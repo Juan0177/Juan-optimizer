@@ -100,12 +100,15 @@ function dropWorkers() {
 
 /**
  * Ends the workers once a run is over (what they compiled is large, and in the page's process):
- * the next run starts new ones. Searches still queued are left to finish first.
+ * the next run starts new ones. Searches still queued are left to finish first. `afterMs`: they
+ * are kept that long unused first (a comparison: the next pick needs them again).
  */
-export function releaseKqmWorkers() {
+export function releaseKqmWorkers(afterMs = 0) {
   clearTimeout(idleTimer)
-  if (!queue.length && slots.every((s) => !s.job)) dropWorkers()
-  else idleTimer = setTimeout(releaseKqmWorkers, 1000)
+  if (queue.length || slots.some((s) => s.job))
+    idleTimer = setTimeout(() => releaseKqmWorkers(afterMs), 1000)
+  else if (afterMs > 0) idleTimer = setTimeout(dropWorkers, afterMs)
+  else dropWorkers()
 }
 
 function startWorkers(mainValues: KqmMainValues) {

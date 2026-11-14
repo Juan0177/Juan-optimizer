@@ -78,7 +78,7 @@ import {
 import { constValue, teamRotationNodes } from './objective'
 import type { SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
-import { allowedCounts, evaluateTeamRotation, TeamOptCancelled } from './solve'
+import { allowedCounts, evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
 
 /*
@@ -923,23 +923,51 @@ interface KqmRunArgs {
 const REPLAYS = 2
 export const optimizeTeamKqm = (args: KqmRunArgs) => runKqm(args)
 
+/** A run's problems and finished set searches, for one way of playing the rotation */
+interface KqmWork {
+  problems: Map<string, Problem | undefined>
+  searches: Map<string, KqmSetSearch | undefined>
+}
+/**
+ * The latest run's work, for its inspector's comparisons (only one run's: problems are large): a
+ * pick that plays the rotation as the run did builds none of the run's problems again, and
+ * searches no set the run searched. By the members' setup and the way the rotation was played
+ * (`workKey`), the two latest at most.
+ */
+let lastWork: { root: KqmResult; byPlayed: Map<string, KqmWork> } | undefined
+/** A comparison's result: the run it compares in */
+const rootOf = new WeakMap<KqmResult, KqmResult>()
+const WORK_PLAYS_KEPT = 2
+const playedKey = (p: KqmPlayed | undefined) =>
+  p ? JSON.stringify([p.attacks, p.rotationTime]) : ''
+/** Workers are kept this long after a comparison (the next pick needs them again) */
+const COMPARE_WORKERS_KEPT_MS = 30_000
+/** Finished set searches kept for comparisons, per way of playing (small: a build and score) */
+const SEARCHES_KEPT = 6000
+
 /** Re-rank one member for a chosen weapon/set pair, keeping every teammate's build fixed. */
 export async function compareTeamKqm({
   result,
   characterKey,
   weapon,
   sets,
+  onPreview,
   ...args
 }: Omit<KqmRunArgs, 'maxRounds'> & {
   result: KqmResult
   characterKey: CharacterKey
   weapon: KqmWeapon
   sets: KqmSets
+  /**
+   * The team with the pick, as soon as its build is found (its rankings not yet: `rankings` has
+   * none); the result follows with this member's rankings
+   */
+  onPreview?: (preview: KqmResult) => void
 }): Promise<KqmResult | undefined> {
   return runKqm({
     ...args,
     maxRounds: 0,
-    comparison: { result, characterKey, weapon, sets },
+    comparison: { result, characterKey, weapon, sets, onPreview },
   })
 }
 
@@ -959,6 +987,7 @@ async function runKqm({
     characterKey: CharacterKey
     weapon: KqmWeapon
     sets: KqmSets
+    onPreview?: (preview: KqmResult) => void
   }
 }): Promise<KqmResult | undefined> {
   const tick = ticker(isCancelled)
@@ -1151,8 +1180,39 @@ async function runKqm({
     ) as Partial<Record<CharacterKey, StatFilters>>
   }
 
+  // a comparison takes its run's work (see `lastWork`), as the rotation plays now
+  const root = comparison
+    ? (rootOf.get(comparison.result) ?? comparison.result)
+    : undefined
+  const workFor = (key: string): KqmWork => {
+    const fresh = () => ({ problems: new Map(), searches: new Map() })
+    if (!root) return fresh()
+    if (lastWork?.root !== root) lastWork = { root, byPlayed: new Map() }
+    const { byPlayed } = lastWork
+    const found = byPlayed.get(key)
+    if (found) {
+      // (the latest used last)
+      byPlayed.delete(key)
+      byPlayed.set(key, found)
+      return found
+    }
+    const work = fresh()
+    byPlayed.set(key, work)
+    while (byPlayed.size > WORK_PLAYS_KEPT)
+      byPlayed.delete(byPlayed.keys().next().value!)
+    return work
+  }
+  // (a new run drops the last one's: problems are large)
+  if (!comparison) lastWork = undefined
+  // the work is for the members as they are set up (a member's settings changed since the run:
+  // none of it), and for the rotation as played
+  const teamStamp = JSON.stringify(
+    members.map((m) => [m.teamChar, m.loadoutDatum, optConfigs[m.characterKey]])
+  )
+  const workKey = (p: KqmPlayed | undefined) => `${teamStamp}\n${playedKey(p)}`
+  let work = workFor(workKey(played))
+
   /** The team's damage as a function of `ck`'s artifacts, with `weapon` on it, the others as in `state` */
-  const problemCache = new Map<string, Problem | undefined>()
   const problemKey = (
     ck: CharacterKey,
     weapon: KqmWeapon,
@@ -1169,7 +1229,14 @@ async function runKqm({
     state: Partial<Record<CharacterKey, KqmBuild>>
   ): Problem | undefined => {
     const cacheKey = problemKey(ck, weapon, state)
-    if (problemCache.has(cacheKey)) return problemCache.get(cacheKey)
+    const problemCache = work.problems
+    if (problemCache.has(cacheKey)) {
+      const kept = problemCache.get(cacheKey)
+      // (the latest used are the last dropped)
+      problemCache.delete(cacheKey)
+      problemCache.set(cacheKey, kept)
+      return kept
+    }
     const withWeapon = { ...state, [ck]: { ...state[ck]!, weapon } }
     const { arts, weapons } = gearOf(withWeapon)
     delete arts[ck]
@@ -1240,6 +1307,11 @@ async function runKqm({
   ) => {
     const key = `${problem.spec.id}|${kqmSetsId(sets)}`
     let search = setSearches.get(key)
+    // (searched before, in the run or an earlier comparison)
+    if (!search && work.searches.has(key)) {
+      search = Promise.resolve(work.searches.get(key))
+      setSearches.set(key, search)
+    }
     if (!search) {
       const task: KqmSetTask = {
         problem: problem.spec,
@@ -1247,9 +1319,14 @@ async function runKqm({
         sets,
         mains: spaces.get(ck)!.mains,
       }
+      const { searches } = work
       search = queueKqmSetTasks([task], kqmMainValues(), isCancelled)[0].then(
         (r) => {
           tried += r?.tried ?? 0
+          // (kept for the comparisons after; the oldest go first)
+          searches.set(key, r)
+          if (searches.size > SEARCHES_KEPT)
+            searches.delete(searches.keys().next().value!)
           return r
         }
       )
@@ -1822,12 +1899,84 @@ async function runKqm({
     if (!changed) return false
     calculator = calculatorFor(rotationTimeNow())
     ;({ ctx: ctxConditionals, extra: extraConditionals } = ruleConditionals())
-    // (problems and searches were for the attacks before)
-    problemCache.clear()
+    // (problems and searches were for the attacks before: a comparison takes its run's for
+    // these, if any)
+    work = workFor(workKey(played))
     setSearches.clear()
     return true
   }
 
+  /** The team with its builds now: its figures, ER and what was assumed (with `rankings`) */
+  const finish = (): KqmResult | undefined => {
+    const { arts, weapons } = gearOf(builds)
+    const finalSettings = {
+      arts,
+      attacks: attacksNow(),
+      statFilters: filtersFor(builds),
+      weapons,
+      extraConditionals,
+      conditionalOverrides,
+      characters,
+      onField: teamOpt.onField,
+      bonusStats,
+    }
+    // (the team's formulas built once: its figures and its ER from them)
+    const finalNodes = teamRotationNodes(
+      database,
+      teamId,
+      gender,
+      finalSettings
+    )
+    if (!finalNodes) return undefined
+    const after = evaluateTeamNodes(
+      database,
+      teamId,
+      finalSettings.attacks,
+      finalNodes
+    )
+    const energyRecharge: KqmResult['energyRecharge'] = {}
+    for (const { characterKey, path, value, min } of finalNodes.constraints ??
+      [])
+      if (path.at(-1) === 'enerRech_')
+        energyRecharge[characterKey] = {
+          target: calculator
+            ? min * 100
+            : kqmEnergyRequirement(kqm, characterKey),
+          minimum: min * 100,
+          value: constValue(value) * 100,
+        }
+
+    // what was counted by rule for each member's own weapon and sets (not set by the user)
+    const assumed: KqmResult['assumed'] = {}
+    for (const m of optimized) {
+      const ck = m.characterKey
+      const b = builds[ck]!
+      const own = m.teamChar.conditional as
+        | Record<string, Record<string, unknown>>
+        | undefined
+      const items = new Set<string>([b.weapon.key, ...Object.keys(b.sets)])
+      assumed[ck] = (ctxConditionals[ck]?.picked ?? []).filter(
+        ({ path }) =>
+          items.has(path[0]) &&
+          own?.[path[0]]?.[path[path.length - 1]] === undefined &&
+          kqm.passives?.[ck]?.[path[0]]?.[path[path.length - 1]] === undefined
+      )
+    }
+
+    return {
+      builds: { ...builds },
+      constellations,
+      energyRecharge,
+      after,
+      rankings,
+      assumed,
+      optimized: optimized.map((m) => m.characterKey),
+      rounds,
+      played,
+    }
+  }
+
+  let preview: KqmResult | undefined
   try {
     // the rotation at the KQM constellations, with no weapon or set effects yet (its builds are
     // not found yet)
@@ -1899,6 +2048,13 @@ async function runKqm({
       if (!selected)
         throw new Error('Could not evaluate this equipment combination.')
       builds[characterKey] = selected.build
+      // the team's figures with the pick first, its rankings after
+      preview = finish()
+      if (preview && comparison.onPreview) {
+        const shown = { ...preview, rankings: {} }
+        rootOf.set(shown, root!)
+        comparison.onPreview(shown)
+      }
     }
     for (let pass = 0; ; pass++) {
       await rankAll()
@@ -1915,62 +2071,16 @@ async function runKqm({
   } catch (e) {
     throw cancelled(e)
   } finally {
-    releaseKqmWorkers()
+    // (a comparison's workers are kept a while: the next pick needs them again)
+    releaseKqmWorkers(comparison ? COMPARE_WORKERS_KEPT_MS : 0)
   }
 
-  const { arts, weapons } = gearOf(builds)
-  const finalSettings = {
-    arts,
-    attacks: attacksNow(),
-    statFilters: filtersFor(builds),
-    weapons,
-    extraConditionals,
-    conditionalOverrides,
-    characters,
-    onField: teamOpt.onField,
-    bonusStats,
-  }
-  const after = evaluateTeamRotation(database, teamId, gender, finalSettings)
-  if (!after) return undefined
-  const finalNodes = teamRotationNodes(database, teamId, gender, finalSettings)
-  const energyRecharge: KqmResult['energyRecharge'] = {}
-  for (const { characterKey, path, value, min } of finalNodes?.constraints ??
-    [])
-    if (path.at(-1) === 'enerRech_')
-      energyRecharge[characterKey] = {
-        target: calculator
-          ? min * 100
-          : kqmEnergyRequirement(kqm, characterKey),
-        minimum: min * 100,
-        value: constValue(value) * 100,
-      }
-
-  // what was counted by rule for each member's own weapon and sets (not set by the user)
-  const assumed: KqmResult['assumed'] = {}
-  for (const m of optimized) {
-    const ck = m.characterKey
-    const b = builds[ck]!
-    const own = m.teamChar.conditional as
-      | Record<string, Record<string, unknown>>
-      | undefined
-    const items = new Set<string>([b.weapon.key, ...Object.keys(b.sets)])
-    assumed[ck] = (ctxConditionals[ck]?.picked ?? []).filter(
-      ({ path }) =>
-        items.has(path[0]) &&
-        own?.[path[0]]?.[path[path.length - 1]] === undefined &&
-        kqm.passives?.[ck]?.[path[0]]?.[path[path.length - 1]] === undefined
-    )
-  }
-
-  return {
-    builds,
-    constellations,
-    energyRecharge,
-    after,
-    rankings,
-    assumed,
-    optimized: optimized.map((m) => m.characterKey),
-    rounds,
-    played,
-  }
+  // (a comparison's builds do not change after its preview: only its rankings are added)
+  const out = preview ? { ...preview, rankings } : finish()
+  if (!out) return undefined
+  rootOf.set(out, root ?? out)
+  // (the run's work, for its comparisons)
+  if (!comparison)
+    lastWork = { root: out, byPlayed: new Map([[workKey(played), work]]) }
+  return out
 }
