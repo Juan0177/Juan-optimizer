@@ -705,6 +705,7 @@ function memberCtx(
     attacks: [...attacks],
     auras: [...auras],
     otherElements: new Set(elements.filter((e) => e !== own)).size,
+    element: own,
   }
 }
 
