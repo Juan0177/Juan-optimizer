@@ -178,8 +178,11 @@ export interface KqmOption extends KqmBuild {
   total: number
   /** Its requirements are not met */
   unmet: boolean
-  /** Estimated extra rolls to match the preceding feasible option in this ranking. */
-  catchUp?: KqmCatchUp
+  /**
+   * Estimated extra rolls to match the ranking's best (feasible) option: how far behind it this
+   * one is, in substat rolls (absent for the best, and for options that miss a requirement)
+   */
+  behind?: KqmCatchUp
   /** The requirements it misses: their stat's path, what it reaches, what it needs */
   shortfalls?: { path: string[]; value: number; min: number }[]
 }
@@ -1618,21 +1621,18 @@ async function runKqm({
         Number(a.unmet) - Number(b.unmet) || b.total - a.total
       const withCatchUp = async (options: KqmOption[]) => {
         options.sort(order)
+        // (every option against the ranking's best: one measure that reads the same on every row)
+        const best = options[0]
         for (let i = 1; i < options.length; i++) {
           await tick()
           const current = options[i]
-          const previous = options[i - 1]
-          if (current.unmet || previous.unmet) continue
+          if (!best || current.unmet || best.unmet) continue
           const own = problemFor(ck, current.weapon, builds)
           if (!own) continue
-          current.catchUp = estimateKqmCatchUp(
-            current,
-            previous.total,
-            (values) => {
-              const score = scoreOf(own, values)
-              return { total: score.total, valid: meetsAsChosen(score) }
-            }
-          )
+          current.behind = estimateKqmCatchUp(current, best.total, (values) => {
+            const score = scoreOf(own, values)
+            return { total: score.total, valid: meetsAsChosen(score) }
+          })
         }
         return options
       }
