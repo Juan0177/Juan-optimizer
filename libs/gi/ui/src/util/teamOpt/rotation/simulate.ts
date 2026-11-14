@@ -1528,6 +1528,9 @@ const sameRef = (
   a: { owner: string; path: string[] },
   b: { owner: string; path: string[] }
 ) => a.owner === b.owner && a.path.join('.') === b.path.join('.')
+/** A buff's key: its owner and path (`sameRef` as one string) */
+const refKey = (a: { owner: string; path: string[] }) =>
+  `${a.owner}|${a.path.join('.')}`
 
 /** Every buff the simulation decides, and its state at each hit ('' when off) */
 function buffStates(
@@ -1562,25 +1565,54 @@ function buffStates(
     byCharacter.set(character, end)
     return end
   }
+  // (every lookup by a buff's key, made once: a rotation has thousands of hits and windows)
   const refs = [...declared]
+  const known = new Set(declared.map(refKey))
   for (const b of [
     ...sim.buffWindows,
     ...sim.countedBuffs,
     ...sim.hits.flatMap((h) => h.states ?? []),
-  ])
-    if (!b.path[1]?.startsWith('_') && !refs.some((r) => sameRef(r, b)))
-      refs.push({ owner: b.owner, path: b.path })
-  const stateAt = (hit: SimHit, index: number) =>
-    refs.map((ref) => {
-      const snapshot = hit.states?.find((s) => sameRef(s, ref))
-      if (snapshot) return snapshot.value
+  ]) {
+    if (b.path[1]?.startsWith('_')) continue
+    const key = refKey(b)
+    if (known.has(key)) continue
+    known.add(key)
+    refs.push({ owner: b.owner, path: b.path })
+  }
+  const keys = refs.map(refKey)
+  /** Each buff's entries, in the simulation's order */
+  const byKey = <T extends { owner: string; path: string[] }>(list: T[]) => {
+    const map = new Map<string, T[]>()
+    for (const item of list) {
+      const key = refKey(item)
+      const entries = map.get(key)
+      if (entries) entries.push(item)
+      else map.set(key, [item])
+    }
+    return map
+  }
+  const windowsOf = byKey(sim.buffWindows)
+  const countedOf = byKey(sim.countedBuffs)
+  const stateAt = (hit: SimHit, index: number) => {
+    // (the hit's own states by buff; the first one for a buff, as `find` took it)
+    let snapshots: Map<string, string> | undefined
+    if (hit.states?.length) {
+      snapshots = new Map()
+      for (const s of hit.states) {
+        const key = refKey(s)
+        if (!snapshots.has(key)) snapshots.set(key, s.value)
+      }
+    }
+    return refs.map((ref, r) => {
+      const key = keys[r]
+      const snapshot = snapshots?.get(key)
+      if (snapshot !== undefined) return snapshot
       // counted buffs (one entry per cast or value): the entry that counts this hit
-      const counted = sim.countedBuffs.filter((c) => sameRef(c, ref))
-      if (counted.length)
+      const counted = countedOf.get(key)
+      if (counted?.length)
         return counted.find((c) => c.hits.has(index))?.value ?? ''
-      const on = sim.buffWindows.filter(
+      const on = (windowsOf.get(key) ?? []).filter(
         (w) =>
-          sameRef(w, ref) &&
           w.start <= hit.t &&
           hit.t < endAt(w, hit.characterKey) &&
           (!w.recipient || w.recipient === hit.characterKey)
@@ -1596,7 +1628,19 @@ function buffStates(
       return on.reduce((latest, w) => (w.start >= latest.start ? w : latest))
         .value
     })
-  return { refs, stateAt }
+  }
+  /** A list of states as each buff's value (the first one for a buff; '' if none) */
+  const valuesFrom = (
+    states: { owner: string; path: string[]; value: string }[]
+  ) => {
+    const by = new Map<string, string>()
+    for (const s of states) {
+      const key = refKey(s)
+      if (!by.has(key)) by.set(key, s.value)
+    }
+    return keys.map((key) => by.get(key) ?? '')
+  }
+  return { refs, keys, stateAt, valuesFrom }
 }
 
 /**
@@ -1608,14 +1652,16 @@ export function rotationBuffDefaults(
   sim: SimulationResult
 ): { owner: SimBuffOwner; path: string[]; value: string }[] {
   const refs: { owner: SimBuffOwner; path: string[] }[] = []
+  const indexOf = new Map<string, number>()
   const weights: Map<string, number>[] = []
   for (const { result, probability } of sim.samples ?? [
     { result: sim, probability: 1 },
   ]) {
-    const { refs: sampleRefs, stateAt } = buffStates(result)
-    const indices = sampleRefs.map((ref) => {
-      const found = refs.findIndex((r) => sameRef(r, ref))
-      if (found >= 0) return found
+    const { refs: sampleRefs, keys, stateAt } = buffStates(result)
+    const indices = sampleRefs.map((ref, r) => {
+      const found = indexOf.get(keys[r])
+      if (found !== undefined) return found
+      indexOf.set(keys[r], refs.length)
       refs.push(ref)
       weights.push(new Map())
       return refs.length - 1
@@ -1657,9 +1703,14 @@ export function rotationAttacks(
     // A buff that exists only in one sample must still be explicitly off in
     // the others, including when the saved loadout/default has it enabled.
     const refs = [...declared]
+    const known = new Set(declared.map(refKey))
     for (const { result } of sim.samples)
-      for (const ref of buffStates(result).refs)
-        if (!refs.some((r) => sameRef(r, ref))) refs.push(ref)
+      for (const ref of buffStates(result).refs) {
+        const key = refKey(ref)
+        if (known.has(key)) continue
+        known.add(key)
+        refs.push(ref)
+      }
     const groups = new Map<
       string,
       { member: CharacterKey; attack: TeamOptAttack }
@@ -1683,7 +1734,7 @@ export function rotationAttacks(
       (out[member] ??= []).push(attack)
     return out
   }
-  const { refs, stateAt } = buffStates(sim, declared)
+  const { refs, keys, stateAt, valuesFrom } = buffStates(sim, declared)
   const groups = new Map<
     string,
     {
@@ -1736,20 +1787,11 @@ export function rotationAttacks(
     if (hit.snapshotT === undefined) return hit
     const onField = hit.snapshotOnField ?? hit.onField ?? hit.characterKey
     const then = hit.snapshotStates
-      ? refs.map(
-          (ref) =>
-            hit.snapshotStates!.find((state) => sameRef(ref, state))?.value ??
-            ''
-        )
+      ? valuesFrom(hit.snapshotStates)
       : stateAt({ ...hit, t: hit.snapshotT, onField, states: undefined }, index)
     // (the hit's own snapshotted states stand at both times)
-    if (
-      then.every(
-        (v, i) =>
-          v === states[i] || hit.states?.some((x) => sameRef(x, refs[i]))
-      )
-    )
-      return hit
+    const own = new Set(hit.states?.map(refKey))
+    if (then.every((v, i) => v === states[i] || own.has(keys[i]))) return hit
     const move =
       hit.tag === 'plunge'
         ? 'plunging'
@@ -1840,10 +1882,7 @@ export function rotationAttacks(
         ? {
             statSnapshots: hit.statSnapshots.map((snapshot) => {
               const values = snapshot.states
-                ? refs.map(
-                    (ref) =>
-                      snapshot.states!.find((s) => sameRef(s, ref))?.value ?? ''
-                  )
+                ? valuesFrom(snapshot.states)
                 : stateAt(
                     {
                       ...hit,
