@@ -17,6 +17,21 @@ export type ItemConditionalCtx = {
   auras: string[]
   /** Teammates of another element than its own (default 3) */
   otherElements?: number
+  /** Its own element (unknown: effects that need its own reactions are counted) */
+  element?: string
+}
+
+/**
+ * Whether it can trigger a Dendro reaction itself (Burning, Quicken, Aggravate, Spread, Bloom,
+ * Hyperbloom, Burgeon): Dendro with a Hydro, Electro or Pyro teammate, or one of those with a
+ * Dendro teammate (`auras`: the team's elements)
+ */
+function dendroReactor(ctx: ItemConditionalCtx) {
+  const partners = ['hydro', 'electro', 'pyro']
+  if (!ctx.element) return true
+  return ctx.element === 'dendro'
+    ? partners.some((e) => ctx.auras.includes(e))
+    : partners.includes(ctx.element) && ctx.auras.includes('dendro')
 }
 
 type Doc = {
@@ -62,6 +77,9 @@ const OVERRIDES: Partial<
   SongOfDaysPast: () => null,
   // needs Burning enemies nearby
   UnfinishedReverie: () => null,
+  // a Leaf only from the wielder's own Dendro reactions (gcsim)
+  SapwoodBlade: (ctx) => (dendroReactor(ctx) ? undefined : null),
+  ForestRegalia: (ctx) => (dendroReactor(ctx) ? undefined : null),
   // the 4-piece procs at random: use its average
   EchoesOfAnOffering: () => 'avg',
   BlizzardStrayer: (ctx) =>
