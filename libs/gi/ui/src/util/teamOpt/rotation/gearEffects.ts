@@ -35,6 +35,18 @@ const REACTION_ELEMENTS: Record<string, string[]> = {
   lunarCrystallize: ['geo', 'hydro'],
 }
 const SWIRLED = ['pyro', 'hydro', 'electro', 'cryo']
+/** Weapons whose Leaf of Consciousness comes from the wielder's Dendro reactions */
+const LEAF_WEAPONS = ['SapwoodBlade', 'ForestRegalia']
+const LEAF_REACTIONS = [
+  'burning',
+  'quicken',
+  'aggravate',
+  'spread',
+  'bloom',
+  'lunarBloom',
+  'hyperbloom',
+  'burgeon',
+]
 
 /**
  * Sets whose Starsparks (Epochal Advent) give their conditional while one is held, each with that
@@ -205,6 +217,10 @@ export function gearEffects({
   for (const k of members)
     if (holds(k, 'HakushinRing'))
       window(k, ['HakushinRing', 'SakuraSaiguu'], 'dendro', 0, 0)
+  // Sapwood Blade / Forest Regalia: declared off, on only from the wielder's own reactions
+  for (const k of members)
+    for (const weapon of LEAF_WEAPONS)
+      if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
   for (const k of members)
     if (wears(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
@@ -403,6 +419,13 @@ export function gearEffects({
                 240
               )
         hakushin(ctx, hit, reaction)
+        // Sapwood Blade / Forest Regalia (gcsim): the wielder's own Burning, Quicken, Aggravate,
+        // Spread, Bloom, Lunar-Bloom, Hyperbloom or Burgeon (off the field too) makes a Leaf of
+        // Consciousness, one per 20 s; picked up at once by whoever is on the field: EM for 12 s
+        if (LEAF_REACTIONS.includes(reaction))
+          for (const weapon of LEAF_WEAPONS)
+            if (holds(k, weapon) && ready(`leaf.${k}.${weapon}`, hit.t, 1200))
+              ctx.buff(k, [weapon, 'passive'], 'on', 0, 720)
         if (reaction === 'moondrift' || reaction === 'moondriftHarmony') return
         // Viridescent Venerer: the swirled element's RES -40% for 10 s
         if (opens(k, 'ViridescentVenerer') && hit.onField === k) {
