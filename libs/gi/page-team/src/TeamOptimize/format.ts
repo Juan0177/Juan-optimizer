@@ -30,6 +30,16 @@ export function formatRate(
   )
 }
 
+const whole = new Intl.NumberFormat('en', { maximumFractionDigits: 0 })
+/** Damage per rotation, or per second, in full: 63,592 (as precise as `formatRate`'s 63.592K) */
+export function formatRateFull(
+  value: number | undefined,
+  rotationTime: number | undefined
+) {
+  if (value === undefined || !Number.isFinite(value)) return '–'
+  return whole.format(rotationTime ? value / rotationTime : value)
+}
+
 /** A relative change: +9.6%, −0.4% */
 export function formatGain(ratio: number) {
   if (!Number.isFinite(ratio)) return '–'
