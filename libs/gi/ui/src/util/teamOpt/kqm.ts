@@ -892,7 +892,14 @@ const TWO_PIECE_CLASSES = 5
 /** Problems a run keeps compiled (the rounds' and rankings' for every weapon of the team fit) */
 const PROBLEMS_KEPT = 200
 /** Times a ranked option better than its member's build is taken, and the rounds go on */
-const ADOPT_PASSES = 1
+const ADOPT_PASSES = 2
+/**
+ * A member's best ranked weapons and sets searched as pairs at the end (the rankings hold each
+ * weapon with the build's sets and each set with the build's weapon: a pair that only wins
+ * together is in neither)
+ */
+const PAIR_WEAPONS = 5
+const PAIR_SETS = 5
 /** Rounds after a ranked option is taken, at most */
 const ADOPT_ROUNDS = 2
 
@@ -1679,6 +1686,63 @@ async function runKqm({
   }
 
   /**
+   * A weapon and sets that only win together (see `PAIR_WEAPONS`): each member's best few ranked
+   * weapons with its best few ranked sets, the pairs not ranked yet, searched in the workers; the
+   * best one over the team that beats its member's build
+   */
+  const missedPair = async () => {
+    let found: { ck: CharacterKey; build: KqmBuild; gain: number } | undefined
+    const searches: Promise<void>[] = []
+    for (const { characterKey: ck } of rankedMembers) {
+      const own = builds[ck]!
+      const problem = problemFor(ck, own.weapon, builds)
+      const ranking = rankings[ck]
+      if (!problem || !ranking) continue
+      const score = scoreOf(problem, kqmValues(own))
+      const allowed = weaponsFor(ck, builds)
+      const weapons = [
+        ...new Map(
+          ranking.weapons
+            .filter(
+              (o) => !o.unmet && allowed.some((w) => w.key === o.weapon.key)
+            )
+            .map((o) => [`${o.weapon.key}@${o.weapon.refinement}`, o.weapon])
+        ).values(),
+      ].slice(0, PAIR_WEAPONS)
+      const setsList = [
+        ...new Map(
+          ranking.sets
+            .filter((o) => !o.unmet)
+            .map((o) => [kqmSetsId(o.sets), o.sets])
+        ).values(),
+      ].slice(0, PAIR_SETS)
+      for (const weapon of weapons) {
+        // (the build's weapon with any set, and any weapon with the build's sets: ranked already)
+        if (weapon.key === own.weapon.key) continue
+        const pairs = setsList.filter(
+          (sets) => kqmSetsId(sets) !== kqmSetsId(own.sets)
+        )
+        if (!pairs.length) continue
+        const search = searchArtifacts(ck, weapon, builds, {
+          setsList: pairs,
+          setsKept: pairs.length,
+        }).then((results) => {
+          for (const { build, score: s } of results) {
+            if (!better(s, score)) continue
+            const gain = s.total / score.total - 1
+            if (gain > 1e-9 && (!found || gain > found.gain))
+              found = { ck, build, gain }
+          }
+        })
+        search.catch(() => undefined)
+        searches.push(search)
+      }
+    }
+    await Promise.all(searches)
+    return found
+  }
+
+  /**
    * Before the rounds: each member's artifacts for its starting weapon, so that the first round's
    * weapons are tried against the others' fitting artifacts, not their starting ones (one problem
    * per member; it saves a round of all the weapons' problems). Members in `order`, from `from`:
@@ -1839,7 +1903,7 @@ async function runKqm({
     for (let pass = 0; ; pass++) {
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
-      const missed = missedBest()
+      const missed = missedBest() ?? (await missedPair())
       if (!missed) break
       // taken, and the rounds go on from there (the others' best builds may change with it)
       builds[missed.ck] = missed.build
