@@ -230,10 +230,55 @@ export function gearEffects({
     petraProc(ctx, active, shard.element)
   }
 
+  // Epochal Advent: a Starspark (2 at most) when the wearer uses a Skill or Burst or performs a
+  // Normal Attack, one lost every 3 s the wearer is on the field (its clock waits off it), and
+  // Undying Radiance (the set's conditional) while one is held
+  const EPOCHAL = 'LegacyOfTheFirstChronicle'
+  const SPARK_LOSS = 180
+  const sparks = new Map<
+    CharacterKey,
+    /** held; Radiance from; on-field frames to the next loss, counted from `at` */
+    { n: number; since: number; left: number; at: number }
+  >()
+  for (const m of members)
+    if (opens(m, EPOCHAL)) {
+      sparks.set(m, { n: 0, since: 0, left: SPARK_LOSS, at: 0 })
+      // (declared: without a Starspark no Radiance, whatever the conditional's own state)
+      window(m, [EPOCHAL, 'undyingRadiance'], 'on', 0, 0)
+    }
+  /** The wearer's Starsparks up to `t`: lost while it is on the field */
+  const settleSparks = (k: CharacterKey, t: number) => {
+    const s = sparks.get(k)
+    if (!s) return
+    if (active === k) {
+      while (s.n > 0 && s.at + s.left <= t) {
+        s.at += s.left
+        s.left = SPARK_LOSS
+        s.n--
+        if (!s.n) window(k, [EPOCHAL, 'undyingRadiance'], 'on', s.since, s.at)
+      }
+      if (s.n > 0) s.left -= t - s.at
+    }
+    s.at = t
+  }
+  const gainSpark = (k: CharacterKey, t: number) => {
+    const s = sparks.get(k)
+    if (!s) return
+    settleSparks(k, t)
+    if (!s.n) {
+      s.since = t
+      s.left = SPARK_LOSS
+    }
+    s.n = Math.min(2, s.n + 1)
+  }
+
   return {
     onHit(ctx, hit) {
       const k = hit.characterKey
       const t = hit.t
+      // (a Normal Attack performed: a Starspark)
+      if (hit.tag === 'normal' && !hit.path[0].startsWith('_') && sparks.has(k))
+        gainSpark(k, t)
       if (
         opens(k, 'PaleFlame') &&
         hit.tag === 'skill' &&
@@ -544,6 +589,12 @@ export function gearEffects({
     },
     onAction(ctx, actor, action) {
       if (actor === active) pickUp(ctx)
+      if (
+        action.kind === 'skill' ||
+        action.kind === 'burst' ||
+        action.kind === 'normal'
+      )
+        gainSpark(actor, ctx.now)
       if (action.kind === 'burst' && gear[actor]?.weapon === 'PrototypeAmber') {
         const refinement = Math.max(
           1,
@@ -625,6 +676,10 @@ export function gearEffects({
         )
     },
     onSwap(t, from, to, ctx) {
+      // (Starsparks lost on the field up to the swap, and none off it for the incoming member:
+      // both settled before it takes the field)
+      settleSparks(from, t)
+      settleSparks(to, t)
       active = to
       if (ctx) pickUp(ctx)
       // Thrilling Tales of Dragon Slayers: the wielder's swap-out gives the incoming member
@@ -691,6 +746,11 @@ export function gearEffects({
       }
     },
     end(t) {
+      for (const [k, s] of sparks) {
+        settleSparks(k, t)
+        if (s.n) window(k, [EPOCHAL, 'undyingRadiance'], 'on', s.since, t)
+      }
+      sparks.clear()
       for (const s of stacks.values())
         window(s.owner, s.path, `${s.count}`, s.start, Math.min(t, s.end))
       stacks.clear()

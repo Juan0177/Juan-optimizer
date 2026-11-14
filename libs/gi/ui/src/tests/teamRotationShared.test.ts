@@ -115,6 +115,7 @@ const CANDIDATES: ArtifactSetKey[] = [
   'GoldenTroupe',
   'MarechausseeHunter',
   'DeepwoodMemories',
+  'LegacyOfTheFirstChronicle',
 ]
 const SETS: ReadonlySet<string> = new Set(allArtifactSetKeys)
 
