@@ -255,7 +255,7 @@ function sampleResult(): KqmResult {
             ...option,
             weapon: { key: 'TheBlackSword', refinement: 1 },
             total: 900,
-            catchUp: {
+            behind: {
               status: 'matched',
               count: 1.5,
               target: 1000,
@@ -425,6 +425,24 @@ describe('KQM focused results', () => {
         .getByRole('tab', { name: 'Artifact sets' })
         .getAttribute('aria-selected')
     ).toBe('true')
+  })
+  it('measures each ranked option against the best, on one line', () => {
+    const result = sampleResult()
+    render(
+      <KqmCompare
+        teamId="ui-behind"
+        runSettings={initial()}
+        result={result}
+        characterKey="KamisatoAyaka"
+        rotationTime={20}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.getByText('vs best')).toBeTruthy()
+    expect(screen.getByText('Best')).toBeTruthy()
+    // (1.5 rolls behind #1, the stat mix in its tooltip)
+    expect(screen.getByText('1.5 rolls behind')).toBeTruthy()
+    expect(screen.queryByText('To rank above')).toBeNull()
   })
   it('remembers the selected weapon when the member inspector is reopened', async () => {
     const result = sampleResult()
