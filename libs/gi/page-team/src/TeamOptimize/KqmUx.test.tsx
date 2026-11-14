@@ -220,6 +220,7 @@ vi.mock('./MemberAvatar', () => ({
 vi.mock('./TeamOptResults', () => ({
   WeaponThumb: () => <span />,
   WeaponDetails: () => <span />,
+  elementColor: () => '#888',
 }))
 
 const keys = ['KamisatoAyaka', 'Shenhe', 'KaedeharaKazuha', 'Bennett'] as const
@@ -570,8 +571,8 @@ describe('KQM focused results', () => {
       />,
       { wrapper: wrap }
     )
-    const list = screen.getByRole('region', { name: 'Top teams' })
-    const rows = within(list).getAllByRole('button', { name: /^Team \d/ })
+    const list = screen.getByRole('region', { name: 'Top builds' })
+    const rows = within(list).getAllByRole('button', { name: /^Rank \d/ })
     expect(rows).toHaveLength(2)
     // the run's own team first, and shown now
     expect(rows[0].getAttribute('aria-pressed')).toBe('true')
@@ -587,8 +588,8 @@ describe('KQM focused results', () => {
     )
     await waitFor(() =>
       expect(
-        within(screen.getByRole('region', { name: 'Top teams' }))
-          .getAllByRole('button', { name: /^Team \d/ })[1]
+        within(screen.getByRole('region', { name: 'Top builds' }))
+          .getAllByRole('button', { name: /^Rank \d/ })[1]
           .getAttribute('aria-pressed')
       ).toBe('true')
     )
@@ -598,9 +599,9 @@ describe('KQM focused results', () => {
     ).toContain('TheBlackSword')
     // back to the best team
     fireEvent.click(
-      within(screen.getByRole('region', { name: 'Top teams' })).getAllByRole(
+      within(screen.getByRole('region', { name: 'Top builds' })).getAllByRole(
         'button',
-        { name: /^Team \d/ }
+        { name: /^Rank \d/ }
       )[0]
     )
     await waitFor(() =>
@@ -646,17 +647,17 @@ describe('KQM focused results', () => {
       />,
       { wrapper: wrap }
     )
-    const list = screen.getByRole('region', { name: 'Top teams' })
+    const list = screen.getByRole('region', { name: 'Top builds' })
     expect(
-      within(list).getAllByRole('button', { name: /^Team \d/ })
+      within(list).getAllByRole('button', { name: /^Rank \d/ })
     ).toHaveLength(5)
     fireEvent.click(within(list).getByRole('button', { name: 'Show top 8' }))
-    const dialog = screen.getByRole('dialog', { name: 'Top teams' })
-    const rows = within(dialog).getAllByRole('button', { name: /^Team \d/ })
+    const dialog = screen.getByRole('dialog', { name: 'Top builds' })
+    const rows = within(dialog).getAllByRole('button', { name: /^Rank \d/ })
     expect(rows).toHaveLength(8)
     // a team picked in the window: shown on the page, the window closed
     fireEvent.click(rows[7])
-    expect(screen.queryByRole('dialog', { name: 'Top teams' })).toBeNull()
+    expect(screen.queryByRole('dialog', { name: 'Top builds' })).toBeNull()
     await waitFor(() =>
       expect(mocks.compare).toHaveBeenCalledWith(
         expect.objectContaining({

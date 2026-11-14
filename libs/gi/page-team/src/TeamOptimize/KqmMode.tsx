@@ -3,7 +3,8 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt, TeamOptEnergyCalculator } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import { giCtaSx } from '@genshin-optimizer/gi/theme'
+import { StatIcon } from '@genshin-optimizer/gi/svgicons'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
   KqmTeamOption,
@@ -43,6 +44,8 @@ import {
   type Theme,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import {
   type ReactNode,
@@ -54,7 +57,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatRate } from './format'
+import { formatRateFull } from './format'
 import {
   KqmSetChooser,
   KqmWeaponChooser,
@@ -65,6 +68,7 @@ import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
+import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
   focusSx,
@@ -1274,6 +1278,182 @@ function useInterval(fn: () => void, ms: number) {
 
 /** A compact team overview; the selected member is explored in a single inspector. */
 /** A member's constellation as a pill: gold from C1, quiet at C0 */
+/** A member's Energy Recharge as a tag: amber below its requirement (the requirement on hover) */
+function ErTag({ er }: { er: { value: number; minimum: number } }) {
+  const { t } = useTranslation('page_team')
+  const short = er.value + 1e-6 < er.minimum
+  const label = t('teamOpt.kqm.erResult', {
+    defaultValue: 'ER {{value}}% / {{minimum}}% required',
+    value: +er.value.toFixed(1),
+    minimum: +er.minimum.toFixed(1),
+  })
+  return (
+    <Tooltip arrow title={label}>
+      <Box
+        component="span"
+        aria-label={label}
+        sx={(theme) => {
+          const tone = short ? theme.palette.warning.main : giTokens.parchment
+          return {
+            // (as the constellation pill beside it)
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.375,
+            height: 18,
+            pl: 0.625,
+            pr: 0.75,
+            borderRadius: 999,
+            flexShrink: 0,
+            fontSize: 11.5,
+            fontWeight: 650,
+            letterSpacing: 0.2,
+            cursor: 'help',
+            color: short ? 'warning.main' : 'text.secondary',
+            bgcolor: alpha(tone, short ? 0.14 : 0.07),
+            ...(short && {
+              boxShadow: `inset 0 0 0 1px ${alpha(tone, 0.5)}`,
+            }),
+            '& svg': { fontSize: 12 },
+            ...numSx,
+          }
+        }}
+      >
+        <StatIcon statKey="enerRech_" />
+        {er.value.toFixed(0)}%
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** Like 70%; under 10%, one decimal (1.5%) */
+function shareText(share: number) {
+  const pct = share * 100
+  if (pct >= 10 || pct === 0) return `${Math.round(pct)}%`
+  return `${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%`
+}
+
+/** A damage figure in full, large, with its unit small beside it: 63,592 DPS */
+function DamageFigure({ value, unit }: { value: string; unit: string }) {
+  return (
+    <Typography
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'baseline',
+        gap: 0.75,
+        whiteSpace: 'nowrap',
+        lineHeight: 1.15,
+        ...numSx,
+      }}
+    >
+      <Box
+        component="span"
+        sx={{
+          fontSize: { xs: 19, sm: 24 },
+          fontWeight: 700,
+          letterSpacing: '-0.02em',
+        }}
+      >
+        {value}
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          display: { xs: 'none', sm: 'inline' },
+          fontSize: 12,
+          fontWeight: 500,
+          color: 'text.secondary',
+        }}
+      >
+        {unit}
+      </Box>
+    </Typography>
+  )
+}
+
+/** A member's share of the team's damage, as a figure: 70% of team */
+function ShareFigure({
+  share,
+  rotationTime,
+}: {
+  share: number
+  rotationTime?: number
+}) {
+  const { t } = useTranslation('page_team')
+  const tip = rotationTime
+    ? t('teamOpt.result.shareDps', 'Its share of the team’s DPS')
+    : t('teamOpt.result.share', 'Its share of the team’s damage')
+  const text = shareText(share)
+  return (
+    <Tooltip arrow title={tip}>
+      <Box
+        component="span"
+        aria-label={`${text}: ${tip}`}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 0.5,
+          whiteSpace: 'nowrap',
+          cursor: 'default',
+          ...numSx,
+        }}
+      >
+        <Box
+          component="span"
+          sx={{ fontSize: { xs: 13, sm: 14 }, fontWeight: 650 }}
+        >
+          {text}
+        </Box>
+        <Box
+          component="span"
+          sx={{
+            display: { xs: 'none', sm: 'inline' },
+            fontSize: 12,
+            fontWeight: 500,
+            color: 'text.secondary',
+          }}
+        >
+          {t('teamOpt.result.shareLabel', 'of team')}
+        </Box>
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** A member's share of the team's damage, as a bar in its element's colour */
+function ShareBar({
+  characterKey,
+  share,
+}: {
+  characterKey: CharacterKey
+  share: number
+}) {
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        mt: 1,
+        height: 4,
+        borderRadius: 2,
+        overflow: 'hidden',
+        bgcolor: alpha(giTokens.parchment, 0.08),
+      }}
+    >
+      <Box
+        sx={(theme) => ({
+          height: '100%',
+          width: `${Math.min(1, Math.max(0, share)) * 100}%`,
+          borderRadius: 2,
+          bgcolor: alpha(elementColor(theme, characterKey), 0.85),
+          // (it moves when a pick changes the team)
+          transition: 'width .35s cubic-bezier(.2,.7,.2,1)',
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+        })}
+      />
+    </Box>
+  )
+}
+
 function ConstellationPill({ value }: { value: number }) {
   return (
     <Box
@@ -1345,6 +1525,9 @@ export function KqmResults({
   )
   const compared =
     shown && result.optimized.includes(shown) ? shown : result.optimized[0]
+  // (the member tiles' icons a size smaller on a phone)
+  const theme = useTheme()
+  const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   // other equipment picked in the inspector: the team as it plays with it (the figures above follow)
   const [comparing, setComparing] = useState<KqmResult>()
   // a top team picked: its inspector compares on the run's own team (not on other picks), while
@@ -1407,7 +1590,7 @@ export function KqmResults({
             }}
           >
             <Typography sx={type.figure}>
-              {formatRate(view.after.total, rotationTime, true)}
+              {formatRateFull(view.after.total, rotationTime)}
             </Typography>
             <Typography sx={type.label}>
               {rotationTime
@@ -1419,7 +1602,7 @@ export function KqmResults({
                 arrow
                 title={t('teamOpt.kqm.vsBestTip', {
                   defaultValue: 'The run’s best builds: {{total}}',
-                  total: formatRate(result.after.total, rotationTime, true),
+                  total: formatRateFull(result.after.total, rotationTime),
                 })}
               >
                 <Typography
@@ -1534,6 +1717,10 @@ export function KqmResults({
           // (with the equipment picked in the inspector, when it is not the run's)
           const build = view.builds[characterKey]
           const er = view.energyRecharge[characterKey]
+          const share =
+            view.after.total > 0
+              ? (view.after.members[characterKey] ?? 0) / view.after.total
+              : 0
           const selected = compared === characterKey
           return (
             <ButtonBase
@@ -1548,8 +1735,7 @@ export function KqmResults({
                 flexDirection: 'column',
                 alignItems: 'stretch',
                 textAlign: 'left',
-                gap: 1,
-                p: { xs: 1.25, sm: 1.5 },
+                p: { xs: 1.5, sm: 2 },
                 borderRadius: tokens.radius.inset,
                 minWidth: 0,
                 border: `1px solid ${selected ? 'transparent' : tokens.hairlineStrong}`,
@@ -1564,21 +1750,37 @@ export function KqmResults({
                 '&.Mui-disabled': { opacity: build ? 0.6 : 0.5 },
               })}
             >
+              {/* who: its name, constellation and ER; its weapon and sets (on a phone the name
+                  below, its whole width) */}
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  flexWrap: 'wrap',
-                  columnGap: 1,
-                  rowGap: 0.75,
+                  flexWrap: { xs: 'wrap', sm: 'nowrap' },
+                  columnGap: 1.25,
+                  rowGap: 1,
                   minWidth: 0,
                 }}
               >
-                <MemberAvatar characterKey={characterKey} size={32} />
-                <Box sx={{ minWidth: 0, flex: '1 1 0' }}>
+                <MemberAvatar
+                  characterKey={characterKey}
+                  size={narrow ? 30 : 38}
+                />
+                <Box
+                  sx={{
+                    minWidth: 0,
+                    flex: { xs: '1 0 100%', sm: '1 1 0' },
+                    order: { xs: 3, sm: 0 },
+                  }}
+                >
                   <Typography
                     noWrap
-                    sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}
+                    sx={{
+                      fontSize: { xs: 13, sm: 14 },
+                      fontWeight: 600,
+                      lineHeight: 1.3,
+                      letterSpacing: '-0.005em',
+                    }}
                   >
                     <CharacterName
                       characterKey={characterKey}
@@ -1589,13 +1791,15 @@ export function KqmResults({
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 0.75,
-                      mt: 0.25,
+                      flexWrap: 'wrap',
+                      gap: 0.5,
+                      mt: 0.5,
                     }}
                   >
                     <ConstellationPill
                       value={result.constellations[characterKey] ?? 0}
                     />
+                    {er && <ErTag er={er} />}
                     {!build && (
                       <Typography
                         sx={{ ...type.label, fontSize: 12, lineHeight: 1.4 }}
@@ -1606,56 +1810,48 @@ export function KqmResults({
                   </Box>
                 </Box>
                 {build && (
-                  <Box sx={{ ml: 'auto' }}>
-                    <KqmGearIcons characterKey={characterKey} build={build} />
-                  </Box>
-                )}
-              </Box>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  justifyContent: 'space-between',
-                  flexWrap: 'wrap',
-                  columnGap: 0.75,
-                }}
-              >
-                <Typography sx={{ ...type.stat, fontSize: { xs: 16, sm: 18 } }}>
-                  {formatRate(
-                    view.after.members[characterKey],
-                    rotationTime,
-                    true
-                  )}
                   <Box
-                    component="span"
-                    sx={{
-                      display: { xs: 'none', sm: 'inline' },
-                      ml: 0.5,
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: 'text.secondary',
-                    }}
+                    sx={{ flexShrink: 0, alignSelf: 'flex-start', ml: 'auto' }}
                   >
-                    {unit}
+                    <KqmGearIcons
+                      characterKey={characterKey}
+                      build={build}
+                      size={narrow ? 28 : 36}
+                    />
                   </Box>
-                </Typography>
-                {er && (
-                  <Typography
-                    sx={{
-                      fontSize: 12,
-                      ...numSx,
-                      color:
-                        er.value + 1e-6 < er.minimum
-                          ? 'warning.main'
-                          : 'text.secondary',
-                    }}
-                  >
-                    ER {er.value.toFixed(0)}%
-                  </Typography>
                 )}
               </Box>
-              {/* where its substat rolls went (fixed + distributed) */}
-              {build && <KqmRollLine build={build} />}
+              {/* its damage and its share of the team's: the figures, then the bar (the bars
+                  line up across the members) */}
+              <Box sx={{ mt: { xs: 1.5, sm: 2 } }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    columnGap: 1,
+                  }}
+                >
+                  <DamageFigure
+                    value={formatRateFull(
+                      view.after.members[characterKey],
+                      rotationTime
+                    )}
+                    unit={unit}
+                  />
+                  <ShareFigure share={share} rotationTime={rotationTime} />
+                </Box>
+                <ShareBar characterKey={characterKey} share={share} />
+              </Box>
+              {/* where its substat rolls went (fixed + distributed), at the tile's foot */}
+              {build && (
+                <Box sx={{ mt: 'auto', pt: { xs: 1.5, sm: 1.75 } }}>
+                  <Box sx={{ pt: 1.25, borderTop: hairline }}>
+                    <KqmRollLine build={build} />
+                  </Box>
+                </Box>
+              )}
             </ButtonBase>
           )
         })}

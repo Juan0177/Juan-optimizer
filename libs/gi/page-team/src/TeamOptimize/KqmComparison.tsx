@@ -46,7 +46,7 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRate } from './format'
+import { formatGain, formatRate, formatRateFull } from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
 import { MemberAvatar } from './MemberAvatar'
 import { kqmReplayOf } from './useKqmRun'
@@ -382,7 +382,7 @@ export function KqmCompare({
                 }}
               >
                 <Typography sx={type.stat}>
-                  {formatRate(view.after.total, rotationTime, true)}
+                  {formatRateFull(view.after.total, rotationTime)}
                 </Typography>
                 <Typography sx={{ ...type.label, fontSize: 12 }}>
                   {rotationTime

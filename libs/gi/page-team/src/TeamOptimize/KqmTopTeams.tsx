@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRate } from './format'
+import { formatGain, formatRateFull } from './format'
 import { KqmGearIcons } from './KqmBuildView'
 import { MemberAvatar } from './MemberAvatar'
 import { FieldLabel, focusSx, numSx, quickSx, tokens, type } from './ui'
@@ -65,7 +65,7 @@ export function KqmTopTeams({
   const current = options.findIndex((o) =>
     members.every((ck) => gearId(o.builds[ck]) === gearId(view.builds[ck]))
   )
-  const title = t('teamOpt.kqm.topTeams', 'Top teams')
+  const title = t('teamOpt.kqm.topBuilds', 'Top builds')
   const rows = (count: number, pick: (option: KqmTeamOption) => void) => (
     <TeamRows
       options={options.slice(0, count)}
@@ -80,8 +80,8 @@ export function KqmTopTeams({
     <Box component="section" aria-label={title} sx={{ mt: 3 }}>
       <FieldLabel
         tip={t(
-          'teamOpt.kqm.topTeamsTip',
-          'The best team, then the best teams that change one member’s weapon or artifact sets. Pick one to see it.'
+          'teamOpt.kqm.topBuildsTip',
+          'The best builds, then the best that change one member’s weapon or artifact sets. Pick one to see it.'
         )}
         sx={{ mb: 0.75 }}
       >
@@ -95,7 +95,7 @@ export function KqmTopTeams({
           aria-haspopup="dialog"
           sx={{ mt: 0.5, color: 'text.secondary', textTransform: 'none' }}
         >
-          {t('teamOpt.kqm.topTeamsAll', {
+          {t('teamOpt.kqm.topBuildsAll', {
             defaultValue: 'Show top {{count}}',
             count: options.length,
           })}
@@ -120,8 +120,8 @@ export function KqmTopTeams({
                 }}
               >
                 <Typography component="h2" sx={{ ...type.title, flexGrow: 1 }}>
-                  {t('teamOpt.kqm.topTeamsCount', {
-                    defaultValue: 'Top {{count}} teams',
+                  {t('teamOpt.kqm.topBuildsCount', {
+                    defaultValue: 'Top {{count}} builds',
                     count: options.length,
                   })}
                 </Typography>
@@ -186,7 +186,7 @@ function TeamRows({
     >
       {options.map((option, i) => {
         const selected = i === current
-        const value = formatRate(option.total, rotationTime, true)
+        const value = formatRateFull(option.total, rotationTime)
         return (
           <ButtonBase
             key={
@@ -195,8 +195,8 @@ function TeamRows({
                 : 'best'
             }
             aria-pressed={selected}
-            aria-label={t('teamOpt.kqm.topTeamLabel', {
-              defaultValue: 'Team {{rank}}: {{value}} {{unit}}',
+            aria-label={t('teamOpt.kqm.topBuildLabel', {
+              defaultValue: 'Rank {{rank}}: {{value}} {{unit}}',
               rank: i + 1,
               value,
               unit,
