@@ -682,12 +682,49 @@ const shortStat: Record<string, string> = {
   def_: 'DEF',
   def: 'DEF',
 }
-function CatchUp({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
+/** A translation: its key, its English text, the values it takes */
+type Translate = (
+  key: string,
+  english: string,
+  values?: Record<string, unknown>
+) => string
+
+/** How far an option is behind the ranking's best, in substat rolls: one line */
+export function behindText(
+  tr: Translate,
+  gap: KqmCatchUp | undefined,
+  rank: number
+): string {
+  if (rank === 0) return tr('teamOpt.kqm.best', 'Best')
+  if (!gap) return '—'
+  if (gap.status === 'tied') return tr('teamOpt.kqm.tie', 'Tie')
+  if (gap.status === 'limit')
+    return tr('teamOpt.kqm.outOfReach', 'Out of reach')
+  return tr('teamOpt.kqm.rollsBehind', '{{count}} rolls behind', {
+    count: Number((Math.ceil(gap.count * 10) / 10).toFixed(1)),
+  })
+}
+
+function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
   const { t } = useTranslation('page_team')
-  if (!gap)
-    return (
-      <Typography sx={{ color: 'text.disabled', fontSize: 12.5 }}>—</Typography>
-    )
+  const text = behindText(
+    (key, english, values) =>
+      t(key, { defaultValue: english, ...values }) as string,
+    gap,
+    rank
+  )
+  const quiet = (
+    <Typography
+      sx={{
+        fontSize: 12.5,
+        color: rank === 0 ? 'text.secondary' : 'text.disabled',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {text}
+    </Typography>
+  )
+  if (rank === 0 || !gap) return quiet
   const detail = Object.entries(gap.rolls)
     .filter(([, n]) => n > 1e-5)
     .map(
@@ -699,51 +736,39 @@ function CatchUp({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
     <Tooltip
       arrow
       title={
-        <Box>
-          {t('teamOpt.kqm.matchRank', {
-            defaultValue: 'Match rank #{{rank}}',
-            rank,
-          })}
-          {detail && <Box sx={{ mt: 0.5 }}>{detail}</Box>}
-          <Box sx={{ mt: 0.5 }}>
+        <Box sx={{ maxWidth: 280 }}>
+          {gap.status === 'limit'
+            ? t(
+                'teamOpt.kqm.outOfReachTip',
+                'Even with the most rolls each substat can take, it does not match #1.'
+              )
+            : gap.status === 'tied'
+              ? t('teamOpt.kqm.tieTip', 'As good as #1.')
+              : t('teamOpt.kqm.matchBest', 'Matches #1 with')}
+          {gap.status === 'matched' && detail && (
+            <Box sx={{ mt: 0.25, fontWeight: 600, ...numSx }}>{detail}</Box>
+          )}
+          <Box sx={{ mt: 0.75, color: 'text.secondary' }}>
             {t(
-              'teamOpt.kqm.catchUpTip',
-              'Extra average rolls above the KQM budget, with the same equipment and teammates. ER requirements and per-stat placement caps still apply.'
+              'teamOpt.kqm.behindTip',
+              'Average substat rolls on top of the KQM budget, same teammates. ER requirements and per-substat caps still apply.'
             )}
           </Box>
         </Box>
       }
     >
-      <Box sx={{ cursor: 'help', minWidth: 0 }}>
-        <Typography
-          sx={{
-            fontSize: 13,
-            fontWeight: gap.status === 'matched' ? 600 : 500,
-            color: gap.status === 'matched' ? 'text.primary' : 'text.secondary',
-            whiteSpace: 'nowrap',
-            ...numSx,
-          }}
-        >
-          {gap.status === 'tied'
-            ? t('teamOpt.kqm.tie', 'Tie')
-            : gap.status === 'limit'
-              ? '—'
-              : `≈ +${(Math.ceil(gap.count * 10) / 10).toFixed(1)} ${t('teamOpt.kqm.rollUnit', 'rolls')}`}
-        </Typography>
-        {gap.status === 'matched' && (
-          <Typography
-            sx={{
-              mt: 0.125,
-              fontSize: 11.5,
-              color: 'text.secondary',
-              lineHeight: 1.45,
-              ...numSx,
-            }}
-          >
-            {detail}
-          </Typography>
-        )}
-      </Box>
+      <Typography
+        sx={{
+          cursor: 'help',
+          fontSize: 13,
+          fontWeight: gap.status === 'matched' ? 600 : 500,
+          color: gap.status === 'matched' ? 'text.primary' : 'text.secondary',
+          whiteSpace: 'nowrap',
+          ...numSx,
+        }}
+      >
+        {text}
+      </Typography>
     </Tooltip>
   )
 }
@@ -783,12 +808,24 @@ function CopyRankingButton({
         ? t('teamOpt.kqm.teamDpsHeader', 'Team DPS')
         : t('teamOpt.kqm.teamDmgHeader', 'Team DMG'),
       '%',
+      t('page_team:teamOpt.kqm.vsBestHeader', 'vs best'),
     ]
     const rows = options.map((o, i) => [
       String(i + 1),
       name(o) + (o.unmet ? ' ⚠' : ''),
       formatRate(o.total, rotationTime, true),
       best ? `${((o.total / best) * 100).toFixed(1)}%` : '',
+      o.unmet
+        ? ''
+        : behindText(
+            (key, english, values) =>
+              t(`page_team:${key}`, {
+                defaultValue: english,
+                ...values,
+              }) as string,
+            o.behind,
+            i
+          ),
     ])
     const line = (cells: string[]) => `| ${cells.join(' | ')} |`
     const text = [
@@ -962,7 +999,7 @@ function RankList({
               </Typography>
             </Tooltip>
           ) : (
-            <CatchUp gap={option.catchUp} rank={i} />
+            <Behind gap={option.behind} rank={i} />
           )}
         </Box>
       </ButtonBase>
@@ -1000,12 +1037,12 @@ function RankList({
           }}
         >
           <Typography sx={{ ...type.label, fontSize: 12 }}>
-            {t('teamOpt.kqm.toPrevious', 'To rank above')}
+            {t('teamOpt.kqm.vsBestHeader', 'vs best')}
           </Typography>
           <InfoTooltipInline
             title={t(
-              'teamOpt.kqm.catchUpHeader',
-              'Extra substats needed to match the rank immediately above.'
+              'teamOpt.kqm.vsBestHeaderTip',
+              'How many extra substat rolls each option needs to match #1.'
             )}
           />
         </Box>

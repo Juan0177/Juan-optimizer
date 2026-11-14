@@ -164,7 +164,7 @@ function setup() {
 }
 
 describe('linked KQM comparisons', () => {
-  it('re-optimizes each side for the selected equipment, preserves teammates and compares adjacent ranks', async () => {
+  it('re-optimizes each side for the selected equipment, preserves teammates and measures every rank against the best', async () => {
     const args = { ...setup(), gender: 'F' as const }
     args.teamOpt.keep = []
     args.teamOpt.kqm!.excludedWeapons = allWeaponKeys.filter(
@@ -231,14 +231,15 @@ describe('linked KQM comparisons', () => {
           0
         )
       ).toBe(20)
+      // every option measured against the ranking's best
       for (const options of Object.values(compared.rankings.KamisatoAyaka!)) {
-        expect(options[0].catchUp).toBeUndefined()
+        expect(options[0].behind).toBeUndefined()
         for (let i = 1; i < options.length; i++)
-          if (!options[i].unmet && !options[i - 1].unmet) {
-            expect(options[i].catchUp!.target).toBe(options[i - 1].total)
-            if (options[i].catchUp!.status === 'matched')
-              expect(options[i].catchUp!.total).toBeGreaterThanOrEqual(
-                options[i - 1].total * (1 - 1e-8)
+          if (!options[i].unmet && !options[0].unmet) {
+            expect(options[i].behind!.target).toBe(options[0].total)
+            if (options[i].behind!.status === 'matched')
+              expect(options[i].behind!.total).toBeGreaterThanOrEqual(
+                options[0].total * (1 - 1e-8)
               )
           }
       }
