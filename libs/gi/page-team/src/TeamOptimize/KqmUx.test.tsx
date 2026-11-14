@@ -475,6 +475,60 @@ describe('KQM focused results', () => {
       ).toContain('TheBlackSword')
     )
   })
+  it('shows a pick’s team before its rankings, and takes another pick meanwhile', async () => {
+    const result = sampleResult()
+    let finish: (() => void) | undefined
+    mocks.compare.mockImplementation(
+      ({ weapon, sets, onPreview, isCancelled }) => {
+        const team = {
+          ...result,
+          builds: { KamisatoAyaka: { ...build, weapon, sets } },
+          after: { ...result.after, total: 950 },
+        }
+        onPreview?.({ ...team, rankings: {} })
+        return new Promise((resolve, reject) => {
+          finish = () =>
+            isCancelled() ? reject(new Error('cancelled')) : resolve(team)
+        })
+      }
+    )
+    const onView = vi.fn()
+    render(
+      <KqmCompare
+        teamId="ui"
+        runSettings={initial()}
+        result={result}
+        characterKey="KamisatoAyaka"
+        rotationTime={20}
+        onView={onView}
+      />,
+      { wrapper: wrap }
+    )
+    fireEvent.click(screen.getByRole('button', { name: /TheBlackSword/ }))
+    // the team's figures first, the rankings still being worked out (the ones before shown)
+    await waitFor(() =>
+      expect(onView).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          after: expect.objectContaining({ total: 950 }),
+        })
+      )
+    )
+    expect(
+      screen.getByRole('progressbar', { name: 'Updating rankings' })
+    ).toBeTruthy()
+    const original = screen.getByRole('button', { name: /AmenomaKageuchi/ })
+    expect(original.hasAttribute('disabled')).toBe(false)
+    // another pick meanwhile replaces it (back to the run's: its own figures)
+    fireEvent.click(original)
+    await waitFor(() => expect(onView).toHaveBeenLastCalledWith(undefined))
+    finish?.()
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('progressbar', { name: 'Updating rankings' })
+      ).toBeNull()
+    )
+    expect(onView).toHaveBeenLastCalledWith(undefined)
+  })
   it('replaces four repeated stat cards with compact member selection and one artifact view', () => {
     const result = sampleResult()
     render(

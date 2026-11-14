@@ -262,6 +262,56 @@ describe('linked KQM comparisons', () => {
     )
   }, 120_000)
 
+  it('shows the pick’s team first, then the same team ranked, as without the run’s work', async () => {
+    const args = { ...setup(), gender: 'F' as const }
+    args.teamOpt.keep = []
+    args.teamOpt.kqm!.excludedWeapons = allWeaponKeys.filter(
+      (key) =>
+        !['AmenomaKageuchi', 'TheBlackSword', 'FavoniusLance'].includes(key)
+    )
+    const result = (await optimizeTeamKqm({ ...args, maxRounds: 1 }))!
+    const pick = {
+      characterKey: 'KamisatoAyaka' as const,
+      sets: { GladiatorsFinale: 4 } as KqmBuild['sets'],
+      weapon: { key: 'TheBlackSword', refinement: 1 } as KqmBuild['weapon'],
+    }
+    const order: string[] = []
+    let preview: KqmResult | undefined
+    // (with the run's problems and searches)
+    const compared = (await compareTeamKqm({
+      ...args,
+      result,
+      ...pick,
+      onPreview: (p) => {
+        order.push('preview')
+        preview = p
+      },
+    }).then((r) => {
+      order.push('result')
+      return r
+    }))!
+    expect(order).toEqual(['preview', 'result'])
+    expect(preview!.rankings).toEqual({})
+    expect(preview!.builds).toEqual(compared.builds)
+    expect(preview!.after).toEqual(compared.after)
+    expect(preview!.energyRecharge).toEqual(compared.energyRecharge)
+    expect(compared.rankings.KamisatoAyaka!.weapons.length).toBeGreaterThan(1)
+    // a pick on a team picked before (the preview) takes the same work
+    const again = (await compareTeamKqm({
+      ...args,
+      result: preview!,
+      ...pick,
+    }))!
+    expect(again.after.total).toBeCloseTo(compared.after.total, 6)
+    // (a copy of the run is another run: none of its work)
+    const fresh = (await compareTeamKqm({
+      ...args,
+      result: structuredClone(result),
+      ...pick,
+    }))!
+    expect(fresh).toEqual(compared)
+  }, 120_000)
+
   it('allows weapon comparisons without a set bonus when sets are explicitly excluded', async () => {
     const args = { ...setup(), gender: 'F' as const }
     args.teamOpt.kqm!.excludedSets = kqmSets()

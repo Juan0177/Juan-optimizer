@@ -46,6 +46,7 @@ import {
 } from '@mui/material'
 import {
   type ReactNode,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -1346,6 +1347,13 @@ export function KqmResults({
     shown && result.optimized.includes(shown) ? shown : result.optimized[0]
   // other equipment picked in the inspector: the team as it plays with it (the figures above follow)
   const [comparing, setComparing] = useState<KqmResult>()
+  // a top team picked: its inspector compares on the run's own team (not on other picks), while
+  // the figures shown stay until its team is worked out
+  const [fromRun, setFromRun] = useState(false)
+  const showView = useCallback((next: KqmResult | undefined) => {
+    setFromRun(false)
+    setComparing(next)
+  }, [])
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
@@ -1356,7 +1364,7 @@ export function KqmResults({
       result,
       option.changed ? { [option.changed]: option.builds[option.changed]! } : {}
     )
-    setComparing(undefined)
+    setFromRun(true)
     if (option.changed) setShown(option.changed)
     // (the inspector reads the picks when it opens: open it again)
     setPicked((n) => n + 1)
@@ -1661,8 +1669,8 @@ export function KqmResults({
           result={result}
           characterKey={compared}
           rotationTime={rotationTime}
-          base={comparing}
-          onView={setComparing}
+          base={fromRun ? undefined : comparing}
+          onView={showView}
         />
       )}
       {/* (supplemental: the best teams that change one member, below the inspector) */}
