@@ -794,7 +794,7 @@ export function Shortfalls({
 }
 
 /** A member's colour: its element's, from the theme */
-const elementColor = (theme: Theme, characterKey: CharacterKey) =>
+export const elementColor = (theme: Theme, characterKey: CharacterKey) =>
   (theme.palette as unknown as Record<string, { main?: string } | undefined>)[
     getCharEle(characterKey)
   ]?.main ?? theme.palette.text.secondary
