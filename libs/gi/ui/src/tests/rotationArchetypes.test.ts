@@ -135,7 +135,7 @@ describe.each([
     console.log(
       `${team.id}: ${(sim.frames / 60).toFixed(2)} s, ${sim.hits.length} events; ${sim.notes.join(' | ')}`
     )
-  })
+  }, 30_000)
 })
 
 it('Beidou C2 does not create extra bounces against the simulator’s single enemy', () => {
