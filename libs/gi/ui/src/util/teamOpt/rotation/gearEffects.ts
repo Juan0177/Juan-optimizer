@@ -36,6 +36,14 @@ const REACTION_ELEMENTS: Record<string, string[]> = {
 }
 const SWIRLED = ['pyro', 'hydro', 'electro', 'cryo']
 
+/**
+ * Sets whose Starsparks (Epochal Advent) give their conditional while one is held, each with that
+ * conditional (one per line: the released build drops the unreleased ones)
+ */
+const STARSPARK_SETS: Record<string, string> = {
+  LegacyOfTheFirstChronicle: 'undyingRadiance',
+}
+
 export interface GearEffects {
   /** Every hit and reaction marker that lands, in time order */
   onHit(ctx: SimContext, hit: SimHit): void
@@ -233,19 +241,23 @@ export function gearEffects({
   // Epochal Advent: a Starspark (2 at most) when the wearer uses a Skill or Burst or performs a
   // Normal Attack, one lost every 3 s the wearer is on the field (its clock waits off it), and
   // Undying Radiance (the set's conditional) while one is held
-  const EPOCHAL = 'LegacyOfTheFirstChronicle'
   const SPARK_LOSS = 180
   const sparks = new Map<
     CharacterKey,
-    /** held; Radiance from; on-field frames to the next loss, counted from `at` */
-    { n: number; since: number; left: number; at: number }
+    /**
+     * the set's conditional; held; Radiance from; on-field frames to the next loss, counted from
+     * `at`
+     */
+    { path: string[]; n: number; since: number; left: number; at: number }
   >()
   for (const m of members)
-    if (opens(m, EPOCHAL)) {
-      sparks.set(m, { n: 0, since: 0, left: SPARK_LOSS, at: 0 })
-      // (declared: without a Starspark no Radiance, whatever the conditional's own state)
-      window(m, [EPOCHAL, 'undyingRadiance'], 'on', 0, 0)
-    }
+    for (const [set, conditional] of Object.entries(STARSPARK_SETS))
+      if (opens(m, set) && !sparks.has(m)) {
+        const path = [set, conditional]
+        sparks.set(m, { path, n: 0, since: 0, left: SPARK_LOSS, at: 0 })
+        // (declared: without a Starspark no Radiance, whatever the conditional's own state)
+        window(m, path, 'on', 0, 0)
+      }
   /** The wearer's Starsparks up to `t`: lost while it is on the field */
   const settleSparks = (k: CharacterKey, t: number) => {
     const s = sparks.get(k)
@@ -255,7 +267,7 @@ export function gearEffects({
         s.at += s.left
         s.left = SPARK_LOSS
         s.n--
-        if (!s.n) window(k, [EPOCHAL, 'undyingRadiance'], 'on', s.since, s.at)
+        if (!s.n) window(k, s.path, 'on', s.since, s.at)
       }
       if (s.n > 0) s.left -= t - s.at
     }
@@ -748,7 +760,7 @@ export function gearEffects({
     end(t) {
       for (const [k, s] of sparks) {
         settleSparks(k, t)
-        if (s.n) window(k, [EPOCHAL, 'undyingRadiance'], 'on', s.since, t)
+        if (s.n) window(k, s.path, 'on', s.since, t)
       }
       sparks.clear()
       for (const s of stacks.values())
