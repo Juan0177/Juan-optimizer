@@ -253,6 +253,16 @@ export function evaluateTeamRotation(
     characters,
   })
   if (!nodes) return undefined
+  return evaluateTeamNodes(database, teamId, attacks, nodes)
+}
+
+/** `evaluateTeamRotation` from the team's formulas already built (`teamRotationNodes`) */
+export function evaluateTeamNodes(
+  database: ArtCharDatabase,
+  teamId: string,
+  attacks: TeamOpt['attacks'],
+  nodes: NonNullable<ReturnType<typeof teamRotationNodes>>
+): TeamOptEvaluation {
   const result: TeamOptEvaluation = {
     total: 0,
     members: {},

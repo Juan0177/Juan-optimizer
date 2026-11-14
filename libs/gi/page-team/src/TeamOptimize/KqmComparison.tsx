@@ -10,6 +10,7 @@ import type {
   KqmBuild,
   KqmCatchUp,
   KqmOption,
+  KqmRanking,
   KqmResult,
 } from '@genshin-optimizer/gi/ui'
 import {
@@ -128,20 +129,41 @@ export function KqmCompare({
         choiceId(ck as CharacterKey, result.builds[ck as CharacterKey]!)
   )
   const [view, setView] = useState(base)
-  const [busy, setBusy] = useState(false)
+  const key = choiceId(characterKey, choice)
+  // what is still being worked out for the pick: the team's figures, then this member's rankings
+  // (from the start when the pick opened with is not worked out yet: the page keeps the
+  // figures it shows until it is)
+  const [pending, setPending] = useState<'figures' | 'rankings' | undefined>(
+    () =>
+      !disabled &&
+      !allOriginal &&
+      !cache.get(base)?.has(key) &&
+      !(base === result && key === choiceId(characterKey, original))
+        ? 'figures'
+        : undefined
+  )
+  const busy = !!pending
+  // the rankings last shown: kept while the pick's are worked out (the list stays where it is)
+  const [listed, setListed] = useState<KqmRanking>()
   const [error, setError] = useState('')
   const [category, setCategory] = useState(0)
-  const key = choiceId(characterKey, choice)
-  // the page's figures follow the picks (back to the run's when every pick is the original)
+  // the page's figures follow the picks (back to the run's when every pick is the original);
+  // while a pick's team is worked out, they stay as they are
   useEffect(() => {
+    if (pending === 'figures') return
     onView?.(view !== result ? view : undefined)
-  }, [view, result, onView])
+  }, [view, result, onView, pending])
   useEffect(() => {
     if (disabled) return
     let cancelled = false
+    const show = (next: KqmResult) => {
+      setView(next)
+      const ranked = next.rankings[characterKey]
+      if (ranked) setListed(ranked)
+    }
     if (allOriginal) {
-      setView(result)
-      setBusy(false)
+      show(result)
+      setPending(undefined)
       setError('')
       return
     }
@@ -151,11 +173,11 @@ export function KqmCompare({
     const hit = saved.get(key)
     setError('')
     if (hit) {
-      setView(hit)
-      setBusy(false)
+      show(hit)
+      setPending(undefined)
       return
     }
-    setBusy(true)
+    setPending('figures')
     compareTeamKqm({
       database,
       teamId,
@@ -167,17 +189,23 @@ export function KqmCompare({
       // (played again with the picked gear: what its effects change for the whole team)
       replay: kqmReplayOf(database, gender, i18n, teamId, runSettings),
       isCancelled: () => cancelled,
+      // (the figures as soon as the pick's build is found; the rankings after)
+      onPreview: (preview) => {
+        if (cancelled) return
+        setView(preview)
+        setPending('rankings')
+      },
     })
       .then((next) => {
         if (cancelled || !next) return
         saved.set(key, next)
-        setView(next)
+        show(next)
       })
       .catch((reason) => {
         if (!cancelled) setError(String(reason?.message ?? reason))
       })
       .finally(() => {
-        if (!cancelled) setBusy(false)
+        if (!cancelled) setPending(undefined)
       })
     return () => {
       cancelled = true
@@ -197,8 +225,10 @@ export function KqmCompare({
     allOriginal,
     i18n,
   ])
-  // (a team with other members' picks ranks this member's options once compared on it)
-  const ranking = view.rankings[characterKey] ?? result.rankings[characterKey]
+  // (a team with other members' picks ranks this member's options once compared on it; while a
+  // pick's are worked out, the ones shown before)
+  const ranking =
+    view.rankings[characterKey] ?? listed ?? result.rankings[characterKey]
   const build = view.builds[characterKey]!
   // the rows' tooltips (passives, set bonuses) have their texts before the first hover: no
   // placeholder while they load
@@ -216,8 +246,9 @@ export function KqmCompare({
     [ranking]
   )
   if (!ranking) return null
+  // (a pick while another is worked out replaces it)
   const choose = (next: Pick<KqmBuild, 'weapon' | 'sets'>) => {
-    if (disabled || busy || choiceId(characterKey, next) === key) return
+    if (disabled || choiceId(characterKey, next) === key) return
     choices.set(result, { ...choices.get(result), [characterKey]: next })
     setChoice(next)
   }
@@ -243,7 +274,7 @@ export function KqmCompare({
         size="small"
         label={t('teamOpt.kqm.weaponLabel', 'Weapon')}
         value={weaponId(choice)}
-        disabled={busy || disabled}
+        disabled={disabled}
         sx={selectSx}
         SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 380 } } } }}
         onChange={(e) => {
@@ -270,7 +301,7 @@ export function KqmCompare({
         size="small"
         label={t('teamOpt.kqm.setLabel', 'Artifact set')}
         value={kqmSetsId(choice.sets)}
-        disabled={busy || disabled}
+        disabled={disabled}
         sx={selectSx}
         SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 380 } } } }}
         onChange={(e) => {
@@ -329,7 +360,8 @@ export function KqmCompare({
             ...insetSx,
             p: { xs: 1.5, sm: 2 },
             minWidth: 0,
-            opacity: busy ? 0.6 : 1,
+            // (dimmed until the pick's build is found)
+            opacity: pending === 'figures' ? 0.6 : 1,
             transition: 'opacity .18s',
           }}
         >
@@ -379,7 +411,7 @@ export function KqmCompare({
                 size="small"
                 variant="text"
                 color="inherit"
-                disabled={busy || disabled}
+                disabled={disabled}
                 startIcon={<UndoIcon sx={{ fontSize: 16 }} />}
                 onClick={() => choose(original)}
                 sx={{ color: 'text.secondary', ...quickSx }}
@@ -517,8 +549,8 @@ export function KqmCompare({
             id={`kqm-${characterKey}-ranking`}
             aria-labelledby={`kqm-${characterKey}-${category === 0 ? 'weapons' : 'sets'}`}
             sx={{
-              opacity: busy ? 0.45 : 1,
-              pointerEvents: busy ? 'none' : undefined,
+              // (the rankings shown before, until the pick's: still to pick from)
+              opacity: busy ? 0.55 : 1,
               transition: 'opacity .18s',
             }}
           >
@@ -538,7 +570,7 @@ export function KqmCompare({
                     : { weapon: choice.weapon, sets: o.sets }
                 )
               }
-              disabled={disabled || busy}
+              disabled={disabled}
               label={(o) =>
                 category === 0 ? (
                   <WeaponLabel weapon={kqmWeaponData(o.weapon, characterKey)} />
