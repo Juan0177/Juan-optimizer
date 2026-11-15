@@ -149,7 +149,7 @@ def main():
     for team in teams:
         prefix = output / team['id']
         prefix.with_suffix('.json').write_text(json.dumps(team['members'], indent=2))
-        prefix.with_suffix('.spec.json').write_text(json.dumps({'text': team['text'], 'loops': fixture['loops'], 'conditional': team.get('conditional', {})}))
+        prefix.with_suffix('.spec.json').write_text(json.dumps({'text': team['text'], 'opener': team.get('opener'), 'loops': fixture['loops'], 'conditional': team.get('conditional', {})}))
         lines = []
         for b in team['members']:
             c = alias(chars, b['key'])
@@ -162,7 +162,10 @@ def main():
             lines += [f'{c} add stats hp=4780 atk=311 {main_stats};', f'{c} add stats {sub_stats};']
         lines += [f'options swap_delay=12 iteration={fixture["iterations"]} ignore_burst_energy=true;',
                   'target lvl=100 resist=0.1 hp=999999999 radius=2 pos=0,2.4;',
-                  f'active {team["native"].split()[0]};',
+                  # (the first character to act: a script may open with an `if`)
+                  f'active {next(w for w in (l.split()[0] for l in ((team.get("nativeOpener") or "") + "\n" + team["native"]).splitlines() if l.strip()) if w not in ("if", "while", "for", "}"))};',
+                  # (a first-rotation-only opener, played once before the loops)
+                  *([team['nativeOpener']] if team.get('nativeOpener') else []),
                   f'for let i=0; i<{fixture["loops"]}; i=i+1 {{', team['native'], '}']
         prefix.with_suffix('.fixed.cfg').write_text('\n'.join(lines) + '\n')
 
