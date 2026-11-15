@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.4.1",
+    "date": "2026-11-15",
+    "improved": [
+      "KQM Theorycrafting: the setup has a Weapons and artifact sets section. Battle Pass, 4★ event wish, 5★ standard wish and 5★ event wish weapons switch on and off right there, each showing the refinement it counts at; Choose weapons and Choose sets pick them one by one."
+    ],
+    "fixed": [
+      "The Widsith counts the average of its three songs, for 10 s each time its wielder takes the field (once per 30 s), instead of always its ATK song. Its passive also has an \"Average of the three\" option."
+    ]
+  },
+  {
     "version": "1.4.0",
     "date": "2026-11-15",
     "fixed": [
