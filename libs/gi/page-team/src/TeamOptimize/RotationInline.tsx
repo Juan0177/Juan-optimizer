@@ -1,4 +1,5 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type {
@@ -66,7 +67,10 @@ export function RotationInline({
   writer,
   replaces,
   disabled,
+  kqm,
 }: {
+  /** KQM theorycrafting's settings, on its tab: previewed at its constellations, no own gear */
+  kqm?: TeamOptKqm
   teamId: string
   members: TeamOptMember[]
   setTeamOpt: (update: TeamOptUpdate) => void
@@ -81,7 +85,9 @@ export function RotationInline({
   const { applied, text, setText, isDraft } = useRotationText(teamId)
   const settings = useRotationSettings(teamId)
   const names = useMemberNames(members)
-  const team = useSimTeam(members)
+  const team = useSimTeam(members, kqm)
+  // (the attacks a rotation leaves on the team are Team optimize's: always the members' own)
+  const ownTeam = useSimTeam(members)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [focused, setFocused] = useState(false)
   // read as steps while it is the rotation in use; a text field while it is written or changed
@@ -100,32 +106,33 @@ export function RotationInline({
   }, [typed])
   const { opener, timing, frameData, pingMs } = settings
   const play = useMemo(
-    () => (value: string) => {
-      try {
-        return {
-          result: simulateWritten({
-            text: value,
-            opener,
-            timing,
-            frameData,
-            pingMs,
-            team,
-            names,
-            members,
-            database,
-            teamId,
-            gender,
-            openerWarning: (warning) =>
-              t('teamOpt.writer.openerWarning', {
-                defaultValue: 'Opener: {{warning}}',
-                warning,
-              }),
-          }),
+    () =>
+      (value: string, as: typeof team = team) => {
+        try {
+          return {
+            result: simulateWritten({
+              text: value,
+              opener,
+              timing,
+              frameData,
+              pingMs,
+              team: as,
+              names,
+              members,
+              database,
+              teamId,
+              gender,
+              openerWarning: (warning) =>
+                t('teamOpt.writer.openerWarning', {
+                  defaultValue: 'Opener: {{warning}}',
+                  warning,
+                }),
+            }),
+          }
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : String(e) }
         }
-      } catch (e) {
-        return { error: e instanceof Error ? e.message : String(e) }
-      }
-    },
+      },
     [
       opener,
       timing,
@@ -161,7 +168,11 @@ export function RotationInline({
   }
   const submit = () => {
     if (disabled || !pending) return
-    const now = stale ? play(text).result : result
+    const now = kqm
+      ? play(text, ownTeam).result
+      : stale
+        ? play(text).result
+        : result
     if (!now?.sim) return
     const undo = applyWritten({
       database,

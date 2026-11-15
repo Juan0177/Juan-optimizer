@@ -166,7 +166,8 @@ function inactiveIn(
   return undefined
 }
 
-function describe(
+/** A conditional's name, source and states as its sheet gives them (by its path if it has none) */
+export function describe(
   ref: BuffRef,
   value: string,
   teamData: TeamData

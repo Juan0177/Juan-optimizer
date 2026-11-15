@@ -1,6 +1,7 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt, TeamOptAttack } from '@genshin-optimizer/gi/db'
+import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
@@ -149,7 +150,13 @@ export default function TeamBuildWorkspace({
   useEffect(() => setRunDialog(false), [mode])
   const [rotationExpanded, setRotationExpanded] = useState(() => !attackCount)
   // the rotation written as text (inline), and its writer dialog with Undo
-  const writer = useRotationWriter({ teamId, members, setTeamOpt })
+  const writer = useRotationWriter({
+    teamId,
+    members,
+    setTeamOpt,
+    teamData,
+    kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
+  })
   // Extra buffs: their count, and the section open when there are some
   const extraCount = Object.values(teamOpt.bonusStats ?? {}).reduce(
     (n, stats) => n + Object.values(stats ?? {}).filter((v) => !!v).length,
@@ -346,6 +353,7 @@ export default function TeamBuildWorkspace({
           writer={writer}
           replaces={!!attackCount}
           disabled={running}
+          kqm={mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined}
         />
         {writer.element}
         {/* the rotation's settings, in one row of labelled controls */}
