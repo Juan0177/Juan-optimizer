@@ -47,6 +47,7 @@ import {
   kqmWeapons,
   optimizeTeamKqm,
   teamRotationNodes,
+  compareTeamKqm,
 } from '../'
 
 const ayaka: CharacterKey = 'KamisatoAyaka'
@@ -711,6 +712,62 @@ describe('KQM Standards builds', () => {
     expect(result.energyRecharge[ayaka]!.minimum).toBeCloseTo(expected, 6)
     expect(result.energyRecharge[ayaka]!.value).toBeGreaterThanOrEqual(expected)
     expect(result.energyRecharge[ayaka]!.minimum).toBeGreaterThan(100)
+  }, 300_000)
+
+  it('searches a teammate again when a weapon changes its ER requirement (Favonius), in rankings and picks', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const settings = defaultEnergyCalculator([ayaka, shenhe], 20)
+    settings.members[ayaka]!.skillUses = 2
+    settings.members[shenhe]!.skillUses = 2
+    settings.members[shenhe]!.burstEvery = 0
+    // (Shenhe's Favonius particles: Ayaka gets her off-field share)
+    settings.members[shenhe]!.favoniusProcs = 2
+    teamOpt.kqm!.energySource = 'calculator'
+    teamOpt.kqm!.energyCalculator = settings
+    teamOpt.kqm!.energyRecharge = calculateEnergyRecharge(
+      [ayaka, shenhe],
+      settings
+    ).targets
+    teamOpt.kqm!.excludedWeapons = [
+      ...kqmWeapons(ayaka, undefined, { all: true })
+        .map((w) => w.key)
+        .filter((key) => key !== 'PrototypeRancour'),
+      ...kqmWeapons(shenhe, undefined, { all: true })
+        .map((w) => w.key)
+        .filter((key) => key !== 'FavoniusLance' && key !== 'TheCatch'),
+    ]
+    teamOpt.kqm!.weaponList = 2
+    const result = (await run(database, teamId, teamOpt))!
+    const weaponOf = (key: string) =>
+      kqmWeapons(shenhe, teamOpt.kqm).find((w) => w.key === key)!
+    const pick = (key: string) =>
+      compareTeamKqm({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt,
+        result,
+        characterKey: shenhe,
+        weapon: weaponOf(key),
+        sets: result.builds[shenhe]!.sets,
+      }).then((r) => r!)
+    const favonius = await pick('FavoniusLance')
+    const other = await pick('TheCatch')
+    const er = (r: KqmResult) => r.energyRecharge[ayaka]!
+    // Favonius lowers Ayaka's requirement; without it, she needs more and her build meets it
+    expect(er(other).minimum).toBeGreaterThan(er(favonius).minimum + 1)
+    expect(er(other).value).toBeGreaterThanOrEqual(er(other).minimum - 1e-6)
+    // with Favonius her artifacts are searched again: she uses the ER it frees
+    expect(er(favonius).value).toBeLessThan(er(other).minimum)
+    // the ranked option whose weapon changes Ayaka's requirement carries her build for it
+    const options = result.rankings[shenhe]!.weapons
+    const changed = options.find(
+      (o) => o.weapon.key !== result.builds[shenhe]!.weapon.key
+    )!
+    expect(changed.team?.[ayaka]).toBeTruthy()
+    // and its total is the team's with it, as a pick of it shows
+    const picked = changed.weapon.key === 'FavoniusLance' ? favonius : other
+    expect(changed.total).toBeCloseTo(picked.after.total, -1)
   }, 300_000)
 
   it('compares ER sands against ATK sands with ER substats before selecting a main stat', async () => {
