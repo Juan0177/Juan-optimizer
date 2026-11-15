@@ -780,7 +780,13 @@ export function simulateRotation({
           amount
         )
     },
-    sets: (ck) => gear[ck]?.sets ?? {},
+    // (a KQM candidate set counts as worn for the per-hit set states: Blizzard Strayer…)
+    sets: (ck) => ({
+      ...Object.fromEntries(
+        (gear[ck]?.candidates?.sets ?? []).map((set) => [set, 4])
+      ),
+      ...(gear[ck]?.sets ?? {}),
+    }),
     note: (text) => notes.add(text),
     warn: (text) => {
       if (!warnings.includes(text)) warnings.push(text)
@@ -913,9 +919,12 @@ export function simulateRotation({
       damageAttack.bonusStats = hit.bonusStats
       const auraStates =
         hit.states?.filter((s) =>
-          ['resonance.ShatteringIce', 'BlizzardStrayer.state'].includes(
-            s.path.join('.')
-          )
+          [
+            'resonance.ShatteringIce',
+            'BlizzardStrayer.state',
+            'Lavawalker.state',
+            'Thundersoother.state',
+          ].includes(s.path.join('.'))
         ) ?? []
       if (auraStates.length)
         damageAttack.states = [
@@ -1332,7 +1341,12 @@ export function simulateRotation({
           : undefined)
     const nextKind =
       next && next.characterKey !== characterKey ? 'swap' : next?.action?.kind
-    gearFx.onAction(ctxAt(now, characterKey), characterKey, action)
+    gearFx.onAction(
+      ctxAt(now, characterKey),
+      characterKey,
+      action,
+      result.normalStarts
+    )
     let frames = kitFramesInto(result, nextKind)
     let stateFrames = frames
     // gcsim queues the next item once the action reaches its earliest cancel (CanQueueAfter):
@@ -2033,6 +2047,8 @@ export function rotationAttacks(
                       [
                         'resonance.ShatteringIce',
                         'BlizzardStrayer.state',
+                        'Lavawalker.state',
+                        'Thundersoother.state',
                       ].includes(ref.path.join('.'))) ||
                     (snapshot.stat === 'all_dmg_' &&
                       ref.path.join('.') === 'Furina.burstFanfare')

@@ -66,7 +66,11 @@ import type { Data } from '@genshin-optimizer/gi/wr'
 import { constant, percent } from '@genshin-optimizer/gi/wr'
 import type { TeamDataOverrides, TeamOptMember } from './data'
 import { teamOptBonusStats, teamOptMembers } from './data'
-import { calculateEnergyRecharge, syncEnergyCalculator } from './energyCalc'
+import {
+  calculateEnergyRecharge,
+  energyCalcData,
+  syncEnergyCalculator,
+} from './energyCalc'
 import type { ItemConditionalCtx } from './itemConditionals'
 import { isStellarAttackPath, itemConditionals } from './itemConditionals'
 import type { KqmBuiltProblem } from './kqmBuild'
@@ -753,6 +757,7 @@ function memberCtx(
     otherElements: new Set(elements.filter((e) => e !== own)).size,
     element: own,
     ownStellar,
+    zeroEnergy: energyCalcData[characterKey]?.burstCost === 0,
   }
 }
 
@@ -1253,6 +1258,9 @@ async function runKqm({
           ),
           Object.fromEntries(
             Object.entries(state).map(([ck, b]) => [ck, b!.weapon.refinement])
+          ),
+          Object.fromEntries(
+            Object.entries(state).map(([ck, b]) => [ck, b!.sets])
           )
         )
       : undefined
