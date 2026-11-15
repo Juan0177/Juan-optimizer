@@ -11,6 +11,7 @@ import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   TeamData,
+  TeamDataOverrides,
   TeamOptEvaluation,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -74,6 +75,7 @@ export function MemberRotation({
   disabled,
   figures = true,
   played = false,
+  overrides,
 }: {
   teamId: string
   member: TeamOptMember
@@ -109,6 +111,11 @@ export function MemberRotation({
    * edited here (the written rotation is)
    */
   played?: boolean
+  /**
+   * The builds a played attack's figures and buffs are read with (KQM theorycrafting's selected
+   * builds: `kqmTeamOverrides`)
+   */
+  overrides?: TeamDataOverrides
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -348,13 +355,13 @@ export function MemberRotation({
       <Collapse in={expanded} timeout={180}>
         <Box
           component="fieldset"
-          disabled={disabled || played}
+          disabled={disabled}
           sx={{
             border: 0,
             p: 0,
             m: 0,
             minWidth: 0,
-            pointerEvents: disabled || played ? 'none' : undefined,
+            pointerEvents: disabled ? 'none' : undefined,
             opacity: disabled ? 0.6 : 1,
             transition: 'opacity .18s',
           }}
@@ -383,6 +390,7 @@ export function MemberRotation({
                 figures={figures || !!evaluation}
                 selecting={selecting}
                 selected={selected.has(i)}
+                readOnly={played}
                 onClick={() => {
                   if (!selecting) return setEditing(i)
                   // (from the latest selection: clicks may come faster than renders)
@@ -581,9 +589,13 @@ export function MemberRotation({
         </DataContext.Provider>
       )}
       {editingAttack && editing !== undefined && (
-        <AttackFiguresContext.Provider value={figures}>
+        <AttackFiguresContext.Provider
+          value={figures || (played && !!overrides)}
+        >
           <AttackEditor
             open
+            readOnly={played}
+            overrides={played ? overrides : undefined}
             onClose={() => setEditing(undefined)}
             teamId={teamId}
             characterKey={characterKey}
@@ -723,10 +735,13 @@ function AttackRow({
   onRemove,
   showConditions,
   figures,
+  readOnly = false,
 }: {
   data: UIData | undefined
   attack: TeamOptAttack
   showConditions: boolean
+  /** A played attack: it opens, read-only, and is not removed here */
+  readOnly?: boolean
   /** Its damage column (none without figures) */
   figures: boolean
   buffs: TeamBuff[]
@@ -975,7 +990,7 @@ function AttackRow({
           ×{formatHits(attack.hits)}
         </Typography>
       </ButtonBase>
-      {!selecting && (
+      {!selecting && !readOnly && (
         <Tooltip title={t('teamOpt.rotation.remove', 'Remove')}>
           <IconButton
             className="attack-remove"

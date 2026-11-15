@@ -23,7 +23,12 @@ import {
   resonanceSheets,
 } from '@genshin-optimizer/gi/sheets'
 import { getCharStat } from '@genshin-optimizer/gi/stats'
-import type { BuffRef, TeamData } from '@genshin-optimizer/gi/ui'
+import type {
+  BuffRef,
+  KqmResult,
+  TeamData,
+  TeamDataOverrides,
+} from '@genshin-optimizer/gi/ui'
 import {
   buffRefKey,
   getTeamDataWith,
@@ -345,7 +350,9 @@ export function useAttackTeamData(
   attack: TeamOptAttack,
   onField: CharacterKey,
   mainStatAssumptionLevel: number,
-  version: unknown
+  version: unknown,
+  /** Other builds than the members' own (KQM theorycrafting's: `kqmTeamOverrides`) */
+  overrides?: TeamDataOverrides
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -360,9 +367,10 @@ export function useAttackTeamData(
     const timer = setTimeout(() => {
       const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
       const data = getTeamDataWith(database, teamId, {
+        ...overrides,
         states: attack.states ?? [],
         mainStatAssumptionLevel,
-        bonusStats: teamOptBonusStats(teamOpt, keys),
+        bonusStats: overrides?.bonusStats ?? teamOptBonusStats(teamOpt, keys),
       })
       if (!data) return
       const onFieldNow = data[active] ? active : keys[0]
@@ -381,8 +389,63 @@ export function useAttackTeamData(
     mainStatAssumptionLevel,
     teamOpt.bonusStats,
     version,
+    overrides,
   ])
   return teamData
+}
+
+/**
+ * KQM theorycrafting's buffs for the builds of `result` (`overrides`: `kqmTeamOverrides` of it):
+ * the team's conditionals that are on, the gear effects it counts by rule, and every state its
+ * played attacks use, named from the sheets with those builds. The passives of gear the builds do
+ * not have are left out (the members' own gear never shows here).
+ */
+export function useKqmTeamBuffs(
+  teamId: string,
+  teamData: TeamData | undefined,
+  overrides: TeamDataOverrides | undefined,
+  result: Pick<KqmResult, 'assumed' | 'played'> | undefined
+): TeamBuff[] {
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  return useMemo(() => {
+    if (!teamData || !overrides || !result) return []
+    const data = getTeamDataWith(database, teamId, overrides)
+    if (!data) return []
+    const keys = Object.keys(data) as CharacterKey[]
+    if (!keys.length) return []
+    const ui = uiDataForTeam(data, gender, keys[0])
+    // (the sheets are the members'; the calculation data the builds')
+    const kqmData: TeamData = Object.fromEntries(
+      keys.flatMap((ck) => {
+        const bundle = teamData[ck]
+        const target = ui[ck]?.target
+        return bundle && target ? [[ck, { ...bundle, target }]] : []
+      })
+    )
+    const refs = new Map<string, { ref: BuffRef; value: string }>()
+    const add = (ref: BuffRef, value: string) => {
+      const key = buffRefKey(ref)
+      if (!refs.has(key)) refs.set(key, { ref, value })
+    }
+    for (const { ref, value } of teamConditionals(database, teamId))
+      add(ref, value)
+    for (const [ck, list] of Object.entries(result.assumed ?? {}))
+      for (const { path, value } of list ?? [])
+        add({ owner: ck as CharacterKey, path }, value)
+    for (const attacks of Object.values(result.played?.attacks ?? {}))
+      for (const attack of attacks ?? [])
+        for (const { owner, path, value } of attack.states ?? [])
+          add({ owner, path }, value)
+    return [...refs.values()]
+      .map(({ ref, value }) => ({
+        ref,
+        key: buffRefKey(ref),
+        value,
+        ...describe(ref, value, kqmData),
+      }))
+      .filter((buff) => buff.inactive !== 'gear')
+  }, [database, gender, teamId, teamData, overrides, result])
 }
 
 /** The buffs that can change an attack of `characterKey`: its own, the team's, and teammates' team buffs */

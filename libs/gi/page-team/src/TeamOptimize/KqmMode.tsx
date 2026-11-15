@@ -1469,6 +1469,7 @@ export function KqmResults({
   stalls,
   running,
   onDiscard,
+  onView,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -1487,6 +1488,8 @@ export function KqmResults({
   stale?: boolean
   running?: boolean
   onDiscard: () => void
+  /** The builds shown now: the run's, or the team with other equipment picked here */
+  onView?: (view: KqmResult) => void
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -1510,6 +1513,7 @@ export function KqmResults({
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
+  useEffect(() => onView?.(view), [onView, view])
   // a top team picked: its member's equipment, as picked in the inspector (the others the run's)
   const [picked, setPicked] = useState(0)
   const pickTeam = (option: KqmTeamOption) => {
