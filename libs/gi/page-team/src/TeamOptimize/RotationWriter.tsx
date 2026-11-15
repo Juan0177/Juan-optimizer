@@ -40,6 +40,7 @@ import {
   type SimHit,
   simulateRotationSamples,
 } from '@genshin-optimizer/gi/ui'
+import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import TuneIcon from '@mui/icons-material/Tune'
@@ -68,6 +69,8 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAttackInfo, variantColor } from './AttackName'
+import { useTeamBuffs } from './buffs'
 import { FrameDataPanel, pingToFrames } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import type { TimelineMoment } from './RotationTimeline'
@@ -77,13 +80,12 @@ import {
   frameOverrides,
   type RotationTimingSettings,
 } from './RotationTiming'
-import { Disclosure, focusSx, quickSx, tokens, type } from './ui'
-import { useTeamBuffs } from './buffs'
 import {
   TimelineHitStats,
   useMomentStats,
   useTimelineFigures,
 } from './TimelineFigures'
+import { Disclosure, focusSx, quickSx, tokens, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
@@ -1376,6 +1378,7 @@ function WriterModal({
                 </Dialog>
                 <HitsSummary
                   members={members}
+                  teamData={teamData}
                   attacks={result.attacks}
                   unsupported={result.sim.unsupported}
                 />
@@ -1559,11 +1562,125 @@ function EmptyTimeline() {
 }
 
 /** Each member's hits in one rotation (what the team's attacks become), compact */
+/**
+ * One attack of a member's hit card: its name in the hit's own colour (its element, or its Stellar
+ * or Lunar reaction's hue, as in the rotation panel), what kind of hit it is, how many, and a
+ * quiet bar of that colour for its share of the member's hits
+ */
+function HitRow({
+  label,
+  n,
+  most,
+  path,
+  data,
+  characterKey,
+}: {
+  label: string
+  n: number
+  most: number
+  path: string[]
+  data: UIData | undefined
+  characterKey: CharacterKey
+}) {
+  const info = useAttackInfo(data, path)
+  // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
+  const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
+  const name = tagged ? tagged[1] : label
+  const tag = tagged?.[2]
+  const color = variantColor(info?.element)
+  const share = `${(n / most) * 100}%`
+  return (
+    <Tooltip
+      title={label}
+      placement="top-start"
+      enterDelay={600}
+      disableInteractive
+    >
+      <Box
+        sx={(theme) => {
+          const palette = theme.palette as unknown as Record<
+            string,
+            { main: string } | undefined
+          >
+          const tint =
+            (info?.element && palette[info.element]?.main) ||
+            laneColor(theme, characterKey)
+          return {
+            position: 'relative',
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr) auto',
+            alignItems: 'center',
+            gap: 1,
+            px: 0.75,
+            mx: -0.75,
+            minHeight: 26,
+            borderRadius: 1,
+            fontSize: 12.5,
+            background: `linear-gradient(90deg, ${alpha(tint, 0.14)} ${share}, transparent ${share})`,
+          }
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 0.75,
+            minWidth: 0,
+          }}
+        >
+          <Box
+            component="span"
+            sx={{
+              color,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {name}
+          </Box>
+          {tag && (
+            <Box
+              component="span"
+              sx={{
+                flexShrink: 1,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: 11,
+                color: 'text.secondary',
+              }}
+            >
+              {tag}
+            </Box>
+          )}
+        </Box>
+        <Box
+          component="span"
+          sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 650 }}
+        >
+          <Box
+            component="span"
+            sx={{ color: 'text.secondary', fontWeight: 500 }}
+          >
+            ×
+          </Box>
+          {Math.round(n * 100) / 100}
+        </Box>
+      </Box>
+    </Tooltip>
+  )
+}
+
 function HitsSummary({
   members,
   attacks,
   unsupported,
+  teamData,
 }: {
+  /** The team's data: each attack's own colour (its element or reaction) */
+  teamData: TeamData | undefined
   members: TeamOptMember[]
   attacks: Partial<Record<CharacterKey, TeamOptAttack[]>> | undefined
   unsupported: CharacterKey[]
@@ -1583,16 +1700,18 @@ function HitsSummary({
       }}
     >
       {members.map(({ characterKey }) => {
-        const counts = new Map<string, number>()
+        const counts = new Map<string, { n: number; path: string[] }>()
         for (const a of attacks?.[characterKey] ?? []) {
           const base = a.description ?? a.path.join('.')
           const label = a.reaction
             ? `${base} (${REACTION_NAMES[a.reaction] ?? a.reaction})`
             : base
-          counts.set(label, (counts.get(label) ?? 0) + (a.hits ?? 1))
+          const found = counts.get(label)
+          if (found) found.n += a.hits ?? 1
+          else counts.set(label, { n: a.hits ?? 1, path: a.path })
         }
-        const total = [...counts.values()].reduce((n, c) => n + c, 0)
-        const most = Math.max(1, ...counts.values())
+        const total = [...counts.values()].reduce((sum, c) => sum + c.n, 0)
+        const most = Math.max(1, ...[...counts.values()].map((c) => c.n))
         return (
           <Box
             key={characterKey}
@@ -1647,89 +1766,17 @@ function HitsSummary({
             </Box>
             {unsupported.includes(characterKey) ? null : counts.size ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                {[...counts].map(([label, n]) => {
-                  // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
-                  const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
-                  const name = tagged ? tagged[1] : label
-                  const tag = tagged?.[2]
-                  return (
-                    <Tooltip
-                      key={label}
-                      title={label}
-                      placement="top-start"
-                      enterDelay={600}
-                      disableInteractive
-                    >
-                      <Box
-                        sx={(theme) => ({
-                          position: 'relative',
-                          display: 'grid',
-                          gridTemplateColumns: 'minmax(0, 1fr) auto',
-                          alignItems: 'center',
-                          gap: 1,
-                          px: 0.75,
-                          mx: -0.75,
-                          minHeight: 26,
-                          borderRadius: 1,
-                          fontSize: 12.5,
-                          // how many of the member's hits it is, as a quiet bar behind the row
-                          background: `linear-gradient(90deg, ${alpha(laneColor(theme, characterKey), 0.13)} ${(n / most) * 100}%, transparent ${(n / most) * 100}%)`,
-                        })}
-                      >
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'baseline',
-                            gap: 0.75,
-                            minWidth: 0,
-                          }}
-                        >
-                          <Box
-                            component="span"
-                            sx={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {name}
-                          </Box>
-                          {tag && (
-                            <Box
-                              component="span"
-                              sx={{
-                                flexShrink: 1,
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                fontSize: 11,
-                                color: 'text.secondary',
-                              }}
-                            >
-                              {tag}
-                            </Box>
-                          )}
-                        </Box>
-                        <Box
-                          component="span"
-                          sx={{
-                            fontVariantNumeric: 'tabular-nums',
-                            fontWeight: 650,
-                          }}
-                        >
-                          <Box
-                            component="span"
-                            sx={{ color: 'text.secondary', fontWeight: 500 }}
-                          >
-                            ×
-                          </Box>
-                          {Math.round(n * 100) / 100}
-                        </Box>
-                      </Box>
-                    </Tooltip>
-                  )
-                })}
+                {[...counts].map(([label, { n, path }]) => (
+                  <HitRow
+                    key={label}
+                    label={label}
+                    n={n}
+                    most={most}
+                    path={path}
+                    data={teamData?.[characterKey]?.target}
+                    characterKey={characterKey}
+                  />
+                ))}
               </Box>
             ) : (
               <Typography variant="caption" color="text.secondary">
