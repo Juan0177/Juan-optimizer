@@ -933,6 +933,7 @@ export function attackHitData(
     mainStatAssumptionLevel = 0,
     onField,
     bonusStats,
+    overrides,
   }: {
     attack: TeamOptAttack
     characterKey: CharacterKey
@@ -941,6 +942,8 @@ export function attackHitData(
     onField?: CharacterKey
     /** Extra bonus stats per member (`teamOptBonusStats`) */
     bonusStats?: Partial<Record<CharacterKey, BonusStats>>
+    /** Other builds than the members' own (KQM theorycrafting's: `kqmTeamOverrides`) */
+    overrides?: TeamDataOverrides
   }
 ): { target: UIData; hit: CalcResult | undefined } | undefined {
   const members = teamOptMembers(database, teamId)
@@ -956,10 +959,11 @@ export function attackHitData(
   // (an attack of no hits: one, as it would be)
   const [first] = attackSegments({ ...attack, hits: Math.max(attack.hits, 1) })
   const teamData = getTeamDataWith(database, teamId, {
+    ...overrides,
     excluded: first?.excluded ?? [],
     states: attack.states ?? [],
     mainStatAssumptionLevel,
-    bonusStats,
+    bonusStats: overrides?.bonusStats ?? bonusStats,
   })
   if (!teamData?.[active]) return undefined
   const ui = uiDataForTeam(

@@ -48,6 +48,7 @@ import {
   optimizeTeamKqm,
   teamRotationNodes,
   compareTeamKqm,
+  kqmTeamOverrides,
 } from '../'
 
 const ayaka: CharacterKey = 'KamisatoAyaka'
@@ -768,6 +769,26 @@ describe('KQM Standards builds', () => {
     // and its total is the team's with it, as a pick of it shows
     const picked = changed.weapon.key === 'FavoniusLance' ? favonius : other
     expect(changed.total).toBeCloseTo(picked.after.total, -1)
+  }, 300_000)
+
+  it('gives a page the calculation of a result’s builds (kqmTeamOverrides): the same team total', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const result = (await run(database, teamId, teamOpt))!
+    const overrides = kqmTeamOverrides(database, teamId, teamOpt, result)
+    const again = evaluateTeamRotation(database, teamId, 'F', {
+      ...overrides,
+      arts: overrides.arts!,
+      attacks: result.played?.attacks ?? teamOpt.attacks,
+      onField: teamOpt.onField,
+    })!
+    expect(again.total).toBeCloseTo(result.after.total, 6)
+    // at the KQM constellations and talents, whatever the members' own
+    expect(overrides.characters?.[shenhe]?.constellation).toBe(
+      result.constellations[shenhe]
+    )
+    expect(overrides.characters?.[ayaka]?.talent?.auto).toBe(
+      kqmTalentLevel(teamOpt.kqm)
+    )
   }, 300_000)
 
   it('compares ER sands against ATK sands with ER substats before selecting a main stat', async () => {
