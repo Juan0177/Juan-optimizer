@@ -45,8 +45,8 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
-import BoltIcon from '@mui/icons-material/Bolt'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import BoltIcon from '@mui/icons-material/Bolt'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import type { SxProps, Theme } from '@mui/material'
@@ -257,6 +257,12 @@ function WeaponChooserModal({
       key: '80',
       label: t('teamOpt.weapons.leveled', 'Level 80 and up'),
       ids: below80,
+    },
+    // none ticked: a start for ticking only the few wanted
+    {
+      key: 'none',
+      label: t('teamOpt.weapons.pickNone', 'None'),
+      ids: all.map((w) => w.id),
     },
   ]
   const allowedCount = all.filter((w) => !excluded.has(w.id)).length
