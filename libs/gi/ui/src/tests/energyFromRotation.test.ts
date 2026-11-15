@@ -211,4 +211,20 @@ describe('energy inputs: Flins (two Bursts)', () => {
     })
     expect(result.targets.Flins!).toBeGreaterThan(without.targets.Flins!)
   })
+  it('a Burst cadence set by hand keeps the Thunderous Symphonies out too (no double count)', () => {
+    const settings = defaultEnergyCalculator(team, 20)
+    settings.members.Flins = {
+      ...settings.members.Flins!,
+      burstEvery: 1,
+      edited: ['burstEvery'],
+    }
+    const filled = withRotationEnergy(settings, team, energy)
+    expect(filled.members.Flins!.burstEvery).toBe(1)
+    expect(filled.members.Flins!.secondaryUses).toBe(
+      settings.members.Flins!.secondaryUses
+    )
+    expect(
+      calculateEnergyRecharge(team, filled).members.Flins!.flatEnergy
+    ).toBeGreaterThanOrEqual(0)
+  })
 })

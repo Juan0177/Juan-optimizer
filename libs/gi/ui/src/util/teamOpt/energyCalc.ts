@@ -791,11 +791,20 @@ export function withRotationEnergy(
     const filled = energy.members[key]
     if (!member || !filled) continue
     const next: TeamOptEnergyMember = { ...member }
+    // (a Burst cadence set by hand also keeps the partial-Energy Bursts out: Flins' Thunderous
+    // Symphony, Varesa's Kablam are Bursts too, so the rotation's count of them would add to the
+    // Bursts entered)
+    const keepShort =
+      !!SHORT_BURSTS[key] && !!member.edited?.includes('burstEvery')
     for (const [field, value] of Object.entries(filled) as [
       TeamOptEnergyRotationField,
       never,
     ][])
-      if (field !== 'fieldTime' && !member.edited?.includes(field))
+      if (
+        field !== 'fieldTime' &&
+        !member.edited?.includes(field) &&
+        !(keepShort && (field === 'secondaryMode' || field === 'secondaryUses'))
+      )
         next[field] = value
     members[key] = next
   }
