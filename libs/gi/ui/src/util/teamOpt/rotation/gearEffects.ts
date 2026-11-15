@@ -287,6 +287,18 @@ export function gearEffects({
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
   for (const k of members)
     if (opens(k, 'PaleFlame')) window(k, ['PaleFlame', 'stacks'], '1', 0, 0)
+  // Clash of Kings: declared off, on only after the wielder's Skill (below)
+  for (const k of members)
+    if (holds(k, 'ClashOfKings'))
+      window(k, ['ClashOfKings', 'skill'], 'on', 0, 0)
+  /**
+   * Clash of Kings' Laws of the Board, per wielder (gcsim): `end` its buff's end, `extendUntil`
+   * the 12 s within which one Charged Attack hit may extend it; both on the wielder's own clock
+   */
+  const clash = new Map<
+    CharacterKey,
+    { end: number; extendUntil: number; extended: boolean }
+  >()
   // Instructor, Heart of the Furnace: declared off, on only from the wearer's own triggers (a
   // saved manual state must not make them active throughout)
   for (const k of members) {
@@ -824,6 +836,30 @@ export function gearEffects({
           reduceCooldown(k, 'skill', 60, t)
         return
       }
+      // Clash of Kings (gcsim): the wielder's Charged Attack hit on the field while Laws of the
+      // Board is up extends it by 6 s, once per trigger (within its 12 s)
+      if (
+        hit.tag === 'charged' &&
+        !hit.path[0].startsWith('_') &&
+        hit.onField === k &&
+        holds(k, 'ClashOfKings')
+      ) {
+        const own = ctx.characterFrame(k)
+        const laws = clash.get(k)
+        if (
+          laws &&
+          !laws.extended &&
+          own < laws.end &&
+          own < laws.extendUntil
+        ) {
+          laws.extended = true
+          laws.end += 360
+          ctx.buff(k, ['ClashOfKings', 'skill'], 'on', 0, laws.end - own, {
+            recipient: k,
+            hitlag: 'recipient',
+          })
+        }
+      }
       if (
         hit.tag === 'charged' &&
         !hit.path[0].startsWith('_') &&
@@ -1008,6 +1044,27 @@ export function gearEffects({
     },
     onAction(ctx, actor, action, normalStarts) {
       if (actor === active) pickUp(ctx)
+      // Clash of Kings (gcsim): the wielder's Skill on the field grants Laws of the Board (ATK, EM)
+      // for 6 s (hitlag-extended), once per 12 s on its own clock
+      if (
+        action.kind === 'skill' &&
+        actor === active &&
+        holds(actor, 'ClashOfKings')
+      ) {
+        const own = ctx.characterFrame(actor)
+        // (gcsim's 12 s ICD status is still active on its expiry frame)
+        if (ready(`clash.${actor}`, own, 721)) {
+          clash.set(actor, {
+            end: own + 360,
+            extendUntil: own + 720,
+            extended: false,
+          })
+          ctx.buff(actor, ['ClashOfKings', 'skill'], 'on', 0, 360, {
+            recipient: actor,
+            hitlag: 'recipient',
+          })
+        }
+      }
       // Fractured Halo: its ATK bonus for 20 s after the wielder's Skill or Burst on the field
       if (
         (action.kind === 'skill' || action.kind === 'burst') &&
