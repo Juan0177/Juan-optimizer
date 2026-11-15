@@ -502,23 +502,37 @@ export function elementalReactions({
     alive: boolean
   }
   let cores: Core[] = []
+  /**
+   * Bloom, Hyperbloom and Burgeon damage (gcsim's ICDGroupReactionA, per attacker and reaction on
+   * the enemy): of the hits landing within 0.5 s of the window's first, only 2 deal damage. The
+   * reactions themselves all happen (one Electro hit on four cores: four Hyperblooms, two hits).
+   */
+  const reactionAIcd = new Map<string, { start: number; count: number }>()
+  const reactionA = (
+    ctx: SimContext,
+    delay: number,
+    owner: CharacterKey,
+    node: 'bloom' | 'hyperbloom' | 'burgeon',
+    label: string
+  ) =>
+    ctx.at(delay, (c) => {
+      const key = `${owner}.${node}`
+      const window = reactionAIcd.get(key)
+      if (!window || c.now >= window.start + 30)
+        reactionAIcd.set(key, { start: c.now, count: 1 })
+      else if (++window.count > 2) return
+      transformative(c, 0, owner, node, 'dendro', label)
+    })
   const explodeCore = (ctx: SimContext, core: Core, delay: number) => {
     if (!core.alive) return
     core.alive = false
-    transformative(ctx, delay, core.owner, 'bloom', 'dendro', 'Bloom')
+    reactionA(ctx, delay, core.owner, 'bloom', 'Bloom')
   }
   const addCore = (ctx: SimContext, owner: CharacterKey) => {
     ctx.at(30, (c) => {
       if (bountiful(owner, c.now)) {
         // Nilou: a Bountiful Core bursts 0.4 s later and cannot Hyperbloom or Burgeon
-        transformative(
-          c,
-          25,
-          owner,
-          'bloom',
-          'dendro',
-          'Bloom (Bountiful Core)'
-        )
+        reactionA(c, 25, owner, 'bloom', 'Bloom (Bountiful Core)')
         return
       }
       cores = cores.filter((x) => x.alive)
@@ -535,23 +549,8 @@ export function elementalReactions({
       if (!core.alive) continue
       core.alive = false
       if (a.element === 'electro')
-        transformative(
-          ctx,
-          60,
-          a.hit.characterKey,
-          'hyperbloom',
-          'dendro',
-          'Hyperbloom'
-        )
-      else
-        transformative(
-          ctx,
-          1,
-          a.hit.characterKey,
-          'burgeon',
-          'dendro',
-          'Burgeon'
-        )
+        reactionA(ctx, 60, a.hit.characterKey, 'hyperbloom', 'Hyperbloom')
+      else reactionA(ctx, 1, a.hit.characterKey, 'burgeon', 'Burgeon')
     }
     cores = cores.filter((x) => x.alive)
   }
