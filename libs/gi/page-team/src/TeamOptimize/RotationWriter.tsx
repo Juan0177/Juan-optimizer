@@ -31,6 +31,7 @@ import {
   kitModels,
   kqmMemberConstellation,
   kqmSimGear,
+  lastRotation,
   needsRotationCalculation,
   parseRotation,
   REACTION_NAMES,
@@ -321,7 +322,11 @@ export function simulateWritten({
   teamId: string
   gender: GenderKey
   openerWarning: (warning: string) => string
-  /** How many times it is played, and which of them count (default: three, the middle one) */
+  /**
+   * How many times it is played, and which of them count. Default: as KQM counts it, 4 in a row
+   * with the last 2 averaged (the pace it keeps: an action not ready again in time waits), the
+   * result's `sim` then the last of them (what a timeline shows) and `counted` the 2.
+   */
   repeats?: number
   keep?: 'middle' | 'all' | 'last2'
   /** Seeded samples of members with random effects (default 64) */
@@ -343,6 +348,9 @@ export function simulateWritten({
     rotation.warnings.push(...parsed.warnings.map(openerWarning))
   }
   if (!rotation.steps.length) return { rotation }
+  // (the writer's and Team optimize's own play: the pace it keeps, as KQM counts it)
+  const steady = repeats === undefined
+  const sampled = team.members.some((m) => kitModels[m]?.sampled)
   const sim = simulateRotationSamples(
     {
       ...team,
@@ -354,19 +362,75 @@ export function simulateWritten({
       swapFrames: timing.swapFrames,
       frameData,
       pingFrames: pingToFrames(pingMs),
-      repeats,
-      keep,
+      repeats: steady ? STEADY_REPEATS : repeats,
+      keep: steady ? 'last2' : keep,
       auraTimeline,
     },
-    samples !== undefined && team.members.some((m) => kitModels[m]?.sampled)
-      ? samples
-      : undefined
+    // (two rotations kept: half the samples each, as much as one rotation of 64)
+    sampled ? (samples ?? (steady ? 32 : undefined)) : undefined
   )
   const own =
     current ??
     ((owner: SimBuffOwner, path: string[]) =>
       ownConditional(database, teamId, members, owner, path))
-  return { rotation, sim, own, attacks: rotationAttacks(sim, own) }
+  if (!steady)
+    return {
+      rotation,
+      sim,
+      own,
+      attacks: rotationAttacks(sim, own),
+      counted: undefined,
+    }
+  return {
+    rotation,
+    // (what the timeline shows: the last of the two counted)
+    sim: lastRotation(sim),
+    own,
+    // per rotation: the hits of the two counted, averaged
+    attacks: perRotation(rotationAttacks(sim, own), STEADY_COUNTED),
+    counted: { sim, rotations: STEADY_COUNTED },
+  }
+}
+/** Played the writer's way (default `repeats`): 4 rotations in a row, the last 2 counted */
+const STEADY_REPEATS = 4
+const STEADY_COUNTED = 2
+/** Attacks of `rotations` rotations, per rotation */
+function perRotation(
+  attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>,
+  rotations: number
+) {
+  return Object.fromEntries(
+    Object.entries(attacks).map(([k, list]) => [
+      k,
+      (list ?? []).map((a) => ({ ...a, hits: (a.hits ?? 1) / rotations })),
+    ])
+  ) as Partial<Record<CharacterKey, TeamOptAttack[]>>
+}
+/** A played rotation's time per rotation, seconds (as counted: the steady pace) */
+export const writtenSeconds = (result: WrittenRotation) =>
+  result.counted
+    ? result.counted.sim.frames / 60 / result.counted.rotations
+    : result.sim
+      ? result.sim.frames / 60
+      : undefined
+/**
+ * When the rotation cannot keep its pace: its first time through (nothing waited for), seconds,
+ * and what waits per rotation since (seconds each, the longest first); undefined when it keeps it
+ */
+export function writtenWaits(result: WrittenRotation) {
+  const counted = result.counted
+  if (!counted) return undefined
+  const first = (counted.sim.rotationFrames?.[0] ?? 0) / 60
+  const per = writtenSeconds(result) ?? 0
+  const waits = Object.entries(counted.sim.stalls ?? {})
+    .map(([label, frames]) => ({
+      label,
+      seconds: frames / 60 / counted.rotations,
+    }))
+    .filter((w) => w.seconds >= 0.1)
+    .sort((a, b) => b.seconds - a.seconds)
+  if (!first || per - first < 0.2) return undefined
+  return { first, waits }
 }
 /** A conditional's state as the member (or the team) has it set */
 function ownConditional(
@@ -521,7 +585,10 @@ export function applyWritten({
   frameData: FrameData
   pingMs: number
 }): WriterUndo | undefined {
-  const { sim, own } = result
+  const { own } = result
+  // (the rotations counted: their buffs, attacks and time, per rotation)
+  const sim = result.counted?.sim ?? result.sim
+  const rotations = result.counted?.rotations ?? 1
   if (!sim || !own) return undefined
   const keys = members.map((m) => m.characterKey)
   const before = database.teams.get(teamId)
@@ -583,13 +650,16 @@ export function applyWritten({
         layeredAssignment(values, [m.characterKey, 'lockHomework'], 'on')
         teamChar.conditional = values
       })
-  const attacks = rotationAttacks(sim, (owner, path) => {
-    const d = defaults.find(
-      (x) => x.owner === owner && x.path.join('.') === path.join('.')
-    )
-    return d ? d.value : own(owner, path)
-  })
-  const seconds = sim.frames / 60
+  const attacks = perRotation(
+    rotationAttacks(sim, (owner, path) => {
+      const d = defaults.find(
+        (x) => x.owner === owner && x.path.join('.') === path.join('.')
+      )
+      return d ? d.value : own(owner, path)
+    }),
+    rotations
+  )
+  const seconds = sim.frames / 60 / rotations
   const unsupported = sim.unsupported
   setTeamOpt((o: TeamOpt) => {
     for (const k of keys)
@@ -1006,7 +1076,8 @@ function WriterModal({
     (!!result &&
       Object.keys(frameOverrides(result.rotation, timing.edits)).length > 0)
 
-  const seconds = result?.sim ? result.sim.frames / 60 : undefined
+  const seconds = result ? writtenSeconds(result) : undefined
+  const waited = result ? writtenWaits(result) : undefined
   const hadRotation = Object.values(
     database.teams.get(teamId)?.teamOpt?.attacks ?? {}
   ).some((a) => !!a?.length)
@@ -1148,6 +1219,9 @@ function WriterModal({
               minWidth: 0,
               maxHeight: { md: '76vh' },
               overflowY: { md: 'auto' },
+              // (the column scrolls: its parts keep their height. Shrunk, the timeline's box went
+              // to 0 on a laptop at 100% zoom and the hit cards covered the chart)
+              '& > *': { flexShrink: 0 },
               [`@media ${SHORT_SCREEN}`]: {
                 maxHeight: 'none',
                 overflowY: 'visible',
@@ -1308,9 +1382,37 @@ function WriterModal({
                     color="text.secondary"
                     sx={{ fontVariantNumeric: 'tabular-nums' }}
                   >
-                    {t('teamOpt.writer.oneRotation', 'one rotation')} ·{' '}
-                    {result.sim.frames} {t('teamOpt.writer.frames', 'frames')}
+                    {t('teamOpt.writer.perRotation', 'per rotation')} ·{' '}
+                    {Math.round(seconds * 60)}{' '}
+                    {t('teamOpt.writer.frames', 'frames')}
                   </Typography>
+                  {waited && (
+                    <Tooltip
+                      title={t(
+                        'teamOpt.writer.waitedTip',
+                        'Played over and over, an action is not ready again in time and the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation.'
+                      )}
+                      placement="top"
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: 'warning.main',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {t('teamOpt.writer.firstTime', {
+                          defaultValue: '{{seconds}} s without waiting',
+                          seconds: waited.first.toFixed(1),
+                        })}
+                        {!!waited.waits.length &&
+                          ` · ${t('teamOpt.writer.waits', 'Waits')} ${waited.waits
+                            .slice(0, 3)
+                            .map((w) => `${w.label} ${w.seconds.toFixed(1)} s`)
+                            .join(', ')}`}
+                      </Typography>
+                    </Tooltip>
+                  )}
                   <Box sx={{ flexGrow: 1 }} />
                   <SettingChip
                     label={t('teamOpt.timing.swap', 'Swap time')}
@@ -1377,7 +1479,7 @@ function WriterModal({
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {(result.sim.frames / 60).toFixed(1)} s
+                      {(seconds ?? result.sim.frames / 60).toFixed(1)} s
                     </Typography>
                     <Typography
                       noWrap
