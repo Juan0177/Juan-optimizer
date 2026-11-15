@@ -266,3 +266,52 @@ export function parseRotation(
   })
   return { steps, loopsTo, warnings }
 }
+
+/** At most this many written rotations are played as one (members bursting every 2nd and 3rd: 6) */
+const MAX_LOOPS = 6
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
+
+/**
+ * The rotation as played when some members use their Elemental Burst only every Nth rotation
+ * (KQM's ER calculator, "Burst: Every 2nd"): `loops` written rotations in a row, each such member's
+ * Burst kept in one of every N of them (a step left with nothing to do is left out, no swap to
+ * it). `index` is each played action's position in the written rotation (for its timing edits).
+ * Undefined when no member that bursts in the rotation bursts less than every rotation.
+ */
+export function everyNthBursts(
+  rotation: ParsedRotation,
+  burstEvery: Partial<Record<CharacterKey, number>>
+): { rotation: ParsedRotation; loops: number; index: number[] } | undefined {
+  const every = (ck: CharacterKey) => {
+    const n = Math.round(burstEvery[ck] ?? 1)
+    return n >= 2 ? n : 1
+  }
+  const ns = [
+    ...new Set(
+      rotation.steps
+        .filter((s) => s.actions.some((a) => a.kind === 'burst'))
+        .map((s) => every(s.characterKey))
+        .filter((n) => n > 1)
+    ),
+  ]
+  if (!ns.length) return undefined
+  let loops = ns.reduce((l, n) => (l * n) / gcd(l, n), 1)
+  if (loops > MAX_LOOPS) loops = Math.max(...ns)
+  const steps: RotationStep[] = []
+  const index: number[] = []
+  for (let k = 0; k < loops; k++) {
+    let i = 0
+    for (const step of rotation.steps) {
+      const actions: RotationAction[] = []
+      for (const action of step.actions) {
+        if (action.kind !== 'burst' || k % every(step.characterKey) === 0) {
+          actions.push(action)
+          index.push(i)
+        }
+        i++
+      }
+      if (actions.length) steps.push({ ...step, actions })
+    }
+  }
+  return { rotation: { ...rotation, steps }, loops, index }
+}

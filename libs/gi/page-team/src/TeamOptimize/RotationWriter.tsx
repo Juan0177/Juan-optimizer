@@ -26,6 +26,7 @@ import type {
 import {
   actionFrameDefaults,
   CharacterName,
+  everyNthBursts,
   type FrameData,
   HEXEREI_CHARACTERS,
   kitModels,
@@ -307,9 +308,15 @@ export function simulateWritten({
   calculation,
   current,
   auraTimeline,
+  burstEvery,
 }: {
   /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
   auraTimeline?: boolean
+  /**
+   * Members that use their Burst only every Nth rotation (KQM's ER calculator): the written
+   * rotation is played N in a row with their Burst in one of them (`loops` in the result)
+   */
+  burstEvery?: Partial<Record<CharacterKey, number>>
   text: string
   opener: string
   timing: RotationTimingSettings
@@ -348,6 +355,10 @@ export function simulateWritten({
     rotation.warnings.push(...parsed.warnings.map(openerWarning))
   }
   if (!rotation.steps.length) return { rotation }
+  // (a Burst every Nth rotation: N written rotations played as one, timing edits kept per copy)
+  const nth = burstEvery ? everyNthBursts(rotation, burstEvery) : undefined
+  const edits = frameOverrides(rotation, timing.edits)
+  const loops = nth?.loops ?? 1
   // (the writer's and Team optimize's own play: the pace it keeps, as KQM counts it)
   const steady = repeats === undefined
   const sampled = team.members.some((m) => kitModels[m]?.sampled)
@@ -357,8 +368,14 @@ export function simulateWritten({
       calculate: needsRotationCalculation(team.members)
         ? rotationCalculation(database, teamId, gender, calculation)
         : undefined,
-      rotation,
-      frameOverrides: frameOverrides(rotation, timing.edits),
+      rotation: nth?.rotation ?? rotation,
+      frameOverrides: nth
+        ? Object.fromEntries(
+            nth.index.flatMap((written, played) =>
+              edits[written] === undefined ? [] : [[played, edits[written]]]
+            )
+          )
+        : edits,
       swapFrames: timing.swapFrames,
       frameData,
       pingFrames: pingToFrames(pingMs),
@@ -380,6 +397,7 @@ export function simulateWritten({
       own,
       attacks: rotationAttacks(sim, own),
       counted: undefined,
+      loops,
     }
   return {
     rotation,
@@ -389,6 +407,7 @@ export function simulateWritten({
     // per rotation: the hits of the two counted, averaged
     attacks: perRotation(rotationAttacks(sim, own), STEADY_COUNTED),
     counted: { sim, rotations: STEADY_COUNTED },
+    loops,
   }
 }
 /** Played the writer's way (default `repeats`): 4 rotations in a row, the last 2 counted */
@@ -496,6 +515,19 @@ export function kqmRotationReplay({
   }
   const keys = members.map((m) => m.characterKey)
   const elements = simTeamOf(members, database).elements
+  // (the ER calculator's "Burst: Every 2nd": that member's Burst in one of every 2 rotations)
+  const calculator =
+    teamOpt.kqm?.energySource === 'calculator'
+      ? teamOpt.kqm.energyCalculator
+      : undefined
+  const burstEvery = calculator
+    ? (Object.fromEntries(
+        Object.entries(calculator.members).map(([k, m]) => [
+          k,
+          m?.burstEvery ?? 1,
+        ])
+      ) as Partial<Record<CharacterKey, number>>)
+    : undefined
   return ({ constellations, gear, overrides }) => {
     // the state where no attack sets one, as KQM counts it: KQM's own weapon and set effects
     // ('' off), else the member's, else the rule's
@@ -521,6 +553,7 @@ export function kqmRotationReplay({
       current,
       repeats: KQM_REPEATS,
       keep: 'last2',
+      burstEvery,
       // (two rotations kept: fewer samples, as much as the writer's one rotation of 64)
       samples: 32,
     })
@@ -529,23 +562,23 @@ export function kqmRotationReplay({
       throw new Error(
         'The written rotation has no actions to play. Check the rotation text.'
       )
-    // (per rotation: the hits and time of the 2 counted, averaged; members the simulation has no
-    // kit for keep the attacks entered for them)
+    // (per rotation: the hits and time of the 2 counted, averaged, each of them `loops` written
+    // rotations; members the simulation has no kit for keep the attacks entered for them)
+    const counted = KQM_COUNTED * (played.loops ?? 1)
     const attacks = { ...teamOpt.attacks }
     for (const k of keys)
       if (!played.sim.unsupported.includes(k))
         attacks[k] = (played.attacks[k] ?? []).map((a) => ({
           ...a,
-          hits: a.hits / KQM_COUNTED,
+          hits: a.hits / counted,
         }))
     const stalls = Object.entries(played.sim.stalls ?? {})
-      .map(([label, frames]) => ({ label, seconds: frames / 60 / KQM_COUNTED }))
+      .map(([label, frames]) => ({ label, seconds: frames / 60 / counted }))
       .filter((s) => s.seconds >= 0.3)
       .sort((a, b) => b.seconds - a.seconds)
     return {
       attacks,
-      rotationTime:
-        Math.round((played.sim.frames / 60 / KQM_COUNTED) * 10) / 10,
+      rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
       stalls,
     }
   }
