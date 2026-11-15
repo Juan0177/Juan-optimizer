@@ -35,14 +35,22 @@ describe('Varesa', () => {
   it('spends Rainbow Crash on the first plunge impact and picks the high plunge after a CA', () => {
     // the Rush's 20 points and the first plunge's 25 fill the gauge: the second is Fiery Passion
     const sim = run('Varesa E N1 P CA P W2')
-    const plunges = sim.hits.filter(
+    const all = sim.hits.filter(
       (h) => h.characterKey === 'Varesa' && h.tag === 'plunge'
     )
+    const plunges = all.filter((h) => h.label !== 'Plunge Collision')
     expect(plunges.map((h) => h.path.join('.'))).toEqual([
       'plunging.high',
       'plunging.fphigh',
     ])
     expect(plunges.map((h) => pinned(h, 'a1Rainbow'))).toEqual(['on', ''])
+    // (each with its falling hit, as KQM's sims play it: Plunge DMG, no Electro applied)
+    const collisions = all.filter((h) => h.label === 'Plunge Collision')
+    expect(collisions.map((h) => h.path.join('.'))).toEqual([
+      'plunging.dmg',
+      'plunging.dmg',
+    ])
+    expect(collisions.every((h) => !h.applies)).toBe(true)
   })
 
   it('gives C4’s Diligent Refinement to the next plunge and +100% only to bursts in Fiery Passion or Apex Drive', () => {
