@@ -45,4 +45,12 @@ describe('Freminet kit (gcsim frames)', () => {
     expect(hitFrames(sim, 'Pers Time Frost')).toEqual([135, 171])
     expect(hitFrames(sim, 'Shattering Pressure (Physical Lv 4)')).toEqual([217])
   })
+  it('checks Stalking at each step of a string, as gcsim does per attack', () => {
+    // (the string starts just before Stalking ends: +2 stacks, then +1 and +1, so its third step
+    // is a Normal Attack, not a Level 4 Shattering Pressure from stacks counted at the start)
+    const sim = playOnce('Freminet Q E W8.2 N3 E', ['Freminet'], 0)
+    expect(hitFrames(sim, 'Pers Time Frost')).toHaveLength(3)
+    expect(hitFrames(sim, 'N3')).toHaveLength(1)
+    expect(hitFrames(sim, 'Shattering Pressure (Physical Lv 4)')).toEqual([])
+  })
 })
