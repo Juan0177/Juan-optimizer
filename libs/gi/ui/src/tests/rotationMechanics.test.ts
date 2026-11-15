@@ -129,12 +129,11 @@ describe('native combat rules shared across character kits', () => {
     }
   })
 
-  it('lets Sandrone heat ticks reach max Decode and finish the delayed native channel exit', () => {
+  it('releases Sandrone\u2019s charge 1 frame after the last beam it can fire, as gcsim b107b5d does', () => {
     const channel = sandroneChannel(0)
     expect(channel.beams).toEqual([60, 120, 180])
-    expect(channel.exit).toBe(199)
-    expect(channel.queueLength).toBe(204)
-    expect(channel.sweeps).toHaveLength(10)
+    expect(channel.exit).toBe(181)
+    expect(channel.sweeps).toHaveLength(9)
     const sim = simulateRotation({
       rotation: parse('Sandrone CA E', ['Sandrone']),
       members: ['Sandrone'],
@@ -142,10 +141,18 @@ describe('native combat rules shared across character kits', () => {
       constellations: {},
       repeats: 1,
     })
-    expect(sim.actions[1].start - sim.actions[0].start).toBe(248)
-    expect(sim.hits.filter((h) => h.label === 'Sweeping Fire')).toHaveLength(10)
-    expect(sandroneChannel(200).queueLength).toBeLessThan(channel.queueLength)
+    // gcsim: charge@1 skill@225 (25 windup + 18 to the first tick + 181)
+    expect(sim.actions[1].start - sim.actions[0].start).toBe(224)
+    expect(sim.hits.filter((h) => h.label === 'Sweeping Fire')).toHaveLength(9)
+    // fewer beams when Decoding Power is too high for 3 (at most 100 - 45.8 for 2)
+    expect(sandroneChannel(300).beams).toEqual([60, 120])
+    expect(sandroneChannel(300).exit).toBe(121)
+    // C1 halves the gain: 6 beams
     expect(sandroneChannel(0, true).beams).toHaveLength(6)
+    expect(sandroneChannel(0, true).exit).toBe(361)
+    // full from the start: no beam, the charge ends as Power Overdrive begins
+    expect(sandroneChannel(1000).beams).toEqual([])
+    expect(sandroneChannel(1000).exit).toBe(20)
   })
 
   it('expires Odette’s transferred Splendor with the summon while allowing a burst to refresh it', () => {
