@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.4.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.4.1) (2026-11-15)
+
+### Improved
+
+- KQM Theorycrafting: the setup has a Weapons and artifact sets section. Battle Pass, 4★ event wish, 5★ standard wish and 5★ event wish weapons switch on and off right there, each showing the refinement it counts at; Choose weapons and Choose sets pick them one by one.
+
+### Fixed
+
+- The Widsith counts the average of its three songs, for 10 s each time its wielder takes the field (once per 30 s), instead of always its ATK song. Its passive also has an "Average of the three" option.
+
 ## [v1.4.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.4.0) (2026-11-15)
 
 ### Fixed
