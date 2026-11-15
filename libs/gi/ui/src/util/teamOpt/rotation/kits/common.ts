@@ -330,3 +330,32 @@ export function annulusHitChance(
     (Math.PI * (outerRadius ** 2 - innerRadius ** 2))
   )
 }
+
+/**
+ * A shield created (kqmsim's Shields.Add, which emits OnShielded) `delay` frames from now, lasting
+ * `frames` (its Expires). The creator is the kit's member (kqmsim's ShieldOwner); a party shield
+ * (Target -1) protects whoever is on the field, a `target` only that member. A new shield replaces
+ * the creator's earlier one of the same `kind` and target, as kqmsim's same Type does. Shield
+ * gear (Angelos Heptades, Starcaller's Watch, Fractured Halo, the "while protected by a shield"
+ * effects) times itself from these markers.
+ */
+export function shieldMarker(
+  ctx: SimContext,
+  delay: number,
+  frames: number,
+  label: string,
+  options: { target?: CharacterKey; kind?: string } = {}
+) {
+  ctx.hit(delay, {
+    path: [
+      '_marker',
+      'shield',
+      `${Math.max(0, Math.round(frames))}`,
+      options.target ?? '',
+      options.kind ?? '',
+    ],
+    tag: 'other',
+    element: 'physical',
+    label,
+  })
+}

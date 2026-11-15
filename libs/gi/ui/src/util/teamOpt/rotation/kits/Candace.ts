@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, withHitlag } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  withHitlag,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/candace, main as of 2026-11-10. */
 
@@ -172,7 +178,10 @@ export const kit: KitModel = {
           framesInto: { skill: 52, burst: 52, dash: 29, jump: 28, swap: 51 },
         }
       case 'skill': {
-        // (The shield of Heron's Sanctum is not damage: not modelled.)
+        // Heron's Sanctum's shield: on Candace from the cast until the skill hits (kqmsim)
+        shieldMarker(ctx, 0, action.hold ? 91 : 16, "Heron's Sanctum shield", {
+          target: 'Candace',
+        })
         // A1 (finish the Hold's charge when hit) is not modelled.
         if (!action.hold) {
           ctx.hit(16, {

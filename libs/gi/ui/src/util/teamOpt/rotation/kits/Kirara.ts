@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -70,9 +71,11 @@ function c6Buff(ctx: SimContext) {
     })
 }
 
+/** The skill's Shield of Safe Transport: a party shield (a new one replaces the one up) */
 function skillShield(ctx: SimContext, s: KiraraState) {
   ctx.at(SHIELD_DELAY, (c2) => {
     s.shieldUntil = c2.now + SHIELD_DURATION
+    shieldMarker(c2, 0, SHIELD_DURATION, 'Shield of Safe Transport')
   })
 }
 
@@ -198,6 +201,7 @@ export const kit: KitModel = {
         // Shields of Safe Transport, which reset the shield's duration (gcsim's a1, 614 frames in)
         ctx.atCharacter('Kirara', duration + 14 + 1, (c2) => {
           s.shieldUntil = c2.now + SHIELD_DURATION
+          shieldMarker(c2, 0, SHIELD_DURATION, 'Shield of Safe Transport (A1)')
         })
         c6Buff(ctx)
         return {

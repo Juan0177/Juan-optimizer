@@ -1,5 +1,11 @@
 import type { HitTag, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/citlali, main as of 2026-11-10. */
 
@@ -235,6 +241,8 @@ export const kit: KitModel = {
           s.blessingEnd = c2.now + 20 * 60
           tryFire(c2, s)
         })
+        // 37 frames: the Opal Shield, a party shield for 20 s
+        shieldMarker(ctx, 37, 20 * 60, 'Opal Shield')
         // C2: Itzpapa's shield (from 37 frames) or the blessing gives the active member +250 EM
         if (cons >= 2)
           ctx.buff(

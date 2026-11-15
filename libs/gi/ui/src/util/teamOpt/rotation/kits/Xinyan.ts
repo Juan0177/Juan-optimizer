@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -81,6 +82,8 @@ function hitlag(ctx: SimContext, at: number, frames: number, label: string) {
 function shield(ctx: SimContext, s: XinyanState, level: number) {
   s.shieldLevel = level
   s.shieldUntil = ctx.now + SHIELD
+  // a party shield (kqmsim's updateShield: every level change is a new one, replacing the last)
+  shieldMarker(ctx, 0, SHIELD, `Sweeping Fervor shield (level ${level})`)
   // A4: the shielded (active) character's Physical DMG +15% while the shield is up
   ctx.buff('Xinyan', ['Xinyan', 'p2Shield'], 'on', 0, SHIELD)
   const gen = ++s.dotGen
