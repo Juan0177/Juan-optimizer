@@ -902,7 +902,8 @@ function BuffList({
     onField,
     mainStatAssumptionLevel,
     buffs,
-    overrides
+    overrides,
+    figures
   )
   // Buffs that change nothing for this attack, folded once all are known. Decided once, and not
   // after an edit, so rows never move under the pointer.

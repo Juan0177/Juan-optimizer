@@ -352,7 +352,9 @@ export function useAttackTeamData(
   mainStatAssumptionLevel: number,
   version: unknown,
   /** Other builds than the members' own (KQM theorycrafting's: `kqmTeamOverrides`) */
-  overrides?: TeamDataOverrides
+  overrides?: TeamDataOverrides,
+  /** Off: nothing is built (no builds to read it with: KQM theorycrafting without a result) */
+  enabled = true
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -364,6 +366,10 @@ export function useAttackTeamData(
   const active = attack.onField ?? onField
   // biome-ignore lint/correctness/useExhaustiveDependencies: `statesKey` stands for `attack.states`, `version` for the team
   useEffect(() => {
+    if (!enabled) {
+      setTeamData(undefined)
+      return undefined
+    }
     const timer = setTimeout(() => {
       const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
       const data = getTeamDataWith(database, teamId, {
@@ -390,8 +396,9 @@ export function useAttackTeamData(
     teamOpt.bonusStats,
     version,
     overrides,
+    enabled,
   ])
-  return teamData
+  return enabled ? teamData : undefined
 }
 
 /**
