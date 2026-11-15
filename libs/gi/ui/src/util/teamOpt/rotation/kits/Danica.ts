@@ -4,6 +4,7 @@ import {
   KQMSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -243,7 +244,7 @@ export const kit: KitModel = {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
     if (c.constellation('Danica') >= 4)
       c.note(
-        'Danica C4: energy regeneration and the Battle Maid shield are not modelled (energy and shields are outside the damage simulation).'
+        'Danica C4: energy regeneration and the Battle Maid shield are not modelled (neither is in the reference).'
       )
   },
   // With the Anchor out her normal attacks are the Anchor's (estimated frames of their own), and
@@ -423,6 +424,8 @@ export const kit: KitModel = {
     s.enhanced = false
     s.a4 = 0
     syncMaid(ctx, s)
+    // Defense Maid's party shield, for 25 s from the Entry Skill (kqmsim newShield)
+    shieldMarker(ctx, 0, 25 * 60, 'Defense Maid shield')
     hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
     return { frames: 60 }
   },

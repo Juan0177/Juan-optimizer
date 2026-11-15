@@ -1,6 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/zhongli, main as of 2026-11-10. */
 
@@ -66,8 +72,10 @@ const zhongliNormals: NormalHit[] = [
 
 /** A Stone Stele stands for 1860 frames (31 s), and ticks every 120 frames */
 const STELE_FRAMES = 1860
+/** The Jade Shield, a party shield, lasts 1200 frames (20 s) */
+const JADE_SHIELD = 1200
 /** The Jade Shield's resist shred: 1200 frames of shield, each shred 60 frames */
-const SHRED_FRAMES = 1200 + 60
+const SHRED_FRAMES = JADE_SHIELD + 60
 
 interface ZhongliState {
   /** Stone Steles (the ones standing are those not yet expired or replaced) */
@@ -210,6 +218,7 @@ export const kit: KitModel = {
           if (s.steles.filter((x) => x.expiry > ctx.now + 48).length < maxStele)
             ctx.at(48, (c2) => newStele(c2, s, maxStele))
           ctx.buff('Zhongli', ['Zhongli', 'skill'], 'on', 48, SHRED_FRAMES, {
+          shieldMarker(ctx, 48, JADE_SHIELD, 'Jade Shield')
             hitlag: 'enemy',
           })
           return {
@@ -239,8 +248,11 @@ export const kit: KitModel = {
           poiseDamage: 500,
           label: 'Planet Befall',
         })
-        if (c >= 2)
+        if (c >= 2) {
           ctx.buff('Zhongli', ['Zhongli', 'skill'], 'on', 101, SHRED_FRAMES, {
+          // (the shield itself: kqmsim adds it at the cast)
+          shieldMarker(ctx, 0, JADE_SHIELD, 'Jade Shield (C2)')
+        }
             hitlag: 'enemy',
           })
         return {

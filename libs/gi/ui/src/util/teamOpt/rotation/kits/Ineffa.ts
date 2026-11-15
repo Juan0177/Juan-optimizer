@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/ineffa, main as of 2026-11-10. */
 
@@ -164,7 +170,9 @@ export const kit: KitModel = {
         })
         // Birgitta is summoned 42 frames after the hit
         ctx.at(68, (c2) => summonBirgitta(c2, s))
-        // the shield (4 frames in) starts C1's Lunar-Charged buff
+        // the Optical Flow Shield Barrier: a party shield for 20 s, 4 frames in; it starts C1's
+        // Lunar-Charged buff
+        shieldMarker(ctx, 4, 20 * 60, 'Optical Flow Shield Barrier')
         if (c >= 1) {
           s.c1Until = now + 4 + 20 * 60
           ctx.buff('Ineffa', ['Ineffa', 'c1AfterShield'], 'on', 4, 20 * 60)
@@ -196,8 +204,10 @@ export const kit: KitModel = {
             c2.hit(0, c2Hit)
           })
         }
-        // C2's shield (37 frames in) also starts C1's buff
+        // C2: the burst makes the skill's shield again 37 frames in (replacing one still up); it
+        // also starts C1's buff
         if (c >= 2) {
+          shieldMarker(ctx, 37, 20 * 60, 'Optical Flow Shield Barrier (C2)')
           s.c1Until = Math.max(s.c1Until, now + 37 + 20 * 60)
           ctx.buff('Ineffa', ['Ineffa', 'c1AfterShield'], 'on', 37, 20 * 60)
         }

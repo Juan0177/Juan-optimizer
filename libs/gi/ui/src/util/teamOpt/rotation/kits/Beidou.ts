@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -114,6 +115,11 @@ export const kit: KitModel = {
         // Tap: the base hit. Hold (Polaris): 2 stacks after 1.6 s, then the same release
         const hold = action.hold ? POLARIS_HOLD : 0
         const hitmark = hold + 23
+        // Tidecaller's shield on Beidou from the cast until the hitmark (kqmsim)
+        shieldMarker(ctx, 0, hitmark, 'Tidecaller shield', {
+          target: 'Beidou',
+          kind: 'BeidouThunderShield',
+        })
         ctx.hit(hitmark, {
           path: ['skill', hold ? 'dmgTwoHits' : 'baseDmg'],
           tag: 'skill',
@@ -181,6 +187,11 @@ export const kit: KitModel = {
           label: 'Stormbreaker hitlag',
         })
         s.burstEnd = ctx.now + stormbreakerFrames
+        // C1: a party shield at the cast, for Stormbreaker's 15 s
+        if (ctx.constellation('Beidou') >= 1)
+          shieldMarker(ctx, 0, stormbreakerFrames, 'Stormbreaker shield (C1)', {
+            kind: 'BeidouC1',
+          })
         // The discharges use the stats at the cast (gcsim snapshots them then)
         s.castSnapshot = { t: ctx.now, onField: ctx.onField }
         // the sheet's burst condition (C6's RES shred): gcsim applies it every 0.5 s from 30

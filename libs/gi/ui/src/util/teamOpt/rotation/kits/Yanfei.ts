@@ -4,6 +4,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -160,6 +161,9 @@ function act(
         animationPause: 4,
         label: 'Done Deal hitlag',
       })
+      // C4: a party shield for 15 s at the cast (kqmsim)
+      if (ctx.constellation('Yanfei') >= 4)
+        shieldMarker(ctx, 0, 15 * 60, 'Supreme Amnesty (Shield)')
       // Brilliance: Charged Attack DMG for 15 s and a Scarlet Seal every second. "The effects of
       // Brilliance will end if Yanfei leaves the field" (game text; gcsim keeps both off-field)
       const run = ++s.brilliance
@@ -222,7 +226,7 @@ function act(
 }
 
 // Not modelled: C2 (needs the enemy below 50% HP: the sheet's condition), C1's stamina and C4's
-// shield.
+// shield absorption (only its timing, for shield gear).
 export const kit: KitModel = {
   characterKey: 'Yanfei',
   element: 'pyro',

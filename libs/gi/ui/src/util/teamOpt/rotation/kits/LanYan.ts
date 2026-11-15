@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -62,6 +63,12 @@ const leapFrames = 66
  */
 const leapEndCancel = detectHitmark + leapFrames + 1
 
+/** The Swallow-Wisp Shield: made 11 frames after the Detect hits, lasting 12.5 s */
+const shieldDelay = 11
+const shieldFrames = 750
+/** C2's shield restore: once per 2 s (a hitlag-affected status, active on its expiry frame) */
+const c2Icd = 121
+
 /** Feathermoon Rings hit at these frames; C1's extra ring at its own */
 const ringHitmarks = [38, 62, 85]
 const c1RingHitmarks = [38, 64, 90]
@@ -77,6 +84,10 @@ interface LanYanState {
   leapGen: number
   /** A1: the element the Detect absorbed (Swallow-Wisp Shield's Elemental Absorption) */
   absorbed?: AbsorbEle
+  /** The Swallow-Wisp Shield is up until this frame */
+  shieldUntil: number
+  /** C2's restore is on cooldown until this frame of Lan Yan's clock */
+  c2Until: number
 }
 
 /**
@@ -132,7 +143,12 @@ export const kit: KitModel = {
   characterKey: 'LanYan',
   element: 'anemo',
   source: `${GCSIM}/lanyan`,
-  init: (): LanYanState => ({ leapOn: false, leapGen: 0 }),
+  init: (): LanYanState => ({
+    leapOn: false,
+    leapGen: 0,
+    shieldUntil: -1,
+    c2Until: -1,
+  }),
   // C6: Swallow-Wisp Pinion Dance gains 1 additional charge
   charges: (cons) => ({ skill: cons >= 6 ? 2 : 1 }),
   // In mid-air after her E (the Leap Back), Normal Attack or E hurls the Feathermoon Rings (their own
@@ -196,7 +212,6 @@ export const kit: KitModel = {
           framesInto: { normal: 41, skill: 44, burst: 44, dash: 59, swap: 45 },
         }
       case 'skill': {
-        // (The Swallow-Wisp Shield is not damage: not modelled, nor C2's shield restore.)
         // Pressed again during the Leap Back: Feathermoon Rings (no cooldown)
         if (s.leapEnd !== undefined && ctx.now < s.leapEnd)
           return feathermoonRings(ctx, s)
@@ -209,6 +224,12 @@ export const kit: KitModel = {
           // A1: the Detect's hit absorbs Pyro > Hydro > Electro > Cryo from the enemy
           const ele = c.absorb(absorbEles)
           if (s.leapGen === gen && ele) s.absorbed = ele as AbsorbEle
+          // the Detect's hit makes the Swallow-Wisp Shield, a party shield (a new one replaces
+          // the one up)
+          c.at(shieldDelay, (c2) => {
+            s.shieldUntil = c2.now + shieldFrames
+            shieldMarker(c2, 0, shieldFrames, 'Swallow-Wisp Shield')
+          })
         })
         ctx.at(detectHitmark + leapFrames, () => {
           if (s.leapGen === gen) s.leapOn = false
@@ -272,6 +293,26 @@ export const kit: KitModel = {
       default:
         return { frames: 30 }
     }
+  },
+  onHit(ctx, s: LanYanState, hit) {
+    // C2: the active member's Normal Attack hit restores the shield's absorption, once per 2 s
+    // (kqmsim adds it again with the same expiry)
+    if (
+      ctx.constellation('LanYan') < 2 ||
+      hit.tag !== 'normal' ||
+      hit.path[0].startsWith('_') ||
+      hit.characterKey !== hit.onField ||
+      hit.t >= s.shieldUntil ||
+      ctx.characterFrame('LanYan') < s.c2Until
+    )
+      return
+    s.c2Until = ctx.characterFrame('LanYan') + c2Icd
+    shieldMarker(
+      ctx,
+      0,
+      s.shieldUntil - hit.t,
+      'Swallow-Wisp Shield (C2 restore)'
+    )
   },
   cooldownKey: (s: LanYanState, action) =>
     action.kind === 'skill'

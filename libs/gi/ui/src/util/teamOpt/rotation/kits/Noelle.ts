@@ -4,6 +4,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -294,6 +295,9 @@ export const kit: KitModel = {
         hitlag(ctx, 14, 4, 'Breastplate hitlag')
         s.a4Count = 0
         s.shieldUntil = ctx.now + 720
+        // Breastplate: a party shield at the cast (kqmsim's NoelleSkill type). A1's shield, for an
+        // active member whose HP falls below 30%, is not modelled.
+        shieldMarker(ctx, 0, 720, 'Breastplate', { kind: 'NoelleSkill' })
         if (c >= 4) {
           // C4: a shield still up bursts when replaced; this one bursts when it expires
           // (its breaking by damage is not modelled)

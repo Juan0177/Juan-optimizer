@@ -5,6 +5,7 @@ import {
   type NormalWatcher,
   newNormalWatcher,
   normalString,
+  shieldMarker,
   templateJump,
   watchAction,
   withHitlag,
@@ -40,6 +41,9 @@ interface ThomaState {
   watch: NormalWatcher
 }
 
+/** The Blazing Barrier (kqmsim's genShield): a party shield for 8 s, one frame after its trigger */
+const BARRIER = 8 * 60
+
 /**
  * Fiery Collapse (gcsim's summonFieryCollapse): snapshotted when triggered, it lands 11 frames
  * later, and its Blazing Barrier (C6's DMG bonus) comes with that hit
@@ -58,11 +62,14 @@ function fieryCollapse(c: SimContext) {
   })
   if (c.constellation('Thoma') >= 6)
     c.buff('Thoma', ['Thoma', 'c6AfterBarrier'], 'on', 11, 360)
+  // the hit's callback creates (or refreshes) the Blazing Barrier a frame later
+  shieldMarker(c, 12, BARRIER, 'Blazing Barrier (Fiery Collapse)')
 }
 
-// Not modelled: the shields (no damage), Thoma's self Pyro aura from Blazing Blessing (no outgoing
-// damage), A1's shield bonus and C4's energy. C1 follows gcsim (12 s / 17 s cooldowns, assuming a
-// shielded teammate is hit), not its 20 s once-per trigger.
+// Not modelled: the shields' absorption (no damage: only their timing, for shield gear), Thoma's
+// self Pyro aura from Blazing Blessing (no outgoing damage), A1's shield bonus and C4's energy. C1
+// follows gcsim (12 s / 17 s cooldowns, assuming a shielded teammate is hit), not its 20 s
+// once-per trigger.
 export const kit: KitModel = {
   characterKey: 'Thoma',
   element: 'pyro',
@@ -121,6 +128,8 @@ export const kit: KitModel = {
         // C6: the Blazing Barrier (9 frames in) gives the party +15% Normal, Charged and Plunging
         // DMG for 6 s
         if (c >= 6) ctx.buff('Thoma', ['Thoma', 'c6AfterBarrier'], 'on', 9, 360)
+        // the Blazing Barrier itself: kqmsim adds it a frame after that (10 frames in)
+        shieldMarker(ctx, 10, BARRIER, 'Blazing Barrier')
         // C1: the cooldown is 12 s (gcsim's sim value)
         return withHitlag(
           {

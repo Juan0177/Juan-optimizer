@@ -1,6 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/dahlia, main as of 2026-11-10. */
 
@@ -163,11 +169,13 @@ export const kit: KitModel = {
           label: 'Radiant Psalter',
         })
         // Favonian Favor (the team's ATK SPD from A4 and C6): 12 s from 31 frames in, +3 s at C4.
-        // (Shields, Benison stacks and the C2 shield bonus do no damage: not modelled.)
+        // (Benison stacks and the C2 shield bonus do no damage: not modelled.)
         const cast = ++s.cast
         ctx.at(31, (c) => {
           const duration = 720 + (c.constellation('Dahlia') >= 4 ? 180 : 0)
           s.end = c.characterFrame('Dahlia') + duration
+          // a party shield until Favonian Favor ends (kqmsim removes it a frame later)
+          shieldMarker(c, 0, duration + 1, 'Radiant Psalter shield')
           c.state('Dahlia', ['Dahlia', 'burstActive'], 'on')
           updateSpeed(c, s, c.onField)
           c.atCharacter('Dahlia', duration, (at) => {
