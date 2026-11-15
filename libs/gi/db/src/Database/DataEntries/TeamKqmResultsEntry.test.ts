@@ -75,10 +75,11 @@ describe('database.teamKqmResults (last KQM theorycrafting runs)', () => {
     const storage = new SandboxStorage()
     const database = new ArtCharDatabase(1, storage)
     database.teamKqmResults.setRun('team_1', saved())
+    // (the storage keeps each run packed: its settings are in `data`)
     const raw = storage.get('teamKqmResults') as {
-      runs: Record<string, { run: Record<string, unknown> }>
+      runs: Record<string, { run: { data: Record<string, unknown> } }>
     }
-    raw.runs['team_1'].run['teamOpt'] = 'not settings'
+    raw.runs['team_1'].run.data['teamOpt'] = 'not settings'
     storage.set('teamKqmResults', raw)
     expect(new ArtCharDatabase(1, storage).teamKqmResults.get().runs).toEqual(
       {}
@@ -90,5 +91,67 @@ describe('database.teamKqmResults (last KQM theorycrafting runs)', () => {
     database.teamKqmResults.setRun('team_1', saved())
     const good = database.exportGOOD() as Record<string, unknown>
     expect(good['teamKqmResults']).toBeUndefined()
+  })
+})
+
+describe('saved KQM runs are packed for the storage', () => {
+  /** A run that played a written rotation: every attack with every buff's state, twice */
+  const played = () => {
+    const states = (i: number) =>
+      Array.from({ length: 40 }, (_, b) => ({
+        owner: b % 2 ? 'Mitya' : 'team',
+        path: ['Mitya', `buff${b}`],
+        value: (i + b) % 3 ? 'on' : `${b % 5}`,
+      }))
+    const attacks = {
+      Mitya: Array.from({ length: 120 }, (_, i) => ({
+        path: ['skill', `hit${i % 7}`],
+        hits: 0.5,
+        hitMode: 'avgHit',
+        states: states(i),
+        limits: [{ owner: 'Mitya', path: ['Mitya', 'buff3'], hits: 0 }],
+      })),
+    }
+    return {
+      savedAt: 1_700_000_000_000,
+      members: ['Mitya'],
+      run: {
+        type: 'done',
+        seconds: 12,
+        teamOpt: initTeamOpt(),
+        runTeamOpt: { ...initTeamOpt(), attacks, rotationTime: 18.4 },
+        result: {
+          builds: { Mitya: { weapon: { key: 'ClashOfKings', refinement: 1 } } },
+          played: { attacks, rotationTime: 18.4 },
+        },
+      },
+    }
+  }
+  it('comes back exactly as an unpacked run does, at a fraction of the size', () => {
+    const saved = JSON.parse(JSON.stringify(played()))
+    // as an older version saved it (not packed): what loading it gives is the reference
+    const legacy = new SandboxStorage()
+    legacy.set('teamKqmResults', { runs: { team_1: saved } })
+    const reference = new ArtCharDatabase(1, legacy).teamKqmResults.getRun(
+      'team_1'
+    )!
+    // (the result is kept as it is: every attack's states and limits, exactly)
+    expect(reference.run.result).toEqual(saved.run.result)
+    // loading it packed it in the storage
+    const stored = legacy.get('teamKqmResults') as {
+      runs: Record<string, { run: { $packed?: number } }>
+    }
+    expect(stored.runs['team_1'].run.$packed).toBe(1)
+    expect(JSON.stringify(stored).length).toBeLessThan(
+      JSON.stringify(saved).length / 10
+    )
+    // and the packed run reads back the same, again and again
+    const again = new ArtCharDatabase(1, legacy).teamKqmResults.getRun('team_1')
+    expect(again).toEqual(reference)
+    const fresh = new SandboxStorage()
+    new ArtCharDatabase(1, fresh).teamKqmResults.setRun('team_1', reference)
+    expect(
+      new ArtCharDatabase(1, fresh).teamKqmResults.getRun('team_1')
+    ).toEqual(reference)
   })
 })
