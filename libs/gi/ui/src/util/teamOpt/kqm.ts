@@ -755,6 +755,53 @@ export function kqmRuleConditionals(
 }
 
 /**
+ * The calculation overrides of a KQM result's builds, as its run counts them: their weapons and
+ * artifacts, level 90 at the result's constellations and the KQM talents, the gear effects on by
+ * rule for the rotation it played, KQM mode's own passive switches and the extra buffs. What a
+ * page reads one of its builds' attacks or stats with (never the members' own builds).
+ */
+export function kqmTeamOverrides(
+  database: ArtCharDatabase,
+  teamId: string,
+  teamOpt: TeamOpt,
+  result: Pick<KqmResult, 'builds' | 'constellations' | 'played'>
+): TeamDataOverrides {
+  const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+  const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  const talent = kqmTalentLevel(kqm)
+  const arts: NonNullable<TeamDataOverrides['arts']> = {}
+  const weapons: NonNullable<TeamDataOverrides['weapons']> = {}
+  const characters: NonNullable<TeamDataOverrides['characters']> = {}
+  for (const [ck, build] of Object.entries(result.builds) as [
+    CharacterKey,
+    KqmBuild,
+  ][]) {
+    arts[ck] = kqmArtData(build)
+    weapons[ck] = kqmWeaponData(build.weapon, ck)
+    characters[ck] = {
+      level: 90,
+      ascension: 6,
+      constellation:
+        result.constellations[ck] ?? kqmMemberConstellation(ck, kqm),
+      talent: { auto: talent, skill: talent, burst: talent },
+    }
+  }
+  const rules = kqmRuleConditionals(database, teamId, {
+    attacks: result.played?.attacks ?? teamOpt.attacks,
+  })
+  return {
+    arts,
+    weapons,
+    characters,
+    extraConditionals: Object.fromEntries(
+      Object.entries(rules).map(([ck, rule]) => [ck, rule!.conditional])
+    ) as NonNullable<TeamDataOverrides['extraConditionals']>,
+    conditionalOverrides: kqm.passives,
+    bonusStats: teamOptBonusStats(teamOpt, keys),
+  }
+}
+
+/**
  * Where a member's search starts: the first allowed weapon, set and main stats, no placed rolls.
  * Only the KQM settings decide it (never the member's own gear), so a run's builds are the same
  * whatever the user has equipped.

@@ -4,6 +4,7 @@ import type { TeamOpt, TeamOptAttack } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  KqmResult,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
@@ -12,6 +13,7 @@ import type {
 import {
   CharacterName,
   evaluateTeamRotation,
+  kqmTeamOverrides,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
@@ -43,7 +45,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
-import { buffsForAttacker, useTeamBuffs } from './buffs'
+import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
@@ -185,6 +187,34 @@ export default function TeamBuildWorkspace({
     kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt)
       ? kqmResult
       : undefined
+  // the builds shown in the KQM results (the run's, or other equipment picked there): the rotation
+  // they played, its damage, and each attack's buffs, read with those builds
+  const [kqmView, setKqmView] = useState<KqmResult>()
+  useEffect(() => setKqmView(undefined), [kqmResult?.result])
+  const kqmShown = kqmRotation ? (kqmView ?? kqmRotation.result) : undefined
+  const kqmPlayed = kqmRotation?.rotation === 'played'
+  const kqmAttacks =
+    kqmRotation &&
+    (kqmPlayed && kqmShown?.played
+      ? kqmShown.played.attacks
+      : kqmRotation.runTeamOpt.attacks)
+  const kqmRotationTime = kqmRotation
+    ? ((kqmPlayed ? kqmShown?.played?.rotationTime : undefined) ??
+      kqmRotation.runTeamOpt.rotationTime)
+    : undefined
+  const kqmOverrides = useMemo(
+    () =>
+      kqmPlayed && kqmRotation && kqmShown
+        ? kqmTeamOverrides(database, teamId, kqmRotation.runTeamOpt, kqmShown)
+        : undefined,
+    [kqmPlayed, kqmRotation, kqmShown, database, teamId]
+  )
+  const kqmBuffs = useKqmTeamBuffs(
+    teamId,
+    teamData,
+    kqmOverrides,
+    kqmPlayed ? kqmShown : undefined
+  )
   const setAttacks = useCallback(
     (characterKey: CharacterKey) =>
       (update: (attacks: TeamOptAttack[]) => TeamOptAttack[]) => {
@@ -325,7 +355,7 @@ export default function TeamBuildWorkspace({
             // (KQM's: the time of the rotation it played, which it counts)
             value={
               kqmRotation?.rotation === 'played'
-                ? (kqmRotation.runTeamOpt.rotationTime ?? rotationTime)
+                ? (kqmRotationTime ?? rotationTime)
                 : rotationTime
             }
             disabled={running || kqmRotation?.rotation === 'played'}
@@ -403,23 +433,21 @@ export default function TeamBuildWorkspace({
                 member={member}
                 teamData={teamData}
                 attacks={
-                  (kqmRotation?.runTeamOpt ?? teamOpt).attacks[
-                    member.characterKey
-                  ] ?? []
+                  (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
                 }
                 setAttacks={setAttacks(member.characterKey)}
-                evaluation={
-                  mode === 'inventory' ? evaluation : kqmRotation?.result.after
-                }
+                evaluation={mode === 'inventory' ? evaluation : kqmShown?.after}
                 figures={mode === 'inventory'}
-                played={kqmRotation?.rotation === 'played'}
-                buffs={buffsForAttacker(buffs, member.characterKey)}
+                played={kqmPlayed}
+                overrides={kqmOverrides}
+                buffs={buffsForAttacker(
+                  kqmPlayed ? kqmBuffs : buffs,
+                  member.characterKey
+                )}
                 mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
                 members={members}
                 onField={onField ?? member.characterKey}
-                rotationTime={
-                  kqmRotation?.runTeamOpt.rotationTime ?? rotationTime
-                }
+                rotationTime={kqmRotationTime ?? rotationTime}
                 showConditions={showConditions}
                 expanded={rotationExpanded}
                 onToggle={
@@ -514,6 +542,7 @@ export default function TeamBuildWorkspace({
             }
             stale={kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt)}
             now={teamOpt}
+            onView={setKqmView}
             onDiscard={() => {
               kqm.clear()
               setRotationExpanded(true)
