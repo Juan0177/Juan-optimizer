@@ -87,11 +87,14 @@ export default function TabTheorycraft() {
 
   const [status, setStatus] = useState(initialBuildStatus())
   const solving = status.type === 'active'
+  // the last run found no distribution that meets the stat filters (the substats are kept)
+  const [noDistribution, setNoDistribution] = useState(false)
 
   const terminateWorker = useCallback(() => {
     workerRef.current?.terminate()
     workerRef.current = null
     setStatus(initialBuildStatus())
+    setNoDistribution(false)
   }, [workerRef])
 
   const { minSubLines, minOtherRolls } = useMemo(
@@ -125,6 +128,7 @@ export default function TabTheorycraft() {
     )
     if (!nodes || !valueFilter) return
     workerRef.current.postMessage({ buildTc, nodes, valueFilter })
+    setNoDistribution(false)
     setStatus((s) => ({
       ...s,
       type: 'active',
@@ -146,7 +150,8 @@ export default function TabTheorycraft() {
           }))
           break
         case 'finalize': {
-          const { maxBuffer, distributed, tested, failed, skipped } = data
+          const { found, maxBuffer, distributed, tested, failed, skipped } =
+            data
           setStatus((s) => ({
             ...s,
             type: 'inactive',
@@ -155,9 +160,11 @@ export default function TabTheorycraft() {
             skipped,
             finishTime: performance.now(),
           }))
+          setNoDistribution(!found)
 
           if (!apply) {
             console.log({
+              found,
               maxBuffer,
               distributed,
               tested,
@@ -166,6 +173,8 @@ export default function TabTheorycraft() {
             })
             break
           }
+          // nothing meets the filters: the substats stay as they are
+          if (!found) break
 
           setBuildTc((buildTc) => {
             buildTc.artifact.substats.stats = objMap(
@@ -321,6 +330,7 @@ export default function TabTheorycraft() {
               minSubLines={minSubLines}
               minOtherRolls={minOtherRolls}
               status={status}
+              noDistribution={noDistribution}
               characterKey={characterKey}
               gender={gender}
             />

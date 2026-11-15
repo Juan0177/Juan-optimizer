@@ -5,7 +5,7 @@ import type { BuildStatus } from '@genshin-optimizer/gi/ui'
 import { BuildAlert } from '@genshin-optimizer/gi/ui'
 import CalculateIcon from '@mui/icons-material/Calculate'
 import CloseIcon from '@mui/icons-material/Close'
-import { Alert, Box, Button, Typography } from '@mui/material'
+import { Alert, Box, Button, Tooltip, Typography } from '@mui/material'
 import { Trans, useTranslation } from 'react-i18next'
 import { SettingsCard } from '../TabOptimize/Components/SettingsCard'
 import ScalesWith from './ScalesWith'
@@ -26,6 +26,7 @@ export function DistributeCard({
   minSubLines,
   minOtherRolls,
   status,
+  noDistribution,
   characterKey,
   gender,
 }: {
@@ -41,6 +42,8 @@ export function DistributeCard({
   minSubLines: number
   minOtherRolls: number
   status: BuildStatus
+  /** The last run found no distribution that meets the stat filters */
+  noDistribution: boolean
   characterKey: CharacterKey
   gender: GenderKey
 }) {
@@ -112,6 +115,13 @@ export function DistributeCard({
         </Alert>
       )}
       <ScalesWith minOtherRolls={minOtherRolls} />
+      {noDistribution && (
+        <Tooltip title={t('tabTheorycraft.noDistributionTip')} placement="top">
+          <Alert severity="warning">
+            {t('tabTheorycraft.noDistributionAlert')}
+          </Alert>
+        </Tooltip>
+      )}
       <BuildAlert status={status} characterKey={characterKey} gender={gender} />
     </SettingsCard>
   )
