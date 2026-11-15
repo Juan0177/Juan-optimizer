@@ -25,6 +25,8 @@ export type ItemConditionalCtx = {
    * Stellar Glimmer reaction DMG"
    */
   ownStellar?: boolean
+  /** It has no Energy (its Burst costs none: Skirk, Mavuika): Finale of the Deep Galleries */
+  zeroEnergy?: boolean
 }
 
 /** A display path of Stellar Glimmer DMG ("…StellarDmg", "crownSc", "beamSsDmg") */
@@ -101,9 +103,66 @@ const OVERRIDES: Partial<
       : ctx.auras.includes('cryo')
         ? 'cryo'
         : null,
-  // Gilded Dreams' team counts follow the team
-  GildedDreams: (_ctx, cond) =>
-    cond.startsWith('override') ? null : undefined,
+  // Gilded Dreams' team counts follow the team; its 4-piece after the wearer's own reactions
+  // (off the field too): any team with another element to react with
+  GildedDreams: (ctx, cond) =>
+    cond.startsWith('override')
+      ? null
+      : (ctx.otherElements ?? 3) > 0
+        ? 'on'
+        : null,
+  // its CRIT Rate on enemies under Superconduct or Stellar-Conduct: both need Cryo and Electro
+  DisenchantmentInDeepShadow: (ctx) =>
+    ctx.auras.includes('cryo') && ctx.auras.includes('electro') ? 'on' : null,
+  // only at 0 Energy (characters without Energy); its Normal Attack and Burst halves lock each
+  // other out for 6 s: a Normal Attack user gets the Normal Attack half
+  FinaleOfTheDeepGalleries: (ctx, cond) =>
+    !ctx.zeroEnergy
+      ? null
+      : cond === '0EnergyNoBurst'
+        ? ctx.attacks.includes('normal')
+          ? 'on'
+          : null
+        : ctx.attacks.includes('normal')
+          ? null
+          : 'on',
+  // after the wearer's Skill (with Energy to spend)
+  ShimenawasReminiscence: (ctx) =>
+    ctx.attacks.includes('skill') ? 'used' : null,
+  // after the wearer's own Normal, Charged, Skill or Burst hits
+  ADayCarvedFromRisingWinds: (ctx) =>
+    ['normal', 'charged', 'skill', 'burst'].some((a) =>
+      ctx.attacks.includes(a as ItemConditionalCtx['attacks'][number])
+    )
+      ? undefined
+      : null,
+  // a stack per Skill, all lasting 10 s from the last: about one held
+  CrimsonWitchOfFlames: (ctx) => (ctx.attacks.includes('skill') ? '1' : null),
+  // a status per kind of the wearer's on-field hits (Normal, Charged, Plunging, Skill, Burst),
+  // up to 3
+  NymphsDream: (ctx) => {
+    const kinds = ['normal', 'charged', 'plunging', 'skill', 'burst'].filter(
+      (a) => ctx.attacks.includes(a as ItemConditionalCtx['attacks'][number])
+    ).length
+    return kinds ? String(Math.min(3, kinds)) : null
+  },
+  // stacks from the wearer's Plunging, Charged and Skill hits: a plunging attacker's
+  LongNightsOath: (ctx) =>
+    ctx.attacks.includes('plunging') ? undefined : null,
+  // after the wearer's elemental hits
+  SilkenMoonsSerenade: (ctx) => (ctx.attacks.length ? undefined : null),
+  // while the wearer is off the field: a member that makes no Normal or Charged Attacks
+  AubadeOfMorningstarAndMoon: (ctx) =>
+    ctx.attacks.includes('normal') || ctx.attacks.includes('charged')
+      ? null
+      : 'on',
+  // its stacks come from the wearer's Geo hits on the field (and its DEF when off it)
+  HuskOfOpulentDreams: (ctx) =>
+    ctx.element === undefined || ctx.element === 'geo' ? undefined : null,
+  // low HP, the enemy's HP, Elemental DMG taken: not modelled
+  Berserker: () => null,
+  BraveHeart: () => null,
+  TinyMiracle: () => null,
   // the 4 stacks need HP loss; the after-burst ATK stays
   VermillionHereafter: (_ctx, cond) => (cond === 'stacks' ? null : undefined),
   // Seals come from teammates' Crystallize shards

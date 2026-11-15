@@ -872,9 +872,12 @@ describe('native combat rules shared across character kits', () => {
       },
       gear: { Flins: { sets: { NightOfTheSkysUnveiling: 4 } } },
     })
-    const windows = sim.buffWindows.filter(
+    const all = sim.buffWindows.filter(
       (w) => w.path[0] === 'NightOfTheSkysUnveiling'
     )
+    // declared off outside its windows (a zero-length window), then on after the reaction
+    expect(all.some((w) => w.end === w.start)).toBe(true)
+    const windows = all.filter((w) => w.end > w.start)
     expect(windows).toHaveLength(1)
     expect(windows[0]).toMatchObject({
       owner: 'Flins',
