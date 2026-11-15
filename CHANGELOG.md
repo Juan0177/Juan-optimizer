@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.4.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.4.0) (2026-11-15)
+
+### Fixed
+
+- Rotation writer: tapping Mitya's Skill again to switch his Detection Core between modes no longer detonates his Gradient Beacons, so his next Charged Attack in Overload is a Gradient Detonation that spends them. As in game, only a Steady core detonates them: when it ends, or when his Skill is tapped or held anew after its cooldown.
+
 ## [v1.3.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.3.3) (2026-11-14)
 
 ### New
