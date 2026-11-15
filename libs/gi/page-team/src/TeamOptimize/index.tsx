@@ -149,14 +149,6 @@ export default function TeamBuildWorkspace({
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
   const [rotationExpanded, setRotationExpanded] = useState(() => !attackCount)
-  // the rotation written as text (inline), and its writer dialog with Undo
-  const writer = useRotationWriter({
-    teamId,
-    members,
-    setTeamOpt,
-    teamData,
-    kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
-  })
   // Extra buffs: their count, and the section open when there are some
   const extraCount = Object.values(teamOpt.bonusStats ?? {}).reduce(
     (n, stats) => n + Object.values(stats ?? {}).filter((v) => !!v).length,
@@ -199,6 +191,15 @@ export default function TeamBuildWorkspace({
   const [kqmView, setKqmView] = useState<KqmResult>()
   useEffect(() => setKqmView(undefined), [kqmResult?.result])
   const kqmShown = kqmRotation ? (kqmView ?? kqmRotation.result) : undefined
+  // the rotation written as text (inline), and its writer dialog with Undo
+  const writer = useRotationWriter({
+    teamId,
+    members,
+    setTeamOpt,
+    teamData,
+    kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
+    kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
+  })
   const kqmPlayed = kqmRotation?.rotation === 'played'
   const kqmAttacks =
     kqmRotation &&
@@ -354,6 +355,7 @@ export default function TeamBuildWorkspace({
           replaces={!!attackCount}
           disabled={running}
           kqm={mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined}
+          kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
         />
         {writer.element}
         {/* the rotation's settings, in one row of labelled controls */}
