@@ -4,6 +4,18 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.5.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.5.0) (2026-11-15)
+
+### New
+
+- KQM Theorycrafting: the attacks of the rotation played for the builds open to show each buff up during the attack, what it gives and how much it adds, and the hit's stats, all for the builds shown. Picking other equipment in the results updates the rotation's attacks and damage.
+
+### Fixed
+
+- Moonpiercer's ATK counts only when its wielder triggers Dendro reactions itself, as for Sapwood Blade and Forest Regalia, so it no longer ranks first in teams without Dendro.
+- KQM Theorycrafting: a weapon that changes a teammate's Energy Recharge requirement (Favonius) is scored with that teammate's artifacts built again, so the Energy Recharge it frees turns into damage, and picking another weapon never leaves a teammate short of its Energy Recharge.
+- KQM Theorycrafting: an attack opened before a run, or with an older run, no longer shows its buffs loading forever.
+
 ## [v1.4.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.4.1) (2026-11-15)
 
 ### Improved
