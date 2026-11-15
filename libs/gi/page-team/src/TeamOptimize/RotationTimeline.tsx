@@ -1126,12 +1126,20 @@ function trackInfo(track: TimelineTrack, teamData: TeamData | undefined) {
     ) : allWeaponKeys.includes(sheetKey as WeaponKey) ? (
       <WeaponName weaponKey={sheetKey as WeaponKey} />
     ) : undefined
+  // (a conditional the members' sheets do not list)
+  const unlisted = info.name === track.path.join(' · ')
   return {
     label: item ?? info.label ?? info.name ?? fallback,
-    title: item ? (info.label ?? info.name) : info.title,
+    title: item
+      ? unlisted
+        ? undefined
+        : (info.label ?? info.name)
+      : info.title,
     states: info.states,
-    // (a conditional the sheets do not list is the simulation's own bookkeeping)
-    internal: info.name === track.path.join(' · '),
+    // (an unlisted conditional is the simulation's own bookkeeping, except a weapon's or set's
+    // effect: a KQM build's item that the member's own build does not have, still shown)
+    internal:
+      unlisted && !(item && !track.path.some((part) => part.startsWith('_'))),
   }
 }
 type TrackInfo = ReturnType<typeof trackInfo>
