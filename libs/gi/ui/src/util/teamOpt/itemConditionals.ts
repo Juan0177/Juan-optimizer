@@ -19,6 +19,18 @@ export type ItemConditionalCtx = {
   otherElements?: number
   /** Its own element (unknown: effects that need its own reactions are counted) */
   element?: string
+  /**
+   * Whether it deals Stellar Glimmer DMG itself (unknown: any Stellar reaction in the team counts):
+   * the effects of "when the equipping character triggers a Stellar Glimmer reaction or deals
+   * Stellar Glimmer reaction DMG"
+   */
+  ownStellar?: boolean
+}
+
+/** A display path of Stellar Glimmer DMG ("…StellarDmg", "crownSc", "beamSsDmg") */
+export const isStellarAttackPath = (path: readonly string[]) => {
+  const last = path[path.length - 1] ?? ''
+  return /stellar/i.test(last) || /(?:Sc|Ss)(?:Dmg)?$/.test(last)
 }
 
 /**
@@ -155,7 +167,8 @@ function choose(
   } else if (
     /elementalReaction\.stellar\.triggerOrHit|stellarglimmer/.test(cond)
   )
-    on = ctx.auras.some((a) => a.startsWith('stellar'))
+    // (the wearer's own Stellar Glimmer hits or reactions, not a teammate's)
+    on = ctx.ownStellar ?? ctx.auras.some((a) => a.startsWith('stellar'))
   if (!on) return undefined
   // highest stack / last state
   return [doc.path, states[states.length - 1]]
