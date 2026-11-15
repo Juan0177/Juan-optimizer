@@ -6,7 +6,7 @@ import type {
   SimContext,
   SimHit,
 } from '../types'
-import { atkSpdAdjust, KQMSIM, type NormalHit } from './common'
+import { atkSpdAdjust, KQMSIM, type NormalHit, shieldMarker } from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/columbina. */
 
@@ -15,8 +15,8 @@ import { atkSpdAdjust, KQMSIM, type NormalHit } from './common'
  * party while it lasts. Gravity accrues as in gcsim: every 3 frames, while a Lunar reaction or
  * Lunar hit came in the last 2 s, 0.5 Gravity (0.67 at C2) goes to the Lunar type that came last;
  * the Gravity Interference is the type with the most Gravity when the total reaches 60.
- * Energy (C1's 6 for the active character, C4's 4 for her), C1's Rainsea Shield and its
- * interruption resistance are not modelled (the sim tracks no energy or shields).
+ * Energy (C1's 6 for the active character, C4's 4 for her) and C1's interruption resistance
+ * are not modelled (the sim tracks no energy).
  */
 
 /** gcsim attack.go: N1 23 / N2 20 / N3 41, no hitlag (catalyst) */
@@ -218,6 +218,9 @@ function gravityTick(ctx: SimContext, s: ColumbinaState, clear: boolean) {
       element: v.element,
       label: v.label,
     })
+  // C1: a Lunar-Crystallize Gravity Interference gives her the Rainsea Shield for 8 s
+  if (c >= 1 && type === LCR)
+    shieldMarker(ctx, 0, 480, 'Rainsea Shield (C1)', { target: 'Columbina' })
   // A1: +5% CRIT Rate per tick (stacks to 3, 10 s)
   s.a1Stacks = Math.min(
     3,

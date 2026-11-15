@@ -14,8 +14,8 @@ import type {
  * Artifact set effects the simulation plays from what happens in the rotation (gcsim's
  * internal/artifacts), for the sets the members wear in the build being simulated. Each one turns
  * the set's own conditional on (on the wearer's sheet, as the user would) for the hits it covers.
- * Kits supply Bond of Life markers and Nightsoul windows. HP, healing and shield effects that
- * have no model remain user-controlled.
+ * Kits supply Bond of Life, HP-change and shield markers and Nightsoul windows. HP and healing
+ * effects that have no model remain user-controlled.
  */
 
 /** The elements a reaction involves (for "a reaction involving its element") */
@@ -68,6 +68,27 @@ const GLEAM_STATE = '18'
 const STARSPARK_SETS: Record<string, string> = {
   LegacyOfTheFirstChronicle: 'undyingRadiance',
 }
+
+/** Weapons whose conditional comes from the wielder creating a shield: item, conditional, state */
+const SHIELD_CREATED: [string, string, string][] = [
+  ['AngelosHeptades', 'shield', 'on'],
+  ['StarcallersWatch', 'shield', 'on'],
+  ['FracturedHalo', 'afterShield', 'on'],
+]
+/**
+ * Effects while the wearer is protected by a shield (kqmsim's CharacterIsShielded): item,
+ * conditional, state, whether a set (4-piece). Beacon of the Reed Sea's is while it is not.
+ */
+const SHIELDED: [string, string, string, boolean?][] = [
+  ['TheBell', 'WithShield', 'protected'],
+  ['TheUnforged', 'WithShield', 'protected'],
+  ['SummitShaper', 'WithShield', 'protected'],
+  ['MemoryOfDust', 'WithShield', 'protected'],
+  ['VortexVanquisher', 'WithShield', 'protected'],
+  ['CalamityOfEshu', 'passive', 'on'],
+  ['BeaconOfTheReedSea', 'noShield', 'on'],
+  ['RetracingBolide', 'state', 'on', true],
+]
 
 export interface GearEffects {
   /** Every hit and reaction marker that lands, in time order */
@@ -261,6 +282,86 @@ export function gearEffects({
     if (opens(k, 'Instructor')) window(k, ['Instructor', 'set4'], 'on', 0, 0)
     if (opens(k, 'HeartOfTheFurnace'))
       window(k, ['HeartOfTheFurnace', '4Stellar'], 'on', 0, 0)
+  }
+  // Shields (kqmsim's Shields.Add): the kits mark each one they create (shieldMarker). The
+  // effects of creating one and of being protected by one are declared off, on only from those
+  const shields: {
+    owner: CharacterKey
+    target?: CharacterKey
+    kind: string
+    start: number
+    end: number
+  }[] = []
+  /** Who is on the field from when, in turn */
+  const fieldLog: [number, CharacterKey][] = [[0, onField]]
+  /** Fractured Halo: until when its wielder's ATK bonus from a Skill or Burst is up */
+  const haloUntil = new Map<CharacterKey, number>()
+  for (const k of members) {
+    for (const [item, path, value] of SHIELD_CREATED)
+      if (holds(k, item)) window(k, [item, path], value, 0, 0)
+    for (const [item, path, value, set] of SHIELDED)
+      if (set ? opens(k, item) : holds(k, item))
+        window(k, [item, path], value, 0, 0)
+  }
+  /** A shield marker lands: it replaces its creator's earlier one of the same kind and target */
+  const shieldCreated = (ctx: SimContext, hit: SimHit) => {
+    const [, , frames, target, kind = ''] = hit.path
+    const owner = hit.characterKey
+    const t = hit.t
+    const to = (target || undefined) as CharacterKey | undefined
+    for (const s of shields)
+      if (s.owner === owner && s.target === to && s.kind === kind && s.end > t)
+        s.end = t
+    shields.push({ owner, target: to, kind, start: t, end: t + +frames })
+    // Angelos Heptades: Pathfinder's Light for 20 s after the wielder creates a shield (off the
+    // field too), DMG for the member on the field
+    if (holds(owner, 'AngelosHeptades'))
+      ctx.buff(owner, ['AngelosHeptades', 'shield'], 'on', 0, 1200)
+    // Starcaller's Watch: once per 14 s, when the wielder creates a shield on the field, DMG for
+    // the member on the field for 15 s
+    if (
+      holds(owner, 'StarcallersWatch') &&
+      hit.onField === owner &&
+      ready(`starcaller.${owner}`, t, 840)
+    )
+      ctx.buff(owner, ['StarcallersWatch', 'shield'], 'on', 0, 900)
+    // Fractured Halo: a shield while its Skill-or-Burst ATK bonus is up gives the party
+    // Lunar-Charged DMG for 20 s
+    if (holds(owner, 'FracturedHalo') && t < (haloUntil.get(owner) ?? -1))
+      ctx.buff(owner, ['FracturedHalo', 'afterShield'], 'on', 0, 1200)
+  }
+  /**
+   * When `k` is protected by a shield up to `end` (kqmsim's CharacterIsShielded): a party shield
+   * protects the member on the field, a targeted one its target
+   */
+  const protectedSpans = (k: CharacterKey, end: number) => {
+    const fields = fieldLog.map(([from, member], i) => ({
+      member,
+      from,
+      to: Math.min(end, fieldLog[i + 1]?.[0] ?? end),
+    }))
+    const spans: [number, number][] = []
+    for (const s of shields) {
+      const until = Math.min(s.end, end)
+      if (s.target) {
+        if (s.target === k && s.start < until) spans.push([s.start, until])
+        continue
+      }
+      for (const f of fields) {
+        if (f.member !== k) continue
+        const from = Math.max(s.start, f.from)
+        const to = Math.min(until, f.to)
+        if (from < to) spans.push([from, to])
+      }
+    }
+    spans.sort((a, b) => a[0] - b[0])
+    const merged: [number, number][] = []
+    for (const [from, to] of spans) {
+      const last = merged[merged.length - 1]
+      if (last && from <= last[1]) last[1] = Math.max(last[1], to)
+      else merged.push([from, to])
+    }
+    return merged
   }
   // The sets whose every trigger the simulation plays (set audit 2026-11-15, as gcsim): declared
   // off, so neither the rule nor a saved switch keeps them on where no trigger happened
@@ -465,6 +566,10 @@ export function gearEffects({
     onHit(ctx, hit) {
       const k = hit.characterKey
       const t = hit.t
+      if (hit.path[0] === '_marker' && hit.path[1] === 'shield') {
+        shieldCreated(ctx, hit)
+        return
+      }
       // (a Normal Attack performed: a Starspark)
       // (a Starspark per Normal Attack performed: in onAction, not from its hits)
       if (
@@ -873,6 +978,13 @@ export function gearEffects({
     },
     onAction(ctx, actor, action, normalStarts) {
       if (actor === active) pickUp(ctx)
+      // Fractured Halo: its ATK bonus for 20 s after the wielder's Skill or Burst on the field
+      if (
+        (action.kind === 'skill' || action.kind === 'burst') &&
+        actor === active &&
+        holds(actor, 'FracturedHalo')
+      )
+        haloUntil.set(actor, ctx.now + 1200)
       // Heretic's Molten Blade: Gleam of First Light after the wielder's Skill while it is on the
       // field, for 14 s, once per 14 s, removed when it leaves the field (gcsim). Its ATK bonus
       // follows the distance travelled each second, which is not modelled: counted at its most.
@@ -1015,6 +1127,7 @@ export function gearEffects({
       settleSparks(from, t)
       settleSparks(to, t)
       active = to
+      fieldLog.push([t, to])
       if (ctx) pickUp(ctx)
       // Thrilling Tales of Dragon Slayers: the wielder's swap-out gives the incoming member
       // its ATK for 10 s (hitlag-extended), once per 20 s (gcsim)
@@ -1088,6 +1201,24 @@ export function gearEffects({
       }
     },
     end(t) {
+      for (const k of members)
+        for (const [item, path, value, set] of SHIELDED) {
+          if (!(set ? opens(k, item) : holds(k, item))) continue
+          const spans = protectedSpans(k, t)
+          if (item !== 'BeaconOfTheReedSea') {
+            for (const [from, to] of spans)
+              window(k, [item, path], value, from, to)
+            continue
+          }
+          // (Beacon of the Reed Sea: while not protected)
+          let from = 0
+          for (const [start, to] of spans) {
+            if (start > from) window(k, [item, path], value, from, start)
+            from = to
+          }
+          if (t > from) window(k, [item, path], value, from, t)
+        }
+      shields.length = 0
       for (const [k, s] of sparks) {
         settleSparks(k, t)
         if (s.n) window(k, s.path, 'on', s.since, t)

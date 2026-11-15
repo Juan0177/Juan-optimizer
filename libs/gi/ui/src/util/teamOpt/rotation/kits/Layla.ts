@@ -1,6 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/layla, main as of 2026-11-10. */
 
@@ -232,6 +238,9 @@ export const kit: KitModel = {
         // the Curtain of Slumber 19 frames in (refreshed if it is up); the star ticks start with it
         ctx.at(19, (c) => {
           if (c.now >= s.shieldUntil && c.now >= s.shootingUntil) s.stars = 0
+          // a party shield. kqmsim only extends one still up (no new shield), which only the
+          // shield-creation weapons tell apart, none a sword; her cooldown outlasts it anyway.
+          shieldMarker(c, 0, SHIELD, 'Curtain of Slumber')
           s.shieldUntil = c.now + SHIELD
           startTicks(c, s)
         })

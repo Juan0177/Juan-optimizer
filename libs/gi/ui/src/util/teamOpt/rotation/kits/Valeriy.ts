@@ -1,5 +1,5 @@
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString } from './common'
+import { KQMSIM, type NormalHit, normalString, shieldMarker } from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), pinned by KQMSIM, internal/characters/valeriy. */
 const normals: NormalHit[] = [
@@ -185,10 +185,12 @@ export const kit: KitModel = {
   act(c, s: State, action) {
     switch (action.kind) {
       case 'skill':
-        c.atCharacter('Valeriy', 25, () => {
+        c.atCharacter('Valeriy', 25, (at) => {
           const bonus = cons(c) >= 1 && s.firstSkill ? 1.5 : 1
           s.firstSkill = false
           addMomentum(c, s, 40 * bonus)
+          // then the party shield, for 18 s (kqmsim's addShield)
+          shieldMarker(at, 0, 18 * 60, 'Skill shield')
         })
         c.atCharacter('Valeriy', 26, (at) => {
           at.hit(0, {

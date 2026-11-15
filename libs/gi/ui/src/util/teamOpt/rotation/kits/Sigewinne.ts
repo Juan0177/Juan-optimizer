@@ -1,5 +1,11 @@
 import type { KitModel, SimContext, SimCountedBuff, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/sigewinne, main as of 2026-11-10. */
 
@@ -53,6 +59,16 @@ interface SigewinneState {
 const c2Shred = (ctx: SimContext, delay: number) =>
   ctx.buff('Sigewinne', ['Sigewinne', 'c2AfterHit'], 'on', delay, 8 * 60 + 1, {
     hitlag: 'enemy',
+  })
+
+/**
+ * C2: a Bubbly Shield on Sigewinne from the cast of her skill or burst while its animation lasts
+ * (`length`): kqmsim ends it the frame after the animation ends. Her next action ends it 1 or 2
+ * frames sooner when it cancels the animation, which no hit can tell apart.
+ */
+const c2Shield = (ctx: SimContext, length: number) =>
+  shieldMarker(ctx, 0, length + 2, 'Bubbly Shield (C2)', {
+    target: 'Sigewinne',
   })
 
 /** C6: when she heals, her burst's CRIT for 15 s (a hitlag-affected modifier on her) */
@@ -169,6 +185,7 @@ export const kit: KitModel = {
             ctx.buff('Sigewinne', ['Sigewinne', 'skillTier'], `${tier}`, t, 1)
           if (c < 1 || k > 2) tier = Math.max(0, tier - 1)
         }
+        if (c >= 2) c2Shield(ctx, hold ? 56 : 41)
         // A1: Hydro DMG +8% for 18 s (a hitlag-affected modifier; the sheet gates it on A1)
         ctx.buff(
           'Sigewinne',
@@ -181,7 +198,7 @@ export const kit: KitModel = {
           }
         )
         ctx.note(
-          'Sigewinne: A4 (Bond of Life healing), the shields and the Sourcewater Droplets are not modelled.'
+          "Sigewinne: A4 (Bond of Life healing), the shield's HP and the Sourcewater Droplets are not modelled."
         )
         if (hold)
           return {
@@ -215,6 +232,7 @@ export const kit: KitModel = {
         // animation is over by then); dash and jump end it at once, swap after 4 frames. A
         // written wait starts at the charge's end (CanQueueAfter: 99).
         const total = BURST_WAVES_START + maxDuration
+        if (c >= 2) c2Shield(ctx, total)
         return {
           cooldown: { key: 'burst', frames: 18 * 60, delay: 1 },
           frames: total + 1,

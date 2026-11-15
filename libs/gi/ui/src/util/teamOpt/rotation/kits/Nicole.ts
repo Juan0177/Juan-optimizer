@@ -9,7 +9,13 @@ import type {
   SimCountedBuff,
   SimHit,
 } from '../types'
-import { atkSpdAdjust, GCSIM, type NormalHit, templateJump } from './common'
+import {
+  atkSpdAdjust,
+  GCSIM,
+  type NormalHit,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/nicole, main as of 2026-11-10. */
 
@@ -17,8 +23,7 @@ import { atkSpdAdjust, GCSIM, type NormalHit, templateJump } from './common'
  * A1 observes the other active members only (game text and upstream gcsim; the kqmsim fork also
  * upgrades Nicole on her own swap-in). C4's Pathfinder's Blessing is a counted buff: an upgrade
  * to Guidance of Theosis (A1, A4, C6) grants the member 20 s and 8 of its own Normal, Charged,
- * Plunging, Skill and Burst hits (16 s cooldown per member), as gcsim's c4OnUpgrade. Not
- * modelled: the C2 shield (no damage).
+ * Plunging, Skill and Burst hits (16 s cooldown per member), as gcsim's c4OnUpgrade.
  */
 
 /** C4's Pathfinder's Blessing: a marker per grant (the recipient as `characterKey`) */
@@ -191,6 +196,9 @@ function nicoleAct(
         icd: 'none',
         label: 'Revelation: Uncreated Light',
       })
+      // Shield of Blazing Light: a party shield for 20 s, made with the buff 8 frames in (kqmsim's
+      // addShield; a recast replaces it)
+      shieldMarker(ctx, 8, 1200, 'Shield of Blazing Light')
       // Grace of Kenosis: the team's ATK bonus for 20 s (from frame 8)
       s.graceEnd = ctx.now + 1208
       ctx.state('Nicole', ['Nicole', 'a1GuidanceActive'], '')

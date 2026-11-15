@@ -4,6 +4,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  shieldMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -143,6 +144,14 @@ export const kit: KitModel = {
         // Opening Flourish: the tap's hit at 13f; a hold is gcsim's hold=1, Charge Level 1 (the hit
         // at 50f). (Charge Level 2, a 2 s hold, has no rotation syntax.) A shield until the hit
         const cd = c >= 1 ? 443 : 9 * 60
+        // the shield is on Yun Jin herself, from the cast until the hit (kqmsim)
+        shieldMarker(
+          ctx,
+          0,
+          action.hold ? 50 : 13,
+          'Opening Flourish (Shield)',
+          { target: 'YunJin' }
+        )
         if (!action.hold) {
           ctx.hit(13, {
             path: ['skill', 'dmg'],

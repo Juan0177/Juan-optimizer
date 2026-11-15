@@ -1,5 +1,11 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/baizhu, main as of 2026-11-10. */
 
@@ -84,6 +90,8 @@ function seamlessShield(ctx: SimContext, s: BaizhuState) {
   if (s.shieldExpiry !== undefined && s.shieldExpiry > ctx.now) spiritvein(ctx)
   const version = ++s.shieldVersion
   s.shieldExpiry = ctx.now + SHIELD_DURATION
+  // a party shield (kqmsim's Shields.Add, so a refresh counts as a new shield)
+  shieldMarker(ctx, 0, SHIELD_DURATION, 'Seamless Shield')
   ctx.at(SHIELD_DURATION, (c2) => {
     if (s.shieldVersion !== version) return
     s.shieldExpiry = undefined

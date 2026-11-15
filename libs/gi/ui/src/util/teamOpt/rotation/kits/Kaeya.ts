@@ -3,6 +3,8 @@ import { GCSIM, type NormalHit, normalString } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kaeya, main as of 2026-11-10. */
 
+/* Not modelled: C4's shield, when Kaeya's HP falls below 20%. */
+
 /** N1..N5 from gcsim's attack.go (hitmarks, cancels) */
 const kaeyaNormals: NormalHit[] = [
   {

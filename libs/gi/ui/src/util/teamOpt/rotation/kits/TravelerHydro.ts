@@ -1,5 +1,5 @@
 import type { HpChange, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { GCSIM, type NormalHit, normalString, shieldMarker } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/hydro/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -260,7 +260,7 @@ export const kit: KitModel = {
           s.thornReady = ctx.now + 9 * 60
         }
         ctx.note(
-          'TravelerHydro: the A1 droplets (pickups, C1 Energy, C6 heal) and the C4 shield are not modelled.'
+          "TravelerHydro: the A1 droplets (pickups, C1 Energy, C6 heal) and the C4 shield's absorption are not modelled."
         )
         return {
           cooldown: { key: 'skill', frames: 600, delay: 24 },
@@ -321,6 +321,24 @@ export const kit: KitModel = {
       default:
         return { frames: 30 }
     }
+  },
+  // C4: Aquacrest Aegis, a shield on the Traveler from the Skill's cast until it ends (kqmsim's
+  // c4 at the cast, 15 s, cut to a frame after the next action starts or the animation is over).
+  // Its Dewdrops only restore its absorption while it is up: no new shield
+  onPartyAction(ctx, _s, actor, action, frames, _normalStarts, stateFrames) {
+    if (
+      actor !== 'TravelerHydro' ||
+      action.kind !== 'skill' ||
+      ctx.constellation('TravelerHydro') < 4
+    )
+      return
+    shieldMarker(
+      ctx,
+      0,
+      Math.min(15 * 60, (stateFrames ?? frames) + 1),
+      'Aquacrest Aegis',
+      { target: 'TravelerHydro' }
+    )
   },
   onHpChange(ctx, s: HydroState, change: HpChange) {
     // Foreign Aqualis: a party member's HP changing by 5% (of Max HP, summed) gives a Blade of

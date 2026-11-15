@@ -1,5 +1,11 @@
-import type { KitModel } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import type { KitModel, SimContext } from '../types'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/diona, main as of 2026-11-10. */
 
@@ -25,6 +31,34 @@ interface DionaState {
   revelationUntil: number
   /** Revelation's 3.5 s ICD, on Diona's clock */
   revelationIcd: number
+  /** Icy Paws' shield: until (frame), and the cast that last added to it */
+  shieldUntil: number
+  shieldCast: number
+  casts: number
+}
+
+/** A paw's shield duration by Icy Paws' level (kqmsim pawDur, seconds) */
+const PAW_DUR = [
+  1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4, 2.4,
+]
+
+/**
+ * Icy Paws' shield (kqmsim pawCB): each paw that hits adds the paw's duration to it (two for a
+ * new cast's first paw on a shield still up), at most 5 paws' worth from now
+ */
+function pawShield(ctx: SimContext, s: DionaState, cast: number) {
+  const level =
+    ctx.calculate('Diona', ['total', 'skillIndex']) ??
+    (ctx.constellation('Diona') >= 5 ? 12 : 9)
+  const dur = Math.trunc(
+    PAW_DUR[Math.min(14, Math.max(0, Math.round(level)))] * 60
+  )
+  if (s.shieldUntil > ctx.now)
+    s.shieldUntil += s.shieldCast === cast ? dur : 2 * dur
+  else s.shieldUntil = ctx.now + dur
+  s.shieldCast = cast
+  s.shieldUntil = Math.min(s.shieldUntil, ctx.now + 5 * dur)
+  shieldMarker(ctx, 0, s.shieldUntil - ctx.now, 'Icy Paws shield')
 }
 
 /** Revelation (Choice Treasures): the reactions that fire 3 Icy Paws */
@@ -43,6 +77,9 @@ export const kit: KitModel = {
     fieldUntil: -1,
     revelationUntil: -1,
     revelationIcd: -1,
+    shieldUntil: -1,
+    shieldCast: 0,
+    casts: 0,
   }),
   onStart(ctx) {
     // Revelation is unlocked (gcsim's default): C6's Max HP and Stellar Glimmer need it
@@ -110,8 +147,9 @@ export const kit: KitModel = {
       case 'skill': {
         // Icy Paws: 2 paws (tap) or 5 (hold), each landing 10 frames of travel after its release
         const hold = !!action.hold
+        const cast = ++s.casts
         if (hold) {
-          for (let i = 0; i < 5; i++)
+          for (let i = 0; i < 5; i++) {
             ctx.hit(34 + i, {
               path: ['skill', 'skillDmg'],
               tag: 'skill',
@@ -120,6 +158,8 @@ export const kit: KitModel = {
               icd: 'skill',
               label: 'Icy Paw',
             })
+            ctx.at(34 + i, (c) => pawShield(c, s, cast))
+          }
           s.revelationUntil = ctx.characterFrame('Diona') + 1201
           return {
             cooldown: { key: 'skill', frames: 900, delay: 29 },
@@ -127,7 +167,7 @@ export const kit: KitModel = {
             framesInto: { normal: 36, burst: 37, dash: 31, jump: 31, swap: 29 },
           }
         }
-        for (let i = 0; i < 2; i++)
+        for (let i = 0; i < 2; i++) {
           ctx.hit(10 + i, {
             path: ['skill', 'skillDmg'],
             tag: 'skill',
@@ -136,6 +176,8 @@ export const kit: KitModel = {
             icd: 'skill',
             label: 'Icy Paw',
           })
+          ctx.at(10 + i, (c) => pawShield(c, s, cast))
+        }
         s.revelationUntil = ctx.characterFrame('Diona') + 1201
         return {
           cooldown: { key: 'skill', frames: 360, delay: 5 },
