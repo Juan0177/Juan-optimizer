@@ -1,6 +1,8 @@
 import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataEntry } from '../DataEntry'
 import { validateTeamOpt } from '../DataManagers/TeamOpt'
+import type { PackedKqmRun } from './packKqmRun'
+import { isPackedKqmRun, packKqmRun, unpackKqmRun } from './packKqmRun'
 
 /**
  * A team's last KQM theorycrafting run, kept across reloads. The run's shape belongs to KQM mode
@@ -23,9 +25,19 @@ export interface ITeamKqmResultsEntry {
   runs: Record<string, TeamKqmSavedRun>
 }
 
+/** As the browser's storage keeps them: each run packed (`packKqmRun`), a fraction of its size */
+export interface ITeamKqmResultsStored {
+  runs: Record<
+    string,
+    Omit<TeamKqmSavedRun, 'run'> & {
+      run: PackedKqmRun | TeamKqmSavedRun['run']
+    }
+  >
+}
+
 /**
- * Runs kept: the most recent ones. Each holds every member's rankings (~100 KB), and the browser's
- * storage for the whole database is ~5 MB.
+ * Runs kept: the most recent ones. Each holds every member's rankings and the rotation it played
+ * (~200 KB packed), and the browser's storage for the whole database is ~5 MB.
  */
 export const TEAM_KQM_RUNS_KEPT = 6
 
@@ -36,19 +48,30 @@ export class TeamKqmResultsEntry extends DataEntry<
   'teamKqmResults',
   'teamKqmResults',
   ITeamKqmResultsEntry,
-  ITeamKqmResultsEntry
+  ITeamKqmResultsStored
 > {
   constructor(database: ArtCharDatabase) {
     super(database, 'teamKqmResults', () => ({ runs: {} }), 'teamKqmResults')
   }
-  override validate(obj: unknown): ITeamKqmResultsEntry | undefined {
+  /**
+   * The runs, unpacked and checked: from the storage (packed, or as older versions saved them)
+   * or as they are set. (What comes out is the cache's form; `deCache` packs it for the storage.)
+   */
+  override validate(obj: unknown): ITeamKqmResultsStored | undefined {
     if (!isObject(obj)) return undefined
     const runs: ITeamKqmResultsEntry['runs'] = {}
     for (const [teamId, saved] of Object.entries(
       isObject(obj['runs']) ? obj['runs'] : {}
     )) {
       if (!isObject(saved)) continue
-      const { savedAt, members, run } = saved
+      const { savedAt, members } = saved
+      let run = saved['run']
+      if (isPackedKqmRun(run))
+        try {
+          run = unpackKqmRun(run)
+        } catch {
+          continue
+        }
       if (!isObject(run) || !isObject(run['result'])) continue
       if (!isObject(run['result']['builds'])) continue
       if (!Array.isArray(members) || members.some((m) => typeof m !== 'string'))
@@ -70,6 +93,20 @@ export class TeamKqmResultsEntry extends DataEntry<
       }
     }
     return { runs }
+  }
+  override toCache(stored: ITeamKqmResultsStored): ITeamKqmResultsEntry {
+    // (`validate` has unpacked them)
+    return stored as ITeamKqmResultsEntry
+  }
+  override deCache(cached: ITeamKqmResultsEntry): ITeamKqmResultsStored {
+    return {
+      runs: Object.fromEntries(
+        Object.entries(cached.runs).map(([teamId, saved]) => [
+          teamId,
+          { ...saved, run: packKqmRun(saved.run) },
+        ])
+      ),
+    }
   }
   /** A team's saved run (a copy: the database keeps its own frozen) */
   getRun(teamId: string): TeamKqmSavedRun | undefined {
