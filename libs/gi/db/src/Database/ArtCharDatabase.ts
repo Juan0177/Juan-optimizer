@@ -1,5 +1,9 @@
 import type { DBStorage } from '@genshin-optimizer/common/database'
-import { Database, SandboxStorage } from '@genshin-optimizer/common/database'
+import {
+  Database,
+  getAppStorage,
+  SandboxStorage,
+} from '@genshin-optimizer/common/database'
 import { compressToB64Gzip } from '@genshin-optimizer/common/util'
 import type { GenderKey } from '@genshin-optimizer/gi/consts'
 import type { IGOOD } from '@genshin-optimizer/gi/good'
@@ -256,7 +260,7 @@ export class ArtCharDatabase extends Database {
     this.storage = other
     this.saveStorage()
     this.storage = oldstorage
-    localStorage.setItem(
+    getAppStorage().setString(
       key,
       compressToB64Gzip(Object.fromEntries(other.entries))
     )

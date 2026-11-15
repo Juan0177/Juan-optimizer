@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@emotion/react'
+import { clearAppStorage } from '@genshin-optimizer/common/database'
 import { ReadOnlyTextArea } from '@genshin-optimizer/common/react-util'
 import { CardThemed } from '@genshin-optimizer/common/ui'
 import { isDev } from '@genshin-optimizer/common/util'
@@ -69,8 +70,10 @@ class ErrorBoundary extends Component<Props, State> {
       const errorStr = `Message: ${this.state.error.message}\nName: ${this.state.error.name}\nStack: ${this.state.error.stack}${this.state.componentStack ? `\nComponents: ${this.state.componentStack}` : ''}`
       const uploadStr = "**Don't forget to upload your JSON file!**"
       const textBoxVal = `${reproStr}\n\n${uploadStr}\n\n\`\`\`\n${errorStr}\n\`\`\``
-      const onNuke = () => {
+      const onNuke = async () => {
         if (!window.confirm(t`confirmNuke`)) return
+        // the data (IndexedDB, saved before going on) and this device's settings (localStorage)
+        await clearAppStorage().catch(console.error)
         localStorage.clear()
         window.alert(t`finishNuke`)
         document.location.reload()

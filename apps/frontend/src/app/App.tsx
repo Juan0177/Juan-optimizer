@@ -20,10 +20,12 @@ import type { ComponentType } from 'react'
 import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import './App.scss'
+import { getAppStorage } from '@genshin-optimizer/common/database'
 import { useDatabases } from '@genshin-optimizer/common/database-ui'
 import ErrorBoundary from './ErrorBoundary'
 import Footer from './Footer'
 import Header from './Header'
+import { SaveErrorNotice } from './SaveErrorNotice'
 import Snow from './Snow'
 import { UpdateBanner } from './UpdateBanner'
 
@@ -155,7 +157,8 @@ function whenIdle(fn: () => void): () => void {
 }
 
 function App() {
-  const dbIndex = Number.parseInt(localStorage.getItem('dbIndex') || '1')
+  // (the active database's slot, kept with its data)
+  const dbIndex = getAppStorage().getDBIndex()
   const [databases, setDatabases] = useDatabases(
     ArtCharDatabase,
     dbIndex,
@@ -192,6 +195,7 @@ function App() {
                 <Content />
                 <ScrollTop />
               </HashRouter>
+              <SaveErrorNotice />
             </ErrorBoundary>
           </DatabaseContext.Provider>
         </SnowContext.Provider>

@@ -1,3 +1,7 @@
+import {
+  getAppStorage,
+  getAppStorageKind,
+} from '@genshin-optimizer/common/database'
 import { CardThemed } from '@genshin-optimizer/common/ui'
 import { objMap } from '@genshin-optimizer/common/util'
 import { SdStorage } from '@mui/icons-material'
@@ -16,6 +20,7 @@ import {
   Typography,
   tableCellClasses,
 } from '@mui/material'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 const MAX_LOCAL_STORAGE_MB = 5
@@ -29,8 +34,26 @@ const COLORS = {
 const DISPLAY_PERCENT_THRESH = 1
 const WARNING_PERCENT_THRESH = 75
 const ERROR_PERCENT_THRESH = 90
+/** What the data take: in IndexedDB (of what the browser allows this site), or in localStorage (of 5 MB) */
 export function LocalStorageUsageCard() {
   const { t } = useTranslation('common')
+  const indexedDb = getAppStorageKind() === 'indexeddb'
+  // (IndexedDB: the browser's allowance for the site, a share of the disk)
+  const [quotaMB, setQuotaMB] = useState<number>()
+  useEffect(() => {
+    if (!indexedDb) return
+    navigator.storage
+      ?.estimate?.()
+      .then(({ quota }) => quota && setQuotaMB(quota / 1024 / 1024))
+      .catch(() => undefined)
+  }, [indexedDb])
+  const limitMB = indexedDb ? (quotaMB ?? 0) : MAX_LOCAL_STORAGE_MB
+  const entries: [string, string][] = indexedDb
+    ? getAppStorage().entries
+    : Object.keys(localStorage).map((key) => [
+        key,
+        localStorage.getItem(key) ?? '',
+      ])
   let totalBytes = 0
   const bytesByCategory = {
     activeGo: 0,
@@ -40,11 +63,8 @@ export function LocalStorageUsageCard() {
     goDb4: 0,
   }
 
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (!key) continue
+  for (const [key, value] of entries) {
     // Calculate bytes for both the key and the value
-    const value = localStorage.getItem(key)
     const size = new Blob(value ? [key, value] : [key]).size
     totalBytes += size
     if (key.startsWith('extraDatabase')) {
@@ -67,13 +87,12 @@ export function LocalStorageUsageCard() {
     }
   }
   const MBByCategory = objMap(bytesByCategory, (v) => v / 1024 / 1024)
-  const percentByCategory = objMap(
-    MBByCategory,
-    (v) => (v / MAX_LOCAL_STORAGE_MB) * 100
+  const percentByCategory = objMap(MBByCategory, (v) =>
+    limitMB ? (v / limitMB) * 100 : 0
   )
 
   const totalMB = totalBytes / 1024 / 1024
-  const percent = (totalMB / MAX_LOCAL_STORAGE_MB) * 100
+  const percent = limitMB ? (totalMB / limitMB) * 100 : 0
   let currentPercent = percent
 
   return (
@@ -111,7 +130,11 @@ export function LocalStorageUsageCard() {
             gap: 2,
           }}
         >
-          <Typography pb={4}>{t('storage.info')}</Typography>
+          <Typography pb={4}>
+            {indexedDb
+              ? t('storage.infoIndexedDb', "Saved in this browser's database")
+              : t('storage.info')}
+          </Typography>
           {/* Stack a bunch of circle bars together */}
           <CircularProgress
             size={100}
@@ -153,9 +176,14 @@ export function LocalStorageUsageCard() {
             >
               {totalMB.toFixed(2)}MB
             </Box>{' '}
-            <Box component="span" color="secondary.main">
-              / {MAX_LOCAL_STORAGE_MB}MB
-            </Box>{' '}
+            {!!limitMB && (
+              <Box component="span" color="secondary.main">
+                /{' '}
+                {limitMB >= 1024
+                  ? `${(limitMB / 1024).toFixed(0)}GB`
+                  : `${limitMB.toFixed(0)}MB`}
+              </Box>
+            )}{' '}
             <br />
             <Box
               component="span"
