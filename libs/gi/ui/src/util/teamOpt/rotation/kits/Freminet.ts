@@ -58,12 +58,14 @@ const thornInterval = 9 * 60
 interface FreminetState {
   /** Shattering Pressure stacks (0-4) */
   stacks: number
-  /** Pers Time is up (ends on a timer; persGen guards stale timers) */
+  /** Pers Time is up (ends on a timer; persGen guards stale timers), until (Freminet's clock) */
   persOn: boolean
   persGen: number
-  /** Subnautical Hunter (Stalking) is up; leaving the field ends it */
+  persUntil: number
+  /** Subnautical Hunter (Stalking) is up (leaving the field ends it), until (Freminet's clock) */
   stalkOn: boolean
   stalkGen: number
+  stalkUntil: number
   /** Spiritbreath Thorn's ICD ends (Freminet's clock) */
   thornReady: number
   /** A4 / C4 / C6 (Freminet's clock): the 0.3 s ICD, and the C4/C6 stacks until they expire */
@@ -160,6 +162,7 @@ function thrust(ctx: SimContext, s: FreminetState): ActionResult {
   s.stacks = 0
   const gen = ++s.persGen
   s.persOn = true
+  s.persUntil = ctx.characterFrame('Freminet') + persFrames + 1
   // Pers Time: 10 s on Freminet's clock (gcsim's status with hitlag)
   ctx.atCharacter('Freminet', persFrames + 1, () => {
     if (s.persGen === gen) s.persOn = false
@@ -232,13 +235,19 @@ function normal(
   const first = ctx.normalSequence(freminetNormals.length, 0)
   let idx = first
   let start = 0
+  /** The hitlag of the steps so far (Freminet's clock waits through it) */
+  let lag = 0
   let last: ActionResult | undefined
   for (let step = 0; step < n; step++) {
     if (step > 0) start += kitFramesInto(last!, 'normal')
+    // each step is its own attack in gcsim: Pers Time and Stalking as of that step's start
+    const clock = ctx.characterFrame('Freminet') + start - lag
     if (s.stacks >= 4) {
       last = detonate(ctx, s, start)
       // (the detonation's own frames are relative to the string's start: make them relative)
       last = shift(last, -start)
+      // (its 0.09 s halt)
+      lag += 6
       idx = 0
       continue
     }
@@ -256,9 +265,9 @@ function normal(
       label: `N${i + 1}`,
     })
     hitlagMarker(ctx, hm, step_.hitlag![0], 'Melee hitlag')
-    if (s.persOn) {
+    if (s.persOn && clock < s.persUntil) {
       // (gcsim: the frost's x2 and the stacks are decided when the attack starts)
-      const stalk = stalking(s)
+      const stalk = stalking(s) && clock < s.stalkUntil
       s.stacks = Math.min(4, s.stacks + (stalk ? 2 : 1))
       ctx.hit(hm + frostDelay[i], {
         path: ['skill', 'frostDmg'],
@@ -286,6 +295,7 @@ function normal(
       },
       step_
     )
+    lag += step_.hitlag![0]
     idx = (i + 1) % freminetNormals.length
   }
   ctx.normalSequence(
@@ -316,8 +326,10 @@ export const kit: KitModel = {
     stacks: 0,
     persOn: false,
     persGen: 0,
+    persUntil: -1,
     stalkOn: false,
     stalkGen: 0,
+    stalkUntil: -1,
     thornReady: -1,
     c46Ready: -1,
     c46Stacks: 0,
@@ -360,6 +372,7 @@ export const kit: KitModel = {
         {
           const gen = ++s.stalkGen
           s.stalkOn = true
+          s.stalkUntil = ctx.characterFrame('Freminet') + stalkFrames + 1
           ctx.atCharacter('Freminet', stalkFrames + 1, () => {
             if (s.stalkGen === gen) s.stalkOn = false
           })
