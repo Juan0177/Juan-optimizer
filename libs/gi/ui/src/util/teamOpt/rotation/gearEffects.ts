@@ -69,6 +69,9 @@ const STARSPARK_SETS: Record<string, string> = {
   LegacyOfTheFirstChronicle: 'undyingRadiance',
 }
 
+/** Weapons whose conditional ('afterHeal') is on for 8 s after the wielder is healed */
+const HEALED_WEAPONS = ['TidalShadow', 'SongOfStillness']
+
 /** Weapons whose conditional comes from the wielder creating a shield: item, conditional, state */
 const SHIELD_CREATED: [string, string, string][] = [
   ['AngelosHeptades', 'shield', 'on'],
@@ -268,6 +271,14 @@ export function gearEffects({
       window(k, ['HereticsMoltenBlade', 'passive'], GLEAM_STATE, 0, 0)
   /** Its Gleam of First Light now on, per wielder (the activation's frame) */
   const gleam = new Map<CharacterKey, number>()
+  // Tidal Shadow, Song of Stillness: declared off, on only after the wielder is healed
+  for (const k of members)
+    for (const weapon of HEALED_WEAPONS)
+      if (holds(k, weapon)) window(k, [weapon, 'afterHeal'], 'on', 0, 0)
+  // Rainbow Serpent's Rainbow: declared off, on only after the wielder's hits off the field
+  for (const k of members)
+    if (holds(k, 'RainbowSerpentsRainBow'))
+      window(k, ['RainbowSerpentsRainBow', 'passive'], 'on', 0, 0)
   // The Widsith: declared off, on only after the wielder takes the field
   for (const k of members)
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
@@ -641,6 +652,19 @@ export function gearEffects({
         }
       }
       if (hit.path[0] === '_heal') {
+        // Tidal Shadow, Song of Stillness (kqmsim): 8 s (hitlag-extended) after a heal reaches
+        // the wielder, off the field too; the heal's targets as the simulation heals them
+        const healed =
+          hit.healTargets ??
+          ((hit.weight ?? 1) === members.length
+            ? members
+            : [hit.onField ?? active])
+        for (const target of healed)
+          for (const weapon of HEALED_WEAPONS)
+            if (holds(target, weapon))
+              ctx.buff(target, [weapon, 'afterHeal'], 'on', 0, 480, {
+                hitlag: 'recipient',
+              })
         if (!wears(k, 'OceanHuedClam') || (bubble && bubble.owner !== k)) return
         if (!bubble) {
           if (t < (clamReady.get(k) ?? 0)) return
@@ -855,6 +879,12 @@ export function gearEffects({
         })
       }
       if (hit.path[0].startsWith('_')) return
+      // Rainbow Serpent's Rainbow (kqmsim): ATK for 8 s (hitlag-extended) after the wielder's
+      // attack hits while it is off the field, from the next hit on
+      if (holds(k, 'RainbowSerpentsRainBow') && hit.onField !== k)
+        ctx.buff(k, ['RainbowSerpentsRainBow', 'passive'], 'on', 1, 480, {
+          hitlag: 'recipient',
+        })
       if (
         ctx.moonsign >= 1 &&
         opens(k, 'SilkenMoonsSerenade') &&
