@@ -1988,6 +1988,61 @@ async function runKqm({
   }
 
   /**
+   * A 4-piece set handed to a teammate: the teammate wears it (its weapon kept,
+   * its artifacts searched with it), then the member who wore it searches its own sets again
+   * (its weapon kept). A set whose effect the team shares and does not stack (Heart of the
+   * Furnace's) is worth most on whoever keeps it up, but one member's step never moves it: taking
+   * it alone doubles it, giving it up alone loses it. The best such pair over the team that beats
+   * the team's builds.
+   */
+  const missedHandoff = async () => {
+    let found:
+      | {
+          ck: CharacterKey
+          build: KqmBuild
+          gain: number
+          team?: Partial<Record<CharacterKey, KqmBuild>>
+        }
+      | undefined
+    const searches: Promise<void>[] = []
+    for (const { characterKey: from } of optimized) {
+      const own = builds[from]!
+      const [[set, count] = []] = Object.entries(own.sets)
+      if (count !== 4) continue
+      const problem = problemFor(from, own.weapon, builds)
+      if (!problem) continue
+      const score = scoreOf(problem, kqmValues(own))
+      for (const { characterKey: to } of optimized) {
+        if (to === from) continue
+        const theirs = builds[to]!
+        if (theirs.sets[set as ArtifactSetKey] === 4) continue
+        if (!spaces.get(to)?.four.includes(set as ArtifactSetKey)) continue
+        const search = searchArtifacts(to, theirs.weapon, builds, {
+          setsList: [own.sets],
+          setsKept: 1,
+        }).then(async ([taken]) => {
+          if (!taken) return
+          const next = { ...builds, [to]: taken.build }
+          const [top] = await searchArtifacts(from, own.weapon, next)
+          if (!top || !better(top.score, score)) return
+          const gain = top.score.total / score.total - 1
+          if (gain > 1e-9 && (!found || gain > found.gain))
+            found = {
+              ck: from,
+              build: top.build,
+              gain,
+              team: { [to]: taken.build },
+            }
+        })
+        search.catch(() => undefined)
+        searches.push(search)
+      }
+    }
+    await Promise.all(searches)
+    return found
+  }
+
+  /**
    * Before the rounds: each member's artifacts for its starting weapon, so that the first round's
    * weapons are tried against the others' fitting artifacts, not their starting ones (one problem
    * per member; it saves a round of all the weapons' problems). Members in `order`, from `from`:
@@ -2235,7 +2290,8 @@ async function runKqm({
     for (let pass = 0; ; pass++) {
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
-      const missed = missedBest() ?? (await missedPair())
+      const missed =
+        missedBest() ?? (await missedPair()) ?? (await missedHandoff())
       if (!missed) break
       // taken, and the rounds go on from there (the others' best builds may change with it)
       builds[missed.ck] = missed.build
