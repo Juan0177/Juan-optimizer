@@ -40,6 +40,7 @@ import {
   kqmWeaponSource,
   kqmWeapons,
 } from '@genshin-optimizer/gi/ui'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
@@ -48,13 +49,17 @@ import {
   alpha,
   Box,
   Button,
+  ButtonBase,
   Checkbox,
   Divider,
   IconButton,
   InputAdornment,
+  Menu,
+  MenuItem,
   Skeleton,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import type { ReactNode } from 'react'
@@ -377,6 +382,22 @@ function toggleKqmWeaponGroup(kqm: TeamOptKqm, keys: WeaponKey[]): TeamOptKqm {
   }
 }
 
+/** A group's weapons all counted at `value` (their own refinements, set one by one, are cleared) */
+function setKqmGroupRefinement(
+  kqm: TeamOptKqm,
+  group: KqmWeaponGroup,
+  keys: WeaponKey[],
+  value: number
+): TeamOptKqm {
+  const refinements = { ...(kqm.refinements ?? {}) }
+  for (const k of keys) delete refinements[k]
+  return {
+    ...kqm,
+    [kqmGroupRefinementKey[group]]: value,
+    refinements: Object.keys(refinements).length ? refinements : undefined,
+  }
+}
+
 /**
  * The weapons turned on and off together: Battle Pass, 4★ event wish (and Starglitter shop), 5★
  * standard wish, 5★ event wish;
@@ -461,18 +482,7 @@ function KqmWeaponGroups({
                 label: `R${r}`,
               }))}
               onChange={(value) =>
-                update((kqm) => {
-                  // (the group's weapons all at it: their own refinements are cleared)
-                  const refinements = { ...(kqm.refinements ?? {}) }
-                  for (const k of keys) delete refinements[k]
-                  return {
-                    ...kqm,
-                    [refinementKey]: value,
-                    refinements: Object.keys(refinements).length
-                      ? refinements
-                      : undefined,
-                  }
-                })
+                update((kqm) => setKqmGroupRefinement(kqm, group, keys, value))
               }
             />
           </Box>
@@ -1046,6 +1056,128 @@ export function kqmChooserCounts(members: TeamOptMember[], teamOpt: TeamOpt) {
 }
 
 /**
+ * A weapon group in KQM Setup: one pill of two parts, its switch (on with all its weapons) and
+ * the refinement its weapons count at (a menu, R1 to R5)
+ */
+function GroupPill({
+  label,
+  short,
+  tip,
+  on,
+  total,
+  refinement,
+  onToggle,
+  onRefinement,
+}: {
+  label: string
+  short: string
+  tip: string
+  on: number
+  total: number
+  refinement: number
+  onToggle: () => void
+  onRefinement: (value: number) => void
+}) {
+  const { t } = useTranslation('page_team')
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const all = on === total
+  const part = {
+    minHeight: 30,
+    fontSize: 13,
+    fontWeight: 600,
+    whiteSpace: 'nowrap',
+    ...quickSx,
+    ...focusSx,
+  } as const
+  return (
+    <Box
+      sx={(theme) => ({
+        display: 'inline-flex',
+        alignItems: 'stretch',
+        borderRadius: tokens.radius.pill,
+        border: `1px solid ${all ? 'transparent' : tokens.hairlineStrong}`,
+        ...(all && {
+          bgcolor: alpha(theme.palette.primary.main, 0.1),
+          boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.55)}`,
+        }),
+      })}
+    >
+      <Tooltip arrow title={tip} enterDelay={400}>
+        <ButtonBase
+          onClick={onToggle}
+          aria-pressed={all}
+          aria-label={label}
+          sx={{
+            ...part,
+            gap: 0.75,
+            pl: 1.5,
+            pr: 1,
+            borderRadius: '999px 0 0 999px',
+            color: all ? 'text.primary' : 'text.secondary',
+            '&:hover': { color: 'text.primary' },
+          }}
+        >
+          {short}
+          {on > 0 && !all && (
+            <Box
+              component="span"
+              sx={{ ...numSx, fontWeight: 500, color: 'text.secondary' }}
+            >
+              {on}/{total}
+            </Box>
+          )}
+        </ButtonBase>
+      </Tooltip>
+      <ButtonBase
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-haspopup="menu"
+        aria-expanded={!!anchor}
+        aria-label={t('teamOpt.kqm.groupRefinement', {
+          defaultValue: '{{group}} refinement',
+          group: label,
+        })}
+        sx={(theme) => ({
+          ...part,
+          ...numSx,
+          pl: 0.875,
+          pr: 0.5,
+          borderRadius: '0 999px 999px 0',
+          borderLeft: `1px solid ${all ? alpha(theme.palette.primary.main, 0.35) : tokens.hairlineStrong}`,
+          color: all ? 'text.primary' : 'text.secondary',
+          '&:hover': {
+            color: 'text.primary',
+            bgcolor: alpha(theme.palette.text.primary, 0.06),
+          },
+        })}
+      >
+        R{refinement}
+        <ArrowDropDownIcon sx={{ fontSize: 18, ml: -0.125 }} />
+      </ButtonBase>
+      <Menu
+        anchorEl={anchor}
+        open={!!anchor}
+        onClose={() => setAnchor(null)}
+        MenuListProps={{ dense: true }}
+      >
+        {[1, 2, 3, 4, 5].map((r) => (
+          <MenuItem
+            key={r}
+            selected={r === refinement}
+            onClick={() => {
+              onRefinement(r)
+              setAnchor(null)
+            }}
+            sx={{ ...numSx, fontSize: 13.5, minWidth: 72 }}
+          >
+            R{r}
+          </MenuItem>
+        ))}
+      </Menu>
+    </Box>
+  )
+}
+
+/**
  * KQM Setup's weapons and artifact sets: how many the builds may use, the weapon groups as
  * switches (with the refinement each counts at), and the drawers that choose them one by one
  */
@@ -1162,15 +1294,17 @@ export function KqmPool({
           }}
         >
           {groups.map(({ group, short, label, tip, keys, on }) => {
-            const all = on === keys.length
             const refinement = kqm[kqmGroupRefinementKey[group]] ?? 1
             return (
-              <Pill
+              <GroupPill
                 key={group}
-                selected={all}
+                label={label}
+                short={short}
                 tip={tip}
-                aria-label={label}
-                onClick={() =>
+                on={on}
+                total={keys.length}
+                refinement={refinement}
+                onToggle={() =>
                   setTeamOpt((o) => {
                     o.kqm = toggleKqmWeaponGroup(
                       o.kqm ?? defaultTeamOptKqm,
@@ -1178,17 +1312,17 @@ export function KqmPool({
                     )
                   })
                 }
-              >
-                {short}
-                {on > 0 && (
-                  <Box
-                    component="span"
-                    sx={{ ...numSx, fontWeight: 500, color: 'text.secondary' }}
-                  >
-                    {all ? `R${refinement}` : `${on}/${keys.length}`}
-                  </Box>
-                )}
-              </Pill>
+                onRefinement={(value) =>
+                  setTeamOpt((o) => {
+                    o.kqm = setKqmGroupRefinement(
+                      o.kqm ?? defaultTeamOptKqm,
+                      group,
+                      keys,
+                      value
+                    )
+                  })
+                }
+              />
             )
           })}
         </Box>

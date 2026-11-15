@@ -151,14 +151,14 @@ describe('KQM Setup’s weapons and artifact sets', () => {
     expect(pill('Battle Pass weapons').getAttribute('aria-pressed')).toBe(
       'true'
     )
-    expect(pill('Battle Pass weapons').textContent).toContain('R1')
+    expect(pill('Battle Pass weapons refinement').textContent).toContain('R1')
     const wish4 = pill('4★ event wish weapons')
     expect(wish4.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(wish4)
     expect(pill('4★ event wish weapons').getAttribute('aria-pressed')).toBe(
       'true'
     )
-    expect(pill('4★ event wish weapons').textContent).toContain('R5')
+    expect(pill('4★ event wish weapons refinement').textContent).toContain('R5')
     expect(before).toBe('4 of 9 on')
     expect(weaponCount()).toBe('7 of 9 on')
     fireEvent.click(pill('4★ event wish weapons'))
@@ -199,6 +199,17 @@ describe('KQM Setup’s weapons and artifact sets', () => {
     expect(saved?.kqm?.excludedWeapons).toContain('FiveA')
     // (written for the current weapon list, so the user's own exclusions are kept as they are)
     expect(saved?.kqm?.weaponList).toBe(2)
+    // its refinement, chosen right there: the group's weapons count at it
+    fireEvent.click(pill('5★ standard wish weapons refinement'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'R3' }))
+    expect(saved?.kqm?.refinementStandard5).toBe(3)
+    expect(pill('5★ standard wish weapons refinement').textContent).toContain(
+      'R3'
+    )
+    // (the switch is not touched by it)
+    expect(pill('5★ standard wish weapons').getAttribute('aria-pressed')).toBe(
+      'true'
+    )
   })
 
   it('opens the weapon and set choosers', () => {
