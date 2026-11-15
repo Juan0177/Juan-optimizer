@@ -156,3 +156,43 @@ describe('energy inputs: Sandrone', () => {
     expect(energy.members.Sandrone!.flatEnergy).toBe(5)
   })
 })
+
+describe('energy inputs: Flins (two Bursts)', () => {
+  const team: CharacterKey[] = ['Flins', 'Ineffa', 'Columbina', 'Sucrose']
+  // (his full Burst, then Manifest Flame: Northland Spearstorm makes his next Q a Thunderous
+  // Symphony, 30 Energy)
+  const sim = simulateRotation({
+    rotation: parseRotation(
+      'Flins Q -> Ineffa E Q -> Columbina E -> Sucrose E -> Flins E N2 E Q N2 W2',
+      team.map((characterKey) => ({ characterKey, name: characterKey }))
+    ),
+    members: team,
+    elements: Object.fromEntries(team.map((m) => [m, getCharEle(m)])) as never,
+    constellations: {},
+    repeats: 4,
+    keep: 'last2',
+  })
+  const energy = energyFromRotation(sim, team, 2)
+  it('counts Thunderous Symphony as its own option (30 Energy), apart from the 80-Energy Burst', () => {
+    expect(energy.members.Flins!.burstEvery).toBe(1)
+    expect(energy.members.Flins!.secondaryUses).toBe(1)
+    // (one Ancient Rite: Arcane Light a rotation; Northland Spearstorm has its own cooldown)
+    expect(energy.members.Flins!.skillUses).toBe(1)
+    const settings = withRotationEnergy(
+      defaultEnergyCalculator(team, 20),
+      team,
+      energy
+    )
+    const result = calculateEnergyRecharge(team, settings)
+    expect(result.members.Flins!.flatEnergy).toBe(-30)
+    // 80 for the Burst plus 30 for the Symphony, from his particles
+    const without = calculateEnergyRecharge(team, {
+      ...settings,
+      members: {
+        ...settings.members,
+        Flins: { ...settings.members.Flins!, secondaryUses: 0 },
+      },
+    })
+    expect(result.targets.Flins!).toBeGreaterThan(without.targets.Flins!)
+  })
+})

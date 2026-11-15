@@ -792,9 +792,18 @@
         "perSecond": 0,
         "duration": 0,
         "cooldown": 16
+      },
+      {
+        "label": "Thunderous Symphony",
+        "particles": 0,
+        "flatEnergy": -30,
+        "variance": 0,
+        "perSecond": 0,
+        "duration": 0,
+        "cooldown": 0
       }
     ],
-    "burstCost": 60,
+    "burstCost": 80,
     "burstDiscount": 0,
     "erDiscount": 0
   },
