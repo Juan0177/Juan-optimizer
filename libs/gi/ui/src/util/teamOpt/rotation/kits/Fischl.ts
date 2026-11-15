@@ -96,8 +96,16 @@ function ozTicks(ctx: SimContext, s: FischlState, firstTick: number) {
 /** Oz is on the field */
 const ozUp = (s: FischlState, t: number) => t >= s.ozStart && t < s.ozEnd
 
-/** gcsim's ozActive: set when the skill or burst starts (before Oz spawns): E recasts then */
-const recastMode = (s: FischlState, t: number) => s.ozPending || ozUp(s, t)
+/** gcsim's ozActive: set when the skill or burst starts (before Oz spawns) */
+const ozActive = (s: FischlState, t: number) => s.ozPending || ozUp(s, t)
+
+/**
+ * E recalls Oz (the recast) only while the skill is still on cooldown and Oz is out. With the
+ * skill ready, E summons a new Oz even if one is out (gcsim/kqmsim: `fischl skill` is the summon;
+ * the recast only on request), e.g. after a Sacrificial reset or with the Burst's Oz still up.
+ */
+const recastMode = (ctx: SimContext, s: FischlState) =>
+  ozActive(s, ctx.now) && ctx.cooldownReadyAt('skill', 'Fischl') > ctx.now
 
 export const kit: KitModel = {
   characterKey: 'Fischl',
@@ -114,19 +122,18 @@ export const kit: KitModel = {
     recastReady: -1,
     ozPending: false,
   }),
-  // While Oz is up, the skill is the recast (no skill CD): it waits only for the recast's CD
-  cooldownKey: (s: FischlState, action, now) =>
-    action.kind === 'skill'
-      ? recastMode(s, now)
-        ? undefined
-        : 'skill'
-      : action.kind === 'burst'
-        ? 'burst'
-        : undefined,
-  actionReadyAt: (ctx, s: FischlState, action) =>
-    action.kind === 'skill' && recastMode(s, ctx.now)
-      ? Math.max(ctx.now, s.recastReady)
-      : ctx.now,
+  // The skill's wait is in actionReadyAt (it needs the cooldown): the summon once the skill is
+  // ready; before that, with Oz out, the recast (its own 92-frame CD); else the skill's cooldown
+  cooldownKey: (_s: FischlState, action) =>
+    action.kind === 'burst' ? 'burst' : undefined,
+  actionReadyAt: (ctx, s: FischlState, action) => {
+    if (action.kind !== 'skill') return ctx.now
+    const skillReady = ctx.cooldownReadyAt('skill', 'Fischl')
+    if (skillReady <= ctx.now) return ctx.now
+    return ozActive(s, ctx.now)
+      ? Math.min(skillReady, Math.max(ctx.now, s.recastReady))
+      : skillReady
+  },
   // C6: while Oz is up, it attacks with the active character's normal attacks (gcsim's watcher)
   onPartyAction(
     ctx,
@@ -178,7 +185,7 @@ export const kit: KitModel = {
   },
   // While Oz is out (or being summoned) her E calls him back to her side (frames of its own)
   variant(ctx, s: FischlState, action) {
-    return action.kind === 'skill' && recastMode(s, ctx.now)
+    return action.kind === 'skill' && recastMode(ctx, s)
       ? { key: 'recast', label: 'Nightrider (recall Oz)' }
       : undefined
   },
@@ -223,7 +230,7 @@ export const kit: KitModel = {
         })
         return { frames: 96, framesInto: { dash: 86, jump: 86 } }
       case 'skill':
-        if (recastMode(s, ctx.now)) {
+        if (recastMode(ctx, s)) {
           // Recast: Oz returns to Fischl's side; 2 frames later its attack timer restarts (first
           // tick 60 frames on) with a new snapshot. 92-frame recast CD; no skill CD.
           s.recastReady = ctx.now + 93
