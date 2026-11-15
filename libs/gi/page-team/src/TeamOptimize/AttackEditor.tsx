@@ -1047,10 +1047,17 @@ function BuffList({
                     count: unused.length,
                     defaultValue: 'Not in use now ({{count}})',
                   })}
-                  info={t(
-                    'teamOpt.editor.unusedHint',
-                    'Passives of weapons and artifact sets the member does not have on now, and effects that are not unlocked. A weapon’s or set’s passive counts once Team Optimize picks it for the member.'
-                  )}
+                  info={
+                    unused.some((b) => b.inactive === 'gear')
+                      ? t(
+                          'teamOpt.editor.unusedHint',
+                          'Passives of weapons and artifact sets the member does not have on now, and effects that are not unlocked. A weapon’s or set’s passive counts once Team Optimize picks it for the member.'
+                        )
+                      : t(
+                          'teamOpt.editor.unusedLockedHint',
+                          'Effects that are not unlocked: a constellation the member does not have, or a resonance the team does not have.'
+                        )
+                  }
                 >
                   {groups(unused)}
                 </FoldedBuffs>
@@ -1253,7 +1260,8 @@ function BuffRow({
   // an effect that is no stat (a state, e.g. "gains Radiance"), what its sheet says
   const effects = useMemo(
     () =>
-      buff.inactive
+      // (no figures: no builds to read what it gives with, so nothing to wait for)
+      buff.inactive || !figures
         ? []
         : gains?.length
           ? gains.map(gainEffect)
@@ -1263,7 +1271,7 @@ function BuffRow({
                 (effect) => effect.value === undefined
               )
             : undefined,
-    [buff, state, data, gains]
+    [buff, state, data, gains, figures]
   )
   const id = useId()
   return (

@@ -112,8 +112,8 @@ export function MemberRotation({
    */
   played?: boolean
   /**
-   * The builds a played attack's figures and buffs are read with (KQM theorycrafting's selected
-   * builds: `kqmTeamOverrides`)
+   * The builds an attack's figures and buffs are read with in the editor (KQM theorycrafting's
+   * builds shown: `kqmTeamOverrides`), instead of the members' own
    */
   overrides?: TeamDataOverrides
 }) {
@@ -589,13 +589,11 @@ export function MemberRotation({
         </DataContext.Provider>
       )}
       {editingAttack && editing !== undefined && (
-        <AttackFiguresContext.Provider
-          value={figures || (played && !!overrides)}
-        >
+        <AttackFiguresContext.Provider value={figures || !!overrides}>
           <AttackEditor
             open
             readOnly={played}
-            overrides={played ? overrides : undefined}
+            overrides={overrides}
             onClose={() => setEditing(undefined)}
             teamId={teamId}
             characterKey={characterKey}
