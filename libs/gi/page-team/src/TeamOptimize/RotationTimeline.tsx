@@ -1,5 +1,13 @@
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { allCharacterKeys } from '@genshin-optimizer/gi/consts'
+import type {
+  ArtifactSetKey,
+  CharacterKey,
+  WeaponKey,
+} from '@genshin-optimizer/gi/consts'
+import {
+  allArtifactSetKeys,
+  allCharacterKeys,
+  allWeaponKeys,
+} from '@genshin-optimizer/gi/consts'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import type {
@@ -9,7 +17,11 @@ import type {
   SimulationResult,
   TeamData,
 } from '@genshin-optimizer/gi/ui'
-import { CharacterName } from '@genshin-optimizer/gi/ui'
+import {
+  ArtifactSetName,
+  CharacterName,
+  WeaponName,
+} from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined'
@@ -21,6 +33,7 @@ import {
   IconButton,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
 import type { Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
@@ -80,6 +93,16 @@ const ROOMY: Sizes = {
   name: 14.5,
   label: 12.5,
 }
+/** The detailed window on a short screen (a phone in landscape): the chart over the room it has */
+const SHORT: Sizes = {
+  lane: 34,
+  track: 18,
+  names: 150,
+  name: 12.5,
+  label: 11,
+}
+/** A screen too short for the roomy measures (a phone in landscape) */
+export const SHORT_SCREEN = '(max-height: 520px)'
 const SizeContext = createContext<Sizes>(COMPACT)
 
 type SimAction = SimulationResult['actions'][number]
@@ -218,7 +241,8 @@ export function RotationTimeline({
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
-  const size = detail ? ROOMY : COMPACT
+  const short = useMediaQuery(SHORT_SCREEN)
+  const size = detail ? (short ? SHORT : ROOMY) : COMPACT
   const nameColumn = size.names
   const start = sim.start
   const length = Math.max(1, sim.frames)
@@ -1091,9 +1115,20 @@ function trackInfo(track: TimelineTrack, teamData: TeamData | undefined) {
     track.segments[0].value,
     teamData
   )
+  // a weapon's or set's effect: named by the item (its condition in the tooltip), as the effect's
+  // own name ("After hitting an opponent with a Skill") does not say whose it is
+  const [sheetKey] = track.path
+  const item =
+    track.group !== 'gear' ? undefined : allArtifactSetKeys.includes(
+        sheetKey as ArtifactSetKey
+      ) ? (
+      <ArtifactSetName setKey={sheetKey as ArtifactSetKey} />
+    ) : allWeaponKeys.includes(sheetKey as WeaponKey) ? (
+      <WeaponName weaponKey={sheetKey as WeaponKey} />
+    ) : undefined
   return {
-    label: info.label ?? info.name ?? fallback,
-    title: info.title,
+    label: item ?? info.label ?? info.name ?? fallback,
+    title: item ? (info.label ?? info.name) : info.title,
     states: info.states,
     // (a conditional the sheets do not list is the simulation's own bookkeeping)
     internal: info.name === track.path.join(' · '),
@@ -1463,11 +1498,15 @@ function Readout({
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
   const pointed = useMoment(store)
+  // (a touch screen has no pointer to hover with)
+  const touch = useMediaQuery('(hover: none)')
   const moment = pointed ?? (pin ? { frame: pin.frame } : undefined)
   if (!moment)
     return (
       <Typography sx={{ ...readoutLabelSx, ml: 0.5 }}>
-        {t('teamOpt.timeline.hint', 'Point at a moment · click to pin it')}
+        {touch
+          ? t('teamOpt.timeline.hintTouch', 'Tap a moment to pin it')
+          : t('teamOpt.timeline.hint', 'Point at a moment · click to pin it')}
       </Typography>
     )
   const hit = pointed ? hitAt(pointed) : pin?.hit
