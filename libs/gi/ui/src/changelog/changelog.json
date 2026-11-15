@@ -1,5 +1,22 @@
 [
   {
+    "version": "1.9.0",
+    "date": "2026-11-15",
+    "new": [
+      "The KQM ER calculator now fills in each member's field time, skill uses, Burst cadence, particle catcher and Electro resonance from your written rotation; anything you change yourself stays, and \"Use rotation\" brings the rotation's values back.",
+      "Timeline: weapon and set effects that last the whole rotation now show as gold lines and are named at each moment, instead of only inside \"Always on\"."
+    ],
+    "fixed": [
+      "Long written rotations no longer lose attacks past the 40th per member, which cut their damage (for example Emilie's Burning and Lumidouce Case hits). Use your written rotation again to update a saved team.",
+      "Clash of Kings' ATK and Elemental Mastery bonus now lasts 6 s after the wielder's Skill (once every 12 s), and a Charged Attack hit while it's up adds 6 s once; it was counted for the whole rotation.",
+      "KQM tab: the timeline shows the set effects KQM counts by rule (such as Disenchantment in Deep Shadow), and buff lists no longer show sets a build doesn't wear.",
+      "Sandrone's Charged Attack after a pause now includes its wind-up, so rotations with waits are timed correctly.",
+      "Varesa's plunges now deal their falling hit.",
+      "ER calculator: Durin's Skill counts the Energy it restores, Varesa's Volcanic Kablam counts as her 30-Energy short Burst, and Sandrone starts at 5 particles and 5 bonus Energy.",
+      "The rotation's wait note now says when it waits for cooldowns left from the previous rotation."
+    ]
+  },
+  {
     "version": "1.8.0",
     "date": "2026-11-15",
     "new": [
