@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.4.0",
+    "date": "2026-11-15",
+    "fixed": [
+      "Rotation writer: tapping Mitya's Skill again to switch his Detection Core between modes no longer detonates his Gradient Beacons, so his next Charged Attack in Overload is a Gradient Detonation that spends them. As in game, only a Steady core detonates them: when it ends, or when his Skill is tapped or held anew after its cooldown."
+    ]
+  },
+  {
     "version": "1.3.3",
     "date": "2026-11-14",
     "new": [
