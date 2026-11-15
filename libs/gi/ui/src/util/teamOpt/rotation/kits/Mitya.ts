@@ -205,8 +205,14 @@ export const kit: KitModel = {
             }
           s.recastReady = ctx.now + 90
           const version = ++s.version
+          // A recast only changes the core's state: the Steady core consumes the Beacons when its
+          // duration ends or another core is created (game text), so they stay for Gradient
+          // Detonation. (The pinned kqmsim detonates here; KQM-git/kqmsim#31 removes it.)
           if (s.mode === 'steady') {
-            detonate(ctx, s)
+            if (s.prisms)
+              ctx.note(
+                'Mitya: switching to Overload keeps the Gradient Beacons (game text; the reference consumes them).'
+              )
             s.mode = 'overloaded'
           } else {
             s.mode = 'steady'
