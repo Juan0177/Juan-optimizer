@@ -460,8 +460,10 @@ export function gearEffects({
         // triggers a Stellar Swirl
         if (reaction === 'stellarSwirl' && opens(k, 'ScarletProof'))
           ctx.buff(k, ['ScarletProof', '4Ss'], 'on', 0, 600)
-        // Instructor: the party's EM +120 for 8 s after the wearer triggers a reaction
-        if (opens(k, 'Instructor'))
+        // Instructor: the party's EM +120 for 8 s after the wearer triggers a reaction while it is
+        // on the field (gcsim: its off-field reactions do not count). (gcsim extends the 8 s by
+        // each member's hitlag: a few frames, not modelled.)
+        if (opens(k, 'Instructor') && hit.onField === k)
           ctx.buff(k, ['Instructor', 'set4'], 'on', 0, 480)
         // Scroll of the Hero of Cinder City: +12% DMG of the elements of a reaction involving the
         // wearer's element, for 15 s, plus an independent 20 s Nightsoul bonus
