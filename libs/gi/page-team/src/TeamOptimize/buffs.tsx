@@ -412,7 +412,7 @@ export function useKqmTeamBuffs(
   teamId: string,
   teamData: TeamData | undefined,
   overrides: TeamDataOverrides | undefined,
-  result: Pick<KqmResult, 'assumed' | 'played'> | undefined
+  result: Pick<KqmResult, 'assumed' | 'played' | 'builds'> | undefined
 ): TeamBuff[] {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -452,8 +452,30 @@ export function useKqmTeamBuffs(
         value,
         ...describe(ref, value, kqmData),
       }))
-      .filter((buff) => buff.inactive !== 'gear')
+      .filter(
+        (buff) =>
+          buff.inactive !== 'gear' && kqmBuildHas(result.builds, buff.ref)
+      )
   }, [database, gender, teamId, teamData, overrides, result])
+}
+
+/**
+ * A weapon's or set's effect belongs to the KQM build that has that item: the run also plays each
+ * member's candidate items (their states are in its attacks and rules), and a member whose own
+ * build lacks an item has no sheet section to tell it is not worn
+ */
+function kqmBuildHas(
+  builds: KqmResult['builds'] | undefined,
+  ref: BuffRef
+): boolean {
+  if (ref.owner === 'team') return true
+  const [item] = ref.path
+  const build = builds?.[ref.owner]
+  if ((allArtifactSetKeys as readonly string[]).includes(item))
+    return (build?.sets[item as ArtifactSetKey] ?? 0) >= 2
+  if ((allWeaponKeys as readonly string[]).includes(item))
+    return build?.weapon.key === item
+  return true
 }
 
 /** The buffs that can change an attack of `characterKey`: its own, the team's, and teammates' team buffs */
