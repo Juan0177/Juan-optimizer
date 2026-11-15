@@ -1,3 +1,4 @@
+import { stopAppStorage } from '@genshin-optimizer/common/database'
 import { isDev } from '@genshin-optimizer/common/util'
 import { reloadOnce, startUpdateCheck } from './app/updateCheck'
 import '@fontsource/roboto/300.css'
@@ -8,6 +9,8 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './app/App'
 import NewTab from './app/NewTab'
+import StorageError from './app/StorageError'
+import { openStorage } from './app/storage'
 import './index.css'
 
 // After a redeploy, a cached page may request chunks that no longer exist. Reload once to pick
@@ -36,10 +39,26 @@ if ('serviceWorker' in navigator && !isDev && location.protocol === 'https:') {
 if (!isDev) startUpdateCheck()
 let mode: 'main' | 'newtab' = 'main'
 let root = createRoot(document.getElementById('root') as HTMLElement)
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
+// The data are read before the app starts (the loading screen shows until then): from IndexedDB,
+// moved there from localStorage the first time
+openStorage().then(
+  () => {
+    if (mode !== 'main') return
+    root.render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    )
+  },
+  (error: unknown) => {
+    console.error(error)
+    if (mode !== 'main') return
+    root.render(
+      <React.StrictMode>
+        <StorageError error={error} />
+      </React.StrictMode>
+    )
+  }
 )
 
 // Detect a storage event, and unmount the main page to show a newTab event.
@@ -48,6 +67,8 @@ function handleStorage(this: Window, event: StorageEvent) {
   if (mode === 'newtab') return
   mode = 'newtab'
   this.document.title = 'ERROR'
+  // the new tab has the data now: this one saves what it changed so far, and nothing after
+  void stopAppStorage()
   root.unmount()
   root = createRoot(document.getElementById('root') as HTMLElement)
   root.render(
