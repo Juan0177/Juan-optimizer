@@ -4,6 +4,24 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.5.5](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.5.5) (2026-11-15)
+
+### New
+
+- Rotation writer: point at any moment of the timeline to read it (who is on the field, the enemy's aura, stacks, the hit there and its damage), and click to pin it. "Detailed timeline" opens a large window with the enemy's aura, every stack and resource over time, each member's buffs, the damage as it adds up, and a card for each member showing their stats, stacks and buffs at that moment.
+- The Teams page is redesigned: each member is a game-style card with their weapon, artifact sets and main stats, hover any of them for details, and every team shows its elemental resonance.
+- KQM Theorycrafting: Instructor and The Exile can be chosen, counted by KQM Standards for 4★ artifacts (lower main stats, 0.8 of the substats and 2 fewer distributed rolls for each 4★ piece, one 5★ off-piece).
+- KQM Theorycrafting: each weapon group's refinement (R1 to R5) is chosen right in the setup.
+
+### Improved
+
+- Rotation writer: each member's hits are cards with every attack's share, and the notes fold behind one line.
+
+### Fixed
+
+- KQM Theorycrafting: the rotation preview and timeline on the KQM tab play at the constellations set in KQM Setup, not your own.
+- Heretic's Molten Blade counts only after its wielder's Elemental Skill while they are on the field, not for every hit.
+
 ## [v1.5.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.5.0) (2026-11-15)
 
 ### New

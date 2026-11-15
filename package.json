@@ -1,6 +1,6 @@
 {
   "name": "genshin-optimizer",
-  "version": "1.5.0",
+  "version": "1.5.5",
   "license": "AGPL-3.0-or-later",
   "private": true,
   "scripts": {
