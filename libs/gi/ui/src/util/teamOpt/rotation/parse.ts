@@ -81,7 +81,74 @@ const NICKNAMES: Partial<Record<CharacterKey, string[]>> = {
   Mavuika: ['mav', 'mavuika'],
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+/**
+ * A name as compared: letters and digits of any script (Инеффа, 茜特菈莉, Ayaka), accents and case
+ * ignored ("Ëlise" = "elise")
+ */
+const norm = (s: string) =>
+  s
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+
+/** The member a word (or a few words) names exactly: its key, displayed name or a nickname */
+function exactMember(
+  word: string,
+  members: readonly RotationMember[]
+): CharacterKey | undefined {
+  const w = norm(word)
+  if (!w) return undefined
+  const found = members.filter(
+    (m) =>
+      norm(m.characterKey) === w ||
+      norm(m.name) === w ||
+      (NICKNAMES[m.characterKey] ?? []).some((n) => norm(n) === w)
+  )
+  return found.length === 1 ? found[0].characterKey : undefined
+}
+
+/**
+ * A part written without arrows ("Ineffa Q E Columbina E Q"): a new step starts at every later
+ * word (or two or three) that names a member exactly; words in parentheses (notes) never do
+ */
+function splitOnNames(
+  part: string,
+  members: readonly RotationMember[]
+): string[] {
+  const words = part.split(/\s+/)
+  /** How many words from `i` name a member exactly (the longest), 0 if none */
+  const nameAt = (i: number) =>
+    [3, 2, 1].find(
+      (n) =>
+        i + n <= words.length &&
+        !words.slice(i, i + n).some((w) => /[()]/.test(w)) &&
+        !!exactMember(words.slice(i, i + n).join(' '), members)
+    ) ?? 0
+  const parts: string[][] = [[]]
+  let depth = 0
+  // (the words of a name just matched: "Kaedehara Kazuha" is one name, not two steps)
+  let inName = nameAt(0)
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]
+    if (i > 0 && depth === 0 && inName <= 0) {
+      const n = nameAt(i)
+      if (n) {
+        parts.push([])
+        inName = n
+      }
+    }
+    parts[parts.length - 1].push(word)
+    inName--
+    depth = Math.max(
+      0,
+      depth +
+        (word.match(/\(/g)?.length ?? 0) -
+        (word.match(/\)/g)?.length ?? 0)
+    )
+  }
+  return parts.map((p) => p.join(' ')).filter(Boolean)
+}
 
 /** Which member a step's name refers to (undefined: none, or ambiguous) */
 export function matchMember(
@@ -90,21 +157,14 @@ export function matchMember(
 ): CharacterKey | undefined {
   const w = norm(word)
   if (!w) return undefined
-  const exact = members.filter(
-    (m) =>
-      norm(m.characterKey) === w ||
-      norm(m.name) === w ||
-      (NICKNAMES[m.characterKey] ?? []).some((n) => norm(n) === w)
-  )
-  if (exact.length === 1) return exact[0].characterKey
+  const exact = exactMember(word, members)
+  if (exact) return exact
   if (w.length < 3) return undefined
   const prefix = members.filter(
     (m) =>
       norm(m.characterKey).startsWith(w) ||
       norm(m.name).startsWith(w) ||
-      norm(m.name)
-        .split(/\s+/)
-        .some((part) => part.startsWith(w))
+      m.name.split(/\s+/).some((part) => norm(part).startsWith(w))
   )
   return prefix.length === 1 ? prefix[0].characterKey : undefined
 }
@@ -180,6 +240,7 @@ export function parseRotation(
     .split(/->|→|=>|>|,|;|\n/)
     .map((p) => p.trim())
     .filter(Boolean)
+    .flatMap((p) => splitOnNames(p, members))
   parts.forEach((part, index) => {
     // the name is the first word, or the longest start of the part that names a member
     const words = part.split(/\s+/)
