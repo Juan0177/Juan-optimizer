@@ -227,4 +227,24 @@ describe('energy inputs: Flins (two Bursts)', () => {
       calculateEnergyRecharge(team, filled).members.Flins!.flatEnergy
     ).toBeGreaterThanOrEqual(0)
   })
+  it('C1: 8 Energy on the party’s Lunar-Charged, once per 5.5 s (kqmsim), as bonus energy', () => {
+    const lunarCharged = sim.hits.filter(
+      (h) =>
+        h.path.join('.') === '_reaction.lunarCharged' &&
+        h.t >= sim.start &&
+        h.t < sim.start + sim.frames
+    )
+    expect(lunarCharged.length).toBeGreaterThan(0)
+    let last = Number.NEGATIVE_INFINITY
+    let procs = 0
+    for (const h of lunarCharged)
+      if (h.t > last + 330) {
+        procs++
+        last = h.t
+      }
+    const c1 = energyFromRotation(sim, team, 2, { Flins: 1 })
+    expect(c1.members.Flins!.flatEnergy).toBeCloseTo((8 * procs) / 2, 9)
+    // (C0: none)
+    expect(energy.members.Flins!.flatEnergy ?? 0).toBe(0)
+  })
 })
