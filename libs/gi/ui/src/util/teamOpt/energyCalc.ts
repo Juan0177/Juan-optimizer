@@ -124,7 +124,12 @@ export function calculateEnergyRecharge(
    * weapon. Absent: Favonius triggers count as entered and no weapon gives flat energy.
    */
   weapons?: Partial<Record<CharacterKey, WeaponKey>>,
-  refinements?: Partial<Record<CharacterKey, number>>
+  refinements?: Partial<Record<CharacterKey, number>>,
+  /**
+   * The members' artifact sets (KQM's picks): The Exile's 4-piece gives the others energy on the
+   * wearer's Burst. Absent: none.
+   */
+  sets?: Partial<Record<CharacterKey, Partial<Record<string, number>>>>
 ): EnergyCalcResult {
   const result: EnergyCalcResult = { targets: {}, members: {}, errors: [] }
   const finite = (n: number, min: number, max = Number.POSITIVE_INFINITY) =>
@@ -268,8 +273,20 @@ export function calculateEnergyRecharge(
           energyWeaponTeam(weapons?.[k], refinements?.[k]) * weaponTriggers(k),
         0
       )
+    // The Exile (gcsim exile.go): the wearer's Burst gives every other member 2 Energy every 2 s
+    // for 6 s; it does not stack (the most from one wearer)
+    const exileEnergy = Math.max(
+      0,
+      ...keys
+        .filter((k) => k !== recipient && (sets?.[k]?.['TheExile'] ?? 0) >= 4)
+        .map((k) => {
+          const every = settings.members[k]?.burstEvery ?? 0
+          return every > 0 ? 6 / every : 0
+        })
+    )
     const flat =
       own.flatEnergy +
+      exileEnergy +
       energyWeaponFlat(weapons?.[recipient], refinements?.[recipient]) *
         weaponTriggers(recipient) +
       teamWeaponEnergy +

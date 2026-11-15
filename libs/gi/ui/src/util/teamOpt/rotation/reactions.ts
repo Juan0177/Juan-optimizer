@@ -1160,12 +1160,26 @@ export function elementalReactions({
       const auraValues = () => {
         const frozen = aura('frozen') > ZERO
         const cryo = aura('cryo') > ZERO || frozen
-        const strayer =
-          (ctx.sets(hit.characterKey)['BlizzardStrayer'] ?? 0) >= 4
+        const sets = ctx.sets(hit.characterKey)
+        const strayer = (sets['BlizzardStrayer'] ?? 0) >= 4
         return {
           cryo: cryo ? 'on' : '',
           strayer: frozen ? 'frozen' : cryo ? 'cryo' : '',
           hasStrayer: strayer,
+          // Lavawalker / Thundersoother (gcsim AuraContains): the enemy affected by Pyro (or
+          // Burning) / Electro
+          lavawalker:
+            (sets['Lavawalker'] ?? 0) >= 4
+              ? aura('pyro') > ZERO || aura('burning') > ZERO
+                ? 'on'
+                : ''
+              : undefined,
+          thundersoother:
+            (sets['Thundersoother'] ?? 0) >= 4
+              ? aura('electro') > ZERO
+                ? 'on'
+                : ''
+              : undefined,
         }
       }
       // the team's state from now on (after this hit's reaction)
@@ -1190,6 +1204,18 @@ export function elementalReactions({
             owner: hit.characterKey,
             path: ['BlizzardStrayer', 'state'],
             value: v.strayer,
+          })
+        if (v.lavawalker !== undefined)
+          states.push({
+            owner: hit.characterKey,
+            path: ['Lavawalker', 'state'],
+            value: v.lavawalker,
+          })
+        if (v.thundersoother !== undefined)
+          states.push({
+            owner: hit.characterKey,
+            path: ['Thundersoother', 'state'],
+            value: v.thundersoother,
           })
         // These attack modifiers belong to this damage event, not the last aura state later
         // in the frame (ordinary attachments are deferred until damage callbacks).

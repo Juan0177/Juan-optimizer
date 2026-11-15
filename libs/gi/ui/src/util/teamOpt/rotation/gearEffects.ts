@@ -1,7 +1,14 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { energyCalcData } from '../energyCalc'
 import type { RotationAction } from './parse'
-import type { SimBuffOwner, SimContext, SimGear, SimHit } from './types'
+import type {
+  NormalStateStart,
+  SimBuffOwner,
+  SimContext,
+  SimGear,
+  SimHit,
+} from './types'
 
 /*
  * Artifact set effects the simulation plays from what happens in the rotation (gcsim's
@@ -66,7 +73,13 @@ export interface GearEffects {
   /** Every hit and reaction marker that lands, in time order */
   onHit(ctx: SimContext, hit: SimHit): void
   /** A member acts */
-  onAction(ctx: SimContext, actor: CharacterKey, action: RotationAction): void
+  onAction(
+    ctx: SimContext,
+    actor: CharacterKey,
+    action: RotationAction,
+    /** A Normal Attack string's individual Normals (their offsets from the action's start) */
+    normalStarts?: readonly NormalStateStart[]
+  ): void
   /** The member on the field changes */
   onSwap(
     t: number,
@@ -238,7 +251,7 @@ export function gearEffects({
   for (const k of members)
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
   for (const k of members)
-    if (wears(k, 'DesertPavilionChronicle'))
+    if (opens(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
   for (const k of members)
     if (opens(k, 'PaleFlame')) window(k, ['PaleFlame', 'stacks'], '1', 0, 0)
@@ -249,6 +262,131 @@ export function gearEffects({
     if (opens(k, 'HeartOfTheFurnace'))
       window(k, ['HeartOfTheFurnace', '4Stellar'], 'on', 0, 0)
   }
+  // The sets whose every trigger the simulation plays (set audit 2026-11-15, as gcsim): declared
+  // off, so neither the rule nor a saved switch keeps them on where no trigger happened
+  for (const k of members) {
+    if (opens(k, 'ShimenawasReminiscence'))
+      window(k, ['ShimenawasReminiscence', 'usedEnergy'], 'used', 0, 0)
+    if (opens(k, 'GildedDreams'))
+      window(k, ['GildedDreams', 'passive'], 'on', 0, 0)
+    if (opens(k, 'DisenchantmentInDeepShadow'))
+      window(k, ['DisenchantmentInDeepShadow', 'state'], 'on', 0, 0)
+    if (opens(k, 'FinaleOfTheDeepGalleries')) {
+      window(k, ['FinaleOfTheDeepGalleries', '0EnergyNoBurst'], 'on', 0, 0)
+      window(k, ['FinaleOfTheDeepGalleries', '0EnergyNoNormal'], 'on', 0, 0)
+    }
+    if (opens(k, 'ADayCarvedFromRisingWinds'))
+      window(k, ['ADayCarvedFromRisingWinds', 'set4'], 'on', 0, 0)
+    if (opens(k, 'CrimsonWitchOfFlames'))
+      window(k, ['CrimsonWitchOfFlames', 'stack'], '1', 0, 0)
+    if (opens(k, 'DeepwoodMemories'))
+      window(k, ['DeepwoodMemories', 'set4'], 'on', 0, 0)
+    if (opens(k, 'TenacityOfTheMillelith'))
+      window(k, ['TenacityOfTheMillelith', 'skill'], 'cast', 0, 0)
+    if (opens(k, 'NoblesseOblige'))
+      window(k, ['NoblesseOblige', 'set4'], 'on', 0, 0)
+    if (opens(k, 'NymphsDream')) window(k, ['NymphsDream', 'set4'], '1', 0, 0)
+    if (opens(k, 'LongNightsOath'))
+      window(k, ['LongNightsOath', 'stacks'], '1', 0, 0)
+    if (opens(k, 'NightOfTheSkysUnveiling'))
+      window(k, ['NightOfTheSkysUnveiling', '4GleamingMoon'], 'on', 0, 0)
+    if (opens(k, 'SilkenMoonsSerenade'))
+      window(k, ['SilkenMoonsSerenade', '4GleamingMoon'], 'on', 0, 0)
+    if (opens(k, 'GoldenTroupe'))
+      window(k, ['GoldenTroupe', 'set4'], 'on', 0, 0)
+    if (opens(k, 'CelestialGift'))
+      window(k, ['CelestialGift', 'set4'], 'on', 0, 0)
+    if (opens(k, 'ScarletProof')) window(k, ['ScarletProof', '4Ss'], 'on', 0, 0)
+    if (opens(k, 'ArchaicPetra'))
+      window(k, ['ArchaicPetra', 'element'], 'pyro', 0, 0)
+    if (opens(k, 'ViridescentVenerer'))
+      for (const e of SWIRLED)
+        window(k, ['ViridescentVenerer', `swirl${e}`], e, 0, 0)
+    // (not modelled: enemies defeated, DMG taken: never on)
+    if (opens(k, 'BloodstainedChivalry'))
+      window(k, ['BloodstainedChivalry', 'defeat'], 'on', 0, 0)
+    if (opens(k, 'VourukashasGlow'))
+      window(k, ['VourukashasGlow', 'set4'], '1', 0, 0)
+    if (opens(k, 'MartialArtist'))
+      window(k, ['MartialArtist', 'state'], 'on', 0, 0)
+    if (opens(k, 'MaidenBeloved'))
+      window(k, ['MaidenBeloved', 'state'], 'on', 0, 0)
+  }
+  /**
+   * Stacks kept as intervals, one per status or slot (Nymph's Dream: one per attack kind; Long
+   * Night's Oath: five slots): at the end, windows of how many are up (at most `cap`)
+   */
+  const intervals = new Map<
+    string,
+    {
+      owner: CharacterKey
+      path: string[]
+      cap: number
+      list: [number, number][]
+    }
+  >()
+  const intervalsOf = (owner: CharacterKey, path: string[], cap: number) => {
+    const key = `${owner}.${path.join('.')}`
+    let entry = intervals.get(key)
+    if (!entry) intervals.set(key, (entry = { owner, path, cap, list: [] }))
+    return entry
+  }
+  /** Nymph's Dream (gcsim): each attack kind's status, refreshed by its own hits only */
+  const nymphLast = new Map<string, [number, number]>()
+  const nymphHit = (k: CharacterKey, kind: string, t: number) => {
+    const key = `${k}.${kind}`
+    const last = nymphLast.get(key)
+    if (last && last[1] > t + 1) {
+      last[1] = t + 1 + 480
+      return
+    }
+    const status: [number, number] = [t + 1, t + 1 + 480]
+    intervalsOf(k, ['NymphsDream', 'set4'], 3).list.push(status)
+    nymphLast.set(key, status)
+  }
+  /** Long Night's Oath (gcsim): five slots of 6 s; a new stack past five replaces the oldest */
+  const oathSlots = new Map<CharacterKey, [number, number][]>()
+  const oathAdd = (k: CharacterKey, n: number, t: number) => {
+    const slots = (oathSlots.get(k) ?? []).filter((slot) => slot[1] > t + 1)
+    for (let i = 0; i < n; i++) {
+      if (slots.length >= 5) {
+        slots.sort((a, b) => a[1] - b[1])
+        slots.shift()![1] = t + 1
+      }
+      const slot: [number, number] = [t + 1, t + 1 + 360]
+      intervalsOf(k, ['LongNightsOath', 'stacks'], 5).list.push(slot)
+      slots.push(slot)
+    }
+    oathSlots.set(k, slots)
+  }
+  /**
+   * Scroll of the Hero of Cinder City (gcsim): after the wearer triggers a reaction involving its
+   * element (off the field too), the party's DMG of the reaction's elements +12% for 15 s, and
+   * +28% for 20 s more when the wearer is in Nightsoul's Blessing
+   */
+  const cinderCity = (
+    ctx: SimContext,
+    k: CharacterKey,
+    t: number,
+    elements: string[]
+  ) => {
+    if (!elements.includes(getCharEle(k))) return
+    const nightsoul = inNightsoul(k, t)
+    for (const e of new Set(elements)) {
+      if (e === 'physical') continue
+      ctx.buff(k, ['ScrollOfTheHeroOfCinderCity', `react_${e}`], e, 0, 900)
+      if (nightsoul)
+        ctx.buff(
+          k,
+          ['ScrollOfTheHeroOfCinderCity', `nightsoul_${e}`],
+          e,
+          0,
+          1200
+        )
+    }
+  }
+  /** Finale of the Deep Galleries: each wearer's last Normal Attack and Burst DMG (its frame) */
+  const finaleLast = new Map<CharacterKey, { normal: number; burst: number }>()
   const desert = new Map<CharacterKey, { end: number }>()
 
   let initialized = false
@@ -328,8 +466,7 @@ export function gearEffects({
       const k = hit.characterKey
       const t = hit.t
       // (a Normal Attack performed: a Starspark)
-      if (hit.tag === 'normal' && !hit.path[0].startsWith('_') && sparks.has(k))
-        gainSpark(k, t)
+      // (a Starspark per Normal Attack performed: in onAction, not from its hits)
       if (
         opens(k, 'PaleFlame') &&
         hit.tag === 'skill' &&
@@ -486,37 +623,22 @@ export function gearEffects({
         // each member's hitlag: a few frames, not modelled.)
         if (opens(k, 'Instructor') && hit.onField === k)
           ctx.buff(k, ['Instructor', 'set4'], 'on', 0, 480)
-        // Scroll of the Hero of Cinder City: +12% DMG of the elements of a reaction involving the
-        // wearer's element, for 15 s, plus an independent 20 s Nightsoul bonus
-        if (opens(k, 'ScrollOfTheHeroOfCinderCity')) {
-          const own = getCharEle(k)
-          const elements =
+        // Gilded Dreams (gcsim): the wearer's own reactions, off the field too, 8 s, once per 8 s
+        if (opens(k, 'GildedDreams') && ready(`gilded.${k}`, t, 480))
+          ctx.buff(k, ['GildedDreams', 'passive'], 'on', 0, 480)
+        // Scroll of the Hero of Cinder City: the elements of the reaction (gcsim: Spread is
+        // Dendro's only; Crystallize the Geo and the crystallized element)
+        if (opens(k, 'ScrollOfTheHeroOfCinderCity'))
+          cinderCity(
+            ctx,
+            k,
+            t,
             reaction === 'crystallize'
               ? ['geo', hit.element]
-              : (REACTION_ELEMENTS[reaction] ?? [])
-          if (elements.includes(own)) {
-            const nightsoul = inNightsoul(k, t)
-            for (const e of new Set(elements)) {
-              if (e === 'physical') continue
-              ctx.buff(
-                k,
-                ['ScrollOfTheHeroOfCinderCity', `react_${e}`],
-                e,
-                0,
-                900
-              )
-              // +28% more when the wearer is in Nightsoul's Blessing
-              if (nightsoul)
-                ctx.buff(
-                  k,
-                  ['ScrollOfTheHeroOfCinderCity', `nightsoul_${e}`],
-                  e,
-                  0,
-                  1200
-                )
-            }
-          }
-        }
+              : reaction === 'spread'
+                ? ['dendro']
+                : (REACTION_ELEMENTS[reaction] ?? [])
+          )
         // Flower of Paradise Lost: a stack per Bloom (1 s ICD), 10 s, up to 4
         if (
           opens(k, 'FlowerOfParadiseLost') &&
@@ -544,6 +666,19 @@ export function gearEffects({
       }
       if (hit.path[0] === 'reaction') {
         const node = hit.path[1]
+        if (node === 'hyperbloom' || node === 'burgeon') {
+          if (opens(k, 'ScrollOfTheHeroOfCinderCity'))
+            cinderCity(
+              ctx,
+              k,
+              t,
+              node === 'hyperbloom' ? ['dendro', 'electro'] : ['dendro', 'pyro']
+            )
+          if (opens(k, 'Instructor') && hit.onField === k)
+            ctx.buff(k, ['Instructor', 'set4'], 'on', 0, 480)
+          if (opens(k, 'GildedDreams') && ready(`gilded.${k}`, t, 480))
+            ctx.buff(k, ['GildedDreams', 'passive'], 'on', 0, 480)
+        }
         if (node === 'hyperbloom') hakushin(ctx, hit, node)
         if (
           opens(k, 'FlowerOfParadiseLost') &&
@@ -563,7 +698,7 @@ export function gearEffects({
       if (
         hit.tag === 'charged' &&
         !hit.path[0].startsWith('_') &&
-        wears(k, 'DesertPavilionChronicle')
+        opens(k, 'DesertPavilionChronicle')
       ) {
         const path = ['DesertPavilionChronicle', 'set4']
         const frame = ctx.characterFrame(k)
@@ -579,11 +714,14 @@ export function gearEffects({
         const entry = { end: frame + 900 }
         desert.set(k, entry)
         ctx.buff(k, path, 'on', 0, 900, { recipient: k, hitlag: 'recipient' })
-        ctx.state(k, ['DesertPavilionChronicle', '_selfAttackSpeed'], '0.1')
-        ctx.atCharacter(k, 900, (at) => {
-          if (desert.get(k) !== entry) return
-          at.state(k, ['DesertPavilionChronicle', '_selfAttackSpeed'], '')
-        })
+        // (its attack speed changes the play: only when worn)
+        if (wears(k, 'DesertPavilionChronicle')) {
+          ctx.state(k, ['DesertPavilionChronicle', '_selfAttackSpeed'], '0.1')
+          ctx.atCharacter(k, 900, (at) => {
+            if (desert.get(k) !== entry) return
+            at.state(k, ['DesertPavilionChronicle', '_selfAttackSpeed'], '')
+          })
+        }
       }
       // Fragment of Harmonic Whimsy: +18% DMG per Bond of Life change (6 s, up to 3); kits mark
       // the changes with ['_marker', 'bondOfLife']
@@ -650,9 +788,81 @@ export function gearEffects({
           sacCredit.set(k, credit - 1)
         } else sacCredit.set(k, credit)
       }
-      // Deepwood Memories: Dendro RES -30% for 8 s after the wearer's Dendro hit
-      if (opens(k, 'DeepwoodMemories') && hit.element === 'dendro')
+      // Deepwood Memories: Dendro RES -30% for 8 s after the wearer's Skill or Burst hits (any
+      // element: gcsim deepwood.go)
+      if (
+        opens(k, 'DeepwoodMemories') &&
+        (hit.tag === 'skill' || hit.tag === 'burst')
+      )
         ctx.buff(k, ['DeepwoodMemories', 'set4'], 'on', 0, 480)
+      // A Day Carved From Rising Winds (gcsim): 6 s after the wearer's own Normal, Charged, Skill
+      // or Burst hit (off the field too); granted after the hit's damage
+      if (
+        opens(k, 'ADayCarvedFromRisingWinds') &&
+        ['normal', 'charged', 'skill', 'burst'].includes(hit.tag)
+      )
+        ctx.buff(k, ['ADayCarvedFromRisingWinds', 'set4'], 'on', 1, 360)
+      // Nymph's Dream (gcsim): the wearer's own hits on the field, a status per attack kind (8 s)
+      if (
+        opens(k, 'NymphsDream') &&
+        hit.onField === k &&
+        ['normal', 'charged', 'plunge', 'skill', 'burst'].includes(hit.tag)
+      )
+        nymphHit(k, hit.tag, t)
+      // Long Night's Oath (gcsim): the wearer's own Plunging (1), Charged (2) and Skill (2) hits on
+      // the field, each kind once per second, 6 s stacks, up to 5
+      if (
+        opens(k, 'LongNightsOath') &&
+        hit.onField === k &&
+        (hit.tag === 'plunge' ||
+          hit.tag === 'charged' ||
+          hit.tag === 'skill') &&
+        ready(`oath.${k}.${hit.tag}`, ctx.characterFrame(k), 60)
+      )
+        oathAdd(k, hit.tag === 'plunge' ? 1 : 2, t)
+      // Disenchantment in Deep Shadow (gcsim): the wearer's attacks on an enemy under
+      // Superconduct or in the Polestar field (Stellar-Conduct) get its CRIT Rate
+      if (opens(k, 'DisenchantmentInDeepShadow'))
+        hit.states = [
+          ...(hit.states ?? []),
+          {
+            owner: k,
+            path: ['DisenchantmentInDeepShadow', 'state'],
+            value:
+              ctx.hasBuff('team', ['reaction', 'superconduct']) ||
+              ctx.hasBuff('team', ['reaction', 'oppInsidePole'])
+                ? 'on'
+                : '',
+          },
+        ]
+      // Finale of the Deep Galleries (gcsim): only at 0 Energy (the characters without Energy:
+      // Skirk, Mavuika); Normal Attack DMG +60% unless the wearer dealt Burst DMG in the last 6 s,
+      // Burst DMG +60% unless it dealt Normal Attack DMG in the last 6 s
+      if (
+        opens(k, 'FinaleOfTheDeepGalleries') &&
+        (hit.tag === 'normal' || hit.tag === 'burst')
+      ) {
+        const zero = energyCalcData[k]?.burstCost === 0
+        const frame = ctx.characterFrame(k)
+        const last = finaleLast.get(k) ?? {
+          normal: Number.NEGATIVE_INFINITY,
+          burst: Number.NEGATIVE_INFINITY,
+        }
+        hit.states = [
+          ...(hit.states ?? []),
+          {
+            owner: k,
+            path: ['FinaleOfTheDeepGalleries', '0EnergyNoBurst'],
+            value: zero && frame >= last.burst + 360 ? 'on' : '',
+          },
+          {
+            owner: k,
+            path: ['FinaleOfTheDeepGalleries', '0EnergyNoNormal'],
+            value: zero && frame >= last.normal + 360 ? 'on' : '',
+          },
+        ]
+        finaleLast.set(k, { ...last, [hit.tag]: frame })
+      }
       // Tenacity of the Millelith: the party's ATK +20% for 3 s after a skill hit (0.5 s ICD)
       if (
         opens(k, 'TenacityOfTheMillelith') &&
@@ -661,7 +871,7 @@ export function gearEffects({
       )
         ctx.buff(k, ['TenacityOfTheMillelith', 'skill'], 'cast', 0, 180)
     },
-    onAction(ctx, actor, action) {
+    onAction(ctx, actor, action, normalStarts) {
       if (actor === active) pickUp(ctx)
       // Heretic's Molten Blade: Gleam of First Light after the wielder's Skill while it is on the
       // field, for 14 s, once per 14 s, removed when it leaves the field (gcsim). Its ATK bonus
@@ -681,7 +891,13 @@ export function gearEffects({
           c.state(actor, ['HereticsMoltenBlade', 'passive'], '')
         })
       }
-      if (
+      // a Starspark per Skill, Burst and Normal Attack performed (each Normal of a string)
+      if (action.kind === 'normal' && normalStarts?.length)
+        for (const start of normalStarts)
+          if (start.offset > 0)
+            ctx.at(start.offset, (c) => gainSpark(actor, c.now))
+          else gainSpark(actor, ctx.now)
+      else if (
         action.kind === 'skill' ||
         action.kind === 'burst' ||
         action.kind === 'normal'
@@ -751,9 +967,35 @@ export function gearEffects({
         ctx.onField === actor
       )
         ctx.buff(actor, ['CelestialGift', 'set4'], 'on', 0, 1200)
-      // Crimson Witch of Flames: a stack per skill, 10 s, up to 3
+      // Crimson Witch of Flames (gcsim): a stack per skill, up to 3, all of them 10 s from the
+      // last skill
       if (action.kind === 'skill' && opens(actor, 'CrimsonWitchOfFlames'))
-        ctx.buff(actor, ['CrimsonWitchOfFlames', 'stack'], '1', 0, 600, 3)
+        stack(actor, ['CrimsonWitchOfFlames', 'stack'], ctx.now, 600, 3)
+      // Shimenawa's Reminiscence (gcsim): the wearer's Skill on the field (with 15 Energy to
+      // spend: not modelled, assumed) gives Normal, Charged and Plunging DMG +50% for 10 s; not
+      // again while it lasts
+      if (
+        action.kind === 'skill' &&
+        opens(actor, 'ShimenawasReminiscence') &&
+        ctx.onField === actor &&
+        ready(`shimenawa.${actor}`, ctx.now, 600)
+      )
+        ctx.buff(
+          actor,
+          ['ShimenawasReminiscence', 'usedEnergy'],
+          'used',
+          0,
+          600
+        )
+      // Martial Artist (gcsim): Normal and Charged Attack DMG +25% for 8 s after the Skill
+      if (action.kind === 'skill' && opens(actor, 'MartialArtist'))
+        ctx.buff(actor, ['MartialArtist', 'state'], 'on', 0, 480)
+      // Maiden Beloved: the party's healing received +20% for 10 s after the Skill or Burst
+      if (
+        (action.kind === 'skill' || action.kind === 'burst') &&
+        opens(actor, 'MaidenBeloved')
+      )
+        ctx.buff(actor, ['MaidenBeloved', 'state'], 'on', 0, 600)
       // Nighttime Whispers in the Echoing Woods: Geo DMG +20% for 10 s after the skill
       if (
         action.kind === 'skill' &&
@@ -854,6 +1096,24 @@ export function gearEffects({
       for (const s of stacks.values())
         window(s.owner, s.path, `${s.count}`, s.start, Math.min(t, s.end))
       stacks.clear()
+      for (const { owner, path, cap, list } of intervals.values()) {
+        const edges = list
+          .filter(([start]) => start < t)
+          .flatMap(([start, end]): [number, number][] => [
+            [start, 1],
+            [Math.min(end, t), -1],
+          ])
+          .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+        let count = 0
+        let from = 0
+        for (const [at, change] of edges) {
+          if (count > 0 && at > from)
+            window(owner, path, `${Math.min(cap, count)}`, from, at)
+          count += change
+          from = at
+        }
+      }
+      intervals.clear()
       for (const [k, since] of aubadeOff)
         window(k, ['AubadeOfMorningstarAndMoon', 'set4'], 'on', since, t)
       aubadeOff.clear()

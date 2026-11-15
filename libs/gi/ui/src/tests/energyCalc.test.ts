@@ -471,6 +471,32 @@ describe('ER calculator weapons', () => {
     )
   })
 
+  it('The Exile: 6 Energy to each other member per Burst of the wearer, not stacking', () => {
+    const settings = defaultEnergyCalculator(keys)
+    settings.rotationTime = 20
+    const base = calculateEnergyRecharge(keys, settings, {})
+    const exile = calculateEnergyRecharge(keys, settings, {}, undefined, {
+      Danica: { TheExile: 4 },
+      Odette: { TheExile: 2 },
+    })
+    const every = settings.members.Danica!.burstEvery
+    for (const k of ['TravelerCryo', 'Odette', 'Anastasya'] as CharacterKey[])
+      expect(
+        exile.members[k]!.flatEnergy - base.members[k]!.flatEnergy
+      ).toBeCloseTo(6 / every, 9)
+    expect(exile.members.Danica!.flatEnergy).toBe(
+      base.members.Danica!.flatEnergy
+    )
+    // two wearers: still 6 per Burst for the others (it does not stack)
+    const both = calculateEnergyRecharge(keys, settings, {}, undefined, {
+      Danica: { TheExile: 4 },
+      Odette: { TheExile: 4 },
+    })
+    expect(
+      both.members.Anastasya!.flatEnergy - base.members.Anastasya!.flatEnergy
+    ).toBeCloseTo(6 / every, 9)
+  })
+
   // Only Favonius energy: no skills, no enemy particles, no bursts
   const team: CharacterKey[] = ['Bennett', 'Xiangling', 'Xingqiu', 'Sucrose']
   function favSettings(procs: number, catcher?: CharacterKey, keys = team) {

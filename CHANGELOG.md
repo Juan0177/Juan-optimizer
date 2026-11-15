@@ -9,6 +9,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 ### New
 
 - The ER calculator counts every energy weapon from its game text (Lumidouce Elegy, Dialogues of the Desert Sages, Tome of the Eternal Flow, Frostbreath and more), each at most once per its cooldown.
+- The ER calculator counts The Exile's 4-piece: 6 Energy to each other member per Burst of the wearer.
 - The rotation writer shows the time per rotation as Team Optimize and KQM count it, and when a rotation has to wait for a cooldown, how long it takes without waiting and what it waits for.
 - The KQM tab's timeline shows the weapon and set buffs of the builds shown, each named by its weapon or set.
 - The timeline fits a phone in landscape: the detailed view opens full screen and the writer is one column.
@@ -17,7 +18,21 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 
 - Heart of the Furnace's 4-piece now needs the wearer's own Stellar Glimmer hits or reactions and lasts 12 s; it was counted all rotation whenever anyone in the team made Stellar reactions.
 - Instructor's 4-piece now needs the wearer to trigger the reaction while on the field.
-- A set's switch turned on by hand no longer keeps Instructor or Heart of the Furnace on for the whole rotation.
+- Shimenawa's Reminiscence lasts 10 s after the wearer's Skill on the field; it was counted all rotation.
+- Gilded Dreams' 4-piece now counts in KQM, for 8 s after the wearer's own reactions (once every 8 s); KQM always had it off.
+- Disenchantment in Deep Shadow's CRIT Rate now counts while Superconduct or the Polestar field is on the enemy; it never counted.
+- Finale of the Deep Galleries counts only for characters without Energy (Skirk, Mavuika), and its two halves lock each other out for 6 s; it was counted for everyone.
+- Scroll of the Hero of Cinder City: Spread counts as Dendro only, and Hyperbloom and Burgeon now trigger it.
+- A Day Carved From Rising Winds needs the wearer's own Normal, Charged, Skill or Burst hits and lasts 6 s; it was on for everyone.
+- Crimson Witch of Flames: each Skill refreshes all its stacks, as in the game.
+- Deepwood Memories is triggered by the wearer's Skill and Burst hits of any element, not by Dendro hits.
+- Nymph's Dream counts one stack per kind of attack the wearer landed on the field in the last 8 s; it was counted at 3 stacks.
+- Long Night's Oath stacks come from the wearer's Plunging, Charged and Skill hits on the field, 6 s each, up to 5.
+- Legacy of the First Chronicle gives one Starspark per Normal Attack; it was counted twice.
+- Martial Artist lasts 8 s after the Skill and Maiden Beloved 10 s after the Skill or Burst; they were counted all rotation.
+- Lavawalker, Thundersoother and Blizzard Strayer count hit by hit from the enemy's element at that hit, KQM's candidate sets too.
+- A set's switch turned on by hand no longer keeps its effect on all rotation when the rotation never triggers it (for example, Viridescent Venerer's shred of an element nobody swirls).
+- Without a written rotation: Aubade of Morningstar and Moon counts for members that make no Normal or Charged Attacks, Husk of Opulent Dreams only for Geo characters, and Berserker, Brave Heart and Tiny Miracle are off.
 - Team Optimize counts a rotation's real pace: a rotation that uses a skill faster than its cooldown allows was counted at its first, fastest time.
 - The timeline no longer disappears behind the hit cards on a laptop screen at 100% zoom.
 
