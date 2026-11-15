@@ -15,9 +15,7 @@ import {
 } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
-  ArtSetExclusion,
   ICachedWeapon,
-  OptConfig,
   StatFilters,
   TeamOpt,
   TeamOptAttack,
@@ -83,7 +81,7 @@ import {
 import { constValue, teamRotationNodes } from './objective'
 import type { SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
-import { allowedCounts, evaluateTeamNodes, TeamOptCancelled } from './solve'
+import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
 
 /*
@@ -623,16 +621,6 @@ const pref = (k: string) => {
   return i < 0 ? WELL_KNOWN_2PC.length : i
 }
 
-/** The member's set rules (its Optimize tab's set exclusions) allow `count` pieces of `setKey` */
-const allows = (
-  exclusion: ArtSetExclusion | undefined,
-  setKey: ArtifactSetKey,
-  count: number
-) =>
-  allowedCounts(
-    exclusion?.[setKey as keyof ArtSetExclusion] as number[] | undefined
-  ).includes(count)
-
 const mainsId = (m: KqmMains) => [m.sands, m.goblet, m.circlet].sort().join('+')
 export const kqmSetsId = (sets: KqmSets) =>
   Object.entries(sets)
@@ -683,44 +671,25 @@ interface MemberSpace {
   mains: KqmMains[]
 }
 
-function memberSpace(
-  member: TeamOptMember,
-  optConfig: OptConfig | undefined,
-  kqm: TeamOptKqm
-): MemberSpace {
+/**
+ * What KQM may give a member: KQM's weapons, KQM's artifact sets (its "artifact sets" chooser) and
+ * every main stat KQM builds use. The member's own Optimize tab (its main stats, set exclusions and
+ * stat filters) plays no part: none of it is on the KQM tab.
+ */
+function memberSpace(member: TeamOptMember, kqm: TeamOptKqm): MemberSpace {
   const { characterKey } = member
-  const exclusion = optConfig?.artSetExclusion
-  const sets = kqmSets()
-  const allowedMains = optConfig?.mainStatKeys as
-    | Partial<Record<'sands' | 'goblet' | 'circlet', string[]>>
-    | undefined
-  const pick = <K extends string>(
-    slot: 'sands' | 'goblet' | 'circlet',
-    keys: readonly K[]
-  ) => {
-    const allowed = allowedMains?.[slot]
-    const kept = allowed?.length
-      ? keys.filter((k) => allowed.includes(k))
-      : keys
-    return kept.length ? kept : keys
-  }
-  const sands = pick('sands', kqmSandsKeys)
-  const goblet = pick('goblet', kqmGobletKeys(getCharEle(characterKey)))
-  const circlet = pick('circlet', kqmCircletKeys)
-  const all: KqmMains[] = sands.flatMap((s) =>
+  const sets = kqmSets().filter((k) => !kqm.excludedSets?.includes(k))
+  const goblet = kqmGobletKeys(getCharEle(characterKey))
+  const all: KqmMains[] = kqmSandsKeys.flatMap((s) =>
     goblet.flatMap((g) =>
-      circlet.map((c) => ({ sands: s, goblet: g, circlet: c }))
+      kqmCircletKeys.map((c) => ({ sands: s, goblet: g, circlet: c }))
     )
   )
   return {
     member,
     weapons: kqmWeapons(characterKey, kqm),
-    four: sets.filter(
-      (k) => !kqm.excludedSets?.includes(k) && allows(exclusion, k, 4)
-    ),
-    two: sets.filter(
-      (k) => !kqm.excludedSets?.includes(k) && allows(exclusion, k, 2)
-    ),
+    four: sets,
+    two: sets,
     mains: all.filter(
       (m, i) => all.findIndex((o) => mainsId(o) === mainsId(m)) === i
     ),
@@ -1155,36 +1124,20 @@ async function runKqm({
       characters[characterKey]!.constellation,
     ])
   )
-  const optConfigs = Object.fromEntries(
-    members.map((m) => [
-      m.characterKey,
-      database.optConfigs.get(m.teamChar.optConfigId),
-    ])
-  ) as Partial<Record<CharacterKey, OptConfig>>
+  // a member's requirement is KQM's ER target only (its Optimize tab's stat filters are not KQM's)
   const baseFilters = Object.fromEntries(
-    members.map(({ characterKey }) => {
-      // KQM's explicit ER target replaces loadout ER filters. Other requirements still apply.
-      const filters = { ...optConfigs[characterKey]?.statFilters }
-      for (const path of Object.keys(filters)) {
-        try {
-          if ((JSON.parse(path) as string[]).at(-1) === 'enerRech_')
-            delete filters[path]
-        } catch {
-          /* Other filter paths are left unchanged. */
-        }
-      }
-      filters[JSON.stringify(['basic', 'enerRech_'])] = [
-        { value: kqmEnergyRequirement(kqm, characterKey), disabled: false },
-      ]
-      return [characterKey, filters]
-    })
+    members.map(({ characterKey }) => [
+      characterKey,
+      {
+        [JSON.stringify(['basic', 'enerRech_'])]: [
+          { value: kqmEnergyRequirement(kqm, characterKey), disabled: false },
+        ],
+      },
+    ])
   ) as Partial<Record<CharacterKey, StatFilters>>
   const bonusStats = teamOptBonusStats(teamOpt, keys)
   const spaces = new Map(
-    optimized.map((m) => [
-      m.characterKey,
-      memberSpace(m, optConfigs[m.characterKey], kqm),
-    ])
+    optimized.map((m) => [m.characterKey, memberSpace(m, kqm)])
   )
   /**
    * The weapons a member may take with the others' builds in `state`: not a one-copy weapon
@@ -1370,7 +1323,7 @@ async function runKqm({
   // the work is for the members as they are set up (a member's settings changed since the run:
   // none of it), and for the rotation as played
   const teamStamp = JSON.stringify(
-    members.map((m) => [m.teamChar, m.loadoutDatum, optConfigs[m.characterKey]])
+    members.map((m) => [m.teamChar, m.loadoutDatum])
   )
   const workKey = (p: KqmPlayed | undefined) => `${teamStamp}\n${playedKey(p)}`
   let work = workFor(workKey(played))
