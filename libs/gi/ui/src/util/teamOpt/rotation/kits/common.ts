@@ -359,3 +359,17 @@ export function shieldMarker(
     label,
   })
 }
+
+/**
+ * A Skill's particles made `delay` frames from now (kqmsim's QueueParticle, from the hit that
+ * makes them), for the ER calculator: each marker is one use of the Skill there. Kits that mark
+ * them count their uses this way; others by their Skill cooldown's starts.
+ */
+export function particleMarker(ctx: SimContext, delay: number, label: string) {
+  ctx.hit(delay, {
+    path: ['_marker', 'particles'],
+    tag: 'other',
+    element: 'physical',
+    label,
+  })
+}

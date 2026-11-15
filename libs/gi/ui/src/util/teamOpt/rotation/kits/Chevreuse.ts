@@ -1,5 +1,11 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/chevreuse, main as of 2026-11-10. */
 
@@ -44,6 +50,8 @@ const normalNodes = [['0'], ['1'], ['2', '3'], ['4']]
 interface ChevreuseState {
   /** Surging Blade's internal cooldown ends (frame) */
   bladeIcdEnd: number
+  /** Her particles' internal cooldown ends (frame) */
+  particleIcdEnd: number
   /** C2's internal cooldown ends (frame) */
   c2IcdEnd: number
   /** C4: a Hold E has no cooldown until this frame, for `c4Shots` more casts */
@@ -98,6 +106,7 @@ export const kit: KitModel = {
   source: `${GCSIM}/chevreuse`,
   init: (): ChevreuseState => ({
     bladeIcdEnd: -1,
+    particleIcdEnd: -1,
     c2IcdEnd: -1,
     c4Until: -1,
     c4Shots: 0,
@@ -174,6 +183,11 @@ export const kit: KitModel = {
             cdDelay,
             1800
           )
+        // her particles (4) on a hit, once per 10 s on world time: a C4 free Hold's too (kqmsim)
+        if (ctx.now + hitmark >= s.particleIcdEnd) {
+          s.particleIcdEnd = ctx.now + hitmark + 10 * 60
+          particleMarker(ctx, hitmark, 'Chevreuse particles')
+        }
         // Surging Blade (Durability 0, 34f / 36f after the hit): on the first E hit of every 10 s
         if (ctx.now + hitmark >= s.bladeIcdEnd) {
           s.bladeIcdEnd = ctx.now + hitmark + 10 * 60

@@ -2,8 +2,10 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   TeamOptEnergyCalculator,
   TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
+import { teamOptEnergyRotationFields } from '@genshin-optimizer/gi/db'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type { TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
@@ -25,6 +27,7 @@ import RemoveIcon from '@mui/icons-material/Remove'
 import {
   alpha,
   Box,
+  Button,
   ButtonBase,
   IconButton,
   InputBase,
@@ -82,10 +85,13 @@ export function KqmEnergyCalculator({
   kqm,
   settings,
   setSettings,
+  fromRotation = false,
 }: {
   members: TeamOptMember[]
   /** KQM's settings: the members' constellations and the weapons they may use */
   kqm: TeamOptKqm | undefined
+  /** The written rotation fills in the inputs not set by hand */
+  fromRotation?: boolean
   settings: TeamOptEnergyCalculator
   setSettings: (
     update: (previous: TeamOptEnergyCalculator) => TeamOptEnergyCalculator
@@ -109,11 +115,25 @@ export function KqmEnergyCalculator({
   ) =>
     setSettings((previous) => {
       const { fieldTime, ...rest } = values
+      const member = previous.members[key]!
+      // (set by hand: the written rotation no longer fills these in)
+      const edited = [
+        ...new Set([
+          ...(member.edited ?? []),
+          ...(Object.keys(values) as TeamOptEnergyRotationField[]).filter(
+            (field) => teamOptEnergyRotationFields.includes(field)
+          ),
+        ]),
+      ]
       const next = {
         ...previous,
         members: {
           ...previous.members,
-          [key]: { ...previous.members[key]!, ...rest },
+          [key]: {
+            ...member,
+            ...rest,
+            ...(edited.length ? { edited } : {}),
+          },
         },
       }
       // Keep the full rotation assigned while someone adjusts a character's field time.
@@ -237,7 +257,12 @@ export function KqmEnergyCalculator({
                   unit="s"
                   ariaLabel={t('teamOpt.kqm.calc.electro', 'Electro interval')}
                   onChange={(electroInterval) =>
-                    setSettings((s) => ({ ...s, electroInterval }))
+                    setSettings((s) => ({
+                      ...s,
+                      electroInterval,
+                      // (set by hand: the written rotation no longer fills it in)
+                      edited: ['electroInterval'],
+                    }))
                   }
                 />
               </LabelledField>
@@ -297,6 +322,17 @@ export function KqmEnergyCalculator({
             member={settings.members[characterKey]}
             estimate={estimate}
             updateMember={updateMember}
+            fromRotation={fromRotation}
+            onUseRotation={() =>
+              setSettings((previous) => {
+                const { edited: _edited, ...member } =
+                  previous.members[characterKey]!
+                return {
+                  ...previous,
+                  members: { ...previous.members, [characterKey]: member },
+                }
+              })
+            }
           />
         ))}
       </Box>
@@ -365,9 +401,15 @@ function MemberEnergy({
   member,
   estimate,
   updateMember,
+  fromRotation,
+  onUseRotation,
 }: {
   characterKey: CharacterKey
   first: boolean
+  /** The written rotation fills in the inputs not set by hand */
+  fromRotation: boolean
+  /** Lets the rotation fill in all of this member's inputs again */
+  onUseRotation: () => void
   keys: CharacterKey[]
   kqm: TeamOptKqm | undefined
   member: TeamOptEnergyMember | undefined
@@ -548,10 +590,16 @@ function MemberEnergy({
       : [
           {
             value: member.burstEvery,
-            label: t('teamOpt.kqm.calc.burstEveryN', {
-              defaultValue: 'Every {{n}}th',
-              n: member.burstEvery,
-            }),
+            label:
+              member.burstEvery < 1
+                ? t('teamOpt.kqm.calc.burstTimes', {
+                    defaultValue: '{{n}} per rotation',
+                    n: +(1 / member.burstEvery).toFixed(1),
+                  })
+                : t('teamOpt.kqm.calc.burstEveryN', {
+                    defaultValue: 'Every {{n}}th',
+                    n: +member.burstEvery.toFixed(1),
+                  }),
           },
         ]),
   ]
@@ -584,6 +632,39 @@ function MemberEnergy({
         <Typography sx={{ ...type.title, flex: 1, minWidth: 0 }} noWrap>
           <CharacterName characterKey={characterKey} gender={gender} />
         </Typography>
+        {fromRotation &&
+          (member.edited?.length ? (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.kqm.calc.editedTip',
+                'You changed some of these inputs, so the written rotation no longer fills them in. Use the rotation’s values again.'
+              )}
+            >
+              <Button
+                size="small"
+                onClick={onUseRotation}
+                sx={{ ...type.label, fontSize: 12, minWidth: 0, px: 1 }}
+              >
+                {t('teamOpt.kqm.calc.useRotation', 'Use rotation')}
+              </Button>
+            </Tooltip>
+          ) : (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.kqm.calc.fromRotationTip',
+                'Field time, skill uses, Burst cadence and the particle catcher come from the written rotation (particles count when they arrive, about 1.7 s after the hit). Change any of them to set it yourself.'
+              )}
+            >
+              <Typography
+                sx={{ ...type.label, fontSize: 12, cursor: 'help' }}
+                noWrap
+              >
+                {t('teamOpt.kqm.calc.fromRotation', 'From rotation')}
+              </Typography>
+            </Tooltip>
+          ))}
         <Tooltip
           arrow
           title={
