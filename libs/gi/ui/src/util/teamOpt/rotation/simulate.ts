@@ -1317,12 +1317,21 @@ export function simulateRotation({
       return
     }
     // Moonsign: Ascendant Gleam. With two or more Moonsign members, a member who is not one
-    // gives the party Lunar reaction DMG (from its own stats) for 20 s after its Skill or Burst
+    // gives the party Lunar reaction DMG (from its own stats) for 20 s after its Skill or Burst;
+    // one at a time, the latest one's (kqmsim: the newest replaces it)
     if (
       moonsign >= 2 &&
       !kits[characterKey]?.moonsign &&
       (action.kind === 'skill' || action.kind === 'burst')
-    )
+    ) {
+      for (const w of windows)
+        if (
+          w.path[1] === 'moonsignAfterSkillBurst' &&
+          w.owner !== characterKey &&
+          w.start <= now &&
+          now < w.end
+        )
+          w.end = now
       windows.push({
         owner: characterKey,
         path: [characterKey, 'moonsignAfterSkillBurst'],
@@ -1330,6 +1339,7 @@ export function simulateRotation({
         start: now,
         end: now + 20 * FPS,
       })
+    }
     lastNormalActor = action.kind === 'normal' ? characterKey : undefined
     if (result.cooldown) {
       const { key, frames, delay = 0 } = result.cooldown
