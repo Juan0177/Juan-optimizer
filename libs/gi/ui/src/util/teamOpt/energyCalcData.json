@@ -801,6 +801,15 @@
         "perSecond": 0,
         "duration": 0,
         "cooldown": 0
+      },
+      {
+        "label": "Manifest Flame hit",
+        "particles": 1,
+        "flatEnergy": 0,
+        "variance": 0,
+        "perSecond": 0,
+        "duration": 0,
+        "cooldown": 2
       }
     ],
     "burstCost": 80,

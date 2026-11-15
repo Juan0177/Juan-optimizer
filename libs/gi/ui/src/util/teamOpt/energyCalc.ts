@@ -660,19 +660,28 @@ export function energyFromRotation(
       [...sim.actions]
         .reverse()
         .find((a) => a.characterKey === key && a.start <= t)
-    const uses: { t: number; hold: boolean; particlesAt?: number }[] =
-      markers.length
-        ? markers.map((m) => ({
-            t: m.t,
-            hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
-            particlesAt: m.t,
-          }))
-        : (sim.skillUses ?? []).filter(
-            (u) => u.characterKey === key && u.t >= start && u.t < end
-          )
+    // (a kit whose markers are single particles has its own sheet option for them: Flins)
+    const markerOption = MARKER_OPTIONS[key]
+      ? data.skills.findIndex((s) => s.label === MARKER_OPTIONS[key])
+      : -1
+    const uses: {
+      t: number
+      hold: boolean
+      particlesAt?: number
+      mode?: number
+    }[] = markers.length
+      ? markers.map((m) => ({
+          t: m.t,
+          hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
+          particlesAt: m.t,
+          ...(markerOption >= 0 ? { mode: markerOption } : {}),
+        }))
+      : (sim.skillUses ?? []).filter(
+          (u) => u.characterKey === key && u.t >= start && u.t < end
+        )
     const byMode = new Map<number, number>()
     for (const u of uses) {
-      const mode = modeFor(u.hold)
+      const mode = u.mode ?? modeFor(u.hold)
       byMode.set(mode, (byMode.get(mode) ?? 0) + 1)
     }
     const modes = [...byMode].sort((a, b) => b[1] - a[1])
@@ -828,6 +837,10 @@ const START_BONUS: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
  * Special Bursts that spend only part of the Energy: the sheet option ("-30 a use") and the kit's
  * variant key of that Burst (one entry per line)
  */
+/** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
+const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
+  Flins: 'Manifest Flame hit',
+}
 const SHORT_BURSTS: Partial<
   Record<CharacterKey, { label: string; variant: string }>
 > = {
