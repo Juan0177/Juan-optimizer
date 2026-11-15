@@ -164,6 +164,11 @@ export interface ReactionOptions {
    * (gcsim's "application" log entries)
    */
   trace?: (entry: AuraTrace) => void
+  /**
+   * The enemy's auras over time, for a timeline: called with the frame and the auras' durability
+   * (by aura: pyro, hydro, frozen, quicken…) whenever an aura appears or goes
+   */
+  watch?: (t: number, auras: Record<string, number>) => void
 }
 
 export interface AuraTrace {
@@ -182,6 +187,7 @@ export function elementalReactions({
   domainActive = () => false,
   bountiful = () => false,
   trace,
+  watch,
 }: ReactionOptions): RotationReactions & {
   moondriftsAt: (t: number) => number
   verdantDewAt: (t: number) => number
@@ -315,12 +321,23 @@ export function elementalReactions({
    * frames, and its hitlag-affected statuses (the Lunar-Charged ICD) last that much longer
    */
   let frozenFrames = 0
+  let watched = ''
   const advance = (t: number) => {
     // (catch up at most 2 minutes of frames: the auras are long gone by then)
     if (t - frame > 7200) frame = t - 7200
-    for (; frame < t; frame++)
+    for (; frame < t; frame++) {
+      if (watch) {
+        // (the auras as the frame begins: what the hits before it left)
+        const now = auraSnapshot()
+        const key = Object.keys(now).join()
+        if (key !== watched) {
+          watched = key
+          watch(frame, now)
+        }
+      }
       if (frozenFrames > 0) frozenFrames--
       else tick()
+    }
   }
   const enemyHitlag = (t: number, frames: number) => {
     advance(t)
