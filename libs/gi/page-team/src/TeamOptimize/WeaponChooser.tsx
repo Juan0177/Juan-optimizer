@@ -348,6 +348,13 @@ function WeaponChooserModal({
                 teamData={teamData}
                 excluded={excluded}
                 onToggle={toggle}
+                onTickAll={(tick) => {
+                  const ids = new Set(group.weapons.map((w) => w.id))
+                  setExcluded([
+                    ...teamOpt.excludedWeapons.filter((id) => !ids.has(id)),
+                    ...(tick ? [] : ids),
+                  ])
+                }}
                 teamMembers={members}
                 weaponEnergy={teamOpt.weaponEnergy}
                 setWeaponEnergy={(id, characterKey, value) =>
@@ -390,6 +397,7 @@ export function WeaponGroup({
   teamData,
   excluded,
   onToggle,
+  onTickAll,
   weaponEnergy,
   setWeaponEnergy,
   virtual = false,
@@ -417,6 +425,8 @@ export function WeaponGroup({
   teamData: TeamData | undefined
   excluded: Set<string>
   onToggle: (weapon: ICachedWeapon) => void
+  /** Ticks (or unticks) every weapon of the type at once (absent: no All/None for the type) */
+  onTickAll?: (tick: boolean) => void
   weaponEnergy: TeamOpt['weaponEnergy']
   setWeaponEnergy: (
     weaponId: string,
@@ -456,6 +466,20 @@ export function WeaponGroup({
           ))}
         </Box>
         <Box sx={{ flexGrow: 1 }} />
+        {/* the type's own quick picks: every weapon of it, or none (to tick a few) */}
+        {onTickAll && (
+          <Box sx={{ display: 'flex', gap: 0.5 }}>
+            <Pill
+              selected={ticked === weapons.length}
+              onClick={() => onTickAll(true)}
+            >
+              {t('teamOpt.weapons.all', 'All')}
+            </Pill>
+            <Pill selected={ticked === 0} onClick={() => onTickAll(false)}>
+              {t('teamOpt.weapons.pickNone', 'None')}
+            </Pill>
+          </Box>
+        )}
         <Typography
           sx={{
             ...typo.label,
