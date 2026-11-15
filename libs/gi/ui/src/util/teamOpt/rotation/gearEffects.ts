@@ -1300,9 +1300,10 @@ export function gearEffects({
 }
 
 /**
- * Hexerei characters (their sheets' `lockHomework` conditional). With two or more in the party,
- * the Hexerei Secret Rite effects apply; gcsim turns them on by default, so the rotation writer
- * does too when the team has two.
+ * Hexerei characters (their sheets' `lockHomework` conditional: Witch's Homework done, which
+ * gcsim takes by default, hexerei=1). The rotation writer turns it on for each of them: their
+ * Witch's Homework bonuses apply alone, the Secret Rite effects only with two or more in the party
+ * (the sheets' tally).
  */
 export const HEXEREI_CHARACTERS: CharacterKey[] = [
   'Albedo',

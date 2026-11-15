@@ -672,17 +672,17 @@ export function applyWritten({
       teamChar.conditional = values
     })
   }
-  // Hexerei: with two or more Hexerei members, their Secret Rite effects are on (as in gcsim)
+  // Hexerei: Witch's Homework is taken as done for each Hexerei member (gcsim's default), so its
+  // bonuses apply even alone; their Secret Rite effects still need two (the sheets' tally)
   const hexerei = members.filter((m) =>
     HEXEREI_CHARACTERS.includes(m.characterKey)
   )
-  if (hexerei.length >= 2)
-    for (const m of hexerei)
-      database.teamChars.set(m.teamCharId, (teamChar) => {
-        const values = deepClone(teamChar.conditional ?? {})
-        layeredAssignment(values, [m.characterKey, 'lockHomework'], 'on')
-        teamChar.conditional = values
-      })
+  for (const m of hexerei)
+    database.teamChars.set(m.teamCharId, (teamChar) => {
+      const values = deepClone(teamChar.conditional ?? {})
+      layeredAssignment(values, [m.characterKey, 'lockHomework'], 'on')
+      teamChar.conditional = values
+    })
   const attacks = perRotation(
     rotationAttacks(sim, (owner, path) => {
       const d = defaults.find(
