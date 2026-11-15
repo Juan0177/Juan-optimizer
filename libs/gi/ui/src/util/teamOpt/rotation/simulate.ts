@@ -62,6 +62,13 @@ export interface SimulationResult {
   frames: number
   /** Start frame of the kept rotation (hits' `t` are absolute) */
   start: number
+  /**
+   * The kept rotations' start frames, when several are kept (`keep` 'last2' or 'all'): the last
+   * ends at `start + frames`. See `lastRotation`.
+   */
+  rotationStarts?: number[]
+  /** Every played rotation's length, frames: the first from a fresh start, nothing waited for */
+  rotationFrames?: number[]
   buffWindows: SimBuffWindow[]
   countedBuffs: SimCountedBuff[]
   /**
@@ -1468,11 +1475,16 @@ export function simulateRotation({
       ...auraLog.filter((a) => a.t > start && a.t < end),
     ]
   }
+  const keptFrom =
+    keep === 'all' ? 0 : keep === 'last2' ? Math.max(0, repeats - 2) : keptLoop
+  const keptTo = keep === 'all' || keep === 'last2' ? repeats : keptLoop + 1
   return {
     ...(auras && { auras }),
     hits: kept,
     frames: end - start,
     start,
+    rotationStarts: bounds.slice(keptFrom, keptTo),
+    rotationFrames: bounds.slice(1, repeats + 1).map((b, i) => b - bounds[i]),
     buffWindows: windows,
     countedBuffs,
     hitlagEvents: all.filter((h) => h.path.join('.') === '_marker.hitlag'),
@@ -1489,6 +1501,80 @@ export function simulateRotation({
         return out
       }, {}),
     actionData,
+  }
+}
+
+/**
+ * The last of the kept rotations alone (what a timeline shows), from a run that kept several:
+ * its hits (the counted buffs' hit indices remapped), actions, waits, swaps and auras; waits per
+ * rotation (`stalls`, averaged). Each sample is cut the same way. A run that kept one: itself.
+ */
+export function lastRotation(sim: SimulationResult): SimulationResult {
+  if (sim.samples?.length) {
+    const samples = sim.samples.map(({ probability, result }) => ({
+      probability,
+      result: lastRotation(result),
+    }))
+    const first = samples[0].result
+    return {
+      ...sim,
+      hits: first.hits,
+      start: first.start,
+      rotationStarts: first.rotationStarts,
+      countedBuffs: first.countedBuffs,
+      actions: first.actions,
+      waits: first.waits,
+      swaps: first.swaps,
+      ...(first.auras && { auras: first.auras }),
+      samples,
+      frames: samples.reduce((n, s) => n + s.probability * s.result.frames, 0),
+      stalls: samples.reduce<Record<string, number>>((out, s) => {
+        for (const [label, frames] of Object.entries(s.result.stalls ?? {}))
+          out[label] = (out[label] ?? 0) + s.probability * frames
+        return out
+      }, {}),
+    }
+  }
+  const starts = sim.rotationStarts
+  if (!starts || starts.length < 2) return sim
+  const from = starts[starts.length - 1]
+  const end = sim.start + sim.frames
+  const index = new Map<number, number>()
+  const hits: SimHit[] = []
+  sim.hits.forEach((h, i) => {
+    if (h.t < from) return
+    index.set(i, hits.length)
+    hits.push(h)
+  })
+  const countedBuffs = sim.countedBuffs
+    .map((b) => ({
+      ...b,
+      hits: new Set(
+        [...b.hits].flatMap((i) => (index.has(i) ? [index.get(i)!] : []))
+      ),
+    }))
+    .filter((b) => b.hits.size)
+  const auras = sim.auras && [
+    { t: from, auras: sim.auras.filter((a) => a.t <= from).pop()?.auras ?? {} },
+    ...sim.auras.filter((a) => a.t > from),
+  ]
+  return {
+    ...sim,
+    ...(auras && { auras }),
+    hits,
+    start: from,
+    frames: end - from,
+    rotationStarts: [from],
+    countedBuffs,
+    actions: sim.actions.filter((a) => a.start >= from),
+    waits: sim.waits?.filter((a) => a.start >= from),
+    swaps: sim.swaps?.filter((w) => w.start >= from),
+    stalls: Object.fromEntries(
+      Object.entries(sim.stalls ?? {}).map(([label, frames]) => [
+        label,
+        frames / starts.length,
+      ])
+    ),
   }
 }
 

@@ -46,6 +46,7 @@ import {
   WriterQuickRow,
   type WrittenRotation,
   writtenHits,
+  writtenSeconds,
 } from './RotationWriter'
 import { focusSx, insetSx, numSx, quickSx, tokens, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
@@ -301,7 +302,7 @@ export function RotationInline({
             }}
           >
             {result?.sim &&
-              `${(result.sim.frames / 60).toFixed(1)} s · ${t(
+              `${(writtenSeconds(result) ?? 0).toFixed(1)} s · ${t(
                 'teamOpt.writer.hitCount',
                 {
                   defaultValue: '{{count}} hits',
