@@ -13,6 +13,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 - The rotation writer shows the time per rotation as Team Optimize and KQM count it, and when a rotation has to wait for a cooldown, how long it takes without waiting and what it waits for.
 - The KQM tab's timeline shows the weapon and set buffs of the builds shown, each named by its weapon or set.
 - The timeline fits a phone in landscape: the detailed view opens full screen and the writer is one column.
+- The weapon chooser in Team optimize has a None button: untick everything, then tick just the weapons you want.
 
 ### Fixed
 
@@ -34,6 +35,8 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 - A set's switch turned on by hand no longer keeps its effect on all rotation when the rotation never triggers it (for example, Viridescent Venerer's shred of an element nobody swirls).
 - Without a written rotation: Aubade of Morningstar and Moon counts for members that make no Normal or Charged Attacks, Husk of Opulent Dreams only for Geo characters, and Berserker, Brave Heart and Tiny Miracle are off.
 - Team Optimize counts a rotation's real pace: a rotation that uses a skill faster than its cooldown allows was counted at its first, fastest time.
+- KQM: a character you set to use their Burst every 2nd or 3rd rotation in the ER calculator now does so in the played rotation, instead of waiting for it every time.
+- The rotation text now understands character names in your language (Russian, Chinese and so on), and a rotation written without arrows between characters is read correctly.
 - The timeline no longer disappears behind the hit cards on a laptop screen at 100% zoom.
 
 ## [v1.6.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.6.0) (2026-11-15)
