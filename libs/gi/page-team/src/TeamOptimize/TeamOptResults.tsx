@@ -32,6 +32,7 @@ import {
   ExcludeIcon,
   resolveInfo,
   statName,
+  WeaponDetails,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
@@ -1489,4 +1490,5 @@ export function WeaponThumb({
 }
 
 // (moved to gi/ui so the Teams page can show the same tooltip)
-export { WeaponDetails } from '@genshin-optimizer/gi/ui'
+// (the weapon tooltip lives in gi/ui now; this file's users still take it from here)
+export { WeaponDetails }
