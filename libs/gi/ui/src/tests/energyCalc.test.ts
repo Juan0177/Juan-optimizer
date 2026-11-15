@@ -9,7 +9,10 @@ import {
   energyCalcWeapons,
   energySkillConstellation,
   energyWeaponFlat,
+  energyWeaponTeam,
+  energyWeaponTriggers,
   favoniusCooldown,
+  isCalcEnergyWeapon,
   syncEnergyCalculator,
   withFieldTime,
 } from '../util/teamOpt/energyCalc'
@@ -416,6 +419,56 @@ describe('ER calculator weapons', () => {
     expect(energyWeaponFlat('EverlastingMoonglow', 5)).toBe(0.6)
     expect(energyWeaponFlat('FavoniusSword', 5)).toBe(0)
     expect([1, 2, 3, 4, 5].map(favoniusCooldown)).toEqual([12, 10.5, 9, 7.5, 6])
+  })
+
+  it('counts every energy weapon of the game text, at its refinement', () => {
+    const at = (key: WeaponKey) =>
+      [1, 2, 3, 4, 5].map((r) => energyWeaponFlat(key, r))
+    expect(at('LumidouceElegy')).toEqual([12, 13, 14, 15, 16])
+    expect(at('DialoguesOfTheDesertSages')).toEqual([8, 10, 12, 14, 16])
+    expect(at('FlameForgedInsight')).toEqual([12, 15, 18, 21, 24])
+    expect(at('ExaiphanesBlade')).toEqual([3, 3, 5, 5, 5])
+    expect(at('TheDockhandsAssistant')).toEqual([6, 7.5, 9, 10.5, 12])
+    expect(isCalcEnergyWeapon('RightfulReward')).toBe(true)
+    expect(isCalcEnergyWeapon('FavoniusSword')).toBe(false)
+    // Frostbreath's energy goes to the other members, not its wielder
+    expect(energyWeaponFlat('Frostbreath', 1)).toBe(0)
+    expect([1, 5].map((r) => energyWeaponTeam('Frostbreath', r))).toEqual([
+      6, 12,
+    ])
+    expect(energyWeaponTeam('LumidouceElegy', 1)).toBe(0)
+  })
+
+  it('caps triggers at the weapon’s cooldown, and gives Frostbreath’s energy to the others', () => {
+    const settings = defaultEnergyCalculator(keys)
+    settings.rotationTime = 20
+    // Lumidouce Elegy: once per 12 s, so at most 20 / 12 triggers a rotation
+    settings.members.TravelerCryo!.weaponEnergyTriggers = 3
+    const lumi = calculateEnergyRecharge(keys, settings, {
+      TravelerCryo: 'LumidouceElegy',
+    })
+    expect(lumi.members.TravelerCryo!.flatEnergy).toBeCloseTo(
+      settings.members.TravelerCryo!.flatEnergy + 12 * (20 / 12),
+      9
+    )
+    expect(energyWeaponTriggers('LumidouceElegy', 3, 20)).toBeCloseTo(
+      20 / 12,
+      9
+    )
+    // Frostbreath on Danica, one trigger: 6 energy to each of the other three
+    settings.members.TravelerCryo!.weaponEnergyTriggers = 0
+    settings.members.Danica!.weaponEnergyTriggers = 1
+    const base = calculateEnergyRecharge(keys, settings, {})
+    const frost = calculateEnergyRecharge(keys, settings, {
+      Danica: 'Frostbreath',
+    })
+    for (const k of ['TravelerCryo', 'Odette', 'Anastasya'] as CharacterKey[])
+      expect(
+        frost.members[k]!.flatEnergy - base.members[k]!.flatEnergy
+      ).toBeCloseTo(6, 9)
+    expect(frost.members.Danica!.flatEnergy).toBe(
+      base.members.Danica!.flatEnergy
+    )
   })
 
   // Only Favonius energy: no skills, no enemy particles, no bursts

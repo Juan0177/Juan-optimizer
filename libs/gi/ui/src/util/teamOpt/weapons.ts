@@ -125,6 +125,22 @@ export const energyWeaponKeys: readonly WeaponKey[] = [
   'KitainCrossSpear',
   'CranesEchoingCall',
   'FlameForgedInsight',
+  'AmenomaKageuchi',
+  'KatsuragikiriNagamasa',
+  'AngelosHeptades',
+  'BeyondTheChrysalis',
+  'BloodsoakedRuins',
+  'DialoguesOfTheDesertSages',
+  'ExaiphanesBlade',
+  'Frostbreath',
+  'LumidouceElegy',
+  'NocturnesCurtainCall',
+  'PortablePowerSaw',
+  'RightfulReward',
+  'Silverdawn',
+  'SongOfTheVigil',
+  'TheDockhandsAssistant',
+  'WhitelakeFrostfeather',
 ]
 export const isEnergyWeapon = (weaponKey: WeaponKey) =>
   energyWeaponKeys.includes(weaponKey)
