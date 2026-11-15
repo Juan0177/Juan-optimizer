@@ -13,7 +13,7 @@ import {
   energyCalcData,
   energyCalcWeapons,
   energySkillConstellation,
-  energyWeaponFlat,
+  isCalcEnergyWeapon,
   isFavonius,
   kqmMemberConstellation,
   kqmWeapons,
@@ -410,7 +410,7 @@ function MemberEnergy({
     member.favoniusProcs > 0 && !allowedWeapons.some((w) => isFavonius(w.key))
   const noEnergyWeapon =
     (member.weaponEnergyTriggers ?? 0) > 0 &&
-    !allowedWeapons.some((w) => energyWeaponFlat(w.key) > 0)
+    !allowedWeapons.some((w) => isCalcEnergyWeapon(w.key))
   const particles = (skill: (typeof data.skills)[number]) =>
     skill.perSecond > 0
       ? t('teamOpt.kqm.calc.perSecond', {
@@ -788,7 +788,7 @@ function MemberEnergy({
             )}
             tip={t(
               'teamOpt.kqm.calc.weaponTriggersTip',
-              'Per rotation, while this member holds Amenoma Kageuchi, Katsuragikiri Nagamasa, Kitain Cross Spear, Prototype Amber or Everlasting Moonglow; the energy follows the weapon and its refinement.'
+              "Per rotation, while this member holds an energy weapon other than Favonius (Lumidouce Elegy, Prototype Amber, Dialogues of the Desert Sages…): the energy follows the weapon and its refinement, at most once per its cooldown. Frostbreath's goes to the other members."
             )}
           >
             <NumberField

@@ -42,23 +42,66 @@ export interface EnergyCalcResult {
   errors: string[]
 }
 
-/** Net flat energy per trigger, from the workbook's equipment reference. */
+/**
+ * The energy weapons the calculator counts per trigger (a member's "energy weapon triggers"),
+ * from their game text: the energy per trigger at R1–R5 (net, for those that cost some first), the
+ * effect's cooldown in seconds (triggers per rotation are capped by it), and `team` when the
+ * energy goes to each other party member instead of the wielder. Amenoma Kageuchi's trigger is one
+ * Succession Seed; The Dockhand's Assistant's and Portable Power Saw's, a use with 3 Symbols.
+ * (One weapon per line: the released build leaves out the beta ones.)
+ */
+const ENERGY_WEAPONS: Partial<
+  Record<WeaponKey, { energy: number[]; cooldown?: number; team?: true }>
+> = {
+  AmenomaKageuchi: { energy: [6, 7.5, 9, 10.5, 12] },
+  KatsuragikiriNagamasa: { energy: [6, 7.5, 9, 10.5, 12] },
+  KitainCrossSpear: { energy: [6, 7.5, 9, 10.5, 12] },
+  PrototypeAmber: { energy: [12, 13.5, 15, 16.5, 18] },
+  EverlastingMoonglow: { energy: [0.6, 0.6, 0.6, 0.6, 0.6] },
+  AngelosHeptades: { energy: [14, 15, 16, 17, 18], cooldown: 14 },
+  BeyondTheChrysalis: { energy: [5, 5.5, 6, 6.5, 7], cooldown: 4 },
+  BloodsoakedRuins: { energy: [12, 13, 14, 15, 16], cooldown: 14 },
+  CranesEchoingCall: { energy: [2.5, 2.75, 3, 3.25, 3.5], cooldown: 0.7 },
+  DialoguesOfTheDesertSages: { energy: [8, 10, 12, 14, 16], cooldown: 10 },
+  ExaiphanesBlade: { energy: [3, 3, 5, 5, 5], cooldown: 5 },
+  FlameForgedInsight: { energy: [12, 15, 18, 21, 24], cooldown: 15 },
+  Frostbreath: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 16, team: true },
+  LumidouceElegy: { energy: [12, 13, 14, 15, 16], cooldown: 12 },
+  NocturnesCurtainCall: { energy: [14, 15, 16, 17, 18], cooldown: 18 },
+  PortablePowerSaw: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 15 },
+  RightfulReward: { energy: [8, 10, 12, 14, 16], cooldown: 10 },
+  Silverdawn: { energy: [10, 10.5, 11, 11.5, 12], cooldown: 15 },
+  SongOfTheVigil: { energy: [4, 5, 6, 7, 8], cooldown: 9 },
+  TheDockhandsAssistant: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 15 },
+  TomeOfTheEternalFlow: { energy: [8, 9, 10, 11, 12], cooldown: 12 },
+  WhitelakeFrostfeather: { energy: [4, 4.5, 5, 5.5, 6], cooldown: 3.5 },
+}
+const energyOf = (key: WeaponKey | undefined, refinement = 1) => {
+  const weapon = key && ENERGY_WEAPONS[key]
+  if (!weapon) return 0
+  return weapon.energy[Math.min(5, Math.max(1, Math.round(refinement))) - 1]
+}
+/** A weapon whose energy the calculator counts per trigger */
+export const isCalcEnergyWeapon = (key: WeaponKey | undefined) =>
+  !!key && !!ENERGY_WEAPONS[key]
+/** The energy a trigger gives its wielder (0 for a weapon whose energy goes to the others) */
 export function energyWeaponFlat(
   key: WeaponKey | undefined,
   refinement = 1
 ): number {
-  switch (key) {
-    case 'AmenomaKageuchi':
-    case 'KatsuragikiriNagamasa':
-    case 'KitainCrossSpear':
-      return 4.5 + 1.5 * refinement
-    case 'PrototypeAmber':
-      return 10.5 + 1.5 * refinement
-    case 'EverlastingMoonglow':
-      return 0.6
-    default:
-      return 0
-  }
+  return key && ENERGY_WEAPONS[key]?.team ? 0 : energyOf(key, refinement)
+}
+/** The energy a trigger gives each other party member (Frostbreath) */
+export const energyWeaponTeam = (key: WeaponKey | undefined, refinement = 1) =>
+  key && ENERGY_WEAPONS[key]?.team ? energyOf(key, refinement) : 0
+/** Triggers per rotation, at most as many as the weapon's cooldown allows */
+export const energyWeaponTriggers = (
+  key: WeaponKey | undefined,
+  triggers: number,
+  rotationTime: number
+) => {
+  const cooldown = key ? ENERGY_WEAPONS[key]?.cooldown : undefined
+  return cooldown ? Math.min(triggers, rotationTime / cooldown) : triggers
 }
 
 export const isFavonius = (key: WeaponKey | undefined) =>
@@ -209,10 +252,27 @@ export function calculateEnergyRecharge(
     // Dori's A4 converts each skill use into energy that scales with her ER.
     if (recipient === 'Dori')
       particles += 5 * (own.skillUses + own.secondaryUses)
+    // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
+    // the others' (Frostbreath)
+    const weaponTriggers = (member: CharacterKey) =>
+      energyWeaponTriggers(
+        weapons?.[member],
+        settings.members[member]?.weaponEnergyTriggers ?? 0,
+        settings.rotationTime
+      )
+    const teamWeaponEnergy = keys
+      .filter((k) => k !== recipient)
+      .reduce(
+        (n, k) =>
+          n +
+          energyWeaponTeam(weapons?.[k], refinements?.[k]) * weaponTriggers(k),
+        0
+      )
     const flat =
       own.flatEnergy +
       energyWeaponFlat(weapons?.[recipient], refinements?.[recipient]) *
-        (own.weaponEnergyTriggers ?? 0) +
+        weaponTriggers(recipient) +
+      teamWeaponEnergy +
       ownData.skills[own.skillMode].flatEnergy * own.skillUses +
       ownData.skills[own.secondaryMode].flatEnergy * own.secondaryUses
     const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
@@ -262,7 +322,7 @@ export function energyCalcWeapons(
         ? candidates.find((w) => isFavonius(w.key))
         : undefined) ??
       ((member.weaponEnergyTriggers ?? 0) > 0
-        ? candidates.find((w) => energyWeaponFlat(w.key) > 0)
+        ? candidates.find((w) => isCalcEnergyWeapon(w.key))
         : undefined)
     if (!weapon) continue
     weapons[key] = weapon.key
