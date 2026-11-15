@@ -18,7 +18,9 @@ const run = (text: string) =>
 
 describe('Sandrone Power Overdrive', () => {
   it('fires every 24 frames after a full Decoding charge, until Decoding Power is under 50', () => {
-    const sim = run('Sandrone CA CA W5')
+    // (Power Overdrive begins 19 frames after Decoding Power is full: the 3rd beam's charge
+    // fills it, so the next charge waits for it)
+    const sim = run('Sandrone CA W4 CA W5')
     const shots = sim.hits.filter((h) => h.label === 'Power Overdrive')
     expect(sim.warnings).toEqual([])
     expect(shots.length).toBeGreaterThan(5)
@@ -31,5 +33,33 @@ describe('Sandrone Power Overdrive', () => {
     expect(sim.hits.filter((h) => h.label === 'Power Overdrive')).toHaveLength(
       0
     )
+  })
+})
+
+describe('Sandrone Decoding charges (gcsim b107b5d)', () => {
+  it('releases each charge after 3 beams: CA E Q CA E CA E keeps gcsim’s timeline', () => {
+    const sim = run('Sandrone CA E Q CA E CA E')
+    expect(sim.warnings).toEqual([])
+    // gcsim: charge@1 skill@225 burst@231 charge@359 skill@558 charge@604 skill@803
+    expect(sim.actions.map((a) => a.start)).toEqual([
+      0, 224, 230, 358, 557, 603, 802,
+    ])
+    expect(
+      sim.hits.filter((h) => h.label.startsWith('Condensed Beam'))
+    ).toHaveLength(9)
+    expect(sim.hits.filter((h) => h.label === 'Sweeping Fire')).toHaveLength(27)
+  })
+  it('repairs Fagio while she hovers: a Skill cancelled at once leaves Decoding Power', () => {
+    // E Q cancels the Skill at 6 frames: 70 + 10 repaired. The Burst's 128 frames of decay
+    // (25 every 30 on field) bring a full Fagio from 100 to under 21.2: the next charge fires 3.
+    const sim = run('Sandrone CA E Q CA')
+    expect(
+      sim.hits.filter((h) => h.label.startsWith('Condensed Beam'))
+    ).toHaveLength(6)
+  })
+  it('normal attacks into a charge take their whole animation (53, 46, 87 frames)', () => {
+    // gcsim: attack@1 charge@64 (53 + 10 hitlag)
+    const sim = run('Sandrone N1 CA')
+    expect(sim.actions[1].start - sim.actions[0].start).toBe(63)
   })
 })
