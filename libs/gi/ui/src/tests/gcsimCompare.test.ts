@@ -47,6 +47,8 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
       )
       const spec: {
         text: string
+        /** Played once before the loops (a first-rotation-only opener) */
+        opener?: string
         loops?: number
         conditional?: Record<string, Record<string, Record<string, string>>>
       } = JSON.parse(readFileSync(`${team}.spec.json`, 'utf8'))
@@ -128,10 +130,16 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
           : undefined,
         repeats: spec.loops ?? 4,
         keep: 'all',
-        rotation: parseRotation(
-          spec.text,
-          members.map((characterKey) => ({ characterKey, name: characterKey }))
-        ),
+        rotation: (() => {
+          const names = members.map((characterKey) => ({
+            characterKey,
+            name: characterKey,
+          }))
+          const rotation = parseRotation(spec.text, names)
+          return spec.opener
+            ? { ...rotation, opener: parseRotation(spec.opener, names).steps }
+            : rotation
+        })(),
         members,
         constellations: Object.fromEntries(builds.map((b) => [b.key, b.cons])),
         elements: Object.fromEntries(
