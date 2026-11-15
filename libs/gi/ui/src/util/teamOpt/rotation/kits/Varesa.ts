@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -84,6 +85,13 @@ const withWindup = (h: NormalHit, w: number): NormalHit => ({
   toAbil: h.toAbil - w,
   frames: h.frames - w,
 })
+
+/**
+ * The plunge's falling hit on the way down (gcsim's plungeCollision, 6 frames before the High
+ * Plunge's hitmark): Plunge DMG, no Electro applied. gcsim plays it with the plunge's `collision`
+ * option, which KQM's Varesa sims always set: played on every plunge here.
+ */
+const COLLISION_HITMARK = 37 - 6
 
 /** Plunges: gcsim's hitmark, the sheet node, frames and cancels of each variant */
 const plunges = {
@@ -496,6 +504,8 @@ export const kit: KitModel = {
           nightsoul: true,
           label: fiery ? 'Fiery Passion Rush' : 'Rush',
         })
+        // its particles (2 or 3) on the hit, but not a free Rush's (kqmsim's particleCB)
+        if (!free) particleMarker(ctx, fiery ? 2 : 5, 'Rush particles')
         // the Rush adds 20 points 5 frames in (it does not start the blessing)
         ctx.at(5, (c2) => gainPoints(c2, s, 20, false))
         // A1 Rainbow Crash: 5 s, spent by the next plunge impact (impactStates)
@@ -588,6 +598,15 @@ export const kit: KitModel = {
           : fiery
             ? plunges.fieryLow
             : plunges.low
+        ctx.hit(COLLISION_HITMARK, {
+          path: ['plunging', 'dmg'],
+          tag: 'plunge',
+          element: 'electro',
+          applies: false,
+          durability: 0,
+          icd: 'none',
+          label: 'Plunge Collision',
+        })
         ctx.hit(variant.hitmark, {
           path: ['plunging', variant.node],
           tag: 'plunge',
