@@ -4,6 +4,25 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.6.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.6.0) (2026-11-15)
+
+### New
+
+- Your data now live in the browser's database (IndexedDB) instead of local storage, so the 5 MB storage limit is gone. Everything moves over by itself on your first visit, and every entry is checked before the old copy is removed.
+- Saving happens in the background and no longer stalls the page. If a save ever fails, a notice says so and leaving the page asks first.
+- Saved KQM results take about a fifth of the space they did.
+- The rotation writer's hit cards show each attack in its own colour, as the rotation panel does.
+
+### Fixed
+
+- Sandrone's Stellar-Swirl charged beam used the Stellar-Conduct multiplier; it now uses its own, higher one.
+- Exaiphanes Blade's ATK bonus at R4 and R5 is 32% and 40%, as in the game.
+- DEF reduction is capped at 90%, as in the game.
+- Team buffs from elemental resonance and reactions say so in their tooltip, instead of naming the active character.
+- Theorycraft: when no substat distribution meets your stat filters, your substats are kept and a warning says so; they used to be overwritten.
+- Optimize: a target that adds up to nothing (for example, its talent conditional is off) can't be started, and the button's tooltip says why.
+- Team import: errors show in the import dialog, and pasting a character's multi-target setup tells you where to import it.
+
 ## [v1.5.5](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.5.5) (2026-11-15)
 
 ### New
