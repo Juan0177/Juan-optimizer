@@ -61,7 +61,7 @@ import {
   useNumWorkers,
   useTeamData,
 } from '@genshin-optimizer/gi/ui'
-import type { UIData } from '@genshin-optimizer/gi/uidata'
+import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
 import type { NumNode } from '@genshin-optimizer/gi/wr'
 import { dynamicData, mergeData, optimize } from '@genshin-optimizer/gi/wr'
@@ -271,7 +271,12 @@ export default function TabBuild() {
   const { data } = useContext(DataContext)
   const compareData = useCompareData()
   const optimizationTargetNode =
-    optimizationTarget && objPathValue(data?.getDisplay(), optimizationTarget)
+    optimizationTarget &&
+    (objPathValue(data?.getDisplay(), optimizationTarget) as
+      | CalcResult
+      | undefined)
+  // (a target that adds up to nothing, e.g. its talent conditional is off: nothing to optimize)
+  const emptyTarget = !!optimizationTargetNode?.isEmpty
   const isSM = ['xs', 'sm'].includes(useMediaQueryUp())
   const deferredBuildSetting = useDeferredValue(buildSetting)
   const teammateArtifactIds = useTeammateArtifactIds()
@@ -851,7 +856,13 @@ export default function TabBuild() {
           </BootstrapTooltip>
           <BootstrapTooltip
             placement="top"
-            title={!optimizationTarget ? t('selectTargetFirst') : ''}
+            title={
+              !optimizationTarget
+                ? t('selectTargetFirst')
+                : emptyTarget
+                  ? t('emptyTarget')
+                  : ''
+            }
           >
             <span>
               <GenerateButton
@@ -859,9 +870,14 @@ export default function TabBuild() {
                 disabled={
                   !characterKey ||
                   !optimizationTarget ||
-                  !optimizationTargetNode
+                  !optimizationTargetNode ||
+                  emptyTarget
                 }
-                cta={!!optimizationTarget && !!optimizationTargetNode}
+                cta={
+                  !!optimizationTarget &&
+                  !!optimizationTargetNode &&
+                  !emptyTarget
+                }
                 onGenerate={generateBuilds}
                 onCancel={cancelBuilds}
               />
