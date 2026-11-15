@@ -178,6 +178,8 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
       rotationTime,
       members: Object.fromEntries(keys.map((key) => [key, { fieldTime: 25 }])),
     },
+  // (no written rotation here: nothing filled in)
+  withRotationEnergy: (settings: object) => settings,
   kqmTopTeams: (result: {
     builds: Record<string, { weapon: object; sets: object }>
     after: { total: number }

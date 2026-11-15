@@ -18,6 +18,7 @@ import type {
   KqmBuild,
   KqmPlayed,
   KqmReplayInput,
+  RotationEnergy,
   SimGear,
   TeamData,
   TeamDataOverrides,
@@ -26,6 +27,7 @@ import type {
 import {
   actionFrameDefaults,
   CharacterName,
+  energyFromRotation,
   everyNthBursts,
   type FrameData,
   HEXEREI_CHARACTERS,
@@ -502,7 +504,9 @@ export function kqmRotationReplay({
   gender: GenderKey
   names: RotationMember[]
   teamOpt: TeamOpt
-}): ((input: KqmReplayInput) => KqmPlayed) | undefined {
+}):
+  | ((input: KqmReplayInput) => KqmPlayed & { energy?: RotationEnergy })
+  | undefined {
   const text = localStorage.getItem(storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
   const common = {
@@ -585,6 +589,8 @@ export function kqmRotationReplay({
       attacks,
       rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
       stalls,
+      // (the ER calculator's inputs as this rotation plays them)
+      energy: energyFromRotation(played.sim, keys, counted, constellations),
     }
   }
 }
@@ -1438,7 +1444,7 @@ function WriterModal({
                     <Tooltip
                       title={t(
                         'teamOpt.writer.waitedTip',
-                        'Played over and over, an action is not ready again in time and the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation.'
+                        'Played over and over, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
                       )}
                       placement="top"
                     >
@@ -1454,7 +1460,7 @@ function WriterModal({
                           seconds: waited.first.toFixed(1),
                         })}
                         {!!waited.waits.length &&
-                          ` · ${t('teamOpt.writer.waits', 'Waits')} ${waited.waits
+                          ` · ${t('teamOpt.writer.waitsRepeat', 'Waits for cooldowns from the previous rotation:')} ${waited.waits
                             .slice(0, 3)
                             .map((w) => `${w.label} ${w.seconds.toFixed(1)} s`)
                             .join(', ')}`}

@@ -2,12 +2,13 @@ import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt, TeamOptEnergyCalculator } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
-import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
   KqmTeamOption,
+  RotationEnergy,
   TeamData,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -22,6 +23,7 @@ import {
   kqmTalentLevel,
   kqmWeapons,
   syncEnergyCalculator,
+  withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
@@ -81,7 +83,7 @@ import {
   tokens,
   type,
 } from './ui'
-import { useKqmProgress } from './useKqmRun'
+import { kqmReplayOf, useKqmProgress } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 /** A member row's columns: name, build, constellation, minimum ER (one line from `sm`) */
@@ -111,18 +113,97 @@ const compactFieldSx = {
 function teamCalculator(
   members: TeamOptMember[],
   teamOpt: TeamOpt,
-  saved: TeamOptEnergyCalculator | undefined
+  saved: TeamOptEnergyCalculator | undefined,
+  /** The written rotation's inputs, filled in where not set by hand */
+  energy?: RotationEnergy
 ) {
   const keys = members.map((m) => m.characterKey)
-  return syncEnergyCalculator(
+  return withRotationEnergy(
+    syncEnergyCalculator(
+      keys,
+      saved,
+      teamOpt.rotationTime ?? 20,
+      teamOpt.onField ?? keys[0],
+      Object.fromEntries(
+        keys.map((key) => [key, kqmMemberConstellation(key, teamOpt.kqm)])
+      )
+    ),
     keys,
-    saved,
-    teamOpt.rotationTime ?? 20,
-    teamOpt.onField ?? keys[0],
-    Object.fromEntries(
-      keys.map((key) => [key, kqmMemberConstellation(key, teamOpt.kqm)])
-    )
+    energy
   )
+}
+
+/**
+ * The ER calculator's inputs as KQM plays the written rotation (at its constellations, see
+ * `energyFromRotation`): worked out after the panel shows (it is a full replay), again when the
+ * rotation, the members, their constellations or the Burst cadence change. Nothing written:
+ * undefined.
+ */
+function useRotationEnergy(
+  teamId: string,
+  members: TeamOptMember[],
+  teamOpt: TeamOpt
+): RotationEnergy | undefined {
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  const { i18n } = useTranslation()
+  const [energy, setEnergy] = useState<RotationEnergy>()
+  const latest = useRef(teamOpt)
+  latest.current = teamOpt
+  let text = ''
+  try {
+    text = localStorage.getItem(`teamOptRotationText_${teamId}`) ?? ''
+  } catch {
+    // (no storage: nothing written)
+  }
+  const constellations = JSON.stringify(
+    members.map((m) => kqmMemberConstellation(m.characterKey, teamOpt.kqm))
+  )
+  const calculator = teamOpt.kqm?.energyCalculator
+  const cadence = JSON.stringify(
+    teamOpt.kqm?.energySource === 'calculator'
+      ? members.map((m) => calculator?.members[m.characterKey]?.burstEvery)
+      : []
+  )
+  const keys = members.map((m) => m.characterKey).join()
+  useEffect(() => {
+    if (!text.trim()) {
+      setEnergy(undefined)
+      return
+    }
+    let cancelled = false
+    const id = setTimeout(() => {
+      let next: RotationEnergy | undefined
+      try {
+        const teamOpt = latest.current
+        next = kqmReplayOf(
+          database,
+          gender,
+          i18n,
+          teamId,
+          teamOpt
+        )?.({
+          constellations: Object.fromEntries(
+            members.map((m) => [
+              m.characterKey,
+              kqmMemberConstellation(m.characterKey, teamOpt.kqm),
+            ])
+          ),
+          gear: {},
+          overrides: {},
+        }).energy
+      } catch {
+        next = undefined
+      }
+      if (!cancelled) setEnergy(next)
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+    // (members by their keys; the rest of the team's settings read when it runs)
+  }, [database, gender, i18n, teamId, text, constellations, cadence, keys])
+  return energy
 }
 
 /** KQM assumptions and equipment, saved with the team as they change. */
@@ -163,14 +244,16 @@ export function KqmSettings({
       teamCalculator(members, teamOpt, teamOpt.kqm?.energyCalculator)
     )
   )
+  // (the written rotation fills in the inputs not set by hand)
+  const rotationEnergy = useRotationEnergy(teamId, members, teamOpt)
   // The rotation length above is shared by both workflows and the ER calculator.
   const rotationTime = teamOpt.rotationTime ?? 20
   const calculatorDraft = useMemo(
     () => ({
-      ...teamCalculator(members, teamOpt, calculatorInputs),
+      ...teamCalculator(members, teamOpt, calculatorInputs, rotationEnergy),
       rotationTime,
     }),
-    [members, teamOpt, calculatorInputs, rotationTime]
+    [members, teamOpt, calculatorInputs, rotationTime, rotationEnergy]
   )
   const [calculatorDirty, setCalculatorDirty] = useState(false)
   // (recomputed when the calculator or the KQM weapons change, not on every keystroke; the same
@@ -243,20 +326,17 @@ export function KqmSettings({
         )
       )
   }, [teamOpt.kqm?.energyRecharge, teamOpt.kqm?.energySource, members])
-  // Keep applied ER targets current when the common rotation length changes.
+  // Keep applied ER targets current when the common rotation length or the written rotation's
+  // inputs change.
   useEffect(() => {
     const applied = teamOpt.kqm?.energyCalculator
     const rotationTime = teamOpt.rotationTime ?? 20
-    if (
-      teamOpt.kqm?.energySource !== 'calculator' ||
-      !applied ||
-      applied.rotationTime === rotationTime
-    )
-      return
+    if (teamOpt.kqm?.energySource !== 'calculator' || !applied) return
     const energyCalculator = {
-      ...teamCalculator(members, teamOpt, applied),
+      ...teamCalculator(members, teamOpt, applied, rotationEnergy),
       rotationTime,
     }
+    if (JSON.stringify(energyCalculator) === JSON.stringify(applied)) return
     const estimate = kqmEnergyEstimate(
       members.map((m) => m.characterKey),
       energyCalculator,
@@ -269,7 +349,7 @@ export function KqmSettings({
         energyRecharge: estimate.targets,
       }
     })
-  }, [teamOpt, members, setTeamOpt])
+  }, [teamOpt, members, setTeamOpt, rotationEnergy])
   const problem = !canRun
     ? t('teamOpt.kqm.addAttacks', 'Add rotation attacks above')
     : !optimized.length
@@ -723,6 +803,7 @@ export function KqmSettings({
             <KqmEnergyCalculator
               members={members}
               kqm={kqm}
+              fromRotation={!!rotationEnergy}
               settings={calculatorDraft}
               setSettings={(update) => {
                 setCalculatorDraft((previous) =>

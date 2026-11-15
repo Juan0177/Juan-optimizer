@@ -103,6 +103,11 @@ export interface SimulationResult {
   /** The kept rotation's written waits (W1.5), in the same form as `actions` */
   waits?: SimulationResult['actions']
   /**
+   * The kept rotation's Skill uses: each time a member's Skill cooldown starts (frame), held or
+   * pressed (what an ER calculator counts as a use: Durin's recast is not one)
+   */
+  skillUses?: { characterKey: CharacterKey; t: number; hold: boolean }[]
+  /**
    * The kept rotation's swaps: who to whom, when the swap began (frame), how long it took (swap
    * time and ping) and how long it first waited for the 1 s swap cooldown
    */
@@ -1091,6 +1096,7 @@ export function simulateRotation({
   }
   if (geoFromMoondrifts) refreshGeoResonance(0)
   const actions: SimulationResult['actions'] = []
+  const skillUses: NonNullable<SimulationResult['skillUses']> = []
   const waits: SimulationResult['actions'] = []
   const swaps: NonNullable<SimulationResult['swaps']> = []
   /** Waits for readiness: what waited, when it began, how long */
@@ -1344,6 +1350,8 @@ export function simulateRotation({
     if (result.cooldown) {
       const { key, frames, delay = 0 } = result.cooldown
       const at = now + delay
+      if (key === 'skill')
+        skillUses.push({ characterKey, t: at, hold: !!action.hold })
       const spend = () =>
         cooldowns.spend(
           `${characterKey}.${key}`,
@@ -1528,6 +1536,7 @@ export function simulateRotation({
     unsupported,
     actions: actions.filter((a) => a.start >= start && a.start < end),
     waits: waits.filter((a) => a.start >= start && a.start < end),
+    skillUses: skillUses.filter((u) => u.t >= start && u.t < end),
     swaps: swaps.filter((w) => w.start >= start && w.start < end),
     stalls: stalled
       .filter((w) => w.t >= start && w.t < end)
@@ -1603,6 +1612,7 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
     countedBuffs,
     actions: sim.actions.filter((a) => a.start >= from),
     waits: sim.waits?.filter((a) => a.start >= from),
+    skillUses: sim.skillUses?.filter((u) => u.t >= from),
     swaps: sim.swaps?.filter((w) => w.start >= from),
     stalls: Object.fromEntries(
       Object.entries(sim.stalls ?? {}).map(([label, frames]) => [
