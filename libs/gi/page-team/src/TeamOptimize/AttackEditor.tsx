@@ -1846,7 +1846,7 @@ function signed(value: number, percent: boolean) {
  * every value its formula uses (the talent's multiplier, Total ATK, DMG Bonus, CRIT, the enemy's
  * RES and DEF…), as its tooltip shows them
  */
-function HitStats({
+export function HitStats({
   hit,
 }: {
   hit: { target: UIData; hit: CalcResult | undefined } | undefined | null

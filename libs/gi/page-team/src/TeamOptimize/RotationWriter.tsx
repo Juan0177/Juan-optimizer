@@ -6,7 +6,11 @@ import {
 import { deepClone, layeredAssignment } from '@genshin-optimizer/common/util'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt, TeamOptAttack } from '@genshin-optimizer/gi/db'
+import type {
+  TeamOpt,
+  TeamOptAttack,
+  TeamOptKqm,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
@@ -14,6 +18,7 @@ import type {
   KqmPlayed,
   KqmReplayInput,
   SimGear,
+  TeamData,
   TeamDataOverrides,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -23,6 +28,7 @@ import {
   type FrameData,
   HEXEREI_CHARACTERS,
   kitModels,
+  kqmMemberConstellation,
   needsRotationCalculation,
   parseRotation,
   REACTION_NAMES,
@@ -31,6 +37,7 @@ import {
   rotationBuffDefaults,
   rotationCalculation,
   type SimBuffOwner,
+  type SimHit,
   simulateRotationSamples,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
@@ -41,6 +48,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Dialog,
   Divider,
   IconButton,
   Snackbar,
@@ -50,6 +58,7 @@ import {
   Typography,
 } from '@mui/material'
 import {
+  Fragment,
   type ReactNode,
   useCallback,
   useDeferredValue,
@@ -61,13 +70,20 @@ import {
 import { useTranslation } from 'react-i18next'
 import { FrameDataPanel, pingToFrames } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
-import { RotationTimeline } from './RotationTimeline'
+import type { TimelineMoment } from './RotationTimeline'
+import { laneColor, RotationTimeline } from './RotationTimeline'
 import {
   DEFAULT_SWAP_FRAMES,
   frameOverrides,
   type RotationTimingSettings,
 } from './RotationTiming'
-import { focusSx, quickSx, tokens, type } from './ui'
+import { Disclosure, focusSx, quickSx, tokens, type } from './ui'
+import { useTeamBuffs } from './buffs'
+import {
+  TimelineHitStats,
+  useMomentStats,
+  useTimelineFigures,
+} from './TimelineFigures'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
@@ -184,9 +200,26 @@ export function useMemberNames(members: TeamOptMember[]) {
 }
 
 /** The team as the simulation sees it (constellations, elements, the members' sets) */
-export function useSimTeam(members: TeamOptMember[]) {
+export function useSimTeam(
+  members: TeamOptMember[],
+  /**
+   * KQM theorycrafting's settings: the rotation is then played at its constellations, with none
+   * of the members' own weapons or sets (it never uses their builds)
+   */
+  kqm?: TeamOptKqm
+) {
   const database = useDatabase()
-  return useMemo(() => simTeamOf(members, database), [members, database])
+  return useMemo(() => {
+    const own = simTeamOf(members, database)
+    if (!kqm) return own
+    return {
+      ...own,
+      constellations: Object.fromEntries(
+        own.members.map((k) => [k, kqmMemberConstellation(k, kqm)])
+      ),
+      gear: {},
+    }
+  }, [members, database, kqm])
 }
 function simTeamOf(members: TeamOptMember[], database: Database) {
   const keys = members.map((m) => m.characterKey)
@@ -257,7 +290,10 @@ export function simulateWritten({
   samples,
   calculation,
   current,
+  auraTimeline,
 }: {
+  /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
+  auraTimeline?: boolean
   text: string
   opener: string
   timing: RotationTimingSettings
@@ -305,6 +341,7 @@ export function simulateWritten({
       pingFrames: pingToFrames(pingMs),
       repeats,
       keep,
+      auraTimeline,
     },
     samples !== undefined && team.members.some((m) => kitModels[m]?.sampled)
       ? samples
@@ -594,10 +631,20 @@ export function useRotationWriter({
   teamId,
   members,
   setTeamOpt,
+  teamData,
+  kqm,
 }: {
   teamId: string
   members: TeamOptMember[]
   setTeamOpt: (update: TeamOptUpdate) => void
+  /** The team's data: the names of what the timeline follows */
+  teamData?: TeamData
+  /**
+   * KQM theorycrafting's settings, on its tab: the rotation is previewed at its constellations
+   * without the members' own gear, and the timeline shows no damage or stats (those are the
+   * members' own builds')
+   */
+  kqm?: TeamOptKqm
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -619,6 +666,8 @@ export function useRotationWriter({
         <WriterModal
           teamId={teamId}
           members={members}
+          teamData={teamData}
+          kqm={kqm}
           setTeamOpt={setTeamOpt}
           onClose={() => setOpen(false)}
           onApplied={setUndo}
@@ -750,12 +799,16 @@ export function insertWord(
 function WriterModal({
   teamId,
   members,
+  teamData,
+  kqm,
   setTeamOpt,
   onClose,
   onApplied,
 }: {
   teamId: string
   members: TeamOptMember[]
+  teamData: TeamData | undefined
+  kqm: TeamOptKqm | undefined
   setTeamOpt: (update: TeamOptUpdate) => void
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
@@ -809,7 +862,10 @@ function WriterModal({
   }
   const keys = members.map((m) => m.characterKey)
 
-  const team = useSimTeam(members)
+  const team = useSimTeam(members, kqm)
+  // (the attacks a rotation leaves on the team are Team optimize's: always the members' own)
+  const ownTeam = useSimTeam(members)
+  const figures = !kqm
   const names = useMemberNames(members)
   // each member's own frame data for every action (shown as the defaults), once the panel opens
   const frameDefaults = useMemo(
@@ -836,6 +892,7 @@ function WriterModal({
         database,
         teamId,
         gender,
+        auraTimeline: true,
         openerWarning: (warning) =>
           t('teamOpt.writer.openerWarning', {
             defaultValue: 'Opener: {{warning}}',
@@ -857,6 +914,52 @@ function WriterModal({
       database,
       teamId,
     ]
+  )
+  // the detailed timeline's window
+  const [detailOpen, setDetailOpen] = useState(false)
+  // (what both timelines, the writer's and the detailed window's, are given)
+  const timelineProps = (
+    rotation: NonNullable<typeof result>['rotation'],
+    sim: NonNullable<NonNullable<typeof result>['sim']>
+  ) => ({
+    members: keys,
+    rotation,
+    sim,
+    edited: editedSteps,
+    selected: selectedStep,
+    teamData,
+    buffs: figures ? teamBuffs : undefined,
+    damage: timelineFigures.damage,
+    renderHit: (hit: SimHit) => {
+      const found = timelineFigures.attackOf?.(hit)
+      return (
+        found && (
+          <TimelineHitStats
+            teamId={teamId}
+            characterKey={found.characterKey}
+            attack={found.attack}
+          />
+        )
+      )
+    },
+    onSelect: (i: number) => {
+      setDetailOpen(false)
+      setSelectedStep(i)
+      setInspectorTab('steps')
+      toggleTiming(true)
+    },
+  })
+  // the members' stats at the timeline's moment (their own builds: never on the KQM tab)
+  const [moment, setMoment] = useState<TimelineMoment>()
+  const momentStats = useMomentStats(teamId, moment, figures)
+  // (the members' own weapon and set effects: listed on the timeline, never on the KQM tab)
+  const teamBuffs = useTeamBuffs(teamId, teamData)
+  // the timeline's damage and stats, with the members' own builds
+  const timelineFigures = useTimelineFigures(
+    teamId,
+    result?.sim,
+    result?.own,
+    figures
   )
   // a mode or stance's version of an action (Zibai's Spirit Steed's Stride) has its own frame data:
   // the versions this rotation played join each member's defaults
@@ -886,12 +989,29 @@ function WriterModal({
   ).some((a) => !!a?.length)
   const apply = () => {
     if (!result?.sim) return
+    const applied = kqm
+      ? simulateWritten({
+          text,
+          opener: openerShown ? openerText : '',
+          timing,
+          frameData,
+          pingMs,
+          team: ownTeam,
+          names,
+          members,
+          database,
+          teamId,
+          gender,
+          openerWarning: (warning) => warning,
+        })
+      : result
+    if (!applied?.sim) return
     const undo = applyWritten({
       database,
       teamId,
       members,
       setTeamOpt,
-      result,
+      result: applied,
       text,
       opener: openerShown ? openerText : '',
       timing,
@@ -1175,36 +1295,92 @@ function WriterModal({
                   />
                 </Box>
                 <RotationTimeline
-                  members={keys}
-                  rotation={result.rotation}
-                  sim={result.sim}
-                  edited={editedSteps}
-                  selected={selectedStep}
-                  onSelect={(i) => {
-                    setSelectedStep(i)
-                    setInspectorTab('steps')
-                    toggleTiming(true)
-                  }}
+                  {...timelineProps(result.rotation, result.sim)}
+                  stats={detailOpen ? undefined : momentStats}
+                  onMoment={figures && !detailOpen ? setMoment : undefined}
+                  onOpenDetail={() => setDetailOpen(true)}
                 />
+                {/* the detailed timeline: its own large window */}
+                <Dialog
+                  open={detailOpen}
+                  onClose={() => setDetailOpen(false)}
+                  maxWidth={false}
+                  PaperProps={{
+                    sx: {
+                      width: 'min(1760px, calc(100vw - 32px))',
+                      maxHeight: 'calc(100vh - 32px)',
+                      m: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      bgcolor: tokens.panel,
+                      backgroundImage: 'none',
+                      border: `1px solid ${tokens.hairline}`,
+                      borderRadius: tokens.radius.panel,
+                    },
+                  }}
+                >
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 2,
+                      flexShrink: 0,
+                      pl: 3,
+                      pr: 1.5,
+                      py: 1.75,
+                      borderBottom: `1px solid ${tokens.hairline}`,
+                    }}
+                  >
+                    <Typography component="h2" sx={type.section}>
+                      {t('teamOpt.timeline.title', 'Timeline')}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        fontSize: 15,
+                        fontWeight: 650,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {(result.sim.frames / 60).toFixed(1)} s
+                    </Typography>
+                    <Typography
+                      noWrap
+                      sx={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: 13,
+                        color: 'text.secondary',
+                        fontFamily: 'ui-monospace, monospace',
+                      }}
+                    >
+                      {text}
+                    </Typography>
+                    <IconButton
+                      onClick={() => setDetailOpen(false)}
+                      aria-label={t('teamOpt.editor.close', 'Close')}
+                      sx={{ alignSelf: 'center', ...quickSx, ...focusSx }}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </Box>
+                  <Box sx={{ minHeight: 0, p: 3, overflowY: 'auto' }}>
+                    {detailOpen && (
+                      <RotationTimeline
+                        {...timelineProps(result.rotation, result.sim)}
+                        detail
+                        stats={momentStats}
+                        onMoment={figures ? setMoment : undefined}
+                      />
+                    )}
+                  </Box>
+                </Dialog>
                 <HitsSummary
                   members={members}
                   attacks={result.attacks}
                   unsupported={result.sim.unsupported}
                 />
                 {!!result.sim.notes.length && (
-                  <Box
-                    sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}
-                  >
-                    {result.sim.notes.map((n) => (
-                      <Typography
-                        key={n}
-                        variant="caption"
-                        color="text.secondary"
-                      >
-                        {n}
-                      </Typography>
-                    ))}
-                  </Box>
+                  <RotationNotes notes={result.sim.notes} />
                 )}
               </>
             ) : (
@@ -1416,28 +1592,50 @@ function HitsSummary({
           counts.set(label, (counts.get(label) ?? 0) + (a.hits ?? 1))
         }
         const total = [...counts.values()].reduce((n, c) => n + c, 0)
+        const most = Math.max(1, ...counts.values())
         return (
           <Box
             key={characterKey}
             sx={(theme) => ({
-              p: 1.25,
-              borderRadius: 2,
-              bgcolor: alpha(theme.palette.text.primary, 0.025),
+              position: 'relative',
+              overflow: 'hidden',
+              px: 1.5,
+              pt: 1.5,
+              pb: 1.25,
+              borderRadius: 2.5,
+              bgcolor: tokens.inset,
               border: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
               minWidth: 0,
+              // the member's colour, as a soft light from the top edge
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                inset: '0 0 auto 0',
+                height: 2,
+                background: `linear-gradient(90deg, ${laneColor(theme, characterKey)}, ${alpha(laneColor(theme, characterKey), 0)})`,
+              },
             })}
           >
-            <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}
-            >
-              <MemberAvatar characterKey={characterKey} size={22} />
-              <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 650 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+              <MemberAvatar characterKey={characterKey} size={26} />
+              <Typography noWrap sx={{ fontSize: 14, fontWeight: 650 }}>
                 <CharacterName characterKey={characterKey} gender={gender} />
               </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ ml: 'auto', fontVariantNumeric: 'tabular-nums' }}
+              <Box
+                component="span"
+                sx={(theme) => ({
+                  ml: 'auto',
+                  flexShrink: 0,
+                  px: 0.875,
+                  borderRadius: 999,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  lineHeight: '20px',
+                  whiteSpace: 'nowrap',
+                  fontVariantNumeric: 'tabular-nums',
+                  color: 'text.secondary',
+                  bgcolor: alpha(theme.palette.text.primary, 0.06),
+                })}
               >
                 {!kitModels[characterKey]
                   ? t('teamOpt.writer.noKitShort', 'attacks kept')
@@ -1445,40 +1643,94 @@ function HitsSummary({
                       defaultValue: '{{count}} hits',
                       count: Math.round(total * 100) / 100,
                     })}
-              </Typography>
+              </Box>
             </Box>
             {unsupported.includes(characterKey) ? null : counts.size ? (
-              [...counts].map(([label, n]) => (
-                <Box
-                  key={label}
-                  sx={{
-                    display: 'grid',
-                    gridTemplateColumns: 'minmax(0, 1fr) auto',
-                    gap: 1,
-                    fontSize: 12.5,
-                    lineHeight: 1.65,
-                  }}
-                >
-                  <Box
-                    component="span"
-                    title={label}
-                    sx={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    {label}
-                  </Box>
-                  <Box
-                    component="span"
-                    sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}
-                  >
-                    ×{Math.round(n * 100) / 100}
-                  </Box>
-                </Box>
-              ))
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                {[...counts].map(([label, n]) => {
+                  // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
+                  const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
+                  const name = tagged ? tagged[1] : label
+                  const tag = tagged?.[2]
+                  return (
+                    <Tooltip
+                      key={label}
+                      title={label}
+                      placement="top-start"
+                      enterDelay={600}
+                      disableInteractive
+                    >
+                      <Box
+                        sx={(theme) => ({
+                          position: 'relative',
+                          display: 'grid',
+                          gridTemplateColumns: 'minmax(0, 1fr) auto',
+                          alignItems: 'center',
+                          gap: 1,
+                          px: 0.75,
+                          mx: -0.75,
+                          minHeight: 26,
+                          borderRadius: 1,
+                          fontSize: 12.5,
+                          // how many of the member's hits it is, as a quiet bar behind the row
+                          background: `linear-gradient(90deg, ${alpha(laneColor(theme, characterKey), 0.13)} ${(n / most) * 100}%, transparent ${(n / most) * 100}%)`,
+                        })}
+                      >
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'baseline',
+                            gap: 0.75,
+                            minWidth: 0,
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {name}
+                          </Box>
+                          {tag && (
+                            <Box
+                              component="span"
+                              sx={{
+                                flexShrink: 1,
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                fontSize: 11,
+                                color: 'text.secondary',
+                              }}
+                            >
+                              {tag}
+                            </Box>
+                          )}
+                        </Box>
+                        <Box
+                          component="span"
+                          sx={{
+                            fontVariantNumeric: 'tabular-nums',
+                            fontWeight: 650,
+                          }}
+                        >
+                          <Box
+                            component="span"
+                            sx={{ color: 'text.secondary', fontWeight: 500 }}
+                          >
+                            ×
+                          </Box>
+                          {Math.round(n * 100) / 100}
+                        </Box>
+                      </Box>
+                    </Tooltip>
+                  )
+                })}
+              </Box>
             ) : (
               <Typography variant="caption" color="text.secondary">
                 {t('teamOpt.writer.none', 'No hits')}
@@ -1490,6 +1742,88 @@ function HitsSummary({
     </Box>
   )
 }
+
+/**
+ * What the simulation assumed or could not check, and what the rotation waited for: folded
+ * behind one line, each a short row (its subject, then what it says)
+ */
+function RotationNotes({ notes }: { notes: string[] }) {
+  const { t } = useTranslation('page_team')
+  const [open, setOpen] = useState(false)
+  const waits = notes.filter((n) => n.startsWith('Waited '))
+  const rest = notes.filter((n) => !n.startsWith('Waited '))
+  return (
+    <Disclosure
+      open={open}
+      onToggle={() => setOpen((o) => !o)}
+      label={t('teamOpt.writer.notes', 'Notes')}
+      count={notes.length}
+    >
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'auto minmax(0, 1fr)',
+          columnGap: 1.5,
+          rowGap: 0.75,
+          mt: 0.5,
+          p: 1.5,
+          borderRadius: 2,
+          bgcolor: tokens.inset,
+          border: tokensHairline,
+          fontSize: 12.5,
+          lineHeight: 1.5,
+        }}
+      >
+        {rest.map((note) => {
+          const at = note.indexOf(': ')
+          const subject = at > 0 && at < 28 ? note.slice(0, at) : ''
+          return (
+            <Fragment key={note}>
+              <Box
+                component="span"
+                sx={{ fontWeight: 650, whiteSpace: 'nowrap' }}
+              >
+                {subject}
+              </Box>
+              <Box component="span" sx={{ color: 'text.secondary' }}>
+                {subject ? note.slice(at + 2) : note}
+              </Box>
+            </Fragment>
+          )
+        })}
+        {!!waits.length && (
+          <>
+            <Box
+              component="span"
+              sx={{ fontWeight: 650, whiteSpace: 'nowrap' }}
+            >
+              {t('teamOpt.writer.waits', 'Waits')}
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+              {waits.map((note) => (
+                <Box
+                  key={note}
+                  component="span"
+                  sx={(theme) => ({
+                    px: 0.875,
+                    borderRadius: 999,
+                    lineHeight: '22px',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: 'text.secondary',
+                    bgcolor: alpha(theme.palette.text.primary, 0.05),
+                  })}
+                >
+                  {note.replace(/^Waited /, '').replace(/\.$/, '')}
+                </Box>
+              ))}
+            </Box>
+          </>
+        )}
+      </Box>
+    </Disclosure>
+  )
+}
+const tokensHairline = `1px solid ${tokens.hairline}`
 
 /** (a chip pressed keeps the cursor in the text: it inserts there) */
 const keepFocus = (e: { preventDefault: () => void }) => e.preventDefault()

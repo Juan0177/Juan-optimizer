@@ -64,6 +64,11 @@ export interface SimulationResult {
   start: number
   buffWindows: SimBuffWindow[]
   countedBuffs: SimCountedBuff[]
+  /**
+   * The enemy's auras over the kept rotation (with `auraTimeline`): from each frame, the auras
+   * there (by aura, their durability) until the next entry
+   */
+  auras?: { t: number; auras: Record<string, number> }[]
   /** Character-clock pauses across all passes, including before the retained interval. */
   hitlagEvents?: Pick<
     SimHit,
@@ -212,6 +217,7 @@ export function simulateRotation({
   target = { radius: 2, distance: 2.4 },
   random = rotationRandom(0),
   auraTrace,
+  auraTimeline,
   frameOverrides = {},
   frameData = {},
   pingFrames = 0,
@@ -234,6 +240,8 @@ export function simulateRotation({
   random?: () => number
   /** Debugging: the reaction engine's aura trace (see `AuraTrace`) */
   auraTrace?: (entry: AuraTrace) => void
+  /** Record the enemy's auras over time (`SimulationResult.auras`), for a timeline */
+  auraTimeline?: boolean
   /**
    * Player-edited timing: frames until the next action, by the action's position in the written
    * rotation (its actions in order). Hits keep their own timing; everything after shifts.
@@ -330,12 +338,14 @@ export function simulateRotation({
       (w) =>
         w.owner === owner && w.path[1] === cond && w.start <= t && t < w.end
     )
+  const auraLog: NonNullable<SimulationResult['auras']> = []
   reactions ??= elementalReactions({
     members,
     domainActive: (t) => windowOn('Columbina', 'burstDomain', t),
     // Nilou's A1 (Golden Chalice's Bounty) is on the whole party
     bountiful: (_m, t) => windowOn('Nilou', 'a1AfterSkill', t),
     trace: auraTrace,
+    watch: auraTimeline ? (t, auras) => auraLog.push({ t, auras }) : undefined,
   })
   let onField: CharacterKey =
     rotation.opener?.[0]?.characterKey ??
@@ -1448,7 +1458,18 @@ export function simulateRotation({
   }
   for (const m of unsupported)
     warnings.push(`${m}: no kit model yet (their actions were skipped)`)
+  let auras: SimulationResult['auras']
+  if (auraTimeline) {
+    // (the engine follows the hits: played on to the end, so the last auras run out)
+    reactions.burningAt?.(end)
+    const before = auraLog.filter((a) => a.t <= start).pop()
+    auras = [
+      { t: start, auras: before?.auras ?? {} },
+      ...auraLog.filter((a) => a.t > start && a.t < end),
+    ]
+  }
   return {
+    ...(auras && { auras }),
     hits: kept,
     frames: end - start,
     start,
@@ -1697,7 +1718,12 @@ export function rotationAttacks(
    */
   current: (owner: SimBuffOwner, path: string[]) => string | undefined = () =>
     undefined,
-  declared: { owner: SimBuffOwner; path: string[] }[] = []
+  declared: { owner: SimBuffOwner; path: string[] }[] = [],
+  /**
+   * Filled with each hit's attack (its member's attack at `index`), for a simulation without
+   * samples: what a timeline reads a hit's damage from
+   */
+  hitAttacks?: Map<SimHit, { characterKey: CharacterKey; index: number }>
 ): Partial<Record<CharacterKey, TeamOptAttack[]>> {
   if (sim.samples) {
     // A buff that exists only in one sample must still be explicitly off in
@@ -1742,9 +1768,11 @@ export function rotationAttacks(
       states: string[]
       count: number
       contributorStates?: TeamOptAttack['reactionContributorStates']
+      /** The simulation's hits it stands for */
+      sources: SimHit[]
     }
   >()
-  const add = (hit: SimHit, states: string[], w: number) => {
+  const add = (hit: SimHit, states: string[], w: number, source: SimHit) => {
     const contributorStates = hit.contributors?.length
       ? Object.fromEntries(
           [...new Set(hit.contributors)].slice(0, 4).map((characterKey) => {
@@ -1771,8 +1799,17 @@ export function rotationAttacks(
       ...states,
     ].join('|')
     const g = groups.get(key)
-    if (g) g.count += w
-    else groups.set(key, { hit, states, count: w, contributorStates })
+    if (g) {
+      g.count += w
+      g.sources.push(source)
+    } else
+      groups.set(key, {
+        hit,
+        states,
+        count: w,
+        contributorStates,
+        sources: [source],
+      })
   }
   /**
    * gcsim's snapshotDelay: a hit whose attacker's buffs changed between its snapshot and its
@@ -1854,13 +1891,18 @@ export function rotationAttacks(
     const states = stateAt(h, index)
     const hit = withCastSnapshot(h, states, index)
     const w = hit.weight ?? 1
-    if (!hit.contributors?.length) return add(hit, states, w)
-    // Keep the reaction on its trigger. Its contributors roll crit independently before
-    // ranking, so a static split of average damage cannot represent the native expectation.
-    add(hit, states, w)
+    // (a reaction with contributors stays on its trigger: they roll crit independently before
+    // ranking, so a static split of average damage cannot represent the native expectation)
+    add(hit, states, w, h)
   })
   const out: Partial<Record<CharacterKey, TeamOptAttack[]>> = {}
-  for (const { hit, states, count, contributorStates } of groups.values()) {
+  for (const {
+    hit,
+    states,
+    count,
+    contributorStates,
+    sources,
+  } of groups.values()) {
     const attack: TeamOptAttack = {
       path: hit.path,
       hits: Math.round(count * 100) / 100,
@@ -1942,7 +1984,14 @@ export function rotationAttacks(
     )
     if (on.length) attack.states = on
     if (off.length) attack.limits = off
-    ;(out[hit.characterKey] ??= []).push(attack)
+    const list = (out[hit.characterKey] ??= [])
+    if (hitAttacks)
+      for (const source of sources)
+        hitAttacks.set(source, {
+          characterKey: hit.characterKey,
+          index: list.length,
+        })
+    list.push(attack)
   }
   return out
 }
