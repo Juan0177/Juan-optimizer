@@ -735,6 +735,26 @@ export function energyFromRotation(
       ).length
       member.flatEnergy = bonus(charged / per)
     }
+    // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
+    // as the rotation triggers them
+    const reactionEnergy = REACTION_ENERGY[key]
+    if (reactionEnergy && cons >= reactionEnergy.constellation) {
+      let last = Number.NEGATIVE_INFINITY
+      let procs = 0
+      for (const h of sim.hits)
+        if (
+          h.t >= start &&
+          h.t < end &&
+          h.path[0] === '_reaction' &&
+          h.path[1] === reactionEnergy.reaction &&
+          h.t > last + reactionEnergy.icd
+        ) {
+          procs++
+          last = h.t
+        }
+      member.flatEnergy =
+        (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
+    }
     // the catcher: who is on the field when each use's particles arrive (the first hit of the
     // member's Skill after the use, then the particles' travel)
     const primary = data.skills[member.skillMode!]
@@ -846,6 +866,18 @@ const START_BONUS: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
  * Special Bursts that spend only part of the Energy: the sheet option ("-30 a use") and the kit's
  * variant key of that Burst (one entry per line)
  */
+/**
+ * Energy a member gets when the party triggers a reaction, once per `icd` frames, from a
+ * constellation (one entry per line)
+ */
+const REACTION_ENERGY: Partial<
+  Record<
+    CharacterKey,
+    { constellation: number; reaction: string; energy: number; icd: number }
+  >
+> = {
+  Flins: { constellation: 1, reaction: 'lunarCharged', energy: 8, icd: 330 },
+}
 /** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
 const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
   Flins: 'Manifest Flame hit',
