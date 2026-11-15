@@ -1,6 +1,7 @@
 import { objKeyMap, range } from '@genshin-optimizer/common/util'
 import { imgAssets } from '@genshin-optimizer/gi/assets'
 import { Translate } from '@genshin-optimizer/gi/i18n'
+import { markPartyWide } from '@genshin-optimizer/gi/uidata'
 import {
   compareEq,
   equal,
@@ -233,22 +234,25 @@ export const reactionConditionals: DocumentConditional[] = [
   },
 ]
 
-export const reactionData = mergeData([
-  inferInfoMut({
-    teamBuff: {
-      premod: {
-        stellarconduct_mult_: polestarStacks_stellarconduct_mult_,
-        cryo_dmg_: polestarStacks_cryo_dmg_,
-        electro_dmg_: polestarStacks_electro_dmg_,
-        physical_enemyRes_: superconduct_physical_enemyRes_,
+export const reactionData = markPartyWide(
+  mergeData([
+    inferInfoMut({
+      teamBuff: {
+        premod: {
+          stellarconduct_mult_: polestarStacks_stellarconduct_mult_,
+          cryo_dmg_: polestarStacks_cryo_dmg_,
+          electro_dmg_: polestarStacks_electro_dmg_,
+          physical_enemyRes_: superconduct_physical_enemyRes_,
+        },
       },
-    },
-  }),
-  inferInfoMut({
-    teamBuff: {
-      premod: {
-        physical_enemyRes_: oppInsidePole_physical_enemyRes_,
+    }),
+    inferInfoMut({
+      teamBuff: {
+        premod: {
+          physical_enemyRes_: oppInsidePole_physical_enemyRes_,
+        },
       },
-    },
-  }),
-])
+    }),
+  ]),
+  'reaction'
+)

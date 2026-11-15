@@ -42,6 +42,14 @@ const displayKey = Symbol()
 
 function SourceDisplay({ source }: { source: string | undefined }) {
   if (!source) return null
+  // the party's own buffs (elemental resonance, reactions), not a member's
+  if (source === 'resonance' || source === 'reaction')
+    return (
+      <ColorText color="secondary">
+        {' '}
+        (<Translate ns="ui" key18={`buffSource.${source}`} />)
+      </ColorText>
+    )
   if (allArtifactSetKeys.includes(source as ArtifactSetKey))
     return (
       <ColorText color="secondary">
