@@ -23,7 +23,6 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 - Freminet's Pressure Level now builds correctly when a Normal Attack string starts just before his Burst's Stalking ends.
 - With two non-Moonsign members, Ascendant Gleam now comes from the latest one to use a Skill or Burst.
 - A team's only Hexerei member now gets its Witch's Homework bonuses (for example A Day Carved From Rising Winds' CRIT Rate); Secret Rite effects still need two Hexerei.
-- The KQM tab's timeline shows each build's set and weapon effects even when the member doesn't wear that set or weapon themselves (they were hidden).
 
 ## [v1.7.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.7.0) (2026-11-15)
 
