@@ -4,6 +4,27 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.8.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.8.0) (2026-11-15)
+
+### New
+
+- KQM builds now find team setups where one member hands a set to a teammate (for example Danica taking Tenacity of the Millelith from Odette), worth up to a few percent more team DPS.
+- Shields now count in rotations: Angelos Heptades, Starcaller's Watch, Fractured Halo and the weapons and sets that work while shielded (The Bell, The Unforged, Summit Shaper, Memory of Dust, Vortex Vanquisher, Calamity of Eshu, Retracing Bolide) turn on while your team's shields are up, and Beacon of the Reed Sea's HP bonus while you're not shielded.
+- Rotation writer: write CA[beams=2] to choose how many beams Sandrone fires in a Charged Attack (up to 3, or 6 from C1).
+
+### Fixed
+
+- Rotation damage now agrees with KQM's own simulator within 5% on all 25 Lunar teams we compared from KQM's public sim database, up from 11.
+- Fischl's Skill summons a new Oz whenever it is ready, even while Oz is still out (after a Sacrificial reset, or with her Burst's Oz up); it only calls Oz back while on cooldown. Fischl teams were counted up to 16% low.
+- Bloom, Hyperbloom and Burgeon deal damage at most twice every 0.5 s per character, as in the game; Hyperbloom teams were counted too high.
+- Alhaitham's Projection Attacks follow their in-game cooldown (his hitlag lengthens it), so they no longer use up the Electro and Hydro that Lunar-Charged needs.
+- Sandrone releases her Charged Attack right after her last beam, as in gcsim, so her rotations are about 1 s shorter and her DPS is higher.
+- Zhongli's stele now resonates with Lunar-Crystallize's Moondrifts, recasting Albedo's, Ningguang's or Itto's construct no longer counts it twice, and Chiori's A4 triggers on every construct created.
+- Rainbow Serpent's Rainbow, Tidal Shadow and Song of Stillness now turn on when the rotation triggers them.
+- Freminet's Pressure Level now builds correctly when a Normal Attack string starts just before his Burst's Stalking ends.
+- With two non-Moonsign members, Ascendant Gleam now comes from the latest one to use a Skill or Burst.
+- A team's only Hexerei member now gets its Witch's Homework bonuses (for example A Day Carved From Rising Winds' CRIT Rate); Secret Rite effects still need two Hexerei.
+
 ## [v1.7.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.7.0) (2026-11-15)
 
 ### New
