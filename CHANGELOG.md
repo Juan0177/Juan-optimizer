@@ -4,6 +4,23 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.7.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.7.0) (2026-11-15)
+
+### New
+
+- The ER calculator counts every energy weapon from its game text (Lumidouce Elegy, Dialogues of the Desert Sages, Tome of the Eternal Flow, Frostbreath and more), each at most once per its cooldown.
+- The rotation writer shows the time per rotation as Team Optimize and KQM count it, and when a rotation has to wait for a cooldown, how long it takes without waiting and what it waits for.
+- The KQM tab's timeline shows the weapon and set buffs of the builds shown, each named by its weapon or set.
+- The timeline fits a phone in landscape: the detailed view opens full screen and the writer is one column.
+
+### Fixed
+
+- Heart of the Furnace's 4-piece now needs the wearer's own Stellar Glimmer hits or reactions and lasts 12 s; it was counted all rotation whenever anyone in the team made Stellar reactions.
+- Instructor's 4-piece now needs the wearer to trigger the reaction while on the field.
+- A set's switch turned on by hand no longer keeps Instructor or Heart of the Furnace on for the whole rotation.
+- Team Optimize counts a rotation's real pace: a rotation that uses a skill faster than its cooldown allows was counted at its first, fastest time.
+- The timeline no longer disappears behind the hit cards on a laptop screen at 100% zoom.
+
 ## [v1.6.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.6.0) (2026-11-15)
 
 ### New
