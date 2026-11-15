@@ -109,3 +109,27 @@ describe('Sandrone charges with a number of beams (CA[beams=N], gcsim charge[bea
     expect([...c0.notes].some((n) => n.includes('3 beams at most'))).toBe(true)
   })
 })
+
+describe('Sandrone charge windup (gcsim b107b5d)', () => {
+  // gcsim adds 25 frames of windup when she starts a charge from Idle, a dash, a jump or a swap;
+  // after a cancel (her last animation still going) there is none
+  const lengthOfCharge = (text: string) => {
+    const sim = run(text)
+    const charge = [...sim.actions].reverse().find((a) => a.text === 'CA')!
+    return sim.actions.find((a) => a.start > charge.start)!.start - charge.start
+  }
+  it('starts from Idle after a wait that outlasts her last animation', () => {
+    // gcsim: skill; wait(120); charge -> 224; skill; charge -> 199
+    expect(lengthOfCharge('Sandrone E W2 CA E')).toBe(224)
+    expect(lengthOfCharge('Sandrone E CA E')).toBe(199)
+    // a wait inside the Skill's animation: the charge still cancels it
+    expect(lengthOfCharge('Sandrone E W10f CA E')).toBe(199)
+  })
+  it('counts the normal attack’s whole animation and hitlag before Idle', () => {
+    // gcsim: attack; charge -> 199; attack; wait(60); charge -> 224
+    expect(lengthOfCharge('Sandrone N1 CA E')).toBe(199)
+    expect(lengthOfCharge('Sandrone N1 W1 CA E')).toBe(224)
+    expect(lengthOfCharge('Sandrone Q CA E')).toBe(199)
+    expect(lengthOfCharge('Sandrone Q W1 CA E')).toBe(224)
+  })
+})
