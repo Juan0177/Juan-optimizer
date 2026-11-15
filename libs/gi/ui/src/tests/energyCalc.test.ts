@@ -498,6 +498,34 @@ describe('ER calculator weapons', () => {
     ).toBeCloseTo(6 / every, 9)
   })
 
+  it('Prototype Amber: its energy on each of the wielder’s Bursts, without entering triggers', () => {
+    const settings = defaultEnergyCalculator(keys)
+    settings.rotationTime = 20
+    const k: CharacterKey = 'TravelerCryo'
+    settings.members[k]!.weaponEnergyTriggers = 0
+    const flatWith = (
+      burstEvery: number,
+      weapon?: 'PrototypeAmber',
+      triggers = 0
+    ) => {
+      settings.members[k]!.burstEvery = burstEvery
+      settings.members[k]!.weaponEnergyTriggers = triggers
+      return calculateEnergyRecharge(
+        keys,
+        settings,
+        weapon ? { [k]: weapon } : {},
+        { [k]: 1 }
+      ).members[k]!.flatEnergy
+    }
+    // (R1: 4 Energy every 2 s for 6 s, 12 a Burst; a Burst every 2 rotations: 6 a rotation)
+    expect(flatWith(1, 'PrototypeAmber') - flatWith(1)).toBeCloseTo(12, 9)
+    expect(flatWith(2, 'PrototypeAmber') - flatWith(2)).toBeCloseTo(6, 9)
+    // (triggers entered by hand change nothing: it follows the Bursts)
+    expect(flatWith(1, 'PrototypeAmber', 3) - flatWith(1)).toBeCloseTo(12, 9)
+    // (no Burst: no energy)
+    expect(flatWith(0, 'PrototypeAmber') - flatWith(0)).toBeCloseTo(0, 9)
+  })
+
   // Only Favonius energy: no skills, no enemy particles, no bursts
   const team: CharacterKey[] = ['Bennett', 'Xiangling', 'Xingqiu', 'Sucrose']
   function favSettings(procs: number, catcher?: CharacterKey, keys = team) {

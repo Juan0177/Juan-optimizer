@@ -56,12 +56,22 @@ export interface EnergyCalcResult {
  * (One weapon per line: the released build leaves out the beta ones.)
  */
 const ENERGY_WEAPONS: Partial<
-  Record<WeaponKey, { energy: number[]; cooldown?: number; team?: true }>
+  Record<
+    WeaponKey,
+    {
+      energy: number[]
+      cooldown?: number
+      team?: true
+      /** It triggers on each of the wielder's Bursts (its triggers are its Bursts, not entered) */
+      perBurst?: true
+    }
+  >
 > = {
   AmenomaKageuchi: { energy: [6, 7.5, 9, 10.5, 12] },
   KatsuragikiriNagamasa: { energy: [6, 7.5, 9, 10.5, 12] },
   KitainCrossSpear: { energy: [6, 7.5, 9, 10.5, 12] },
-  PrototypeAmber: { energy: [12, 13.5, 15, 16.5, 18] },
+  // (gcsim: 4–6 Energy every 2 s for 6 s after each of the wielder's Bursts, on the field)
+  PrototypeAmber: { energy: [12, 13.5, 15, 16.5, 18], perBurst: true },
   EverlastingMoonglow: { energy: [0.6, 0.6, 0.6, 0.6, 0.6] },
   AngelosHeptades: { energy: [14, 15, 16, 17, 18], cooldown: 14 },
   BeyondTheChrysalis: { energy: [5, 5.5, 6, 6.5, 7], cooldown: 4 },
@@ -99,6 +109,9 @@ export function energyWeaponFlat(
 /** The energy a trigger gives each other party member (Frostbreath) */
 export const energyWeaponTeam = (key: WeaponKey | undefined, refinement = 1) =>
   key && ENERGY_WEAPONS[key]?.team ? energyOf(key, refinement) : 0
+/** A weapon that triggers on each of its wielder's Bursts (Prototype Amber): no triggers to enter */
+export const energyWeaponPerBurst = (key: WeaponKey | undefined) =>
+  !!key && !!ENERGY_WEAPONS[key]?.perBurst
 /** Triggers per rotation, at most as many as the weapon's cooldown allows */
 export const energyWeaponTriggers = (
   key: WeaponKey | undefined,
@@ -264,12 +277,18 @@ export function calculateEnergyRecharge(
       particles += 5 * (own.skillUses + own.secondaryUses)
     // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
     // the others' (Frostbreath)
-    const weaponTriggers = (member: CharacterKey) =>
-      energyWeaponTriggers(
+    const weaponTriggers = (member: CharacterKey) => {
+      // (Prototype Amber: once per Burst of its wielder, whatever was entered)
+      if (energyWeaponPerBurst(weapons?.[member])) {
+        const every = settings.members[member]?.burstEvery ?? 0
+        return every > 0 ? 1 / every : 0
+      }
+      return energyWeaponTriggers(
         weapons?.[member],
         settings.members[member]?.weaponEnergyTriggers ?? 0,
         settings.rotationTime
       )
+    }
     const teamWeaponEnergy = keys
       .filter((k) => k !== recipient)
       .reduce(
@@ -664,14 +683,17 @@ export function energyFromRotation(
         a.start < end &&
         (a.frameKey ?? '').startsWith('burst')
     )
-    // (Varesa: her Volcanic Kablam in Apex Drive is the sheet's "Kablam" option, -30 a use, not
-    // her 70-cost Burst)
-    const kablamOption = data.skills.findIndex((s) => s.label === 'Kablam')
-    const kablams =
-      kablamOption >= 0
-        ? burstActions.filter((a) => a.variant?.key === 'apex').length
+    // a special Burst that spends only part of the Energy (Varesa's Volcanic Kablam, Flins'
+    // Thunderous Symphony): its sheet option, -30 a use, not the full Burst
+    const short = SHORT_BURSTS[key]
+    const shortOption = short
+      ? data.skills.findIndex((s) => s.label === short.label)
+      : -1
+    const shortBursts =
+      shortOption >= 0
+        ? burstActions.filter((a) => a.variant?.key === short!.variant).length
         : 0
-    const bursts = burstActions.length - kablams
+    const bursts = burstActions.length - shortBursts
     const member: Partial<TeamOptEnergyMember> = {
       fieldTime:
         total > 0 ? Math.round(((field.get(key) ?? 0) / total) * 1000) / 10 : 0,
@@ -687,9 +709,9 @@ export function energyFromRotation(
       member.secondaryMode = burstOption
       member.secondaryUses = bursts / per
     }
-    if (kablamOption >= 0 && !modes[1]) {
-      member.secondaryMode = kablamOption
-      member.secondaryUses = kablams / per
+    if (shortOption >= 0 && !modes[1]) {
+      member.secondaryMode = shortOption
+      member.secondaryUses = shortBursts / per
     }
     if (SKILL_FLAT_ENERGY[key] !== undefined)
       member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
@@ -802,6 +824,16 @@ export function withRotationEnergy(
 const START_USES: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
 /** Bonus energy a member starts with: Sandrone's 5 in a rotation of 3 Charged Attacks */
 const START_BONUS: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
+/**
+ * Special Bursts that spend only part of the Energy: the sheet option ("-30 a use") and the kit's
+ * variant key of that Burst (one entry per line)
+ */
+const SHORT_BURSTS: Partial<
+  Record<CharacterKey, { label: string; variant: string }>
+> = {
+  Varesa: { label: 'Kablam', variant: 'apex' },
+  Flins: { label: 'Thunderous Symphony', variant: 'symphony' },
+}
 /**
  * Bonus energy a rotation gives a member, by its Charged Attacks per rotation: Sandrone's 5 with
  * 3 or more
