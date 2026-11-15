@@ -198,6 +198,22 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
 vi.mock('./KqmChoosers', () => ({
   kqmChooserCounts: () => ({ weapons: { allowed: 3 }, sets: { allowed: 3 } }),
   KqmWeaponChooser: () => <div>Weapon options</div>,
+  KqmPool: ({
+    onWeapons,
+    onSets,
+  }: {
+    onWeapons: () => void
+    onSets: () => void
+  }) => (
+    <>
+      <button type="button" onClick={onWeapons}>
+        Choose weapons
+      </button>
+      <button type="button" onClick={onSets}>
+        Choose sets
+      </button>
+    </>
+  ),
   KqmSetChooser: () => <div>Set options</div>,
 }))
 vi.mock('./KqmEnergyCalculator', () => ({
@@ -377,7 +393,7 @@ describe('KQM first-time setup', () => {
   })
   it('puts optional filters in a labelled panel and hides them when this page becomes inactive', async () => {
     const ui = render(<Setup />, { wrapper: wrap })
-    fireEvent.click(screen.getByRole('button', { name: /3 weapons/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Choose weapons' }))
     expect(await screen.findByRole('dialog', { name: 'Weapons' })).toBeTruthy()
     expect(screen.getByText('Weapon options')).toBeTruthy()
     ui.rerender(<Setup active={false} />)

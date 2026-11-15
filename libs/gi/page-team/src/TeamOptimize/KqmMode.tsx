@@ -26,7 +26,6 @@ import {
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import CloseIcon from '@mui/icons-material/Close'
-import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -59,6 +58,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { formatRateFull } from './format'
 import {
+  KqmPool,
   KqmSetChooser,
   KqmWeaponChooser,
   kqmChooserCounts,
@@ -635,44 +635,14 @@ export function KqmSettings({
           )
         })}
       </Box>
-      {/* what the builds may use: each opens its drawer */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 1,
-          mt: 1.5,
-        }}
-      >
-        <FieldLabel
-          sx={{ mr: 0.5 }}
-          tip={t(
-            'teamOpt.kqm.compareScopeTip',
-            'The weapons and artifact sets the builds may use. Each one is ranked in the results.'
-          )}
-        >
-          {t('teamOpt.kqm.compareScope', 'Compare')}
-        </FieldLabel>
-        <Button
-          size="small"
-          variant="outlined"
-          color="inherit"
-          startIcon={<TuneOutlinedIcon />}
-          onClick={() => setTab(1)}
-        >
-          {weaponsLabel}
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          color="inherit"
-          startIcon={<TuneOutlinedIcon />}
-          onClick={() => setTab(2)}
-        >
-          {setsLabel}
-        </Button>
-      </Box>
+      {/* what the builds may use: the weapon groups, and the drawers that choose one by one */}
+      <KqmPool
+        members={members}
+        teamOpt={teamOpt}
+        setTeamOpt={setTeamOpt}
+        onWeapons={() => setTab(1)}
+        onSets={() => setTab(2)}
+      />
       <Drawer
         anchor="right"
         open={active && !disabled && tab !== 0}
