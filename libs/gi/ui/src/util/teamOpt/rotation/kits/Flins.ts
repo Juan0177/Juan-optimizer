@@ -1,5 +1,11 @@
 import type { KitModel } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/flins, main as of 2026-11-10. */
 
@@ -53,6 +59,8 @@ interface FlinsState {
   c2ShredUntil: number
   /** A Lunar-Charged reaction's thundercloud is up until this frame (gcsim's LcKey status) */
   lcUntil: number
+  /** Its particle (1 per Manifest Flame normal hit) is on its 2 s ICD until this, on his clock */
+  particleIcd: number
   plungeNoted: boolean
 }
 
@@ -75,6 +83,7 @@ export const kit: KitModel = {
     c2Until: -1,
     c2ShredUntil: -1,
     lcUntil: -1,
+    particleIcd: -1,
     plungeNoted: false,
   }),
   // In Manifest Flame his E is Northland Spearstorm, and after it his Q is Thunderous Symphony,
@@ -121,6 +130,14 @@ export const kit: KitModel = {
               applies: true,
               icd: 'normal',
               label: `N${i + 1} (Manifest Flame)`,
+            })
+            // a particle per flame normal hit, once per 2 s on his clock (gcsim's particleCB:
+            // the hitlag-extended status is still active on its expiry frame)
+            ctx.at(d, (p) => {
+              const own = p.characterFrame('Flins')
+              if (own < s.particleIcd) return
+              s.particleIcd = own + 121
+              particleMarker(p, 0, 'Flins particle')
             })
             // C2: the next flame normal hit (any in the string) within 6 s of Northland
             // Spearstorm adds a Lunar-Charged hit 20 frames later

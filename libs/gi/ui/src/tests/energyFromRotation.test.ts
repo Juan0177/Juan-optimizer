@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   calculateEnergyRecharge,
   defaultEnergyCalculator,
+  energyCalcData,
   energyFromRotation,
   withRotationEnergy,
 } from '../util/teamOpt/energyCalc'
@@ -176,8 +177,23 @@ describe('energy inputs: Flins (two Bursts)', () => {
   it('counts Thunderous Symphony as its own option (30 Energy), apart from the 80-Energy Burst', () => {
     expect(energy.members.Flins!.burstEvery).toBe(1)
     expect(energy.members.Flins!.secondaryUses).toBe(1)
-    // (one Ancient Rite: Arcane Light a rotation; Northland Spearstorm has its own cooldown)
-    expect(energy.members.Flins!.skillUses).toBe(1)
+    // (his particles: 1 per Manifest Flame normal hit, 2 s apart at least, as kqmsim; each a use
+    // of the sheet's "Manifest Flame hit" option, 1 particle)
+    const markers = sim.hits.filter(
+      (h) =>
+        h.characterKey === 'Flins' &&
+        h.path.join('.') === '_marker.particles' &&
+        h.t >= sim.start &&
+        h.t < sim.start + sim.frames
+    )
+    expect(markers.length).toBeGreaterThan(0)
+    for (let i = 1; i < markers.length; i++)
+      expect(markers[i].t - markers[i - 1].t).toBeGreaterThanOrEqual(120)
+    expect(energy.members.Flins!.skillUses).toBe(markers.length / 2)
+    const data = energyCalcData.Flins!
+    expect(data.skills[energy.members.Flins!.skillMode!].label).toBe(
+      'Manifest Flame hit'
+    )
     const settings = withRotationEnergy(
       defaultEnergyCalculator(team, 20),
       team,
