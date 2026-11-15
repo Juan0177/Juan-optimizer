@@ -869,7 +869,7 @@ function MemberEnergy({
             )}
             tip={t(
               'teamOpt.kqm.calc.weaponTriggersTip',
-              "Per rotation, while this member holds an energy weapon other than Favonius (Lumidouce Elegy, Prototype Amber, Dialogues of the Desert Sages…): the energy follows the weapon and its refinement, at most once per its cooldown. Frostbreath's goes to the other members."
+              "Per rotation, while this member holds an energy weapon other than Favonius (Lumidouce Elegy, Dialogues of the Desert Sages…): the energy follows the weapon and its refinement, at most once per its cooldown. Frostbreath's goes to the other members. Prototype Amber counts by itself, once per Burst."
             )}
           >
             <NumberField
