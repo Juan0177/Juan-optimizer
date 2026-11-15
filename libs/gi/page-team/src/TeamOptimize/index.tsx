@@ -202,18 +202,26 @@ export default function TeamBuildWorkspace({
     ? ((kqmPlayed ? kqmShown?.played?.rotationTime : undefined) ??
       kqmRotation.runTeamOpt.rotationTime)
     : undefined
+  // (its attacks, played or entered, are read with the KQM builds shown)
   const kqmOverrides = useMemo(
     () =>
-      kqmPlayed && kqmRotation && kqmShown
+      kqmRotation && kqmShown
         ? kqmTeamOverrides(database, teamId, kqmRotation.runTeamOpt, kqmShown)
         : undefined,
-    [kqmPlayed, kqmRotation, kqmShown, database, teamId]
+    [kqmRotation, kqmShown, database, teamId]
   )
-  const kqmBuffs = useKqmTeamBuffs(
-    teamId,
-    teamData,
-    kqmOverrides,
-    kqmPlayed ? kqmShown : undefined
+  const kqmBuffs = useKqmTeamBuffs(teamId, teamData, kqmOverrides, kqmShown)
+  // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
+  // without one, the team's own without the passives of gear (KQM never shows the members' own
+  // builds)
+  const rotationBuffs = useMemo(
+    () =>
+      mode === 'kqm'
+        ? kqmRotation
+          ? kqmBuffs
+          : buffs.filter((b) => b.inactive !== 'gear')
+        : buffs,
+    [mode, kqmRotation, kqmBuffs, buffs]
   )
   const setAttacks = useCallback(
     (characterKey: CharacterKey) =>
@@ -440,10 +448,7 @@ export default function TeamBuildWorkspace({
                 figures={mode === 'inventory'}
                 played={kqmPlayed}
                 overrides={kqmOverrides}
-                buffs={buffsForAttacker(
-                  kqmPlayed ? kqmBuffs : buffs,
-                  member.characterKey
-                )}
+                buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
                 mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
                 members={members}
                 onField={onField ?? member.characterKey}
