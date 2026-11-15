@@ -1,7 +1,12 @@
 import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOptEnergyCalculator } from '@genshin-optimizer/gi/db'
+import type {
+  TeamOptEnergyCalculator,
+  TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
+} from '@genshin-optimizer/gi/db'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import particleData from './energyCalcData.json'
+import type { SimulationResult } from './rotation/simulate'
 
 /** Factual particle data and fixed-rotation equations from the user's ERC 7.3 workbook (v1.59.1). */
 export const ENERGY_CALC_SOURCE =
@@ -293,8 +298,9 @@ export function calculateEnergyRecharge(
       ownData.skills[own.skillMode].flatEnergy * own.skillUses +
       ownData.skills[own.secondaryMode].flatEnergy * own.secondaryUses
     const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
+    // (without the Burst, still the energy it spends: Varesa's Kablam is -30 a use)
     const needed =
-      own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery - flat
+      (own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery) - flat
     const required =
       needed <= 0
         ? 100
@@ -376,7 +382,7 @@ export function defaultEnergyCalculator(
                   : 50 / (keys.length - 1),
             burstEvery: energyCalcData[key]?.burstCost === 0 ? 0 : 1,
             skillMode: mode,
-            skillUses: 1,
+            skillUses: START_USES[key] ?? 1,
             secondaryMode: mode,
             secondaryUses: 0,
             catchBy: key,
@@ -384,7 +390,7 @@ export function defaultEnergyCalculator(
             favoniusProcs: 0,
             weaponEnergyTriggers: 0,
             favoniusCatchBy: key,
-            flatEnergy: 0,
+            flatEnergy: SKILL_FLAT_ENERGY[key] ?? START_BONUS[key] ?? 0,
           },
         ]
       })
@@ -493,3 +499,313 @@ export function withFieldTime(
     }
   return { ...settings, members }
 }
+
+/**
+ * Energy a Skill use restores directly, not from particles (so not scaled by Energy Recharge): the
+ * ERC sheet's "bonus non-particle energy" for these, at Skill level 9 (KQM's guides).
+ * Durin: entering Confirmation of Purity or Denial of Darkness, once per 6 s (kqmsim's
+ * skillEnergy; 33 at level 10).
+ */
+export const SKILL_FLAT_ENERGY: Partial<Record<CharacterKey, number>> = {
+  Durin: 30,
+}
+
+/** gcsim's ParticleDelay: frames from the hit that makes a Skill's particles to their arrival */
+const particleDelay = (key: CharacterKey) => (key === 'Bennett' ? 80 : 100)
+
+/** The reactions that make Electro resonance's particle (gcsim's, every 5 s at most) */
+const ELECTRO_RESONANCE_REACTIONS = [
+  'overloaded',
+  'superconduct',
+  'stellarConduct',
+  'electroCharged',
+  'lunarCharged',
+  'quicken',
+  'aggravate',
+  'hyperbloom',
+]
+
+/** What a written rotation says about each member's energy inputs (see `energyFromRotation`) */
+export interface RotationEnergy {
+  /** Seconds between Electro resonance particles (its Electro reactions, 5 s apart at least) */
+  electroInterval?: number
+  members: Partial<
+    Record<
+      CharacterKey,
+      Partial<Pick<TeamOptEnergyMember, TeamOptEnergyRotationField>>
+    >
+  >
+}
+
+/**
+ * The ER calculator's inputs as a played rotation has them, per written rotation (`rotations` of
+ * them in the simulation's kept span):
+ * - field time: how long each member is on the field;
+ * - skill uses: each time its Skill's cooldown starts, pressed or held (the matching option);
+ *   a "Burst" option (Emilie's case, replaced by her Burst) counts the Bursts;
+ * - the particle catcher: who is on the field when a Skill's particles arrive (they give energy
+ *   on arrival, `particleDelay` after the hit that makes them), and the share they catch;
+ * - Burst cadence: unused without a Burst, otherwise once per its Bursts in a rotation;
+ * - bonus energy a Skill use restores directly (`SKILL_FLAT_ENERGY`).
+ * Turrets (particles over time) keep the catcher: the calculator shares them out by field time.
+ */
+export function energyFromRotation(
+  sim: Pick<
+    SimulationResult,
+    'start' | 'frames' | 'hits' | 'swaps' | 'skillUses' | 'actions'
+  >,
+  keys: readonly CharacterKey[],
+  rotations = 1,
+  constellations?: Partial<Record<CharacterKey, number>>
+): RotationEnergy {
+  const start = sim.start
+  const end = sim.start + sim.frames
+  const per = Math.max(1, rotations)
+  const swaps = [...(sim.swaps ?? [])].sort((a, b) => a.start - b.start)
+  const first =
+    swaps[0]?.from ??
+    sim.actions.find((a) => a.start >= start)?.characterKey ??
+    keys[0]
+  /** Who is on the field at `t` (a swap's incoming member from its end) */
+  const onFieldAt = (t: number) => {
+    let who = first
+    for (const s of swaps)
+      if (s.start + s.frames <= t) who = s.to
+      else break
+    return who
+  }
+  const field = new Map<CharacterKey, number>()
+  {
+    let from = start
+    let who = first
+    for (const s of swaps) {
+      const at = Math.min(end, Math.max(from, s.start + s.frames))
+      field.set(who, (field.get(who) ?? 0) + at - from)
+      from = at
+      who = s.to
+    }
+    field.set(who, (field.get(who) ?? 0) + Math.max(0, end - from))
+  }
+  const total = keys.reduce((n, k) => n + (field.get(k) ?? 0), 0)
+  // Electro resonance (a party of 4 with 2 Electro members): a particle on an Electro reaction,
+  // 5 s apart at least
+  let electroInterval: number | undefined
+  if (
+    keys.length === 4 &&
+    keys.filter((k) => getCharEle(k) === 'electro').length >= 2
+  ) {
+    let last = Number.NEGATIVE_INFINITY
+    let procs = 0
+    for (const h of sim.hits)
+      if (
+        h.t >= start &&
+        h.t < end &&
+        h.path[0] === '_reaction' &&
+        ELECTRO_RESONANCE_REACTIONS.includes(h.path[1]) &&
+        h.t - last >= 300
+      ) {
+        procs++
+        last = h.t
+      }
+    electroInterval = procs
+      ? Math.round((sim.frames / 60 / procs) * 10) / 10
+      : 0
+  }
+  const members: RotationEnergy['members'] = {}
+  for (const key of keys) {
+    const data = energyCalcData[key]
+    if (!data) continue
+    const cons =
+      constellations?.[key] ?? (getCharStat(key).rarity === 4 ? 6 : 0)
+    const usable = (i: number) =>
+      energySkillConstellation(data.skills[i].label) <= cons
+    const base = defaultSkillMode(key, constellations?.[key])
+    const modeFor = (hold: boolean) => {
+      const found = data.skills.findIndex(
+        (skill, i) =>
+          usable(i) && (hold ? /hold/i : /press|tap/i).test(skill.label)
+      )
+      return found >= 0 ? found : base
+    }
+    // a use per particle marker its kit sets (`particleMarker`: the hits that make them), or else
+    // per start of its Skill cooldown
+    const markers = sim.hits.filter(
+      (h) =>
+        h.characterKey === key &&
+        h.t >= start &&
+        h.t < end &&
+        h.path[0] === '_marker' &&
+        h.path[1] === 'particles'
+    )
+    const actionAt = (t: number) =>
+      [...sim.actions]
+        .reverse()
+        .find((a) => a.characterKey === key && a.start <= t)
+    const uses: { t: number; hold: boolean; particlesAt?: number }[] =
+      markers.length
+        ? markers.map((m) => ({
+            t: m.t,
+            hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
+            particlesAt: m.t,
+          }))
+        : (sim.skillUses ?? []).filter(
+            (u) => u.characterKey === key && u.t >= start && u.t < end
+          )
+    const byMode = new Map<number, number>()
+    for (const u of uses) {
+      const mode = modeFor(u.hold)
+      byMode.set(mode, (byMode.get(mode) ?? 0) + 1)
+    }
+    const modes = [...byMode].sort((a, b) => b[1] - a[1])
+    const burstActions = sim.actions.filter(
+      (a) =>
+        a.characterKey === key &&
+        a.start >= start &&
+        a.start < end &&
+        (a.frameKey ?? '').startsWith('burst')
+    )
+    // (Varesa: her Volcanic Kablam in Apex Drive is the sheet's "Kablam" option, -30 a use, not
+    // her 70-cost Burst)
+    const kablamOption = data.skills.findIndex((s) => s.label === 'Kablam')
+    const kablams =
+      kablamOption >= 0
+        ? burstActions.filter((a) => a.variant?.key === 'apex').length
+        : 0
+    const bursts = burstActions.length - kablams
+    const member: Partial<TeamOptEnergyMember> = {
+      fieldTime:
+        total > 0 ? Math.round(((field.get(key) ?? 0) / total) * 1000) / 10 : 0,
+      skillMode: modes[0]?.[0] ?? base,
+      skillUses: (modes[0]?.[1] ?? 0) / per,
+      secondaryMode: modes[1]?.[0] ?? modes[0]?.[0] ?? base,
+      secondaryUses: (modes[1]?.[1] ?? 0) / per,
+      burstEvery: bursts ? per / bursts : 0,
+    }
+    // (Emilie: her Burst replaces her Lumidouce Case, the sheet's "Burst" option)
+    const burstOption = data.skills.findIndex((s) => s.label === 'Burst')
+    if (burstOption >= 0 && !modes[1]) {
+      member.secondaryMode = burstOption
+      member.secondaryUses = bursts / per
+    }
+    if (kablamOption >= 0 && !modes[1]) {
+      member.secondaryMode = kablamOption
+      member.secondaryUses = kablams / per
+    }
+    if (SKILL_FLAT_ENERGY[key] !== undefined)
+      member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
+    const bonus = ROTATION_BONUS[key]
+    if (bonus) {
+      const charged = sim.actions.filter(
+        (a) =>
+          a.characterKey === key &&
+          a.start >= start &&
+          a.start < end &&
+          (a.frameKey ?? '').startsWith('charged')
+      ).length
+      member.flatEnergy = bonus(charged / per)
+    }
+    // the catcher: who is on the field when each use's particles arrive (the first hit of the
+    // member's Skill after the use, then the particles' travel)
+    const primary = data.skills[member.skillMode!]
+    if (primary && !(primary.perSecond > 0) && uses.length) {
+      const caught = new Map<CharacterKey, number>()
+      uses.forEach((u, i) => {
+        const until = uses[i + 1]?.t ?? u.t + 20 * 60
+        const made =
+          u.particlesAt ??
+          sim.hits.find(
+            (h) =>
+              h.characterKey === key &&
+              h.t >= u.t &&
+              h.t < until &&
+              !h.path[0].startsWith('_') &&
+              (h.tag === 'skill' || h.path[0] === 'skill')
+          )?.t
+        if (made === undefined) return
+        const who = onFieldAt(made + particleDelay(key))
+        caught.set(who, (caught.get(who) ?? 0) + 1)
+      })
+      const counted = [...caught.values()].reduce((n, c) => n + c, 0)
+      const [catcher, count] = [...caught]
+        .filter(([who]) => who !== key)
+        .sort((a, b) => b[1] - a[1])[0] ?? [key, 0]
+      member.catchBy = count ? catcher : key
+      member.funnelShare =
+        count && counted ? Math.round((count / counted) * 100) : 100
+    }
+    members[key] = member
+  }
+  return { members, ...(electroInterval !== undefined && { electroInterval }) }
+}
+
+/**
+ * The calculator's settings with a rotation's inputs filled in, except those set by hand
+ * (`TeamOptEnergyMember.edited`). Field time stays 100% in total: the members set by hand keep
+ * theirs and the others share the rest as the rotation does.
+ */
+export function withRotationEnergy(
+  settings: TeamOptEnergyCalculator,
+  keys: readonly CharacterKey[],
+  energy: RotationEnergy | undefined
+): TeamOptEnergyCalculator {
+  if (!energy) return settings
+  const electro =
+    energy.electroInterval !== undefined &&
+    !settings.edited?.includes('electroInterval')
+      ? { electroInterval: energy.electroInterval }
+      : {}
+  const members = { ...settings.members }
+  for (const key of keys) {
+    const member = members[key]
+    const filled = energy.members[key]
+    if (!member || !filled) continue
+    const next: TeamOptEnergyMember = { ...member }
+    for (const [field, value] of Object.entries(filled) as [
+      TeamOptEnergyRotationField,
+      never,
+    ][])
+      if (field !== 'fieldTime' && !member.edited?.includes(field))
+        next[field] = value
+    members[key] = next
+  }
+  const auto = keys.filter(
+    (k) =>
+      members[k] &&
+      energy.members[k]?.fieldTime !== undefined &&
+      !members[k]!.edited?.includes('fieldTime')
+  )
+  if (auto.length) {
+    const fixed = keys
+      .filter((k) => !auto.includes(k))
+      .reduce((n, k) => n + (members[k]?.fieldTime ?? 0), 0)
+    const rest = Math.max(0, 100 - fixed)
+    const sum = auto.reduce((n, k) => n + energy.members[k]!.fieldTime!, 0)
+    for (const k of auto)
+      members[k] = {
+        ...members[k]!,
+        fieldTime:
+          Math.round(
+            (sum > 0
+              ? (energy.members[k]!.fieldTime! / sum) * rest
+              : rest / auto.length) * 10
+          ) / 10,
+      }
+  }
+  return { ...settings, ...electro, members }
+}
+
+/**
+ * Skill uses a member starts with in the calculator, where one is wrong. Sandrone: 1 particle on
+ * a Cryo or Stellar-Conduct hit of her Charged Attack or Skill (2.5 s ICD), 5 in a rotation of 3
+ * full Charged Attacks (the ERC sheet's note).
+ */
+const START_USES: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
+/** Bonus energy a member starts with: Sandrone's 5 in a rotation of 3 Charged Attacks */
+const START_BONUS: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
+/**
+ * Bonus energy a rotation gives a member, by its Charged Attacks per rotation: Sandrone's 5 with
+ * 3 or more
+ */
+const ROTATION_BONUS: Partial<
+  Record<CharacterKey, (charged: number) => number>
+> = { Sandrone: (charged) => (charged >= 3 ? 5 : 0) }

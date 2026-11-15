@@ -27,8 +27,12 @@ import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import { allInputPremodKeys } from '@genshin-optimizer/gi/wr-types'
 import { z } from 'zod'
 
-/** Attacks per member, at most */
-export const TEAM_OPT_MAX_ATTACKS = 40
+/**
+ * Attacks per member, at most. The rotation writer makes one per group of hits with the same
+ * buffs, so a long rotation can need well over a hundred (at 40, a written rotation lost the hits
+ * past its 40th group).
+ */
+export const TEAM_OPT_MAX_ATTACKS = 400
 
 /**
  * Whose conditional a buff is: a member's (its talents, weapon and artifact sets, stored on its
@@ -143,6 +147,24 @@ export interface TeamOpt {
   kqm?: TeamOptKqm
 }
 
+/**
+ * The ER calculator's member inputs a written rotation fills in (field time, skill uses, the
+ * particle catcher...), unless set by hand
+ */
+export const teamOptEnergyRotationFields = [
+  'fieldTime',
+  'burstEvery',
+  'skillMode',
+  'skillUses',
+  'secondaryMode',
+  'secondaryUses',
+  'catchBy',
+  'funnelShare',
+  'flatEnergy',
+] as const
+export type TeamOptEnergyRotationField =
+  (typeof teamOptEnergyRotationFields)[number]
+
 export interface TeamOptEnergyMember {
   fieldTime: number
   burstEvery: number
@@ -156,6 +178,8 @@ export interface TeamOptEnergyMember {
   weaponEnergyTriggers: number
   favoniusCatchBy?: CharacterKey
   flatEnergy: number
+  /** Inputs set by hand: the written rotation no longer fills them in */
+  edited?: TeamOptEnergyRotationField[]
 }
 
 export interface TeamOptEnergyCalculator {
@@ -166,6 +190,8 @@ export interface TeamOptEnergyCalculator {
   /** Zero disables Electro resonance particle generation. */
   electroInterval: number
   members: Partial<Record<CharacterKey, TeamOptEnergyMember>>
+  /** Encounter inputs set by hand: the written rotation no longer fills them in */
+  edited?: 'electroInterval'[]
 }
 
 /** KQM mode's settings */
@@ -346,6 +372,10 @@ const energyMemberSchema = z.object({
   weaponEnergyTriggers: z.number().finite().min(0).default(0),
   favoniusCatchBy: z.enum(allCharacterKeys).optional(),
   flatEnergy: z.number().finite(),
+  edited: z
+    .array(z.enum(teamOptEnergyRotationFields))
+    .optional()
+    .catch(undefined),
 })
 const energyCalculatorSchema = z.object({
   rotationTime: z.number().finite().positive(),
@@ -353,6 +383,10 @@ const energyCalculatorSchema = z.object({
   enemyParticles: z.number().finite().min(0),
   rng: z.enum(['average', 'safe', 'worst']),
   electroInterval: z.number().finite().min(0),
+  edited: z
+    .array(z.enum(['electroInterval']))
+    .optional()
+    .catch(undefined),
   members: z.record(z.string(), z.unknown()).transform((record) => {
     const result: TeamOptEnergyCalculator['members'] = {}
     for (const [key, value] of Object.entries(record)) {

@@ -13,6 +13,7 @@ import {
   energyWeaponTriggers,
   favoniusCooldown,
   isCalcEnergyWeapon,
+  SKILL_FLAT_ENERGY,
   syncEnergyCalculator,
   withFieldTime,
 } from '../util/teamOpt/energyCalc'
@@ -818,5 +819,21 @@ describe('ER calculator inputs', () => {
       syncEnergyCalculator(team, standard, 20, 'Fischl', { Keqing: 2 }).members
         .Keqing!.secondaryMode
     ).toBe(1)
+  })
+})
+
+describe("Durin's Skill", () => {
+  it('restores 30 Energy on its recast (Skill level 9): bonus energy, besides its 4 particles', () => {
+    const team: CharacterKey[] = ['Emilie', 'Nicole', 'Durin', 'Kinich']
+    const settings = defaultEnergyCalculator(team, 18)
+    expect(settings.members.Durin!.flatEnergy).toBe(SKILL_FLAT_ENERGY.Durin)
+    expect(SKILL_FLAT_ENERGY.Durin).toBe(30)
+    const result = calculateEnergyRecharge(team, settings)
+    expect(result.members.Durin!.flatEnergy).toBe(30)
+    // (70 cost, less the 30 restored, from particles)
+    expect(result.members.Durin!.required).toBeCloseTo(
+      (40 / result.members.Durin!.particleEnergy) * 100,
+      0
+    )
   })
 })

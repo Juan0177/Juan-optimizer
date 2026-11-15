@@ -1,6 +1,12 @@
 import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/sandrone. Her timing
  * follows gcsim's later official version (genshinsim/gcsim b107b5d, #3269): a charge is released
@@ -107,6 +113,8 @@ export function sandroneChannel(decode: number, c1 = false, asked?: number) {
 interface SandroneState {
   /** Sandrone was on the field at the last action */
   onField: boolean
+  /** Her clock's frame her particles can come again (kqmsim's 2.5 s particle ICD) */
+  particleReady: number
   /** Fagio's Decoding Power (x10), settled up to `nextDecay` */
   decode: number
   /** Fagio is in Power Overdrive (from reaching 100 until Decoding Power is under 50) */
@@ -198,6 +206,17 @@ function radianceHit(
 }
 
 /** One of her actions (see `kit.act`) */
+/**
+ * A particle when a Condensed Beam or a Prism Shot hits, once per 2.5 s on her clock (kqmsim's
+ * particleCB, sandrone-particle-icd), for the ER calculator
+ */
+function particleHit(ctx: SimContext, s: SandroneState) {
+  const now = ctx.characterFrame('Sandrone')
+  if (now < s.particleReady) return
+  s.particleReady = now + 150
+  particleMarker(ctx, 0, 'Sandrone particle')
+}
+
 function playAction(
   ctx: SimContext,
   s: SandroneState,
@@ -320,6 +339,7 @@ function playAction(
         ]
         ctx.at(beamAt, (c2) => {
           radianceHit(c2, 'beam', 'charged', 'Condensed Beam', c2Stacks)
+          particleHit(c2, s)
           // C6: from the 3rd beam of a charge, a Condensed Cluster Beam 5 frames later, in the
           // radiance of its beam
           if (c >= 6 && k >= 3) {
@@ -395,6 +415,8 @@ function playAction(
           label: 'Prism Shot',
         })
         c2.at(10, (c3) => {
+          // (both Prism Shots land now: one particle at most)
+          particleHit(c3, s)
           const radiance = c3.radiance
           const node =
             radiance === 'conduct'
@@ -510,6 +532,7 @@ export const kit: KitModel = {
   source: `${KQMSIM}/sandrone`,
   init: (): SandroneState => ({
     onField: false,
+    particleReady: -1,
     decode: 0,
     overdrive: false,
     overdriveAt: Number.POSITIVE_INFINITY,

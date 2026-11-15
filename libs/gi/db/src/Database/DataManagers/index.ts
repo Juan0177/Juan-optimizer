@@ -80,6 +80,7 @@ import type {
   TeamOptBuffOwner,
   TeamOptEnergyCalculator,
   TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
   TeamOptKqm,
 } from './TeamOpt'
 import {
@@ -87,6 +88,7 @@ import {
   initTeamOpt,
   initTeamOptAttack,
   TEAM_OPT_MAX_ATTACKS,
+  teamOptEnergyRotationFields,
   validateTeamOpt,
 } from './TeamOpt'
 import type { TeamRotation } from './TeamRotation'
@@ -146,6 +148,7 @@ export type {
   TeamOptBuffOwner,
   TeamOptEnergyCalculator,
   TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
   TeamOptKqm,
   TeamRotation,
 }
@@ -181,6 +184,7 @@ export {
   parseTeamRotation,
   TEAM_OPT_MAX_ATTACKS,
   TEAM_ROTATION_TYPE,
+  teamOptEnergyRotationFields,
   teamRotationExport,
   toBuildTc,
   validateArtifact,
