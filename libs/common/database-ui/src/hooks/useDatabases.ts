@@ -1,7 +1,7 @@
 import {
   type Database,
-  DBLocalStorage,
   type DBStorage,
+  getAppStorage,
   loadJsonOrB64GzipFromStorage,
   SandboxStorage,
   type StorageType,
@@ -18,11 +18,8 @@ export function useDatabases<DB extends Database>(
     localStorage.removeItem(newTabKey)
     localStorage.setItem(newTabKey, 'debug')
     return ([1, 2, 3, 4] as const).map((index) => {
-      if (index === dbIndex)
-        return new DatabaseClass(
-          index,
-          new DBLocalStorage(localStorage, storageType)
-        )
+      // the active database works on the app's storage (IndexedDB, or localStorage before it)
+      if (index === dbIndex) return new DatabaseClass(index, getAppStorage())
       const dbName = `${storageType ? `${storageType}_` : ''}extraDatabase_${index}`
       const dbObj = loadJsonOrB64GzipFromStorage(dbName)
       return new DatabaseClass(index, new SandboxStorage(dbObj, storageType))
