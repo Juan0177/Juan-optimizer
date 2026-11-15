@@ -76,7 +76,7 @@ interface AlhaithamState {
   nextLoss: number
   /** A1's 12 s cooldown ends (frame) */
   a1Until: number
-  /** The Projection Attack ICD (1.6 s) ends (frame) */
+  /** The Projection Attack ICD (1.6 s) ends (Alhaitham's own frame: his hitlag extends it) */
   projectionUntil: number
   /** C6: the Excess Mirror buff ends (frame) */
   c6Until: number
@@ -358,14 +358,16 @@ export const kit: KitModel = {
   },
   onHit(ctx, s: AlhaithamState, hit) {
     if (hit.characterKey !== 'Alhaitham') return
+    // (gcsim's ICD statuses here run on Alhaitham's own clock: his hitlag extends them)
+    const own = ctx.characterFrame('Alhaitham')
     // C1: a Projection Attack hit cuts the Skill's cooldown by 1.2 s, once per 1 s (gcsim's status
     // ICD: still active on its expiry frame)
     if (
       hit.path[1] === 'mirrorDmg1' &&
       ctx.constellation('Alhaitham') >= 1 &&
-      ctx.now >= s.c1Until
+      own >= s.c1Until
     ) {
-      s.c1Until = ctx.now + 61
+      s.c1Until = own + 61
       ctx.reduceCooldown('skill', 72)
     }
     if (hit.tag !== 'normal' && hit.tag !== 'charged' && hit.tag !== 'plunge')
@@ -379,9 +381,9 @@ export const kit: KitModel = {
     // on the field and off the 1.6 s ICD; one per mirror
     settle(s, hit.t)
     if (hit.onField !== 'Alhaitham' || s.mirrors === 0) return
-    if (hit.t < s.projectionUntil) return
-    // (1.6 s ICD: gcsim's status, still active on its expiry frame)
-    s.projectionUntil = hit.t + 97
+    if (own < s.projectionUntil) return
+    // (1.6 s ICD: gcsim's status, still active on its expiry frame, extended by his hitlag)
+    s.projectionUntil = own + 97
     const n = Math.min(3, s.mirrors)
     projectionHitmarks[n].forEach((d, i) =>
       ctx.hit(d, {
