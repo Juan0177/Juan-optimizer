@@ -787,7 +787,7 @@
       {
         "label": "Constellation 1",
         "particles": 4,
-        "flatEnergy": -6,
+        "flatEnergy": 0,
         "variance": 0,
         "perSecond": 0,
         "duration": 0,
