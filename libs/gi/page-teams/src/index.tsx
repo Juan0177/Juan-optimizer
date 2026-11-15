@@ -12,7 +12,7 @@ import {
   ModalWrapper,
   notePendingNavigation,
   PageHeader,
-  ShowingAndSortOptionSelect,
+  SortByButton,
   useInfScroll,
   useTitle,
 } from '@genshin-optimizer/common/ui'
@@ -25,6 +25,7 @@ import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import { CharacterMultiAutocomplete, TeamCard } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
 import GroupsIcon from '@mui/icons-material/Groups'
+import SearchIcon from '@mui/icons-material/Search'
 import UploadIcon from '@mui/icons-material/Upload'
 import {
   Box,
@@ -32,6 +33,7 @@ import {
   CardContent,
   CardHeader,
   Divider,
+  InputAdornment,
   Skeleton,
   TextField,
   Typography,
@@ -46,7 +48,7 @@ const numToShowMap = { xs: 6, sm: 12, md: 18, lg: 24, xl: 24 }
 
 export default function PageTeams() {
   // The team cards also use 'statKey_gen'; fetch it together with the page's namespaces.
-  preloadNamespaces(['statKey_gen'])
+  preloadNamespaces(['statKey_gen', 'elementalResonance_gen'])
   const { t } = useTranslation([
     'page_team',
     'page_teams',
@@ -128,29 +130,10 @@ export default function PageTeams() {
     [filteredTeamIds, numShow]
   )
 
-  const totalShowing =
-    filteredTeamIds.length !== totalTeamNum
-      ? `${filteredTeamIds.length}/${totalTeamNum}`
-      : `${totalTeamNum}`
-
-  const showingTextProps = {
-    numShowing: TeamIdsToShow.length,
-    total: totalShowing,
-    t: t,
-    namespace: 'page_teams',
-  }
-
-  const sortByButtonProps = {
-    sortKeys: [...teamSortKeys],
-    value: sortType,
-    onChange: (sortType: TeamSortKey) => database.displayTeam.set({ sortType }),
-    ascending: ascending,
-    onChangeAsc: (ascending: boolean) =>
-      database.displayTeam.set({ ascending }),
-  }
+  const filtered = filteredTeamIds.length !== totalTeamNum
 
   return (
-    <Box display="flex" flexDirection="column" gap={1}>
+    <Box display="flex" flexDirection="column" gap={2}>
       <PageHeader
         title={t('ui:tabs.teams')}
         count={totalTeamNum}
@@ -170,50 +153,74 @@ export default function PageTeams() {
           </>
         }
       />
-      <CardThemed>
-        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {/* like the Characters page: the character filter grows (capped on wide pages), the
-              name search keeps a fixed width on the right */}
-          <Box display="flex" gap={1} alignItems="stretch">
-            <CharacterMultiAutocomplete
-              teamIds={filteredTeamIds}
-              charKeys={charKeys}
-              setCharKey={(charKeys) => database.displayTeam.set({ charKeys })}
-              acProps={{ sx: { flexGrow: 1, maxWidth: { lg: 720 } } }}
-            />
-            <TextField
-              autoFocus
-              value={searchTerm}
-              onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                setSearchTerm(e.target.value)
-              }
-              label={t('searchLabel.team')}
-              // size="small"
-              sx={{
-                height: '100%',
-                flexGrow: { xs: 1, md: 0 },
-                width: { md: 320 },
-                flexShrink: 0,
-                ml: { md: 'auto' },
-              }}
-              InputProps={{
-                sx: { height: '100%' },
-              }}
-            />
-          </Box>
-          <Box
-            display="flex"
-            justifyContent="space-between"
-            alignItems="center"
-            flexWrap="wrap"
-          >
-            <ShowingAndSortOptionSelect
-              showingTextProps={showingTextProps}
-              sortByButtonProps={sortByButtonProps}
-            />
-          </Box>
-        </CardContent>
-      </CardThemed>
+      {/* one quiet row: find a team by name or by who is in it, then order the list */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <TextField
+          autoFocus={brPt !== 'xs' && brPt !== 'sm'}
+          size="small"
+          value={searchTerm}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+            setSearchTerm(e.target.value)
+          }
+          placeholder={t('page_teams:toolbar.search', 'Search teams')}
+          inputProps={{ 'aria-label': t('searchLabel.team') }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ width: { xs: '100%', sm: 280 } }}
+        />
+        <CharacterMultiAutocomplete
+          teamIds={filteredTeamIds}
+          charKeys={charKeys}
+          setCharKey={(charKeys) => database.displayTeam.set({ charKeys })}
+          acProps={{
+            size: 'small',
+            sx: { flexGrow: 1, minWidth: 240, maxWidth: { lg: 560 } },
+          }}
+        />
+        <Box
+          sx={{
+            ml: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
+          {filtered && (
+            <Typography color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+              {t('page_teams:toolbar.filtered', {
+                defaultValue: '{{count}} of {{total}} teams',
+                count: filteredTeamIds.length,
+                total: totalTeamNum,
+              })}
+            </Typography>
+          )}
+          <SortByButton
+            size="small"
+            sortKeys={[...teamSortKeys]}
+            value={sortType}
+            onChange={(sortType: TeamSortKey) =>
+              database.displayTeam.set({ sortType })
+            }
+            ascending={ascending}
+            onChangeAsc={(ascending: boolean) =>
+              database.displayTeam.set({ ascending })
+            }
+          />
+        </Box>
+      </Box>
 
       <ModalWrapper open={showImport} onClose={onHideImport}>
         <CardThemed>
@@ -278,7 +285,7 @@ export default function PageTeams() {
             display: 'grid',
             gap: 2,
             gridTemplateColumns:
-              'repeat(auto-fill, minmax(min(360px, 100%), 1fr))',
+              'repeat(auto-fill, minmax(min(520px, 100%), 1fr))',
           }}
         >
           {TeamIdsToShow.map((tid) => (
