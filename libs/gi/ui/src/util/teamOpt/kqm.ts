@@ -46,6 +46,7 @@ import {
   KQM_SUBSTAT_ROLLS,
   KqmSearchCancelled,
   kqmProblem,
+  kqmRarity,
   kqmRollCaps,
   kqmStatValues,
   queueKqmSetTasks,
@@ -92,6 +93,7 @@ import { withEnergyRelief } from './weapons'
 export type { KqmMains, KqmRolls, KqmSets } from '@genshin-optimizer/gi/solver'
 export {
   KQM_FIXED_ROLLS,
+  KQM_FOUR_STAR_ROLLS_LESS,
   KQM_ROLLS,
   KQM_SUBSTAT_ROLLS,
   kqmRollCaps,
@@ -261,7 +263,6 @@ export interface KqmStep {
   tried?: number
 }
 
-const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key]
 const mainValue = (key: MainStatKey) => getMainStatValue(key, 5, 20)
 const slotMains = (m: KqmMains): MainStatKey[] => [
   'hp',
@@ -270,12 +271,32 @@ const slotMains = (m: KqmMains): MainStatKey[] => [
   m.goblet,
   m.circlet,
 ]
-/** Every 5★ +20 main stat's value (for the search kernel, which has no stat data) */
+/**
+ * The 4★ sets KQM builds may use (KQMS: their pieces are 4★ artifacts: 0.8 of the substats, 2
+ * fewer distributed rolls each, 4★ +16 main stats; a 4-piece bonus leaves one 5★ off-piece)
+ */
+export const KQM_FOUR_STAR_SETS: readonly ArtifactSetKey[] = [
+  'Instructor',
+  'TheExile',
+]
+/**
+ * Every 5★ +20 main stat's value (for the search kernel, which has no stat data), with the 4★
+ * sets and a 4★ +16 main stat's values
+ */
 let mainValuesTable: KqmMainValues | undefined
 const kqmMainValues = () =>
-  (mainValuesTable ??= Object.fromEntries(
-    allMainStatKeys.map((k) => [k, mainValue(k)])
-  ) as KqmMainValues)
+  (mainValuesTable ??= {
+    ...(Object.fromEntries(
+      allMainStatKeys.map((k) => [k, mainValue(k)])
+    ) as KqmMainValues),
+    fourStarSets: KQM_FOUR_STAR_SETS,
+    fourStarMains: Object.fromEntries(
+      allMainStatKeys.map((k) => [k, getMainStatValue(k, 4, 16)])
+    ),
+  })
+/** KQMS for a build's artifact rarities (see `kqmRarity`): its substat scale and its rolls */
+export const kqmBuildRarity = (build: Pick<KqmBuild, 'sets'>) =>
+  kqmRarity(build.sets, kqmMainValues())
 
 /** A build's artifact stats, as the solver reads them (`dyn`: fractions for % stats) */
 export function kqmValues(
@@ -295,8 +316,15 @@ export interface KqmArtifactStat {
 
 /** Artifact contributions only, without character base stats, weapons or set bonuses. */
 export function kqmArtifactStats(
-  build: Pick<KqmBuild, 'mains' | 'rolls'>
+  build: Pick<KqmBuild, 'mains' | 'rolls'> & Partial<Pick<KqmBuild, 'sets'>>
 ): KqmArtifactStat[] {
+  // (4★ sets: their pieces' main stats and the substats' scale, as the search counts them)
+  const sets = build.sets ?? {}
+  const { subScale } = kqmBuildRarity({ sets })
+  const asBuilt = kqmStatValues(
+    { sets, mains: build.mains, rolls: {} },
+    kqmMainValues()
+  )
   const keys = [
     ...new Set<MainStatKey | SubstatKey>([
       ...allSubstatKeys,
@@ -306,8 +334,11 @@ export function kqmArtifactStats(
   return keys
     .map((key) => {
       const mainCount = slotMains(build.mains).filter((k) => k === key).length
-      const main = mainCount ? mainCount * mainValue(key as MainStatKey) : 0
-      const rollValue = KQM_SUBSTAT_ROLLS[key as SubstatKey] ?? 0
+      const rollValue = (KQM_SUBSTAT_ROLLS[key as SubstatKey] ?? 0) * subScale
+      // (its main stats: what the build has of it beyond its two fixed rolls)
+      const main = mainCount
+        ? (asBuilt[key] ?? 0) - KQM_FIXED_ROLLS * rollValue
+        : 0
       const fixed = KQM_FIXED_ROLLS * rollValue
       const rolls = build.rolls[key as SubstatKey] ?? 0
       const distributed = rolls * rollValue
@@ -339,6 +370,9 @@ export function estimateKqmCatchUp(
   const values = kqmValues(build)
   const rolls: KqmRolls = {}
   const caps = kqmRollCaps(build.mains)
+  // (a roll is worth what this build's rolls are: less with 4★ pieces)
+  const { subScale } = kqmBuildRarity(build)
+  const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * subScale
   let { total, valid } = evaluate(values)
   const tolerance = Math.max(1e-6, Math.abs(target) * 1e-9)
   const result = (status: KqmCatchUp['status']): KqmCatchUp => ({
@@ -545,8 +579,13 @@ export const kqmDefaultExcludedWeapons = () =>
     )
   })
 
-/** Every 5★ artifact set (the ones KQM builds are made of) */
-export const kqmSets = () => fiveStarSets()
+/** The artifact sets KQM builds are made of: every 5★ one, and the 4★ ones KQM guides use */
+export const kqmSets = (): ArtifactSetKey[] => [
+  ...fiveStarSets(),
+  ...KQM_FOUR_STAR_SETS.filter((k) =>
+    (allArtifactSetKeys as readonly string[]).includes(k)
+  ),
+]
 
 const fiveStarSets = () =>
   (allArtifactSetKeys as readonly ArtifactSetKey[]).filter((k) =>
@@ -598,7 +637,7 @@ export const kqmSetsId = (sets: KqmSets) =>
     .sort()
     .join('+')
 const buildId = (b: KqmBuild) =>
-  `${b.weapon.key}@${b.weapon.refinement}|${kqmSetsId(b.sets)}|${b.mains.sands},${b.mains.goblet},${b.mains.circlet}|${JSON.stringify(Object.entries(b.rolls).sort())}`
+  `${b.weapon.key}@${b.weapon.refinement}|${kqmSetsId(b.sets)}|${b.mains.sands},${b.mains.goblet},${b.mains.circlet},${b.mains.off ?? ''}|${JSON.stringify(Object.entries(b.rolls).sort())}`
 
 /** A member's compiled problem: for searches here, and as sent to the workers */
 interface Problem extends KqmProblem {
@@ -647,7 +686,7 @@ function memberSpace(
 ): MemberSpace {
   const { characterKey } = member
   const exclusion = optConfig?.artSetExclusion
-  const sets = fiveStarSets()
+  const sets = kqmSets()
   const allowedMains = optConfig?.mainStatKeys as
     | Partial<Record<'sands' | 'goblet' | 'circlet', string[]>>
     | undefined

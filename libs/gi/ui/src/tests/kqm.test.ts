@@ -31,6 +31,7 @@ import {
   KQM_ROLLS,
   KQM_SUBSTAT_ROLLS,
   kqmArtData,
+  kqmBuildRarity,
   kqmConstellation,
   KQM_THREE_STARS,
   kqmDefaultExcludedWeapons,
@@ -123,14 +124,14 @@ function expectKqms(result: KqmResult) {
   ][]) {
     const caps = kqmRollCaps(b.mains)
     const total = Object.values(b.rolls).reduce((a, n) => a + (n ?? 0), 0)
-    expect(total).toBe(KQM_ROLLS)
+    // (2 fewer for each 4★ piece: Instructor's and The Exile's)
+    expect(total).toBe(kqmBuildRarity(b).rolls)
     for (const [k, n] of Object.entries(b.rolls) as [SubstatKey, number][])
       expect(n).toBeLessThanOrEqual(caps[k])
     expect(getWeaponStat(b.weapon.key)?.weaponType).toBe(getCharWeaponType(ck))
     const pieces = Object.values(b.sets).reduce((a, n) => a + (n ?? 0), 0)
     expect(pieces).toBeLessThanOrEqual(4)
-    for (const k of Object.keys(b.sets))
-      expect(getArtSetStat(k as ArtifactSetKey)?.rarities).toContain(5)
+    for (const k of Object.keys(b.sets)) expect(kqmSets()).toContain(k)
   }
 }
 
@@ -789,6 +790,79 @@ describe('KQM Standards builds', () => {
     expect(overrides.characters?.[ayaka]?.talent?.auto).toBe(
       kqmTalentLevel(teamOpt.kqm)
     )
+  }, 300_000)
+
+  it('counts 4★ sets by KQMS: 0.8 of the substats and 2 fewer rolls a 4★ piece, 4★ main stats, one 5★ off-piece', async () => {
+    expect(kqmSets()).toEqual(
+      expect.arrayContaining(['Instructor', 'TheExile'])
+    )
+    const mains = {
+      sands: 'atk_',
+      goblet: 'cryo_dmg_',
+      circlet: 'critRate_',
+    } as const
+    const five = kqmValues({ sets: { NoblesseOblige: 4 }, mains, rolls: {} })
+    // four 4★ pieces and a 5★ circlet (the default off-piece)
+    const four = kqmValues({ sets: { Instructor: 4 }, mains, rolls: {} })
+    {
+      const rarity = kqmBuildRarity({ sets: { Instructor: 4 } })
+      expect(rarity.four).toBe(4)
+      expect(rarity.subScale).toBeCloseTo(0.84, 12)
+      expect(rarity.rolls).toBe(12)
+    }
+    // substats: (1 + 0.8 x 4) / 5 of a 5★ roll
+    expect(four['critDMG_']).toBeCloseTo(five['critDMG_'] * 0.84, 9)
+    // main stats: 4★ +16 on the flower, plume, sands and goblet; the 5★ circlet as it is
+    const main = (k: 'hp' | 'atk' | 'atk_' | 'cryo_dmg_', rarity: 4 | 5) =>
+      getMainStatValue(k, rarity, rarity === 5 ? 20 : 16)
+    const sub = (k: 'hp' | 'atk' | 'atk_', scale: number) =>
+      2 * KQM_SUBSTAT_ROLLS[k] * scale
+    expect(four['hp']).toBeCloseTo(main('hp', 4) + sub('hp', 0.84), 6)
+    expect(four['atk']).toBeCloseTo(main('atk', 4) + sub('atk', 0.84), 6)
+    expect(four['atk_']).toBeCloseTo(main('atk_', 4) + sub('atk_', 0.84), 9)
+    expect(four['cryo_dmg_']).toBeCloseTo(main('cryo_dmg_', 4), 9)
+    expect(
+      four['critRate_'] - 2 * KQM_SUBSTAT_ROLLS.critRate_ * 0.84
+    ).toBeCloseTo(getMainStatValue('critRate_', 5, 20), 9)
+    // another off-piece: the 5★ sands, the circlet 4★
+    const offSands = kqmValues({
+      sets: { Instructor: 4 },
+      mains: { ...mains, off: 'sands' },
+      rolls: {},
+    })
+    expect(offSands['atk_']).toBeCloseTo(main('atk_', 5) + sub('atk_', 0.84), 9)
+    // a 2-piece of a 4★ set: two 4★ pieces (the flower and plume)
+    const two = kqmValues({
+      sets: { TheExile: 2, NoblesseOblige: 2 },
+      mains,
+      rolls: {},
+    })
+    {
+      const rarity = kqmBuildRarity({
+        sets: { TheExile: 2, NoblesseOblige: 2 },
+      })
+      expect(rarity.four).toBe(2)
+      expect(rarity.subScale).toBeCloseTo(0.92, 12)
+      expect(rarity.rolls).toBe(16)
+    }
+    expect(two['atk_']).toBeCloseTo(main('atk_', 5) + sub('atk_', 0.92), 9)
+    expect(two['hp']).toBeCloseTo(main('hp', 4) + sub('hp', 0.92), 6)
+
+    // a run restricted to Instructor: 12 rolls placed, and an off-piece chosen
+    const { database, teamId, ayakaId, teamOpt } = setup()
+    database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
+      artSetExclusion: Object.fromEntries(
+        kqmSets().map((key) => [key, key === 'Instructor' ? [2] : [2, 4]])
+      ),
+    })
+    const result = (await run(database, teamId, teamOpt))!
+    const build = result.builds[ayaka]!
+    expect(build.sets).toEqual({ Instructor: 4 })
+    expect(Object.values(build.rolls).reduce((a, n) => a + (n ?? 0), 0)).toBe(
+      12
+    )
+    expect(['sands', 'goblet', 'circlet']).toContain(build.mains.off)
+    expectKqms(result)
   }, 300_000)
 
   it('compares ER sands against ATK sands with ER substats before selecting a main stat', async () => {

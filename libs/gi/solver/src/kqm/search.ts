@@ -37,13 +37,55 @@ export interface KqmMains {
   sands: MainStatKey
   goblet: MainStatKey
   circlet: MainStatKey
+  /**
+   * With four 4★ pieces (a 4★ set's 4-piece bonus, or two 4★ 2-piece bonuses): the slot of the
+   * one 5★ piece (default: the circlet). The flower and plume are 4★ first.
+   */
+  off?: 'sands' | 'goblet' | 'circlet'
 }
 /** Set piece counts: one set at 4, two at 2 (2+2), or none */
 export type KqmSets = Partial<Record<ArtifactSetKey, number>>
 /** The rolls placed freely, per substat (the fixed 2 of each are not in it) */
 export type KqmRolls = Partial<Record<SubstatKey, number>>
-/** A 5★ +20 main stat's value, per main stat (`getMainStatValue(key, 5, 20)`) */
-export type KqmMainValues = Partial<Record<MainStatKey, number>>
+/**
+ * A 5★ +20 main stat's value, per main stat (`getMainStatValue(key, 5, 20)`); and for builds with
+ * 4★ sets, which sets those are and a 4★ +16 main stat's values
+ */
+export type KqmMainValues = Partial<Record<MainStatKey, number>> & {
+  fourStarSets?: readonly string[]
+  fourStarMains?: Partial<Record<MainStatKey, number>>
+}
+
+/** KQMS: a 4★ artifact's stats count 0.8 of a 5★ one's */
+export const KQM_FOUR_STAR_SCALE = 0.8
+/** KQMS: each 4★ artifact has 2 fewer distributed rolls */
+export const KQM_FOUR_STAR_ROLLS_LESS = 2
+const OFF_SLOTS = ['sands', 'goblet', 'circlet'] as const
+
+/** How many of a build's five artifacts are 4★: the pieces of its 4★ sets */
+export function kqmFourStarPieces(
+  sets: KqmSets,
+  mainValues: KqmMainValues
+): number {
+  const four = mainValues.fourStarSets
+  if (!four?.length) return 0
+  let n = 0
+  for (const [k, count] of Object.entries(sets))
+    if (count && four.includes(k)) n += count
+  return Math.min(4, n)
+}
+/**
+ * KQMS for a build's artifact rarities: its substats' scale (the average of 1 a 5★ piece and 0.8
+ * a 4★ one) and its distributed rolls (2 fewer a 4★ piece)
+ */
+export function kqmRarity(sets: KqmSets, mainValues: KqmMainValues) {
+  const four = kqmFourStarPieces(sets, mainValues)
+  return {
+    four,
+    subScale: (5 - four + KQM_FOUR_STAR_SCALE * four) / 5,
+    rolls: KQM_ROLLS - KQM_FOUR_STAR_ROLLS_LESS * four,
+  }
+}
 
 const slotMains = (m: KqmMains): MainStatKey[] => [
   'hp',
@@ -76,10 +118,26 @@ export function kqmStatValues(
   mainValues: KqmMainValues
 ): Record<string, number> {
   const values: Record<string, number> = {}
+  const { four, subScale } = kqmRarity(build.sets, mainValues)
   for (const k of allSubstatKeys)
-    values[k] = (KQM_FIXED_ROLLS + (build.rolls[k] ?? 0)) * subRoll(k)
-  for (const k of slotMains(build.mains))
-    values[k] = (values[k] ?? 0) + (mainValues[k] ?? 0)
+    values[k] =
+      (KQM_FIXED_ROLLS + (build.rolls[k] ?? 0)) * subRoll(k) * subScale
+  // the 4★ pieces: the flower and plume first, then all but the 5★ off-piece
+  const off = build.mains.off ?? 'circlet'
+  const slots = slotMains(build.mains)
+  const slotIsFour = [
+    four >= 1,
+    four >= 2,
+    four >= 4 && off !== 'sands',
+    four >= 4 && off !== 'goblet',
+    four >= 4 && off !== 'circlet',
+  ]
+  slots.forEach((k, i) => {
+    const main = slotIsFour[i]
+      ? (mainValues.fourStarMains?.[k] ?? 0)
+      : (mainValues[k] ?? 0)
+    values[k] = (values[k] ?? 0) + main
+  })
   for (const [k, n] of Object.entries(build.sets)) if (n) values[k] = n
   return values
 }
@@ -182,10 +240,29 @@ export function scoreOf(
 export function placeRolls(
   problem: KqmProblem,
   sets: KqmSets,
-  mains: KqmMains,
+  given: KqmMains,
   mainValues: KqmMainValues,
   refine = true
-): { rolls: KqmRolls; score: KqmScore } {
+): { rolls: KqmRolls; score: KqmScore; mains: KqmMains } {
+  const rarity = kqmRarity(sets, mainValues)
+  // four 4★ pieces: each slot tried as the one 5★ off-piece, the best kept
+  if (rarity.four >= 4 && !given.off) {
+    let best: ReturnType<typeof placeRolls> | undefined
+    for (const off of OFF_SLOTS) {
+      const found = placeRolls(
+        problem,
+        sets,
+        { ...given, off },
+        mainValues,
+        refine
+      )
+      if (!best || betterScore(found.score, best.score)) best = found
+    }
+    return best!
+  }
+  const mains = given
+  const budget = rarity.rolls
+  const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * rarity.subScale
   const caps = kqmRollCaps(mains)
   const subs = allSubstatKeys.filter(
     (k) => caps[k] > 0 && problem.scales.has(k)
@@ -198,7 +275,7 @@ export function placeRolls(
     values[k] += n * subRoll(k)
     rolls[k] = (rolls[k] ?? 0) + n
   }
-  for (let i = 0; i < KQM_ROLLS; i++) {
+  for (let i = 0; i < budget; i++) {
     let best: SubstatKey | undefined
     let bestScore: KqmScore | undefined
     for (const k of subs) {
@@ -233,9 +310,9 @@ export function placeRolls(
     add(move[1], 1)
     score = moveScore
   }
-  // KQMS requires all 20 distributed rolls, including harmless filler when useful stats cap out.
+  // KQMS requires all the distributed rolls, including harmless filler when useful stats cap out.
   let remaining =
-    KQM_ROLLS - Object.values(rolls).reduce((sum, n) => sum + (n ?? 0), 0)
+    budget - Object.values(rolls).reduce((sum, n) => sum + (n ?? 0), 0)
   for (const key of allSubstatKeys) {
     if (!remaining) break
     const count = Math.min(remaining, caps[key] - (rolls[key] ?? 0))
@@ -247,7 +324,7 @@ export function placeRolls(
   score = scoreOf(problem, values)
   for (const k of Object.keys(rolls) as SubstatKey[])
     if (!rolls[k]) delete rolls[k]
-  return { rolls, score }
+  return { rolls, score, mains }
 }
 
 /**
@@ -300,9 +377,14 @@ export function searchSet(
     .slice(0, mainsSearched)
   let best: KqmSetSearch | undefined
   for (const { mains: m } of kept) {
-    const { rolls, score } = placeRolls(problem, sets, m, mainValues)
+    // (with four 4★ pieces, its main stats come back with the 5★ off-piece's slot)
+    const {
+      rolls,
+      score,
+      mains: placed,
+    } = placeRolls(problem, sets, m, mainValues)
     if (!best || betterScore(score, best.score))
-      best = { mains: m, rolls, score, tried: 0 }
+      best = { mains: placed, rolls, score, tried: 0 }
   }
   if (best) best.tried = choices.length + kept.length
   return best
