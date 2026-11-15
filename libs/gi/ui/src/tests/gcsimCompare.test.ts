@@ -78,9 +78,8 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
             weapons: [b.weapon[0]] as never,
           }
         ).conditional
-        const hexerei =
-          members.filter((m) => HEXEREI_CHARACTERS.includes(m)).length >= 2 &&
-          HEXEREI_CHARACTERS.includes(b.key)
+        // (Witch's Homework done for each Hexerei member, as gcsim's default and the writer)
+        const hexerei = HEXEREI_CHARACTERS.includes(b.key)
         const conditional = {
           ...items,
           ...(hexerei ? { [b.key]: { lockHomework: 'on' } } : {}),

@@ -79,6 +79,7 @@ import {
   kqmWeaponSource,
 } from './kqmWeaponSources'
 import { constValue, teamRotationNodes } from './objective'
+import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
 import type { SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
@@ -758,14 +759,24 @@ export function kqmRuleConditionals(
   teamOpt: Pick<TeamOpt, 'attacks'>
 ): Partial<Record<CharacterKey, ReturnType<typeof itemConditionals>>> {
   return Object.fromEntries(
-    teamOptMembers(database, teamId).map((m) => [
-      m.characterKey,
-      itemConditionals(memberCtx(database, teamId, m.characterKey, teamOpt), {
-        weapons: kqmWeapons(m.characterKey, undefined, { all: true }).map(
-          (w) => w.key
-        ),
-      }),
-    ])
+    teamOptMembers(database, teamId).map((m) => {
+      const rules = itemConditionals(
+        memberCtx(database, teamId, m.characterKey, teamOpt),
+        {
+          weapons: kqmWeapons(m.characterKey, undefined, { all: true }).map(
+            (w) => w.key
+          ),
+        }
+      )
+      // a Hexerei member has done its Witch's Homework (kqmsim's default): its bonuses apply even
+      // alone, the Secret Rite effects with two or more (the sheets' tally)
+      if (HEXEREI_CHARACTERS.includes(m.characterKey))
+        rules.conditional[m.characterKey] = {
+          ...rules.conditional[m.characterKey],
+          lockHomework: 'on',
+        }
+      return [m.characterKey, rules]
+    })
   )
 }
 
