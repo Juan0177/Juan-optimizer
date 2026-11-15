@@ -18,7 +18,10 @@ import {
 } from '@genshin-optimizer/common/ui'
 import { filterFunction, sortFunction } from '@genshin-optimizer/common/util'
 import type { TeamSortKey } from '@genshin-optimizer/gi/db'
-import { teamSortKeys } from '@genshin-optimizer/gi/db'
+import {
+  teamSortKeys,
+  validateCustomMultiTarget,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
@@ -28,6 +31,7 @@ import GroupsIcon from '@mui/icons-material/Groups'
 import SearchIcon from '@mui/icons-material/Search'
 import UploadIcon from '@mui/icons-material/Upload'
 import {
+  Alert,
   Box,
   Button,
   CardContent,
@@ -39,7 +43,14 @@ import {
   Typography,
 } from '@mui/material'
 import type { ChangeEvent } from 'react'
-import { Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { teamFilterConfigs, teamSortConfigs, teamSortMap } from './TeamSort'
@@ -67,8 +78,14 @@ export default function PageTeams() {
     // the new team page opens its member picker straight away
     navigate(newid, { state: { openQuickSetup: true } })
   }
-  const [showImport, onShowImport, onHideImport] = useBoolState()
+  const [showImport, onShowImport, onHideImportModal] = useBoolState()
   const [data, setData] = useState('')
+  // why the pasted data could not be imported (shown in the dialog, which stays open)
+  const [importError, setImportError] = useState<string>()
+  const onHideImport = useCallback(() => {
+    setImportError(undefined)
+    onHideImportModal()
+  }, [onHideImportModal])
   // Automatically open the import modal if the state indicates to do so
   useEffect(() => {
     if (location.state?.openImportModal) {
@@ -77,16 +94,27 @@ export default function PageTeams() {
     }
   }, [location.state, onShowImport, setData])
   const importData = () => {
+    let dataObj: unknown
     try {
-      const dataObj = JSON.parse(data)
-      if (!database.teams.import(dataObj))
-        window.alert(t('importForm.error.verifi'))
-      onHideImport()
+      dataObj = JSON.parse(data)
     } catch (e) {
-      window.alert(`${t('importForm.error.import')}\n${e}`)
-
+      setImportError(`${t('importForm.error.import')} ${e}`)
       return
     }
+    try {
+      if (database.teams.import(dataObj as never)) {
+        onHideImport()
+        return
+      }
+    } catch (e) {
+      console.error(e)
+    }
+    // (a character's multi-target setup, copied from its Optimize tab: imported there, not here)
+    setImportError(
+      validateCustomMultiTarget(dataObj)
+        ? t('importForm.error.multiOpt')
+        : t('importForm.error.verifi')
+    )
   }
   const displayTeam = useDataEntryBase(database.displayTeam)
   const { sortType, ascending, charKeys } = displayTeam
@@ -235,10 +263,14 @@ export default function PageTeams() {
               label={t('importForm.label')}
               placeholder={t('importForm.placeholder')}
               value={data}
-              onChange={(e) => setData(e.target.value)}
+              onChange={(e) => {
+                setData(e.target.value)
+                setImportError(undefined)
+              }}
               multiline
               rows={4}
             />
+            {importError && <Alert severity="error">{importError}</Alert>}
             <Button
               startIcon={<UploadIcon />}
               disabled={!data}
