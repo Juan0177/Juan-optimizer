@@ -3,6 +3,7 @@ import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type {
+  KqmBuild,
   RotationAction,
   RotationMember,
   RotationStep,
@@ -68,9 +69,12 @@ export function RotationInline({
   replaces,
   disabled,
   kqm,
+  kqmBuilds,
 }: {
   /** KQM theorycrafting's settings, on its tab: previewed at its constellations, no own gear */
   kqm?: TeamOptKqm
+  /** With KQM: the shown result's builds, whose weapon and set effects the preview plays */
+  kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
   teamId: string
   members: TeamOptMember[]
   setTeamOpt: (update: TeamOptUpdate) => void
@@ -85,7 +89,7 @@ export function RotationInline({
   const { applied, text, setText, isDraft } = useRotationText(teamId)
   const settings = useRotationSettings(teamId)
   const names = useMemberNames(members)
-  const team = useSimTeam(members, kqm)
+  const team = useSimTeam(members, kqm, kqmBuilds)
   // (the attacks a rotation leaves on the team are Team optimize's: always the members' own)
   const ownTeam = useSimTeam(members)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)

@@ -15,6 +15,7 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type {
+  KqmBuild,
   KqmPlayed,
   KqmReplayInput,
   SimGear,
@@ -29,6 +30,7 @@ import {
   HEXEREI_CHARACTERS,
   kitModels,
   kqmMemberConstellation,
+  kqmSimGear,
   needsRotationCalculation,
   parseRotation,
   REACTION_NAMES,
@@ -57,6 +59,7 @@ import {
   type Theme,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
 import {
   Fragment,
@@ -74,7 +77,7 @@ import { useTeamBuffs } from './buffs'
 import { FrameDataPanel, pingToFrames } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import type { TimelineMoment } from './RotationTimeline'
-import { laneColor, RotationTimeline } from './RotationTimeline'
+import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
   DEFAULT_SWAP_FRAMES,
   frameOverrides,
@@ -208,7 +211,12 @@ export function useSimTeam(
    * KQM theorycrafting's settings: the rotation is then played at its constellations, with none
    * of the members' own weapons or sets (it never uses their builds)
    */
-  kqm?: TeamOptKqm
+  kqm?: TeamOptKqm,
+  /**
+   * With KQM: the builds of its result shown on the page, whose weapons and sets the rotation is
+   * played with (their effects: Instructor, Noblesse Oblige...); none without a current result
+   */
+  kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
 ) {
   const database = useDatabase()
   return useMemo(() => {
@@ -219,9 +227,14 @@ export function useSimTeam(
       constellations: Object.fromEntries(
         own.members.map((k) => [k, kqmMemberConstellation(k, kqm)])
       ),
-      gear: {},
+      gear: Object.fromEntries(
+        own.members.flatMap((k) => {
+          const build = kqmBuilds?.[k]
+          return build ? [[k, kqmSimGear(build)]] : []
+        })
+      ),
     }
-  }, [members, database, kqm])
+  }, [members, database, kqm, kqmBuilds])
 }
 function simTeamOf(members: TeamOptMember[], database: Database) {
   const keys = members.map((m) => m.characterKey)
@@ -635,6 +648,7 @@ export function useRotationWriter({
   setTeamOpt,
   teamData,
   kqm,
+  kqmBuilds,
 }: {
   teamId: string
   members: TeamOptMember[]
@@ -647,6 +661,8 @@ export function useRotationWriter({
    * members' own builds')
    */
   kqm?: TeamOptKqm
+  /** With KQM: the shown result's builds, whose weapon and set effects the preview plays */
+  kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -670,6 +686,7 @@ export function useRotationWriter({
           members={members}
           teamData={teamData}
           kqm={kqm}
+          kqmBuilds={kqmBuilds}
           setTeamOpt={setTeamOpt}
           onClose={() => setOpen(false)}
           onApplied={setUndo}
@@ -803,6 +820,7 @@ function WriterModal({
   members,
   teamData,
   kqm,
+  kqmBuilds,
   setTeamOpt,
   onClose,
   onApplied,
@@ -811,6 +829,7 @@ function WriterModal({
   members: TeamOptMember[]
   teamData: TeamData | undefined
   kqm: TeamOptKqm | undefined
+  kqmBuilds: Partial<Record<CharacterKey, KqmBuild>> | undefined
   setTeamOpt: (update: TeamOptUpdate) => void
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
@@ -818,6 +837,8 @@ function WriterModal({
   const { t } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
+  // a phone in landscape (or a narrow window): the detailed timeline takes the whole screen
+  const fullScreen = useMediaQuery(`${SHORT_SCREEN}, (max-width: 700px)`)
   // the rotation in use, and a draft typed since (kept when the writer is closed without using it)
   const { applied, text, setText, isDraft: changed } = useRotationText(teamId)
   const isDraft = changed && !!applied.trim()
@@ -864,7 +885,7 @@ function WriterModal({
   }
   const keys = members.map((m) => m.characterKey)
 
-  const team = useSimTeam(members, kqm)
+  const team = useSimTeam(members, kqm, kqmBuilds)
   // (the attacks a rotation leaves on the team are Team optimize's: always the members' own)
   const ownTeam = useSimTeam(members)
   const figures = !kqm
@@ -1112,6 +1133,10 @@ function WriterModal({
               md: timingOpen ? 'minmax(0, 1fr) 420px' : 'minmax(0, 1fr)',
             },
             minHeight: 0,
+            // (a phone in landscape: one column, the window scrolls, not each column in its 76%)
+            [`@media ${SHORT_SCREEN}`]: {
+              gridTemplateColumns: 'minmax(0, 1fr)',
+            },
           }}
         >
           <Box
@@ -1123,6 +1148,10 @@ function WriterModal({
               minWidth: 0,
               maxHeight: { md: '76vh' },
               overflowY: { md: 'auto' },
+              [`@media ${SHORT_SCREEN}`]: {
+                maxHeight: 'none',
+                overflowY: 'visible',
+              },
             }}
           >
             {/* the rotation, as text */}
@@ -1307,17 +1336,22 @@ function WriterModal({
                   open={detailOpen}
                   onClose={() => setDetailOpen(false)}
                   maxWidth={false}
+                  fullScreen={fullScreen}
                   PaperProps={{
                     sx: {
-                      width: 'min(1760px, calc(100vw - 32px))',
-                      maxHeight: 'calc(100vh - 32px)',
+                      width: fullScreen
+                        ? '100vw'
+                        : 'min(1760px, calc(100vw - 32px))',
+                      maxHeight: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
                       m: 0,
                       display: 'flex',
                       flexDirection: 'column',
                       bgcolor: tokens.panel,
                       backgroundImage: 'none',
-                      border: `1px solid ${tokens.hairline}`,
-                      borderRadius: tokens.radius.panel,
+                      border: fullScreen
+                        ? 'none'
+                        : `1px solid ${tokens.hairline}`,
+                      borderRadius: fullScreen ? 0 : tokens.radius.panel,
                     },
                   }}
                 >
@@ -1327,9 +1361,9 @@ function WriterModal({
                       alignItems: 'baseline',
                       gap: 2,
                       flexShrink: 0,
-                      pl: 3,
-                      pr: 1.5,
-                      py: 1.75,
+                      pl: fullScreen ? 1.5 : 3,
+                      pr: fullScreen ? 0.5 : 1.5,
+                      py: fullScreen ? 0.25 : 1.75,
                       borderBottom: `1px solid ${tokens.hairline}`,
                     }}
                   >
@@ -1365,7 +1399,13 @@ function WriterModal({
                       <CloseIcon />
                     </IconButton>
                   </Box>
-                  <Box sx={{ minHeight: 0, p: 3, overflowY: 'auto' }}>
+                  <Box
+                    sx={{
+                      minHeight: 0,
+                      p: fullScreen ? 1 : 3,
+                      overflowY: 'auto',
+                    }}
+                  >
                     {detailOpen && (
                       <RotationTimeline
                         {...timelineProps(result.rotation, result.sim)}
@@ -1405,6 +1445,11 @@ function WriterModal({
                 maxHeight: { md: '76vh' },
                 minHeight: 0,
                 minWidth: 0,
+                [`@media ${SHORT_SCREEN}`]: {
+                  maxHeight: 'none',
+                  borderLeft: 'none',
+                  borderTop: `1px solid ${theme.palette.divider}`,
+                },
               })}
             >
               <FrameDataPanel
