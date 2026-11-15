@@ -105,6 +105,8 @@ const OVERRIDES: Partial<
   PolarStar: (ctx) => (ctx.attacks.includes('charged') ? '4' : '3'),
   // its effects rotate every 10 s: none is on all the time
   ForgedByTheGoldenMelody: () => null,
+  // one of its three songs at random on taking the field: their average
+  TheWidsith: () => 'avg',
   // Royal stacks reset on every CRIT hit: about one stack on average
   RoyalBow: () => '1',
   RoyalGreatsword: () => '1',
