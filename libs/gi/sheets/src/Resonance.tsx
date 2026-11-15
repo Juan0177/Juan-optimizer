@@ -18,6 +18,7 @@ import {
   PyroIcon,
 } from '@genshin-optimizer/gi/svgicons'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
+import { markPartyWide } from '@genshin-optimizer/gi/uidata'
 import {
   equal,
   greaterEq,
@@ -654,25 +655,28 @@ export const resonanceSheets: IResonance[] = [
   sprawlingGreenery,
 ]
 
-export const resonanceData = inferInfoMut({
-  teamBuff: {
-    premod: {
-      ...objMap(pcNodes, ([_nodeDisp, node]) => node),
-      atk_: ffNode,
-      hp_: swNode,
-      staminaDec_: iwNodeStam,
-      moveSPD_: iwNodeMove,
-      cdRed_: iwNodeCD,
-      shield_: erNodeshield_,
-      geo_enemyRes_: erNodeRes_,
-      eleMas: infoMut(sum(sgBase_eleMas, sg2ele_eleMas, sg3ele_eleMas), {
-        pivot: true,
-      }),
-      all_dmg_: erNodeDMG_,
+export const resonanceData = markPartyWide(
+  inferInfoMut({
+    teamBuff: {
+      premod: {
+        ...objMap(pcNodes, ([_nodeDisp, node]) => node),
+        atk_: ffNode,
+        hp_: swNode,
+        staminaDec_: iwNodeStam,
+        moveSPD_: iwNodeMove,
+        cdRed_: iwNodeCD,
+        shield_: erNodeshield_,
+        geo_enemyRes_: erNodeRes_,
+        eleMas: infoMut(sum(sgBase_eleMas, sg2ele_eleMas, sg3ele_eleMas), {
+          pivot: true,
+        }),
+        all_dmg_: erNodeDMG_,
+      },
+      total: {
+        // TODO: this crit rate is on-hit. Might put it in a `hit.critRate_` namespace later.
+        critRate_: siNode,
+      },
     },
-    total: {
-      // TODO: this crit rate is on-hit. Might put it in a `hit.critRate_` namespace later.
-      critRate_: siNode,
-    },
-  },
-})
+  }),
+  'resonance'
+)

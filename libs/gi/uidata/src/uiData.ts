@@ -505,6 +505,21 @@ function makeEmpty(
   }
 }
 
+/** Buffs of the whole party rather than of one member: elemental resonance, reactions */
+export type PartySource = 'resonance' | 'reaction'
+const partyWide = new WeakMap<object, PartySource>()
+/**
+ * Marks `data` (merged into every member's data, counted once through the active member's copy)
+ * as the party's: the team buffs only it gives are labelled `source` instead of that member
+ */
+export function markPartyWide<T extends object>(
+  data: T,
+  source: PartySource
+): T {
+  partyWide.set(data, source)
+  return data
+}
+
 export function uiDataForTeam(
   teamData: Partial<Record<CharacterKey, Data[]>>,
   gender: GenderKey,
@@ -541,14 +556,29 @@ export function uiDataForTeam(
   )
   Object.values(teamData).forEach((srcData, from) => {
     const buffed = {} // all entries in `srcData[i].teamBuff.*`
-    for (const data of srcData)
-      crawlObject(data.teamBuff, [], isNode, (_, path) =>
+    // the entries only party-wide data gives (resonance, reactions): labelled as theirs
+    const memberBuffed = {}
+    const partyOf = new Map<string, PartySource>()
+    for (const data of srcData) {
+      const party = partyWide.get(data)
+      crawlObject(data.teamBuff, [], isNode, (_, path) => {
         layeredAssignment(buffed, path, true)
-      )
+        if (!party) layeredAssignment(memberBuffed, path, true)
+        else if (!partyOf.has(path.join('.')))
+          partyOf.set(path.join('.'), party)
+      })
+    }
 
     crawlObject(buffed, [], found, (_, path) => {
       const r: ReadNode<number> = objPathValue(input, path)
-      const info: Info = { ...r.info, source: sources[from], asConst }
+      const party = objPathValue(memberBuffed, path)
+        ? undefined
+        : partyOf.get(path.join('.'))
+      const info: Info = {
+        ...r.info,
+        source: party ?? sources[from],
+        asConst,
+      }
       const read = { ...r, path: ['teamBuff', ...path], info }
       keys.forEach((_, to) => {
         const node = resetData(data(read, target[to]), own[from])
