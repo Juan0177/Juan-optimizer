@@ -331,7 +331,8 @@ export function simulateRotation({
   })
   let normalCounter = 0
   let lastNormalActor: CharacterKey | undefined
-  const constructs: number[] = []
+  const constructs: { end: number; kind?: string }[] = []
+  let constructsSpawned = 0
   const infusions: {
     element: HitElement
     start: number
@@ -609,8 +610,18 @@ export function simulateRotation({
           w.start <= t &&
           t < w.end
       ),
-    constructs: constructs.filter((end) => end > t).length,
-    construct: (duration) => constructs.push(t + duration),
+    constructs: constructs.filter((x) => x.end > t).length,
+    constructsSpawned,
+    construct: (duration, { kind, replace = true } = {}) => {
+      if (kind && replace)
+        for (let i = constructs.length - 1; i >= 0; i--)
+          if (constructs[i].kind === kind && constructs[i].end > t) {
+            constructs[i].end = t
+            break
+          }
+      constructs.push({ end: t + duration, kind })
+      constructsSpawned++
+    },
     hit(delay, h) {
       const at = t + Math.max(0, delay)
       const characterKey = h.characterKey ?? actor

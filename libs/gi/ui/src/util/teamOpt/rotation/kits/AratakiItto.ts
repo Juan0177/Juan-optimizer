@@ -494,7 +494,7 @@ export const kit: KitModel = {
           addStacks(s, 1)
           if (s.ushiEnd > c2.now) addStacks(s, 1)
           s.ushiEnd = c2.now + 6 * 60
-          c2.construct(6 * 60)
+          c2.construct(6 * 60, { kind: 'Ushi' })
         })
         // when it leaves on its own (+1), unless a later Ushi has replaced it
         ctx.at(18 + 6 * 60, () => {

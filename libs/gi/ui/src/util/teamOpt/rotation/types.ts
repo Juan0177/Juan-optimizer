@@ -248,7 +248,18 @@ export interface SimContext {
   readonly isFrozen: boolean
   readonly moondrifts: number
   readonly constructs: number
-  construct(duration: number): void
+  /** Geo constructs created so far, replacements included (kqmsim's OnConstructSpawned) */
+  readonly constructsSpawned: number
+  /**
+   * A Geo construct appears for `duration` frames (kqmsim's Constructs.New). One of a `kind`
+   * replaces the newest standing one of that kind (kqmsim's refresh: Albedo's Solar Isotoma,
+   * Ningguang's Jade Screen, Itto's Ushi), unless `replace` is false (Zhongli's steles below his
+   * maximum)
+   */
+  construct(
+    duration: number,
+    options?: { kind?: string; replace?: boolean }
+  ): void
   /** Moonsign level of the party */
   readonly moonsign: number
   /** The Stellar Radiance currently active on the party (Conduct takes precedence). */

@@ -12,9 +12,9 @@ import {
 
 /*
  * Assumptions: A1 (Fortify) and A4 (the Max HP bonuses) are unlocked (the sim has no ascension, and
- * Fortify only changes the shield); a stele resonates with the party's other Geo constructs (all
- * taken to stand within 8 m of it), not with Zhongli's other steles (gcsim; KQM evidence), and its
- * ticks use the snapshot of the latest stele; the Jade Shield lasts its full 20 s (it is never
+ * Fortify only changes the shield); a stele resonates with the party's other Geo constructs,
+ * Moondrifts included (all taken to stand within 8 m of it), not with Zhongli's other steles
+ * (gcsim; KQM evidence), and its ticks use the snapshot of the latest stele; the Jade Shield lasts its full 20 s (it is never
  * broken). Not modelled: the shield's healing (C6, needs incoming damage) and plunges (gcsim has
  * none).
  */
@@ -80,9 +80,6 @@ const SHRED_FRAMES = JADE_SHIELD + 60
 interface ZhongliState {
   /** Stone Steles (the ones standing are those not yet expired or replaced) */
   steles: { src: number; expiry: number }[]
-  /** Every stele registered as a Geo construct, with its full expiry (the engine's count keeps
-   * a replaced one until then) */
-  registered: number[]
   /** The latest stele's snapshot: every stele's ticks use it (gcsim's steleSnapshot) */
   snap?: { t: number; onField: CharacterKey }
 }
@@ -109,11 +106,10 @@ function newStele(ctx: SimContext, s: ZhongliState, max: number) {
   // its type)
   const kept = standing.length >= max ? standing.slice(0, max - 1) : standing
   s.steles = [...kept, { src: now, expiry: now + STELE_FRAMES }]
-  s.registered = [
-    ...s.registered.filter((end) => end > now),
-    now + STELE_FRAMES,
-  ]
-  ctx.construct(STELE_FRAMES)
+  ctx.construct(STELE_FRAMES, {
+    kind: 'ZhongliStele',
+    replace: standing.length >= max,
+  })
   s.snap = { t: now, onField: ctx.onField }
   ctx.hit(0, {
     characterKey: 'Zhongli',
@@ -135,8 +131,10 @@ function steleTick(s: ZhongliState, src: number): (c: SimContext) => void {
   return (c) => {
     const me = s.steles.find((x) => x.src === src)
     if (!me || c.now >= me.expiry) return
-    const own = s.registered.filter((end) => end > c.now).length
-    const others = Math.max(0, c.constructs - own)
+    const own = s.steles.filter((x) => x.expiry > c.now).length
+    // the party's other Geo constructs, Lunar-Crystallize's Moondrifts among them (gcsim registers
+    // them as constructs, GeoConstructLunarCrystallize: a stele resonates with each)
+    const others = Math.max(0, c.constructs + c.moondrifts - own)
     for (let k = 0; k <= others; k++)
       c.hit(0, {
         characterKey: 'Zhongli',
@@ -157,7 +155,7 @@ export const kit: KitModel = {
   characterKey: 'Zhongli',
   element: 'geo',
   source: `${GCSIM}/zhongli`,
-  init: (): ZhongliState => ({ steles: [], registered: [] }),
+  init: (): ZhongliState => ({ steles: [] }),
   act(ctx, s: ZhongliState, action, previous) {
     const c = ctx.constellation('Zhongli')
     const maxStele = c >= 1 ? 2 : 1
@@ -218,9 +216,9 @@ export const kit: KitModel = {
           if (s.steles.filter((x) => x.expiry > ctx.now + 48).length < maxStele)
             ctx.at(48, (c2) => newStele(c2, s, maxStele))
           ctx.buff('Zhongli', ['Zhongli', 'skill'], 'on', 48, SHRED_FRAMES, {
-          shieldMarker(ctx, 48, JADE_SHIELD, 'Jade Shield')
             hitlag: 'enemy',
           })
+          shieldMarker(ctx, 48, JADE_SHIELD, 'Jade Shield')
           return {
             cooldown: { key: 'skill', frames: 720, delay: 47 },
             frames: 96,
@@ -250,11 +248,11 @@ export const kit: KitModel = {
         })
         if (c >= 2) {
           ctx.buff('Zhongli', ['Zhongli', 'skill'], 'on', 101, SHRED_FRAMES, {
+            hitlag: 'enemy',
+          })
           // (the shield itself: kqmsim adds it at the cast)
           shieldMarker(ctx, 0, JADE_SHIELD, 'Jade Shield (C2)')
         }
-            hitlag: 'enemy',
-          })
         return {
           cooldown: { key: 'burst', frames: 720 },
           frames: 139,
