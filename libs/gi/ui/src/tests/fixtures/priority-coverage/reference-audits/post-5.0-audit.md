@@ -63,3 +63,13 @@ Energy (all benchmarks ignore burst energy), shields and being hit (Lan Yan C2, 
 Skirk C6 trigger, Beidou C4/counter), particles (Razor C1 is approximated), element absorption from
 gadgets or the player (Lan Yan in Pyro teams), status expiry on the expiry frame (kits that line up on
 a frame grid correct it locally), Nicole's ATK evaluated in the hitter's context.
+
+## Later corrections
+
+- **Mitya, mode-switch Skill (2026-11-15).** The reference detonates his Gradient Beacons (Prism
+  Shatter) when the Skill is tapped again to switch a Steady core to Overload. Game text: a Steady
+  core consumes them "when its duration ends or another Detection Core is created", and tapping
+  again within 6 s only "changes the Detection Core's state". We keep the Beacons on a switch, in
+  both directions; a new tap or hold Skill on a Steady core, or its 25 s running out, still
+  detonates. Reported by players; the fix is open upstream as KQM-git/kqmsim#31. Tests:
+  `kqmsimKits.test.ts` (switch keeps Beacons, the DPS loop never detonates, each detonation case).
