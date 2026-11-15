@@ -49,3 +49,33 @@ it('runs Fischl’s A4 ICD on the reaction triggerer’s clock, including their 
       .map((h) => h.t - entry)
   ).toEqual([4, 45])
 })
+
+it('summons a new Oz with the skill ready even while the Burst’s Oz is out; recalls it only on cooldown', () => {
+  const members: CharacterKey[] = ['Fischl', 'Keqing']
+  const play = (text: string) =>
+    simulateRotation({
+      rotation: parseRotation(
+        text,
+        members.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members,
+      elements: { Fischl: 'electro', Keqing: 'electro' },
+      constellations: {},
+      repeats: 1,
+      keep: 'all',
+      kits: { Fischl: kitModels.Fischl },
+      reactions: { onHit() {} },
+    })
+  // (Keqing only fills the party: no actions)
+  const summons = (sim: ReturnType<typeof play>) =>
+    sim.hits.filter((h) => h.label === 'Oz (Summon)').length
+  // E, then the Burst 15 s later (its Oz lasts 10 s), then E once the skill is ready (25 s):
+  // the Burst's Oz is still out, and gcsim/kqmsim summon a new one (summon hit, fresh 10 s)
+  const ready = play('Fischl E W900f Q W630f E W60f')
+  expect(ready.stalls ?? {}).toEqual({})
+  expect(summons(ready)).toBe(2)
+  // E again 5 s after the first (skill on cooldown, Oz out): the recall, no summon hit, no wait
+  const recall = play('Fischl E W300f E W60f')
+  expect(summons(recall)).toBe(1)
+  expect(recall.stalls ?? {}).toEqual({})
+})
