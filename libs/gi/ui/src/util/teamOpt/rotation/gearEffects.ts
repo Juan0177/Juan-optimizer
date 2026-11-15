@@ -51,6 +51,9 @@ const LEAF_REACTIONS = [
   'burgeon',
 ]
 
+/** Heretic's Molten Blade's Gleam of First Light at its most (the sheet's 18 steps above its least) */
+const GLEAM_STATE = '18'
+
 /**
  * Sets whose Starsparks (Epochal Advent) give their conditional while one is held, each with that
  * conditional (one per line: the released build drops the unreleased ones)
@@ -225,6 +228,12 @@ export function gearEffects({
   for (const k of members)
     for (const weapon of LEAF_WEAPONS)
       if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
+  // Heretic's Molten Blade: declared off, on only after the wielder's Skill while on the field
+  for (const k of members)
+    if (holds(k, 'HereticsMoltenBlade'))
+      window(k, ['HereticsMoltenBlade', 'passive'], GLEAM_STATE, 0, 0)
+  /** Its Gleam of First Light now on, per wielder (the activation's frame) */
+  const gleam = new Map<CharacterKey, number>()
   // The Widsith: declared off, on only after the wielder takes the field
   for (const k of members)
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
@@ -631,6 +640,24 @@ export function gearEffects({
     },
     onAction(ctx, actor, action) {
       if (actor === active) pickUp(ctx)
+      // Heretic's Molten Blade: Gleam of First Light after the wielder's Skill while it is on the
+      // field, for 14 s, once per 14 s, removed when it leaves the field (gcsim). Its ATK bonus
+      // follows the distance travelled each second, which is not modelled: counted at its most.
+      if (
+        action.kind === 'skill' &&
+        actor === active &&
+        holds(actor, 'HereticsMoltenBlade') &&
+        ready(`gleam.${actor}`, ctx.now, 840)
+      ) {
+        const started = ctx.now
+        gleam.set(actor, started)
+        ctx.state(actor, ['HereticsMoltenBlade', 'passive'], GLEAM_STATE)
+        ctx.at(840, (c) => {
+          if (gleam.get(actor) !== started) return
+          gleam.delete(actor)
+          c.state(actor, ['HereticsMoltenBlade', 'passive'], '')
+        })
+      }
       if (
         action.kind === 'skill' ||
         action.kind === 'burst' ||
@@ -742,6 +769,8 @@ export function gearEffects({
             hitlag: 'recipient',
           }
         )
+      if (gleam.delete(from))
+        ctx?.state(from, ['HereticsMoltenBlade', 'passive'], '')
       // The Widsith: taking the field plays one of its three songs at random for 10 s
       // (hitlag-extended), once per 30 s (gcsim): their average
       if (ctx && holds(to, 'TheWidsith') && ready(`widsith.${to}`, t, 1800))

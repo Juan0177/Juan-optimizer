@@ -108,6 +108,9 @@ const OVERRIDES: Partial<
   ForgedByTheGoldenMelody: () => null,
   // one of its three songs at random on taking the field: their average
   TheWidsith: () => 'avg',
+  // after the wielder's Elemental Skill (its on-field time is the rotation's to say)
+  HereticsMoltenBlade: (ctx) =>
+    ctx.attacks.includes('skill') ? undefined : null,
   // Royal stacks reset on every CRIT hit: about one stack on average
   RoyalBow: () => '1',
   RoyalGreatsword: () => '1',
