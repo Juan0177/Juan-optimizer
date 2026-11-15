@@ -242,6 +242,13 @@ export function gearEffects({
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
   for (const k of members)
     if (opens(k, 'PaleFlame')) window(k, ['PaleFlame', 'stacks'], '1', 0, 0)
+  // Instructor, Heart of the Furnace: declared off, on only from the wearer's own triggers (a
+  // saved manual state must not make them active throughout)
+  for (const k of members) {
+    if (opens(k, 'Instructor')) window(k, ['Instructor', 'set4'], 'on', 0, 0)
+    if (opens(k, 'HeartOfTheFurnace'))
+      window(k, ['HeartOfTheFurnace', '4Stellar'], 'on', 0, 0)
+  }
   const desert = new Map<CharacterKey, { end: number }>()
 
   let initialized = false
@@ -355,6 +362,14 @@ export function gearEffects({
           })
         }
       }
+      // Heart of the Furnace (gcsim): the wearer's ATK +12% and the party's Stellar Glimmer
+      // reaction DMG +50% for 12 s when the wearer deals Stellar Glimmer DMG (off the field too)
+      if (
+        (hit.tag === 'directStellarConduct' ||
+          hit.tag === 'directStellarSwirl') &&
+        opens(k, 'HeartOfTheFurnace')
+      )
+        ctx.buff(k, ['HeartOfTheFurnace', '4Stellar'], 'on', 0, 720)
       if (dendroResonance && hit.path[0] === '_reaction') {
         if (['burning', 'bloom', 'lunarBloom', 'quicken'].includes(hit.path[1]))
           ctx.buff('team', ['resonance', 'SprawlingCanopy2ele'], 'on', 0, 360)
@@ -456,6 +471,12 @@ export function gearEffects({
               hitlag: 'enemy',
             })
         }
+        // Heart of the Furnace: also when the wearer triggers a Stellar-Conduct or Stellar Swirl
+        if (
+          (reaction === 'stellarConduct' || reaction === 'stellarSwirl') &&
+          opens(k, 'HeartOfTheFurnace')
+        )
+          ctx.buff(k, ['HeartOfTheFurnace', '4Stellar'], 'on', 0, 720)
         // Scarlet Proof: the wearer's CRIT Rate +16% and Stellar Swirl DMG +40% for 10 s after it
         // triggers a Stellar Swirl
         if (reaction === 'stellarSwirl' && opens(k, 'ScarletProof'))

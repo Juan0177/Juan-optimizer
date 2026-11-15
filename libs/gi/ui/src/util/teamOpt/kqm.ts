@@ -68,7 +68,7 @@ import type { TeamDataOverrides, TeamOptMember } from './data'
 import { teamOptBonusStats, teamOptMembers } from './data'
 import { calculateEnergyRecharge, syncEnergyCalculator } from './energyCalc'
 import type { ItemConditionalCtx } from './itemConditionals'
-import { itemConditionals } from './itemConditionals'
+import { isStellarAttackPath, itemConditionals } from './itemConditionals'
 import type { KqmBuiltProblem } from './kqmBuild'
 import { buildKqmProblem } from './kqmBuild'
 import {
@@ -733,9 +733,11 @@ function memberCtx(
   const members = teamOptMembers(database, teamId)
   const attacks = new Set<ItemConditionalCtx['attacks'][number]>()
   const kinds = ['normal', 'charged', 'plunging', 'skill', 'burst'] as const
+  let ownStellar = false
   for (const attack of teamOpt.attacks[characterKey] ?? []) {
     const text = attack.path.join('.').toLowerCase()
     for (const kind of kinds) if (text.includes(kind)) attacks.add(kind)
+    if (isStellarAttackPath(attack.path)) ownStellar = true
   }
   const elements = members.map((m) => getCharEle(m.characterKey))
   const auras = new Set<string>(
@@ -743,14 +745,14 @@ function memberCtx(
   )
   for (const attacks of Object.values(teamOpt.attacks))
     for (const attack of attacks ?? [])
-      if (attack.path.join('.').toLowerCase().includes('stellar'))
-        auras.add('stellar')
+      if (isStellarAttackPath(attack.path)) auras.add('stellar')
   const own = getCharEle(characterKey)
   return {
     attacks: [...attacks],
     auras: [...auras],
     otherElements: new Set(elements.filter((e) => e !== own)).size,
     element: own,
+    ownStellar,
   }
 }
 
