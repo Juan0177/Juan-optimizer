@@ -73,3 +73,14 @@ a frame grid correct it locally), Nicole's ATK evaluated in the hitter's context
   both directions; a new tap or hold Skill on a Steady core, or its 25 s running out, still
   detonates. Reported by players; the fix is open upstream as KQM-git/kqmsim#31. Tests:
   `kqmsimKits.test.ts` (switch keeps Beacons, the DPS loop never detonates, each detonation case).
+- **Sandrone, charge timing (2026-11-15).** The pinned kqmsim holds a plain charge until Decoding
+  Power is full, then waits the 19 frames before Power Overdrive. gcsim's official version
+  (`b107b5d`, #3269) releases it 1 frame after the most condensed beams it can fire (3, 6 with C1;
+  fewer when Decoding Power is already high), repairs Fagio while she hovers (70 as the Skill is
+  cast, then 10 every 0.1 s while it goes on), times normal attacks into a charge by their whole
+  animation (53 / 46 / 87 frames) and lands the Prism Shots at 34 frames. We follow it: each charge
+  is 23 frames shorter (CA E Q CA E CA E: 14.1 s on field instead of 15.2 s, as a TC sheet had it).
+  The action timeline matches upstream frame for frame (`rotationSandroneOverdrive.test.ts`).
+  Upstream's A1 reads "more than 5" Decoding Power (its values are x10); the game text says 50, which
+  we keep. A charge with too much Decoding Power for 3 beams is an error upstream; here it fires the
+  beams it still can (none when Fagio is full) and ends as Power Overdrive begins.

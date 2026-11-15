@@ -1,7 +1,11 @@
 import type { KitModel, SimContext } from '../types'
 import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
 
-/* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/sandrone. */
+/* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/sandrone. Her timing
+ * follows gcsim's later official version (genshinsim/gcsim b107b5d, #3269): a charge is released
+ * after the most condensed beams it can fire (3, 6 with C1) rather than held until Decoding Power
+ * is full; the Skill repairs Fagio while she hovers (70 as she casts, then 10 every 0.1 s); normal
+ * attacks into a charge take their whole animation; the Prism Shots land at 34 frames. */
 
 /*
  * Constellations (kqmsim cons.go, checked against the game text): C1 halves Decoding Power gain
@@ -17,9 +21,9 @@ import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
 const sandroneNormals: NormalHit[] = [
   {
     hitmarks: [24],
-    hitlag: [9],
+    hitlag: [10],
     toNormal: 30,
-    toCharged: 24,
+    toCharged: 53,
     toAbil: 24,
     frames: 38,
   },
@@ -27,7 +31,7 @@ const sandroneNormals: NormalHit[] = [
     hitmarks: [25],
     hitlag: [10],
     toNormal: 31,
-    toCharged: 25,
+    toCharged: 46,
     toAbil: 25,
     frames: 46,
   },
@@ -35,7 +39,7 @@ const sandroneNormals: NormalHit[] = [
     hitmarks: [49],
     hitlag: [11],
     toNormal: 69,
-    toCharged: 49,
+    toCharged: 87,
     toAbil: 49,
     frames: 79,
   },
@@ -48,32 +52,54 @@ const SWEEP_TICKS = [
 ]
 
 const MAX_DECODE = 1000
+/** Fagio enters Power Overdrive this many frames after its Decoding Power reaches the maximum */
+const OVERDRIVE_DELAY = 19
+/**
+ * Decoding Power (x10) a charge gains before its Nth beam can still fire in Decoding mode (gcsim's
+ * decodeNeededForBeams): N beams need Decoding Power at most 100 minus this at the start
+ */
+const BEAMS_NEEDED = [0, 128, 458, 788, 1118, 1448, 1778]
+/** Beams a charge fires before it is released: 3, or 6 with C1 (its Decoding Power gain is halved) */
+const maxBeams = (c1: boolean) => (c1 ? 6 : 3)
 
-/** Default native CA holds until max Decode, then exits after the 19f state delay.
- * Its queue length continues advancing in 12f heat ticks during that delay. */
+/**
+ * A Decoding charge, in frames from its first tick (gcsim b107b5d, internal/characters/sandrone/
+ * charge.go): heat every 12 frames (+3.2), a condensed beam every 60 (+17), released 1 frame
+ * after its last beam, the most beams it can fire before Power Overdrive (3, 6 with C1). If
+ * Decoding Power reaches 100 first, Fagio enters Power Overdrive 19 frames later and the charge
+ * ends the frame after. `exit` is when the next action can start (its end lag has passed by then).
+ */
 export function sandroneChannel(decode: number, c1 = false) {
   const divisor = c1 ? 2 : 1
+  let count = 0
+  for (let n = 1; n <= maxBeams(c1); n++)
+    if (decode <= MAX_DECODE - BEAMS_NEEDED[n] / divisor) count = n
   let exit = Number.POSITIVE_INFINITY
-  let queueLength = 0
+  /** Frame Decoding Power reached its maximum */
+  let reached = Number.POSITIVE_INFINITY
   const beams: number[] = []
   const sweeps: number[] = []
   const gain = (amount: number, t: number) => {
     decode = Math.min(MAX_DECODE, decode + amount / divisor)
-    if (decode >= MAX_DECODE) exit = Math.min(exit, t + 19)
+    if (decode >= MAX_DECODE && reached === Number.POSITIVE_INFINITY) {
+      reached = t
+      exit = Math.min(exit, t + OVERDRIVE_DELAY + 1)
+    }
   }
   for (let t = 0; t < exit; t += 12) {
-    if (t > 0 && t % 60 === 0) {
+    // (a beam's task was queued before the same frame's heat tick: it lands first)
+    if (t > 0 && t % 60 === 0 && t < reached + OVERDRIVE_DELAY) {
       beams.push(t)
       gain(170, t)
+      if (beams.length >= count && count > 0) exit = Math.min(exit, t + 1)
     }
     gain(32, t)
-    queueLength = t + 12
   }
   for (let t = 0, i = 0; t < exit; i++) {
     sweeps.push(t)
     t += SWEEP_TICKS[i % SWEEP_TICKS.length]
   }
-  return { exit, queueLength, beams, sweeps, decode }
+  return { exit, beams, sweeps, decode, reached }
 }
 
 interface SandroneState {
@@ -81,6 +107,12 @@ interface SandroneState {
   onField: boolean
   /** Fagio's Decoding Power (x10), settled up to `nextDecay` */
   decode: number
+  /** Fagio is in Power Overdrive (from reaching 100 until Decoding Power is under 50) */
+  overdrive: boolean
+  /** Fagio enters Power Overdrive at this frame if its Decoding Power is still 100 then */
+  overdriveAt: number
+  /** Sandrone's actions so far (and swaps out): which one is going on */
+  action: number
   /** The next Decoding Power decay tick (every 0.5 s: 25, or 75 while Sandrone is off-field) */
   nextDecay: number
   tactics: number
@@ -91,7 +123,15 @@ interface SandroneState {
 
 /** Decoding Power decays to `now` */
 function settleDecode(s: SandroneState, now: number) {
-  while (s.decode > 0 && s.nextDecay <= now) {
+  for (;;) {
+    const decay = s.decode > 0 ? s.nextDecay : Number.POSITIVE_INFINITY
+    // Power Overdrive begins if Decoding Power is still full then (before a decay tick that frame)
+    if (s.overdriveAt <= now && s.overdriveAt <= decay) {
+      if (s.decode >= MAX_DECODE) s.overdrive = true
+      s.overdriveAt = Number.POSITIVE_INFINITY
+      continue
+    }
+    if (decay > now) return
     const used = Math.min(s.decode, s.onField ? 25 : 75)
     decrease(s, used)
     s.nextDecay += 30
@@ -101,6 +141,9 @@ function settleDecode(s: SandroneState, now: number) {
 function decrease(s: SandroneState, amount: number) {
   const used = Math.min(s.decode, amount)
   s.decode -= used
+  // (gcsim's reduceDecode: Power Overdrive ends under 50; under 100 it is no longer coming)
+  if (s.decode < MAX_DECODE) s.overdriveAt = Number.POSITIVE_INFINITY
+  if (s.decode < 500) s.overdrive = false
   s.decreased += used
   s.tactics = Math.min(10, s.tactics + Math.floor(s.decreased / 100))
   s.decreased %= 100
@@ -157,6 +200,9 @@ export const kit: KitModel = {
   init: (): SandroneState => ({
     onField: false,
     decode: 0,
+    overdrive: false,
+    overdriveAt: Number.POSITIVE_INFINITY,
+    action: 0,
     nextDecay: 0,
     tactics: 0,
     decreased: 0,
@@ -168,6 +214,7 @@ export const kit: KitModel = {
     settleDecode(s, ctx.now)
     const swappedIn = !s.onField
     s.onField = true
+    const id = ++s.action
     switch (action.kind) {
       case 'normal':
         return normalString(
@@ -185,7 +232,7 @@ export const kit: KitModel = {
           ctx
         )
       case 'charged': {
-        if (s.decode >= 500) {
+        if (s.overdrive) {
           // Power Overdrive (Decoding Power reached 100 and is still 50+): Fagio fires at longer
           // intervals, dealing Cryo DMG, while Decoding Power keeps decreasing; it ends under 50.
           // kqmsim's ticker gives the timing (first shot at the channel's first tick, then every
@@ -239,6 +286,8 @@ export const kit: KitModel = {
         const t0 = windup + 18 // the first tick
         s.decode = channel.decode
         s.nextDecay = ctx.now + t0 + channel.exit + 30
+        // (Power Overdrive 19 frames after Decoding Power reached 100, unless it fell by then)
+        s.overdriveAt = ctx.now + t0 + channel.reached + OVERDRIVE_DELAY
         for (const tick of channel.sweeps) {
           const at = t0 + tick
           ctx.hit(at, {
@@ -315,25 +364,29 @@ export const kit: KitModel = {
             }
           })
         }
-        const after = (end: number) => t0 + channel.queueLength + 1 + end
+        // Released: every action can start at once (gcsim sets the channel's length to 0, so each
+        // end lag has passed by then)
+        const end = t0 + channel.exit
         return {
-          frames: after(20),
+          frames: end,
           framesInto: {
-            normal: after(2),
-            charged: after(28),
-            skill: after(0),
-            burst: after(0),
-            dash: after(0),
-            jump: after(0),
-            swap: after(1),
+            normal: end,
+            charged: end,
+            skill: end,
+            burst: end,
+            dash: end,
+            jump: end,
+            swap: end,
             // gcsim's CanQueueAfter: a written wait starts with the channel's first tick
             wait: t0,
           },
         }
       }
       case 'skill': {
-        ctx.at(20, (c2) => {
-          const enhanced = s.decode > 500
+        // A1: decided as she casts, before the repair below (more than 50 Decoding Power)
+        const enhanced = s.decode > 500
+        // (gcsim b107b5d: the Prism Shots' task at 19 frames, landing 5 + 10 frames of travel later)
+        ctx.at(24, (c2) => {
           c2.hit(10, {
             path: ['skill', 'prismDmg1'],
             tag: 'skill',
@@ -384,8 +437,14 @@ export const kit: KitModel = {
               ],
             })
           })
-          decrease(s, 1000)
         })
+        // Fagio repaired while she hovers: 70 Decoding Power as she casts, then 10 every 0.1 s
+        // while the Skill goes on (3 times: 100 in all)
+        decrease(s, 700)
+        for (let i = 1; i <= 3; i++)
+          ctx.atCharacter('Sandrone', 6 * i, () => {
+            if (s.action === id) decrease(s, 100)
+          })
         return {
           cooldown: { key: 'skill', frames: 4 * 60 },
           frames: 46,
@@ -450,6 +509,7 @@ export const kit: KitModel = {
   onSwapOut(ctx, s: SandroneState) {
     settleDecode(s, ctx.now)
     s.onField = false
+    s.action++
   },
   // C4: her Stellar-Conduct / Stellar Swirl DMG calls a coordinated Prismatic Resonance Cannon
   // (15 frames later, once per 4 s on her clock), counted as that Stellar Glimmer DMG
