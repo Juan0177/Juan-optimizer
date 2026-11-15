@@ -1,39 +1,29 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
-import type {
-  ArtifactSetKey,
-  CharacterKey,
-  SubstatKey,
-} from '@genshin-optimizer/gi/consts'
-import {
-  allArtifactSetKeys,
-  allSubstatKeys,
-} from '@genshin-optimizer/gi/consts'
+import type { CharacterKey, SubstatKey } from '@genshin-optimizer/gi/consts'
+import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 import type { LoadoutDatum, TeamOpt } from '@genshin-optimizer/gi/db'
 import {
   ArtCharDatabase,
   initTeamOpt,
   validateTeamOpt,
 } from '@genshin-optimizer/gi/db'
-import {
-  getArtSetStat,
-  getCharWeaponType,
-  getWeaponStat,
-} from '@genshin-optimizer/gi/stats'
+import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import { precompute } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import type { KqmBuild, KqmResult } from '../'
 import {
   calculateEnergyRecharge,
+  compareTeamKqm,
   defaultEnergyCalculator,
   evaluateTeamRotation,
   itemConditionals,
   KQM_ROLLS,
   KQM_SUBSTAT_ROLLS,
+  KQM_THREE_STARS,
   kqmArtData,
   kqmBuildRarity,
   kqmConstellation,
-  KQM_THREE_STARS,
   kqmDefaultExcludedWeapons,
   kqmExcludedWeapons,
   kqmMemberConstellation,
@@ -41,6 +31,7 @@ import {
   kqmRollCaps,
   kqmSets,
   kqmTalentLevel,
+  kqmTeamOverrides,
   kqmValues,
   kqmWeaponData,
   kqmWeaponGroup,
@@ -48,8 +39,6 @@ import {
   kqmWeapons,
   optimizeTeamKqm,
   teamRotationNodes,
-  compareTeamKqm,
-  kqmTeamOverrides,
 } from '../'
 
 const ayaka: CharacterKey = 'KamisatoAyaka'
@@ -272,32 +261,45 @@ describe('KQM Standards builds', () => {
     for (const k of Object.keys(b.rolls)) expect(allSubstatKeys).toContain(k)
   }, 300_000)
 
-  it('keeps each member to its set rules', async () => {
+  it("uses KQM's own settings, not the members' Optimize tab (main stats, sets, stat filters)", async () => {
     const { database, teamId, ayakaId, teamOpt } = setup()
-    // every 5★ set left out but Blizzard Strayer's 4-piece
-    const excluded = Object.fromEntries(
-      (allArtifactSetKeys as readonly ArtifactSetKey[])
-        .filter(
-          (k) =>
-            k !== 'BlizzardStrayer' &&
-            getArtSetStat(k)?.rarities?.includes(5 as never)
-        )
-        .map((k) => [k, [2, 4]])
-    )
+    // the Optimize tab: HP% sands only, every set but Blizzard Strayer left out, a CRIT Rate floor
     const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
     database.optConfigs.set(optConfigId, {
-      artSetExclusion: { ...excluded, BlizzardStrayer: [2] },
+      mainStatKeys: { sands: ['hp_'], goblet: ['hp_'], circlet: ['hp_'] },
+      artSetExclusion: Object.fromEntries(
+        kqmSets()
+          .filter((k) => k !== 'BlizzardStrayer')
+          .map((k) => [k, [2, 4]])
+      ),
+      statFilters: {
+        [JSON.stringify(['basic', 'critRate_'])]: [
+          { value: 100, disabled: false },
+        ],
+      },
     })
+    // KQM's own choice: Blizzard Strayer and Gladiator's Finale only
+    teamOpt.kqm!.excludedSets = kqmSets().filter(
+      (k) => k !== 'BlizzardStrayer' && k !== 'GladiatorsFinale'
+    )
     const result = (await run(database, teamId, teamOpt))!
     expectKqms(result)
-    const sets = result.builds[ayaka]!.sets
-    // Blizzard's 2 pieces are left out, its 4 allowed; none of the excluded ones appears
-    expect(sets['BlizzardStrayer'] === 4 || !sets['BlizzardStrayer']).toBe(true)
-    for (const k of Object.keys(sets))
-      expect(Object.keys(excluded)).not.toContain(k)
-    for (const o of result.rankings[ayaka]!.sets)
-      for (const k of Object.keys(o.sets))
-        expect(Object.keys(excluded)).not.toContain(k)
+    const build = result.builds[ayaka]!
+    // main stats by KQM's rules: a DPS takes no HP% pieces
+    expect([
+      build.mains.sands,
+      build.mains.goblet,
+      build.mains.circlet,
+    ]).not.toContain('hp_')
+    // KQM's sets only, Gladiator's Finale among them (the Optimize tab had left it out)
+    const used = result.rankings[ayaka]!.sets.flatMap((o) =>
+      Object.keys(o.sets)
+    )
+    for (const k of used)
+      expect(['BlizzardStrayer', 'GladiatorsFinale']).toContain(k)
+    expect(used).toContain('GladiatorsFinale')
+    // the Optimize tab's CRIT Rate floor is no KQM requirement
+    expect(result.after.unmet[ayaka] ?? []).toEqual([])
   }, 300_000)
 
   it('meets a member’s requirements', async () => {
@@ -640,12 +642,8 @@ describe('KQM Standards builds', () => {
   it('allocates rolls to an explicit ER target and reports impossible targets', async () => {
     const { database, teamId, ayakaId, teamOpt } = setup()
     const configId = database.teamChars.get(ayakaId)!.optConfigId
+    // (the Optimize tab's ER floor is not KQM's: KQM's ER target decides)
     database.optConfigs.set(configId, {
-      mainStatKeys: {
-        sands: ['atk_'],
-        goblet: ['cryo_dmg_'],
-        circlet: ['critRate_'],
-      },
       statFilters: {
         [JSON.stringify(['basic', 'enerRech_'])]: [
           { value: 999, disabled: false },
@@ -849,12 +847,8 @@ describe('KQM Standards builds', () => {
     expect(two['hp']).toBeCloseTo(main('hp', 4) + sub('hp', 0.92), 6)
 
     // a run restricted to Instructor: 12 rolls placed, and an off-piece chosen
-    const { database, teamId, ayakaId, teamOpt } = setup()
-    database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
-      artSetExclusion: Object.fromEntries(
-        kqmSets().map((key) => [key, key === 'Instructor' ? [2] : [2, 4]])
-      ),
-    })
+    const { database, teamId, teamOpt } = setup()
+    teamOpt.kqm!.excludedSets = kqmSets().filter((k) => k !== 'Instructor')
     const result = (await run(database, teamId, teamOpt))!
     const build = result.builds[ayaka]!
     expect(build.sets).toEqual({ Instructor: 4 })
@@ -866,31 +860,19 @@ describe('KQM Standards builds', () => {
   }, 300_000)
 
   it('compares ER sands against ATK sands with ER substats before selecting a main stat', async () => {
-    const { database, teamId, ayakaId, teamOpt } = setup()
-    const configId = database.teamChars.get(ayakaId)!.optConfigId
-    database.optConfigs.set(configId, {
-      mainStatKeys: { sands: ['atk_', 'enerRech_'], goblet: [], circlet: [] },
-      artSetExclusion: Object.fromEntries(
-        kqmSets().map((key) => [key, key === 'BlizzardStrayer' ? [2] : [2, 4]])
-      ),
-    })
+    const { database, teamId, teamOpt } = setup()
+    teamOpt.kqm!.excludedSets = kqmSets().filter((k) => k !== 'BlizzardStrayer')
     teamOpt.keep = [shenhe]
     teamOpt.kqm!.energyRecharge![ayaka] = 135
     teamOpt.kqm!.excludedWeapons = kqmWeapons(ayaka, undefined, { all: true })
       .map((w) => w.key)
       .filter((key) => key !== 'PrototypeRancour')
     teamOpt.kqm!.weaponList = 2
-    const unrestricted = (await run(database, teamId, teamOpt))!
-    database.optConfigs.set(configId, {
-      mainStatKeys: { sands: ['atk_'], goblet: [], circlet: [] },
-    })
-    const atk = (await run(database, teamId, teamOpt))!
-    expect(atk.energyRecharge[ayaka]!.value).toBeGreaterThanOrEqual(135)
-    expect(unrestricted.after.total).toBeGreaterThanOrEqual(
-      atk.after.total * (1 - 1e-9)
-    )
-    expect(unrestricted.builds[ayaka]!.mains.sands).toBe('atk_')
-    expect(unrestricted.builds[ayaka]!.rolls.enerRech_).toBeGreaterThan(0)
+    const result = (await run(database, teamId, teamOpt))!
+    // an ATK sands meeting 135% with ER substats beats an ER sands
+    expect(result.energyRecharge[ayaka]!.value).toBeGreaterThanOrEqual(135)
+    expect(result.builds[ayaka]!.mains.sands).toBe('atk_')
+    expect(result.builds[ayaka]!.rolls.enerRech_).toBeGreaterThan(0)
   }, 300_000)
 
   it('keeps valid KQM settings and drops broken ones', () => {

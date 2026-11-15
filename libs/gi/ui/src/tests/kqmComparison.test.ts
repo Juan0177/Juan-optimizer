@@ -145,21 +145,11 @@ function setup() {
       { path: ['skill', 'press'], hits: 2, hitMode: 'avgHit' },
     ],
   }
-  database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
-    mainStatKeys: {
-      sands: ['atk_', 'enerRech_'],
-      goblet: ['cryo_dmg_'],
-      circlet: ['critRate_', 'critDMG_'],
-    },
-    artSetExclusion: Object.fromEntries(
-      kqmSets().map((key) => [
-        key,
-        ['BlizzardStrayer', 'GladiatorsFinale', 'NoblesseOblige'].includes(key)
-          ? [2]
-          : [2, 4],
-      ])
-    ),
-  })
+  // (KQM's own sets only: Blizzard Strayer, Gladiator's Finale, Noblesse Oblige)
+  teamOpt.kqm.excludedSets = kqmSets().filter(
+    (key) =>
+      !['BlizzardStrayer', 'GladiatorsFinale', 'NoblesseOblige'].includes(key)
+  )
   return { database, teamId, teamOpt }
 }
 
@@ -176,15 +166,6 @@ describe('linked KQM comparisons', () => {
           'FavoniusLance',
         ].includes(key)
     )
-    const support = args.database.teamChars.values.find(
-      (c) => c.key === 'Shenhe'
-    )!
-    args.database.optConfigs.set(support.optConfigId, {
-      mainStatKeys: { sands: ['atk_'], goblet: ['atk_'], circlet: ['atk_'] },
-      artSetExclusion: Object.fromEntries(
-        kqmSets().map((key) => [key, key === 'NoblesseOblige' ? [2] : [2, 4]])
-      ),
-    })
     const result = (await optimizeTeamKqm({ ...args, maxRounds: 1 }))!
     const baseline = structuredClone(result)
     expect(result.builds.Shenhe).toBeTruthy()
