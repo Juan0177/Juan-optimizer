@@ -191,15 +191,6 @@ export default function TeamBuildWorkspace({
   const [kqmView, setKqmView] = useState<KqmResult>()
   useEffect(() => setKqmView(undefined), [kqmResult?.result])
   const kqmShown = kqmRotation ? (kqmView ?? kqmRotation.result) : undefined
-  // the rotation written as text (inline), and its writer dialog with Undo
-  const writer = useRotationWriter({
-    teamId,
-    members,
-    setTeamOpt,
-    teamData,
-    kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
-    kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
-  })
   const kqmPlayed = kqmRotation?.rotation === 'played'
   const kqmAttacks =
     kqmRotation &&
@@ -219,6 +210,16 @@ export default function TeamBuildWorkspace({
     [kqmRotation, kqmShown, database, teamId]
   )
   const kqmBuffs = useKqmTeamBuffs(teamId, teamData, kqmOverrides, kqmShown)
+  // the rotation written as text (inline), and its writer dialog with Undo
+  const writer = useRotationWriter({
+    teamId,
+    members,
+    setTeamOpt,
+    teamData,
+    kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
+    kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
+    kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
+  })
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)

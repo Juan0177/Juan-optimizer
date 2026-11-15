@@ -1173,8 +1173,11 @@ function TrackGroup({
   const { t } = useTranslation('page_team')
   const TRACK = useContext(SizeContext).track
   const steps = tracks.filter((x) => x.kind === 'steps')
-  // (the ones that are simply on all rotation are in the moment's panel, not drawn)
-  const buffs = tracks.filter((x) => x.kind === 'ribbon' && !x.constant)
+  // (the ones that are simply on all rotation are in the moment's panel, not drawn; a weapon's or
+  // set's effect is drawn all the same, as the gear it is on)
+  const buffs = tracks.filter(
+    (x) => x.kind === 'ribbon' && (!x.constant || x.group === 'gear')
+  )
   if (!steps.length && !buffs.length) return null
   const { characterKey, color, pct, span, store, pin } = props
   const tint = (theme: Theme, track: TimelineTrack) =>
@@ -2047,8 +2050,10 @@ function BuffChips({
 }) {
   const { t } = useTranslation('page_team')
   const up = tracks.filter((x) => trackValueAt(x, frame))
-  const timed = up.filter((x) => !x.constant)
-  const always = up.filter((x) => x.constant)
+  // (a weapon's or set's effect is named like a timed one even when it is on all rotation)
+  const named = (x: TimelineTrack) => !x.constant || x.group === 'gear'
+  const timed = up.filter(named)
+  const always = up.filter((x) => !named(x))
   return (
     <>
       {timed.map((track) => (
@@ -2167,9 +2172,11 @@ function BuffChip({
             </Suspense>
           </Box>
         )}
-        <Box component="span" sx={{ color: 'text.secondary', ...numSx }}>
-          {seconds(seg.end - frame)}s
-        </Box>
+        {!track.constant && (
+          <Box component="span" sx={{ color: 'text.secondary', ...numSx }}>
+            {seconds(seg.end - frame)}s
+          </Box>
+        )}
       </Box>
     </Tooltip>
   )

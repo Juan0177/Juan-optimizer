@@ -75,6 +75,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAttackInfo, variantColor } from './AttackName'
+import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
 import { FrameDataPanel, pingToFrames } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
@@ -756,6 +757,7 @@ export function useRotationWriter({
   teamData,
   kqm,
   kqmBuilds,
+  kqmBuffs,
 }: {
   teamId: string
   members: TeamOptMember[]
@@ -770,6 +772,11 @@ export function useRotationWriter({
   kqm?: TeamOptKqm
   /** With KQM: the shown result's builds, whose weapon and set effects the preview plays */
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
+  /**
+   * With KQM: the shown result's buffs (its builds' weapon and set effects, as KQM counts them):
+   * the timeline lists those it does not time (Disenchantment's, on by rule) as on all rotation
+   */
+  kqmBuffs?: TeamBuff[]
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -794,6 +801,7 @@ export function useRotationWriter({
           teamData={teamData}
           kqm={kqm}
           kqmBuilds={kqmBuilds}
+          kqmBuffs={kqmBuffs}
           setTeamOpt={setTeamOpt}
           onClose={() => setOpen(false)}
           onApplied={setUndo}
@@ -928,6 +936,7 @@ function WriterModal({
   teamData,
   kqm,
   kqmBuilds,
+  kqmBuffs,
   setTeamOpt,
   onClose,
   onApplied,
@@ -937,6 +946,7 @@ function WriterModal({
   teamData: TeamData | undefined
   kqm: TeamOptKqm | undefined
   kqmBuilds: Partial<Record<CharacterKey, KqmBuild>> | undefined
+  kqmBuffs: TeamBuff[] | undefined
   setTeamOpt: (update: TeamOptUpdate) => void
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
@@ -1058,7 +1068,8 @@ function WriterModal({
     edited: editedSteps,
     selected: selectedStep,
     teamData,
-    buffs: figures ? teamBuffs : undefined,
+    // (on the KQM tab, the KQM builds' effects: never the members' own)
+    buffs: figures ? teamBuffs : kqmBuffs,
     damage: timelineFigures.damage,
     renderHit: (hit: SimHit) => {
       const found = timelineFigures.attackOf?.(hit)
