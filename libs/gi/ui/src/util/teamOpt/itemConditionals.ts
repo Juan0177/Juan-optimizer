@@ -182,6 +182,9 @@ const OVERRIDES: Partial<
   // after the wielder's Elemental Skill (its on-field time is the rotation's to say)
   HereticsMoltenBlade: (ctx) =>
     ctx.attacks.includes('skill') ? undefined : null,
+  // KQM's standard enemy is one target: "fewer than 2 opponents nearby" (ATK +24% at R1, not the
+  // +16% ATK and DEF of 2 or more)
+  Deathmatch: () => 'oneOrNone',
   // Royal stacks reset on every CRIT hit: about one stack on average
   RoyalBow: () => '1',
   RoyalGreatsword: () => '1',
