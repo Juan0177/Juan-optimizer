@@ -68,11 +68,12 @@ const maxBeams = (c1: boolean) => (c1 ? 6 : 3)
  * after its last beam, the most beams it can fire before Power Overdrive (3, 6 with C1). If
  * Decoding Power reaches 100 first, Fagio enters Power Overdrive 19 frames later and the charge
  * ends the frame after. `exit` is when the next action can start (its end lag has passed by then).
+ * `asked`: the beams written ("CA[beams=2]", gcsim's charge[beams=2]), at most the most it can fire.
  */
-export function sandroneChannel(decode: number, c1 = false) {
+export function sandroneChannel(decode: number, c1 = false, asked?: number) {
   const divisor = c1 ? 2 : 1
   let count = 0
-  for (let n = 1; n <= maxBeams(c1); n++)
+  for (let n = 1; n <= Math.min(asked ?? maxBeams(c1), maxBeams(c1)); n++)
     if (decode <= MAX_DECODE - BEAMS_NEEDED[n] / divisor) count = n
   let exit = Number.POSITIVE_INFINITY
   /** Frame Decoding Power reached its maximum */
@@ -274,7 +275,13 @@ export const kit: KitModel = {
             },
           }
         }
-        const channel = sandroneChannel(s.decode, c >= 1)
+        const channel = sandroneChannel(s.decode, c >= 1, action.beams)
+        if (action.beams && channel.beams.length < action.beams)
+          ctx.note(
+            action.beams > maxBeams(c >= 1)
+              ? `Sandrone: a charge fires ${maxBeams(c >= 1)} beams at most${c >= 1 ? '' : ' before C1'} ("${action.text}" fired ${channel.beams.length}).`
+              : `Sandrone: "${action.text}" fired ${channel.beams.length} of ${action.beams} beams: Fagio's Decoding Power was too high for more.`
+          )
         // Windup 25f from idle (the start, a dash, a jump or a swap); otherwise in the endlag
         const windup =
           swappedIn ||

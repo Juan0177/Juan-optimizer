@@ -63,3 +63,49 @@ describe('Sandrone Decoding charges (gcsim b107b5d)', () => {
     expect(sim.actions[1].start - sim.actions[0].start).toBe(63)
   })
 })
+
+describe('Sandrone charges with a number of beams (CA[beams=N], gcsim charge[beams=N])', () => {
+  const parse = (text: string, who: CharacterKey[] = ['Sandrone']) =>
+    parseRotation(
+      text,
+      who.map((characterKey) => ({ characterKey, name: characterKey }))
+    )
+  it('reads the beams of a Charged Attack, for Sandrone only', () => {
+    const own = parse('Sandrone CA[beams=2] C[beams = 1] CA')
+    expect(own.warnings).toEqual([])
+    expect(own.steps[0].actions.map((a) => a.beams)).toEqual([2, 1, undefined])
+    const other = parse('Odette CA[beams=2]', ['Odette'])
+    expect(other.steps[0].actions[0].beams).toBeUndefined()
+    expect(other.warnings[0]).toContain('only Sandrone')
+    expect(parse('Sandrone CA[beams=7]').warnings[0]).toContain('1 to 6 beams')
+  })
+  it('releases the charge after that many beams', () => {
+    // gcsim: charge[beams=2]@1 skill@165, charge[beams=1]@1 skill@105
+    const two = run('Sandrone CA[beams=2] E')
+    expect(two.actions[1].start - two.actions[0].start).toBe(164)
+    expect(
+      two.hits.filter((h) => h.label.startsWith('Condensed Beam'))
+    ).toHaveLength(2)
+    const one = run('Sandrone CA[beams=1] E')
+    expect(one.actions[1].start - one.actions[0].start).toBe(104)
+  })
+  it('fires 6 beams at most from C1, 3 before, and says when it fired fewer', () => {
+    const c1 = simulateRotation({
+      rotation: parseRotation('Sandrone CA[beams=4] E', [
+        { characterKey: 'Sandrone', name: 'Sandrone' },
+      ]),
+      members,
+      constellations: { Sandrone: 1 },
+      elements: { Sandrone: 'cryo' },
+      repeats: 1,
+      keep: 'all',
+    })
+    // gcsim (C1): charge[beams=4]@1 skill@285
+    expect(c1.actions[1].start - c1.actions[0].start).toBe(284)
+    const c0 = run('Sandrone CA[beams=4] E')
+    expect(
+      c0.hits.filter((h) => h.label.startsWith('Condensed Beam'))
+    ).toHaveLength(3)
+    expect([...c0.notes].some((n) => n.includes('3 beams at most'))).toBe(true)
+  })
+})

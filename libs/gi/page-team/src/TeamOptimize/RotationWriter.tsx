@@ -119,7 +119,11 @@ const TOKENS: { text: string; key: string; label: string }[] = [
   { text: 'hE', key: 'hold', label: 'Elemental Skill (hold)' },
   { text: 'Q', key: 'burst', label: 'Elemental Burst' },
   { text: 'N3', key: 'normal', label: 'Normal attacks: N1 to N6 hits' },
-  { text: 'CA', key: 'charged', label: 'Charged Attack' },
+  {
+    text: 'CA',
+    key: 'charged',
+    label: 'Charged Attack (Sandrone: CA[beams=2] releases it after 2 beams)',
+  },
   { text: 'P', key: 'plunge', label: 'Plunging Attack' },
   { text: 'D', key: 'dash', label: 'Dash' },
   { text: 'J', key: 'jump', label: 'Jump' },
@@ -1181,7 +1185,7 @@ function WriterModal({
                 <Box sx={{ whiteSpace: 'pre-line' }}>
                   {t(
                     'teamOpt.writer.help',
-                    'Who acts, then their actions, steps separated by ->:\nE / tE skill (tap) · hE skill (hold) · Q burst · N1–N6 normal attacks · CA charged · P plunge · D dash · J jump · W1.5 wait 1.5 s (W90f: 90 frames) · E? Q? only when ready (left out, not waited for)\nEnd with the first member ("-> bina") where the rotation loops.\nFrame data: gcsim and kqmsim (AGPLv3). Mitya: E again within 6 s switches cores. Automatic entry skills are included. Unimplemented actions are listed below.'
+                    'Who acts, then their actions, steps separated by ->:\nE / tE skill (tap) · hE skill (hold) · Q burst · N1–N6 normal attacks · CA charged (Sandrone: CA[beams=2], 2 condensed beams) · P plunge · D dash · J jump · W1.5 wait 1.5 s (W90f: 90 frames) · E? Q? only when ready (left out, not waited for)\nEnd with the first member ("-> bina") where the rotation loops.\nFrame data: gcsim and kqmsim (AGPLv3). Mitya: E again within 6 s switches cores. Automatic entry skills are included. Unimplemented actions are listed below.'
                   )}
                 </Box>
               }
