@@ -11,6 +11,7 @@ import {
   ArtifactSetTooltip,
   KQM_FIXED_ROLLS,
   kqmArtifactStats,
+  kqmBuildRarity,
   quickTooltipProps,
   kqmWeaponData,
   statName,
@@ -57,6 +58,11 @@ export function KqmBuildView({
     'def_',
     'def',
   ]
+  // (a 4★ set: four of its pieces are 4★, one of sands, goblet and circlet the 5★ off-piece)
+  const rarity = kqmBuildRarity(build)
+  const fourStar = rarity.four
+  const slotFour = (slot: 'sands' | 'goblet' | 'circlet') =>
+    fourStar >= 4 && (build.mains.off ?? 'circlet') !== slot
   const stats = kqmArtifactStats(build).sort(
     (a, b) => order.indexOf(a.key) - order.indexOf(b.key)
   )
@@ -79,9 +85,21 @@ export function KqmBuildView({
       )}
       {/* the three main stats that are chosen: one aligned row each */}
       <Box>
-        <Typography sx={{ fontSize: 13, fontWeight: 600, mb: 0.5 }}>
-          {t('teamOpt.kqm.mainStats', 'Main stats')}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+          <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+            {t('teamOpt.kqm.mainStats', 'Main stats')}
+          </Typography>
+          {fourStar > 0 && (
+            <InfoTooltipInline
+              title={t('teamOpt.kqm.fourStarTip', {
+                defaultValue:
+                  '{{count}} of the five artifacts are 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}.',
+                count: fourStar,
+                rolls: rarity.rolls,
+              })}
+            />
+          )}
+        </Box>
         {(['sands', 'goblet', 'circlet'] as const).map((slot, i) => (
           <Box
             key={slot}
@@ -99,6 +117,14 @@ export function KqmBuildView({
             </Typography>
             <Typography sx={{ fontSize: 13.5, minWidth: 0, lineHeight: 1.4 }}>
               {mainStatLabel(build.mains[slot])}
+              {fourStar > 0 && (
+                <Box
+                  component="span"
+                  sx={{ ml: 0.75, fontSize: 11.5, color: 'text.secondary' }}
+                >
+                  {slotFour(slot) ? '4★' : '5★'}
+                </Box>
+              )}
             </Typography>
             <Typography
               sx={{
@@ -110,7 +136,9 @@ export function KqmBuildView({
             >
               {artifactStatValue(
                 build.mains[slot],
-                getMainStatValue(build.mains[slot], 5, 20)
+                slotFour(slot)
+                  ? getMainStatValue(build.mains[slot], 4, 16)
+                  : getMainStatValue(build.mains[slot], 5, 20)
               )}
             </Typography>
           </Box>

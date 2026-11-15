@@ -76,7 +76,10 @@ vi.mock('@genshin-optimizer/gi/assets', () => ({
   artifactAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
 }))
 vi.mock('@genshin-optimizer/gi/util', () => ({ getMainStatValue: () => 0.466 }))
-vi.mock('@genshin-optimizer/gi/i18n', () => ({ preloadNamespaces: () => {} }))
+vi.mock('@genshin-optimizer/gi/i18n', () => ({
+  preloadNamespaces: () => {},
+  Translate: () => null,
+}))
 vi.mock('@genshin-optimizer/common/ui', () => ({
   ModalWrapper: ({
     open,
@@ -146,6 +149,7 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
       .sort()
       .join('+'),
   kqmWeaponData: (weapon: object) => weapon,
+  kqmBuildRarity: () => ({ four: 0, subScale: 1, rolls: 20 }),
   kqmArtifactStats: () => [
     {
       key: 'critRate_',
@@ -194,6 +198,22 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   compareTeamKqm: mocks.compare,
   optimizeTeamKqm: mocks.optimize,
   TeamOptCancelled: class extends Error {},
+}))
+// (the timeline names its tracks from the sheets: not needed here)
+vi.mock('./buffs', () => ({
+  describe: () => ({ name: '', teamBuff: false }),
+  useTeamBuffs: () => [],
+  useKqmTeamBuffs: () => [],
+  buffsForAttacker: () => [],
+  buffEffects: () => [],
+  useAttackTeamData: () => undefined,
+  teamBuffsOf: () => [],
+}))
+// (the writer's timeline figures bring the attack editor's whole module graph)
+vi.mock('./TimelineFigures', () => ({
+  useTimelineFigures: () => ({}),
+  useMomentStats: () => undefined,
+  TimelineHitStats: () => null,
 }))
 vi.mock('./KqmChoosers', () => ({
   kqmChooserCounts: () => ({ weapons: { allowed: 3 }, sets: { allowed: 3 } }),
