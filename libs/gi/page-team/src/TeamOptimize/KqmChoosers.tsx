@@ -1,4 +1,8 @@
-import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
+import {
+  CardThemed,
+  InfoTooltipInline,
+  ModalWrapper,
+} from '@genshin-optimizer/common/ui'
 import { objPathValue } from '@genshin-optimizer/common/util'
 import { artifactAsset } from '@genshin-optimizer/gi/assets'
 import type {
@@ -38,10 +42,12 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
   Box,
+  Button,
   Checkbox,
   Divider,
   IconButton,
@@ -298,6 +304,79 @@ const virtualWeapon = (key: WeaponKey, refinement: number): ICachedWeapon => ({
   lock: false,
 })
 
+/** The weapon groups turned on and off together, with their labels and what they hold */
+function useKqmWeaponGroups(): {
+  group: KqmWeaponGroup
+  label: string
+  short: string
+  tip: string
+}[] {
+  const { t } = useTranslation('page_team')
+  return useMemo(
+    () => [
+      {
+        group: 'bp',
+        label: t('teamOpt.kqm.groupBp', 'Battle Pass weapons'),
+        short: t('teamOpt.kqm.groupBpShort', 'Battle Pass'),
+        tip: t(
+          'teamOpt.kqm.groupBpTip',
+          'The Battle Pass’s weapon choice (Gnostic Hymn). On by default at R1.'
+        ),
+      },
+      {
+        group: 'wish4',
+        label: t('teamOpt.kqm.groupWish4', '4★ event wish weapons'),
+        short: t('teamOpt.kqm.groupWish4Short', '4★ event wish'),
+        tip: t(
+          'teamOpt.kqm.groupWish4Tip',
+          'Only from a weapon banner’s rate-up (event wishes), and the Starglitter shop. Off by default. The standard wish pool’s 4★ (Favonius, Sacrificial…), from any banner, are on at R5.'
+        ),
+      },
+      {
+        group: 'standard5',
+        label: t('teamOpt.kqm.groupStandard5', '5★ standard wish weapons'),
+        short: t('teamOpt.kqm.groupStandard5Short', '5★ standard wish'),
+        tip: t(
+          'teamOpt.kqm.groupStandard5Tip',
+          'The standard banner’s 5★ (Skyward, Aquila Favonia, Wolf’s Gravestone…). Off by default.'
+        ),
+      },
+      {
+        group: 'wish5',
+        label: t('teamOpt.kqm.groupWish5', '5★ event wish weapons'),
+        short: t('teamOpt.kqm.groupWish5Short', '5★ event wish'),
+        tip: t(
+          'teamOpt.kqm.groupWish5Tip',
+          'Only from a weapon banner’s rate-up (event wishes). Off by default. Free 5★ weapons (Exaiphanes Blade) are always on, at R1.'
+        ),
+      },
+    ],
+    [t]
+  )
+}
+
+/** Every weapon the team's members may use (one list per weapon type) */
+function kqmTeamWeapons(members: TeamOptMember[], kqm: TeamOptKqm) {
+  const types = new Map<WeaponTypeKey, CharacterKey>()
+  for (const m of members)
+    types.set(getCharWeaponType(m.characterKey), m.characterKey)
+  return [...types.values()].flatMap((ck) => kqmWeapons(ck, kqm, { all: true }))
+}
+
+/** A group's weapons all on, or (when they all are) all off */
+function toggleKqmWeaponGroup(kqm: TeamOptKqm, keys: WeaponKey[]): TeamOptKqm {
+  const excluded = kqmExcludedWeapons(kqm)
+  const allOn = keys.every((k) => !excluded.has(k))
+  for (const k of keys)
+    if (allOn) excluded.add(k)
+    else excluded.delete(k)
+  return {
+    ...kqm,
+    excludedWeapons: [...excluded],
+    weaponList: KQM_WEAPON_LIST,
+  }
+}
+
 /**
  * The weapons turned on and off together: Battle Pass, 4★ event wish (and Starglitter shop), 5★
  * standard wish, 5★ event wish;
@@ -317,40 +396,7 @@ function KqmWeaponGroups({
 }) {
   const { t } = useTranslation('page_team')
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
-  const groups: { group: KqmWeaponGroup; label: string; tip: string }[] = [
-    {
-      group: 'bp',
-      label: t('teamOpt.kqm.groupBp', 'Battle Pass weapons'),
-      tip: t(
-        'teamOpt.kqm.groupBpTip',
-        'The Battle Pass’s weapon choice (Gnostic Hymn). On by default at R1.'
-      ),
-    },
-    {
-      group: 'wish4',
-      label: t('teamOpt.kqm.groupWish4', '4★ event wish weapons'),
-      tip: t(
-        'teamOpt.kqm.groupWish4Tip',
-        'Only from a weapon banner’s rate-up (event wishes), and the Starglitter shop. Off by default. The standard wish pool’s 4★ (Favonius, Sacrificial…), from any banner, are on at R5.'
-      ),
-    },
-    {
-      group: 'standard5',
-      label: t('teamOpt.kqm.groupStandard5', '5★ standard wish weapons'),
-      tip: t(
-        'teamOpt.kqm.groupStandard5Tip',
-        'The standard banner’s 5★ (Skyward, Aquila Favonia, Wolf’s Gravestone…). Off by default.'
-      ),
-    },
-    {
-      group: 'wish5',
-      label: t('teamOpt.kqm.groupWish5', '5★ event wish weapons'),
-      tip: t(
-        'teamOpt.kqm.groupWish5Tip',
-        'Only from a weapon banner’s rate-up (event wishes). Off by default. Free 5★ weapons (Exaiphanes Blade) are always on, at R1.'
-      ),
-    },
-  ]
+  const groups = useKqmWeaponGroups()
   const update = (fn: (kqm: TeamOptKqm) => TeamOptKqm) =>
     setTeamOpt((o) => {
       o.kqm = fn(o.kqm ?? defaultTeamOptKqm)
@@ -385,19 +431,7 @@ function KqmWeaponGroups({
             <Switch
               size="small"
               checked={all}
-              onChange={() =>
-                update((kqm) => {
-                  const excluded = kqmExcludedWeapons(kqm)
-                  for (const k of keys)
-                    if (all) excluded.add(k)
-                    else excluded.delete(k)
-                  return {
-                    ...kqm,
-                    excludedWeapons: [...excluded],
-                    weaponList: KQM_WEAPON_LIST,
-                  }
-                })
-              }
+              onChange={() => update((kqm) => toggleKqmWeaponGroup(kqm, keys))}
               inputProps={{ 'aria-label': label }}
             />
             <Box sx={{ flex: '1 1 150px', minWidth: 0 }}>
@@ -996,12 +1030,7 @@ function SetRow({
 /** How many weapons (of the optimized members' types) and sets KQM mode may choose from */
 export function kqmChooserCounts(members: TeamOptMember[], teamOpt: TeamOpt) {
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
-  const types = new Map<WeaponTypeKey, CharacterKey>()
-  for (const m of members)
-    types.set(getCharWeaponType(m.characterKey), m.characterKey)
-  const weapons = [...types.values()].flatMap((ck) =>
-    kqmWeapons(ck, kqm, { all: true })
-  )
+  const weapons = kqmTeamWeapons(members, kqm)
   const excluded = kqmExcludedWeapons(kqm)
   const sets = kqmSets()
   return {
@@ -1014,6 +1043,167 @@ export function kqmChooserCounts(members: TeamOptMember[], teamOpt: TeamOpt) {
       total: sets.length,
     },
   }
+}
+
+/**
+ * KQM Setup's weapons and artifact sets: how many the builds may use, the weapon groups as
+ * switches (with the refinement each counts at), and the drawers that choose them one by one
+ */
+export function KqmPool({
+  members,
+  teamOpt,
+  setTeamOpt,
+  onWeapons,
+  onSets,
+}: {
+  members: TeamOptMember[]
+  teamOpt: TeamOpt
+  setTeamOpt: (update: TeamOptUpdate) => void
+  onWeapons: () => void
+  onSets: () => void
+}) {
+  const { t } = useTranslation('page_team')
+  const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+  const groupDefs = useKqmWeaponGroups()
+  const counts = kqmChooserCounts(members, teamOpt)
+  const groups = useMemo(() => {
+    const all = kqmTeamWeapons(members, kqm).map((w) => w.key)
+    const excluded = kqmExcludedWeapons(kqm)
+    return groupDefs.flatMap((g) => {
+      const keys = all.filter((k) => kqmWeaponGroup(k) === g.group)
+      if (!keys.length) return []
+      const on = keys.filter((k) => !excluded.has(k)).length
+      return [{ ...g, keys, on }]
+    })
+  }, [members, kqm, groupDefs])
+  const rowSx = {
+    display: 'grid',
+    gridTemplateColumns: { xs: '1fr auto', md: '150px 1fr auto' },
+    gridTemplateAreas: {
+      xs: '"name action" "groups groups"',
+      md: '"name groups action"',
+    },
+    alignItems: 'center',
+    columnGap: 2,
+    rowGap: 1,
+    px: 1.5,
+    py: 1.25,
+  } as const
+  const name = (label: string, allowed: number, total: number) => (
+    <Box sx={{ gridArea: 'name', minWidth: 0 }}>
+      <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{label}</Typography>
+      <Typography sx={{ ...typeScale.label, ...numSx }}>
+        {t('teamOpt.kqm.poolCount', {
+          defaultValue: '{{on}} of {{count}} on',
+          on: allowed,
+          count: total,
+        })}
+      </Typography>
+    </Box>
+  )
+  const choose = (label: string, onClick: () => void) => (
+    <Button
+      size="small"
+      variant="outlined"
+      color="inherit"
+      startIcon={<TuneOutlinedIcon />}
+      onClick={onClick}
+      sx={{ gridArea: 'action', justifySelf: 'end', whiteSpace: 'nowrap' }}
+    >
+      {label}
+    </Button>
+  )
+  return (
+    <Box sx={{ ...insetSx, overflow: 'hidden', mt: 1.5 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          pl: 1.5,
+          pr: 1,
+          py: 0.75,
+          minHeight: 48,
+          borderBottom: hairline,
+        }}
+      >
+        <Typography
+          component="h3"
+          sx={{
+            ...typeScale.title,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          {t('teamOpt.kqm.pool', 'Weapons and artifact sets')}
+          <InfoTooltipInline
+            title={t(
+              'teamOpt.kqm.compareScopeTip',
+              'The weapons and artifact sets the builds may use. Each one is ranked in the results.'
+            )}
+          />
+        </Typography>
+      </Box>
+      <Box sx={rowSx}>
+        {name(
+          t('teamOpt.kqm.weaponsList', 'Weapons'),
+          counts.weapons.allowed,
+          counts.weapons.total
+        )}
+        <Box
+          role="group"
+          aria-label={t('teamOpt.kqm.poolGroups', 'Weapon groups')}
+          sx={{
+            gridArea: 'groups',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 0.75,
+            minWidth: 0,
+          }}
+        >
+          {groups.map(({ group, short, label, tip, keys, on }) => {
+            const all = on === keys.length
+            const refinement = kqm[kqmGroupRefinementKey[group]] ?? 1
+            return (
+              <Pill
+                key={group}
+                selected={all}
+                tip={tip}
+                aria-label={label}
+                onClick={() =>
+                  setTeamOpt((o) => {
+                    o.kqm = toggleKqmWeaponGroup(
+                      o.kqm ?? defaultTeamOptKqm,
+                      keys
+                    )
+                  })
+                }
+              >
+                {short}
+                {on > 0 && (
+                  <Box
+                    component="span"
+                    sx={{ ...numSx, fontWeight: 500, color: 'text.secondary' }}
+                  >
+                    {all ? `R${refinement}` : `${on}/${keys.length}`}
+                  </Box>
+                )}
+              </Pill>
+            )
+          })}
+        </Box>
+        {choose(t('teamOpt.kqm.chooseWeapons', 'Choose weapons'), onWeapons)}
+      </Box>
+      <Box sx={{ ...rowSx, borderTop: hairline }}>
+        {name(
+          t('teamOpt.kqm.sets', 'Artifact sets'),
+          counts.sets.allowed,
+          counts.sets.total
+        )}
+        {choose(t('teamOpt.kqm.chooseSets', 'Choose sets'), onSets)}
+      </Box>
+    </Box>
+  )
 }
 
 function SelectionSearch({
