@@ -1,6 +1,13 @@
 import type { WeaponKey } from '@genshin-optimizer/gi/consts'
 import { allElementKeys } from '@genshin-optimizer/gi/consts'
-import { equal, input, subscript } from '@genshin-optimizer/gi/wr'
+import {
+  constant,
+  input,
+  lookup,
+  naught,
+  prod,
+  subscript,
+} from '@genshin-optimizer/gi/wr'
 import { cond, st, stg, trans } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
@@ -14,26 +21,17 @@ const refinementEleDmgVals = [-1, 0.48, 0.6, 0.72, 0.84, 0.96]
 const refinementEleMasVals = [-1, 240, 300, 360, 420, 480]
 
 const [condPassivePath, condPassive] = cond(key, 'Debut')
-const atk_ = equal(
-  'recitative',
-  condPassive,
-  subscript(input.weapon.refinement, refinementAtkVals)
-)
+/** A theme's bonus: in full when it is the song played, a third for `avg` (one of three at random) */
+const theme = (song: string, values: number[]) =>
+  prod(
+    lookup(condPassive, { [song]: constant(1), avg: constant(1 / 3) }, naught),
+    subscript(input.weapon.refinement, values)
+  )
+const atk_ = theme('recitative', refinementAtkVals)
 const eleBonus_ = Object.fromEntries(
-  allElementKeys.map((ele) => [
-    ele,
-    equal(
-      'aria',
-      condPassive,
-      subscript(input.weapon.refinement, refinementEleDmgVals)
-    ),
-  ])
+  allElementKeys.map((ele) => [ele, theme('aria', refinementEleDmgVals)])
 )
-const eleMas = equal(
-  'interlude',
-  condPassive,
-  subscript(input.weapon.refinement, refinementEleMasVals)
-)
+const eleMas = theme('interlude', refinementEleMasVals)
 
 const data = dataObjForWeaponSheet(key, {
   premod: {
@@ -84,6 +82,19 @@ const sheet: IWeaponSheet = {
             {
               node: atk_,
             },
+            {
+              text: stg('duration'),
+              value: 10,
+              unit: 's',
+            },
+          ],
+        },
+        avg: {
+          name: trm('avg'),
+          fields: [
+            { node: atk_ },
+            ...allElementKeys.map((ele) => ({ node: eleBonus_[ele] })),
+            { node: eleMas },
             {
               text: stg('duration'),
               value: 10,

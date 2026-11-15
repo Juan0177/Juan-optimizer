@@ -221,6 +221,9 @@ export function gearEffects({
   for (const k of members)
     for (const weapon of LEAF_WEAPONS)
       if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
+  // The Widsith: declared off, on only after the wielder takes the field
+  for (const k of members)
+    if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
   for (const k of members)
     if (wears(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
@@ -735,6 +738,12 @@ export function gearEffects({
             hitlag: 'recipient',
           }
         )
+      // The Widsith: taking the field plays one of its three songs at random for 10 s
+      // (hitlag-extended), once per 30 s (gcsim): their average
+      if (ctx && holds(to, 'TheWidsith') && ready(`widsith.${to}`, t, 1800))
+        ctx.buff(to, ['TheWidsith', 'Debut'], 'avg', 0, 600, {
+          hitlag: 'recipient',
+        })
       const vermillionState = vermillion.get(from)
       if (vermillionState) {
         // Close the live intervals on departure, including when no more damage is dealt.
