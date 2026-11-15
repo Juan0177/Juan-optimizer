@@ -80,6 +80,7 @@ const OVERRIDES: Partial<
   // a Leaf only from the wielder's own Dendro reactions (gcsim)
   SapwoodBlade: (ctx) => (dendroReactor(ctx) ? undefined : null),
   ForestRegalia: (ctx) => (dendroReactor(ctx) ? undefined : null),
+  Moonpiercer: (ctx) => (dendroReactor(ctx) ? undefined : null),
   // the 4-piece procs at random: use its average
   EchoesOfAnOffering: () => 'avg',
   BlizzardStrayer: (ctx) =>

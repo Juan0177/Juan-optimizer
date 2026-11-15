@@ -134,5 +134,38 @@ describe('Leaf of Consciousness weapons', () => {
     expect(on('dendro', ['dendro', 'cryo'], 'ForestRegalia')).toBeUndefined()
     expect(on('hydro', ['hydro', 'dendro'], 'SapwoodBlade')).toBe('on')
     expect(on('dendro', ['dendro', 'electro'], 'ForestRegalia')).toBe('on')
+    // Moonpiercer's Leaf of Revival: the same rule (an Electro wielder with Cryo teammates has none)
+    expect(on('electro', ['electro', 'cryo'], 'Moonpiercer')).toBeUndefined()
+    expect(on('electro', ['electro', 'dendro'], 'Moonpiercer')).toBe('on')
+  })
+  it('Moonpiercer’s Leaf of Revival: from the wielder’s own Dendro reactions, 12 s, one per 20 s', () => {
+    const sim = simulateRotation({
+      rotation: parseRotation('Nahida E', [
+        { characterKey: 'Nahida', name: 'Nahida' },
+      ]),
+      members: ['Nahida'],
+      constellations: {},
+      elements: { Nahida: 'dendro' },
+      repeats: 1,
+      kits: {
+        Nahida: kit(
+          'Nahida',
+          'dendro',
+          [
+            [0, 'burning'],
+            [900, 'bloom'],
+            [1300, 'hyperbloom'],
+          ],
+          [20, 1320],
+          2400
+        ),
+      },
+      reactions: { onHit() {} },
+      gear: { Nahida: { weapon: 'Moonpiercer', refinement: 5 } },
+    })
+    expect(leafWindows(sim, 'Moonpiercer')).toEqual([
+      [0, 720],
+      [1300, 2020],
+    ])
   })
 })

@@ -35,8 +35,11 @@ const REACTION_ELEMENTS: Record<string, string[]> = {
   lunarCrystallize: ['geo', 'hydro'],
 }
 const SWIRLED = ['pyro', 'hydro', 'electro', 'cryo']
-/** Weapons whose Leaf of Consciousness comes from the wielder's Dendro reactions */
-const LEAF_WEAPONS = ['SapwoodBlade', 'ForestRegalia']
+/**
+ * Weapons whose Leaf (Sapwood Blade's and Forest Regalia's of Consciousness, Moonpiercer's of
+ * Revival) comes from the wielder's Dendro reactions, one per 20 s, its buff for 12 s (gcsim)
+ */
+const LEAF_WEAPONS = ['SapwoodBlade', 'ForestRegalia', 'Moonpiercer']
 const LEAF_REACTIONS = [
   'burning',
   'quicken',
@@ -217,7 +220,8 @@ export function gearEffects({
   for (const k of members)
     if (holds(k, 'HakushinRing'))
       window(k, ['HakushinRing', 'SakuraSaiguu'], 'dendro', 0, 0)
-  // Sapwood Blade / Forest Regalia: declared off, on only from the wielder's own reactions
+  // Sapwood Blade / Forest Regalia / Moonpiercer: declared off, on only from the wielder's own
+  // reactions
   for (const k of members)
     for (const weapon of LEAF_WEAPONS)
       if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
