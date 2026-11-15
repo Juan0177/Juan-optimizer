@@ -409,7 +409,12 @@ export function actionName(
         count: a.count ?? 1,
       })
     case 'charged':
-      return t('teamOpt.timing.kind.charged', 'Charged attack')
+      return a.beams
+        ? t('teamOpt.timing.kind.chargedBeams', {
+            defaultValue: 'Charged attack, {{count}} beams',
+            count: a.beams,
+          })
+        : t('teamOpt.timing.kind.charged', 'Charged attack')
     case 'plunge':
       return t('teamOpt.timing.kind.plunge', 'Plunge')
     case 'dash':

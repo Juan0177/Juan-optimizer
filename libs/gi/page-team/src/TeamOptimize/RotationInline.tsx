@@ -370,7 +370,7 @@ const actionCode = (a: RotationAction) => {
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':
-      return 'CA'
+      return a.beams ? `CA[beams=${a.beams}]` : 'CA'
     case 'plunge':
       return 'P'
     case 'dash':

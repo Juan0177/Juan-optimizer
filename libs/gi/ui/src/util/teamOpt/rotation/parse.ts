@@ -9,6 +9,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   E / tE  Elemental Skill, tapped          hE   Elemental Skill, held
  *   Q       Elemental Burst                  N1–N6  a Normal Attack string of that many hits
  *   CA / C  Charged Attack                   P    Plunging Attack
+ *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default, 6 from C1)
  *   D       dash                             J    jump
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
@@ -34,6 +35,8 @@ export interface RotationAction {
   count?: number
   /** Used only when ready ("E?", "Q?"): left out, not waited for, when it is not */
   optional?: boolean
+  /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
+  beams?: number
   /** As written (for messages) */
   text: string
 }
@@ -169,11 +172,15 @@ export function matchMember(
   return prefix.length === 1 ? prefix[0].characterKey : undefined
 }
 
+/** Members whose Charged Attack takes a number of beams ("CA[beams=2]"), and the most it can take */
+const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
   warnings: string[],
-  who: string
+  who: string,
+  characterKey?: CharacterKey
 ): RotationAction[] {
   const actions: RotationAction[] = []
   // alternatives: the first one
@@ -183,7 +190,7 @@ function parseActions(
     .map((word) => word.split('/')[0])
     .join(' ')
   const token =
-    /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)|(p)|(d)|(j))/iy
+    /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
   let i = 0
   const s = cleaned.trim()
   while (i < s.length) {
@@ -221,10 +228,24 @@ function parseActions(
       })
     else if (m[8])
       actions.push({ kind: 'normal', count: Number(m[9]), text: raw })
-    else if (m[10]) actions.push({ kind: 'charged', text: raw })
-    else if (m[11]) actions.push({ kind: 'plunge', text: raw })
-    else if (m[12]) actions.push({ kind: 'dash', text: raw })
-    else if (m[13]) actions.push({ kind: 'jump', text: raw })
+    else if (m[10]) {
+      const beams = m[11] !== undefined ? Number(m[11]) : undefined
+      const most = characterKey && CHARGE_BEAMS[characterKey]
+      if (beams === undefined) actions.push({ kind: 'charged', text: raw })
+      else if (!most) {
+        warnings.push(
+          `${who}: "${raw}": only Sandrone's Charged Attack has beams (played as a plain Charged Attack)`
+        )
+        actions.push({ kind: 'charged', text: raw })
+      } else if (beams < 1 || beams > most) {
+        warnings.push(
+          `${who}: "${raw}": 1 to ${most} beams (played as a plain Charged Attack)`
+        )
+        actions.push({ kind: 'charged', text: raw })
+      } else actions.push({ kind: 'charged', beams, text: raw })
+    } else if (m[12]) actions.push({ kind: 'plunge', text: raw })
+    else if (m[13]) actions.push({ kind: 'dash', text: raw })
+    else if (m[14]) actions.push({ kind: 'jump', text: raw })
   }
   return actions
 }
@@ -256,7 +277,7 @@ export function parseRotation(
       warnings.push(`"${part}": no team member with that name (step skipped)`)
       return
     }
-    const actions = parseActions(rest, warnings, words[0])
+    const actions = parseActions(rest, warnings, words[0], characterKey)
     if (!actions.length) {
       if (index === parts.length - 1) loopsTo = characterKey
       else warnings.push(`${words[0]}: no actions (step skipped)`)
