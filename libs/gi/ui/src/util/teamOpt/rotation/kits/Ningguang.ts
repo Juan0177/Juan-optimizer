@@ -282,7 +282,7 @@ export const kit: KitModel = {
         ctx.at(0, (c) => {
           s.screenUntil = c.now + 1800
           const token = ++s.screenToken
-          c.construct(1800)
+          c.construct(1800, { kind: 'JadeScreen' })
           // C4: Elemental RES +10% near the screen
           c.state('Ningguang', ['Ningguang', 'Constellation4'], 'on')
           c.at(1800, (c2) => {

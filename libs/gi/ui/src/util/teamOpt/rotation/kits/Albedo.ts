@@ -131,7 +131,7 @@ export const kit: KitModel = {
           },
         }
       case 'skill': {
-        ctx.at(25, (c) => c.construct(FIELD_DURATION))
+        ctx.at(25, (c) => c.construct(FIELD_DURATION, { kind: 'SolarIsotoma' }))
         ctx.hit(25, {
           path: ['skill', 'dmg'],
           tag: 'skill',

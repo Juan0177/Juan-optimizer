@@ -74,7 +74,7 @@ interface ChioriState {
   rockToken: number
   rockEnd: number
   checkToken: number
-  /** A4: the Geo constructs counted at the last check (a rise is a new construct) */
+  /** A4: the Geo constructs created by the last check (more since is a new construct) */
   constructs: number
 }
 
@@ -177,10 +177,14 @@ export const kit: KitModel = {
     constructs: 0,
   }),
   onStart(ctx, s: ChioriState) {
-    // A4: a party member creating a Geo construct (a rise in the count, checked every 10 frames)
+    // A4: a Geo construct created (kqmsim's OnConstructSpawned: replacements and Lunar-
+    // Crystallize's Moondrifts too), checked every 10 frames
+    let moondrifts = 0
     const poll = (c: SimContext) => {
-      if (c.constructs > s.constructs) a4Buff(c)
-      s.constructs = c.constructs
+      if (c.constructsSpawned > s.constructs || c.moondrifts > moondrifts)
+        a4Buff(c)
+      s.constructs = c.constructsSpawned
+      moondrifts = c.moondrifts
       c.at(10, poll)
     }
     ctx.at(0, poll)
