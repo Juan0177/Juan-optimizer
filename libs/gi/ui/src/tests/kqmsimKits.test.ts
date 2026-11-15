@@ -111,29 +111,28 @@ describe('KQM-only character kits', () => {
     expect(stellar.at(-1)!.t).toBeLessThan(after.start)
   })
 
-  it('Mitya overflows four prisms in Steady State and a recast detonates remaining prisms', () => {
+  it('Mitya overflows four prisms in Steady State, and a recast to Overload keeps them for Gradient Detonation', () => {
     const sim = run('Kaeya E -> Mitya E Q W2 E W2', ['Kaeya', 'Mitya'])
     expect(
       sim.hits.some((h) => h.label === 'Prism Surge (Stellar-Conduct)')
     ).toBe(true)
+    // (game text: the Steady core consumes the Beacons when its duration ends or another core is
+    // created; a recast only changes its state)
     expect(
       sim.hits.some(
         (h) => h.label === 'Prism Shatter (Stellar-Conduct)' && h.weight! > 0
       )
-    ).toBe(true)
-    const shatter = rotationAttacks(sim).Mitya!.find(
-      (a) => a.path.join('.') === 'skill.steadyDetonateDmg'
-    )!
-    expect(shatter.states).toContainEqual({
-      owner: 'Mitya',
-      path: ['Mitya', 'detectionCore'],
-      value: 'steady',
-    })
-    expect(
-      Number(
-        shatter.states?.find((s) => s.path[1] === 'gradientBeacons')?.value
-      )
-    ).toBeGreaterThan(0)
+    ).toBe(false)
+    const recast = sim.actions.filter(
+      (a) => a.characterKey === 'Mitya' && a.text === 'E'
+    )[1]!
+    const kept = sim.buffWindows.find(
+      (w) =>
+        w.path.join('.') === 'Mitya.gradientBeacons' &&
+        w.start <= recast.start + recast.frames &&
+        recast.start + recast.frames < w.end
+    )
+    expect(Number(kept?.value)).toBeGreaterThan(0)
     expect(
       sim.buffWindows.some(
         (w) =>
@@ -145,6 +144,86 @@ describe('KQM-only character kits', () => {
         .filter((w) => w.path.join('.') === 'Mitya.gradientBeacons')
         .every((w) => !w.value || Number(w.value) <= 4)
     ).toBe(true)
+
+    const ca = run('Kaeya E -> Mitya E Q W2 E CA', ['Kaeya', 'Mitya'])
+    expect(
+      ca.hits.filter((h) => h.label === 'Special Charge (Stellar-Conduct)')
+    ).toHaveLength(Number(kept?.value))
+  })
+
+  it('Mitya’s Steady core detonates its Beacons when it ends or a new tap or hold E is used on it', () => {
+    const shattered = (sim: ReturnType<typeof run>) =>
+      sim.hits
+        .filter(
+          (h) => h.label === 'Prism Shatter (Stellar-Conduct)' && h.weight! > 0
+        )
+        .map((h) => h.weight)
+    // (Q's three Beacons, 10 s each, outlast the 25 s Steady core)
+    expect(shattered(run('Mitya E W14 Q W12', ['Mitya']))).toEqual([3])
+    // a new core (the 18 s cooldown Skill, tapped or held) while the Steady one is on
+    const fresh = run('Mitya E W17 Q E', ['Mitya'])
+    expect(shattered(fresh)).toEqual([3])
+    expect(shattered(run('Mitya E W17 Q hE', ['Mitya']))).toEqual([3])
+    // never from an Overload core
+    expect(shattered(run('Mitya hE W17 Q E', ['Mitya']))).toEqual([])
+    // nor from switching modes, either way (here Overload to Steady with four Beacons)
+    const back = run('Mitya hE Q E W1', ['Mitya'])
+    expect(back.actions.at(-1)?.variant?.key).toBe('switch')
+    expect(shattered(back)).toEqual([])
+
+    const attack = rotationAttacks(fresh).Mitya!.find(
+      (a) => a.path.join('.') === 'skill.steadyDetonateDmg'
+    )!
+    expect(attack.states).toContainEqual({
+      owner: 'Mitya',
+      path: ['Mitya', 'detectionCore'],
+      value: 'steady',
+    })
+    expect(
+      Number(attack.states?.find((s) => s.path[1] === 'gradientBeacons')?.value)
+    ).toBe(3)
+  })
+
+  it('Mitya’s DPS loop (hold E opener, then tap E, switch, charged attack) never detonates', () => {
+    const members: CharacterKey[] = ['Mitya', 'Odette', 'Valeriy', 'Sucrose']
+    const names = members.map((characterKey) => ({
+      characterKey,
+      name: characterKey,
+    }))
+    const rotation = parseRotation(
+      'odette EQE -> Val EQC -> sucrose N1E(or Q) -> mitya CA Q CA tE -> sucrose N1/E -> mitya tE CA',
+      names
+    )
+    rotation.opener = parseRotation('mitya hE', names).steps
+    const sim = simulateRotation({
+      rotation,
+      members,
+      elements: Object.fromEntries(members.map((k) => [k, getCharEle(k)])),
+      constellations: {},
+      repeats: 3,
+      keep: 'all',
+    })
+    const switches = sim.actions.filter(
+      (a) => a.characterKey === 'Mitya' && a.variant?.key === 'switch'
+    )
+    expect(switches.length).toBeGreaterThanOrEqual(3)
+    // Beacons are there at each switch, and stay for the charged attack
+    for (const a of switches)
+      expect(
+        Number(
+          sim.buffWindows.find(
+            (w) =>
+              w.path.join('.') === 'Mitya.gradientBeacons' &&
+              w.start <= a.start + a.frames &&
+              a.start + a.frames < w.end
+          )?.value
+        )
+      ).toBeGreaterThan(0)
+    expect(
+      sim.hits.filter(
+        (h) => h.label === 'Prism Shatter (Stellar-Conduct)' && h.weight! > 0
+      )
+    ).toEqual([])
   })
 
   it('Tsaritsa seals after Love burst, waits until unsealed, then performs Triumph automatically', () => {
