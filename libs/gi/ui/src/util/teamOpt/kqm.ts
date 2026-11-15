@@ -185,6 +185,12 @@ export interface KqmOption extends KqmBuild {
   behind?: KqmCatchUp
   /** The requirements it misses: their stat's path, what it reaches, what it needs */
   shortfalls?: { path: string[]; value: number; min: number }[]
+  /**
+   * Teammates' builds searched again for it: its weapon changes their Energy Recharge
+   * requirement (Favonius particles, a weapon's energy), so their artifacts use the ER it frees or
+   * make up what it no longer gives. Its `total` is the team's with them.
+   */
+  team?: Partial<Record<CharacterKey, KqmBuild>>
 }
 export interface KqmRanking {
   /** The best build with each set (or 2+2), the weapon the best one's */
@@ -1181,6 +1187,66 @@ async function runKqm({
     ) as Partial<Record<CharacterKey, StatFilters>>
   }
 
+  /**
+   * The teammates whose requirements change when `ck` holds `weapon` instead of its weapon in
+   * `state` (an energy weapon: Favonius particles, a weapon's energy in the ER calculator or in
+   * KQM's weapon window)
+   */
+  const affectedBy = (
+    ck: CharacterKey,
+    weapon: KqmWeapon,
+    state: Partial<Record<CharacterKey, KqmBuild>>
+  ) => {
+    const own = state[ck]
+    if (!own || own.weapon.key === weapon.key) return []
+    const before = filtersFor(state)
+    const after = filtersFor({ ...state, [ck]: { ...own, weapon } })
+    return optimized
+      .map((m) => m.characterKey)
+      .filter(
+        (j) =>
+          j !== ck && JSON.stringify(before[j]) !== JSON.stringify(after[j])
+      )
+  }
+
+  /**
+   * `build` for `ck` in `state`, with the teammates whose requirements its weapon changes searched
+   * again (their weapons and sets kept): their artifacts then use the ER it frees, or make up
+   * what it no longer gives. Their new builds, and the team's score with them; undefined when its
+   * weapon changes nobody's requirement.
+   */
+  const settleTeammates = async (
+    ck: CharacterKey,
+    build: KqmBuild,
+    state: Partial<Record<CharacterKey, KqmBuild>>,
+    counter?: Counter
+  ): Promise<
+    { team: Partial<Record<CharacterKey, KqmBuild>>; score: Score } | undefined
+  > => {
+    const affected = affectedBy(ck, build.weapon, state)
+    if (!affected.length) return undefined
+    const next = { ...state, [ck]: build }
+    const team: Partial<Record<CharacterKey, KqmBuild>> = {}
+    let score: Score | undefined
+    for (const j of affected) {
+      const own = next[j]!
+      const problem = problemFor(j, own.weapon, next)
+      if (!problem) continue
+      const current = scoreOf(problem, kqmValues(own))
+      const [top] = await searchArtifacts(j, own.weapon, next, {
+        setsList: [own.sets],
+        setsKept: 1,
+        counter,
+      })
+      if (top && better(top.score, current)) {
+        next[j] = top.build
+        team[j] = top.build
+        score = top.score
+      } else score = current
+    }
+    return score ? { team, score } : undefined
+  }
+
   // a comparison takes its run's work (see `lastWork`), as the rotation plays now
   const root = comparison
     ? (rootOf.get(comparison.result) ?? comparison.result)
@@ -1663,8 +1729,13 @@ async function runKqm({
       const chosenMeets = problem.mins.map((min, j) => chosenCons[j] >= min)
       const meetsAsChosen = (score: Score) =>
         score.deficit <= chosen.deficit + DEFICIT_TOL
-      const option = (r: { build: KqmBuild; score: Score }): KqmOption => {
-        const own = problemFor(ck, r.build.weapon, builds)
+      const option = (r: {
+        build: KqmBuild
+        score: Score
+        team?: Partial<Record<CharacterKey, KqmBuild>>
+      }): KqmOption => {
+        // (with the teammates searched again for it, when it has some)
+        const own = problemFor(ck, r.build.weapon, { ...builds, ...r.team })
         const cons = own?.run(kqmValues(r.build)).cons ?? []
         const shortfalls = (own?.mins ?? []).flatMap((min, j) =>
           cons[j] >= min || !chosenMeets[j]
@@ -1672,9 +1743,14 @@ async function runKqm({
             : [{ path: own!.paths[j], value: cons[j], min }]
         )
         const unmet = !meetsAsChosen(r.score) || shortfalls.length > 0
-        return unmet
-          ? { ...r.build, total: r.score.total, unmet, shortfalls }
-          : { ...r.build, total: r.score.total, unmet }
+        const team = r.team && Object.keys(r.team).length ? r.team : undefined
+        return {
+          ...r.build,
+          total: r.score.total,
+          unmet,
+          ...(unmet && { shortfalls }),
+          ...(team && { team }),
+        }
       }
       const allSets = setCombos(problem, space, best)
       if (!allSets.some((sets) => kqmSetsId(sets) === kqmSetsId(best.sets)))
@@ -1686,7 +1762,12 @@ async function runKqm({
       })
       bySetsFound.catch(() => undefined)
       const byWeaponFound: Promise<
-        { build: KqmBuild; score: Score } | undefined
+        | {
+            build: KqmBuild
+            score: Score
+            team?: Partial<Record<CharacterKey, KqmBuild>>
+          }
+        | undefined
       >[] = []
       for (const weapon of weaponsFor(ck, builds)) {
         await tick()
@@ -1694,7 +1775,13 @@ async function runKqm({
           setsList: [best.sets],
           setsKept: 1,
           counter,
-        }).then(([top]) => top)
+        }).then(async ([top]) => {
+          if (!top) return top
+          // (a weapon that changes a teammate's ER requirement: with that teammate's artifacts
+          // searched again)
+          const withTeam = await settleTeammates(ck, top.build, builds, counter)
+          return withTeam ? { ...top, ...withTeam } : top
+        })
         found.catch(() => undefined)
         byWeaponFound.push(found)
       }
@@ -1712,7 +1799,10 @@ async function runKqm({
           await tick()
           const current = options[i]
           if (!best || current.unmet || best.unmet) continue
-          const own = problemFor(ck, current.weapon, builds)
+          const own = problemFor(ck, current.weapon, {
+            ...builds,
+            ...current.team,
+          })
           if (!own) continue
           current.behind = estimateKqmCatchUp(current, best.total, (values) => {
             const score = scoreOf(own, values)
@@ -1741,7 +1831,14 @@ async function runKqm({
    * screened left it out), the best such one over the team
    */
   const missedBest = () => {
-    let found: { ck: CharacterKey; build: KqmBuild; gain: number } | undefined
+    let found:
+      | {
+          ck: CharacterKey
+          build: KqmBuild
+          gain: number
+          team?: Partial<Record<CharacterKey, KqmBuild>>
+        }
+      | undefined
     for (const { characterKey: ck } of rankedMembers) {
       const own = builds[ck]!
       const problem = problemFor(ck, own.weapon, builds)
@@ -1755,8 +1852,8 @@ async function runKqm({
         if (!allowed.some((w) => w.key === option.weapon.key)) continue
         const gain = option.total / score.total - 1
         if (gain > 1e-9 && (!found || gain > found.gain)) {
-          const { weapon, sets, mains, rolls } = option
-          found = { ck, build: { weapon, sets, mains, rolls }, gain }
+          const { weapon, sets, mains, rolls, team } = option
+          found = { ck, build: { weapon, sets, mains, rolls }, gain, team }
         }
       }
     }
@@ -1769,7 +1866,14 @@ async function runKqm({
    * best one over the team that beats its member's build
    */
   const missedPair = async () => {
-    let found: { ck: CharacterKey; build: KqmBuild; gain: number } | undefined
+    let found:
+      | {
+          ck: CharacterKey
+          build: KqmBuild
+          gain: number
+          team?: Partial<Record<CharacterKey, KqmBuild>>
+        }
+      | undefined
     const searches: Promise<void>[] = []
     for (const { characterKey: ck } of rankedMembers) {
       const own = builds[ck]!
@@ -1804,12 +1908,15 @@ async function runKqm({
         const search = searchArtifacts(ck, weapon, builds, {
           setsList: pairs,
           setsKept: pairs.length,
-        }).then((results) => {
-          for (const { build, score: s } of results) {
+        }).then(async (results) => {
+          for (const { build, score: found1 } of results) {
+            // (with the teammates whose ER requirement its weapon changes searched again)
+            const withTeam = await settleTeammates(ck, build, builds)
+            const s = withTeam?.score ?? found1
             if (!better(s, score)) continue
             const gain = s.total / score.total - 1
             if (gain > 1e-9 && (!found || gain > found.gain))
-              found = { ck, build, gain }
+              found = { ck, build, gain, team: withTeam?.team }
           }
         })
         search.catch(() => undefined)
@@ -2048,7 +2155,15 @@ async function runKqm({
       })
       if (!selected)
         throw new Error('Could not evaluate this equipment combination.')
+      // the teammates whose ER requirement the picked weapon changes: their artifacts searched
+      // again (the ER it frees, or what it no longer gives)
+      const teammates = await settleTeammates(
+        characterKey,
+        selected.build,
+        builds
+      )
       builds[characterKey] = selected.build
+      Object.assign(builds, teammates?.team)
       // the team's figures with the pick first, its rankings after
       preview = finish()
       if (preview && comparison.onPreview) {
@@ -2066,6 +2181,14 @@ async function runKqm({
       builds[missed.ck] = missed.build
       lastChange[missed.ck] = ++changes
       delete settled[missed.ck]
+      for (const [j, build] of Object.entries(missed.team ?? {}) as [
+        CharacterKey,
+        KqmBuild,
+      ][]) {
+        builds[j] = build
+        lastChange[j] = ++changes
+        delete settled[j]
+      }
       plannedRounds = rounds + ADOPT_ROUNDS
       await descend(rounds + 1, rounds + ADOPT_ROUNDS)
     }
