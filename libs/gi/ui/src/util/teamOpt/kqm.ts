@@ -258,6 +258,11 @@ export interface KqmStep {
   characterKey: CharacterKey
   /** A member's search: its weapons tried with its current artifacts, then the best few searched */
   stage?: 'weapons' | 'artifacts'
+  /**
+   * Search: a round after the rankings found a better build than the rounds had (it is taken, and
+   * the others' builds are searched again around it)
+   */
+  improving?: boolean
   /** The stage's progress (weapons tried, or searches done) */
   done?: number
   total?: number
@@ -1004,6 +1009,11 @@ const PAIR_SETS = 5
 const HANDOFF_WEAPONS = 2
 /** Rounds after a ranked option is taken, at most */
 const ADOPT_ROUNDS = 2
+/**
+ * A ranked weapon's option, in a ranking's progress: as many searches (its problem is built on the
+ * page, its searches in the workers)
+ */
+const OPTION_COUNT = 3
 
 interface KqmRunArgs {
   database: ArtCharDatabase
@@ -1411,32 +1421,51 @@ async function runKqm({
     return problem
   }
 
-  // Progress: a member's search is a unit, a member's rankings 0.6; two rounds are expected
-  // (one to find the builds, one to confirm them), a third is added when the second changes one
+  // Progress: a member's search is a unit, a member's rankings 2.5 (every weapon and every set
+  // tried, the teammates searched again for the energy weapons); two rounds are expected (one to
+  // find the builds, one to confirm them), a third is added when the second changes one
   const steps = optimized.length
   const rankedMembers = comparison
     ? optimized.filter((m) => m.characterKey === comparison.characterKey)
     : optimized
-  const RANK_UNITS = 0.6
+  const RANK_UNITS = 2.5
+  // The rankings may find a better build, then more rounds and rankings follow (`ADOPT_PASSES`):
+  // the line stops short of the end until they are known (`CEILINGS`, by pass), and the room left
+  // is what they fill. With none, the run ends there.
+  const CEILINGS = [0.7, 0.88]
+  const ceilingOf = (pass: number) =>
+    comparison || maxRounds === 0 || pass >= ADOPT_PASSES
+      ? 1
+      : (CEILINGS[pass] ?? 1)
+  let ceiling = ceilingOf(0)
+  let improving = false
   let plannedRounds = Math.min(maxRounds, 2)
   let tried = 0
   let shown = 0
   // when more work is planned (another round), the rest of the line is shared out from where
   // it is, so that it keeps moving instead of waiting for the estimate to catch up
-  let rebase = { shown: 0, units: 0, total: 0 }
+  let rebase = { shown: 0, units: 0, total: 0, ceiling }
   const emit = (
     step: Omit<KqmStep, 'maxRounds' | 'progress' | 'tried'>,
     units: number
   ) => {
     const total = plannedRounds * steps + RANK_UNITS * rankedMembers.length
-    if (total !== rebase.total) rebase = { shown, units, total }
+    if (total !== rebase.total || ceiling !== rebase.ceiling)
+      rebase = { shown, units, total, ceiling }
     const left = total - rebase.units
     const progress =
       left > 0
-        ? rebase.shown + ((1 - rebase.shown) * (units - rebase.units)) / left
-        : 1
-    shown = Math.max(shown, Math.min(1, progress))
-    return onStep?.({ ...step, maxRounds, progress: shown, tried })
+        ? rebase.shown +
+          ((ceiling - rebase.shown) * (units - rebase.units)) / left
+        : ceiling
+    shown = Math.max(shown, Math.min(ceiling, progress))
+    return onStep?.({
+      ...step,
+      ...(improving && step.phase === 'search' && { improving: true }),
+      maxRounds,
+      progress: shown,
+      tried,
+    })
   }
   const cancelled = (e: unknown) =>
     e instanceof KqmSearchCancelled ? new TeamOptCancelled() : e
@@ -1860,7 +1889,10 @@ async function runKqm({
           }
         | undefined
       >[] = []
-      for (const weapon of weaponsFor(ck, builds)) {
+      const weapons = weaponsFor(ck, builds)
+      // (its weapons' options, built after their searches: counted from the start)
+      counter.total += OPTION_COUNT * weapons.length
+      for (const weapon of weapons) {
         await tick()
         const found = searchArtifacts(ck, weapon, builds, {
           setsList: [best.sets],
@@ -1876,9 +1908,27 @@ async function runKqm({
         found.catch(() => undefined)
         byWeaponFound.push(found)
       }
-      const bySets = await bySetsFound
-      const byWeapon = (await Promise.all(byWeaponFound)).flatMap((top) =>
-        top ? [option(top)] : []
+      // (an option with teammates searched again builds its own problem: one at a time, the
+      // page drawn between them; a weapon's is counted as `OPTION_COUNT` searches)
+      const optionsOf = async (
+        found: readonly (Parameters<typeof option>[0] | undefined)[],
+        count = 0
+      ) => {
+        const options: KqmOption[] = []
+        for (const top of found) {
+          if (top) {
+            await tick()
+            options.push(option(top))
+          }
+          counter.done += count
+          if (count) counter.onDone?.()
+        }
+        return options
+      }
+      const bySets = await optionsOf(await bySetsFound)
+      const byWeapon = await optionsOf(
+        await Promise.all(byWeaponFound),
+        OPTION_COUNT
       )
       const order = (a: KqmOption, b: KqmOption) =>
         Number(a.unmet) - Number(b.unmet) || b.total - a.total
@@ -1903,7 +1953,7 @@ async function runKqm({
         return options
       }
       const ranking = {
-        sets: await withCatchUp(bySets.map(option)),
+        sets: await withCatchUp(bySets),
         weapons: await withCatchUp(byWeapon),
       }
       rankedDone.add(ck)
@@ -2434,6 +2484,8 @@ async function runKqm({
         delete settled[j]
       }
       plannedRounds = rounds + ADOPT_ROUNDS
+      ceiling = ceilingOf(pass + 1)
+      improving = true
       await descend(rounds + 1, rounds + ADOPT_ROUNDS)
     }
   } catch (e) {
