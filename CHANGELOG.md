@@ -8,7 +8,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 
 ### New
 
-- Rotation writer: choose whether to count the repeating pace or only the first 1 to 3 rotations from the start, with every cooldown ready (as in a timed challenge's first rotation). Team optimize and the KQM tab use the same choice.
+- Rotation writer: choose whether to count the repeating pace or only the first 1 to 6 rotations from the start, with every cooldown ready (as in a timed challenge's first rotation). Team optimize and the KQM tab use the same choice.
 
 ### Fixed
 

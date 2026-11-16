@@ -12,6 +12,7 @@ import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { teamOptMembers } from '@genshin-optimizer/gi/ui'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { firstRotations } from './RotationTiming'
 import { kqmRotationReplay, simulateWritten } from './RotationWriter'
 
 const MEMBERS: CharacterKey[] = ['Sucrose', 'Bennett']
@@ -108,6 +109,12 @@ describe('the first rotations from the start', () => {
     expect(hits(two)).toBeCloseTo(hits(one), 5)
     // the timeline shows all of them
     expect(two.sim!.rotationStarts!.length).toBe(2)
+  })
+  it('counts up to 6 rotations (more is read as 6)', () => {
+    expect(play(6).counted!.rotations).toBe(6)
+    expect(play(6).sim!.rotationStarts!.length).toBe(6)
+    expect(firstRotations({ edits: {}, rotations: 9 })).toBe(6)
+    expect(firstRotations({ edits: {} })).toBeUndefined()
   })
   it('KQM’s replay counts the same rotations', () => {
     localStorage.setItem(`teamOptRotationText_${teamId}`, TEXT)
