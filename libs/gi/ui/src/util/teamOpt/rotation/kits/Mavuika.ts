@@ -95,6 +95,8 @@ const BURST_SPIRIT = 100
 /** The burst's buff (no Nightsoul drain, the Spirit it spent as a stat) starts 105 frames in, 7 s long */
 const BURST_BUFF_START = 105
 const BURST_BUFF = 7 * 60
+/** One revolution of the Flamestrider's held Charged Attack (gcsim's bikeChargeAttackSpinFrames) */
+const BIKE_SPIN = 45
 /** Rings of Searing Radiance: every 2 s in Ring form */
 const RADIANCE_INTERVAL = 2 * 60
 /** C6: a Flamestrider hit every 3 s in Flamestrider form */
@@ -492,17 +494,23 @@ export const kit: KitModel = {
                 'Mavuika: the target is outside the Flamestrider spin hitbox.',
             }
           const token = ++s.chargeToken
-          consume(ctx, s, (0.2 / 6) * Math.max(0, timing.final - 45))
-          hitAt(ctx, s, timing.hit, {
-            path: ['skill', 'chargedCyclicDmg'],
-            tag: 'charged',
-            element: 'pyro',
-            nightsoul: true,
-            applies: true,
-            icd: 'MavuikaFlamestrider',
-            label: 'Flamestrider Charged Attack (Cyclic)',
-          })
-          ctx.at(timing.final, (c) => {
+          // (held for `spins` revolutions, KQM's "C3F": a cyclic hit each, 45 frames apart as
+          // gcsim's bikeChargeAttackSpinFrames, the finisher after the last one)
+          const spins = Math.max(1, action.spins ?? 1)
+          const held = (spins - 1) * BIKE_SPIN
+          const final = timing.final + held
+          consume(ctx, s, (0.2 / 6) * Math.max(0, final - 45))
+          for (let spin = 0; spin < spins; spin++)
+            hitAt(ctx, s, timing.hit + spin * BIKE_SPIN, {
+              path: ['skill', 'chargedCyclicDmg'],
+              tag: 'charged',
+              element: 'pyro',
+              nightsoul: true,
+              applies: true,
+              icd: 'MavuikaFlamestrider',
+              label: 'Flamestrider Charged Attack (Cyclic)',
+            })
+          ctx.at(final, (c) => {
             if (token !== s.chargeToken || c.onField !== 'Mavuika' || !s.bike)
               return
             hitAt(c, s, 0, {
@@ -524,17 +532,20 @@ export const kit: KitModel = {
               label: 'Flamestrider finisher hitlag',
             })
           })
+          // (the next action cancels the finisher at the last spin's hit, unless it is waited for
+          // ("F"): then it comes as gcsim's finisher frames allow, the dash at its hit)
+          const cancel = action.final ? final : timing.hit + held
           return {
-            frames: timing.normal,
+            frames: timing.normal + held,
             framesInto: {
-              normal: timing.normal,
-              charged: timing.hit,
-              skill: timing.hit,
-              burst: timing.hit,
-              dash: timing.hit,
-              jump: timing.hit,
-              swap: timing.hit,
-              wait: timing.hit,
+              normal: timing.normal + held,
+              charged: cancel,
+              skill: cancel,
+              burst: cancel,
+              dash: cancel,
+              jump: cancel,
+              swap: cancel,
+              wait: cancel,
             },
           }
         }

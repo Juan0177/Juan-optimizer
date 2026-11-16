@@ -383,7 +383,11 @@ const actionCode = (a: RotationAction) => {
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':
-      return a.beams ? `CA[beams=${a.beams}]` : 'CA'
+      return a.beams
+        ? `CA[beams=${a.beams}]`
+        : a.spins
+          ? `C${a.spins}${a.final ? 'F' : ''}`
+          : 'CA'
     case 'plunge':
       return 'P'
     case 'dash':

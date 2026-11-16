@@ -128,3 +128,69 @@ describe('Mavuika against kqmsim (Mavuika / Citlali / Iansan / Nicole, 2026-11-1
       expect(boosted.some((w) => w.start === h.t)).toBe(true)
   })
 })
+
+describe("Mavuika's held Flamestrider Charged Attack in KQM's notation (C3FD C3FD CF)", () => {
+  const team: CharacterKey[] = ['Mavuika', 'Citlali', 'Iansan', 'Nicole']
+  const names = team.map((characterKey) => ({
+    characterKey,
+    name: characterKey,
+  }))
+  const text =
+    'Nicole E -> Iansan E CA Q -> Citlali E Q -> Mavuika E CA Q C3FD C3FD CF -> Nicole'
+  it('reads C<n> as spins and F as the finisher, for Mavuika only', () => {
+    const parsed = parseRotation(text, names)
+    expect(parsed.warnings).toEqual([])
+    const mavuika = parsed.steps.find((s) => s.characterKey === 'Mavuika')!
+    expect(
+      mavuika.actions.map((a) => [a.kind, a.spins, a.final ?? false])
+    ).toEqual([
+      ['skill', undefined, false],
+      ['charged', undefined, false],
+      ['burst', undefined, false],
+      ['charged', 3, true],
+      ['dash', undefined, false],
+      ['charged', 3, true],
+      ['dash', undefined, false],
+      ['charged', 1, true],
+    ])
+    const other = parseRotation('Iansan C3F', names)
+    expect(other.warnings[0]).toMatch(
+      /Mavuika's Flamestrider Charged Attack only/
+    )
+    expect(other.steps[0].actions[0].spins).toBeUndefined()
+  })
+  it('spins 45 frames apart, then the finisher, and the dash comes at the finisher', () => {
+    const sim = simulateRotation({
+      rotation: parseRotation(text, names),
+      members: team,
+      elements: {
+        Mavuika: 'pyro',
+        Citlali: 'cryo',
+        Iansan: 'electro',
+        Nicole: 'pyro',
+      },
+      constellations: {},
+      repeats: 2,
+      keep: 'all',
+    })
+    const charged = sim.hits
+      .filter(
+        (h) =>
+          h.characterKey === 'Mavuika' &&
+          h.label?.startsWith('Flamestrider Charged Attack') &&
+          h.t < 1150
+      )
+      .sort((a, b) => a.t - b.t)
+    const cyclic = charged.filter((h) => h.label!.endsWith('(Cyclic)'))
+    const final = charged.filter((h) => h.label!.endsWith('(Final)'))
+    // (3 + 3 + 1 spins, 3 finishers: none cancelled)
+    expect(cyclic.length).toBe(7)
+    expect(final.length).toBe(3)
+    expect(cyclic[1].t - cyclic[0].t).toBe(45)
+    expect(cyclic[2].t - cyclic[1].t).toBe(45)
+    const dashes = (sim.actions ?? []).filter(
+      (a) => a.characterKey === 'Mavuika' && a.text === 'D'
+    )
+    expect(dashes[0].start).toBe(final[0].t)
+  })
+})
