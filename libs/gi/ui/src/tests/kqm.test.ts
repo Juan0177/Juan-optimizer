@@ -302,6 +302,24 @@ describe('KQM Standards builds', () => {
     expect(result.after.unmet[ayaka] ?? []).toEqual([])
   }, 300_000)
 
+  it('pairs two sets with the same 2-piece bonus (2-piece ATK + 2-piece ATK)', async () => {
+    const { database, teamId, teamOpt } = setup()
+    // (two ATK% 2-pieces and one Cryo DMG 2-piece: one bonus class each, ATK% twice)
+    teamOpt.kqm!.excludedSets = kqmSets().filter(
+      (k) =>
+        k !== 'BlizzardStrayer' &&
+        k !== 'GladiatorsFinale' &&
+        k !== 'ShimenawasReminiscence'
+    )
+    const result = (await run(database, teamId, teamOpt))!
+    expectKqms(result)
+    const ranked = result.rankings[ayaka]!.sets.map((o) => o.sets)
+    expect(ranked).toContainEqual({
+      GladiatorsFinale: 2,
+      ShimenawasReminiscence: 2,
+    })
+  }, 300_000)
+
   it('meets a member’s requirements', async () => {
     const { database, teamId, ayakaId, teamOpt } = setup()
     const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
