@@ -73,7 +73,7 @@ import {
 import type { ItemConditionalCtx } from './itemConditionals'
 import { isStellarAttackPath, itemConditionals } from './itemConditionals'
 import type { KqmBuiltProblem } from './kqmBuild'
-import { buildKqmProblem } from './kqmBuild'
+import { kqmProblemBuilder, releaseKqmBuilders } from './kqmBuildPool'
 import {
   KQM_ONE_COPY,
   KQM_THREE_STARS,
@@ -665,7 +665,12 @@ function ticker(isCancelled: () => boolean) {
   return async () => {
     if (isCancelled()) throw new TeamOptCancelled()
     if (performance.now() - last < 30) return
-    // (not a timer: a run left in a background tab goes on at full speed)
+    // (not a timer: a run left in a background tab goes on at full speed; a hidden page draws
+    // nothing, and its queued tasks wait long: no yield then)
+    if (globalThis.document?.visibilityState === 'hidden') {
+      last = performance.now()
+      return
+    }
     await yieldTask()
     last = performance.now()
     if (isCancelled()) throw new TeamOptCancelled()
@@ -1010,10 +1015,10 @@ const HANDOFF_WEAPONS = 2
 /** Rounds after a ranked option is taken, at most */
 const ADOPT_ROUNDS = 2
 /**
- * A ranked weapon's option, in a ranking's progress: as many searches (its problem is built on the
- * page, its searches in the workers)
+ * A ranked weapon's option in a ranking's progress, as many sets' (its search, its teammates
+ * searched again, its problem built on the page: a set's is one search in the workers)
  */
-const OPTION_COUNT = 3
+const WEAPON_OPTION = 10
 
 interface KqmRunArgs {
   database: ArtCharDatabase
@@ -1030,6 +1035,11 @@ interface KqmRunArgs {
    * when it gives nothing, the team's attacks are used as they are.
    */
   replay?: (input: KqmReplayInput) => KqmPlayed | undefined
+  /**
+   * The builds found so far, with their rankings, when a ranking finds a better build and the run
+   * goes on to take it: shown while the run improves on them (its result replaces them)
+   */
+  onEarly?: (result: KqmResult) => void
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1037,7 +1047,7 @@ export const optimizeTeamKqm = (args: KqmRunArgs) => runKqm(args)
 
 /** A run's problems and finished set searches, for one way of playing the rotation */
 interface KqmWork {
-  problems: Map<string, Problem | undefined>
+  problems: Map<string, Promise<Problem | undefined>>
   searches: Map<string, KqmSetSearch | undefined>
 }
 /**
@@ -1092,6 +1102,7 @@ async function runKqm({
   isCancelled = () => false,
   maxRounds = 3,
   replay,
+  onEarly,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1322,7 +1333,7 @@ async function runKqm({
     let score: Score | undefined
     for (const j of affected) {
       const own = next[j]!
-      const problem = problemFor(j, own.weapon, next)
+      const problem = await problemFor(j, own.weapon, next)
       if (!problem) continue
       const current = scoreOf(problem, kqmValues(own))
       const [top] = await searchArtifacts(j, own.weapon, next, {
@@ -1382,15 +1393,17 @@ async function runKqm({
       .map(([k, b]) => `${k}=${buildId(b!)}`)
       .sort()
       .join(';')}`
+  // (built in the builders' workers, several at once: see `kqmBuildPool`)
+  const builder = kqmProblemBuilder(database, isCancelled)
   const problemFor = (
     ck: CharacterKey,
     weapon: KqmWeapon,
     state: Partial<Record<CharacterKey, KqmBuild>>
-  ): Problem | undefined => {
+  ): Promise<Problem | undefined> => {
     const cacheKey = problemKey(ck, weapon, state)
     const problemCache = work.problems
-    if (problemCache.has(cacheKey)) {
-      const kept = problemCache.get(cacheKey)
+    const kept = problemCache.get(cacheKey)
+    if (kept) {
       // (the latest used are the last dropped)
       problemCache.delete(cacheKey)
       problemCache.set(cacheKey, kept)
@@ -1399,7 +1412,7 @@ async function runKqm({
     const withWeapon = { ...state, [ck]: { ...state[ck]!, weapon } }
     const { arts, weapons } = gearOf(withWeapon)
     delete arts[ck]
-    const built = buildKqmProblem(database, teamId, gender, {
+    const built = builder.build(teamId, gender, {
       dyn: ck,
       arts,
       attacks: kqmProblemAttacks(attacksNow(), ck, withWeapon),
@@ -1413,7 +1426,11 @@ async function runKqm({
       onField: teamOpt.onField,
       bonusStats,
     })
-    const problem = built && compile(built)
+    const problem = built.then((b) => b && compile(b))
+    // (one that failed is built again when asked for again; a wait that was cancelled is no error)
+    problem.catch(() => {
+      if (problemCache.get(cacheKey) === problem) problemCache.delete(cacheKey)
+    })
     // (the oldest go first: a problem is large compiled code)
     while (problemCache.size >= PROBLEMS_KEPT)
       problemCache.delete(problemCache.keys().next().value!)
@@ -1539,10 +1556,25 @@ async function runKqm({
       counter,
     }: { setsList?: KqmSets[]; setsKept?: number; counter?: Counter } = {}
   ): Promise<{ build: KqmBuild; score: Score }[]> => {
+    const problem = await problemFor(ck, weapon, state)
+    return problem
+      ? searchWith(ck, weapon, state, problem, { setsList, setsKept, counter })
+      : []
+  }
+  /** `searchArtifacts` with the problem at hand (its searches queued now) */
+  const searchWith = (
+    ck: CharacterKey,
+    weapon: KqmWeapon,
+    state: Partial<Record<CharacterKey, KqmBuild>>,
+    problem: Problem,
+    {
+      setsList,
+      setsKept = SETS_SEARCHED,
+      counter,
+    }: { setsList?: KqmSets[]; setsKept?: number; counter?: Counter } = {}
+  ): Promise<{ build: KqmBuild; score: Score }[]> => {
     const space = spaces.get(ck)!
     const current = state[ck]!
-    const problem = problemFor(ck, weapon, state)
-    if (!problem) return []
     const evalPick = (sets: KqmSets, mains: KqmMains) =>
       scoreOf(
         problem,
@@ -1637,11 +1669,16 @@ async function runKqm({
     const current = state[ck]!
     const counter: Counter = { done: 0, total: 0 }
     const searches = new Map<string, ReturnType<typeof searchArtifacts>>()
+    // (the weapons' problems, as they come: their searches are then queued at once)
+    const built = new Map<string, Problem>()
     const search = (weapon: KqmWeapon) => {
       const id = `${weapon.key}@${weapon.refinement}`
       let found = searches.get(id)
       if (!found) {
-        found = searchArtifacts(ck, weapon, state, { counter })
+        const problem = built.get(id)
+        found = problem
+          ? searchWith(ck, weapon, state, problem, { counter })
+          : searchArtifacts(ck, weapon, state, { counter })
         searches.set(id, found)
       }
       return found
@@ -1655,14 +1692,18 @@ async function runKqm({
     const withCurrentSets: ReturnType<typeof searchArtifacts>[] = []
     const screened: { weapon: KqmWeapon; score: Score }[] = []
     const allowed = weaponsFor(ck, state)
+    // (all of them asked for now: the builders build several at once)
+    const problems = allowed.map((weapon) => problemFor(ck, weapon, state))
+    for (const p of problems) p.catch(() => undefined)
     for (const [i, weapon] of allowed.entries()) {
       await tick()
       report('weapons', i, allowed.length)
-      const problem = problemFor(ck, weapon, state)
+      const problem = await problems[i]
       if (!problem) continue
+      built.set(`${weapon.key}@${weapon.refinement}`, problem)
       const score = scoreOf(problem, kqmValues(current))
       screened.push({ weapon, score })
-      const found = searchArtifacts(ck, weapon, state, {
+      const found = searchWith(ck, weapon, state, problem, {
         setsList: [current.sets],
         setsKept: 1,
         counter,
@@ -1715,7 +1756,7 @@ async function runKqm({
       for (const weapon of space.weapons) {
         await yieldTask()
         if (done() || isCancelled()) return
-        problemFor(ck, weapon, state)
+        await problemFor(ck, weapon, state).catch(() => undefined)
       }
     }
 
@@ -1753,7 +1794,7 @@ async function runKqm({
         )
           continue
         const before = builds[ck]!
-        const problem = problemFor(ck, before.weapon, builds)
+        const problem = await problemFor(ck, before.weapon, builds)
         // (a one-copy weapon another member has: any allowed build replaces it)
         const conflict = !weaponsFor(ck, builds).some(
           (w) => w.key === before.weapon.key
@@ -1811,7 +1852,10 @@ async function runKqm({
     // Each list varies one item; the selected weapon/set and every teammate stay fixed. The
     // members are ranked together, their searches in the workers.
     const rankBase = rounds * steps
-    const counter: Counter = { done: 0, total: 0 }
+    // The options ranked (every set with the member's weapon, every weapon with its sets), all
+    // known before any is searched: the count's total stays. A weapon's weighs more in the
+    // progress (`WEAPON_OPTION`).
+    const count = { done: 0, total: 0, weighed: 0, weight: 0 }
     const rankedDone = new Set<CharacterKey>()
     const reportRanking = () =>
       emit(
@@ -1824,24 +1868,49 @@ async function runKqm({
             rankedMembers.find((m) => !rankedDone.has(m.characterKey)) ??
             rankedMembers[rankedMembers.length - 1]
           ).characterKey,
-          done: counter.done,
-          total: counter.total,
+          done: count.done,
+          total: count.total,
         },
         rankBase +
           RANK_UNITS *
             rankedMembers.length *
-            (counter.total ? counter.done / counter.total : 0)
+            (count.weight ? count.weighed / count.weight : 0)
       )
-    counter.onDone = reportRanking
+    const optionDone = (weight: number) => {
+      count.done++
+      count.weighed += weight
+      return reportRanking()
+    }
+    const plans = new Map<
+      CharacterKey,
+      { problem: Problem; allSets: KqmSets[]; weapons: KqmWeapon[] }
+    >()
+    const chosen = await Promise.all(
+      rankedMembers.map(({ characterKey: ck }) =>
+        problemFor(ck, builds[ck]!.weapon, builds)
+      )
+    )
+    for (const [i, { characterKey: ck }] of rankedMembers.entries()) {
+      await tick()
+      const best = builds[ck]!
+      const problem = chosen[i]
+      if (!problem) continue
+      const allSets = setCombos(problem, spaces.get(ck)!, best)
+      if (!allSets.some((sets) => kqmSetsId(sets) === kqmSetsId(best.sets)))
+        allSets.push(best.sets)
+      const weapons = weaponsFor(ck, builds)
+      plans.set(ck, { problem, allSets, weapons })
+      count.total += allSets.length + weapons.length
+      count.weight += allSets.length + WEAPON_OPTION * weapons.length
+    }
     await reportRanking()
     const rankMember = async (
       ck: CharacterKey
     ): Promise<KqmRanking | undefined> => {
       const best = builds[ck]!
-      const space = spaces.get(ck)!
-      await tick()
-      const problem = problemFor(ck, best.weapon, builds)
-      if (!problem) return undefined
+      const plan = plans.get(ck)
+      if (!plan) return undefined
+      const { problem, allSets, weapons } = plan
       // An option misses its requirements when it misses one the chosen build meets: one nobody
       // meets (another member's that no build of this one reaches) marks none of them
       const chosen = scoreOf(problem, kqmValues(best))
@@ -1849,13 +1918,15 @@ async function runKqm({
       const chosenMeets = problem.mins.map((min, j) => chosenCons[j] >= min)
       const meetsAsChosen = (score: Score) =>
         score.deficit <= chosen.deficit + DEFICIT_TOL
-      const option = (r: {
-        build: KqmBuild
-        score: Score
-        team?: Partial<Record<CharacterKey, KqmBuild>>
-      }): KqmOption => {
-        // (with the teammates searched again for it, when it has some)
-        const own = problemFor(ck, r.build.weapon, { ...builds, ...r.team })
+      const option = (
+        r: {
+          build: KqmBuild
+          score: Score
+          team?: Partial<Record<CharacterKey, KqmBuild>>
+        },
+        /** Its problem (with the teammates searched again for it, when it has some) */
+        own: Problem | undefined
+      ): KqmOption => {
         const cons = own?.run(kqmValues(r.build)).cons ?? []
         const shortfalls = (own?.mins ?? []).flatMap((min, j) =>
           cons[j] >= min || !chosenMeets[j]
@@ -1872,13 +1943,16 @@ async function runKqm({
           ...(team && { team }),
         }
       }
-      const allSets = setCombos(problem, space, best)
-      if (!allSets.some((sets) => kqmSetsId(sets) === kqmSetsId(best.sets)))
-        allSets.push(best.sets)
+      // (a set's option is done when its search is)
+      const setsSearched: Counter = {
+        done: 0,
+        total: 0,
+        onDone: () => void optionDone(1),
+      }
       const bySetsFound = searchArtifacts(ck, best.weapon, builds, {
         setsList: allSets,
         setsKept: allSets.length,
-        counter,
+        counter: setsSearched,
       })
       bySetsFound.catch(() => undefined)
       const byWeaponFound: Promise<
@@ -1889,47 +1963,49 @@ async function runKqm({
           }
         | undefined
       >[] = []
-      const weapons = weaponsFor(ck, builds)
-      // (its weapons' options, built after their searches: counted from the start)
-      counter.total += OPTION_COUNT * weapons.length
       for (const weapon of weapons) {
         await tick()
         const found = searchArtifacts(ck, weapon, builds, {
           setsList: [best.sets],
           setsKept: 1,
-          counter,
         }).then(async ([top]) => {
           if (!top) return top
           // (a weapon that changes a teammate's ER requirement: with that teammate's artifacts
           // searched again)
-          const withTeam = await settleTeammates(ck, top.build, builds, counter)
+          const withTeam = await settleTeammates(ck, top.build, builds)
           return withTeam ? { ...top, ...withTeam } : top
         })
         found.catch(() => undefined)
         byWeaponFound.push(found)
       }
       // (an option with teammates searched again builds its own problem: one at a time, the
-      // page drawn between them; a weapon's is counted as `OPTION_COUNT` searches)
+      // page drawn between them; a weapon's option is done once built)
       const optionsOf = async (
         found: readonly (Parameters<typeof option>[0] | undefined)[],
-        count = 0
+        weapons = false
       ) => {
+        // (their problems asked for at once: built several at a time)
+        const problems = found.map((top) =>
+          top
+            ? problemFor(ck, top.build.weapon, { ...builds, ...top.team })
+            : undefined
+        )
+        for (const p of problems) p?.catch(() => undefined)
         const options: KqmOption[] = []
-        for (const top of found) {
+        for (const [i, top] of found.entries()) {
           if (top) {
+            const own = await problems[i]
             await tick()
-            options.push(option(top))
+            options.push(option(top, own))
           }
-          counter.done += count
-          if (count) counter.onDone?.()
+          if (weapons) await optionDone(WEAPON_OPTION)
         }
         return options
       }
       const bySets = await optionsOf(await bySetsFound)
-      const byWeapon = await optionsOf(
-        await Promise.all(byWeaponFound),
-        OPTION_COUNT
-      )
+      // (sets with no search to wait for: done too)
+      for (let n = setsSearched.done; n < allSets.length; n++) optionDone(1)
+      const byWeapon = await optionsOf(await Promise.all(byWeaponFound), true)
       const order = (a: KqmOption, b: KqmOption) =>
         Number(a.unmet) - Number(b.unmet) || b.total - a.total
       const withCatchUp = async (options: KqmOption[]) => {
@@ -1940,7 +2016,7 @@ async function runKqm({
           await tick()
           const current = options[i]
           if (!best || current.unmet || best.unmet) continue
-          const own = problemFor(ck, current.weapon, {
+          const own = await problemFor(ck, current.weapon, {
             ...builds,
             ...current.team,
           })
@@ -1971,7 +2047,7 @@ async function runKqm({
    * A ranked option better than its member's build (its member's search missed it: the sets it
    * screened left it out), the best such one over the team
    */
-  const missedBest = () => {
+  const missedBest = async () => {
     let found:
       | {
           ck: CharacterKey
@@ -1982,7 +2058,7 @@ async function runKqm({
       | undefined
     for (const { characterKey: ck } of rankedMembers) {
       const own = builds[ck]!
-      const problem = problemFor(ck, own.weapon, builds)
+      const problem = await problemFor(ck, own.weapon, builds)
       const ranking = rankings[ck]
       if (!problem || !ranking) continue
       const score = scoreOf(problem, kqmValues(own))
@@ -2018,7 +2094,7 @@ async function runKqm({
     const searches: Promise<void>[] = []
     for (const { characterKey: ck } of rankedMembers) {
       const own = builds[ck]!
-      const problem = problemFor(ck, own.weapon, builds)
+      const problem = await problemFor(ck, own.weapon, builds)
       const ranking = rankings[ck]
       if (!problem || !ranking) continue
       const score = scoreOf(problem, kqmValues(own))
@@ -2090,7 +2166,7 @@ async function runKqm({
       const own = builds[from]!
       const [[set, count] = []] = Object.entries(own.sets)
       if (count !== 4) continue
-      const problem = problemFor(from, own.weapon, builds)
+      const problem = await problemFor(from, own.weapon, builds)
       if (!problem) continue
       const score = scoreOf(problem, kqmValues(own))
       for (const { characterKey: to } of optimized) {
@@ -2127,14 +2203,14 @@ async function runKqm({
    * The whole team's score in `state`: every member's requirements (their deficits added up),
    * then the team's damage
    */
-  const teamScore = (
+  const teamScore = async (
     state: Partial<Record<CharacterKey, KqmBuild>>
-  ): Score | undefined => {
+  ): Promise<Score | undefined> => {
     let total = 0
     let deficit = 0
     for (const { characterKey: j } of optimized) {
       const build = state[j]
-      const problem = build && problemFor(j, build.weapon, state)
+      const problem = build && (await problemFor(j, build.weapon, state))
       if (!build || !problem) return undefined
       const s = scoreOf(problem, kqmValues(build))
       deficit += s.deficit
@@ -2152,7 +2228,7 @@ async function runKqm({
    * over the team that beats the team's builds (requirements first, then damage).
    */
   const missedFavonius = async () => {
-    const current = teamScore(builds)
+    const current = await teamScore(builds)
     if (!current) return undefined
     let found:
       | {
@@ -2195,7 +2271,7 @@ async function runKqm({
           for (const { characterKey: j } of optimized) {
             if (j === from) continue
             const theirs = next[j]!
-            const problem = problemFor(j, theirs.weapon, next)
+            const problem = await problemFor(j, theirs.weapon, next)
             if (!problem) continue
             const [top] = await searchArtifacts(j, theirs.weapon, next, {
               setsList: [theirs.sets],
@@ -2205,7 +2281,7 @@ async function runKqm({
               next[j] = top.build
             team[j] = next[j]!
           }
-          const score = teamScore(next)
+          const score = await teamScore(next)
           if (!score || !better(score, current)) continue
           const gain =
             current.deficit - score.deficit + score.total / current.total - 1
@@ -2243,7 +2319,7 @@ async function runKqm({
         (0.25 * (pass * steps + i)) / (2 * steps)
       )
       const start = state[ck]!
-      const problem = problemFor(ck, start.weapon, state)
+      const problem = await problemFor(ck, start.weapon, state)
       if (!problem) continue
       score = scoreOf(problem, kqmValues(start))
       const [top] = await searchArtifacts(ck, start.weapon, state)
@@ -2465,9 +2541,15 @@ async function runKqm({
     for (let pass = 0; ; pass++) {
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
+      // (the builds so far, with these rankings, while a better one is looked for: later
+      // rankings replace these, not change them)
+      if (onEarly) {
+        const early = finish()
+        if (early) onEarly({ ...early, rankings: { ...rankings } })
+      }
       const missed =
         (await missedFavonius()) ??
-        missedBest() ??
+        (await missedBest()) ??
         (await missedPair()) ??
         (await missedHandoff())
       if (!missed) break
@@ -2493,6 +2575,8 @@ async function runKqm({
   } finally {
     // (a comparison's workers are kept a while: the next pick needs them again)
     releaseKqmWorkers(comparison ? COMPARE_WORKERS_KEPT_MS : 0)
+    // (the builders a while longer: a pick in the inspector builds with them)
+    releaseKqmBuilders(COMPARE_WORKERS_KEPT_MS)
   }
 
   // (a comparison's builds do not change after its preview: only its rankings are added)

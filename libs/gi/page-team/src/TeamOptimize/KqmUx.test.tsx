@@ -123,6 +123,10 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   weaponSheetNs: (key: string) => `weapon_${key}_gen`,
   kqmConstellation: (key: string) => (key === 'Bennett' ? 6 : 0),
   KQM_TALENT_DEFAULT: 9,
+  kqmBuildThreads: () => undefined,
+  kqmBuildThreadsAuto: () => 4,
+  kqmBuildThreadsMax: () => 7,
+  setKqmBuildThreads: () => undefined,
   teamOptMembers: () => [],
   kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 9,
   kqmMemberConstellation: (

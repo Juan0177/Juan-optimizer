@@ -20,8 +20,12 @@ import {
   kqmEnergyRequirement,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
+  kqmBuildThreads,
+  kqmBuildThreadsAuto,
+  kqmBuildThreadsMax,
   kqmTalentLevel,
   kqmWeapons,
+  setKqmBuildThreads,
   syncEnergyCalculator,
   withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
@@ -34,6 +38,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  CircularProgress,
   Drawer,
   IconButton,
   InputAdornment,
@@ -522,6 +527,7 @@ export function KqmSettings({
               )}
             </Box>
           )}
+          <KqmThreads />
           <Button
             variant="contained"
             disabled={disabled || !canRun || blocked || calculatorDirty}
@@ -1579,6 +1585,54 @@ function ConstellationPill({ value }: { value: number }) {
   )
 }
 
+/**
+ * How many background threads build a run's formulas on this device: automatic (by its memory and
+ * cores), or chosen. Kept per device, not with the team.
+ */
+function KqmThreads() {
+  const { t } = useTranslation('page_team')
+  const [threads, setThreads] = useState(kqmBuildThreads)
+  const auto = kqmBuildThreadsAuto()
+  const most = kqmBuildThreadsMax()
+  const label = t('teamOpt.kqm.threads', 'Threads')
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <FieldLabel
+        tip={t(
+          'teamOpt.kqm.threadsTip',
+          'Background threads that build the team’s formulas during a run. More finish sooner; each uses about 200 MB of memory while a run lasts. Auto picks from this device’s memory and cores.'
+        )}
+      >
+        {label}
+      </FieldLabel>
+      <Select
+        size="small"
+        value={threads === undefined ? 'auto' : String(Math.min(threads, most))}
+        inputProps={{ 'aria-label': label }}
+        onChange={(e) => {
+          const next =
+            e.target.value === 'auto' ? undefined : Number(e.target.value)
+          setKqmBuildThreads(next)
+          setThreads(next)
+        }}
+        sx={{ minWidth: 92, '& .MuiSelect-select': { py: 0.5 } }}
+      >
+        <MenuItem value="auto">
+          {t('teamOpt.kqm.threadsAuto', {
+            defaultValue: 'Auto ({{n}})',
+            n: auto,
+          })}
+        </MenuItem>
+        {Array.from({ length: most }, (_, i) => i + 1).map((n) => (
+          <MenuItem key={n} value={String(n)}>
+            {n}
+          </MenuItem>
+        ))}
+      </Select>
+    </Box>
+  )
+}
+
 export function KqmResults({
   teamId,
   runSettings,
@@ -1592,6 +1646,7 @@ export function KqmResults({
   rotation,
   stalls,
   running,
+  improving,
   onDiscard,
   onView,
 }: {
@@ -1611,6 +1666,8 @@ export function KqmResults({
   rotationTime?: number
   stale?: boolean
   running?: boolean
+  /** The run's builds so far: it is still looking for better ones (its members can be viewed) */
+  improving?: boolean
   onDiscard: () => void
   /** The builds shown now: the run's, or the team with other equipment picked here */
   onView?: (view: KqmResult) => void
@@ -1695,6 +1752,30 @@ export function KqmResults({
                 ? t('teamOpt.kqm.teamDps', 'team DPS')
                 : t('teamOpt.kqm.teamDmg', 'team DMG')}
             </Typography>
+            {improving && (
+              <Tooltip
+                arrow
+                title={t(
+                  'teamOpt.kqm.improvingTip',
+                  'The best builds so far. The run is still looking for better ones: these update when it finds them.'
+                )}
+              >
+                <Typography
+                  sx={{
+                    ...type.label,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    alignSelf: 'center',
+                    color: 'text.secondary',
+                    cursor: 'help',
+                  }}
+                >
+                  <CircularProgress size={10} thickness={6} color="inherit" />
+                  {t('teamOpt.kqm.improving', 'Improving')}
+                </Typography>
+              </Tooltip>
+            )}
             {comparing && (
               <Tooltip
                 arrow
@@ -1826,7 +1907,7 @@ export function KqmResults({
               role="tab"
               aria-selected={selected}
               aria-label={characterKey}
-              disabled={!build || running}
+              disabled={!build || (running && !improving)}
               onClick={() => setShown(characterKey)}
               sx={(theme) => ({
                 display: 'flex',
