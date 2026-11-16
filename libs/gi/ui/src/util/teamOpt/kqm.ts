@@ -67,6 +67,7 @@ import { teamOptBonusStats, teamOptMembers } from './data'
 import {
   calculateEnergyRecharge,
   energyCalcData,
+  isFavonius,
   syncEnergyCalculator,
 } from './energyCalc'
 import type { ItemConditionalCtx } from './itemConditionals'
@@ -980,6 +981,8 @@ const ADOPT_PASSES = 2
  */
 const PAIR_WEAPONS = 5
 const PAIR_SETS = 5
+/** A Favonius holder's best other ranked weapons tried when its Favonius goes to a teammate */
+const HANDOFF_WEAPONS = 2
 /** Rounds after a ranked option is taken, at most */
 const ADOPT_ROUNDS = 2
 
@@ -2052,6 +2055,100 @@ async function runKqm({
   }
 
   /**
+   * The whole team's score in `state`: every member's requirements (their deficits added up),
+   * then the team's damage
+   */
+  const teamScore = (
+    state: Partial<Record<CharacterKey, KqmBuild>>
+  ): Score | undefined => {
+    let total = 0
+    let deficit = 0
+    for (const { characterKey: j } of optimized) {
+      const build = state[j]
+      const problem = build && problemFor(j, build.weapon, state)
+      if (!build || !problem) return undefined
+      const s = scoreOf(problem, kqmValues(build))
+      deficit += s.deficit
+      total = Math.max(total, s.total)
+    }
+    return { total, deficit }
+  }
+
+  /**
+   * A Favonius handed to a teammate: the teammate takes its own Favonius, the member who held one
+   * takes one of its best other weapons, and everyone's artifacts are searched again for the
+   * Energy Recharge that moves. The particles of a Favonius lower every teammate's requirement,
+   * so one member's step keeps it where it is even when it belongs on a support: a carry holding
+   * it alone meets the team's requirements, giving it up alone misses them. The best such move
+   * over the team that beats the team's builds (requirements first, then damage).
+   */
+  const missedFavonius = async () => {
+    const current = teamScore(builds)
+    if (!current) return undefined
+    let found:
+      | {
+          ck: CharacterKey
+          build: KqmBuild
+          gain: number
+          team?: Partial<Record<CharacterKey, KqmBuild>>
+        }
+      | undefined
+    for (const { characterKey: from } of optimized) {
+      const own = builds[from]!
+      if (!isFavonius(own.weapon.key)) continue
+      const allowed = weaponsFor(from, builds)
+      const others = [
+        ...new Map(
+          [...(rankings[from]?.weapons ?? [])]
+            .sort((a, b) => b.total - a.total)
+            .filter(
+              (o) =>
+                !isFavonius(o.weapon.key) &&
+                allowed.some((w) => w.key === o.weapon.key)
+            )
+            .map((o) => [`${o.weapon.key}@${o.weapon.refinement}`, o.weapon])
+        ).values(),
+      ].slice(0, HANDOFF_WEAPONS)
+      if (!others.length) continue
+      for (const { characterKey: to } of optimized) {
+        if (to === from || isFavonius(builds[to]!.weapon.key)) continue
+        const favonius = weaponsFor(to, builds).find((w) => isFavonius(w.key))
+        if (!favonius) continue
+        const [given] = await searchArtifacts(to, favonius, builds)
+        if (!given) continue
+        for (const weapon of others) {
+          const next = { ...builds, [to]: given.build }
+          const [mine] = await searchArtifacts(from, weapon, next)
+          if (!mine) continue
+          next[from] = mine.build
+          // (the others' artifacts for the Energy Recharge the move frees or takes away)
+          const team: Partial<Record<CharacterKey, KqmBuild>> = {}
+          for (const { characterKey: j } of optimized) {
+            if (j === from) continue
+            const theirs = next[j]!
+            const problem = problemFor(j, theirs.weapon, next)
+            if (!problem) continue
+            const [top] = await searchArtifacts(j, theirs.weapon, next, {
+              setsList: [theirs.sets],
+              setsKept: 1,
+            })
+            if (top && better(top.score, scoreOf(problem, kqmValues(theirs))))
+              next[j] = top.build
+            team[j] = next[j]!
+          }
+          const score = teamScore(next)
+          if (!score || !better(score, current)) continue
+          const gain =
+            current.deficit - score.deficit + score.total / current.total - 1
+          if (!found || gain > found.gain)
+            found = { ck: from, build: mine.build, gain, team }
+        }
+      }
+    }
+    return found
+  }
+
+  /**
    * Before the rounds: each member's artifacts for its starting weapon, so that the first round's
    * weapons are tried against the others' fitting artifacts, not their starting ones (one problem
    * per member; it saves a round of all the weapons' problems). Members in `order`, from `from`:
@@ -2300,7 +2397,10 @@ async function runKqm({
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
       const missed =
-        missedBest() ?? (await missedPair()) ?? (await missedHandoff())
+        (await missedFavonius()) ??
+        missedBest() ??
+        (await missedPair()) ??
+        (await missedHandoff())
       if (!missed) break
       // taken, and the rounds go on from there (the others' best builds may change with it)
       builds[missed.ck] = missed.build
