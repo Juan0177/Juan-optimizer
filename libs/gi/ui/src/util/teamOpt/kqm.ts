@@ -1526,34 +1526,43 @@ async function runKqm({
     )
   }
 
-  /** 4-piece sets, and 2+2 of the best 2-piece bonuses (sets with the same bonus count once) */
+  /**
+   * 4-piece sets, and 2+2 of the best 2-piece bonuses: sets with the same bonus are one class
+   * (named by the best-known set), paired with another class or with a second set of its own (two
+   * 2-piece ATK sets stack: Gladiator's Finale + Shimenawa's Reminiscence)
+   */
   const setCombos = (
     problem: Problem,
     space: MemberSpace,
     current: KqmBuild
   ): KqmSets[] => {
     const rolls = current.rolls
-    const two = space.two
-      .map((k) => ({
-        k,
-        v: scoreOf(
-          problem,
-          kqmValues({ sets: { [k]: 2 }, mains: current.mains, rolls })
-        ).total,
-      }))
+    const value = (sets: KqmSets) =>
+      scoreOf(problem, kqmValues({ sets, mains: current.mains, rolls })).total
+    const none = value({})
+    const scored = space.two
+      .map((k) => ({ k, v: value({ [k]: 2 }) }))
       .sort((a, b) => b.v - a.v || pref(a.k) - pref(b.k))
-      .filter(
-        (x, i, all) =>
-          all.findIndex((o) => Math.abs(o.v - x.v) <= 1e-9 * Math.abs(x.v)) ===
-          i
+    const classes: { v: number; sets: ArtifactSetKey[] }[] = []
+    for (const x of scored) {
+      const same = classes.find(
+        (c) => Math.abs(c.v - x.v) <= 1e-9 * Math.abs(x.v)
       )
-      .slice(0, TWO_PIECE_CLASSES)
-      .map((x) => x.k)
+      if (same) same.sets.push(x.k)
+      else classes.push({ v: x.v, sets: [x.k] })
+    }
+    const kept = classes.slice(0, TWO_PIECE_CLASSES)
     return [
       ...space.four.map((k) => ({ [k]: 4 }) as KqmSets),
-      ...two.flatMap((a, i) =>
-        two.slice(i + 1).map((b) => ({ [a]: 2, [b]: 2 }) as KqmSets)
-      ),
+      ...kept.flatMap((a, i) => [
+        // (a bonus worth nothing to the member is not doubled)
+        ...(a.sets.length > 1 && a.v > none + 1e-9 * Math.abs(none)
+          ? [{ [a.sets[0]]: 2, [a.sets[1]]: 2 } as KqmSets]
+          : []),
+        ...kept
+          .slice(i + 1)
+          .map((b) => ({ [a.sets[0]]: 2, [b.sets[0]]: 2 }) as KqmSets),
+      ]),
     ]
   }
 
