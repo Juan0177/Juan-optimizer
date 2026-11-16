@@ -88,6 +88,25 @@ function shifted(c: SimContext, offset: number): SimContext {
   })
 }
 const active = (c: SimContext, s: State) => c.now < s.end
+/**
+ * Sword Essence (dump `_ABILITY_Vesna_MagicValue`: 30 a Sword Essence, at most 90), kept as whole
+ * Sword Essence plus points of 5
+ */
+function addEssence(s: State, essence: number, points = 0) {
+  const total = Math.min(
+    18,
+    s.essence * 6 + s.normalPoints + essence * 6 + points
+  )
+  s.essence = Math.floor(total / 6)
+  s.normalPoints = total % 6
+}
+/** Armed for Action ends: all Sword Essence goes */
+function clearEssence(s: State) {
+  s.essence = 0
+  s.normalPoints = 0
+}
+/** C1: the first max-level Windborne Sword of this Armed for Action needs no Sword Essence */
+const freeSword = (s: State) => s.level >= 3 && s.c1Free
 const set = (c: SimContext, name: string, value: string) =>
   c.state('Vesna', ['Vesna', name], value)
 function sync(c: SimContext, s: State) {
@@ -122,7 +141,9 @@ function spirit(
   delay: number,
   node: string,
   label: string,
-  burst = false
+  burst = false,
+  /** The blade still counts as in Armed for Action (the last use: the mode ends after it) */
+  armed = false
 ) {
   c.atCharacter('Vesna', delay, (at) => {
     sync(at, s)
@@ -149,6 +170,15 @@ function spirit(
           path: ['Vesna', 'a1Stacks'],
           value: s.a1.length ? String(s.a1.length) : '',
         },
+        ...(armed
+          ? [
+              {
+                owner: 'Vesna' as const,
+                path: ['Vesna', 'skillArmed'],
+                value: 'on',
+              },
+            ]
+          : []),
       ],
     })
   })
@@ -216,7 +246,7 @@ export const kit: KitModel = {
   onStart(c, s: State) {
     sync(c, s)
     c.note(
-      'Vesna: follows the pinned native source (C1–C6 included). Wind Pinion is emitted on each normal/charged action, including outside Armed for Action in that source; plunges are unsupported.'
+      'Vesna: follows the pinned native source (C1–C6 included), with the game logic where they differ: Wind Pinions only in Armed for Action, Sword Essence capped at 3, a Burst before her Skill keeps its Sword Essence; plunges are unsupported.'
     )
   },
   cooldownKey: (s: State, action, now) =>
@@ -231,7 +261,8 @@ export const kit: KitModel = {
     action.kind === 'skill' &&
     !transposeReady(c, s) &&
     active(c, s) &&
-    s.essence <= 0
+    s.essence <= 0 &&
+    !freeSword(s)
       ? s.end
       : c.now,
   // In Armed for Action her E is Windborne Blade Lv. 1, 2 or 3 (each with frames of its own); in
@@ -240,7 +271,11 @@ export const kit: KitModel = {
     if (action.kind !== 'skill' && action.kind !== 'normal') return undefined
     if (transposeReady(c, s))
       return { key: 'transpose', label: 'Windborne Sword: Transpose' }
-    if (action.kind !== 'skill' || !active(c, s) || s.essence <= 0)
+    if (
+      action.kind !== 'skill' ||
+      !active(c, s) ||
+      (s.essence <= 0 && !freeSword(s))
+    )
       return undefined
     const level = Math.min(3, s.level)
     return {
@@ -257,7 +292,8 @@ export const kit: KitModel = {
         if (transposeReady(c, s)) return transpose(c, s)
         if (!active(c, s)) {
           s.end = c.now + 929
-          s.essence = 2
+          // (+2 Sword Essence on top of any a Burst left: essence goes only when the mode ends)
+          addEssence(s, 2)
           s.level = 1
           s.maxUses = 0
           s.a1 = []
@@ -270,7 +306,7 @@ export const kit: KitModel = {
           c.atCharacter('Vesna', 929, (at) => {
             if (token !== s.token) return
             s.end = at.now
-            s.essence = 0
+            clearEssence(s)
             sync(at, s)
           })
           c.hit(29, {
@@ -295,7 +331,7 @@ export const kit: KitModel = {
             cooldown: { key: 'skill', delay: 29, frames: 1080 },
           }
         }
-        if (s.essence <= 0)
+        if (s.essence <= 0 && !freeSword(s))
           return {
             frames: 0,
             failed: 'Vesna: Windborne Blade requires Sword Essence.',
@@ -348,21 +384,35 @@ export const kit: KitModel = {
                 },
               }
         }
+        // C1: up to 4 max-level uses instead of 3.
+        const last = s.maxUses + 1 >= (c.constellation('Vesna') >= 1 ? 4 : 3)
+        // (the last use's blades keep Armed for Action's C1 bonus: the mode ends only after its
+        // animation, dump Vesna_ElementalArt_E3_CountChecker_Real)
         for (const t of [24, 33, 41, 50])
-          spirit(c, s, t, 'sword3Spirit', 'Windborne Blade Lv. 3 Spirit Blade')
+          spirit(
+            c,
+            s,
+            t,
+            'sword3Spirit',
+            'Windborne Blade Lv. 3 Spirit Blade',
+            false,
+            last
+          )
         spirit(
           c,
           s,
           70,
           'sword3SpiritFinal',
-          'Windborne Blade Lv. 3 Spirit Blade Final'
+          'Windborne Blade Lv. 3 Spirit Blade Final',
+          false,
+          last
         )
         // C6: Transpose is available for 5 s after a max-level use.
         if (c.constellation('Vesna') >= 6) s.c6End = c.now + 300
-        // C1: up to 4 max-level uses instead of 3.
-        if (++s.maxUses >= (c.constellation('Vesna') >= 1 ? 4 : 3)) {
+        s.maxUses++
+        if (last) {
           s.end = c.now
-          s.essence = 0
+          clearEssence(s)
           sync(c, s)
         }
         return {
@@ -414,7 +464,8 @@ export const kit: KitModel = {
                   : []),
               ],
             })
-            if (j === 0) {
+            // (Wind Pinions only in Armed for Action: dump _ABILITY_Vesna_MagicSword_Enabled)
+            if (j === 0 && armed) {
               const start = delay - normals[i].hitmarks[0]
               if (!queued.has(start)) {
                 queued.add(start)
@@ -466,7 +517,7 @@ export const kit: KitModel = {
               : []),
           ],
         })
-        pinion(c, 30)
+        if (armed) pinion(c, 30)
         c.hit(31, {
           path: ['_marker', 'hitlag'],
           tag: 'other',
@@ -492,9 +543,8 @@ export const kit: KitModel = {
       }
       case 'burst':
         stack(c, s)
-        c.atCharacter('Vesna', 98, () => {
-          s.essence++
-        })
+        // (+1 Sword Essence, in Armed for Action or not: kept for her next Skill)
+        c.atCharacter('Vesna', 98, () => addEssence(s, 1))
         spirit(c, s, 132, 'spirit', 'Burst', true)
         return {
           frames: 128,
@@ -539,11 +589,7 @@ export const kit: KitModel = {
     const points = Number(
       hit.states?.find((x) => x.path[1] === '_swordEssence')?.value ?? 0
     )
-    s.normalPoints += points
-    if (s.normalPoints >= 6) {
-      s.normalPoints -= 6
-      s.essence++
-    }
+    if (points && active(c, s)) addEssence(s, 0, points)
   },
   onReactionSnapshot: sync,
   onHitlag(c, s: State, frames) {
@@ -551,8 +597,11 @@ export const kit: KitModel = {
     if (transposeReady(c, s)) s.c6End += frames
   },
   onSwapOut(c, s: State) {
+    // (leaving the field ends Armed for Action and its Sword Essence; a Burst's outside it stays)
+    if (active(c, s)) clearEssence(s)
     s.end = c.now
-    s.essence = 0
+    // C6: leaving the field removes Transpose
+    s.c6End = -1
     s.a1 = []
     s.dashed = false
     sync(c, s)
