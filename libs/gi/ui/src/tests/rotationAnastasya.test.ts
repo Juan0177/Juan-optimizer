@@ -78,7 +78,7 @@ describe('Anastasya', () => {
   })
 
   it('Evernight Seals the others, Blessed Spear hits shorten it, then Doom runs its three stages', () => {
-    const sim = run('Anastasya hE Q N5 N5 N5 N5 W3 E E E W2', ['Anastasya'])
+    const sim = run('Anastasya hE Q N5 N5 W3 E E E W2', ['Anastasya'])
     const evernight = sim.hits.find((h) =>
       h.label.startsWith('The Evernight Yields to Dawn')
     )!
@@ -91,6 +91,59 @@ describe('Anastasya', () => {
       expect(doom.some((h) => h.path[1] === stage)).toBe(true)
     // Honor Sealing ended (Doom available): Accolades were shared with her meanwhile
     expect(windowAt(sim, 'accolades', evernight.t + 1)).toBe('honorSeal')
+  })
+
+  it('one N5 string ends the Honor Sealing (the dump: 120, time 1 per 12 frames, the attacks 10/20/20/30/30)', () => {
+    const sim = run('Anastasya hE Q N5 E E E W1', ['Anastasya'])
+    const n5 = sim.actions.find((a) => a.text === 'N5')!
+    const es = sim.actions.filter((a) => a.text === 'E')
+    expect(es.map((a) => a.variant?.key)).toEqual(['doom1', 'doom2', 'doom3'])
+    // the Sealing ends within the string's fifth attack (its 30 lands 0.65 s in, after its last
+    // hit), the Accolades share then lasting 8 s more
+    const share = sim.buffWindows.find(
+      (w) =>
+        w.owner === 'Anastasya' &&
+        w.path[1] === 'accolades' &&
+        w.value === 'honorSeal'
+    )!
+    const sealEnd = share.end - 480
+    const fifth = n5.start + 26 + 33 + 37 + 30
+    expect(sealEnd).toBeGreaterThan(fifth)
+    expect(sealEnd).toBeLessThanOrEqual(fifth + 55)
+    // Doom's first stage follows at once (no wait for the Skill CD)
+    expect(es[0].start).toBe(Math.max(n5.start + n5.frames, sealEnd))
+    for (const stage of ['doom0Sc', 'doom1Sc', 'doom2Sc'])
+      expect(sim.hits.some((h) => h.path[1] === stage)).toBe(true)
+  })
+
+  it('without Blessed Spear attacks the 14 s run out: the others unseal without Doom', () => {
+    const sim = run('Anastasya hE Q W15 E W1', ['Anastasya'])
+    expect(sim.hits.some((h) => h.path[1]?.startsWith('doom'))).toBe(false)
+    expect(sim.actions.find((a) => a.text === 'E')!.variant).toBeUndefined()
+    const evernight = sim.hits.find((h) => h.path[1] === 'evernightSc')!
+    expect(windowAt(sim, 'accolades', evernight.t + 840 + 481)).not.toBe(
+      'honorSeal'
+    )
+  })
+
+  it('leaving the field ends the Blessing of Honor; the hold Skill ends the crown and To the New World', () => {
+    const sim = run('Anastasya hE Q N5 E E E -> Bennett E W2', [
+      'Anastasya',
+      'Bennett',
+    ])
+    const bennett = sim.actions.find((a) => a.characterKey === 'Bennett')!
+    expect(windowAt(sim, 'blessing', bennett.start - 1)).toBe('honor')
+    expect(windowAt(sim, 'blessing', bennett.start)).toBe('love')
+
+    const love = run('Anastasya E Q hE W10', ['Anastasya'])
+    const hold = love.actions.find((a) => a.text === 'hE')!
+    expect(windowAt(love, 'burstActive', hold.start - 1)).toBe('on')
+    expect(windowAt(love, 'burstActive', hold.start)).toBe('')
+    expect(
+      love.hits.some(
+        (h) => h.path.join('.') === 'skill.crownDmg' && h.t > hold.start
+      )
+    ).toBe(false)
   })
 
   it('C2 Love lasts 30 s after the tap, independent of the crown', () => {
@@ -116,10 +169,16 @@ describe('Anastasya', () => {
     })
   })
 
-  it('C6 Honor adds Doom’s third attack to the next tapped Skill', () => {
-    const sim = run('Anastasya hE W15 E', ['Anastasya'], { Anastasya: 6 })
-    const doom = sim.hits.find((h) => h.label.startsWith('Doom 3-Hit (C6)'))!
+  it('C6 Honor: the Skill right after the hold Skill is Doom’s third attack, with no cooldown wait', () => {
+    const sim = run('Anastasya hE E W1', ['Anastasya'], { Anastasya: 6 })
+    const [hold, strike] = sim.actions.filter(
+      (a) => a.characterKey === 'Anastasya'
+    )
+    expect(strike.start).toBe(hold.start + hold.frames)
+    expect(strike.variant?.label).toBe('Palestar Edict: Doom 3-Hit (C6)')
+    const doom = sim.hits.find((h) => h.path[0] === 'constellation6')!
     expect(doom.path.join('.')).toBe('constellation6.doom3Sc')
+    // (nobody Sealed: C6_VirtualSealed_Bonus, every member's Accolades)
     expect(doom.states).toContainEqual({
       owner: 'Anastasya',
       path: ['Anastasya', 'accolades'],
@@ -127,7 +186,7 @@ describe('Anastasya', () => {
     })
   })
 
-  it('uses 18 s Burst CD in both Blessings; at C6 Honor’s strike is Doom’s third stage, after the others unseal', () => {
+  it('uses 18 s Burst CD in both Blessings', () => {
     for (const rot of ['Anastasya E Q Q', 'Anastasya hE Q Q']) {
       const sim = run(rot, ['Anastasya'])
       const qs = sim.actions.filter(
@@ -135,29 +194,56 @@ describe('Anastasya', () => {
       )
       expect(qs[1].start - qs[0].start).toBeGreaterThanOrEqual(1080)
     }
+  })
 
-    const c6 = run('Anastasya hE Q N5 N5 N5 N5 E E E E', ['Anastasya'], {
+  it('C6 hE Q N5D N5D E E E: the Sealing’s end removes the unused C6 strike, Doom’s third stage is its own', () => {
+    // (the dump's Frozen_SwitchSkill_Prepare removes Constellation_6_Descender_Ready)
+    const c6 = run('Anastasya hE Q N5 D N5 D E E E W1', ['Anastasya'], {
       Anastasya: 6,
     })
-    // (the dump's Breaking_Descender: with the C6 flag from the hold Skill, the third stage deals
-    // the C6 version, 250% with every member's Accolades, instead of its own DMG, once)
-    const strikes = c6.hits.filter(
+    expect(c6.hits.some((h) => h.path[0] === 'constellation6')).toBe(false)
+    expect(
+      c6.hits.filter((h) => h.path.join('.') === 'burst.doom2Sc')
+    ).toHaveLength(1)
+    expect(
+      c6.actions.filter((a) => a.text === 'E').map((a) => a.variant?.key)
+    ).toEqual(['doom1', 'doom2', 'doom3'])
+  })
+
+  it('C6 hE Q E N5D N5D E E E: the strike once, at once, with every member’s Accolades, then all of Doom', () => {
+    const sim = run('Anastasya hE Q E N5 D N5 D E E E W1', ['Anastasya'], {
+      Anastasya: 6,
+    })
+    const q = sim.actions.find((a) => a.text === 'Q')!
+    const es = sim.actions.filter((a) => a.text === 'E')
+    expect(es[0].start).toBe(q.start + q.frames)
+    expect(es.map((a) => a.variant?.key)).toEqual([
+      'c6doom',
+      'doom1',
+      'doom2',
+      'doom3',
+    ])
+    expect(sim.notes.some((n) => n.includes('Waited'))).toBe(false)
+    const strikes = sim.hits.filter(
       (h) => h.path.join('.') === 'constellation6.doom3Sc'
     )
     expect(strikes).toHaveLength(1)
-    expect(c6.hits.some((h) => h.path.join('.') === 'burst.doom2Sc')).toBe(
-      false
-    )
-    expect(
-      strikes[0].states?.find((x) => x.path.join('.') === 'Anastasya.accolades')
-        ?.value
-    ).toBe('honorSeal')
+    expect(strikes[0].states).toContainEqual({
+      owner: 'Anastasya',
+      path: ['Anastasya', 'accolades'],
+      value: 'honorSeal',
+    })
+    expect(windowAt(sim, 'accolades', strikes[0].t)).toBe('honorSeal')
     // (its 20% Elevation window is on then)
-    expect(windowAt(c6, 'c6HonorWindow', strikes[0].t)).toBe('on')
-    // (below C6, the third stage is Doom's own)
-    const c0 = run('Anastasya hE Q N5 N5 N5 N5 E E E E', ['Anastasya'])
-    expect(c0.hits.some((h) => h.path.join('.') === 'burst.doom2Sc')).toBe(true)
+    expect(windowAt(sim, 'c6HonorWindow', strikes[0].t)).toBe('on')
+    for (const stage of ['doom0Sc', 'doom1Sc', 'doom2Sc'])
+      expect(sim.hits.filter((h) => h.path[1] === stage)).toHaveLength(1)
+    // (below C6 the E waits for the Skill CD instead)
+    const c0 = run('Anastasya hE Q E W1', ['Anastasya'])
     expect(c0.hits.some((h) => h.path[0] === 'constellation6')).toBe(false)
+    expect(c0.actions.filter((a) => a.text === 'E')[0].start).toBeGreaterThan(
+      q.start + q.frames
+    )
   })
 
   it('sheet reflects 7.2.52 CRIT DMG ascension, A4 10% Swirl coeff, C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
@@ -234,5 +320,21 @@ describe('Anastasya', () => {
       honorAna.getDisplay()['constellation6']['doom3Sc'].value /
         honorAna.getDisplay()['burst']['doom2Sc'].value
     ).toBeCloseTo(2.5, 5)
+
+    // the C6 strike's 'honorSeal' Accolades: every member's 12% (x1.3 at C4), 4 units against 1
+    const critDMG = (accolades: string) => {
+      const id = db.teamChars.new('Anastasya', {
+        conditional: { Anastasya: { blessing: 'honor', accolades } },
+      })
+      const teamId = db.teams.new({
+        loadoutData: [{ teamCharId: id }] as LoadoutDatum[],
+      })
+      return uiDataForTeam(
+        getTeamDataWith(db, teamId, {})! as never,
+        'F',
+        'Anastasya'
+      ).Anastasya!.target.getDisplay()['basic']['critDMG_'].value
+    }
+    expect(critDMG('honorSeal') - critDMG('on')).toBeCloseTo(3 * 0.12 * 1.3, 5)
   })
 })
