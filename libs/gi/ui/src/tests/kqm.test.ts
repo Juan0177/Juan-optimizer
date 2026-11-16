@@ -723,10 +723,16 @@ describe('KQM Standards builds', () => {
     teamOpt.kqm!.weaponList = 2
     const result = (await run(database, teamId, teamOpt))!
     expect(result.builds[shenhe]!.weapon.key).toBe('FavoniusLance')
-    const expected = calculateEnergyRecharge([ayaka, shenhe], settings, {
-      [ayaka]: 'PrototypeRancour',
-      [shenhe]: 'FavoniusLance',
-    }).targets[ayaka]!
+    // (the weapons' refinements as the run gives them: Favonius's chance follows its refinement)
+    const expected = calculateEnergyRecharge(
+      [ayaka, shenhe],
+      settings,
+      { [ayaka]: 'PrototypeRancour', [shenhe]: 'FavoniusLance' },
+      {
+        [ayaka]: result.builds[ayaka]!.weapon.refinement,
+        [shenhe]: result.builds[shenhe]!.weapon.refinement,
+      }
+    ).targets[ayaka]!
     expect(result.energyRecharge[ayaka]!.minimum).toBeCloseTo(expected, 6)
     expect(result.energyRecharge[ayaka]!.value).toBeGreaterThanOrEqual(expected)
     expect(result.energyRecharge[ayaka]!.minimum).toBeGreaterThan(100)

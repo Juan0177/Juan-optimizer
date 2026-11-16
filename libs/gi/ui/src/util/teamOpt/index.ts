@@ -3,6 +3,12 @@ export * from './display'
 export * from './energyCalc'
 export * from './itemConditionals'
 export * from './kqm'
+export {
+  kqmBuildThreads,
+  kqmBuildThreadsAuto,
+  kqmBuildThreadsMax,
+  setKqmBuildThreads,
+} from './kqmBuildPool'
 export * from './kqmWeaponSources'
 export * from './objective'
 export * from './rotation'
