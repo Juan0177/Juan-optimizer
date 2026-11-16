@@ -536,6 +536,8 @@ describe('ER calculator weapons', () => {
       settings.members[key]!.burstEvery = 0
     }
     settings.members.Bennett!.favoniusProcs = procs
+    // (entered by hand: a count filled in from the rotation is scaled by the refinement's chance)
+    settings.members.Bennett!.edited = ['favoniusProcs']
     if (catcher) settings.members.Bennett!.favoniusCatchBy = catcher
     return settings
   }
@@ -563,6 +565,16 @@ describe('ER calculator weapons', () => {
     expect(energy.Bennett).toBeCloseTo(12, 9)
     for (const key of ['Xiangling', 'Xingqiu', 'Sucrose'] as const)
       expect(energy[key]).toBeCloseTo(7.2, 9)
+  })
+
+  it('Favonius: a count from the rotation (R5) takes a smaller refinement’s chance (60–100%)', () => {
+    const settings = favSettings(2)
+    settings.members.Bennett!.edited = []
+    expect(energyOf(settings, 'FavoniusSword', 5).Bennett).toBeCloseTo(12, 9)
+    expect(energyOf(settings, 'FavoniusSword', 3).Bennett).toBeCloseTo(
+      12 * 0.8,
+      9
+    )
   })
 
   it('Favonius: particles go to whoever is on the field when it triggers', () => {
@@ -655,6 +667,7 @@ describe('ER calculator weapons', () => {
     expect(result.members.Xingqiu!.flatEnergy).toBe(12)
     // filled in from a rotation (not set by hand): no Favonius assumed before KQM picks
     const filled = favSettings(2)
+    filled.members.Bennett!.edited = []
     expect(
       energyCalcWeapons(team, filled, (k) => allowed[k] ?? []).weapons.Bennett
     ).toBeUndefined()

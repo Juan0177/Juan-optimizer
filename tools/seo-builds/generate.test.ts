@@ -35,6 +35,7 @@ import {
   getBuildTcArtifactData,
   getBuildTcWeaponData,
   getTeamDataCalc,
+  KQM_NOT_IN_GAME,
 } from '@genshin-optimizer/gi/ui'
 import { getMainStatValue, getSubstatValue } from '@genshin-optimizer/gi/util'
 import {
@@ -85,7 +86,11 @@ function run(sc: Scenario) {
   const weapons = (allWeaponKeys as readonly string[])
     .filter((w) => {
       const s = getWeaponStat(w as any) as any
-      return s.weaponType === weaponType && s.rarity >= 4
+      return (
+        s.weaponType === weaponType &&
+        s.rarity >= 4 &&
+        !KQM_NOT_IN_GAME.includes(w as never)
+      )
     })
     .slice(0, quick ? 3 : undefined)
   if (quick) {
