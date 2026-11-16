@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.12.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.12.0) (2026-11-17)
+
+### New
+
+- Share your KQM results as pictures for Discord, Reddit or X (the Share button above the results): a theorycrafting team card with each member's weapon, sets, damage share, field time and Energy Recharge and the rotation, and weapon and artifact set charts for each member, measured against the best weapon from the default list. Every picture notes the version and the date, and pictures with beta characters, weapons or sets are marked as beta.
+- Weapon groups can count several refinements at once, for example R1 and R5: builds use the highest, and the rankings and weapon charts show each weapon at the others too. Favonius, Sacrificial and the other 4★ standard wish weapons now have their own group (R5 by default).
+
+### Improved
+
+- "Opener counted" sits beside the rotation count in the KQM run settings: the same switch as the writer's "Counted" for First rotation only.
+
 ## [v1.11.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.11.2) (2026-11-16)
 
 ### New
