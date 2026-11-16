@@ -9,10 +9,10 @@ import type {
 } from '@mui/material'
 import {
   Autocomplete,
+  Box,
   Chip,
   ListItemIcon,
   ListItemText,
-  MenuItem,
   Skeleton,
   TextField,
   useTheme,
@@ -104,9 +104,10 @@ export function GeneralAutocomplete<T extends string>({
         const { key, ...rest } =
           props as React.HTMLAttributes<HTMLLIElement> & { key: string }
         return (
-          <MenuItem
-            value={option.key}
-            sx={{ whiteSpace: 'normal' }}
+          // juanlab: un li e non MenuItem, che con MUI 9 va in errore fuori da un Menu ("MenuListContext is missing")
+          <Box
+            component="li"
+            sx={{ whiteSpace: 'normal', display: 'flex', alignItems: 'center' }}
             key={key}
             {...rest}
           >
@@ -127,7 +128,7 @@ export function GeneralAutocomplete<T extends string>({
               </Suspense>
             </ListItemText>
             {!!option.favorite && <FavoriteIcon />}
-          </MenuItem>
+          </Box>
         )
       }}
       filterOptions={(options, { inputValue }) =>
@@ -201,7 +202,13 @@ export function GeneralAutocompleteMulti<T extends string>({
         />
       )}
       renderOption={(props, option) => (
-        <MenuItem value={option.key} {...props} key={option.key}>
+        // juanlab: un li e non MenuItem, come sopra
+        <Box
+          component="li"
+          sx={{ display: 'flex', alignItems: 'center' }}
+          {...props}
+          key={option.key}
+        >
           <ListItemIcon>{toImg(option.key)}</ListItemIcon>
           <ListItemText>
             <Suspense fallback={<Skeleton variant="text" width={100} />}>
@@ -216,7 +223,7 @@ export function GeneralAutocompleteMulti<T extends string>({
             </Suspense>
           </ListItemText>
           {!!option.favorite && <FavoriteIcon />}
-        </MenuItem>
+        </Box>
       )}
       renderValue={(selected, getItemProps) =>
         selected.map(({ key, label, color: variant }, index) => (
