@@ -34,5 +34,20 @@
     "credits1": "Juan-optimizer is a copy of <go>Genshin Optimizer</go> by <frzyc>frzyc</frzyc> and all its <contrib>contributors</contrib>, released under the <mit>MIT</mit> license. Calculations, data and interface are their work: the original site is <site>frzyc.github.io/genshin-optimizer</site>.",
     "credits2": "Player showcases from <enka>Enka.network</enka>. This copy is by <juanlab>JuanLab</juanlab> (<code>source code</code>) and is not affiliated with the original project.",
     "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse."
+  },
+  "gcweb": {
+    "title": "Link to gc-web",
+    "enable": "Enable",
+    "urlLabel": "gc-web address",
+    "hint": "gc-web is the LunaGC panel on your PC. When the link is on, the character page has “Send to gc-web” (the equipped artifacts become a CharacterBuilder build), and builds sent from gc-web (“Open in Juan-optimizer”) open here ready to import. When it is off, incoming links are ignored.",
+    "send": "Send to gc-web",
+    "sendTitle": "Open gc-web with this character's equipped artifacts, ready to save as a CharacterBuilder build",
+    "noArtifacts": "This character has no equipped artifacts to send.",
+    "incomingTitle": "Build from gc-web",
+    "incomingOff": "A build arrived from gc-web, but the link is off. Turn it on in Settings → Database → Upload, under “Link to gc-web”, then open the link from gc-web again.",
+    "incomingBad": "The link from gc-web does not hold a valid build.",
+    "incomingLabel": "gc-web build: {{name}}",
+    "skipped_one": "{{count}} piece not recognized was left out.",
+    "skipped_other": "{{count}} pieces not recognized were left out."
   }
 }

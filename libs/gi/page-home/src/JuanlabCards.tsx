@@ -1,9 +1,17 @@
 // juanlab: riquadri della home del fork (introduzione, import da UID, crediti)
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import { DatabaseContext } from '@genshin-optimizer/gi/db-ui'
-import { isUid, UploadCard } from '@genshin-optimizer/gi/ui'
+import {
+  decodePayload,
+  GCWEB_PARAM,
+  getGcwebSettings,
+  isUid,
+  payloadToGood,
+  UploadCard,
+} from '@genshin-optimizer/gi/ui'
 import { CloudDownload, Favorite } from '@mui/icons-material'
 import {
+  Alert,
   Box,
   Button,
   CardContent,
@@ -14,8 +22,9 @@ import {
   Typography,
 } from '@mui/material'
 import type { ReactElement } from 'react'
-import { useContext, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 
 // link esterni dei testi tradotti: <go>…</go>, <enka>…</enka>, ecc.
 const ext = (href: string): ReactElement => (
@@ -145,5 +154,74 @@ export function CreditsCard() {
         </Typography>
       </CardContent>
     </CardThemed>
+  )
+}
+
+type Incoming =
+  | { kind: 'off' | 'bad' }
+  | { kind: 'ok'; json: string; label: string; skipped: number }
+
+/** Build arrivata da gc-web (#/?gcweb=...): con il collegamento attivo apre l'import con l'anteprima,
+ *  altrimenti avvisa e non legge nulla. Il parametro viene tolto dall'indirizzo subito. */
+export function GcwebIncoming() {
+  const { t } = useTranslation('juanlab')
+  const { databases, database } = useContext(DatabaseContext)
+  const index = Math.max(0, databases.indexOf(database))
+  const [params, setParams] = useSearchParams()
+  const [incoming, setIncoming] = useState<Incoming | null>(null)
+  const raw = params.get(GCWEB_PARAM)
+  useEffect(() => {
+    if (raw === null) return
+    setParams({}, { replace: true })
+    if (!getGcwebSettings().enabled) {
+      setIncoming({ kind: 'off' })
+      return
+    }
+    try {
+      const payload = decodePayload(raw)
+      const { good, skipped } = payloadToGood(
+        payload,
+        (key) => !!database.chars.get(key)
+      )
+      if (!good.artifacts.length) throw new Error('empty')
+      setIncoming({
+        kind: 'ok',
+        json: JSON.stringify(good),
+        label: t('gcweb.incomingLabel', {
+          name: payload.name || payload.character?.name || '',
+        }),
+        skipped,
+      })
+    } catch {
+      setIncoming({ kind: 'bad' })
+    }
+  }, [raw, setParams, database, t])
+  if (!incoming) return null
+  const close = () => setIncoming(null)
+  if (incoming.kind !== 'ok')
+    return (
+      <Alert
+        severity={incoming.kind === 'off' ? 'info' : 'error'}
+        onClose={close}
+        sx={{ my: 1 }}
+      >
+        {t(incoming.kind === 'off' ? 'gcweb.incomingOff' : 'gcweb.incomingBad')}
+      </Alert>
+    )
+  return (
+    <ModalWrapper open onClose={close}>
+      <Box>
+        {incoming.skipped > 0 && (
+          <Alert severity="warning" sx={{ mb: 1 }}>
+            {t('gcweb.skipped', { count: incoming.skipped })}
+          </Alert>
+        )}
+        <UploadCard
+          index={index}
+          initialData={{ json: incoming.json, label: incoming.label }}
+          onReplace={close}
+        />
+      </Box>
+    </ModalWrapper>
   )
 }

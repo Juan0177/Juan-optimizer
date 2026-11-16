@@ -3,7 +3,12 @@
 import { Box, Grid, useMediaQuery, useTheme } from '@mui/material'
 import ReactGA from 'react-ga4'
 import InventoryCard from './InventoryCard'
-import { CreditsCard, ImportUidCard, IntroCard } from './JuanlabCards'
+import {
+  CreditsCard,
+  GcwebIncoming,
+  ImportUidCard,
+  IntroCard,
+} from './JuanlabCards'
 import TeamCard from './TeamCard'
 
 export default function PageHome() {
@@ -12,26 +17,30 @@ export default function PageHome() {
   ReactGA.send({ hitType: 'pageview', page: '/home' })
   if (lg)
     return (
-      <Grid container spacing={2} direction={'row-reverse'}>
-        <Grid
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-          size={{ xs: 12, lg: 5, xl: 4 }}
-        >
-          <ImportUidCard />
-          <CreditsCard />
+      <>
+        <GcwebIncoming />
+        <Grid container spacing={2} direction={'row-reverse'}>
+          <Grid
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            size={{ xs: 12, lg: 5, xl: 4 }}
+          >
+            <ImportUidCard />
+            <CreditsCard />
+          </Grid>
+          <Grid
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+            size={{ xs: 12, lg: 7, xl: 8 }}
+          >
+            <IntroCard />
+            <InventoryCard />
+            <TeamCard />
+          </Grid>
         </Grid>
-        <Grid
-          sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
-          size={{ xs: 12, lg: 7, xl: 8 }}
-        >
-          <IntroCard />
-          <InventoryCard />
-          <TeamCard />
-        </Grid>
-      </Grid>
+      </>
     )
   return (
     <Box sx={{ my: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <GcwebIncoming />
       <IntroCard />
       <ImportUidCard />
       <InventoryCard />

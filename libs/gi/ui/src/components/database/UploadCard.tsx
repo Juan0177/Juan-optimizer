@@ -26,6 +26,7 @@ import type { ChangeEventHandler, DragEventHandler } from 'react'
 import { useCallback, useContext, useMemo, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { EnkaUidImport } from '../../juanlab/EnkaUidImport' // juanlab
+import { GcwebSettingsBox } from '../../juanlab/GcwebLink' // juanlab
 
 const InvisInput = styled('input')({
   display: 'none',
@@ -35,18 +36,22 @@ export function UploadCard({
   index,
   onReplace,
   initialUid, // juanlab: UID scritto nella home, caricato subito
+  initialData, // juanlab: build arrivata da gc-web, gia in formato GOOD
 }: {
   index: number
   onReplace: () => void
   initialUid?: string
+  initialData?: { json: string; label: string }
 }) {
   const { databases } = useContext(DatabaseContext)
   const database = databases[index]
   const { t } = useTranslation('settings')
-  const [data, setdata] = useState('')
-  const [filename, setfilename] = useState('')
+  const [data, setdata] = useState(initialData?.json ?? '')
+  const [filename, setfilename] = useState(initialData?.label ?? '')
   const [errorMsg, setErrorMsg] = useState('') // TODO localize error msg
-  const [keepWepArtiNotInImport, setKeepWepArtiNotInImport] = useState(false)
+  const [keepWepArtiNotInImport, setKeepWepArtiNotInImport] = useState(
+    !!initialData // juanlab: una build da gc-web non cancella il resto dell'inventario
+  )
   const [keepCharNotInImport, setKeepCharNotInImport] = useState(true)
   const [ignoreDups, setIgnoreDups] = useState(false)
   const { importResult, importedDatabase } =
@@ -137,6 +142,7 @@ export function UploadCard({
             setdata(json)
           }}
         />
+        <GcwebSettingsBox />
         <Grid container spacing={2} sx={{ mb: 1 }}>
           <Grid>
             <label htmlFor="icon-button-file">

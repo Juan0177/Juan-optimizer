@@ -11,7 +11,7 @@ Copia personale di [Genshin Optimizer](https://github.com/frzyc/genshin-optimize
 Solo Genshin Optimizer: l'app `apps/frontend` e le librerie che usa (`libs/gi`, `libs/common`, `libs/pando`, `libs/game-opt`).
 Sono stati tolti Star Rail (`libs/sr`, `apps/sr-frontend`), Zenless (`libs/zzz`, `apps/zzz-frontend`), il bot Somnia, il frontend sperimentale `apps/gi-frontend` e i workflow dell'originale.
 
-Per ora le build si caricano solo dalla vetrina di Enka (import da UID tramite il Worker di JuanLab).
+Le build si caricano dalla vetrina di Enka (import da UID tramite il Worker di JuanLab) o arrivano da gc-web con un link.
 I personaggi della beta verranno dopo: il piano è nel documento "Genshin Optimizer di JuanLab: specifica e piano".
 
 ## Aggiornare dall'originale
@@ -62,6 +62,15 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
   La vetrina arriva da Enka.network tramite il Worker di JuanLab (`juanlab-enka…workers.dev`), viene convertita in GOOD
   (tabelle ID → chiave del datamine di GO, ordine dei talenti dai dati pubblici di Enka) e passa dall'import GOOD di GO,
   con l'anteprima prima di salvare. Armi e manufatti già presenti e non in vetrina restano nel database.
+- **Collegamento a gc-web** (`libs/gi/ui/src/juanlab/gcweb.ts`, `GcwebLink.tsx`): scambio di build con gc-web, il pannello
+  di LunaGC sul PC. Si attiva nella finestra d'import (voce "Collegamento a gc-web", con l'indirizzo di gc-web, di base
+  `http://127.0.0.1:8090/`); spento, i link in arrivo vengono ignorati e il pulsante non compare.
+  - Juan-optimizer → gc-web: "Invia a gc-web" nella scheda del personaggio apre gc-web con i manufatti equipaggiati
+    (`#juanlab=…`), che lì diventano una build di CharacterBuilder.
+  - gc-web → Juan-optimizer: "Apri in Juan-optimizer" su una build apre `#/?gcweb=…`; la home la converte in GOOD (manufatti
+    equipaggiati al personaggio, che viene aggiunto se manca) e apre l'import con l'anteprima. Il resto dell'inventario resta.
+  - Il link porta un formato neutro con gli ID del gioco (`JuanLabBuild` versione 1: set, slot `EQUIP_…`, statistiche
+    `FIGHT_PROP_…` con il valore mostrato in gioco), uguale a `public/juanlab.js` di gc-web.
 - **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, inventario, squadre e crediti;
   tolti pubblicità, link a social e donazioni, video guida, note di versione e resina.
 - **Niente pubblicità** in tutto il sito (`ADS_ENABLED = false` in `libs/common/ad/src/consts.ts`).

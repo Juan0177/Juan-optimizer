@@ -28,7 +28,7 @@ export const ENKA_PROXY = 'https://juanlab-enka.gianni-nacu-4055.workers.dev/'
 const ENKA_AVATARS =
   'https://raw.githubusercontent.com/EnkaNetwork/API-docs/master/store/gi/avatars.json'
 
-const PROP: Record<string, MainStatKey | SubstatKey> = {
+export const PROP: Record<string, MainStatKey | SubstatKey> = {
   FIGHT_PROP_HP: 'hp',
   FIGHT_PROP_HP_PERCENT: 'hp_',
   FIGHT_PROP_ATTACK: 'atk',

@@ -34,5 +34,20 @@
     "credits1": "Juan-optimizer è una copia di <go>Genshin Optimizer</go> di <frzyc>frzyc</frzyc> e di tutti i suoi <contrib>contributori</contrib>, distribuito con licenza <mit>MIT</mit>. Calcoli, dati e interfaccia sono il loro lavoro: il sito originale è <site>frzyc.github.io/genshin-optimizer</site>.",
     "credits2": "Vetrine dei giocatori da <enka>Enka.network</enka>. Questa copia è di <juanlab>JuanLab</juanlab> (<code>codice</code>) e non è collegata al progetto originale.",
     "credits3": "Genshin Impact è un marchio di HoYoverse. Questo sito non è affiliato né approvato da HoYoverse."
+  },
+  "gcweb": {
+    "title": "Collegamento a gc-web",
+    "enable": "Attiva",
+    "urlLabel": "Indirizzo di gc-web",
+    "hint": "gc-web è il pannello di LunaGC sul tuo PC. Con il collegamento attivo, nella scheda del personaggio compare «Invia a gc-web» (i manufatti equipaggiati diventano una build di CharacterBuilder), e le build inviate da gc-web («Apri in Juan-optimizer») si aprono qui pronte da importare. Spento, i link in arrivo vengono ignorati.",
+    "send": "Invia a gc-web",
+    "sendTitle": "Apre gc-web con i manufatti equipaggiati di questo personaggio, pronti da salvare come build di CharacterBuilder",
+    "noArtifacts": "Questo personaggio non ha manufatti equipaggiati da inviare.",
+    "incomingTitle": "Build da gc-web",
+    "incomingOff": "È arrivata una build da gc-web, ma il collegamento è spento. Attivalo in Impostazioni → Database → Carica, alla voce «Collegamento a gc-web», e riapri il link da gc-web.",
+    "incomingBad": "Il link da gc-web non contiene una build valida.",
+    "incomingLabel": "Build di gc-web: {{name}}",
+    "skipped_one": "{{count}} pezzo non riconosciuto è stato escluso.",
+    "skipped_other": "{{count}} pezzi non riconosciuti sono stati esclusi."
   }
 }
