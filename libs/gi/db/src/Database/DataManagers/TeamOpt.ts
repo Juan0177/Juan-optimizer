@@ -362,9 +362,10 @@ const attackSchema = z.object({
 const energyMemberSchema = z.object({
   fieldTime: z.number().finite().min(0).max(100),
   burstEvery: z.number().finite().min(0),
-  skillMode: z.number().int().min(0).max(2),
+  // (an option of the member's skills: the calculator checks it against them, e.g. Flins has 4)
+  skillMode: z.number().int().min(0),
   skillUses: z.number().finite().min(0),
-  secondaryMode: z.number().int().min(0).max(2),
+  secondaryMode: z.number().int().min(0),
   secondaryUses: z.number().finite().min(0),
   catchBy: z.enum(allCharacterKeys).optional(),
   funnelShare: z.number().finite().min(0).max(100),
