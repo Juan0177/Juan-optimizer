@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.10.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.10.1) (2026-11-16)
+
+### New
+
+- The rotation writer is wider and split into clear sections: the rotation, its time and timeline, and hits per rotation.
+- The Rotations setting (Repeating, or the first 1–6 from the start) is now on the page beside the rotation; changing it updates the rotation in use.
+
+### Fixed
+
+- KQM tab: teams with Flins no longer crash with "Unexpected Error Occurred" when the ER targets come from the calculator.
+
 ## [v1.10.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.10.0) (2026-11-16)
 
 ### New
