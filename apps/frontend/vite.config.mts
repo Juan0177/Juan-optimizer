@@ -76,6 +76,9 @@ export default defineConfig(() => ({
       )
     ),
     __VERSION__: `"${pkg.version}"`,
+    // juanlab: id della build, aggiunto alle richieste delle traduzioni (?v=...) cosi dopo un deploy il browser non
+    // usa i JSON vecchi che ha in cache (GitHub Pages li fa tenere 10 minuti) con il JavaScript nuovo
+    __JUANLAB_BUILD__: JSON.stringify(Date.now().toString(36)),
   },
 
   // Uncomment this if you are using workers.
