@@ -260,6 +260,50 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
   })
 
+  it('keeps a calculator member whose skill options go past the third (Flins: Manifest Flame hit)', () => {
+    // (dropping it made the KQM tab's prefill write it again and again: React error 185)
+    const first = new ArtCharDatabase(1, new SandboxStorage())
+    first.importGOOD(good(), false, false, false)
+    const [id] = first.teams.keys
+    const member = {
+      fieldTime: 60,
+      burstEvery: 0,
+      skillMode: 3,
+      skillUses: 4,
+      secondaryMode: 2,
+      secondaryUses: 2,
+      catchBy: 'KamisatoAyaka' as const,
+      funnelShare: 19,
+      favoniusProcs: 0,
+      weaponEnergyTriggers: 0,
+      flatEnergy: 0,
+    }
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      kqm: {
+        refinement5: 1,
+        refinement4: 5,
+        energySource: 'calculator',
+        energyCalculator: {
+          rotationTime: 17.3,
+          clearTime: 90,
+          enemyParticles: 9,
+          rng: 'safe',
+          electroInterval: 5.3,
+          members: {
+            KamisatoAyaka: member,
+            Shenhe: { ...member, skillMode: 0 },
+          },
+        },
+      },
+    }
+    first.teams.set(id, { teamOpt })
+    expect(first.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    const second = new ArtCharDatabase(1, new SandboxStorage())
+    second.importGOOD(first.exportGOOD() as IGOOD & IGO, false, false, false)
+    expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
+  })
+
   it('round-trips every setting through a GOOD export and import', () => {
     const teamOpt: TeamOpt = {
       ...initTeamOpt(),
