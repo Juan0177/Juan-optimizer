@@ -1,12 +1,12 @@
 # JuanLab: aggiorna il ramo `juanlab` da upstream (frzyc/genshin-optimizer) e pubblica il sito su GitHub Pages.
-# - Ogni giorno (e a mano da Actions > Run workflow): unisce upstream/master in `juanlab`; se ci sono novità ricostruisce e pubblica.
+# - Il 1° e il 15 di ogni mese (e quando vuoi, a mano da Actions > Run workflow): unisce upstream/master in `juanlab`; se ci sono novità ricostruisce e pubblica.
 # - A ogni push su `juanlab`: ricostruisce e pubblica.
 # - Se l'unione fallisce non pubblica nulla: il sito resta all'ultima versione buona.
 name: JuanLab - sync e Pages
 
 on:
   schedule:
-    - cron: '17 5 * * *'
+    - cron: '17 5 1,15 * *'
   workflow_dispatch:
   push:
     branches:
