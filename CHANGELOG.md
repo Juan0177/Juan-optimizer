@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.10.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.10.2) (2026-11-16)
+
+### New
+
+- KQM: the ER targets from the ER calculator now apply by themselves when you use or change the rotation; there's no need to open Calculate ER and press Apply. Targets you type by hand stay until the rotation changes.
+- ER calculator: the random Energy from each member's Normal and Charged Attack hits is now counted from your written rotation (in Bonus energy).
+
+### Fixed
+
+- The rotation's steps on the page keep each name and its actions on one line; on Windows the actions sat slightly higher than the names.
+
 ## [v1.10.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.10.1) (2026-11-16)
 
 ### New
