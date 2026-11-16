@@ -102,7 +102,8 @@ jobs:
           cache: 'yarn'
       - run: yarn install --immutable
       - name: Link e impostazioni dell'app
-        # l'.env dell'originale ha valori segnaposto (quelli veri li mette la loro CI): qui i link giusti, niente analytics
+        # l'.env dell'originale ha valori segnaposto (quelli veri li mette la loro CI): qui i link giusti.
+        # NX_GA_TRACKINGID resta il segnaposto: vuoto fa andare in errore ReactGA (Analytics e' gia in modalita test)
         run: |
           cat > apps/frontend/.env.local <<'ENV'
           NX_URL_GITHUB_GO=https://github.com/frzyc/genshin-optimizer
@@ -112,7 +113,6 @@ jobs:
           NX_URL_WEBSITE_KQM=https://keqingmains.com/
           NX_URL_KQM_MULTI_GUIDE=https://keqingmains.com/misc/multi-optimization/
           NX_URL_GITHUB_API_GO_RELEASES=https://api.github.com/repos/frzyc/genshin-optimizer/releases/tags/
-          NX_GA_TRACKINGID=
           ENV
           sed -i 's/^ *//' apps/frontend/.env.local
       - name: Build frontend

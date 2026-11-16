@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ADS_ENABLED } from '../consts'
 
 const googleAdsURL =
   'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'
@@ -11,6 +12,7 @@ export function useIsAdblocked() {
   const [adBlockEnabled, setAdBlockEnabled] = useState(false)
 
   useEffect(() => {
+    if (!ADS_ENABLED) return // juanlab: senza pubblicita non serve contattare Google per controllare l'AdBlock
     const fetchUrl = async () => {
       try {
         await fetch(new Request(googleAdsURL)).catch((_) => {
