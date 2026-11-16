@@ -22,26 +22,35 @@ import { kqmRotationReplay } from './RotationWriter'
 
 export type KqmRunState =
   | { type: 'idle' }
-  | { type: 'running'; startTime: number }
   | {
-      type: 'done'
-      result: KqmResult
-      seconds: number
-      /** The settings it was run with, as set (what "changed since" compares with) */
-      teamOpt: TeamOpt
-      /**
-       * The settings its damage is for: the written rotation as KQM played it for these builds
-       * (`played`: at the KQM constellations, with their weapons and sets, the last 2 of 4
-       * rotations), or the attacks entered, nothing being written (`entered`)
-       */
-      runTeamOpt: TeamOpt
-      rotation: 'played' | 'entered'
-      /** What each rotation waited for to be ready (seconds), when played as KQM plays it */
-      stalls?: { label: string; seconds: number }[]
-      /** When it was found: which saved run it is (`database.teamKqmResults`) */
-      savedAt?: number
+      type: 'running'
+      startTime: number
+      /** The builds found so far, while the run looks for better ones (`onEarly`) */
+      early?: KqmDoneRun
     }
+  | KqmDoneRun
   | { type: 'error'; message: string }
+/** A run's result */
+export interface KqmDoneRun {
+  type: 'done'
+  result: KqmResult
+  seconds: number
+  /** The settings it was run with, as set (what "changed since" compares with) */
+  teamOpt: TeamOpt
+  /**
+   * The settings its damage is for: the written rotation as KQM played it for these builds
+   * (`played`: at the KQM constellations, with their weapons and sets, the last 2 of 4
+   * rotations), or the attacks entered, nothing being written (`entered`)
+   */
+  runTeamOpt: TeamOpt
+  rotation: 'played' | 'entered'
+  /** What each rotation waited for to be ready (seconds), when played as KQM plays it */
+  stalls?: { label: string; seconds: number }[]
+  /** When it was found: which saved run it is (`database.teamKqmResults`) */
+  savedAt?: number
+  /** When its run started, in this visit (its early builds and its result are the same run's) */
+  startTime?: number
+}
 
 /**
  * The last KQM result per team, so that it is still there after visiting another page (one object
@@ -223,27 +232,9 @@ async function startKqmRun(
     jobs.delete(teamId)
     notifyRun(teamId)
   }
-  // (the running state paints before the first problem is built; a hidden page goes on at once)
-  await nextPaint()
-  try {
-    const replay = kqmReplayOf(database, gender, i18n, teamId, teamOpt)
-    const result = await optimizeTeamKqm({
-      database,
-      teamId,
-      gender,
-      teamOpt,
-      replay,
-      isCancelled: () => job.cancelled,
-      onStep: (step) => setProgress(teamId, step),
-    })
-    if (job.cancelled) return end()
-    if (!result)
-      return end({
-        type: 'error',
-        message: 'Every member is kept: nothing to optimize.',
-      })
+  const doneOf = (result: KqmResult): KqmDoneRun => {
     const { played } = result
-    end({
+    return {
       type: 'done',
       result,
       seconds: (performance.now() - job.state.startTime) / 1000,
@@ -257,7 +248,34 @@ async function startKqmRun(
         : teamOpt,
       rotation: played ? 'played' : 'entered',
       stalls: played?.stalls,
+      startTime: job.state.startTime,
+    }
+  }
+  // (the running state paints before the first problem is built; a hidden page goes on at once)
+  await nextPaint()
+  try {
+    const replay = kqmReplayOf(database, gender, i18n, teamId, teamOpt)
+    const result = await optimizeTeamKqm({
+      database,
+      teamId,
+      gender,
+      teamOpt,
+      replay,
+      isCancelled: () => job.cancelled,
+      onStep: (step) => setProgress(teamId, step),
+      onEarly: (early) => {
+        if (job.cancelled || jobs.get(teamId) !== job) return
+        job.state = { ...job.state, early: doneOf(early) }
+        notifyRun(teamId)
+      },
     })
+    if (job.cancelled) return end()
+    if (!result)
+      return end({
+        type: 'error',
+        message: 'Every member is kept: nothing to optimize.',
+      })
+    end(doneOf(result))
   } catch (e) {
     if (e instanceof TeamOptCancelled) return end()
     console.error(e)
@@ -287,7 +305,8 @@ export function useKqmRun(teamId: string) {
     return subscribeRun(teamId, () => {
       const next = runState(database, teamId)
       // (the results are a big render: interruptible, so the page does not freeze)
-      if (next.type === 'done') startTransition(() => setState(next))
+      if (next.type === 'done' || (next.type === 'running' && next.early))
+        startTransition(() => setState(next))
       else setState(next)
     })
   }, [database, teamId])

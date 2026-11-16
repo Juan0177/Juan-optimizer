@@ -41,6 +41,7 @@ import {
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -155,11 +156,13 @@ export default function TeamBuildWorkspace({
     0
   )
   const [extraOpen, setExtraOpen] = useState(() => extraCount > 0)
+  // (while it runs: its builds so far once it has some, else the last result)
+  const kqmEarly = kqm.state.type === 'running' ? kqm.state.early : undefined
   const kqmDone =
     kqm.state.type === 'done'
       ? kqm.state
       : kqmRunning
-        ? kqm.lastResult
+        ? (kqmEarly ?? kqm.lastResult)
         : undefined
   const kqmResult =
     kqmDone &&
@@ -168,8 +171,15 @@ export default function TeamBuildWorkspace({
     )
       ? kqmDone
       : undefined
+  // the results shown when they come (a run's early builds, else its result), once a run
+  const revealedRun = useRef<number | undefined>(undefined)
   useEffect(() => {
-    if (kqm.state.type !== 'done') return
+    const shown = kqm.state.type === 'done' ? kqm.state : kqmEarly
+    if (!shown) return
+    if (shown.startTime !== undefined) {
+      if (revealedRun.current === shown.startTime) return
+      revealedRun.current = shown.startTime
+    }
     setRotationExpanded(false)
     if (mode === 'kqm')
       requestAnimationFrame(() =>
@@ -177,7 +187,7 @@ export default function TeamBuildWorkspace({
           .getElementById(`kqm-results-${teamId}`)
           ?.scrollIntoView({ block: 'start' })
       )
-  }, [kqm.state, mode, teamId])
+  }, [kqm.state, kqmEarly, mode, teamId])
   // KQM theorycrafting's own rotation, while its result is for the rotation as it is: the attacks
   // it played for its builds (at its constellations, with their gear), with their damage
   const kqmRotation =
@@ -547,10 +557,15 @@ export default function TeamBuildWorkspace({
         </Alert>
       )}
       {mode === 'kqm' && kqmResult && (
-        <Box key={kqmResult.seconds} sx={{ ...revealSx, ...sectionSx, p: 0 }}>
+        // (one run's early builds and its result: the same results, updated in place)
+        <Box
+          key={kqmResult.startTime ?? kqmResult.seconds}
+          sx={{ ...revealSx, ...sectionSx, p: 0 }}
+        >
           <KqmResults
             teamId={teamId}
             running={running}
+            improving={!!kqmEarly && kqmResult === kqmEarly}
             runSettings={kqmResult.runTeamOpt ?? kqmResult.teamOpt}
             setup={kqmResult.teamOpt}
             rotation={kqmResult.rotation}
