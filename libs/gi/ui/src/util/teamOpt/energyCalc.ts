@@ -8,6 +8,8 @@ import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import particleData from './energyCalcData.json'
 import type { SimulationResult } from './rotation/simulate'
 import type { SimHit } from './rotation/types'
+import { healedBy, isReactionEvent } from './rotation/weaponEffects'
+import { isLunarHit } from './rotation/weapons/catalyst4'
 
 /** Factual particle data and fixed-rotation equations from the user's ERC 7.3 workbook (v1.59.1). */
 export const ENERGY_CALC_SOURCE =
@@ -69,11 +71,13 @@ const ENERGY_WEAPONS: Partial<
   >
 > = {
   AmenomaKageuchi: { energy: [6, 7.5, 9, 10.5, 12] },
-  KatsuragikiriNagamasa: { energy: [6, 7.5, 9, 10.5, 12] },
-  KitainCrossSpear: { energy: [6, 7.5, 9, 10.5, 12] },
+  KatsuragikiriNagamasa: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 10 },
+  KitainCrossSpear: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 10 },
+  // (per Energy restore the simulation marks: its module applies its rules)
+  JadefallsSplendor: { energy: [4.5, 5, 5.5, 6, 6.5] },
   // (gcsim: 4–6 Energy every 2 s for 6 s after each of the wielder's Bursts, on the field)
   PrototypeAmber: { energy: [12, 13.5, 15, 16.5, 18], perBurst: true },
-  EverlastingMoonglow: { energy: [0.6, 0.6, 0.6, 0.6, 0.6] },
+  EverlastingMoonglow: { energy: [0.6, 0.6, 0.6, 0.6, 0.6], cooldown: 0.1 },
   AngelosHeptades: { energy: [14, 15, 16, 17, 18], cooldown: 14 },
   BeyondTheChrysalis: { energy: [5, 5.5, 6, 6.5, 7], cooldown: 4 },
   BloodsoakedRuins: { energy: [12, 13, 14, 15, 16], cooldown: 14 },
@@ -128,6 +132,9 @@ export const isFavonius = (key: WeaponKey | undefined) =>
 /** A Favonius weapon triggers at most once per 12/10.5/9/7.5/6 s (R1–R5). */
 export const favoniusCooldown = (refinement = 1) =>
   13.5 - 1.5 * Math.min(5, Math.max(1, Math.round(refinement)))
+/** A Favonius weapon's chance on a CRIT hit: 60/70/80/90/100% (R1–R5) */
+export const favoniusChance = (refinement = 1) =>
+  0.5 + 0.1 * Math.min(5, Math.max(1, Math.round(refinement)))
 
 /** The constellation a skill option needs ("Constellation 2", "C2 proc"); 0 for any other. */
 export const energySkillConstellation = (label: string) =>
@@ -255,7 +262,11 @@ export function calculateEnergyRecharge(
         ? member.favoniusProcs
         : isFavonius(weapon)
           ? Math.min(
-              member.favoniusProcs,
+              // (counted from the rotation at R5: a smaller refinement's chance; a typed count has it)
+              member.favoniusProcs *
+                (member.edited?.includes('favoniusProcs')
+                  ? 1
+                  : favoniusChance(refinements?.[source])),
               settings.rotationTime / favoniusCooldown(refinements?.[source])
             )
           : 0
@@ -279,6 +290,12 @@ export function calculateEnergyRecharge(
     // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
     // the others' (Frostbreath)
     const weaponTriggers = (member: CharacterKey) => {
+      // (Exaiphanes Blade gives its Energy to the Traveler only: kqmsim exaiphanesblade.go)
+      if (
+        weapons?.[member] === 'ExaiphanesBlade' &&
+        !member.startsWith('Traveler')
+      )
+        return 0
       // (Prototype Amber: once per Burst of its wielder, whatever was entered)
       if (energyWeaponPerBurst(weapons?.[member])) {
         const every = settings.members[member]?.burstEvery ?? 0
@@ -668,39 +685,176 @@ export const isFrostbreathReaction = (h: SimHit) =>
     (h.path[1] === 'crystallize' &&
       (h.element === 'cryo' || h.element === 'hydro')))
 
+/** What a rotation trigger rule sees besides the hit */
+interface TriggerContext {
+  keys: readonly CharacterKey[]
+  /** Each member's Burst casts (frames) */
+  bursts: Partial<Record<CharacterKey, number[]>>
+}
+/** An energy weapon the simulation marks when it restores Energy (its module applies its rules) */
+const marked = (weapon: WeaponKey) => (h: SimHit, key: CharacterKey) =>
+  h.characterKey === key &&
+  h.path[0] === '_marker' &&
+  h.path[1] === 'weaponEnergy' &&
+  h.path[2] === weapon
+/** A damage hit (not a marker or a reaction's own damage) */
+const isDamageHit = (h: SimHit) =>
+  !h.path[0].startsWith('_') && h.path[0] !== 'reaction'
+/** The member's own Stellar Glimmer reactions or DMG */
+const ownStellarGlimmer = (h: SimHit, key: CharacterKey) =>
+  h.characterKey === key &&
+  ((h.path[0] === '_reaction' &&
+    (h.path[1] === 'stellarConduct' || h.path[1] === 'stellarSwirl')) ||
+    (isDamageHit(h) &&
+      (h.tag === 'directStellarConduct' || h.tag === 'directStellarSwirl')))
+
+/**
+ * What triggers each energy weapon the calculator takes from a played rotation (as kqmsim), for
+ * wielder `key`, one hit of the simulation at a time; at most once per the weapon's cooldown
+ * (`ENERGY_WEAPONS`), or per `cooldown` frames when given (0: each one counts)
+ */
+const ROTATION_TRIGGERS: Partial<
+  Record<
+    WeaponKey,
+    {
+      match: (h: SimHit, key: CharacterKey, ctx: TriggerContext) => boolean
+      cooldown?: number
+    }
+  >
+> = {
+  // its own Cryo- or Hydro-related reactions
+  Frostbreath: {
+    match: (h, key) => h.characterKey === key && isFrostbreathReaction(h),
+  },
+  // a heal that reaches the wielder, off the field too (rightfulreward.go)
+  RightfulReward: {
+    match: (h, key, { keys }) =>
+      h.path[0] === '_heal' &&
+      healedBy(h, keys, h.onField ?? key).includes(key),
+  },
+  // a heal the wielder performs, off the field too (dialogues.go)
+  DialoguesOfTheDesertSages: {
+    match: (h, key) => h.path[0] === '_heal' && h.characterKey === key,
+  },
+  // any reaction the wielder triggers, off the field too (songofthevigil.go)
+  SongOfTheVigil: {
+    match: (h, key) => h.characterKey === key && isReactionEvent(h),
+  },
+  // its own Electro-Charged, Lunar-Charged, Bloom, Lunar-Bloom, Crystallize or Lunar-Crystallize
+  // (flameforgedinsight.go)
+  FlameForgedInsight: {
+    match: (h, key) =>
+      h.characterKey === key &&
+      h.path[0] === '_reaction' &&
+      [
+        'electroCharged',
+        'lunarCharged',
+        'bloom',
+        'lunarBloom',
+        'crystallize',
+        'lunarCrystallize',
+      ].includes(h.path[1] ?? ''),
+  },
+  // any of the Traveler's hits, off the field too (exaiphanesblade.go)
+  ExaiphanesBlade: {
+    match: (h, key) =>
+      key.startsWith('Traveler') &&
+      h.characterKey === key &&
+      !h.path[0].startsWith('_'),
+  },
+  // its own Skill hits (kitain.go, nagamasa.go: a 10 s cooldown)
+  KitainCrossSpear: {
+    match: (h, key) =>
+      h.characterKey === key && h.tag === 'skill' && isDamageHit(h),
+  },
+  KatsuragikiriNagamasa: {
+    match: (h, key) =>
+      h.characterKey === key && h.tag === 'skill' && isDamageHit(h),
+  },
+  // each shield the wielder creates (its kit's shield markers, angelosheptades.go)
+  AngelosHeptades: {
+    match: (h, key) =>
+      h.characterKey === key &&
+      h.path[0] === '_marker' &&
+      h.path[1] === 'shield',
+  },
+  // any party member's Plunging hit, the wielder's too, once per 0.7 s (cranesechoingcall.go)
+  CranesEchoingCall: {
+    match: (h) => h.tag === 'plunge' && isDamageHit(h),
+  },
+  // its own Lunar reactions or Lunar DMG (nocturnes.go)
+  NocturnesCurtainCall: {
+    match: (h, key) => h.characterKey === key && isLunarHit(h),
+  },
+  // its HP changing while it is on the field (eternalflow.go)
+  TomeOfTheEternalFlow: {
+    match: (h, key) =>
+      h.characterKey === key &&
+      h.onField === key &&
+      h.path[0] === '_marker' &&
+      h.path[1] === 'hpChange',
+  },
+  // its own Stellar Glimmer reactions or DMG (the game's text)
+  Silverdawn: { match: ownStellarGlimmer },
+  // its Normal Attack hits within 12 s of its Burst, once per 0.1 s (moonglow.go)
+  EverlastingMoonglow: {
+    match: (h, key, { bursts }) =>
+      h.characterKey === key &&
+      h.tag === 'normal' &&
+      isDamageHit(h) &&
+      (bursts[key] ?? []).some((b) => b <= h.t && h.t < b + 720),
+    cooldown: 6,
+  },
+  // marked by their modules (rotation/weapons), which apply their own rules
+  JadefallsSplendor: { match: marked('JadefallsSplendor'), cooldown: 0 },
+  BloodsoakedRuins: { match: marked('BloodsoakedRuins'), cooldown: 0 },
+  LumidouceElegy: { match: marked('LumidouceElegy'), cooldown: 0 },
+  AmenomaKageuchi: { match: marked('AmenomaKageuchi'), cooldown: 0 },
+}
+
 /**
  * Each member's energy weapon triggers a rotation if it held the weapon, as the played rotation
- * has them (the weapons whose trigger it plays), at most once per the weapon's cooldown:
- * Frostbreath, its own Cryo- or Hydro-related reactions
+ * has them (the weapons in `ROTATION_TRIGGERS`), at most once per the weapon's cooldown (which
+ * runs from before the counted span: the earlier rotations' triggers)
  */
 export function weaponTriggersFromRotation(
-  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'>,
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'> &
+    Partial<Pick<SimulationResult, 'actions'>>,
   keys: readonly CharacterKey[],
   rotations = 1
 ): Partial<Record<CharacterKey, Partial<Record<WeaponKey, number>>>> {
   const start = sim.start
   const end = sim.start + sim.frames
-  const cooldown = (ENERGY_WEAPONS['Frostbreath']?.cooldown ?? 16) * 60
+  const bursts: TriggerContext['bursts'] = {}
+  for (const a of sim.actions ?? [])
+    if (a.text === 'Q' || /burst/i.test(a.text))
+      (bursts[a.characterKey] ??= []).push(a.start)
+  const ctx: TriggerContext = { keys, bursts }
   const out: Partial<Record<CharacterKey, Partial<Record<WeaponKey, number>>>> =
     {}
   for (const key of keys) {
-    const times = sim.hits
-      .filter(
-        (h) => h.characterKey === key && h.t < end && isFrostbreathReaction(h)
-      )
-      .map((h) => h.t)
-      .sort((a, b) => a - b)
-    // (the cooldown runs from before the counted span: the earlier rotations' reactions)
-    let ready = Number.NEGATIVE_INFINITY
-    let triggers = 0
-    for (const t of times) {
-      if (t < ready) continue
-      ready = t + cooldown
-      if (t >= start) triggers++
+    const triggers: Partial<Record<WeaponKey, number>> = {}
+    for (const [weapon, rule] of Object.entries(ROTATION_TRIGGERS) as [
+      WeaponKey,
+      NonNullable<(typeof ROTATION_TRIGGERS)[WeaponKey]>,
+    ][]) {
+      const cooldown =
+        rule.cooldown ?? (ENERGY_WEAPONS[weapon]?.cooldown ?? 0) * 60
+      const times = sim.hits
+        .filter((h) => h.t < end && rule.match(h, key, ctx))
+        .map((h) => h.t)
+        .sort((a, b) => a - b)
+      let ready = Number.NEGATIVE_INFINITY
+      let n = 0
+      for (const t of times) {
+        if (t < ready) continue
+        ready = t + cooldown
+        if (t >= start) n++
+      }
+      if (n)
+        triggers[weapon] = Math.round((n / Math.max(1, rotations)) * 10) / 10
     }
-    out[key] = {
-      Frostbreath: Math.round((triggers / Math.max(1, rotations)) * 10) / 10,
-    }
+    out[key] = triggers
   }
   return out
 }
@@ -727,11 +881,13 @@ export function favoniusFromRotation(
     Record<CharacterKey, { procs: number; catchBy: CharacterKey | undefined }>
   > = {}
   for (const key of keys) {
-    // (its own hits that can CRIT: not the simulation's markers, not the reactions that cannot)
+    // (its own hits that can CRIT, while it is on the field: kqmsim favonius.go counts only the
+    // active character's; not the simulation's markers, not the reactions that cannot CRIT)
     const hits = sim.hits
       .filter(
         (h) =>
           h.characterKey === key &&
+          h.onField === key &&
           h.t < end &&
           !h.path[0].startsWith('_') &&
           !(h.path[0] === 'reaction' && !h.path[1]?.startsWith('lunar'))

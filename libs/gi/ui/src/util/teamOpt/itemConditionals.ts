@@ -27,7 +27,28 @@ export type ItemConditionalCtx = {
   ownStellar?: boolean
   /** It has no Energy (its Burst costs none: Skirk, Mavuika): Finale of the Deep Galleries */
   zeroEnergy?: boolean
+  /** Its own Burst's Energy cost (Moonweaver's Dawn) */
+  burstCost?: number
+  /** The party's combined maximum Energy, its Burst costs (Wavebreaker's Fin, Mouun's Moon…) */
+  teamEnergy?: number
+  /** The party's elements, Anemo and Geo included (unknown: none ruled out) */
+  elements?: string[]
+  /** Party members (the wielder too) of another element or from Natlan: Chain Breaker (kqmsim) */
+  chainBreaker?: number
+  /** Whether it deals Lunar reaction DMG itself (unknown: counted) */
+  ownLunar?: boolean
+  /** Its kit keeps it below half HP (KQM's standard: Hu Tao): Staff of Homa */
+  lowHp?: boolean
 }
+
+/**
+ * The party's combined maximum Energy as the Watatsumi weapons' state (steps of 10, 40 to 350),
+ * as kqmsim counts it at the start: undefined when unknown
+ */
+const partyEnergyState = (ctx: ItemConditionalCtx) =>
+  ctx.teamEnergy === undefined
+    ? null
+    : String(Math.min(350, Math.max(40, Math.floor(ctx.teamEnergy / 10) * 10)))
 
 /** A display path of Stellar Glimmer DMG ("…StellarDmg", "crownSc", "beamSsDmg") */
 export const isStellarAttackPath = (path: readonly string[]) => {
@@ -71,7 +92,13 @@ function nameKey(name: unknown): string {
  * Bloom/Burning/Stellar Swirl mechanics.
  */
 const OFF =
-  /offField|OffField|[sS]hield|takeDmg|afterHeal|hpChange|bond\.|afterDefeatEnemy|enemyLessPercentHP|^party$|team\.|moondrift|[lL]unar|[bB]loom|burgeon|nightsoul|swirlReaction|weakSpot|plunging|afterReaction|stellarswirl/
+  /offField|OffField|[sS]hield|takeDmg|after(?:Perform)?Heal|hpChange|bond\.|afterDefeatEnemy|enemyLessPercentHP|^party$|team\.|moondrift|[lL]unar|[bB]loom|burgeon|nightsoul|swirlReaction|weakSpot|plunging|afterReaction|stellarswirl/
+
+/** An effect after the wielder's Skill or Burst: on for a member that uses one */
+const skillOrBurstUser = (ctx: ItemConditionalCtx) =>
+  ctx.attacks.includes('skill') || ctx.attacks.includes('burst')
+    ? undefined
+    : null
 
 /**
  * Per-item choices the name alone can't decide: a state to use, `null` for off, or `undefined` to
@@ -85,6 +112,25 @@ const OVERRIDES: Partial<
 > = {
   // The generic optimizer target is not a Slime. A roster cannot establish enemy species.
   BlackTassel: () => null,
+  // the party's combined maximum Energy: known from its Burst costs (kqmsim, at the start)
+  WavebreakersFin: partyEnergyState,
+  MouunsMoon: partyEnergyState,
+  Akuoumaru: partyEnergyState,
+  // its doubling needs Geo DMG in the party (kqmsim: anyone's)
+  UrakuMisugiri: (ctx) =>
+    ctx.elements === undefined || ctx.elements.includes('geo')
+      ? undefined
+      : null,
+  // its extra Burst DMG while its own Energy capacity is at most 60, or 40 (more; no Energy at all
+  // counts as 40, as kqmsim and the game text)
+  MoonweaversDawn: (ctx) =>
+    ctx.burstCost === undefined
+      ? null
+      : ctx.burstCost <= 40
+        ? '40'
+        : ctx.burstCost <= 60
+          ? '60'
+          : null,
   // needs a Geo teammate's Crystallize shard
   ArchaicPetra: () => null,
   // needs a healer
@@ -169,12 +215,17 @@ const OVERRIDES: Partial<
   Verdict: () => null,
   // both pieces need Nightsoul's Blessing / Nightsoul points
   ObsidianCodex: () => null,
-  // counts teammates of other elements
-  ChainBreaker: (ctx) => String(Math.min(3, ctx.otherElements ?? 3)),
+  // a stack per party member (the wielder too) of another element or from Natlan, up to 4 (kqmsim)
+  ChainBreaker: (ctx) => String(Math.min(4, ctx.chainBreaker ?? 3)),
   // needs a Hydro/Dendro Elemental Skill and Lunar-Bloom
   NightweaversLookingGlass: () => null,
-  // one stack each from Normal, Charged, Skill and Burst hits
-  PolarStar: (ctx) => (ctx.attacks.includes('charged') ? '4' : '3'),
+  // one stack each from Normal, Charged, Skill and Burst hits: those the wielder uses
+  PolarStar: (ctx) => {
+    const kinds = (['normal', 'charged', 'skill', 'burst'] as const).filter(
+      (a) => ctx.attacks.includes(a)
+    ).length
+    return kinds ? String(kinds) : null
+  },
   // its effects rotate every 10 s: none is on all the time
   ForgedByTheGoldenMelody: () => null,
   // one of its three songs at random on taking the field: their average
@@ -191,6 +242,146 @@ const OVERRIDES: Partial<
   RoyalGrimoire: () => '1',
   RoyalLongsword: () => '1',
   RoyalSpear: () => '1',
+  // Weapon audit 2026-11-16 (as kqmsim and the game's text): what KQM counts where no rotation is
+  // played; a written rotation times these weapons itself (rotation/weapons).
+  // needs full Energy on each hit: not after its Burst, so rarely
+  Hamayumi: () => null,
+  // a stack per 0.1 s of each arrow's flight: gcsim's default flight (10 frames) is 1
+  AmosBow: () => '1',
+  // after the wielder's Skill (or its Lunar-Crystallize hits)
+  GoldenFrostboundOath: (ctx, cond) =>
+    cond === 'skillOrLc' && !ctx.attacks.includes('skill') ? null : undefined,
+  // its state moves on once per 7 s on a hit, through all three: the middle one on average
+  FadingTwilight: () => 'afterglow',
+  // Symbols come from heals
+  RangeGauge: () => null,
+  ProspectorsDrill: () => null,
+  PortablePowerSaw: () => null,
+  TheDockhandsAssistant: () => null,
+  HymnOfTheMaelstrom: () => null,
+  // a stack for 18 s each time its Energy goes down (its Burst): one held
+  Cloudforged: (ctx) =>
+    !ctx.zeroEnergy && ctx.attacks.includes('burst') ? '1' : null,
+  // stacks build only off the field and are lost 4 s on it: not an on-field attacker's
+  AlleyHunter: (ctx) =>
+    ctx.attacks.includes('normal') || ctx.attacks.includes('charged')
+      ? null
+      : undefined,
+  // its Normal and Charged DMG stacks only on PlayStation
+  Predator: () => null,
+  // after the wielder's Skill or Burst hits (one entry per line: the released build drops beta ones)
+  ElegyForTheEnd: skillOrBurstUser,
+  Silverdawn: skillOrBurstUser,
+  BreezeborneRefrain: skillOrBurstUser,
+  // a stack per 4 s on the field, all lost on leaving it: about 2 for an on-field attacker
+  LostPrayerToTheSacredWinds: (ctx) =>
+    ctx.attacks.includes('normal') || ctx.attacks.includes('charged')
+      ? '2'
+      : null,
+  // needs a Sprint (a dash)
+  WineAndSong: () => null,
+  // Crystal Compounding after the wielder's Skill; Law of Combustion from reactions during it
+  StarsealedEdict: (ctx, cond) =>
+    !ctx.attacks.includes('skill')
+      ? null
+      : cond === 'lawOfCombustion' && (ctx.otherElements ?? 3) === 0
+        ? null
+        : undefined,
+  // its Bond of Life must be cleared by healing first
+  FlowingPurity: (_ctx, cond) => (cond === 'bond' ? null : undefined),
+  FinaleOfTheDeep: (_ctx, cond) => (cond === 'bond' ? null : undefined),
+  // after the wielder's Burst (or a shield)
+  JadefallsSplendor: (ctx) =>
+    ctx.attacks.includes('burst') ? undefined : null,
+  // after the wielder's Skill
+  SurfsUp: (ctx) => (ctx.attacks.includes('skill') ? undefined : null),
+  EtherlightSpindlelute: (ctx) =>
+    ctx.attacks.includes('skill') ? undefined : null,
+  OathswornEye: (ctx) => (ctx.attacks.includes('skill') ? undefined : null),
+  DisasterAndRemorse: (ctx) =>
+    ctx.attacks.includes('skill') ? undefined : null,
+  CalamityQueller: (ctx) => (ctx.attacks.includes('skill') ? undefined : null),
+  WhitelakeFrostfeather: (ctx) =>
+    ctx.attacks.includes('skill') ? undefined : null,
+  NewBough: (ctx) => (ctx.attacks.includes('skill') ? undefined : null),
+  // Sacred Wine after the wielder's own Lunar reactions or Lunar DMG
+  NocturnesCurtainCall: (ctx) => ((ctx.ownLunar ?? true) ? undefined : null),
+  // from the wielder's own reactions: a team with another element to react with
+  FruitOfFulfillment: (ctx) =>
+    (ctx.otherElements ?? 3) > 0 ? undefined : null,
+  FreedomSworn: (ctx) => ((ctx.otherElements ?? 3) > 0 ? undefined : null),
+  // only the wielder's own Electro-Charged, Lunar-Charged, Bloom, Lunar-Bloom, Crystallize or
+  // Lunar-Crystallize
+  FlameForgedInsight: (ctx) => {
+    const has = (e: string) => ctx.auras.includes(e)
+    const own = ctx.element
+    return !own ||
+      (own === 'electro' && has('hydro')) ||
+      (own === 'hydro' && (has('electro') || has('dendro'))) ||
+      (own === 'dendro' && has('hydro')) ||
+      (own === 'geo' && ['pyro', 'hydro', 'electro', 'cryo'].some(has))
+      ? undefined
+      : null
+  },
+  // needs the wielder itself affected by an element (not modelled; kqmsim: no effect)
+  TalkingStick: () => null,
+  // from the wielder's own Burning, or its Dendro DMG on Burning enemies
+  LumidouceElegy: (ctx) =>
+    ctx.auras.includes('pyro') &&
+    ctx.auras.includes('dendro') &&
+    (ctx.element === undefined ||
+      ctx.element === 'pyro' ||
+      ctx.element === 'dendro')
+      ? undefined
+      : null,
+  // its Lunar-Charged DMG after the Burst: a Hydro and Electro team's
+  BloodsoakedRuins: (ctx, cond) =>
+    cond === 'afterBurst' &&
+    !(
+      ctx.attacks.includes('burst') &&
+      ctx.auras.includes('hydro') &&
+      ctx.auras.includes('electro')
+    )
+      ? null
+      : undefined,
+  // below half HP: a kit that keeps itself there
+  StaffOfHoma: (ctx) => (ctx.lowHp ? undefined : null),
+  // its ER for 12 s after the Burst: not toward the ER requirement
+  EngulfingLightning: () => null,
+  // its Bond of Life (25%) from its own Charged Attacks
+  CrimsonMoonsSemblance: (ctx) =>
+    ctx.attacks.includes('charged') ? '1' : null,
+  // Ode to Flowers from the wielder's Normal and Plunging hits
+  PeakPatrolSong: (ctx) =>
+    ctx.attacks.includes('normal') || ctx.attacks.includes('plunging')
+      ? undefined
+      : null,
+  // Winds of Devotion / Defiance after its Skill or Burst uses (Defiance: Stellar Swirl DMG)
+  BeyondTheChrysalis: (ctx, cond) =>
+    !ctx.attacks.includes('skill') && !ctx.attacks.includes('burst')
+      ? null
+      : cond === 'defiance' && !(ctx.ownStellar ?? true)
+        ? null
+        : undefined,
+  // two stacks need two Skills within 12 s: one is likelier
+  SilverLight: () => '1',
+  // its 0-Energy bonus only for a Burst that costs no Energy (Skirk, Mavuika)
+  Azurelight: (ctx, cond) =>
+    cond === 'noEnergy' ? (ctx.zeroEnergy ? 'on' : null) : undefined,
+  // Wavespikes from teammates' Skills, used up by its own Skill for its Normal Attacks
+  HaranGeppakuFutsu: (ctx) =>
+    ctx.attacks.includes('skill') && ctx.attacks.includes('normal')
+      ? '2'
+      : null,
+  // a stack each: Energy below full, its Normal or Charged Elemental DMG, its Burst
+  MistsplitterReforged: (ctx) =>
+    String(
+      1 +
+        (ctx.attacks.includes('normal') || ctx.attacks.includes('charged')
+          ? 1
+          : 0) +
+        (ctx.attacks.includes('burst') ? 1 : 0)
+    ),
 }
 
 function choose(
@@ -211,6 +402,8 @@ function choose(
     ctx.attacks.includes(a)
   let on = true
   if (/hitOp\.normalChargedSkillBurst/.test(cond)) on = true
+  else if (/hitOp\.normalChargedOrPlunging/.test(cond))
+    on = has('normal') || has('charged') || has('plunging')
   else if (/hitOp\.normalOrCharged/.test(cond))
     on = has('normal') || has('charged')
   else if (/hitOp\.charged/.test(cond)) on = has('charged')
@@ -218,7 +411,7 @@ function choose(
   else if (/hitOp\.skillOrBurst|afterUse\.skillOrBurst/.test(cond))
     on = has('skill') || has('burst')
   else if (/hitOp\.skill|afterUse\.skill/.test(cond)) on = has('skill')
-  else if (/afterUse\.burst/.test(cond)) on = has('burst')
+  else if (/hitOp\.burst|afterUse\.burst/.test(cond)) on = has('burst')
   else if (/hitOp\.cryo/.test(cond)) on = ctx.auras.includes('cryo')
   else if (/enemyAffected\./.test(cond)) {
     const want = cond

@@ -453,6 +453,9 @@ export function kqmWeaponData(
   }
 }
 
+/** Weapons that are not in the game (Genshin Optimizer's April Fools catalyst): never offered */
+export const KQM_NOT_IN_GAME: readonly WeaponKey[] = ['QuantumCatalyst']
+
 /**
  * The weapons a member may get: every 4★ and 5★ of its type, plus the 3★ Harbinger of Dawn,
  * Slingshot and Thrilling Tales of Dragon Slayers (`KQM_THREE_STARS`), at the settings' refinement
@@ -467,6 +470,7 @@ export function kqmWeapons(
     const stat = getWeaponStat(key)
     return (
       stat?.weaponType === type &&
+      !KQM_NOT_IN_GAME.includes(key) &&
       ((stat?.rarity ?? 0) >= 4 || KQM_THREE_STARS.includes(key))
     )
   })
@@ -709,10 +713,12 @@ function memberCtx(
   const attacks = new Set<ItemConditionalCtx['attacks'][number]>()
   const kinds = ['normal', 'charged', 'plunging', 'skill', 'burst'] as const
   let ownStellar = false
+  let ownLunar = false
   for (const attack of teamOpt.attacks[characterKey] ?? []) {
     const text = attack.path.join('.').toLowerCase()
     for (const kind of kinds) if (text.includes(kind)) attacks.add(kind)
     if (isStellarAttackPath(attack.path)) ownStellar = true
+    if (text.includes('lunar')) ownLunar = true
   }
   const elements = members.map((m) => getCharEle(m.characterKey))
   const auras = new Set<string>(
@@ -729,6 +735,19 @@ function memberCtx(
     element: own,
     ownStellar,
     zeroEnergy: energyCalcData[characterKey]?.burstCost === 0,
+    burstCost: energyCalcData[characterKey]?.burstCost,
+    elements: [...new Set(elements)],
+    ownLunar,
+    lowHp: characterKey === 'HuTao',
+    chainBreaker: members.filter(
+      (m) =>
+        getCharEle(m.characterKey) !== own ||
+        getCharStat(m.characterKey).region === 'natlan'
+    ).length,
+    teamEnergy: members.reduce(
+      (n, m) => n + (energyCalcData[m.characterKey]?.burstCost ?? 0),
+      0
+    ),
   }
 }
 
