@@ -52,8 +52,8 @@ jobs:
           # Il fork tiene solo Genshin Optimizer: via di nuovo Star Rail, Zenless, Somnia, il frontend sperimentale
           # e i workflow di upstream, anche quando upstream li ha modificati (cosi non diventano conflitti).
           DROP="apps/somnia apps/somnia-e2e apps/sr-frontend apps/zzz-frontend apps/gi-frontend libs/sr libs/zzz"
-          git rm -r -q --ignore-unmatch $DROP
-          git ls-files .github/workflows | grep -v '/juanlab-pages.yml$' | xargs -r git rm -q --ignore-unmatch
+          git rm -r -q -f --ignore-unmatch $DROP
+          git ls-files .github/workflows | grep -v '/juanlab-pages.yml$' | xargs -r git rm -q -f --ignore-unmatch
           if git diff --name-only --diff-filter=U | grep -q .; then
             git diff --name-only --diff-filter=U
             git merge --abort || true
