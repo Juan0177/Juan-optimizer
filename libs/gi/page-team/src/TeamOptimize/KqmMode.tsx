@@ -14,9 +14,9 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
+  KQM_ER_DEFAULT,
   KQM_TALENT_DEFAULT,
   kqmConstellation,
-  KQM_ER_DEFAULT,
   kqmEnergyRequirement,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
@@ -59,13 +59,13 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRateFull } from './format'
+import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import {
   KqmPool,
   KqmSetChooser,
   KqmWeaponChooser,
   kqmChooserCounts,
 } from './KqmChoosers'
-import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmTopTeams } from './KqmTopTeams'
@@ -327,7 +327,9 @@ export function KqmSettings({
       )
   }, [teamOpt.kqm?.energyRecharge, teamOpt.kqm?.energySource, members])
   // Keep applied ER targets current when the common rotation length or the written rotation's
-  // inputs change.
+  // inputs change. (Written once per change: if the saved settings come back different, e.g.
+  // a value the database does not keep, the same inputs are not written again, or it would loop.)
+  const lastWritten = useRef<string>()
   useEffect(() => {
     const applied = teamOpt.kqm?.energyCalculator
     const rotationTime = teamOpt.rotationTime ?? 20
@@ -336,7 +338,9 @@ export function KqmSettings({
       ...teamCalculator(members, teamOpt, applied, rotationEnergy),
       rotationTime,
     }
-    if (JSON.stringify(energyCalculator) === JSON.stringify(applied)) return
+    const json = JSON.stringify(energyCalculator)
+    if (json === JSON.stringify(applied) || json === lastWritten.current) return
+    lastWritten.current = json
     const estimate = kqmEnergyEstimate(
       members.map((m) => m.characterKey),
       energyCalculator,
