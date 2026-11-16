@@ -28,7 +28,7 @@ import {
 import { Fragment, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
-import { FieldLabel, Segmented } from './ui'
+import { FieldLabel } from './ui'
 import {
   actionName,
   DEFAULT_SWAP_FRAMES,
@@ -36,38 +36,13 @@ import {
   frameOverrides,
   type RotationTimingSettings,
   StepTiming,
+  swapFramesToPing,
+  timingPing,
+  withPing,
+  withSwapFrames,
 } from './RotationTiming'
 
-const FPS = 60
-/** Ping, ms → the frames it adds to each action and swap */
-export const pingToFrames = (ms: number) => Math.round((ms * FPS) / 1000)
-
 type ActionDefaults = NonNullable<SimulationResult['actionData']>[CharacterKey]
-
-/**
- * gcsim's timing settings: KQM's standard configs (swap_delay=12, no action delays; gcsim's own
- * default is swap_delay=1) and gcsim's frame_defaults=human (swap 8, every action +5 frames)
- */
-const PRESETS = [
-  {
-    key: 'kqm',
-    swap: 12,
-    delay: 0,
-    labelKey: 'teamOpt.frames.presetKqm',
-    label: 'KQM standard',
-    tipKey: 'teamOpt.frames.presetKqmTip',
-    tip: 'As in KQM’s standard gcsim configs: a 12-frame swap and no delay on actions (perfect inputs, no ping).',
-  },
-  {
-    key: 'human',
-    swap: 8,
-    delay: 5,
-    labelKey: 'teamOpt.frames.presetHuman',
-    label: 'Human',
-    tipKey: 'teamOpt.frames.presetHumanTip',
-    tip: 'Real-player inputs: an 8-frame swap and 5 frames (about 83 ms) added before every action, for reaction time and ping.',
-  },
-] as const
 
 /** The cancels shown for each action, in the order players think of them */
 const CANCELS: FrameKind[] = [
@@ -111,7 +86,7 @@ function cleanEdit(
 }
 
 /**
- * The rotation writer's timing inspector: the swap time and ping for everyone (or a gcsim preset),
+ * The rotation writer's timing inspector: the swap time for everyone (or the ping that sets it),
  * then two tabs: this rotation's steps (each one's frames, for this rotation only; a timeline block
  * opens its step) and each member's frame data for every action (length, cancels into each next
  * action, hit delay; saved for every team). Every change replays the rotation.
@@ -123,8 +98,6 @@ export function FrameDataPanel({
   defaults,
   frameData,
   setFrameData,
-  pingMs,
-  setPingMs,
   timing,
   setTiming,
   tab,
@@ -138,8 +111,6 @@ export function FrameDataPanel({
   defaults: Partial<Record<CharacterKey, ActionDefaults>>
   frameData: FrameData
   setFrameData: (d: FrameData) => void
-  pingMs: number
-  setPingMs: (ms: number) => void
   timing: RotationTimingSettings
   setTiming: (s: RotationTimingSettings) => void
   tab: 'steps' | 'characters'
@@ -158,20 +129,15 @@ export function FrameDataPanel({
     : 0
   const anyEdit =
     members.some(memberEdited) ||
-    pingMs > 0 ||
     timing.swapFrames !== undefined ||
     stepEdits > 0
   const resetAll = () => {
     const next = { ...frameData }
     for (const m of members) delete next[m]
     setFrameData(next)
-    setPingMs(0)
     setTiming({ edits: {} })
   }
   const swap = timing.swapFrames ?? DEFAULT_SWAP_FRAMES
-  const activePreset = PRESETS.find(
-    (p) => swap === p.swap && pingToFrames(pingMs) === p.delay
-  )?.key
   // a step's action, for every rotation: the member's frame data, that action open
   const editCharacter = (characterKey: CharacterKey, actionKey: string) => {
     setSelected(characterKey)
@@ -208,7 +174,7 @@ export function FrameDataPanel({
             {t('teamOpt.timing.resetAll', 'Reset all')}
           </Button>
         </Box>
-        {/* for everyone: the swap time and ping, or a preset */}
+        {/* for everyone: the swap time, or the ping that sets it */}
         <Box
           sx={{
             mt: 1.5,
@@ -221,7 +187,7 @@ export function FrameDataPanel({
             label={t('teamOpt.timing.swap', 'Swap time')}
             tip={t(
               'teamOpt.timing.swapTip',
-              'Frames from pressing a character’s key until they can act. Applies to every swap. gcsim uses 12.'
+              'Frames from pressing a character’s key until they are on the field and can act, for every swap. KQM standard: 12 frames.'
             )}
           >
             <FramesInput
@@ -229,12 +195,7 @@ export function FrameDataPanel({
               defaultValue={DEFAULT_SWAP_FRAMES}
               min={0}
               large
-              onChange={(v) =>
-                setTiming({
-                  ...timing,
-                  swapFrames: v === DEFAULT_SWAP_FRAMES ? undefined : v,
-                })
-              }
+              onChange={(v) => setTiming(withSwapFrames(timing, v))}
               label={t('teamOpt.timing.swap', 'Swap time')}
             />
           </Field>
@@ -242,51 +203,39 @@ export function FrameDataPanel({
             label={t('teamOpt.frames.ping', 'Ping')}
             tip={t(
               'teamOpt.frames.pingTip',
-              'Your input delay or ping. Every action and swap starts this much later (60 ms ≈ 4 frames). KQM standard assumes none (0); Human uses 5 frames (83 ms).'
+              'Your ping sets the swap time: a swap waits for the server to answer, so it takes about twice your ping (100 ms ≈ 12 frames, KQM standard; 30 ms ≈ 4). Attacks, Skills and Bursts are not delayed by ping.'
             )}
           >
             <FramesInput
-              value={pingMs}
-              defaultValue={0}
+              value={timingPing(timing)}
+              defaultValue={swapFramesToPing(DEFAULT_SWAP_FRAMES)}
               min={0}
               large
               unit="ms"
-              onChange={(v) => setPingMs(Math.min(1000, v))}
+              onChange={(v) => setTiming(withPing(timing, Math.min(1000, v)))}
               label={t('teamOpt.frames.ping', 'Ping')}
-              tip={
-                pingMs
-                  ? t('teamOpt.frames.pingFrames', {
-                      defaultValue: '+{{frames}} frames per action and swap',
-                      frames: pingToFrames(pingMs),
-                    })
-                  : undefined
-              }
+              tip={t('teamOpt.frames.pingSwap', {
+                defaultValue: 'A {{frames}}-frame swap',
+                frames: swap,
+              })}
             />
           </Field>
         </Box>
-        <Box sx={{ mt: 1 }}>
-          <Segmented
-            fullWidth
+        {timing.swapFrames !== undefined && (
+          <Button
             size="small"
-            aria-label={t('teamOpt.frames.presets', 'Presets')}
-            value={activePreset}
-            onChange={(key) => {
-              const preset = PRESETS.find((p) => p.key === key)
-              if (!preset) return
-              setTiming({
-                ...timing,
-                swapFrames:
-                  preset.swap === DEFAULT_SWAP_FRAMES ? undefined : preset.swap,
-              })
-              setPingMs(Math.round((preset.delay * 1000) / FPS))
-            }}
-            options={PRESETS.map((preset) => ({
-              value: preset.key,
-              label: t(preset.labelKey, preset.label),
-              tip: t(preset.tipKey, preset.tip),
-            }))}
-          />
-        </Box>
+            color="inherit"
+            onClick={() =>
+              setTiming(withSwapFrames(timing, DEFAULT_SWAP_FRAMES))
+            }
+            sx={{ mt: 0.5, color: 'text.secondary', textTransform: 'none' }}
+          >
+            {t(
+              'teamOpt.frames.useKqmSwap',
+              'Use KQM standard (12 frames, about 100 ms)'
+            )}
+          </Button>
+        )}
       </Box>
 
       {/* this rotation's steps, or each member's frame data */}
