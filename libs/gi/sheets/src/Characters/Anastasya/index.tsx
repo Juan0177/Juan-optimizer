@@ -102,6 +102,10 @@ const dm = {
     critDMG_: skillParam_gen.passive1[0][0],
     duration: skillParam_gen.passive1[1][0],
   },
+  // A4: il testo dice +15% al moltiplicatore base del Turbinio astrale, il parametro della beta 10%: si usa il testo
+  passive2: {
+    stellarswirl_reactionMult_: 0.15,
+  },
   passive3: {
     radianceSsDuration: skillParam_gen.passive3![0][0],
     baseDmgPer100Atk: skillParam_gen.passive3![1][0],
@@ -110,6 +114,7 @@ const dm = {
   constellation1: {
     cryo_atk_: skillParam_gen.constellation1[0],
     eleMas: skillParam_gen.constellation1[1],
+    selfSealedMult: skillParam_gen.constellation1[2],
   },
   // C2: il parametro della beta dice 50%, il testo (uguale su Nanoka e gachabase) 60%: si usa il testo.
   constellation2: {
@@ -123,6 +128,8 @@ const dm = {
     accoladeMult_: skillParam_gen.constellation4[0],
   },
   constellation6: {
+    honorDoomMult: skillParam_gen.constellation6[2],
+    loveTriumphMult: skillParam_gen.constellation6[4],
     love_specialDmg_: skillParam_gen.constellation6[3],
     honor_specialDmg_: skillParam_gen.constellation6[5],
   },
@@ -156,13 +163,29 @@ const c4Mult = sum(
   one,
   greaterEq(input.constellation, 4, percent(dm.constellation4.accoladeMult_))
 )
-// Stato "altri Sigillati" (Benedizione dell'Onore): gli Encomi dei personaggi Sigillati si dividono tra chi non lo e.
-// Con la squadra piena (3 Sigillati) la Tsaritsa riceve i 4 Encomi, gli altri nessuno; dura fino a 8s dopo il Sigillo.
+// Gli Encomi dei personaggi Sigillati si dividono tra chi non lo e (fino a 8s dopo il Sigillo).
+// - "sealed" (Onore, The Evernight Yields to Dawn): altri 3 Sigillati, la Tsaritsa riceve i 4 Encomi;
+// - "selfSealed" (Amore, To the New World): la Tsaritsa Sigillata, il suo Encomio va diviso tra gli altri 3.
+// C1: chi divide il proprio Encomio non lo perde, e con la Tsaritsa Sigillata gli Encomi che da agli altri valgono il
+// 300%.
+const c1KeepsOwn = greaterEq(input.constellation, 1, one)
+const c1SelfSealedMult = sum(
+  one,
+  greaterEq(input.constellation, 1, dm.constellation1.selfSealedMult - 1)
+)
+const isSelf = (node: Parameters<typeof equal>[2]) =>
+  equal(target.charKey, key, node)
+const isOther = (node: Parameters<typeof unequal>[2]) =>
+  unequal(target.charKey, key, node)
 const accoladeShares = lookup(
   condAccolades,
   {
     on: constant(1),
-    sealed: equal(target.charKey, key, constant(4)),
+    sealed: sum(isSelf(constant(4)), isOther(c1KeepsOwn)),
+    selfSealed: sum(
+      isSelf(c1KeepsOwn),
+      isOther(prod(constant(4 / 3), c1SelfSealedMult))
+    ),
   },
   naught
 )
@@ -188,6 +211,15 @@ const c1Accolades_eleMas = greaterEq(
     'cryo',
     prod(accoladeShares, dm.constellation1.eleMas, c4Mult)
   )
+)
+
+// A4: moltiplicatore base della reazione Turbinio astrale +15% per il gruppo. La parte su Astroconduzione (il Campo
+// stellare si rinforza a ogni buff) e i vortici portati subito al livello 2 restano testo: si scelgono con le
+// cariche del Campo e il vortice di livello 2.
+const a4_stellarswirl_reactionMult_ = greaterEq(
+  input.asc,
+  4,
+  percent(dm.passive2.stellarswirl_reactionMult_)
 )
 
 // Tripudio "To the New World" (Amore): DAN delle reazioni stellari del gruppo aumentati
@@ -246,7 +278,8 @@ const stellar = (
   arr: number[],
   talent: 'skill' | 'burst',
   variant: 'stellarconduct' | 'stellarswirl',
-  mult?: Parameters<typeof prod>[0]
+  mult?: Parameters<typeof prod>[0],
+  additional?: Parameters<typeof stellarTalentDmgNode>[5]
 ) =>
   stellarTalentDmgNode(
     'atk',
@@ -254,7 +287,7 @@ const stellar = (
     talent,
     variant,
     'cryo',
-    undefined,
+    additional,
     mult as any
   )
 // Danno stellare solo in Radiance (Corona, ultimo colpo della lancia): Astroconduzione o Turbinio astrale
@@ -265,6 +298,29 @@ const radianceSs = (node: ReturnType<typeof stellar>) =>
 // Danno "considerato Astroconduzione", che in Radiance: Stellar Swirl diventa Turbinio astrale
 const scUnlessSs = (node: ReturnType<typeof stellar>) =>
   equal(isRadianceScOrNotRadiance, 1, node)
+
+// C6, Amore: al cambio di personaggio un effetto pari a Palestar Edict: Triumph al 250%
+const c6TriumphMult = prod(dm.constellation6.loveTriumphMult, one)
+// C6, Onore: la prossima E premuta fa un effetto pari al 3o attacco di Doom al 200%; se gli altri non sono Sigillati
+// la Tsaritsa ha gli Encomi di tutto il gruppo per questo colpo (i 3 degli altri si aggiungono al suo)
+const c6DoomMult = prod(c2HonorMult, dm.constellation6.honorDoomMult)
+const c6DoomOtherAccolades = greaterEq(
+  input.asc,
+  1,
+  equal(condAccolades, 'on', prod(constant(3), c4Mult))
+)
+const c6DoomAdditional = {
+  premod: {
+    critDMG_: prod(c6DoomOtherAccolades, percent(dm.passive1.critDMG_)),
+    atk_: greaterEq(
+      input.constellation,
+      1,
+      prod(c6DoomOtherAccolades, percent(dm.constellation1.cryo_atk_))
+    ),
+  },
+}
+const c6 = (node: ReturnType<typeof stellar>) =>
+  greaterEq(input.constellation, 6, node)
 
 const dmgFormulas = {
   normal: Object.fromEntries(
@@ -351,6 +407,40 @@ const dmgFormulas = {
       ])
     ),
   },
+  constellation6: {
+    triumphScDmg: c6(
+      scUnlessSs(
+        stellar(dm.burst.triumphScDmg, 'burst', 'stellarconduct', c6TriumphMult)
+      )
+    ),
+    triumphSsDmg: c6(
+      radianceSs(
+        stellar(dm.burst.triumphSsDmg, 'burst', 'stellarswirl', c6TriumphMult)
+      )
+    ),
+    doomScDmg: c6(
+      scUnlessSs(
+        stellar(
+          dm.burst.doomStellarArr[2].sc,
+          'burst',
+          'stellarconduct',
+          c6DoomMult,
+          c6DoomAdditional
+        )
+      )
+    ),
+    doomSsDmg: c6(
+      radianceSs(
+        stellar(
+          dm.burst.doomStellarArr[2].ss,
+          'burst',
+          'stellarswirl',
+          c6DoomMult,
+          c6DoomAdditional
+        )
+      )
+    ),
+  },
 }
 const burstC3 = greaterEq(input.constellation, 3, 3)
 const skillC5 = greaterEq(input.constellation, 5, 3)
@@ -375,6 +465,7 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
       stellarswirl_critDMG_: c2Love_stellarswirl_critDMG_,
       stellarconduct_specialDmg_: team_stellarconduct_specialDmg_,
       stellarswirl_specialDmg_: team_stellarswirl_specialDmg_,
+      stellarswirl_reactionMult_: a4_stellarswirl_reactionMult_,
     },
   },
   flags: {
@@ -517,10 +608,23 @@ const sheet: TalentSheet = {
             { node: c1Accolades_eleMas },
           ],
         },
+        selfSealed: {
+          name: ct.ch('accoladesSelfSealed'),
+          fields: [
+            { node: a1Accolades_critDMG_ },
+            { node: c1Accolades_atk_ },
+            { node: c1Accolades_eleMas },
+          ],
+        },
       },
     }),
   ]),
-  passive2: ct.talentTem('passive2'),
+  passive2: ct.talentTem('passive2', [
+    ct.fieldsTem('passive2', {
+      teamBuff: true,
+      fields: [{ node: a4_stellarswirl_reactionMult_ }],
+    }),
+  ]),
   passive3: ct.talentTem('passive3', [
     ct.fieldsTem('passive3', {
       teamBuff: true,
@@ -583,6 +687,14 @@ const sheet: TalentSheet = {
       fields: [
         { node: c6Love_stellarconduct_specialDmg_ },
         { node: c6Honor_stellarconduct_specialDmg_ },
+      ],
+    }),
+    ct.fieldsTem('constellation6', {
+      fields: [
+        node(f.constellation6.triumphScDmg, ct.ch('c6Triumph')),
+        node(f.constellation6.triumphSsDmg, ct.ch('c6Triumph')),
+        node(f.constellation6.doomScDmg, ct.ch('c6Doom')),
+        node(f.constellation6.doomSsDmg, ct.ch('c6Doom')),
       ],
     }),
   ]),

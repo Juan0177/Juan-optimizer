@@ -95,6 +95,7 @@ for (const reaction of allStellarReactionKeys) {
 }
 allNonModStatNodes.stellarconduct_electro_critDMG_.info!.variant =
   'stellarconduct'
+allNonModStatNodes.stellarswirl_reactionMult_.info!.variant = 'stellarswirl'
 crittableTransformativeReactions.forEach((reaction) => {
   allNonModStatNodes[`${reaction}_critRate_`].info!.variant = reaction
   allNonModStatNodes[`${reaction}_critDMG_`].info!.variant = reaction

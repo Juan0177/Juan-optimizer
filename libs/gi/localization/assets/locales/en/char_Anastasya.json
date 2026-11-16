@@ -6,5 +6,8 @@
   "newWorldCond": "To the New World active",
   "honorMult": "Blessing of Honor DMG multiplier",
   "accoladesOn": "Accolades for the whole party",
-  "accoladesSealed": "3 others Sealed: all Accolades on Anastasya"
+  "accoladesSealed": "3 others Sealed: all Accolades on Anastasya",
+  "accoladesSelfSealed": "Anastasya Sealed: her Accolade shared by the other 3",
+  "c6Triumph": "C6 Love: Triumph on character switch (250%)",
+  "c6Doom": "C6 Honor: tap E, 3rd Doom attack (200%)"
 }

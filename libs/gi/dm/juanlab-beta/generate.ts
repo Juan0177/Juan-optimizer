@@ -196,10 +196,39 @@ function charMats(materials: any) {
 }
 
 /* ---------- character card ---------- */
-// GO's cards come from the official drip marketing, which the beta does not have yet: a provisional card with the
-// character's icon on the colour of the element, 350x700 like the others.
+// GO's cards come from the official drip marketing, which the beta does not have yet. The card is the gacha banner
+// of Lunaris (lunaris.moe, 2048x1024 with transparency) cut to a vertical 292x700 around the character, on the colour
+// of the element; config.json "cardCenterX" says where the character stands in the banner. Without the banner, a
+// provisional card with the character's icon.
+const LUNARIS_GACHA = 'https://api.lunaris.moe/data/assets/gachaimg'
 const ELEMENT_COLOR: Record<string, string> = { electro: '#8f52c9', cryo: '#4fb3d1', pyro: '#d9573b', hydro: '#3d7fd9', anemo: '#3fbf9f', geo: '#c9a23b', dendro: '#6fae3a' }
-function makeCard(iconPng: string, dest: string, element: string) {
+const ELEMENT_DARK: Record<string, string> = { electro: '#2a1d45', cryo: '#1d3550', pyro: '#4a1f17', hydro: '#17284a', anemo: '#173f36', geo: '#43361a', dendro: '#243b17' }
+async function makeCard(key: string, iconName: string, iconPng: string, dest: string, element: string) {
+  const banner = iconName.replace('UI_AvatarIcon_', 'UI_Gacha_AvatarImg_')
+  const res = await fetch(`${LUNARIS_GACHA}/${banner}.png`).catch(() => undefined)
+  if (res?.ok) {
+    const tmp = `${dest}.banner.png`
+    writeFileSync(tmp, Buffer.from(await res.arrayBuffer()))
+    execFileSync('python3', ['-c', `
+import os, sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert('RGBA')
+os.remove(sys.argv[1])
+w = round(im.height * 292 / 700)
+cx = int(sys.argv[3]) if sys.argv[3] else im.width // 2
+x0 = max(0, min(im.width - w, cx - w // 2))
+crop = im.crop((x0, 0, x0 + w, im.height))
+card = Image.new('RGBA', crop.size, sys.argv[4])
+fade = Image.new('RGBA', crop.size, (0, 0, 0, 0))
+for y in range(crop.height):
+    fade.paste((0, 0, 0, int(140 * y / crop.height)), (0, y, w, y + 1))
+card = Image.alpha_composite(card, fade)
+card.alpha_composite(crop)
+card.convert('RGB').resize((292, 700), Image.LANCZOS).save(sys.argv[2], 'WEBP', quality=90)
+`, tmp, dest, String(config.cardCenterX?.[key] ?? ''), ELEMENT_DARK[element] ?? '#222222'])
+    return
+  }
+  console.warn(`banner ${banner} non trovato su Lunaris: cartoncino provvisorio con l'icona`)
   execFileSync('python3', ['-c', `
 import sys
 from PIL import Image
@@ -290,7 +319,8 @@ async function main() {
     names.char[key] = loc.name
     mats[key] = charMats(d.Materials)
     const card = join(CARDS, `Character_${key}_Card.webp`)
-    if (fetchMode || !existsSync(card)) makeCard(join(GEN, 'chars', key, `${assets.icon}.png`), card, data.ele)
+    if (fetchMode || !existsSync(card))
+      await makeCard(key, assets.icon, join(GEN, 'chars', key, `${assets.icon}.png`), card, data.ele)
   }
   for (const [key, d] of Object.entries(all.weapon)) {
     const data = weaponStats(d)

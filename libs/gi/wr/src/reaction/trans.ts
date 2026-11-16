@@ -189,8 +189,12 @@ const trans = {
   ),
   stellarswirl: infoMut(
     stellarDmgNode(
-      constant(
-        transformativeReactions.stellarswirl.multi,
+      // juanlab-beta 7.3: l'A4 di Anastasya aumenta il moltiplicatore base della reazione (0,75 + 0,15)
+      infoMut(
+        sum(
+          constant(transformativeReactions.stellarswirl.multi),
+          input.total.stellarswirl_reactionMult_
+        ),
         info('stellarswirl_multi_')
       ),
       'reaction',
