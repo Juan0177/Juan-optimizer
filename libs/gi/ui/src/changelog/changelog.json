@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.10.1",
+    "date": "2026-11-16",
+    "new": [
+      "The rotation writer is wider and split into clear sections: the rotation, its time and timeline, and hits per rotation.",
+      "The Rotations setting (Repeating, or the first 1–6 from the start) is now on the page beside the rotation; changing it updates the rotation in use."
+    ],
+    "fixed": [
+      "KQM tab: teams with Flins no longer crash with \"Unexpected Error Occurred\" when the ER targets come from the calculator."
+    ]
+  },
+  {
     "version": "1.10.0",
     "date": "2026-11-16",
     "new": [
