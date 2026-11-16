@@ -16,6 +16,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   Collapse,
   TextField,
   Tooltip,
@@ -643,7 +644,15 @@ export function RotationsSetting({
   const first = firstRotations(timing)
   const set = (rotations: number | undefined) => {
     const { rotations: _previous, ...rest } = timing
-    const next = rotations === undefined ? rest : { ...rest, rotations }
+    apply(rotations === undefined ? rest : { ...rest, rotations })
+  }
+  // (counted from the start: the first rotation written apart is the first rotation, or a setup
+  // played before the start, not counted)
+  const setOpenerCounted = (counted: boolean) => {
+    const { openerSetup: _setup, ...rest } = timing
+    apply(counted ? rest : { ...rest, openerSetup: true })
+  }
+  const apply = (next: typeof timing) => {
     if (applied.trim()) {
       try {
         const result = simulateWritten({
@@ -727,6 +736,36 @@ export function RotationsSetting({
               disabled,
             }))}
           />
+          {!!opener.trim() && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.timing.openerCountedTip',
+                'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+              )}
+            >
+              <Box
+                component="label"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.25,
+                  cursor: disabled ? 'default' : 'pointer',
+                  whiteSpace: 'nowrap',
+                  ...type.label,
+                }}
+              >
+                <Checkbox
+                  size="small"
+                  checked={!timing.openerSetup}
+                  disabled={disabled}
+                  onChange={(_, checked) => setOpenerCounted(checked)}
+                  sx={{ p: 0.5 }}
+                />
+                {t('teamOpt.timing.openerCounted', 'Opener counted')}
+              </Box>
+            </Tooltip>
+          )}
         </>
       )}
     </Box>
