@@ -257,8 +257,91 @@ it('suppresses elemental bonuses near Stellar Swirl while retaining direct Stell
   )
 })
 
-it('extends Stellar Swirl radiance by four seconds without enabling the reaction by itself', () => {
-  for (const support of ['Vodyanitsa', 'Mona'] as const) {
+it('gives Lead Vocal’s Stellar Swirl bonus to a direct hit only with a Wandering Vortex present or just exploded', () => {
+  const probe: KitModel = {
+    characterKey: 'Venti',
+    element: 'anemo',
+    source: 'test',
+    act(c) {
+      c.hit(1, {
+        characterKey: 'Odette',
+        path: ['skill', '1'],
+        tag: 'directStellarSwirl',
+        element: 'cryo',
+        label: 'Before the vortex',
+      })
+      // (the reaction is made later: a reaction hit is snapshotted when it is made)
+      c.at(30, (at) => {
+        at.hit(0, {
+          path: ['reaction', 'stellarswirl'],
+          tag: 'other',
+          element: 'anemo',
+          label: 'Reaction',
+          contributors: ['Venti', 'Odette'],
+        })
+        at.hit(2, {
+          characterKey: 'Odette',
+          path: ['skill', '1'],
+          tag: 'directStellarSwirl',
+          element: 'cryo',
+          label: 'With the vortex',
+        })
+      })
+      return { frames: 1 }
+    },
+  }
+  const kits = {
+    Vodyanitsa: kitModels.Vodyanitsa,
+    Venti: probe,
+    Odette: {
+      ...probe,
+      characterKey: 'Odette' as const,
+      element: 'cryo' as const,
+    },
+  }
+  const members: CharacterKey[] = ['Vodyanitsa', 'Venti', 'Odette']
+  const sim = run(members, 'Vodyanitsa E -> Venti E W6', kits, {
+    reactions: { onHit() {} },
+  })
+  expect(a4(sim.hits.find((h) => h.label === 'Before the vortex')!)).toBe(
+    undefined
+  )
+  expect(a4(sim.hits.find((h) => h.label === 'With the vortex')!)).toBe(
+    'stellar'
+  )
+  const a1 = (s: typeof sim) =>
+    s.buffWindows.some(
+      (w) => w.path.join('.') === 'Vodyanitsa.a1Vortex' && w.value === 'on'
+    )
+  expect(a1(sim)).toBe(true)
+  // Outside Song the vortex is an ordinary one: no A1 RES shred, no Stellar Swirl bonus
+  const unsung = run(members, 'Venti E W6', kits, { reactions: { onHit() {} } })
+  expect(a1(unsung)).toBe(false)
+  expect(a4(unsung.hits.find((h) => h.label === 'Reaction')!)).toBeFalsy()
+  expect(a4(unsung.hits.find((h) => h.label === 'With the vortex')!)).toBe(
+    undefined
+  )
+})
+
+it('deals her Burst as a 2U Hydro hit', () => {
+  const sim = run(['Vodyanitsa'], 'Vodyanitsa Q W2')
+  expect(sim.hits.find((h) => h.tag === 'burst')?.durability).toBe(50)
+})
+
+it('extends Stellar Swirl radiance by four seconds during her Song, without enabling the reaction by itself', () => {
+  // (her Song without its hits: only the +4 s is under test)
+  const singing: KitModel = {
+    ...kitModels.Vodyanitsa!,
+    act(c) {
+      c.state('Vodyanitsa', ['Vodyanitsa', 'skillSong'], 'on')
+      return { frames: 1 }
+    },
+  }
+  for (const [support, song] of [
+    ['Vodyanitsa', true],
+    ['Vodyanitsa', false],
+    ['Mona', false],
+  ] as const) {
     const seen: (string | undefined)[] = []
     const cryo: KitModel = {
       characterKey: 'Odette',
@@ -292,16 +375,20 @@ it('extends Stellar Swirl radiance by four seconds without enabling the reaction
         return { frames: 1 }
       },
     }
-    const sim = run(['Odette', 'Venti', support], 'Odette E -> Venti E W14', {
-      Odette: cryo,
-      Venti: anemo,
-      [support]: kitModels[support],
-    })
+    const sim = run(
+      ['Odette', 'Venti', support],
+      `${song ? `${support} E -> ` : ''}Odette E -> Venti E W14`,
+      {
+        Odette: cryo,
+        Venti: anemo,
+        [support]: song ? singing : kitModels[support],
+      }
+    )
     expect(
       sim.hits.some((h) => h.path.join('.') === 'reaction.stellarswirl')
     ).toBe(true)
     expect(seen).toEqual(
-      support === 'Vodyanitsa'
+      song
         ? ['swirl', 'swirl', 'swirl', undefined]
         : ['swirl', undefined, undefined, undefined]
     )
@@ -425,10 +512,8 @@ it('adds Song to the burst HP coefficient and caps managed elemental/Stellar fla
       },
     })!.hit!.value
   const params = allStats.char.skillParam.Vodyanitsa.burst
-  expect(burst('on') / burst('')).toBeCloseTo(
-    (params[0][9] + params[1][9]) / params[0][9],
-    8
-  )
+  // (the Song bonus multiplies the coefficient: dump Vodyanitsa_ElementalBurst_DamageRatio)
+  expect(burst('on') / burst('')).toBeCloseTo(1 + params[1][9], 8)
   const attack: TeamOptAttack = {
     path: ['reaction', 'stellarswirl'],
     hits: 1,
