@@ -21,12 +21,14 @@ import { useEffect, useState } from 'react'
 import * as artifactMap from '../../../dm/src/mapping/artifact'
 // biome-ignore lint/style/noRestrictedImports: juanlab, solo le tabelle ID del datamine (l'index di gi/dm usa il filesystem)
 import { characterIdMap } from '../../../dm/src/mapping/character'
+import type { EnkaResponse } from './enkaToGood'
 import { PROP } from './enkaToGood'
 
 const { artifactIdMap, artifactSlotMap } = artifactMap
 
 export const GCWEB_PARAM = 'gcweb'
 export const LINK_FORMAT = 'JuanLabBuild'
+export const ACCOUNT_FORMAT = 'JuanLabAccount'
 export const DEFAULT_GCWEB_URL = 'http://127.0.0.1:8090/'
 const STORAGE_KEY = 'juanlab-gcweb'
 const CHANGE_EVENT = 'juanlab-gcweb-change'
@@ -110,6 +112,37 @@ export function decodePayload(text: string): JuanLabBuild {
     payload?.format !== LINK_FORMAT ||
     payload.version !== 1 ||
     !Array.isArray(payload.artifacts)
+  )
+    throw new Error('format')
+  return payload
+}
+
+/* ---------- personaggi dell'account (dal server privato, tramite gc-web) ----------
+   Link "z." + JSON compresso (deflate-raw) in base64url: i personaggi nella forma della vetrina di Enka
+   (avatarInfoList), con livello, ascensione, costellazione, talenti, arma e manufatti equipaggiati. */
+export type JuanLabAccount = {
+  format: typeof ACCOUNT_FORMAT
+  version: 1
+  source?: string
+  uid?: number
+  nickname?: string
+  avatarInfoList: NonNullable<EnkaResponse['avatarInfoList']>
+}
+
+export const isAccountLink = (text: string) => text.startsWith('z.')
+
+export async function decodeAccount(text: string): Promise<JuanLabAccount> {
+  const base64 = text.slice(2).replace(/-/g, '+').replace(/_/g, '/')
+  const binary = atob(base64 + '='.repeat((4 - (base64.length % 4)) % 4))
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
+  const stream = new Blob([bytes])
+    .stream()
+    .pipeThrough(new DecompressionStream('deflate-raw'))
+  const payload = JSON.parse(await new Response(stream).text())
+  if (
+    payload?.format !== ACCOUNT_FORMAT ||
+    payload.version !== 1 ||
+    !Array.isArray(payload.avatarInfoList)
   )
     throw new Error('format')
   return payload

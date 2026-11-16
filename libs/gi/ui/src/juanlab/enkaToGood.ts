@@ -96,6 +96,7 @@ type EnkaAvatar = {
   skillDepotId?: number
   propMap?: Record<string, { val?: string }>
   talentIdList?: number[]
+  constellation?: number // juanlab: dal server privato (gc-web) arriva il numero, non gli ID
   skillLevelMap?: Record<string, number>
   equipList?: EnkaEquip[]
 }
@@ -192,7 +193,7 @@ export function enkaToGood(
       key,
       level: Number(a.propMap?.['4001']?.val ?? 1),
       ascension: Number(a.propMap?.['1002']?.val ?? 0),
-      constellation: a.talentIdList?.length ?? 0,
+      constellation: a.constellation ?? a.talentIdList?.length ?? 0,
       talent: talentsOf(a, store),
     })
     for (const e of a.equipList ?? []) {

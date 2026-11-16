@@ -39,15 +39,19 @@
     "title": "Collegamento a gc-web",
     "enable": "Attiva",
     "urlLabel": "Indirizzo di gc-web",
-    "hint": "gc-web è il pannello di LunaGC sul tuo PC. Con il collegamento attivo, nella scheda del personaggio compare «Invia a gc-web» (i manufatti equipaggiati diventano una build di CharacterBuilder), e le build inviate da gc-web («Apri in Juan-optimizer») si aprono qui pronte da importare. Spento, i link in arrivo vengono ignorati.",
+    "hint": "gc-web è il pannello di LunaGC sul tuo PC. Con il collegamento attivo, nella scheda del personaggio compare «Invia a gc-web» (i manufatti equipaggiati diventano una build di CharacterBuilder); le build («Apri in Juan-optimizer») e i personaggi del tuo account («Esporta i personaggi in Juan-optimizer») inviati da gc-web si aprono qui pronti da importare. Spento, i link in arrivo vengono ignorati.",
     "send": "Invia a gc-web",
     "sendTitle": "Apre gc-web con i manufatti equipaggiati di questo personaggio, pronti da salvare come build di CharacterBuilder",
     "noArtifacts": "Questo personaggio non ha manufatti equipaggiati da inviare.",
     "incomingTitle": "Build da gc-web",
-    "incomingOff": "È arrivata una build da gc-web, ma il collegamento è spento. Attivalo in Impostazioni → Database → Carica, alla voce «Collegamento a gc-web», e riapri il link da gc-web.",
-    "incomingBad": "Il link da gc-web non contiene una build valida.",
+    "incomingOff": "È arrivato un link da gc-web, ma il collegamento è spento. Attivalo in Impostazioni → Database → Carica, alla voce «Collegamento a gc-web», e riapri il link da gc-web.",
+    "incomingBad": "Il link da gc-web non contiene una build o dei personaggi validi.",
     "incomingLabel": "Build di gc-web: {{name}}",
     "skipped_one": "{{count}} pezzo non riconosciuto è stato escluso.",
-    "skipped_other": "{{count}} pezzi non riconosciuti sono stati esclusi."
+    "skipped_other": "{{count}} pezzi non riconosciuti sono stati esclusi.",
+    "accountLabel_one": "Personaggi di gc-web: {{name}} (UID {{uid}}), {{count}} personaggio",
+    "accountLabel_other": "Personaggi di gc-web: {{name}} (UID {{uid}}), {{count}} personaggi",
+    "accountSkipped_one": "{{count}} elemento non riconosciuto (personaggio, arma o manufatto, forse troppo nuovo per questa versione) è stato escluso.",
+    "accountSkipped_other": "{{count}} elementi non riconosciuti (personaggi, armi o manufatti, forse troppo nuovi per questa versione) sono stati esclusi."
   }
 }
