@@ -1,3 +1,4 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
   GCSIM,
@@ -53,6 +54,66 @@ interface YaoyaoState {
   burstTok?: number
   /** Dash and jump intervals [from, to): A1 throws a radish at a tick in one of them */
   air: [number, number][]
+  /** A4: each member's latest radish heal (its regen chain) and its status end, on its clock */
+  a4: Partial<Record<CharacterKey, { src: number; until: number }>>
+}
+
+/** A radish's explosion radius, and C6's Mega Radish's (kqmsim yuegui.go, cons.go) */
+const RADISH_RADIUS = 2
+const MEGA_RADISH_RADIUS = 4
+
+/**
+ * Where a Yuegui throws (kqmsim yuegui.go:122-134): at the enemy, or at the player when the active
+ * member is at 70% HP or less (tracked HP only)
+ */
+const throwsAtPlayer = (c: SimContext) =>
+  c.healthTracked && (c.hpRatio(c.onField) ?? 1) <= 0.7
+
+/**
+ * A radish's heal when it explodes within `radius` of the player (kqmsim yuegui.go:87-97): a burst
+ * radish heals the party, a skill radish the active member. A4 then regenerates the active member
+ * (radish.go:15-19)
+ */
+function radishHeal(
+  c: SimContext,
+  s: YaoyaoState,
+  burst: boolean,
+  atPlayer: boolean
+) {
+  if (!atPlayer && c.target.distance > RADISH_RADIUS) return
+  c.hit(0, {
+    characterKey: 'Yaoyao',
+    path: ['_heal', burst ? 'burst' : 'skill', burst ? 'radishHeal' : 'heal'],
+    tag: 'other',
+    element: 'dendro',
+    healTargets: burst ? [...c.members] : [c.onField],
+    label: 'Radish (Heal)',
+  })
+  a4Start(c, s)
+}
+
+/**
+ * A4 (assumed: ascension 4): the active member heals every 1 s of Yaoyao's clock while its 5 s
+ * status lasts (its clock); its next radish heal restarts the chain (kqmsim asc.go:63-85)
+ */
+function a4Start(c: SimContext, s: YaoyaoState) {
+  const m = c.onField
+  const src = c.now
+  s.a4[m] = { src, until: c.characterFrame(m) + 300 }
+  const tick = (t: SimContext): void => {
+    const a = s.a4[m]
+    if (a?.src !== src || t.characterFrame(m) > a.until) return
+    t.hit(0, {
+      characterKey: 'Yaoyao',
+      path: ['_heal', 'passive2', 'heal'],
+      tag: 'other',
+      element: 'dendro',
+      healTargets: [m],
+      label: 'Yaoyao A4 (Heal)',
+    })
+    t.atCharacter('Yaoyao', 60, tick)
+  }
+  c.atCharacter('Yaoyao', 60, tick)
 }
 
 /**
@@ -112,8 +173,11 @@ const throwRadish = (
         }),
   })
 
-/** C6: the Mega Radish of every 3rd and 6th throw of the summoned Yuegui, 20 frames after it */
-const megaRadish = (c: SimContext) => {
+/**
+ * C6: the Mega Radish of every 3rd and 6th throw of the summoned Yuegui, 20 frames after it; it
+ * heals the active member within its radius, with no A4 (kqmsim cons.go:73-96, radish.go:8)
+ */
+const megaRadish = (c: SimContext, atPlayer: boolean) => {
   if (c.constellation('Yaoyao') < 6) return
   c.hit(20, {
     path: ['constellation6', 'dmg'],
@@ -124,6 +188,16 @@ const megaRadish = (c: SimContext) => {
     icd: 'none',
     label: 'Mega Radish (C6)',
   })
+  if (atPlayer || c.target.distance <= MEGA_RADISH_RADIUS)
+    c.at(20, (c2) =>
+      c2.hit(0, {
+        path: ['_heal', 'constellation6', 'heal'],
+        tag: 'other',
+        element: 'dendro',
+        healTargets: [c2.onField],
+        label: 'Mega Radish (C6, Heal)',
+      })
+    )
 }
 
 /**
@@ -134,8 +208,11 @@ const skillThrow =
   (s: YaoyaoState, end: number, n: number, snapshotAt: number) =>
   (c: SimContext): void => {
     if (c.now >= end) return
+    const atPlayer = throwsAtPlayer(c)
+    const burst = inBurst(s, c.now + 13)
+    c.at(13, (c2) => radishHeal(c2, s, burst, atPlayer))
     // under Adeptal Legacy its radishes are the burst's (Elemental Burst DMG), with its stats
-    if (inBurst(s, c.now + 13))
+    if (burst)
       throwRadish(
         c,
         ['burst', 'radish'],
@@ -153,7 +230,7 @@ const skillThrow =
         'YaoyaoRadishSkill',
         snapshotAt
       )
-    if (n === 2 || n === 5) megaRadish(c)
+    if (n === 2 || n === 5) megaRadish(c, atPlayer)
     c.at(60, skillThrow(s, end, n + 1, snapshotAt))
   }
 
@@ -162,6 +239,7 @@ const jumpThrow =
   (s: YaoyaoState, tok: number) =>
   (c: SimContext): void => {
     if (s.burstTok !== tok || c.now >= tok + BURST_DUR) return
+    const atPlayer = throwsAtPlayer(c)
     throwRadish(
       c,
       ['burst', 'radish'],
@@ -169,6 +247,7 @@ const jumpThrow =
       'Radish (Moonjade, Yuegui)',
       'YaoyaoRadishBurst'
     )
+    c.at(13, (c2) => radishHeal(c2, s, true, atPlayer))
     c.at(60, jumpThrow(s, tok))
   }
 
@@ -178,7 +257,7 @@ const a1Tick =
   (c: SimContext): void => {
     if (s.burstTok !== tok || c.now >= tok + BURST_DUR) return
     if (s.air.some(([a, b]) => a <= c.now && c.now < b))
-      c.at(12, (c2) =>
+      c.at(12, (c2) => {
         throwRadish(
           c2,
           ['burst', 'radish'],
@@ -186,7 +265,9 @@ const a1Tick =
           'Radish (A1, in the air)',
           'YaoyaoRadishBurst'
         )
-      )
+        // (always thrown at an enemy)
+        c2.at(13, (c3) => radishHeal(c3, s, true, false))
+      })
     c.at(36, a1Tick(s, tok))
   }
 
@@ -194,7 +275,7 @@ export const kit: KitModel = {
   characterKey: 'Yaoyao',
   element: 'dendro',
   source: `${GCSIM}/yaoyao`,
-  init: (): YaoyaoState => ({ air: [] }),
+  init: (): YaoyaoState => ({ air: [], a4: {} }),
   act(ctx, s: YaoyaoState, action, previous) {
     switch (action.kind) {
       case 'normal':
@@ -235,16 +316,16 @@ export const kit: KitModel = {
         }
       case 'skill': {
         // Yuegui: summoned 63 frames after the cast; its first throw 92 frames after the cast
-        // (a throw every 60 frames until 663). The radish lands on an enemy (assumed: the active
-        // member is above 70% HP and an enemy is in reach, so no heal-at-self throws).
+        // (a throw every 60 frames until 663). The radish lands on an enemy in reach (assumed),
+        // or on the player at 70% HP or less (tracked HP), and heals only within 2 m of the player:
+        // at KQM's standard 2.4 m an enemy-bound radish does not heal (as kqmsim).
         ctx.at(92, skillThrow(s, ctx.now + 663, 0, ctx.now + 63))
         // C4: Elemental Mastery for 8 s after the skill (a sheet conditional)
         if (ctx.constellation('Yaoyao') >= 4)
           ctx.buff('Yaoyao', ['Yaoyao', 'c4AfterSkillBurst'], 'on', 0, C4_DUR, {
             hitlag: 'recipient',
           })
-        // (C1's Dendro DMG and A4's heals need the radish to explode on the active character, as in
-        // gcsim, where it lands on the enemy: not modelled)
+        // (C1's Dendro DMG after a radish heal is not modelled)
         return {
           cooldown: { key: 'skill', frames: 900, delay: 15 },
           frames: 52,

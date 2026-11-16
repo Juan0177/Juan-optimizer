@@ -1,3 +1,4 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
   KQMSIM,
@@ -59,7 +60,27 @@ interface QiqiState {
   heraldEnd: number
   /** Coordinated Attack's 2.2 s ICD, on each triggering character's own clock. */
   coordIcd: Record<string, number>
+  /** The newest Talisman on the enemy, whether it is up, and its heal's 1 s ICD (world time) */
+  talismanSrc: number
+  talismanOn: boolean
+  talismanIcd: number
 }
+
+/** A heal by Qiqi */
+const qiqiHeal = (
+  c: SimContext,
+  node: string[],
+  healTargets: CharacterKey[],
+  label: string
+) =>
+  c.hit(0, {
+    characterKey: 'Qiqi',
+    path: ['_heal', ...node],
+    tag: 'other',
+    element: 'cryo',
+    healTargets,
+    label,
+  })
 
 export const kit: KitModel = {
   characterKey: 'Qiqi',
@@ -70,6 +91,9 @@ export const kit: KitModel = {
     heraldStart: -1,
     heraldEnd: -1,
     coordIcd: {},
+    talismanSrc: 0,
+    talismanOn: false,
+    talismanIcd: -1,
   }),
   onStart(ctx) {
     ctx.state('Qiqi', ['Qiqi', 'lockRevelation'], 'on')
@@ -175,6 +199,19 @@ export const kit: KitModel = {
             label: 'Qiqi Herald initial hitlag',
           })
           c2.at(64, (c3) => tick(c3, 60))
+          // the active member's regen: at the initial hit, then every 4.5 s while Herald lasts
+          // (kqmsim qiqi/skill.go:68, :159)
+          const regen = (t: SimContext): void => {
+            if (s.heraldSrc !== src || t.now >= s.heraldEnd) return
+            qiqiHeal(
+              t,
+              ['skill', 'contRegen'],
+              [t.onField],
+              'Herald of Frost (Heal)'
+            )
+            t.at(270, regen)
+          }
+          regen(c2)
         })
         // Revelation (gcsim's default): her E cooldown is 15 s
         return withHitlag(
@@ -187,6 +224,14 @@ export const kit: KitModel = {
         )
       }
       case 'burst': {
+        // the Talisman lands on the enemy 40 frames in, for 15 s of its clock (kqmsim burst.go:42)
+        ctx.at(40, (c2) => {
+          const src = ++s.talismanSrc
+          s.talismanOn = true
+          c2.atEnemy(900, () => {
+            if (s.talismanSrc === src) s.talismanOn = false
+          })
+        })
         // Revelation adds a second, direct Stellar hit when cast in Conduct radiance.
         ctx.hit(82, {
           path: ['burst', 'dmg'],
@@ -304,6 +349,52 @@ export const kit: KitModel = {
       ctx.radiance === 'conduct' ? 'on' : ctx.radiance === 'swirl' ? 'ss' : ''
     )
     ctx.state('Qiqi', ['Qiqi', 'QiqiLk'], ctx.now < s.heraldEnd ? 'on' : '')
+    if (!hit.path[0].startsWith('_')) {
+      // Herald of Frost: her Normal and Charged hits heal the party (kqmsim qiqi/skill.go:240)
+      if (
+        hit.characterKey === 'Qiqi' &&
+        (hit.tag === 'normal' || hit.tag === 'charged') &&
+        hit.path[0] !== 'reaction' &&
+        hit.t >= s.heraldStart &&
+        hit.t < s.heraldEnd
+      )
+        qiqiHeal(
+          ctx,
+          ['skill', 'hitRegen'],
+          [...ctx.members],
+          'Herald of Frost (Attack Heal)'
+        )
+      // Talisman: any member's damage on the enemy heals that member, once per 1 s of world time;
+      // C4 (Revelation) also heals the lowest-HP member (kqmsim burst.go:104, cons.go:139)
+      if (s.talismanOn && hit.t > s.talismanIcd) {
+        s.talismanIcd = hit.t + 60
+        qiqiHeal(
+          ctx,
+          ['burst', 'heal'],
+          [hit.characterKey],
+          'Fortune-Preserving Talisman (Heal)'
+        )
+        if (ctx.constellation('Qiqi') >= 4)
+          // (after that heal lands; Qiqi on ties, as kqmsim)
+          ctx.at(0, (c) => {
+            let lowest: CharacterKey = 'Qiqi'
+            let ratio = c.hpRatio('Qiqi') ?? 1
+            for (const m of c.members) {
+              const r = c.hpRatio(m) ?? 1
+              if (r < ratio) {
+                lowest = m
+                ratio = r
+              }
+            }
+            qiqiHeal(
+              c,
+              ['constellation4', 'heal'],
+              [lowest],
+              'Fortune-Preserving Talisman (C4 Heal)'
+            )
+          })
+      }
+    }
     if (
       hit.path[0].startsWith('_') ||
       (hit.path[0] === 'reaction' &&

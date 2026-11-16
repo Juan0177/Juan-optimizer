@@ -123,6 +123,7 @@ export const kit: KitModel = {
           element: 'cryo',
           applies: true,
           icd: 'none',
+          travel: 10,
           label: 'Frostflake Arrow',
         })
         ctx.hit(131 - skip, {
@@ -131,6 +132,8 @@ export const kit: KitModel = {
           element: 'cryo',
           applies: true,
           icd: 'none',
+          // (kqmsim aimed.go: the bloom lands 18 f after the arrow's 10 f of travel)
+          travel: 28,
           label: 'Frostflake Arrow Bloom',
         })
         // (C1's Cryo RES shred follows each arrow and bloom hit: see onHit)
