@@ -106,6 +106,74 @@ describe('Danica', () => {
     ).toBe(false)
   })
 
+  // (dump Avatar_Danica_ElementalArt_InsertClaymore: the re-summon removes the Anchor handler)
+  it('Scouring Anchor ends the form: in "Entry E Q" no Royal Guard, Aegis or party ATK is left after the E', () => {
+    const sim = run('Danica E -> Kaeya E -> Lisa E -> Danica E Q W2', [
+      'Danica',
+      'Kaeya',
+      'Lisa',
+    ])
+    const entry = sim.actions.find(
+      (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+    )!
+    const e = sim.actions.filter(
+      (a) => a.characterKey === 'Danica' && a.text === 'E'
+    )[1]
+    expect(entry).toBeTruthy()
+    expect(e.start).toBeGreaterThan(entry.start)
+    const windows = (path: string) =>
+      sim.buffWindows.filter((w) => w.path.join('.') === `Danica.${path}`)
+    // Royal Guard from the Entry until the E's re-summon (22 frames in), then no form
+    const guard = windows('maidForm').filter((w) => w.value === 'defense')
+    expect(guard).toHaveLength(1)
+    expect(guard[0].start).toBe(entry.start)
+    expect(guard[0].end).toBe(e.start + 22)
+    // the Q after it has no form to light: no Royal Guard ATK at any time
+    expect(windows('burstEnhanced').some((w) => w.value === 'on')).toBe(false)
+    // the Royal Aegis ends with the form (a 0-frame shield of the same kind)
+    const shields = sim.hits
+      .filter((h) => h.path[0] === '_marker' && h.path[1] === 'shield')
+      .map((h) => [h.t, +h.path[2]])
+    expect(shields).toEqual([
+      [entry.start, 1500],
+      [e.start + 22, 0],
+    ])
+  })
+
+  it('Scouring Anchor clears Will to Protect’s cooldown: a second Entry within 16 s', () => {
+    // (Lisa's Normal Attacks fill Will off the field; the second E waits out its own 18 s)
+    const sim = run(
+      'Danica E -> Lisa N2 W15 -> Danica E -> Lisa N2 -> Danica N1',
+      ['Danica', 'Lisa']
+    )
+    const entries = sim.actions.filter(
+      (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+    )
+    expect(entries).toHaveLength(2)
+    expect(entries[1].start - entries[0].start).toBeLessThan(960)
+  })
+
+  it('the Burst window is live: a Q before Will to Purge lights it, refills Will and enhances both casts', () => {
+    // (Kaeya's Burst: Will short of 100 at the swap, no Entry, and Cryo that keeps Radiance up)
+    const sim = run('Danica E -> Kaeya Q -> Danica Q N4 E E W1', [
+      'Danica',
+      'Kaeya',
+    ])
+    expect(sim.actions.some((a) => a.text === 'Entry')).toBe(false)
+    const purges = rotationAttacks(sim).Danica!.filter(
+      (a) => a.path.join('.') === 'skill.onFieldDmg'
+    )
+    // (the second E is a Will to Purge without Normal Attacks: entering Cleaner refilled Will)
+    expect(purges).toHaveLength(2)
+    for (const p of purges)
+      expect(p.states).toContainEqual({
+        owner: 'Danica',
+        path: ['Danica', 'burstEnhanced'],
+        value: 'on',
+      })
+    expect(sim.notes.some((n) => n.includes('Waited'))).toBe(false)
+  })
+
   it('uses 18 s Burst CD and 16 s Will to Protect CD', () => {
     const burst = run('Danica Q Q', ['Danica'])
     const qs = burst.actions.filter(
@@ -138,7 +206,8 @@ describe('Danica', () => {
     const setup = (
       constellation: number,
       cond: Record<string, string>,
-      atkBonus = 0
+      atkBonus = 0,
+      bonusStats: Record<string, number> = {}
     ) => {
       const db = new ArtCharDatabase(1, new SandboxStorage({}))
       db.chars.set('Danica', {
@@ -173,7 +242,7 @@ describe('Danica', () => {
       })
       const dId = db.teamChars.new('Danica', {
         conditional: { Danica: cond },
-        bonusStats: atkBonus ? { atk: atkBonus } : {},
+        bonusStats: { ...(atkBonus ? { atk: atkBonus } : {}), ...bonusStats },
       })
       const bId = db.teamChars.new('Bennett', {})
       const teamId = db.teams.new({
@@ -252,5 +321,47 @@ describe('Danica', () => {
     expect(
       dBoth['skill']['decreeDmg'].value - dBoth['skill']['onFieldDmg'].value
     ).toBeCloseTo(0.5 * baseSelf['skill']['onFieldDmg'].value, 4)
+
+    // C2 self Toast: one +350% ATK addition per hit, whether it consumes 1 or 2 stacks
+    const one = setup(2, {
+      maidForm: 'battle',
+      c2SelfToast: '1',
+      a0StellarRadianceSc: 'on',
+    }).danica.getDisplay()
+    expect(dSelf['skill']['onFieldDmg'].value).toBeCloseTo(
+      one['skill']['onFieldDmg'].value,
+      4
+    )
+    expect(one['skill']['onFieldDmg'].value).toBeGreaterThan(
+      baseSelf['skill']['onFieldDmg'].value
+    )
+
+    // Burst-enhanced Will to Purge (dump E2_Field_Attack): its multiplier × (1 + 70.27% at Burst
+    // Lv10), a factor of its own, not added to the EM bonus (200 EM here)
+    const em = { eleMas: 200 }
+    const plain = setup(0, { maidForm: 'battle' }, 0, em).danica.getDisplay()
+    const lit = setup(
+      0,
+      { maidForm: 'battle', burstEnhanced: 'on' },
+      0,
+      em
+    ).danica.getDisplay()
+    expect(
+      lit['skill']['onFieldDmg'].value / plain['skill']['onFieldDmg'].value
+    ).toBeCloseTo(1.70272, 4)
+    // (C1: +120%, 1 + 2.2 × 70.27%; Cleaning Decree's 150% on top)
+    const c2Lit = setup(
+      2,
+      { maidForm: 'battle', burstEnhanced: 'on' },
+      0,
+      em
+    ).danica.getDisplay()
+    const c2Plain = setup(2, { maidForm: 'battle' }, 0, em).danica.getDisplay()
+    expect(
+      c2Lit['skill']['onFieldDmg'].value / c2Plain['skill']['onFieldDmg'].value
+    ).toBeCloseTo(1 + 2.2 * 0.70272, 4)
+    expect(
+      c2Lit['skill']['decreeDmg'].value / c2Lit['skill']['onFieldDmg'].value
+    ).toBeCloseTo(1.5, 4)
   })
 })

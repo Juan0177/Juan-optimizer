@@ -226,7 +226,9 @@ const burstDefense_atkDisp = infoMut(
   ),
   { path: 'atk', isTeamBuff: true }
 )
-// Battle Maid: On-Field Skill E2 DMG increase
+// Battle Maid: Will to Purge's own multiplier grows (dump Avatar_Danica_E2_Field_Attack:
+// E2_Field_StarSC_Dmg × ATK × (1 + FormalDress_Combat_E2DmgUp × FormalDress_EffectMultiplier_Combat)),
+// not a DMG Bonus added to the EM bonus
 const burstBattle_onField_dmg_ = infoMut(
   equal(
     inBattle,
@@ -242,8 +244,9 @@ const burstBattle_onField_dmg_ = infoMut(
       )
     )
   ),
-  { path: 'stellarconduct_dmg_' }
+  { name: ct.chg('burst.skillParams.5'), unit: '%' }
 )
+const onFieldMult = sum(percent(1), burstBattle_onField_dmg_)
 
 // C2 "Toast" (10 stacks per member when the Anchor is summoned): party Stellar-Conduct DMG
 // +80% of Danica's ATK per stack consumed
@@ -257,7 +260,8 @@ const c2Toast_dmgIncDisp = greaterEq(
   ),
   { path: 'stellarconduct_dmgInc', isTeamBuff: true }
 )
-// C2: Battle Maid, Danica consumes up to 2 of her stacks (350% ATK each) on her Stellar-Conduct hit
+// C2: Battle Maid, Danica consumes up to 2 of her stacks on her Stellar-Conduct hit for one +350%
+// ATK addition (the dump's DamageExtra adds ATK × ratio once per hit, whatever count it consumes)
 const c2SelfToast_dmgInc = greaterEq(
   input.constellation,
   2,
@@ -266,8 +270,8 @@ const c2SelfToast_dmgInc = greaterEq(
     1,
     lookup(
       condC2SelfToast,
-      objKeyMap(c2SelfToastArr, (n) =>
-        prod(percent(dm.constellation2.selfAtkMult * n), input.total.atk)
+      objKeyMap(c2SelfToastArr, () =>
+        prod(percent(dm.constellation2.selfAtkMult), input.total.atk)
       ),
       naught
     )
@@ -374,7 +378,6 @@ const scTalent = (
 
 const onFieldAddl = {
   premod: {
-    stellarconduct_dmg_: burstBattle_onField_dmg_,
     stellarconduct_dmgInc: c2SelfToast_dmgInc,
     critRate_: c6Battle_critRate_,
     critDMG_: c6Battle_critDMG_,
@@ -400,7 +403,12 @@ const dmgFormulas = {
       ])
     ),
     entryDmg: scTalent(dm.skill.entryDmg, 'skill'),
-    onFieldDmg: scTalent(dm.skill.onFieldDmg, 'skill', onFieldAddl),
+    onFieldDmg: scTalent(
+      dm.skill.onFieldDmg,
+      'skill',
+      onFieldAddl,
+      onFieldMult
+    ),
     // C2: once per combat, the Will to Purge cast with Cleaning Decree (hold Normal Attack within
     // 6s of the combat-entry Will to Protect) deals 150% of its original DMG
     decreeDmg: greaterEq(
@@ -410,7 +418,7 @@ const dmgFormulas = {
         dm.skill.onFieldDmg,
         'skill',
         onFieldAddl,
-        constant(dm.constellation2.decreeMult)
+        prod(constant(dm.constellation2.decreeMult), onFieldMult)
       )
     ),
     shield: shieldNodeTalent(

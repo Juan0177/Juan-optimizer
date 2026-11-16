@@ -1003,6 +1003,7 @@ export function energyFromRotation(
   const favonius = favoniusFromRotation(sim, keys, per, onFieldAt)
   // (energy weapons: what each member would trigger with one, counted only if it holds one)
   const weaponTriggers = weaponTriggersFromRotation(sim, keys, per)
+  const danica = danicaEnergyFromRotation(sim, keys, per, constellations)
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -1117,6 +1118,10 @@ export function energyFromRotation(
       member.flatEnergy =
         (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
     }
+    // Danica's C1 and C4 Energy, as the rotation plays them
+    if (danica[key])
+      member.flatEnergy =
+        Math.round(((member.flatEnergy ?? 0) + danica[key]!) * 100) / 100
     if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
     if (favonius[key]) {
       member.favoniusProcs = favonius[key]!.procs
@@ -1251,6 +1256,70 @@ const REACTION_ENERGY: Partial<
   >
 > = {
   Flins: { constellation: 1, reaction: 'lunarCharged', energy: 8, icd: 330 },
+}
+/**
+ * Danica's flat Energy a rotation, per member (dump ConfigTalent_Danica, Avatar_Danica_ElementalArt_E2):
+ * - C1: 20 to herself on each Will to Protect (her automatic Entry) or Will to Purge, once per
+ *   14 s (UNIQUE_Danica_C1_EnergyRecover_CD);
+ * - C4: 3 to each other member when the member on the field, protected by her Royal Aegis (her
+ *   kit's shield markers, a later one ending an earlier one), deals Stellar-Conduct DMG, once per
+ *   3.5 s (UNIQUE_Danica_C4_EnergyRecover_CD).
+ */
+function danicaEnergyFromRotation(
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits' | 'actions'>,
+  keys: readonly CharacterKey[],
+  per: number,
+  constellations?: Partial<Record<CharacterKey, number>>
+): Partial<Record<CharacterKey, number>> {
+  const cons = constellations?.Danica ?? 0
+  if (!keys.includes('Danica') || cons < 1) return {}
+  const start = sim.start
+  const end = sim.start + sim.frames
+  const out: Partial<Record<CharacterKey, number>> = {}
+  let last = Number.NEGATIVE_INFINITY
+  let c1 = 0
+  for (const a of [...sim.actions].sort((x, y) => x.start - y.start))
+    if (
+      a.characterKey === 'Danica' &&
+      a.start >= start &&
+      a.start < end &&
+      (a.text === 'Entry' || a.variant?.key === 'battleMaid') &&
+      a.start >= last + 840
+    ) {
+      c1++
+      last = a.start
+    }
+  if (c1) out.Danica = (20 * c1) / per
+  if (cons < 4) return out
+  const aegis: [number, number][] = []
+  for (const h of [...sim.hits].sort((x, y) => x.t - y.t))
+    if (
+      h.characterKey === 'Danica' &&
+      h.path[0] === '_marker' &&
+      h.path[1] === 'shield'
+    ) {
+      const open = aegis[aegis.length - 1]
+      if (open && open[1] > h.t) open[1] = h.t
+      aegis.push([h.t, h.t + +h.path[2]])
+    }
+  last = Number.NEGATIVE_INFINITY
+  let c4 = 0
+  for (const h of [...sim.hits].sort((x, y) => x.t - y.t))
+    if (
+      h.t >= start &&
+      h.t < end &&
+      h.tag === 'directStellarConduct' &&
+      h.characterKey === h.onField &&
+      h.t >= last + 210 &&
+      aegis.some(([from, to]) => from <= h.t && h.t < to)
+    ) {
+      c4++
+      last = h.t
+    }
+  if (c4)
+    for (const k of keys)
+      if (k !== 'Danica') out[k] = (out[k] ?? 0) + (3 * c4) / per
+  return out
 }
 /** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
 const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
