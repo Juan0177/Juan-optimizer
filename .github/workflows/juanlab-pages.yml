@@ -1,0 +1,116 @@
+# JuanLab: aggiorna il ramo `juanlab` da upstream (frzyc/genshin-optimizer) e pubblica il sito su GitHub Pages.
+# - Ogni giorno (e a mano da Actions > Run workflow): unisce upstream/master in `juanlab`; se ci sono novità ricostruisce e pubblica.
+# - A ogni push su `juanlab`: ricostruisce e pubblica.
+# - Se l'unione fallisce non pubblica nulla: il sito resta all'ultima versione buona.
+name: JuanLab - sync e Pages
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - juanlab
+
+permissions:
+  contents: write
+  issues: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: juanlab-pages
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      changed: ${{ steps.merge.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: juanlab
+          fetch-depth: 0
+          filter: blob:none
+          # Con il solo GITHUB_TOKEN il push fallisce quando upstream modifica i file in .github/workflows:
+          # un secret SYNC_TOKEN (token personale con permesso "workflow") lo evita.
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+      - name: Unisci upstream/master
+        id: merge
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/frzyc/genshin-optimizer.git
+          git fetch --filter=blob:none upstream master
+          before=$(git rev-parse HEAD)
+          if ! git merge --no-edit upstream/master; then
+            git merge --abort || true
+            echo "::error::Conflitto di merge con upstream/master: va risolto a mano."
+            exit 1
+          fi
+          if [ "$before" = "$(git rev-parse HEAD)" ]; then
+            echo "Nessuna novità da upstream."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git push origin HEAD:juanlab
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      - name: Segnala il problema
+        if: failure()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Sync da upstream non riuscito';
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
+            if (open.data.some((i) => i.title === title)) return;
+            const url = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({ owner, repo, title, body: [
+              `Il sync automatico è fallito: ${url}`,
+              '',
+              'Cause probabili:',
+              '- conflitto tra upstream e le modifiche di JuanLab (va risolto a mano);',
+              '- upstream ha modificato i workflow e manca il secret `SYNC_TOKEN` (in alternativa usa "Sync fork" e poi unisci `master` in `juanlab`).',
+              '',
+              'Il sito resta all\'ultima versione pubblicata.',
+            ].join('\n') });
+
+  build:
+    needs: sync
+    if: ${{ !cancelled() && (github.event_name == 'push' || (needs.sync.result == 'success' && (needs.sync.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'))) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: juanlab
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'yarn'
+      - run: yarn install --immutable
+      - name: Build frontend
+        run: |
+          export NX_URL_GITHUB_GO_CURRENT_VERSION="https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)"
+          yarn run nx run frontend:build:production
+        env:
+          NX_DAEMON: false
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/apps/frontend
+
+  deploy:
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
