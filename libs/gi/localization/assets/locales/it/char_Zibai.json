@@ -1,0 +1,10 @@
+{
+  "a1Cond": "Sotto l'effetto <strong>Discesa selenica</strong>",
+  "stride_dmgInc": "Aumento DAN aggiuntivi Passo del destriero spirituale",
+  "stride_lunarcrystallize_dmg_": "Bonus DAN da Cristallizzazione lunare Passo del destriero spirituale",
+  "shift_lunarcrystallize_mult_": "Molt. Cristallizzazione lunare Cambio delle fasi lunari",
+  "c1Cond": "Primo <strong>Passo del destriero spirituale</strong> dopo il passaggio alla modalità <strong>Cambio delle fasi lunari</strong>",
+  "c2Cond": "In modalità <strong>Cambio delle fasi lunari</strong>",
+  "c4Cond": "Sotto l'effetto <strong>Splendore Disperdiluna</strong>",
+  "c6Cond": "<strong>Cambio di fase splendente</strong> consumato oltre 70"
+}

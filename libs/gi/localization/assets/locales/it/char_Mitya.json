@@ -1,0 +1,13 @@
+{
+  "skillDetonationCond": "Fari a gradiente consumati",
+  "detonationMult_": "Molt. DAN da detonazione Nucleo stabile",
+  "a1BeaconsCond": "Nucleo stabile: Fari a gradiente posseduti",
+  "a4StacksCond": "Fari a gradiente creati",
+  "c1Text": "Aumento del numero massimo di Fari a gradiente",
+  "c1CoreCond": "Nucleo di rilevamento presente",
+  "c2CoreFieldCond": "Nucleo di rilevamento presente e avversario nel Campo astropolare",
+  "c2CoreTypeCond": "Stato del Nucleo di rilevamento",
+  "c2CoreSteady": "Stabile",
+  "c2CoreOverloaded": "Sovraccarico",
+  "detectionCoreMult_": "Molt. DAN Nucleo di rilevamento"
+}

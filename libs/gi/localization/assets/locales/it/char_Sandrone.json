@@ -1,0 +1,14 @@
+{
+  "a1DecodingCond": "Potenza di decodifica di Fagio superiore a 50",
+  "prismMult_": "Molt. Colpo prismatico",
+  "a1TacticsCond": "<strong>Tattiche sofisticate</strong> consumate",
+  "rayMult_": "Molt. Raggio a inibizione convettiva",
+  "c1Cond": "In modalità Decodifica",
+  "beam_critDMG_": "DAN da CRIT Raggio condensato ATT caricato",
+  "c2Cond": "Raggi condensati ATT caricato sparati",
+  "c4StellarDmg": "DAN da Astroconduzione coordinati",
+  "c4StellarSwirlDmg": "DAN da Turbinio astrale coordinati",
+  "c6Dmg": "DAN da raggio aggiuntivo",
+  "c6StellarDmg": "DAN da Astroconduzione raggio aggiuntivo",
+  "c6StellarSwirlDmg": "DAN da Turbinio astrale raggio aggiuntivo"
+}

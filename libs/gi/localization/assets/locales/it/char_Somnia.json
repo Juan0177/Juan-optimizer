@@ -1,0 +1,141 @@
+{
+  "name": "Somnia",
+  "title": "Creazione di cognizione simulata",
+  "description": "Una combinazione di una moltitudine di concetti. Esiste in una varietà di stati e fasi. Sarà davvero reale?",
+  "constellationName": "Mathematica Felina",
+  "auto": {
+    "name": "Abaco astrale",
+    "fields": {
+      "normal": {
+        "0": "<strong><strong>Attacco normale</strong>",
+        "1": "Esegue fino a 4 attacchi consecutivi, lanciando dal suo Abaco astrale delle perline che infliggono <electro>DAN da Electro</electro>."
+      },
+      "charged": {
+        "0": "<strong>Attacco caricato</strong>",
+        "1": "Consuma una determinata quantità di vigore per caricare e scagliare un flusso continuo di perline di Electro, infliggendo <electro>DAN da Electro</electro> a un massimo di 4 bersagli ogni 0,3 s.",
+        "2": "Durante l'attacco caricato, Somnia ottiene resistenza all'interruzione e può muoversi liberamente."
+      },
+      "plunging": {
+        "0": "<strong>Attacco in picchiata</strong>",
+        "1": "Scaglia perline di Electro contro il suolo, infliggendo <electro>DAN da Electro ad area</electro> all'impatto."
+      }
+    },
+    "skillParams": {
+      "0": "DAN da 1º colpo",
+      "1": "DAN da 2º colpo",
+      "2": "DAN da 3º colpo",
+      "3": "DAN da 4º colpo",
+      "4": "DAN da flusso ATT caricato",
+      "5": "Costo vigore ATT caricato",
+      "6": "DAN da ATT in picchiata",
+      "7": "DAN da ATT in picchiata basso/alto"
+    }
+  },
+  "skill": {
+    "name": "Calcolatore cosmico",
+    "description": {
+      "0": "Somnia condensa un'immensa energia dal suo Abaco astrale per creare un'esplosione che infligge <electro>DAN da Electro ad area</electro> e genera sopra la sua testa un Sigillo autoreferenziale dal contenuto indefinibile.",
+      "1": "Il Sigillo autoreferenziale le conferisce l'effetto Sovrapposizione di Schrödinger.",
+      "2": "<br/>",
+      "3": "<strong>Sovrapposizione di Schrödinger</strong>",
+      "4": "I DAN inflitti dagli attacchi normali e caricati di Somnia aumentano in base alla sua maestria elementale.",
+      "5": "Sovrapposizione di Schrödinger termina allo scadere della durata del Sigillo autoreferenziale o quando Somnia lascia il campo."
+    },
+    "skillParams": {
+      "0": "DAN da abilità",
+      "1": "Durata",
+      "2": "TdR"
+    }
+  },
+  "burst": {
+    "name": "Zampe di parallasse",
+    "description": {
+      "0": "Somnia evoca attorno a sé un Ciclone celeste a forma di stella, che espandendosi sprigiona un'esplosione di <electro>DAN da Electro</electro>. Il campo permane e infligge continuamente <electro>DAN da Electro ad area</electro> ai nemici al suo interno ogni 1 s.",
+      "1": "Mentre il Ciclone celeste è attivo, la maestria elementale di Somnia aumenta in modo moltiplicativo.",
+      "2": "Inoltre, mentre il Ciclone celeste è attivo, Somnia ottiene Statistica stellare. In questo stato, Somnia può impostare il suo Abaco astrale sulle modalità Moltiplicazione, Addizione o Sottrazione, ognuna delle quali conferisce bonus diversi ai suoi attacchi e al Ciclone celeste. Può essere attiva una sola modalità dell'Abaco di Statistica stellare alla volta.",
+      "3": "<br/>",
+      "4": "Modalità dell'Abaco",
+      "5": [
+        "<strong>Moltiplicazione</strong>: all'interno del Ciclone celeste di Somnia, le armi di tutti i personaggi che impugnano spade a una mano, spadoni e armi ad asta ricevono un'infusione di <electro>Electro</electro>. I colpi degli attacchi normali o caricati all'interno del campo attivano Spaccastelle, un'esplosione coordinata di Electro che infligge <electro>DAN da Electro ad area</electro> in base alla maestria elementale di Somnia. Spaccastelle può attivarsi una volta ogni 1,5 s.",
+        "<strong>Addizione</strong>: l'area d'effetto e i DAN del Ciclone celeste aumentano. Quando colpiscono un nemico, gli attacchi normali e caricati di Somnia attivano una Supernova che infligge <electro>DAN da Electro ad area</electro> in base alla sua maestria elementale. Questo effetto può attivarsi una volta ogni 0,75 s.",
+        "<strong>Sottrazione</strong>: l'area d'effetto e i DAN del Ciclone celeste diminuiscono, ma applica l'effetto \"Minore di tre\" ai nemici al suo interno. \"Minore di tre\" riduce le RES elementali e fisiche dei nemici in base alla maestria elementale di Somnia. Inoltre, gli attacchi normali e caricati di Somnia infliggono DAN aumentati in base alla sua maestria elementale."
+      ]
+    },
+    "skillParams": {
+      "0": "DAN da abilità",
+      "1": "Maestria elementale",
+      "2": "DAN nel tempo Ciclone celeste (Moltiplicazione)",
+      "3": "DAN da Spaccastelle",
+      "4": "DAN nel tempo Ciclone celeste (Addizione)",
+      "5": "DAN da Supernova",
+      "6": "DAN nel tempo Ciclone celeste (Sottrazione)"
+    }
+  },
+  "passive1": {
+    "name": "Calcolo rapido",
+    "description": {
+      "0": "Gli attacchi caricati di Somnia consumano il 20% di vigore in meno e si caricano il 20% più velocemente."
+    }
+  },
+  "passive2": {
+    "name": "Genio della matematica",
+    "description": {
+      "0": "Per la durata del Ciclone celeste, la maestria elementale di Somnia aumenta del 5% per ogni colpo inflitto da Ciclone celeste, Spaccastelle e Supernova, fino a un massimo del 25%."
+    }
+  },
+  "passive3": {
+    "name": "Iterazione insonne",
+    "description": {
+      "0": "Di notte (18:00 - 6:00), aumenta del 10% la velocità di generazione delle build di Genshin Optimizer."
+    }
+  },
+  "constellation1": {
+    "name": "Virgola decimale",
+    "description": {
+      "0": "Gli attacchi normali e caricati di Somnia hanno il 25% di probabilità di infliggere il doppio dei DAN."
+    }
+  },
+  "constellation2": {
+    "name": "Numero primo",
+    "description": {
+      "0": "Quando Somnia è sotto l'effetto Sovrapposizione di Schrödinger, ogni colpo di attacco normale o caricato le conferisce un accumulo di Numero naturale. Quando il numero di accumuli di Numero naturale è primo, il successivo attacco normale o caricato di Somnia riceve il doppio dell'aumento DAN di Sovrapposizione di Schrödinger."
+    }
+  },
+  "constellation3": {
+    "name": "Serie infinita",
+    "description": {
+      "0": "Aumenta di 3 il livello di <strong>Zampe di parallasse</strong>.",
+      "1": "Il livello massimo è 15."
+    }
+  },
+  "constellation4": {
+    "name": "Quadrato perfetto",
+    "description": {
+      "0": "Quando Somnia innesca una reazione di Electro, ripristina 4 punti di energia elementale a sé stessa e a tutti i membri vicini del gruppo degli elementi coinvolti nella reazione.",
+      "1": "Questo effetto può attivarsi una volta ogni 4 s."
+    }
+  },
+  "constellation5": {
+    "name": "Coefficiente erba gatta",
+    "description": {
+      "0": "Aumenta di 3 il livello di <strong>Calcolatore cosmico</strong>.",
+      "1": "Il livello massimo è 15."
+    }
+  },
+  "constellation6": {
+    "name": "Sezione aurea",
+    "description": {
+      "0": "Quando l'attacco caricato di Somnia infligge danni, il suo tasso di CRIT e i DAN da CRIT aumentano rispettivamente del 3% e del 5%. Questo effetto può attivarsi una volta ogni 0,2 s ed è cumulabile fino a 8 volte. Tutti gli accumuli di Sezione aurea vengono rimossi 13 s dopo aver ottenuto il primo accumulo."
+    }
+  },
+  "c1Key": "Molt. DAN ATT normale e caricato",
+  "superpositionCond": "Sotto l'effetto Sovrapposizione di Schrödinger",
+  "cycloneActiveCond": "Ciclone celeste attivo",
+  "multCond": "In modalità Moltiplicazione",
+  "subCond": "In modalità Sottrazione",
+  "lessThan3Cond": "Nemico affetto da \"Minore di tre\"",
+  "c1Cond": "Frequenza di attivazione di Virgola decimale",
+  "average": "Media",
+  "always": "Sempre",
+  "c2Cond": "Possiede un numero primo di accumuli di Numero naturale"
+}

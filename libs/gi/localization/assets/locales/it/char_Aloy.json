@@ -1,0 +1,9 @@
+{
+  "skill": {
+    "coil": "Bobina",
+    "rush": "Frenesia di gelo",
+    "rushState": "Tempo trascorso nello stato di Frenesia di gelo"
+  },
+  "a1CondName": "Dopo aver ottenuto l'effetto Bobina",
+  "normCryoInfus": "<cryo>Infusione di Cryo ATT normale</cryo>"
+}

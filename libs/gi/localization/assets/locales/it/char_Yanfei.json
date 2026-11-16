@@ -1,0 +1,34 @@
+{
+  "seals": [
+    "0 sigilli",
+    "1 sigillo",
+    "2 sigilli",
+    "3 sigilli",
+    "4 sigilli"
+  ],
+  "perSeal": "(per sigillo)",
+  "maxSeals": "Numero massimo di Sigilli scarlatti",
+  "charged": {
+    "0": "DAN con 0 sigilli",
+    "1": "DAN con 1 sigillo",
+    "2": "DAN con 2 sigilli",
+    "3": "DAN con 3 sigilli",
+    "4": "DAN con 4 sigilli"
+  },
+  "burst": {
+    "grantMax": "Conferisce il numero massimo di Sigilli scarlatti"
+  },
+  "passive1": {
+    "sealsConsumed": "Sigilli consumati usando un attacco caricato"
+  },
+  "passive2": {
+    "key": "DAN da Sguardo di fuoco",
+    "probabilisticSuffix": "(considerando il tasso di CRIT)"
+  },
+  "c1": {
+    "sealChargedStam_": "Riduzione consumo vigore ATT caricato"
+  },
+  "c6": {
+    "maxSealInc": "Aumento numero massimo di Sigilli scarlatti"
+  }
+}

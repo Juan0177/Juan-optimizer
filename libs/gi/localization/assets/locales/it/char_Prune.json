@@ -1,0 +1,7 @@
+{
+  "a4Cond": "Personaggio sotto l'effetto Adunanza del rintocco",
+  "lockCond": "Dopo che un personaggio Hexerei sotto l'effetto Adunanza del rintocco innesca una reazione elementale",
+  "swirl": "Reazione di Turbinio o Turbinio astrale",
+  "nonSwirl": "Reazione diversa da Turbinio",
+  "c6Cond": "Dopo che un personaggio sotto l'effetto Adunanza del rintocco innesca una reazione elementale"
+}

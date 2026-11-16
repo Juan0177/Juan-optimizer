@@ -1,0 +1,11 @@
+{
+  "windfavoredState": "Nello stato <strong>Vento prospero</strong>",
+  "p1": {
+    "pyroCondName": "<strong>Hanega: Canzone del vento</strong> è entrata in contatto con <pyro>Pyro</pyro>",
+    "cryoCondName": "<strong>Hanega: Canzone del vento</strong> è entrata in contatto con <cryo>Cryo</cryo>"
+  },
+  "p2Dmg": "DAN da freccia di vento",
+  "c1BonusKey": "Incremento bonus DAN freccia di vento",
+  "c2CondName": "Differenza tra punti Kuugoryoku massimi e attuali",
+  "c6Key": "Molt. Shugen: Ondeggio malinconico"
+}

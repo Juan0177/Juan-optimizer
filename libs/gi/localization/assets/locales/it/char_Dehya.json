@@ -1,0 +1,7 @@
+{
+  "inFieldAndTakeDmg": "Dopo che il personaggio attivo subisce DAN nel campo del Santuario infuocato",
+  "field_dmg_": "Bonus DAN Santuario infuocato",
+  "initialHeal": "Guarigione iniziale",
+  "dotHeal": "Guarigione aggiuntiva",
+  "critHitDuringBurst": "Dopo un colpo CRIT di Pugno della Chiomardente"
+}

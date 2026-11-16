@@ -1,0 +1,40 @@
+{
+  "intro": "<0>Scanner</0><1>Gli scanner sono strumenti per Genshin che acquisiscono automaticamente i dati di gioco da screenshot o direttamente dal gioco.</1><2>Qui sotto trovi alcuni scanner testati con GO.</2><3>Per caricare il file esportato, vai alla pagina <1>Impostazioni</1> e carica il file nella sezione <strong>Caricamento database</strong>.</3>",
+  "tosWarn": "Come per qualsiasi strumento che interagisce indirettamente con il gioco, anche se il loro uso è praticamente impossibile da rilevare, <1>potrebbero comunque esserci dei rischi.</1> Usali a tua discrezione.",
+  "tosStrongWarn": "Gli scanner di rete/cattura pacchetti <1>possono comportare dei rischi.</1> Usali a tua discrezione.",
+  "addlArtiText": "Supporta la scansione delle statistiche secondarie non attivate e, quando possibile, del numero di roll",
+  "tags": {
+    "pc": "PC",
+    "mobile": "Mobile",
+    "ps": "PlayStation",
+    "gameMani": "Controllo automatico",
+    "materials": "Materiali",
+    "characters": "Personaggi",
+    "weapons": "Armi",
+    "achievements": "Obiettivi",
+    "packetCap": "Cattura pacchetti",
+    "addlArti": "Funzioni extra manufatti"
+  },
+  "nb": {
+    "title": "Artiscan",
+    "p1": "Questo scanner OCR via web può acquisire la finestra del gioco o analizzare uno screenshot o un video. Lo screenshot/video può essere a schermo intero e non va ritagliato.",
+    "p2": "Su mobile/PlayStation si può scansionare solo da screenshot o video.",
+    "p3": "Con questo scanner devi passare tu da un manufatto all'altro."
+  },
+  "ik": {
+    "title": "Inventory Kamera",
+    "p1": "Scansiona tramite OCR tutti i personaggi, le armi, i manufatti e i materiali del tuo inventario."
+  },
+  "is": {
+    "title": "Irminsul",
+    "p1": "Intercetta i pacchetti di rete per scansionare tutti i personaggi, le armi, i manufatti e i materiali del tuo inventario.",
+    "p2": "Questa app può anche scansionare gli obiettivi per <1>Paimon.moe</1> e <1>Seelie.me</1>."
+  },
+  "as": {
+    "title": "AdeptiScanner",
+    "p1": "Scansiona tramite OCR tutti i manufatti e le armi del tuo inventario. Ha una modalità di scansione manuale e può anche importare i dati dei personaggi da <1>Enka.Network</1>."
+  },
+  "goodeng": "Questa app scansiona solo in inglese ed esporta nel formato <1>GOOD</1>.",
+  "good": "Questa app esporta nel formato <1>GOOD</1>.",
+  "seelieme": "Questa app può anche scansionare i materiali per <1>Seelie.me</1>"
+}

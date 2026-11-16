@@ -1,0 +1,10 @@
+{
+  "burst": {
+    "lifeDrain_": "Prosciugavita",
+    "currentHPPerSec": "(PS attuali/s)",
+    "incJump": "Altezza del salto notevolmente aumentata",
+    "inBurst": "Sotto l'effetto di <strong>Castigo di ogni male</strong>",
+    "stack": "Tempo trascorso in <strong>Castigo di ogni male</strong>"
+  },
+  "skillStack": "Usi precedenti di <strong>Ciclone lemniscatico</strong>"
+}

@@ -11,6 +11,7 @@ import {
 } from '@genshin-optimizer/gi/consts'
 
 import elementalData from './ElementalData'
+import { isItalian, statMapIt } from './KeyMapIt' // juanlab
 import type {
   AdditiveReactionsKey,
   AmplifyingReactionsKey,
@@ -314,6 +315,8 @@ export class KeyMap {
       throw Error('A static class cannot be instantiated.')
   }
   static getStr(key = ''): string | undefined {
+    // juanlab: nomi italiani quando la lingua del sito e' l'italiano
+    if (isItalian() && statMapIt[key]) return statMapIt[key]
     return statMap[key as keyof typeof statMap]
   }
   static get(key = '') {

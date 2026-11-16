@@ -1,0 +1,11 @@
+{
+  "burstSerpentCond": "Astuzia del serpente consumata oltre 50",
+  "burstVoidCond": "Varchi nel Vuoto assorbiti durante <strong>Caos: Estinzione</strong>",
+  "a4Cond": "Accumuli di Traversata della Morte",
+  "c2AddlSerpentFactor": "Astuzia del serpente massima considerata",
+  "c2Cond": "Dopo aver usato <strong>Caos: Estinzione</strong> in modalità <strong>Lampo eptafasico</strong>",
+  "c2Atk_blurb": "Il bonus ATT qui sopra non si applica ad attacco normale, Tripudio elementale e DAN del Tripudio di C6 di Skirk",
+  "c6BurstDmg": "DAN da Tripudio",
+  "c6NormalDmg": "DAN da attacco normale",
+  "c6ChargedDmg": "DAN da attacco caricato"
+}

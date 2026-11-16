@@ -1,0 +1,12 @@
+{
+  "a1": {
+    "condName": "Dopo aver scoccato una freccia Fiocco di ghiaccio",
+    "critRateInc": "Aumento Tasso di CRIT Fiocco di ghiaccio"
+  },
+  "c1": {
+    "condName": "Avversario colpito da una freccia Fiocco di ghiaccio o dalla sua fioritura"
+  },
+  "c4": {
+    "lingerDuration": "Durata persistenza effetto"
+  }
+}

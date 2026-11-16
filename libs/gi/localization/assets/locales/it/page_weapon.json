@@ -1,0 +1,32 @@
+{
+  "weaponFilterTitle": "Filtro armi",
+  "showingNum_one": "Visualizzata <1>{{count}}</1> arma su {{value}}",
+  "showingNum_other": "Visualizzate <1>{{count}}</1> armi su {{value}}",
+  "edit": "Modifica arma",
+  "weaponName": "Nome arma",
+  "removeWeapon": "Vuoi davvero rimuovere {{value}}?",
+  "addWeapon": "Aggiungi nuova arma",
+  "cantDeleteLock": "Impossibile eliminare l'arma perché è bloccata",
+  "button": {
+    "deleteWeapons": "Elimina armi",
+    "lockWeapons": "Blocca armi",
+    "unlockWeapons": "Sblocca armi"
+  },
+  "buttonHint": "Nota: i pulsanti rossi qui sopra si applicano solo alle <1>armi filtrate<1>",
+  "equippedWeapon": "Tutte le armi equipaggiate",
+  "weaponInInv": "Tutte le armi non equipaggiate",
+  "locationsTooltip": "Disattiva \"Tutte le armi equipaggiate\" per filtrare per personaggio",
+  "subheadings": {
+    "general": "Generale",
+    "inventory": "Inventario"
+  },
+  "refinement": "Raffinamento <1>{{rank}}</1>",
+  "weaponType": {
+    "sword": "Spada",
+    "claymore": "Claymore",
+    "polearm": "Lancia",
+    "bow": "Arco",
+    "catalyst": "Catalizzatore"
+  },
+  "tcBuild": "Build TC"
+}

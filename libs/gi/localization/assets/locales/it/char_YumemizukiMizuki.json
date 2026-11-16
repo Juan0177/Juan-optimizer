@@ -1,0 +1,5 @@
+{
+  "skillCond": "Nello stato Girasogni",
+  "a4Cond": "Nello stato Girasogni e i membri vicini del gruppo colpiscono gli avversari con attacchi di <pyro>Pyro</pyro>, <hydro>Hydro</hydro>, <cryo>Cryo</cryo> o <electro>Electro</electro>",
+  "c1Cond": "Nemico sotto l'effetto \"Ventitré notti di attesa\""
+}

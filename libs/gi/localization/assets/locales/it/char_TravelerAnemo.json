@@ -1,0 +1,9 @@
+{
+  "p1": "DAN da Taglio del vento",
+  "c4": "Riduzione DAN durante il lancio",
+  "c6": "Nemico colpito da <strong>Raffica di vento</strong>",
+  "initialEleDmg": "DAN da assorbimento taglio iniziale",
+  "maxEleDmg": "DAN da assorbimento taglio max",
+  "stormEleDmg": "DAN da assorbimento tempesta iniziale",
+  "stormEleMaxDmg": "DAN da assorbimento tempesta max"
+}

@@ -1,0 +1,49 @@
+{
+  "intro": "Il calcolatore <strong>definitivo</strong> per <3><i>Genshin Impact</i></3>: GO tiene traccia del tuo inventario di manufatti, armi e personaggi e ti aiuta a creare la build migliore in base a come giochi, con quello che hai.",
+  "quickLinksCard": {
+    "title": "Link rapidi",
+    "buttons": {
+      "tyGuide": {
+        "title": "Playlist di guide su YouTube",
+        "tooltip": "Impara a usare Genshin Optimizer"
+      },
+      "scanners": {
+        "title": "Scanner automatici",
+        "tooltip": "Programmi di terze parti che scansionano automaticamente i manufatti dal gioco"
+      },
+      "kqm": {
+        "title": "Keqing Mains",
+        "tooltip": "Community di theorycrafting e guide"
+      },
+      "devDiscord": {
+        "title": "Genshin Dev Discord",
+        "tooltip": "Community di sviluppatori di strumenti per Genshin"
+      },
+      "good": {
+        "title": "Documentazione GOOD",
+        "tooltip": "Documentazione del Genshin Open Object Descriptor"
+      },
+      "patchNotes": {
+        "title": "Note di aggiornamento",
+        "tooltip": "Tutte le note di aggiornamento di GO"
+      }
+    }
+  },
+  "inventoryCard": {
+    "title": "Inventario GO"
+  },
+  "vidGuideCard": {
+    "title": "Video guide"
+  },
+  "teamCard": {
+    "title": "Conosci il team",
+    "jobTitle": {
+      "leadDev": "Sviluppatore principale",
+      "dev": "Sviluppatore",
+      "admin": "Amministratore",
+      "mod": "Moderatore",
+      "translator": "Responsabile traduzioni",
+      "TC": "Referente TC"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "flameNormal_dmgInc": "Aumento DAN ATT normale Pyromoto",
+  "flameCharged_dmgInc": "Aumento DAN ATT caricato Pyromoto",
+  "flameBurst_dmgInc": "Aumento DAN ATT caricato Pyromoto",
+  "burstCond": "Spirito combattivo consumato",
+  "a4Cond": "Tempo dall'uso del Tripudio",
+  "c1Cond": "Dopo aver ottenuto Spirito combattivo",
+  "c2RingCond": "In forma di Anello dell'ardore fulgido",
+  "c2FlameCond": "In forma di Pyromoto",
+  "flamestriderDmg": "DAN da Pyromoto",
+  "c2Exception": "La riduzione della DIF nemica non si applica ai colpi del Pyromoto o del Tripudio fino a C6"
+}

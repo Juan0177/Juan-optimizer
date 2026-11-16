@@ -1,0 +1,10 @@
+{
+  "burstHits": "Numero di attivazioni del Daruma Muji-Muji",
+  "p2Heal": "Guarigione personaggi vicini",
+  "c1Text": "Il Daruma Muji-Muji ignora i limiti di PS e può attaccare gli avversari vicini e curare i personaggi contemporaneamente",
+  "c2KickPressDmg_": "Bonus DAN Calcio turbine Fuufuu con pressione",
+  "c2KickDmg_": "Bonus DAN Calcio turbine Fuufuu",
+  "c2Cond": "Tempo trascorso nello stato <strong>Turbine Fuufuu</strong>",
+  "c6DarumaDmgInc": "Aumento DAN Daruma Muji-Muji",
+  "c6DarumaHealInc": "Aumento guarigione Daruma Muji-Muji"
+}

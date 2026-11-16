@@ -1,0 +1,10 @@
+{
+  "sourceCond": "Punti Anima della Notte al massimo",
+  "sourceActive": "Campioni musicali attivati",
+  "geoSourceActive": "Campione musicale di <geo>Geo</geo> attivato",
+  "c4Cond": "Sotto l'effetto Benedizione fiorita",
+  "c6Cond": "Nello stato Benedizione della Notte imperitura",
+  "ns_dmg": "DAN da ATT in picchiata Caccia su ruote",
+  "ns_low": "DAN da ATT in picchiata basso Caccia su ruote",
+  "ns_high": "DAN da ATT in picchiata alto Caccia su ruote"
+}

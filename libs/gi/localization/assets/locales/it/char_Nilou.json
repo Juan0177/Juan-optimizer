@@ -1,0 +1,22 @@
+{
+  "skill": {
+    "dance1": "DAN da 1º colpo Danza della spada",
+    "dance2": "DAN da 2º colpo Danza della spada",
+    "whirl1": "DAN da 1º colpo Passi vorticosi",
+    "whirl2": "DAN da 2º colpo Passi vorticosi",
+    "illusion": "DAN da Illusione luminosa",
+    "wheel": "DAN da Ruota acquatica"
+  },
+  "passive1": {
+    "underChaliceEffect": "Sotto l'effetto Dorato calice dell'abbondanza",
+    "notDendroHydroTeam": "Suggerimento: forma una squadra con soli personaggi Dendro e Hydro per vedere condizioni ed effetti aggiuntivi",
+    "condName": "Dopo aver subito <dendro>DAN da Dendro</dendro> sotto l'effetto Dorato calice dell'abbondanza",
+    "bountifulCores": "La reazione di Fioritura genera Nuclei munifici"
+  },
+  "c1": {
+    "illusion_dmg_": "Bonus DAN Illusione luminosa"
+  },
+  "c4": {
+    "condName": "Dopo che il terzo passo di danza della Piroetta colpisce gli avversari"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "questBonusTitle": "Bonus delle missioni",
+  "bonusCanned": "Dopo aver usato Conoscenze in scatola attivate nella missione dell'Archon \"Ever So Close\"",
+  "bonusSkirk1": "Dopo aver completato la fase 2 dell'Allenamento speciale nella missione della storia di Skirk",
+  "bonusSkirk2": "Dopo aver completato la fase 6 dell'Allenamento speciale nella missione della storia di Skirk",
+  "bonusSkirk3": "Dopo aver completato la fase 9 dell'Allenamento speciale nella missione della storia di Skirk",
+  "lockedPassiveCond": "Dopo aver completato la missione dell'Archon \"True Moon\"",
+  "resonance": {
+    "anemo": "In risonanza con <anemo>Anemo</anemo>",
+    "geo": "In risonanza con <geo>Geo</geo>",
+    "electro": "In risonanza con <electro>Electro</electro>",
+    "dendro": "In risonanza con <dendro>Dendro</dendro>",
+    "hydro": "In risonanza con <hydro>Hydro</hydro>",
+    "pyro": "In risonanza con <pyro>Pyro</pyro>",
+    "cryo": "In risonanza con <cryo>Cryo</cryo>"
+  }
+}

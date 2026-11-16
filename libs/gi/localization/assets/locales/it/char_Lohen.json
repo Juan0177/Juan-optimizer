@@ -1,0 +1,10 @@
+{
+  "willConsumed": "<strong>Voglia di vincere</strong> consumata",
+  "a4Cond": "Dopo che un membro vicino del gruppo innesca una <cryo>reazione di Cryo</cryo> in modalità <strong>Colpo da maestro</strong>",
+  "a0Cond": "Sotto l'effetto Buonumore",
+  "lockBuffCond": "<strong>Voglia di vincere</strong> al 50% o più dopo aver usato l'abilità elementale speciale o il Tripudio elementale",
+  "c1Text": "Aumento limite di <strong>Voglia di vincere</strong>",
+  "c2Cond": "Lama Scacciamali attivata",
+  "etch_critDMG_": "DAN da CRIT Nelle ossa e nell'anima",
+  "c6Cond": "Modalità <strong>Colpo da maestro</strong> attiva all'uso del Tripudio elementale"
+}

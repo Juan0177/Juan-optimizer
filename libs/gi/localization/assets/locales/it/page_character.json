@@ -1,0 +1,122 @@
+{
+  "addNew": "Aggiungi personaggio",
+  "tabs": {
+    "overview": "Panoramica",
+    "talent": "Talenti",
+    "optimize": "Ottimizza",
+    "theorycraft": "Theorycraft",
+    "upopt": "Potenziamento manufatti"
+  },
+  "formulas": "Formule",
+  "calculations": "Calcoli",
+  "selectCharacter": "Seleziona un personaggio",
+  "removeCharacter": "Vuoi davvero rimuovere {{value}}? Verranno rimossi anche tutti i suoi dati, come configurazioni e multi-opt, e il personaggio verrà tolto da tutte le squadre di cui fa parte.",
+  "delete": "Elimina personaggio",
+  "teammates": "Compagni di squadra",
+  "showingNum_one": "Visualizzato <1>{{count}}</1> personaggio su {{value}}",
+  "showingNum_other": "Visualizzati <1>{{count}}</1> personaggi su {{value}}",
+  "hitmode": {
+    "hit": "DAN colpo non CRIT",
+    "avgHit": "DAN medi",
+    "critHit": "DAN colpo CRIT",
+    "global": "Segui impostazione globale"
+  },
+  "noReaction": "Nessuna reazione",
+  "tabEquip": {
+    "swapWeapon": "Cambia arma",
+    "swapArt": "Cambia manufatto",
+    "compare": "Confronta con la build attuale",
+    "unequipArts": "Rimuovi tutti i manufatti"
+  },
+  "characterName": "Nome del personaggio",
+  "teammate": "Compagno {{count}}",
+  "multiTarget": {
+    "title": "Impostazioni obiettivi multi-ottimizzazione",
+    "info1": "Nota: puoi trovare obiettivi multi-ottimizzazione creati dalla community nel <1>Discord di GO</1> o nella <3>guida alla multi-ottimizzazione di KQM</3>, ma la validità di queste configurazioni non è garantita.",
+    "info2": "Sta a te verificare che le impostazioni rispecchino davvero il tuo caso d'uso.",
+    "addNewTarget": "Aggiungi obiettivo",
+    "addNewMTarget": "Crea multi-opt",
+    "description": "Descrizione",
+    "duplicate": "Duplica",
+    "target_one": "<0>{{count}}</0> obiettivo",
+    "target_other": "<0>{{count}}</0> obiettivi",
+    "jsonDescWarning": "Sembra che tu stia cercando di importare una configurazione multi-opt. Non è il posto giusto! Torna alla finestra precedente e premi <strong>Importa multi-opt.</strong>",
+    "label": "Nome multi-obiettivo personalizzato",
+    "desc": "Descrizione multi-obiettivo personalizzato",
+    "export": "Esporta",
+    "confirm": "Vuoi davvero eliminare questo obiettivo?",
+    "copyMsg": "Configurazione copiata negli appunti."
+  },
+  "addStats": {
+    "title": "Statistiche bonus",
+    "info": "Puoi usare questi campi per aggiungere buff/debuff non supportati direttamente da GO, come i buff dei cibi, le carte dell'Abisso o la Superconduzione. Consulta la <1>Genshin Impact Wiki</1> per i valori specifici.",
+    "label": "Nuova statistica bonus",
+    "main": "Statistiche principali",
+    "other": "Altre statistiche",
+    "misc": "Statistiche varie",
+    "special": "<0>Speciale:</0> "
+  },
+  "tabTheorycraft": {
+    "distribute": "Distribuisci",
+    "distInput": "Statistiche secondarie",
+    "compareToggle": {
+      "equipped": "Confronta con equipaggiato",
+      "tc": "Mostra statistiche TC"
+    },
+    "resetDialog": {
+      "title": "Reimpostare la build TC?",
+      "content": "La build TC attualmente configurata verrà cancellata."
+    },
+    "copyDialog": {
+      "copyBtn": "Copia da equipaggiato",
+      "title": "Copiare i dati dei manufatti e dell'arma equipaggiati?",
+      "content": "La build TC attualmente configurata verrà sostituita con i dati della build equipaggiata."
+    },
+    "kqmsDialog": {
+      "kqmsBtn": "Usa KQMS",
+      "title": "Usare KQMS?",
+      "content": "La tua attuale <strong>distribuzione delle statistiche secondarie</strong> verrà sostituita con una conforme agli <5>standard KQM</5>."
+    },
+    "gcsimDialog": {
+      "title": "Esportazione gcsim",
+      "content": "Importa questa build in <2>gcsim</2> copiando il codice qui sotto.",
+      "copied": "Configurazione gcsim copiata negli appunti."
+    },
+    "all": {
+      "rolls": "Tutti i roll",
+      "max": "Tutti al max"
+    },
+    "substat": {
+      "max": "Max"
+    },
+    "substatType": {
+      "min": "Roll secondario minimo",
+      "max": "Roll secondario massimo",
+      "mid": "Roll secondario mediano"
+    },
+    "maxTotalRolls": "La build attuale può avere al massimo <strong>{{value}}</strong> roll.",
+    "maxRolls": "Questa statistica secondaria può avere al massimo 30 roll.",
+    "maxRollsMain": "Dato che almeno una statistica principale ha lo stesso attributo, questa statistica secondaria può avere al massimo {{value}} roll.",
+    "feasibilityAlert": "La distribuzione attuale richiede almeno <strong>{{minSubLines}}</strong> righe di statistiche secondarie. Devi assegnare <strong>{{minOtherRolls}}</strong> roll ad altre statistiche secondarie perché la soluzione sia realizzabile.",
+    "noDistributionAlert": "Impossibile trovare una distribuzione delle statistiche secondarie che rispetti i filtri e i limiti attuali. Prova ad abbassare le soglie dei filtri o ad aumentare il numero di statistiche secondarie da distribuire.",
+    "optAlert": {
+      "scalesWith": "L'obiettivo di ottimizzazione e i vincoli selezionati scalano con: ",
+      "distribute": ". Il risolutore distribuirà i roll solo su queste statistiche secondarie.",
+      "feasibilty": "Potrebbero avanzare statistiche secondarie da assegnare a statistiche che non scalano, affinché la soluzione sia realizzabile."
+    }
+  },
+  "tabTeambuff": {
+    "team_reso": "Risonanza elementale",
+    "resonance_tip": "Il gruppo deve essere completo, con 4 personaggi, perché la Risonanza elementale abbia effetto."
+  },
+  "noLoadout": "Sembra che tu non abbia ancora aggiunto configurazioni/squadre con questo personaggio. Per fare <strong>theorycraft</strong> o <strong>ottimizzare</strong> devi aggiungerlo a una squadra.",
+  "teammateUsing": {
+    "weapon": "Il compagno <strong><1></1></strong> sta usando quest'arma.",
+    "artifact": "Il compagno <strong><1></1></strong> sta usando questo pezzo: <3></3>"
+  },
+  "charContentModal": {
+    "loadoutsWith": "Configurazioni di squadra con <2/>",
+    "addLoAndTeam": "Aggiungi configurazione + squadra",
+    "addTeam": "Aggiungi nuova squadra"
+  }
+}

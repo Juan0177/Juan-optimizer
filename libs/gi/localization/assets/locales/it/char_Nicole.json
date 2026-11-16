@@ -1,0 +1,13 @@
+{
+  "skillCond": "Sotto l'effetto Grazia della kenosis",
+  "guidanceCond": "Personaggio attivo sotto l'effetto Guida della theosis",
+  "nicoleGuidanceCond": "Nicole sotto l'effetto Guida della theosis",
+  "projectionExplain": "I DAN della Proiezione si trovano tra gli obiettivi di ciascun compagno",
+  "arcaneProjectionDmg": "DAN da Proiezione arcana: Unità",
+  "graceEnhanced": "Effetto Grazia della kenosis potenziato",
+  "guidanceEnhanced": "Effetto Guida della theosis potenziato",
+  "c4Cond": "Sotto l'effetto Benedizione del precursore",
+  "projection_dmgInc": "Aumento DAN aggiuntivi Proiezione arcana",
+  "guidance": "Grazia della kenosis del personaggio attivo potenziata in Guida della theosis",
+  "nicoleGuidance": "Grazia della kenosis di Nicole potenziata in Guida della theosis"
+}
