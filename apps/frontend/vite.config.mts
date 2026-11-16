@@ -14,6 +14,7 @@ import { deriveCoreStats } from '../../libs/gi/stats/src/coreStats/derive'
 import pkg from '../../package.json' with { type: 'json' }
 import {
   betaKeyTest,
+  betaKeys,
   readBetaContent,
   releasedOnlyPlugin,
   stripBetaKeys,
@@ -249,6 +250,10 @@ export default defineConfig(({ command }) => ({
     __VERSION__: `"${pkg.version}"`,
     __GO_LOCALES_VERSION__: JSON.stringify(hashLocales()),
     __GO_BUILD_ID__: JSON.stringify(buildId),
+    // unreleased content's keys and the beta's name, for the mark on share pictures that show it
+    // (neither on the released site: no names)
+    __GO_BETA_KEYS__: JSON.stringify(released ? [] : betaKeys(beta)),
+    __GO_BETA_LABEL__: JSON.stringify(released ? '' : (beta.label ?? 'Beta')),
   },
 
   // Uncomment this if you are using workers.

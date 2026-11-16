@@ -137,6 +137,9 @@ const elementColors: Record<string, string> = {
   cryo: '#77a2e6',
   physical: '#aaaaaa',
 }
+/** An element's color on the cards */
+export const cardElementColor = (element: string) =>
+  elementColors[element] ?? elementColors['physical']!
 
 /** The substats that count toward Roll Value: a character's choice (all when none is saved) */
 export function rvKeysOf(rvFilter: readonly unknown[]): SubstatKey[] {
