@@ -4,6 +4,19 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.10.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.10.0) (2026-11-16)
+
+### New
+
+- Rotation writer: choose whether to count the repeating pace or only the first 1 to 3 rotations from the start, with every cooldown ready (as in a timed challenge's first rotation). Team optimize and the KQM tab use the same choice.
+
+### Fixed
+
+- KQM tab: builds can now pair two sets with the same 2-piece bonus, such as Gladiator's Finale + Shimenawa's Reminiscence (ATK) or Wanderer's Troupe + Gilded Dreams (Elemental Mastery).
+- A rotation that opens by waiting for a cooldown now shows the wait at its end instead of its start.
+- Mitya: when his second tap E comes too late to switch his Detection Core, the writer says it is a new Skill and why it waits.
+- The rotation writer's button is now called "Write rotation".
+
 ## [v1.9.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.9.1) (2026-11-16)
 
 ### Fixed
