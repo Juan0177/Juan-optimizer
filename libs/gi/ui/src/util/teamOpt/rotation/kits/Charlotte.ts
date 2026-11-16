@@ -1,3 +1,4 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import { GCSIM, type NormalHit, normalString, templateJump } from './common'
 
@@ -29,6 +30,53 @@ interface CharlotteState {
   c6Icd: number
   /** Spiritbreath Thorn: its 6 s ICD */
   thornIcd: number
+  /** C1 Verification: each member's status end, on its own clock */
+  c1Until: Partial<Record<CharacterKey, number>>
+}
+
+/**
+ * A heal by Charlotte. Her burst's and C6's heals start C1's Verification on each member they reach
+ * (kqmsim charlotte/cons.go:41-56)
+ */
+function charlotteHeal(
+  c: SimContext,
+  s: CharlotteState,
+  node: string[],
+  healTargets: CharacterKey[],
+  label: string
+) {
+  c.hit(0, {
+    characterKey: 'Charlotte',
+    path: ['_heal', ...node],
+    tag: 'other',
+    element: 'cryo',
+    healTargets,
+    label,
+  })
+  if (c.constellation('Charlotte') >= 1)
+    for (const m of healTargets) verification(c, s, m)
+}
+
+/**
+ * C1 Verification: unless it is already on that member, 6 s (its clock): a heal now and every 2 s
+ * while it lasts (kqmsim cons.go:24-39; a status is active on its expiry frame)
+ */
+function verification(c: SimContext, s: CharlotteState, m: CharacterKey) {
+  if (c.characterFrame(m) <= (s.c1Until[m] ?? -1)) return
+  s.c1Until[m] = c.characterFrame(m) + 360
+  const tick = (t: SimContext): void => {
+    if (t.characterFrame(m) > (s.c1Until[m] ?? -1)) return
+    t.hit(0, {
+      characterKey: 'Charlotte',
+      path: ['_heal', 'constellation1', 'heal'],
+      tag: 'other',
+      element: 'cryo',
+      healTargets: [m],
+      label: 'Verification (C1, Heal)',
+    })
+    t.atCharacter(m, 120, tick)
+  }
+  tick(c)
 }
 
 /**
@@ -109,6 +157,7 @@ export const kit: KitModel = {
     markLive: -1,
     c6Icd: -1e9,
     thornIcd: -1e9,
+    c1Until: {},
   }),
   act(ctx, s: CharlotteState, action, previous) {
     const c = ctx.constellation('Charlotte')
@@ -264,7 +313,17 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Still Photo: Comprehensive Confirmation',
         })
-        for (const t of [95, 119, 143, 166, 179, 203, 226, 249])
+        // the cast heals the party at 53 frames (kqmsim charlotte/burst.go:73)
+        ctx.at(53, (c2) =>
+          charlotteHeal(
+            c2,
+            s,
+            ['burst', 'castHeal'],
+            [...c2.members],
+            'Still Photo: Comprehensive Confirmation (Heal)'
+          )
+        )
+        for (const t of [95, 119, 143, 166, 179, 203, 226, 249]) {
           ctx.hit(t, {
             path: ['burst', 'kameraDmg'],
             tag: 'burst',
@@ -273,6 +332,18 @@ export const kit: KitModel = {
             icd: 'CharlotteKamera',
             label: 'Still Photo: Kamera',
           })
+          // each Kamera tick heals the active member (its 7 m area, 4.5 m ahead, always covers the
+          // player: kqmsim burst.go:87)
+          ctx.at(t, (c2) =>
+            charlotteHeal(
+              c2,
+              s,
+              ['burst', 'kameraHeal'],
+              [c2.onField],
+              'Still Photo: Kamera (Heal)'
+            )
+          )
+        }
         return {
           cooldown: { key: 'burst', frames: 1200 },
           frames: 70,
@@ -335,5 +406,16 @@ export const kit: KitModel = {
       icd: 'none',
       label: 'A Summation of Interest (C6)',
     })
+    // it heals the active member when the player is within 5 m of the enemy (kqmsim cons.go:150)
+    if (ctx.target.distance <= 5)
+      ctx.at(14, (c2) =>
+        charlotteHeal(
+          c2,
+          s,
+          ['constellation6', 'heal'],
+          [c2.onField],
+          'A Summation of Interest (C6, Heal)'
+        )
+      )
   },
 }

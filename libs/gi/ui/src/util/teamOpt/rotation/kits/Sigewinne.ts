@@ -53,7 +53,15 @@ interface SigewinneState {
   thornIcdUntil: number
   /** The skill cast (a newer cast stops the previous bubble) */
   skillSrc: number
+  /** Sourcewater Droplets from the last skill: spawned from / gone at these frames */
+  dropletsFrom: number
+  dropletsUntil: number
 }
+
+/** Each skill spawns 2 Sourcewater Droplets 4 frames after its cooldown starts; they last 878 */
+const DROPLETS = 2
+const DROPLET_DELAY = 4
+const DROPLET_LIFE = 878
 
 /** C2: the enemy's Hydro RES -35% for 8 s after a bubble or a burst wave hits */
 const c2Shred = (ctx: SimContext, delay: number) =>
@@ -88,7 +96,12 @@ export const kit: KitModel = {
   characterKey: 'Sigewinne',
   element: 'hydro',
   source: `${GCSIM}/sigewinne`,
-  init: (): SigewinneState => ({ thornIcdUntil: -1, skillSrc: 0 }),
+  init: (): SigewinneState => ({
+    thornIcdUntil: -1,
+    skillSrc: 0,
+    dropletsFrom: -1,
+    dropletsUntil: -1,
+  }),
   act(ctx, s: SigewinneState, action, previous) {
     const c = ctx.constellation('Sigewinne')
     switch (action.kind) {
@@ -124,6 +137,9 @@ export const kit: KitModel = {
         // tap: the first bubble at 35f (CD from 16f); hold: gcsim's skill[hold=1], the short hold
         // (66f, CD from 40f, Bubble tier 1). (The full hold, hold=2: 90f, tier 2, is not written.)
         const hold = !!action.hold
+        // (kqmsim skill.go:94, :155-170)
+        s.dropletsFrom = ctx.now + (hold ? 40 : 16) + DROPLET_DELAY
+        s.dropletsUntil = s.dropletsFrom + DROPLET_LIFE
         const first = hold ? 66 : 35
         let tier = hold ? 1 : 0
         const bubbles = c >= 1 ? 8 : 5
@@ -198,7 +214,7 @@ export const kit: KitModel = {
           }
         )
         ctx.note(
-          "Sigewinne: A4 (Bond of Life healing), the shield's HP and the Sourcewater Droplets are not modelled."
+          "Sigewinne: A4 (Bond of Life healing), the shield's HP and her Bond of Life's clearing are not modelled."
         )
         if (hold)
           return {
@@ -212,6 +228,19 @@ export const kit: KitModel = {
         }
       }
       case 'burst': {
+        // her droplets are consumed 99 frames in, each a Bond of Life gain of 10% Max HP
+        // (kqmsim burst.go:32-43, :61-63; sigewinne.go:109-112)
+        const pick = ctx.now + BURST_WAVES_START
+        if (pick >= s.dropletsFrom && pick < s.dropletsUntil) {
+          s.dropletsUntil = -1
+          for (let k = 0; k < DROPLETS; k++)
+            ctx.hit(BURST_WAVES_START, {
+              path: ['_marker', 'bondOfLife', 'gain'],
+              tag: 'other',
+              element: 'hydro',
+              label: 'Sourcewater Droplet (Bond of Life)',
+            })
+        }
         // waves: 6 (142f), or 14 (326f) at C4; the animation follows the last wave
         const maxDuration = c >= 4 ? 326 : 142
         const waves = Math.floor(maxDuration / 25) + 1

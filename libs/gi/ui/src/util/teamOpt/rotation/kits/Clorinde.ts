@@ -179,8 +179,9 @@ function swiftHunt(
       ctx.at(at, () => {
         s.bol = Math.min(BOL_MAX, s.bol + SHOT_BOL)
       })
+      // (kqmsim clorinde/skill.go:82)
       ctx.hit(at, {
-        path: ['_marker', 'bondOfLife'],
+        path: ['_marker', 'bondOfLife', 'gain'],
         tag: 'other',
         element: 'electro',
         label: 'Swift Hunt (Bond of Life)',
@@ -310,8 +311,9 @@ function impale(ctx: SimContext, s: ClorindeState, c: number): ActionResult {
       const prev = s.bol
       s.bol = 0
       if (prev >= 1) a4Stack(c2, s)
+      // (its heal clears the debt: kqmsim skill.go:182, template heal.go:86)
       c2.hit(0, {
-        path: ['_marker', 'bondOfLife'],
+        path: ['_marker', 'bondOfLife', 'loss'],
         tag: 'other',
         element: 'electro',
         label: 'Impale the Night (Bond of Life)',
@@ -434,12 +436,14 @@ export const kit: KitModel = {
           const prev = s.bol
           s.bol = Math.min(BOL_MAX, prev + BURST_BOL[level])
           if (prev >= 1) a4Stack(c2, s)
-          c2.hit(0, {
-            path: ['_marker', 'bondOfLife'],
-            tag: 'other',
-            element: 'electro',
-            label: 'Last Lightfall (Bond of Life)',
-          })
+          // (kqmsim burst.go:56; at the cap nothing changes, so no event)
+          if (s.bol > prev)
+            c2.hit(0, {
+              path: ['_marker', 'bondOfLife', 'gain'],
+              tag: 'other',
+              element: 'electro',
+              label: 'Last Lightfall (Bond of Life)',
+            })
           // C4: +2% Last Lightfall DMG per 1% Bond of Life, max 200% (the sheet's 5% steps)
           const pct = Math.min(100, Math.floor((s.bol * 100) / 5) * 5)
           if (c >= 4 && pct >= 10)
@@ -548,6 +552,14 @@ export const kit: KitModel = {
     const prev = s.bol
     s.bol = Math.min(BOL_MAX, prev + (change.amount + change.overheal) / max)
     if (prev >= 1 && s.bol !== prev) a4Stack(ctx, s)
+    // (a Bond of Life gain: kqmsim clorinde/heal.go:30)
+    if (s.bol > prev)
+      ctx.hit(0, {
+        path: ['_marker', 'bondOfLife', 'gain'],
+        tag: 'other',
+        element: 'electro',
+        label: 'Healing to Bond of Life',
+      })
   },
   // Impale the Night (in Night Vigil) has no cooldown: the press waits for the skill's
   cooldownKey: (s: ClorindeState, action) =>

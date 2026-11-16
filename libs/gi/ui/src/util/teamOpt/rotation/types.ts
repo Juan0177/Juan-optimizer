@@ -97,6 +97,8 @@ export interface SimHit {
    * queued (0: at the cast), not when it lands; enemy debuffs still count at impact.
    */
   snapshotDelay?: number
+  /** Frames from its arrow's release to this hit, for Amos' Bow (gcsim's default 10) */
+  travel?: number
   /** (set by the simulation) frame and active member of that snapshot */
   snapshotT?: number
   snapshotOnField?: CharacterKey
@@ -152,6 +154,11 @@ export interface SimBuffWindow {
   recipient?: CharacterKey
   /** Buff duration uses the recipient's character clock rather than world time. */
   hitlag?: 'recipient' | 'enemy'
+  /**
+   * Written when its effect closes, after the frames it covers (a set's or weapon's window in
+   * gearEffects): a hit that took its stats at its cast, before it was written, still counts it
+   */
+  late?: true
 }
 
 /**

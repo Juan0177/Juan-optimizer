@@ -9,6 +9,8 @@ import type {
   SimGear,
   SimHit,
 } from './types'
+import { weaponEffects } from './weaponEffects'
+import { WEAPON_MODULES } from './weapons'
 
 /*
  * Artifact set effects the simulation plays from what happens in the rotation (gcsim's
@@ -70,6 +72,13 @@ const STARSPARK_SETS: Record<string, string> = {
 }
 
 /** Weapons whose conditional ('afterHeal') is on for 8 s after the wielder is healed */
+/** The weapons with Golden Majesty's stacks (kqmsim common/goldenmajesty.go) */
+const GOLDEN_MAJESTY = [
+  'TheUnforged',
+  'SummitShaper',
+  'MemoryOfDust',
+  'VortexVanquisher',
+] as const
 const HEALED_WEAPONS = ['TidalShadow', 'SongOfStillness']
 
 /** Weapons whose conditional comes from the wielder creating a shield: item, conditional, state */
@@ -96,6 +105,12 @@ const SHIELDED: [string, string, string, boolean?][] = [
 export interface GearEffects {
   /** Every hit and reaction marker that lands, in time order */
   onHit(ctx: SimContext, hit: SimHit): void
+  /**
+   * A member is about to act, before its action's hits are queued: the weapon modules' action
+   * triggers (kqmsim emits OnSkill/OnBurst before the ability), so hits that take their stats at
+   * the cast count them
+   */
+  beforeAction(ctx: SimContext, actor: CharacterKey, action: RotationAction): void
   /** A member acts */
   onAction(
     ctx: SimContext,
@@ -252,8 +267,11 @@ export function gearEffects({
               REACTION_ELEMENTS[reaction]?.includes('electro')
             ? REACTION_ELEMENTS[reaction].find((e) => e !== 'electro')
             : undefined
-    if (other && ready(`hakushin.${k}.${other}`, hit.t, 60))
-      ctx.buff(k, ['HakushinRing', 'SakuraSaiguu'], other, 0, 360)
+    // (kqmsim hakushin.go: the 1 s cooldown and the 6 s buff on the wielder's clock)
+    if (other && ready(`hakushin.${k}.${other}`, ctx.characterFrame(k), 60))
+      ctx.buff(k, ['HakushinRing', 'SakuraSaiguu'], other, 0, 360, {
+        hitlag: 'recipient',
+      })
   }
   // Declare the conditional even if no eligible reaction happens, so a saved manual state
   // cannot make the effect active throughout an ineligible rotation.
@@ -295,6 +313,17 @@ export function gearEffects({
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
   for (const k of members)
     if (opens(k, 'PaleFlame')) window(k, ['PaleFlame', 'stacks'], '1', 0, 0)
+  // Beacon of the Reed Sea: its after-Skill ATK declared off, on after the wielder's Skill hits
+  for (const k of members)
+    if (holds(k, 'BeaconOfTheReedSea'))
+      window(k, ['BeaconOfTheReedSea', 'afterSkill'], 'on', 0, 0)
+  // Golden Majesty (The Unforged, Summit Shaper, Memory of Dust, Vortex Vanquisher): declared
+  // off, its stacks from the wielder's hits on the field (below)
+  for (const k of members)
+    for (const weapon of GOLDEN_MAJESTY)
+      if (holds(k, weapon)) window(k, [weapon, 'GoldenMajesty'], '1', 0, 0)
+  /** Golden Majesty per wielder: its stack count and its generation (for the expiry) */
+  const majesty = new Map<CharacterKey, { count: number; end: number }>()
   // Clash of Kings: declared off, on only after the wielder's Skill (below)
   for (const k of members)
     if (holds(k, 'ClashOfKings'))
@@ -593,13 +622,59 @@ export function gearEffects({
     s.n = Math.min(2, s.n + 1)
   }
 
+  // The weapon effects played from descriptions (rotation/weapons): declared off, on from their
+  // own triggers
+  const weapons = weaponEffects(WEAPON_MODULES, {
+    members,
+    gear,
+    onField,
+    window,
+    stack,
+    ready,
+  })
+  weapons.declare()
+
   return {
     onHit(ctx, hit) {
+      weapons.onHit(ctx, hit)
       const k = hit.characterKey
       const t = hit.t
       if (hit.path[0] === '_marker' && hit.path[1] === 'shield') {
         shieldCreated(ctx, hit)
         return
+      }
+      // Golden Majesty (kqmsim goldenmajesty.go): each damage instance of the wielder's on the
+      // field, once per 0.3 s of its clock, a stack for 8 s (its clock), every stack refreshed,
+      // up to 5; the hit itself counts the stacks from before it
+      if (
+        !hit.path[0].startsWith('_') &&
+        hit.onField === k &&
+        GOLDEN_MAJESTY.some((w) => holds(k, w))
+      ) {
+        const frame = ctx.characterFrame(k)
+        if (ready(`goldenMajesty.${k}`, frame, 18)) {
+          const old = majesty.get(k)
+          const previous = old && frame < old.end ? old.count : 0
+          const next = { count: Math.min(5, previous + 1), end: frame + 480 }
+          majesty.set(k, next)
+          for (const weapon of GOLDEN_MAJESTY)
+            if (holds(k, weapon)) {
+              hit.states = [
+                ...(hit.states ?? []),
+                {
+                  owner: k,
+                  path: [weapon, 'GoldenMajesty'],
+                  value: previous ? `${previous}` : '',
+                },
+              ]
+              ctx.state(k, [weapon, 'GoldenMajesty'], `${next.count}`)
+            }
+          ctx.atCharacter(k, 480, (at) => {
+            if (majesty.get(k) !== next) return
+            for (const weapon of GOLDEN_MAJESTY)
+              if (holds(k, weapon)) at.state(k, [weapon, 'GoldenMajesty'], '')
+          })
+        }
       }
       // A Thousand Blazing Suns (gcsim): Scorching Brilliance's ATK and CRIT DMG x1.75 while the
       // wielder is in Nightsoul's Blessing, as each of its hits lands
@@ -718,7 +793,8 @@ export function gearEffects({
             })
           })
         }
-        if (t < bubble.end) {
+        // (a heal by Max HP %, `healPercent`, has no node to sum)
+        if (t < bubble.end && hit.path[1] !== '_percent') {
           const path = hit.path.slice(1)
           const prev = bubble.healing.find(
             (h) => h.path.join('.') === path.join('.')
@@ -751,7 +827,10 @@ export function gearEffects({
         // Consciousness, one per 20 s; picked up at once by whoever is on the field: EM for 12 s
         if (LEAF_REACTIONS.includes(reaction))
           for (const weapon of LEAF_WEAPONS)
-            if (holds(k, weapon) && ready(`leaf.${k}.${weapon}`, hit.t, 1200))
+            if (
+              holds(k, weapon) &&
+              ready(`leaf.${k}.${weapon}`, ctx.characterFrame(k), 1200)
+            )
               ctx.buff(k, [weapon, 'passive'], 'on', 0, 720)
         // Frostbreath (gcsim): the wielder's own Cryo- or Hydro-related reaction (off the field
         // too) gives it ATK for 15 s, once per 16 s; both are hitlag statuses (its own clock)
@@ -837,6 +916,14 @@ export function gearEffects({
       if (hit.path[0] === 'reaction') {
         const node = hit.path[1]
         if (node === 'hyperbloom' || node === 'burgeon') {
+          // Sapwood Blade / Forest Regalia / Moonpiercer: a Leaf from the wielder's own Hyperbloom
+          // or Burgeon too (they have no reaction marker: their damage)
+          for (const weapon of LEAF_WEAPONS)
+            if (
+              holds(k, weapon) &&
+              ready(`leaf.${k}.${weapon}`, ctx.characterFrame(k), 1200)
+            )
+              ctx.buff(k, [weapon, 'passive'], 'on', 0, 720)
           if (opens(k, 'ScrollOfTheHeroOfCinderCity'))
             cinderCity(
               ctx,
@@ -944,6 +1031,13 @@ export function gearEffects({
         })
       }
       if (hit.path[0].startsWith('_')) return
+      // Beacon of the Reed Sea (kqmsim beacon.go): ATK for 8 s (hitlag-extended) after each of the
+      // wielder's Skill hits, off the field too, from the next hit on
+      if (holds(k, 'BeaconOfTheReedSea') && hit.tag === 'skill')
+        ctx.buff(k, ['BeaconOfTheReedSea', 'afterSkill'], 'on', 1, 480, {
+          recipient: k,
+          hitlag: 'recipient',
+        })
       // Rainbow Serpent's Rainbow (kqmsim): ATK for 8 s (hitlag-extended) after the wielder's
       // attack hits while it is off the field, from the next hit on
       if (holds(k, 'RainbowSerpentsRainBow') && hit.onField !== k)
@@ -1070,6 +1164,9 @@ export function gearEffects({
         ready(`totm.${k}`, t, 30)
       )
         ctx.buff(k, ['TenacityOfTheMillelith', 'skill'], 'cast', 0, 180)
+    },
+    beforeAction(ctx, actor, action) {
+      weapons.onAction(ctx, actor, action)
     },
     onAction(ctx, actor, action, normalStarts) {
       if (actor === active) pickUp(ctx)
@@ -1238,6 +1335,7 @@ export function gearEffects({
         )
     },
     onSwap(t, from, to, ctx) {
+      weapons.onSwap(t, from, to, ctx)
       // (Starsparks lost on the field up to the swap, and none off it for the incoming member:
       // both settled before it takes the field)
       settleSparks(from, t)
@@ -1267,7 +1365,12 @@ export function gearEffects({
         ctx?.state(from, ['HereticsMoltenBlade', 'passive'], '')
       // The Widsith: taking the field plays one of its three songs at random for 10 s
       // (hitlag-extended), once per 30 s (gcsim): their average
-      if (ctx && holds(to, 'TheWidsith') && ready(`widsith.${to}`, t, 1800))
+      if (
+        ctx &&
+        holds(to, 'TheWidsith') &&
+        // (its 30 s cooldown on the wielder's clock, as kqmsim widsith.go)
+        ready(`widsith.${to}`, ctx.characterFrame(to), 1800)
+      )
         ctx.buff(to, ['TheWidsith', 'Debut'], 'avg', 0, 600, {
           hitlag: 'recipient',
         })
@@ -1317,6 +1420,7 @@ export function gearEffects({
       }
     },
     end(t) {
+      weapons.end(t)
       for (const k of members)
         for (const [item, path, value, set] of SHIELDED) {
           if (!(set ? opens(k, item) : holds(k, item))) continue

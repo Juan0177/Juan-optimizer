@@ -1,4 +1,5 @@
-import type { HitElement, KitModel } from '../types'
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { HitElement, KitModel, SimContext } from '../types'
 import {
   GCSIM,
   type NormalHit,
@@ -58,11 +59,42 @@ const kickHitlag = (ctx: Parameters<KitModel['act']>[0], at: number) =>
     label: 'Fuufuu Whirlwind hitlag',
   })
 
+interface SayuState {
+  /** A1's 2 s ICD ends at this frame of Sayu's clock (active on it) */
+  a1Until: number
+}
+
+/** The Swirls that trigger A1 (kqmsim sayu/asc.go:51-55) */
+const A1_SWIRLS = [
+  'pyroSwirl',
+  'hydroSwirl',
+  'electroSwirl',
+  'cryoSwirl',
+  'stellarSwirl',
+]
+
+/** A heal by Sayu */
+const sayuHeal = (
+  c: SimContext,
+  node: string[],
+  healTargets: CharacterKey[],
+  label: string
+) =>
+  c.hit(0, {
+    characterKey: 'Sayu',
+    path: ['_heal', ...node],
+    tag: 'other',
+    element: 'anemo',
+    healTargets,
+    label,
+  })
+
 export const kit: KitModel = {
   characterKey: 'Sayu',
   element: 'anemo',
   source: `${GCSIM}/sayu`,
-  act(ctx, _s, action, previous) {
+  init: (): SayuState => ({ a1Until: -1 }),
+  act(ctx, _s: SayuState, action, previous) {
     switch (action.kind) {
       case 'normal':
         return normalString(
@@ -182,37 +214,57 @@ export const kit: KitModel = {
           label: 'Yoohoo Art: Mujina Flurry',
         })
         kickHitlag(ctx, 12)
+        // the cast heals the party at once (kqmsim sayu/burst.go:52)
+        sayuHeal(
+          ctx,
+          ['burst', 'pressHeal'],
+          [...ctx.members],
+          'Yoohoo Art: Mujina Flurry (Heal)'
+        )
         // Muji-Muji Daruma: 6 ticks, 90 frames apart from 145 (a character task, so after the
-        // hitlag), on the cast's snapshot. Each one attacks an enemy in the area (assumed: the
-        // active member is above 70% HP, so it does not heal instead; C1 does both)
+        // hitlag), on the cast's snapshot. Each one heals the active member at 70% HP or less
+        // (tracked HP) and otherwise attacks the enemy; C1 does both (kqmsim burst.go:74-104)
         const cast = ctx.now
         const onField = ctx.onField
+        const c1 = ctx.constellation('Sayu') >= 1
         ctx.atCharacter('Sayu', 20, (c) => {
           for (let i = 145 - 20; i < 145 + 540 - 20; i += 90)
-            c.hit(i, {
-              path: ['burst', 'darumaDmg'],
-              tag: 'burst',
-              element: 'anemo',
-              applies: true,
-              durability: 25,
-              icd: 'burst',
-              statSnapshots: (
-                [
-                  'atk',
-                  'eleMas',
-                  'critRate_',
-                  'critDMG_',
-                  'all_dmg_',
-                  'anemo_dmg_',
-                  'burst_dmg_',
-                ] as const
-              ).map((stat) => ({
-                stat,
-                path: ['total', stat],
-                t: cast,
-                onField,
-              })),
-              label: 'Muji-Muji Daruma',
+            c.at(i, (c2) => {
+              const heals =
+                c1 || (c2.healthTracked && (c2.hpRatio(c2.onField) ?? 1) <= 0.7)
+              if (heals)
+                sayuHeal(
+                  c2,
+                  ['burst', 'darumaHeal'],
+                  [c2.onField],
+                  'Muji-Muji Daruma (Heal)'
+                )
+              if (heals && !c1) return
+              c2.hit(0, {
+                path: ['burst', 'darumaDmg'],
+                tag: 'burst',
+                element: 'anemo',
+                applies: true,
+                durability: 25,
+                icd: 'burst',
+                statSnapshots: (
+                  [
+                    'atk',
+                    'eleMas',
+                    'critRate_',
+                    'critDMG_',
+                    'all_dmg_',
+                    'anemo_dmg_',
+                    'burst_dmg_',
+                  ] as const
+                ).map((stat) => ({
+                  stat,
+                  path: ['total', stat],
+                  t: cast,
+                  onField,
+                })),
+                label: 'Muji-Muji Daruma',
+              })
             })
         })
         return withHitlag(
@@ -245,5 +297,25 @@ export const kit: KitModel = {
       default:
         return { frames: 30 }
     }
+  },
+  // A1: her Swirl while she is on the field heals the party, once per 2 s of her clock (kqmsim
+  // asc.go:20-48)
+  onHit(ctx, s: SayuState, hit) {
+    if (
+      hit.characterKey !== 'Sayu' ||
+      hit.onField !== 'Sayu' ||
+      hit.path[0] !== '_reaction' ||
+      !A1_SWIRLS.includes(hit.path[1])
+    )
+      return
+    const frame = ctx.characterFrame('Sayu')
+    if (frame <= s.a1Until) return
+    s.a1Until = frame + 120
+    sayuHeal(
+      ctx,
+      ['passive1', 'heal'],
+      [...ctx.members],
+      'Someone More Capable (A1, Heal)'
+    )
   },
 }

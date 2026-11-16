@@ -195,7 +195,7 @@ export const kit: KitModel = {
           icd: 'burst',
           label: 'Signature Mix',
         })
-        for (let i = 0; i < 6; i++)
+        for (let i = 0; i < 6; i++) {
           ctx.hit(178 + 120 * i, {
             path: ['burst', 'fieldDmg'],
             tag: 'burst',
@@ -204,6 +204,17 @@ export const kit: KitModel = {
             icd: 'burst',
             label: 'Signature Mix (field)',
           })
+          // each tick heals the active member, in the field (kqmsim diona/burst.go:64)
+          ctx.at(178 + 120 * i, (c) =>
+            c.hit(0, {
+              path: ['_heal', 'burst', 'healDot'],
+              tag: 'other',
+              element: 'cryo',
+              healTargets: [c.onField],
+              label: 'Signature Mix (Heal)',
+            })
+          )
+        }
         // the field lasts 12.5 s from frame 58 (C4's window ends with it)
         s.fieldUntil = ctx.now + 808
         // C6: every 0.5 s in the field, the active character gets EM for 2 s (HP above 50% assumed)
