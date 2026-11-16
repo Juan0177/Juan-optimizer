@@ -4,11 +4,14 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
 import {
+  constant,
   equal,
   greaterEq,
   infoMut,
   input,
+  lookup,
   min,
+  naught,
   one,
   percent,
   prod,
@@ -153,31 +156,37 @@ const c4Mult = sum(
   one,
   greaterEq(input.constellation, 4, percent(dm.constellation4.accoladeMult_))
 )
+// Stato "altri Sigillati" (Benedizione dell'Onore): gli Encomi dei personaggi Sigillati si dividono tra chi non lo e.
+// Con la squadra piena (3 Sigillati) la Tsaritsa riceve i 4 Encomi, gli altri nessuno; dura fino a 8s dopo il Sigillo.
+const accoladeShares = lookup(
+  condAccolades,
+  {
+    on: constant(1),
+    sealed: equal(target.charKey, key, constant(4)),
+  },
+  naught
+)
 const a1Accolades_critDMG_ = greaterEq(
   input.asc,
   1,
-  equal(condAccolades, 'on', prod(percent(dm.passive1.critDMG_), c4Mult))
+  prod(accoladeShares, percent(dm.passive1.critDMG_), c4Mult)
 )
 const c1Accolades_atk_ = greaterEq(
   input.constellation,
   1,
   equal(
-    condAccolades,
-    'on',
-    equal(
-      target.charEle,
-      'cryo',
-      prod(percent(dm.constellation1.cryo_atk_), c4Mult)
-    )
+    target.charEle,
+    'cryo',
+    prod(accoladeShares, percent(dm.constellation1.cryo_atk_), c4Mult)
   )
 )
 const c1Accolades_eleMas = greaterEq(
   input.constellation,
   1,
-  equal(
-    condAccolades,
-    'on',
-    unequal(target.charEle, 'cryo', prod(dm.constellation1.eleMas, c4Mult))
+  unequal(
+    target.charEle,
+    'cryo',
+    prod(accoladeShares, dm.constellation1.eleMas, c4Mult)
   )
 )
 
@@ -492,11 +501,20 @@ const sheet: TalentSheet = {
       name: ct.ch('accoladesCond'),
       states: {
         on: {
+          name: ct.ch('accoladesOn'),
           fields: [
             { node: a1Accolades_critDMG_ },
             { node: c1Accolades_atk_ },
             { node: c1Accolades_eleMas },
             { text: stg('duration'), value: dm.passive1.duration, unit: 's' },
+          ],
+        },
+        sealed: {
+          name: ct.ch('accoladesSealed'),
+          fields: [
+            { node: a1Accolades_critDMG_ },
+            { node: c1Accolades_atk_ },
+            { node: c1Accolades_eleMas },
           ],
         },
       },
