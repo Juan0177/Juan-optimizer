@@ -27,6 +27,8 @@ import {
   kqmDefaultExcludedWeapons,
   kqmExcludedWeapons,
   kqmMemberConstellation,
+  kqmCompareRefinements,
+  kqmGroupRefinements,
   kqmRefinement,
   kqmRollCaps,
   kqmSets,
@@ -347,6 +349,48 @@ describe('KQM Standards builds', () => {
     expect(result.rankings[shenhe]).toBeDefined()
   }, 300_000)
 
+  it('ranks a group’s weapons at every refinement ticked, building at the highest only', async () => {
+    // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too)
+    const kqm = {
+      refinement5: 1,
+      refinement4: 5,
+      compareRefinements: { standard4: [1, 5], bp: [1, 5] },
+      refinementBp: 5,
+    }
+    expect(kqmWeaponGroup('FavoniusSword')).toBe('standard4')
+    expect(kqmRefinement('FavoniusSword', kqm)).toBe(5)
+    expect(kqmGroupRefinements('standard4', kqm)).toEqual([1, 5])
+    expect(kqmCompareRefinements('FavoniusSword', kqm)).toEqual([1])
+    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([1])
+    // (a weapon with its own refinement is not compared; a group with one ticked neither)
+    expect(
+      kqmCompareRefinements('FavoniusSword', {
+        ...kqm,
+        refinements: { FavoniusSword: 3 },
+      })
+    ).toEqual([])
+    expect(kqmCompareRefinements('PrototypeRancour', kqm)).toEqual([])
+    // the run: each such weapon ranked twice, R1 marked compared; no build takes a compared one
+    const { database, teamId, teamOpt } = setup()
+    const result = (await run(database, teamId, {
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm!, ...kqm },
+    }))!
+    const weapons = result.rankings[ayaka]!.weapons
+    const favonius = weapons.filter((o) => o.weapon.key === 'FavoniusSword')
+    expect(favonius.map((o) => o.weapon.refinement).sort()).toEqual([1, 5])
+    expect(favonius.find((o) => o.weapon.refinement === 1)?.compare).toBe(true)
+    expect(favonius.find((o) => o.weapon.refinement === 5)?.compare).toBe(
+      undefined
+    )
+    for (const ck of [ayaka, shenhe]) {
+      const built = result.builds[ck]!.weapon
+      expect(
+        kqmCompareRefinements(built.key, { ...teamOpt.kqm!, ...kqm })
+      ).not.toContain(built.refinement)
+    }
+  })
+
   it('uses only free weapons by default (4★, the three 3★ and the free 5★ Exaiphanes Blade), at their source’s refinement', async () => {
     const { database, teamId, teamOpt } = setup()
     const result = (await run(database, teamId, teamOpt))!
@@ -449,7 +493,16 @@ describe('KQM Standards builds', () => {
     ).toEqual(new Set(['SkywardBlade']))
     // the groups turned on and off together, and their refinement settings
     expect(kqmWeaponGroup('TheBlackSword')).toBe('bp')
-    expect(kqmWeaponGroup('FavoniusSword')).toBeUndefined()
+    // (the standard wish pool's 4★: a group of their own, on by default at R5)
+    expect(kqmWeaponGroup('FavoniusSword')).toBe('standard4')
+    expect(kqmDefaultExcludedWeapons()).not.toContain('FavoniusSword')
+    expect(
+      kqmRefinement('FavoniusSword', {
+        refinement5: 1,
+        refinement4: 5,
+        refinementStandard4: 1,
+      })
+    ).toBe(1)
     expect(kqmWeaponGroup('TheAlleyFlash')).toBe('wish4')
     expect(kqmWeaponGroup('BlackcliffLongsword')).toBe('wish4')
     expect(kqmWeaponGroup('MistsplitterReforged')).toBe('wish5')

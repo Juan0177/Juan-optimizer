@@ -197,6 +197,11 @@ export interface KqmOption extends KqmBuild {
    * make up what it no longer gives. Its `total` is the team's with them.
    */
   team?: Partial<Record<CharacterKey, KqmBuild>>
+  /**
+   * Ranked for comparison only: its weapon at another refinement ticked for its group
+   * (`TeamOptKqm.compareRefinements`), never one the builds may take
+   */
+  compare?: true
 }
 export interface KqmRanking {
   /** The best build with each set (or 2+2), the weapon the best one's */
@@ -506,12 +511,17 @@ const weaponOrder = (key: WeaponKey) => {
  * 4★ event wish (and Starglitter shop), 5★ standard wish, 5★ event wish. (The standard wish pool's
  * 4★, like the other free ones, are no group: on at R5.)
  */
-export type KqmWeaponGroup = 'bp' | 'wish4' | 'standard5' | 'wish5'
+export type KqmWeaponGroup =
+  | 'bp'
+  | 'wish4'
+  | 'standard4'
+  | 'standard5'
+  | 'wish5'
 export function kqmWeaponGroup(key: WeaponKey): KqmWeaponGroup | undefined {
   const source = kqmWeaponSource(key)
   const five = getWeaponStat(key)?.rarity === 5
   if (source === 'bp') return 'bp'
-  if (source === 'standard') return five ? 'standard5' : undefined
+  if (source === 'standard') return five ? 'standard5' : 'standard4'
   if (source === 'gacha' || source === 'starglitter')
     return five ? 'wish5' : 'wish4'
   return undefined
@@ -520,14 +530,61 @@ export function kqmWeaponGroup(key: WeaponKey): KqmWeaponGroup | undefined {
 export const kqmGroupRefinementKey = {
   bp: 'refinementBp',
   wish4: 'refinement4',
+  standard4: 'refinementStandard4',
   standard5: 'refinementStandard5',
   wish5: 'refinement5',
 } as const satisfies Record<KqmWeaponGroup, keyof TeamOptKqm>
+/** The refinement a group's weapons are built at (its setting, else the group's default) */
+export function kqmGroupRefinement(
+  group: KqmWeaponGroup,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): number {
+  switch (group) {
+    case 'bp':
+      return kqm.refinementBp ?? 1
+    case 'wish4':
+      return kqm.refinement4
+    case 'standard4':
+      return kqm.refinementStandard4 ?? 5
+    case 'standard5':
+      return kqm.refinementStandard5 ?? 1
+    case 'wish5':
+      return kqm.refinement5
+  }
+}
+/**
+ * The refinements ticked for a group: the one its builds use, and any others its weapons are
+ * ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
+ */
+export function kqmGroupRefinements(
+  group: KqmWeaponGroup,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): number[] {
+  return [
+    ...new Set([
+      ...(kqm.compareRefinements?.[group] ?? []),
+      kqmGroupRefinement(group, kqm),
+    ]),
+  ].sort((a, b) => a - b)
+}
+/**
+ * The refinements a weapon is ranked at besides the one it is built at: the others ticked for its
+ * group (none when the weapon has a refinement of its own)
+ */
+export function kqmCompareRefinements(
+  key: WeaponKey,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): number[] {
+  const group = kqmWeaponGroup(key)
+  if (!group || kqm.refinements?.[key]) return []
+  const built = kqmRefinement(key, kqm)
+  return kqmGroupRefinements(group, kqm).filter((r) => r !== built)
+}
 
 /**
  * The refinement a weapon is counted at: as set for it, else by where it comes from (forged,
- * event, fishing and 4★ standard-wish weapons R5; one-copy rewards R1; Battle Pass and 5★
- * standard-wish ones their setting's, R1), else the settings' 5★ / 4★ event wish refinement
+ * event and fishing weapons R5; one-copy rewards R1; Battle Pass, 4★ and 5★ standard-wish ones
+ * their setting's: R1, R5, R1), else the settings' 5★ / 4★ event wish refinement
  */
 export function kqmRefinement(
   key: WeaponKey,
@@ -543,7 +600,7 @@ export function kqmRefinement(
     case 'standard':
       return getWeaponStat(key)?.rarity === 5
         ? (kqm.refinementStandard5 ?? 1)
-        : 5
+        : (kqm.refinementStandard4 ?? 5)
     case 'bp':
       return kqm.refinementBp ?? 1
     case 'quest':
@@ -965,7 +1022,8 @@ export function kqmTopTeams(result: KqmResult, count = 10): KqmTeamOption[] {
         .filter((key) => KQM_ONE_COPY.includes(key))
     )
     for (const option of [...ranking.sets, ...ranking.weapons]) {
-      if (option.unmet || taken.has(option.weapon.key)) continue
+      if (option.unmet || option.compare || taken.has(option.weapon.key))
+        continue
       if (id(option) === id(current)) continue
       const key = `${ck}|${id(option)}`
       const seen = best.get(key)
@@ -1040,6 +1098,12 @@ interface KqmRunArgs {
    * goes on to take it: shown while the run improves on them (its result replaces them)
    */
   onEarly?: (result: KqmResult) => void
+  /**
+   * Another run's builds to start from (the same team at another constellation): its members'
+   * rounds only, from them (no warm-up, no rankings, no passes after them), a quick neighbour of
+   * that run. Its result has no rankings.
+   */
+  from?: Partial<Record<CharacterKey, KqmBuild>>
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1103,6 +1167,7 @@ async function runKqm({
   maxRounds = 3,
   replay,
   onEarly,
+  from,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1238,8 +1303,20 @@ async function runKqm({
     ? structuredClone(comparison.result.builds)
     : {}
   if (!comparison)
-    for (const m of optimized)
-      builds[m.characterKey] = startBuild(spaces.get(m.characterKey)!)
+    for (const m of optimized) {
+      const space = spaces.get(m.characterKey)!
+      const start = from?.[m.characterKey]
+      // (another run's build, while its weapon is allowed here)
+      builds[m.characterKey] =
+        start &&
+        space.weapons.some(
+          (w) =>
+            w.key === start.weapon.key &&
+            w.refinement === start.weapon.refinement
+        )
+          ? structuredClone(start)
+          : startBuild(space)
+    }
 
   const gearOf = (state: Partial<Record<CharacterKey, KqmBuild>>) => {
     const arts: Partial<Record<CharacterKey, Data>> = {}
@@ -1444,14 +1521,16 @@ async function runKqm({
   const steps = optimized.length
   const rankedMembers = comparison
     ? optimized.filter((m) => m.characterKey === comparison.characterKey)
-    : optimized
+    : from
+      ? []
+      : optimized
   const RANK_UNITS = 2.5
   // The rankings may find a better build, then more rounds and rankings follow (`ADOPT_PASSES`):
   // the line stops short of the end until they are known (`CEILINGS`, by pass), and the room left
   // is what they fill. With none, the run ends there.
   const CEILINGS = [0.7, 0.88]
   const ceilingOf = (pass: number) =>
-    comparison || maxRounds === 0 || pass >= ADOPT_PASSES
+    comparison || from || maxRounds === 0 || pass >= ADOPT_PASSES
       ? 1
       : (CEILINGS[pass] ?? 1)
   let ceiling = ceilingOf(0)
@@ -1883,7 +1962,13 @@ async function runKqm({
     }
     const plans = new Map<
       CharacterKey,
-      { problem: Problem; allSets: KqmSets[]; weapons: KqmWeapon[] }
+      {
+        problem: Problem
+        allSets: KqmSets[]
+        weapons: KqmWeapon[]
+        /** where `weapons`' comparison-only ones start */
+        compareFrom: number
+      }
     >()
     const chosen = await Promise.all(
       rankedMembers.map(({ characterKey: ck }) =>
@@ -1898,8 +1983,16 @@ async function runKqm({
       const allSets = setCombos(problem, spaces.get(ck)!, best)
       if (!allSets.some((sets) => kqmSetsId(sets) === kqmSetsId(best.sets)))
         allSets.push(best.sets)
-      const weapons = weaponsFor(ck, builds)
-      plans.set(ck, { problem, allSets, weapons })
+      const own = weaponsFor(ck, builds)
+      // (then each weapon at the other refinements ticked for its group: compared, never built)
+      const compared = own.flatMap((w) =>
+        kqmCompareRefinements(w.key, kqm).map((refinement) => ({
+          key: w.key,
+          refinement,
+        }))
+      )
+      const weapons = [...own, ...compared]
+      plans.set(ck, { problem, allSets, weapons, compareFrom: own.length })
       count.total += allSets.length + weapons.length
       count.weight += allSets.length + WEAPON_OPTION * weapons.length
     }
@@ -1910,7 +2003,7 @@ async function runKqm({
       const best = builds[ck]!
       const plan = plans.get(ck)
       if (!plan) return undefined
-      const { problem, allSets, weapons } = plan
+      const { problem, allSets, weapons, compareFrom } = plan
       // An option misses its requirements when it misses one the chosen build meets: one nobody
       // meets (another member's that no build of this one reaches) marks none of them
       const chosen = scoreOf(problem, kqmValues(best))
@@ -1996,7 +2089,9 @@ async function runKqm({
           if (top) {
             const own = await problems[i]
             await tick()
-            options.push(option(top, own))
+            const made = option(top, own)
+            if (weapons && i >= compareFrom) made.compare = true
+            options.push(made)
           }
           if (weapons) await optionDone(WEAPON_OPTION)
         }
@@ -2064,8 +2159,8 @@ async function runKqm({
       const score = scoreOf(problem, kqmValues(own))
       const allowed = weaponsFor(ck, builds)
       for (const option of [...ranking.sets, ...ranking.weapons]) {
-        // (unmet: it misses a requirement this build meets)
-        if (option.unmet) continue
+        // (unmet: it misses a requirement this build meets; compared only: not one to build)
+        if (option.unmet || option.compare) continue
         if (!allowed.some((w) => w.key === option.weapon.key)) continue
         const gain = option.total / score.total - 1
         if (gain > 1e-9 && (!found || gain > found.gain)) {
@@ -2103,7 +2198,10 @@ async function runKqm({
         ...new Map(
           ranking.weapons
             .filter(
-              (o) => !o.unmet && allowed.some((w) => w.key === o.weapon.key)
+              (o) =>
+                !o.unmet &&
+                !o.compare &&
+                allowed.some((w) => w.key === o.weapon.key)
             )
             .map((o) => [`${o.weapon.key}@${o.weapon.refinement}`, o.weapon])
         ).values(),
@@ -2248,6 +2346,7 @@ async function runKqm({
             .sort((a, b) => b.total - a.total)
             .filter(
               (o) =>
+                !o.compare &&
                 !isFavonius(o.weapon.key) &&
                 allowed.some((w) => w.key === o.weapon.key)
             )
@@ -2458,7 +2557,7 @@ async function runKqm({
     // The first builds, warmed up in the team's order and in reverse (the last ones choose with
     // the first ones' sets on: a team-wide set goes to whoever chooses first), the better kept:
     // which way the rounds settle depends on it, and only the KQM settings decide it
-    if (!comparison && maxRounds > 0) {
+    if (!comparison && !from && maxRounds > 0) {
       const order = optimized.map((m) => m.characterKey)
       const forward = await warmUp(builds, order, 0)
       const reverse =
@@ -2538,7 +2637,8 @@ async function runKqm({
         comparison.onPreview(shown)
       }
     }
-    for (let pass = 0; ; pass++) {
+    // (from another run's builds: its rounds only)
+    for (let pass = 0; !from; pass++) {
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
       // (the builds so far, with these rankings, while a better one is looked for: later

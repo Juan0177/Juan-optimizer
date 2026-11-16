@@ -226,6 +226,16 @@ export interface TeamOptKqm {
   refinementStandard5?: number
   /** Battle Pass weapons' refinement (absent: 1) */
   refinementBp?: number
+  /** 4★ standard wish weapons' refinement (absent: 5) */
+  refinementStandard4?: number
+  /**
+   * Per weapon group, every refinement ticked when more than one is (R1 and R5): the builds use
+   * the group's refinement (the highest ticked); the rankings and charts show each weapon of the
+   * group at the others too, for comparison
+   */
+  compareRefinements?: Partial<
+    Record<'bp' | 'wish4' | 'standard4' | 'standard5' | 'wish5', number[]>
+  >
   /**
    * Weapons left out of the choice; absent: the default (event-wish and shop weapons, 4★ and
    * 5★; the standard wish pool's 4★ are in)
@@ -488,6 +498,30 @@ const teamOptSchema = z.object({
       refinement5: z.number().int().min(1).max(5).catch(1),
       refinement4: z.number().int().min(1).max(5).catch(5),
       refinementBp: z.number().int().min(1).max(5).optional().catch(undefined),
+      refinementStandard4: z
+        .number()
+        .int()
+        .min(1)
+        .max(5)
+        .optional()
+        .catch(undefined),
+      compareRefinements: z
+        .record(z.string(), z.array(z.number().int().min(1).max(5)))
+        .optional()
+        .catch(undefined)
+        .transform((record): TeamOptKqm['compareRefinements'] => {
+          if (!record) return undefined
+          const groups = ['bp', 'wish4', 'standard4', 'standard5', 'wish5']
+          const kept = Object.fromEntries(
+            Object.entries(record).flatMap(([group, list]) => {
+              const unique = [...new Set(list)].sort((a, b) => a - b)
+              return groups.includes(group) && unique.length > 1
+                ? [[group, unique]]
+                : []
+            })
+          )
+          return Object.keys(kept).length ? kept : undefined
+        }),
       refinementStandard5: z
         .number()
         .int()

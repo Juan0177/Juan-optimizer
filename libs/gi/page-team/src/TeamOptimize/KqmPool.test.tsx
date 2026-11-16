@@ -53,8 +53,31 @@ vi.mock('@genshin-optimizer/gi/ui', () => {
     kqmGroupRefinementKey: {
       bp: 'refinementBp',
       wish4: 'refinement4',
+      standard4: 'refinementStandard4',
       standard5: 'refinementStandard5',
       wish5: 'refinement5',
+    },
+    kqmGroupRefinements: (
+      group: string,
+      kqm: {
+        refinement4: number
+        refinement5: number
+        refinementBp?: number
+        refinementStandard4?: number
+        refinementStandard5?: number
+        compareRefinements?: Record<string, number[]>
+      }
+    ) => {
+      const built = {
+        bp: kqm.refinementBp ?? 1,
+        wish4: kqm.refinement4,
+        standard4: kqm.refinementStandard4 ?? 5,
+        standard5: kqm.refinementStandard5 ?? 1,
+        wish5: kqm.refinement5,
+      }[group]
+      return [
+        ...new Set([...(kqm.compareRefinements?.[group] ?? []), built]),
+      ].sort((a, b) => (a ?? 0) - (b ?? 0))
     },
     kqmSets: () => ['SetA', 'SetB'],
     kqmDefaultExcludedWeapons: () => [
@@ -199,17 +222,35 @@ describe('KQM Setup’s weapons and artifact sets', () => {
     expect(saved?.kqm?.excludedWeapons).toContain('FiveA')
     // (written for the current weapon list, so the user's own exclusions are kept as they are)
     expect(saved?.kqm?.weaponList).toBe(2)
-    // its refinement, chosen right there: the group's weapons count at it
+    // its refinements, ticked right there: R3 as well as R1, so the group's weapons are built
+    // at R3 (the highest) and ranked at R1 too
     fireEvent.click(pill('5★ standard wish weapons refinement'))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'R3' }))
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'R3' }))
     expect(saved?.kqm?.refinementStandard5).toBe(3)
-    expect(pill('5★ standard wish weapons refinement').textContent).toContain(
-      'R3'
-    )
+    expect(saved?.kqm?.compareRefinements?.standard5).toEqual([1, 3])
+    // (the menu stays open for more ticks: the pill behind it)
+    expect(
+      screen.getByRole('button', {
+        name: '5★ standard wish weapons refinement',
+        hidden: true,
+      }).textContent
+    ).toContain('R1 + R3')
+    // R1 unticked: R3 alone, nothing compared
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'R1' }))
+    expect(saved?.kqm?.refinementStandard5).toBe(3)
+    expect(saved?.kqm?.compareRefinements).toBeUndefined()
+    // (the last one ticked stays ticked)
+    expect(
+      screen
+        .getByRole('menuitemcheckbox', { name: 'R3' })
+        .getAttribute('aria-disabled')
+    ).toBe('true')
     // (the switch is not touched by it)
-    expect(pill('5★ standard wish weapons').getAttribute('aria-pressed')).toBe(
-      'true'
-    )
+    expect(
+      screen
+        .getByRole('button', { name: '5★ standard wish weapons', hidden: true })
+        .getAttribute('aria-pressed')
+    ).toBe('true')
   })
 
   it('opens the weapon and set choosers', () => {
