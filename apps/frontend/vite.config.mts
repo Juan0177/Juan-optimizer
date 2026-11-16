@@ -21,6 +21,21 @@ import {
 import { seoPagesPlugin } from './vite-plugin-seo-pages.mts'
 import { webpAssets } from './vite-plugin-webp.mts'
 
+/**
+ * Workers show no images: one their code imports (the game data's art, in the KQM formula
+ * builder's) is an empty URL there, so their build emits no copy of it (as PNG: the WebP step is
+ * the page's)
+ */
+const noWorkerImages = (): Plugin => ({
+  name: 'no-worker-images',
+  enforce: 'pre',
+  load(id) {
+    if (/\.(png|jpe?g|webp|gif|svg|avif)(\?.*)?$/i.test(id))
+      return 'export default ""'
+    return undefined
+  },
+})
+
 /** Unreleased content: on the beta site only (see beta-content.json) */
 const beta = readBetaContent(resolve(__dirname, 'beta-content.json'))
 /**
@@ -241,8 +256,12 @@ export default defineConfig(({ command }) => ({
     // https://vitejs.dev/guide/migration#worker-plugins-is-now-a-function
     plugins: () =>
       released
-        ? [releasedOnlyPlugin(beta, { locales: false }), nxViteTsPaths()]
-        : [nxViteTsPaths()],
+        ? [
+            noWorkerImages(),
+            releasedOnlyPlugin(beta, { locales: false }),
+            nxViteTsPaths(),
+          ]
+        : [noWorkerImages(), nxViteTsPaths()],
   },
 
   build: {
