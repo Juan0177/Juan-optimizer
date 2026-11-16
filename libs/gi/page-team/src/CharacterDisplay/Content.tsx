@@ -4,6 +4,7 @@ import { characterAsset } from '@genshin-optimizer/gi/assets'
 import type { CharacterKey, ElementKey } from '@genshin-optimizer/gi/consts'
 import { TeamCharacterContext, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { BetaNotice } from '@genshin-optimizer/gi/ui' // juanlab-beta
 import FactCheckIcon from '@mui/icons-material/FactCheck'
 import PersonIcon from '@mui/icons-material/Person'
 import ScienceIcon from '@mui/icons-material/Science'
@@ -34,6 +35,7 @@ export default function Content({ tab }: { tab?: string }) {
   return (
     <>
       <FormulaModal />
+      <BetaNotice characterKey={characterKey} />
       <TabNav
         tab={tab}
         characterKey={characterKey}

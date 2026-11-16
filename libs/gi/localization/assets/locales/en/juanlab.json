@@ -72,5 +72,8 @@
     "accountLabel_other": "Characters from gc-web: {{name}} (UID {{uid}}), {{count}} characters",
     "accountSkipped_one": "{{count}} unrecognized item (character, weapon or artifact, maybe too new for this version) was left out.",
     "accountSkipped_other": "{{count}} unrecognized items (characters, weapons or artifacts, maybe too new for this version) were left out."
+  },
+  "beta": {
+    "notice": "Beta {{label}} data ({{source}}): provisional numbers, they may change before release. Icons from the beta, provisional card."
   }
 }
