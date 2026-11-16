@@ -19,6 +19,12 @@ interface State {
   lead: number
   chorus: number
   recentSwirlEnd: number
+  /**
+   * A Wandering Vortex made during Song of Ages Past is present until this frame (dump
+   * `_ABILITY_Vodyanitsa_StarSwirl_Mark`, only while Song is active): only its swirls and its
+   * detonation count for A1 and for A4/C2's Stellar Swirl bonuses
+   */
+  wanderingUntil: number
   normalEnd: number
   dashed: boolean
 }
@@ -81,6 +87,7 @@ export const kit: KitModel = {
     lead: 0,
     chorus: 0,
     recentSwirlEnd: -1,
+    wanderingUntil: -1,
     normalEnd: -1,
     dashed: false,
   }),
@@ -96,9 +103,6 @@ export const kit: KitModel = {
       'c4State',
     ])
       state(c, condition, '')
-    c.note(
-      'Vodyanitsa: C0 follows the pinned native implementation. Its +4 s Stellar Swirl duration and vortex RES reduction are enabled by party presence; the description scopes these effects to Song of Ages Past.'
-    )
     if (c.constellation('Vodyanitsa') >= 2)
       c.note(
         'Vodyanitsa C2: "Two Voices in Black and White" starts with the Horn of Spring\'s Call attacks (game text; the reference also grants it on the initial Skill hit).'
@@ -202,6 +206,8 @@ export const kit: KitModel = {
           tag: 'burst',
           element: 'hydro',
           applies: true,
+          // (2U: the dump's Sink With Thee attack has durability 50)
+          durability: 50,
           icd: 'none',
           label: 'Sink With Thee',
           states: [
@@ -273,22 +279,31 @@ export const kit: KitModel = {
   },
   onReactionSnapshot(c, s: State, hit) {
     if (!sharedSwirl(hit)) return
-    s.recentSwirlEnd = c.now + 300
-    c.buff('Vodyanitsa', ['Vodyanitsa', 'a1Vortex'], 'on', 0, 360)
-    markBonus(hit, pool(c, s, hit) ? 'stellar' : '')
+    // A Stellar Swirl during Song makes (or refreshes) a Wandering Vortex (181 frames); outside
+    // Song the vortex is an ordinary one: no A1, and no A4/C2 Stellar Swirl bonus (dump)
+    if (c.now < s.skillEnd) s.wanderingUntil = c.now + 182
+    if (c.now < s.wanderingUntil) {
+      s.recentSwirlEnd = c.now + 300
+      c.buff('Vodyanitsa', ['Vodyanitsa', 'a1Vortex'], 'on', 0, 360)
+    }
+    markBonus(hit, recentVortex(c, s) && pool(c, s, hit) ? 'stellar' : '')
     markC2(c, s, hit)
   },
   onHit(c, s: State, hit) {
     if (hit.path[0].startsWith('_')) return
     if (!sharedSwirl(hit)) markC2(c, s, hit)
     if (sharedSwirl(hit)) {
-      if (c.now < s.poolEnd) spend(c, s, hit)
+      if (c.now < s.poolEnd && recentVortex(c, s)) spend(c, s, hit)
       return
     }
     if (pool(c, s, hit)) {
       if (hit.tag === 'directStellarSwirl') {
-        markBonus(hit, 'stellar')
-        spend(c, s, hit)
+        // Lead Vocal/Chorus's Stellar Swirl branch needs a Wandering Vortex present or exploded
+        // in the last 5 s (dump `_ABILITY_Vodyanitsa_StarSwirl_AlterMark`)
+        if (recentVortex(c, s)) {
+          markBonus(hit, 'stellar')
+          spend(c, s, hit)
+        }
       } else if (
         ['normal', 'charged', 'plunge', 'skill', 'burst'].includes(hit.tag) &&
         (hit.element === 'hydro' || hit.element === 'cryo') &&

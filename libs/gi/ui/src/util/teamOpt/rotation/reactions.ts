@@ -685,8 +685,11 @@ export function elementalReactions({
     )
   }
   const stellarSwirl = (ctx: SimContext, a: Attack) => {
-    // The pinned Vodyanitsa passive sets this party flag at initialization.
-    sswEnd = ctx.now + 480 + (members.includes('Vodyanitsa') ? 240 : 0)
+    // Vodyanitsa's A1: +4 s for a Stellar Swirl during her Song of Ages Past (dump)
+    sswEnd =
+      ctx.now +
+      480 +
+      (ctx.hasBuff('Vodyanitsa', ['Vodyanitsa', 'skillSong']) ? 240 : 0)
     const owner = a.hit.characterKey
     const contributors = [
       ...new Set([
