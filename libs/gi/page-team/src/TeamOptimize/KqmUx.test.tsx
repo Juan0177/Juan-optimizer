@@ -594,6 +594,38 @@ describe('KQM focused results', () => {
     expect(screen.queryByRole('button', { name: 'Run again' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Discard' })).toBeTruthy()
   })
+  it('marks preliminary results as not final, then says once that they are', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const result = sampleResult()
+      const props = {
+        teamId: 'ui-prelim',
+        runSettings: initial(),
+        members,
+        result,
+        seconds: 1,
+        rotationTime: 20,
+        onDiscard: vi.fn(),
+      }
+      const view = render(<KqmResults {...props} running improving />, {
+        wrapper: wrap,
+      })
+      expect(screen.getByText('Preliminary builds')).toBeTruthy()
+      expect(screen.getByText('still improving')).toBeTruthy()
+      expect(screen.getByText('team DPS so far')).toBeTruthy()
+      // the run's result replaces them: final, for a moment
+      view.rerender(<KqmResults {...props} />)
+      expect(screen.queryByText('Preliminary builds')).toBeNull()
+      expect(screen.getByText('Final builds')).toBeTruthy()
+      expect(screen.queryByText('team DPS so far')).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(4500)
+      })
+      expect(screen.queryByText('Final builds')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
   it('lists the top teams, and picking one shows that team', async () => {
     const result = sampleResult()
     mocks.compare.mockImplementation(async ({ weapon, sets }) => ({
