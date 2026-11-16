@@ -3,6 +3,9 @@ import LanguageDetector from 'i18next-browser-languagedetector'
 import Backend from 'i18next-http-backend'
 import { initReactI18next } from 'react-i18next'
 
+// juanlab: definito da Vite nella build del frontend (apps/frontend/vite.config.mts)
+declare const __JUANLAB_BUILD__: string | undefined
+
 // Probably a way to auto-populate this.
 export const languageCodeList = [
   'chs',
@@ -66,6 +69,10 @@ i18n
     backend: {
       // Path to load localization data from.
       loadPath: './assets/locales/{{lng}}/{{ns}}.json',
+      // juanlab: nuova build -> nuovo indirizzo dei JSON, niente traduzioni vecchie dalla cache del browser
+      ...(typeof __JUANLAB_BUILD__ === 'string'
+        ? { queryStringParams: { v: __JUANLAB_BUILD__ } }
+        : {}),
     },
     interpolation: {
       escapeValue: false, //react does interlopation already
