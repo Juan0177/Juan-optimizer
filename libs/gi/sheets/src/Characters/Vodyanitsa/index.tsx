@@ -365,14 +365,13 @@ const dmgFormulas = {
     ),
   },
   burst: {
-    // The Song bonus adds to the HP coefficient (native burst.go), before flat additions.
+    // In Song the dump multiplies the damage by Vodyanitsa_ElementalBurst_DamageRatio (default 1,
+    // the talent adds the Song bonus to it), so the bonus multiplies the HP coefficient
     skillDmg: customDmgNode(
       prod(
         input.total.hp,
-        sum(
-          subscript(input.total.burstIndex, dm.burst.skillDmg),
-          skillSong_burst_mult_
-        )
+        subscript(input.total.burstIndex, dm.burst.skillDmg),
+        sum(one, skillSong_burst_mult_)
       ),
       'burst'
     ),
