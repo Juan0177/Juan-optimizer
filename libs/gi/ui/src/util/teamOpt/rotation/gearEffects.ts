@@ -1,6 +1,6 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
-import { energyCalcData } from '../energyCalc'
+import { energyCalcData, isFrostbreathReaction } from '../energyCalc'
 import type { RotationAction } from './parse'
 import type {
   NormalStateStart,
@@ -265,6 +265,9 @@ export function gearEffects({
   for (const k of members)
     for (const weapon of LEAF_WEAPONS)
       if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
+  // Frostbreath: declared off, on only from the wielder's own Cryo- or Hydro-related reactions
+  for (const k of members)
+    if (holds(k, 'Frostbreath')) window(k, ['Frostbreath', 'react'], 'on', 0, 0)
   // Heretic's Molten Blade: declared off, on only after the wielder's Skill while on the field
   for (const k of members)
     if (holds(k, 'HereticsMoltenBlade'))
@@ -735,6 +738,17 @@ export function gearEffects({
           for (const weapon of LEAF_WEAPONS)
             if (holds(k, weapon) && ready(`leaf.${k}.${weapon}`, hit.t, 1200))
               ctx.buff(k, [weapon, 'passive'], 'on', 0, 720)
+        // Frostbreath (gcsim): the wielder's own Cryo- or Hydro-related reaction (off the field
+        // too) gives it ATK for 15 s, once per 16 s; both are hitlag statuses (its own clock)
+        if (
+          holds(k, 'Frostbreath') &&
+          isFrostbreathReaction(hit) &&
+          ready(`frostbreath.${k}`, ctx.characterFrame(k), 960)
+        )
+          ctx.buff(k, ['Frostbreath', 'react'], 'on', 0, 900, {
+            recipient: k,
+            hitlag: 'recipient',
+          })
         if (reaction === 'moondrift' || reaction === 'moondriftHarmony') return
         // Viridescent Venerer: the swirled element's RES -40% for 10 s
         if (opens(k, 'ViridescentVenerer') && hit.onField === k) {

@@ -328,6 +328,69 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
   })
 
+  it('keeps the energy weapon triggers the rotation fills in, by weapon (Frostbreath)', () => {
+    const first = new ArtCharDatabase(1, new SandboxStorage())
+    first.importGOOD(good(), false, false, false)
+    const [id] = first.teams.keys
+    const member = {
+      fieldTime: 50,
+      burstEvery: 1,
+      skillMode: 0,
+      skillUses: 1,
+      secondaryMode: 0,
+      secondaryUses: 0,
+      funnelShare: 100,
+      favoniusProcs: 0,
+      weaponEnergyTriggers: 0,
+      weaponTriggers: { Frostbreath: 1.5 },
+      flatEnergy: 0,
+    }
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      kqm: {
+        refinement5: 1,
+        refinement4: 5,
+        energySource: 'calculator',
+        energyCalculator: {
+          rotationTime: 20,
+          clearTime: 90,
+          enemyParticles: 9,
+          rng: 'safe',
+          electroInterval: 0,
+          members: { KamisatoAyaka: member, Shenhe: member },
+        },
+      },
+    }
+    first.teams.set(id, { teamOpt })
+    expect(first.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    const second = new ArtCharDatabase(1, new SandboxStorage())
+    second.importGOOD(first.exportGOOD() as IGOOD & IGO, false, false, false)
+    expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    // (a bad value drops the counts only, not the member)
+    first.teams.set(id, {
+      teamOpt: {
+        ...teamOpt,
+        kqm: {
+          ...teamOpt.kqm!,
+          energyCalculator: {
+            ...teamOpt.kqm!.energyCalculator!,
+            members: {
+              KamisatoAyaka: {
+                ...member,
+                weaponTriggers: { Frostbreath: -1 } as never,
+              },
+              Shenhe: member,
+            },
+          },
+        },
+      },
+    })
+    const kept =
+      first.teams.get(id)!.teamOpt!.kqm!.energyCalculator!.members
+        .KamisatoAyaka!
+    expect(kept.weaponTriggers).toBeUndefined()
+    expect(kept.skillUses).toBe(1)
+  })
   it('round-trips every setting through a GOOD export and import', () => {
     const teamOpt: TeamOpt = {
       ...initTeamOpt(),

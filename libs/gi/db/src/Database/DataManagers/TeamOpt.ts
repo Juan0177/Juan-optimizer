@@ -163,6 +163,7 @@ export const teamOptEnergyRotationFields = [
   'flatEnergy',
   'favoniusProcs',
   'favoniusCatchBy',
+  'weaponTriggers',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
@@ -177,7 +178,13 @@ export interface TeamOptEnergyMember {
   catchBy?: CharacterKey
   funnelShare: number
   favoniusProcs: number
+  /** Energy weapon triggers a rotation, set by hand (0: the rotation's `weaponTriggers`) */
   weaponEnergyTriggers: number
+  /**
+   * Energy weapon triggers a rotation as the written rotation plays them, by weapon (what the
+   * member would trigger holding it: Frostbreath, its Cryo- or Hydro-related reactions)
+   */
+  weaponTriggers?: Partial<Record<WeaponKey, number>>
   favoniusCatchBy?: CharacterKey
   flatEnergy: number
   /** Inputs set by hand: the written rotation no longer fills them in */
@@ -378,6 +385,10 @@ const energyMemberSchema = z.object({
   funnelShare: z.number().finite().min(0).max(100),
   favoniusProcs: z.number().finite().min(0),
   weaponEnergyTriggers: z.number().finite().min(0).default(0),
+  weaponTriggers: z
+    .partialRecord(z.enum(allWeaponKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
   favoniusCatchBy: z.enum(allCharacterKeys).optional(),
   flatEnergy: z.number().finite(),
   edited: z

@@ -7,6 +7,7 @@ import type {
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import particleData from './energyCalcData.json'
 import type { SimulationResult } from './rotation/simulate'
+import type { SimHit } from './rotation/types'
 
 /** Factual particle data and fixed-rotation equations from the user's ERC 7.3 workbook (v1.59.1). */
 export const ENERGY_CALC_SOURCE =
@@ -283,11 +284,14 @@ export function calculateEnergyRecharge(
         const every = settings.members[member]?.burstEvery ?? 0
         return every > 0 ? 1 / every : 0
       }
-      return energyWeaponTriggers(
-        weapons?.[member],
-        settings.members[member]?.weaponEnergyTriggers ?? 0,
-        settings.rotationTime
-      )
+      // (triggers set by hand, else the rotation's for the weapon it holds)
+      const inputs = settings.members[member]
+      const weapon = weapons?.[member]
+      const entered =
+        (inputs?.weaponEnergyTriggers ?? 0) > 0
+          ? inputs!.weaponEnergyTriggers
+          : ((weapon && inputs?.weaponTriggers?.[weapon]) ?? 0)
+      return energyWeaponTriggers(weapon, entered, settings.rotationTime)
     }
     const teamWeaponEnergy = keys
       .filter((k) => k !== recipient)
@@ -637,6 +641,70 @@ export function attackEnergyFromRotation(
  * CRIT hit makes particles every time, once per 6 s), the wielder's hits CRIT half the time.
  * A smaller refinement's longer cooldown is applied by the calculator (`favoniusCooldown`).
  */
+/**
+ * The reactions that trigger Frostbreath ("a Cryo or Hydro-related elemental reaction", kqmsim's
+ * list of events): the simulation's reaction marks, crystallize by the element it consumed
+ */
+const FROSTBREATH_REACTIONS = new Set([
+  'melt',
+  'vaporize',
+  'frozen',
+  'shattered',
+  'superconduct',
+  'cryoSwirl',
+  'hydroSwirl',
+  'electroCharged',
+  'bloom',
+  'lunarCharged',
+  'lunarBloom',
+  'lunarCrystallize',
+  'stellarConduct',
+  'stellarSwirl',
+])
+/** A reaction mark (`_reaction`) of the simulation that triggers Frostbreath */
+export const isFrostbreathReaction = (h: SimHit) =>
+  h.path[0] === '_reaction' &&
+  (FROSTBREATH_REACTIONS.has(h.path[1] ?? '') ||
+    (h.path[1] === 'crystallize' &&
+      (h.element === 'cryo' || h.element === 'hydro')))
+
+/**
+ * Each member's energy weapon triggers a rotation if it held the weapon, as the played rotation
+ * has them (the weapons whose trigger it plays), at most once per the weapon's cooldown:
+ * Frostbreath, its own Cryo- or Hydro-related reactions
+ */
+export function weaponTriggersFromRotation(
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'>,
+  keys: readonly CharacterKey[],
+  rotations = 1
+): Partial<Record<CharacterKey, Partial<Record<WeaponKey, number>>>> {
+  const start = sim.start
+  const end = sim.start + sim.frames
+  const cooldown = (ENERGY_WEAPONS['Frostbreath']?.cooldown ?? 16) * 60
+  const out: Partial<Record<CharacterKey, Partial<Record<WeaponKey, number>>>> =
+    {}
+  for (const key of keys) {
+    const times = sim.hits
+      .filter(
+        (h) => h.characterKey === key && h.t < end && isFrostbreathReaction(h)
+      )
+      .map((h) => h.t)
+      .sort((a, b) => a - b)
+    // (the cooldown runs from before the counted span: the earlier rotations' reactions)
+    let ready = Number.NEGATIVE_INFINITY
+    let triggers = 0
+    for (const t of times) {
+      if (t < ready) continue
+      ready = t + cooldown
+      if (t >= start) triggers++
+    }
+    out[key] = {
+      Frostbreath: Math.round((triggers / Math.max(1, rotations)) * 10) / 10,
+    }
+  }
+  return out
+}
+
 const FAVONIUS_ASSUMED = { cooldown: 360, crit: 0.5 }
 const FAVONIUS_RUNS = 400
 
@@ -777,6 +845,8 @@ export function energyFromRotation(
   const attackEnergy = attackEnergyFromRotation(sim, keys, per)
   // (Favonius: what each member's hits would trigger with one, counted only if it holds one)
   const favonius = favoniusFromRotation(sim, keys, per, onFieldAt)
+  // (energy weapons: what each member would trigger with one, counted only if it holds one)
+  const weaponTriggers = weaponTriggersFromRotation(sim, keys, per)
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -891,6 +961,7 @@ export function energyFromRotation(
       member.flatEnergy =
         (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
     }
+    if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
     if (favonius[key]) {
       member.favoniusProcs = favonius[key]!.procs
       if (favonius[key]!.catchBy)
