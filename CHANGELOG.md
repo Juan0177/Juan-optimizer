@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.11.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.11.1) (2026-11-16)
+
+### Fixed
+
+- Danica and the Tsaritsa follow the 7.3 beta (7.2.52) kit changes: the Tsaritsa ascends with CRIT DMG (38.4% at 90) instead of CRIT Rate, has higher Blessed Spear and Palestar Edict: Doom Stellar Glimmer multipliers, an 18s Burst cooldown, 10% Stellar Swirl base coefficient (A4), 50% Love Stellar Glimmer CRIT DMG (C2), 200% C6 Triumph and 250% C6 Doom multipliers, and keeps C6 Honor's 20% Elevation after teammates unseal.
+- Danica's Maid: Royal Guard burst ATK buff is 10% up to 400 at Lv10 (18s Burst cooldown, 16s Will to Protect cooldown), C1 Royal Guard burst boost is 100%, C2 is reworked (10 Let Us Toast stacks at 80% ATK, up to 2 at 350% ATK in Maid: Cleaner, and a once-per-combat 150% Cleaning Decree Will to Purge hit), and C6 grants 15% Stellar-Conduct Elevation.
+
 ## [v1.11.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.11.0) (2026-11-16)
 
 ### New
