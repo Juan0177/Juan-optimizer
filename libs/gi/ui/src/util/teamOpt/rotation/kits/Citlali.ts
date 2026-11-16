@@ -159,7 +159,9 @@ function gain(c: SimContext, s: CitlaliState, amount: number) {
 }
 
 export const kit: KitModel = {
-  sampled: true,
+  // (her only randomness is the Obsidian skull's delay, 87 to 117 frames: 8 stratified samples
+  // land within 0.4% of 64)
+  sampled: 8,
   characterKey: 'Citlali',
   element: 'cryo',
   source: `${GCSIM}/citlali`,

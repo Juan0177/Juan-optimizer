@@ -42,6 +42,7 @@ import {
   rotationAttacks,
   rotationBuffDefaults,
   rotationCalculation,
+  rotationSamples,
   type SimBuffOwner,
   type SimHit,
   simulateRotationSamples,
@@ -68,8 +69,10 @@ import {
 import {
   Fragment,
   type ReactNode,
+  startTransition,
   useCallback,
   useDeferredValue,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -400,7 +403,14 @@ export function simulateWritten({
       auraTimeline,
     },
     // (two rotations kept: half the samples each, as much as one rotation of 64)
-    sampled ? (samples ?? (steady ? 32 : undefined)) : undefined
+    // (no more than the members' kits need: a small randomness, few plays)
+    sampled
+      ? rotationSamples(
+          team.members,
+          kitModels,
+          samples ?? (steady ? 32 : undefined)
+        )
+      : undefined
   )
   const own =
     current ??
@@ -851,9 +861,26 @@ export function useRotationWriter({
       />
     </>
   )
-  return { openWriter: () => setOpen(true), onApplied: setUndo, element }
+  return { open, openWriter: () => setOpen(true), onApplied: setUndo, element }
 }
 export type RotationWriterHandle = ReturnType<typeof useRotationWriter>
+
+/**
+ * `value` for playing the rotation: at once while a play is quick, once typing pauses when it is
+ * slow (`playMs`, the last play's time: a heavy team's play blocks the page for a few hundred ms,
+ * too long to run on every key)
+ */
+function useSettled<T>(value: T, playMs: { current: number }) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(
+      () => startTransition(() => setSettled(value)),
+      playMs.current > 50 ? 250 : 0
+    )
+    return () => clearTimeout(timer)
+  }, [value, playMs])
+  return settled
+}
 
 /**
  * Opens the writer dialog for the rotation written inline: its timeline, frame data and opener
@@ -975,11 +1002,13 @@ function WriterModal({
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const insert = (word: string) =>
     insertWord(inputRef.current, text, word, setText)
-  const deferred = useDeferredValue(text)
+  // (the last play's time: a slow one waits for typing to pause)
+  const playMs = useRef(0)
+  const deferred = useSettled(text, playMs)
   const [openerText, setOpenerText] = useState(
     () => localStorage.getItem(openerKey(teamId)) ?? ''
   )
-  const deferredOpener = useDeferredValue(openerText)
+  const deferredOpener = useSettled(openerText, playMs)
   const [openerShown, setOpenerShown] = useState(() => !!openerText.trim())
   const [timing, setTiming] = useState(() =>
     parseTiming(localStorage.getItem(timingKey(teamId)))
@@ -1027,9 +1056,14 @@ function WriterModal({
     [team, timingOpen]
   )
 
+  // (using the rotation closes the writer: the team it changes is not played again before that)
+  const closing = useRef(false)
+  const lastResult = useRef<ReturnType<typeof simulateWritten>>(undefined)
   const result = useMemo(
-    () =>
-      simulateWritten({
+    () => {
+      if (closing.current && lastResult.current) return lastResult.current
+      const start = performance.now()
+      const played = simulateWritten({
         text: deferred,
         opener: deferredOpener,
         timing: deferredTiming,
@@ -1046,7 +1080,11 @@ function WriterModal({
             defaultValue: 'Opener: {{warning}}',
             warning,
           }),
-      }),
+      })
+      playMs.current = performance.now() - start
+      lastResult.current = played
+      return played
+    },
     // (the members' constellations are read when the text changes)
     [
       deferred,
@@ -1136,24 +1174,28 @@ function WriterModal({
   const hadRotation = Object.values(
     database.teams.get(teamId)?.teamOpt?.attacks ?? {}
   ).some((a) => !!a?.length)
+  // (typed since the preview's play, which waits for a pause on a heavy team: used as it is now)
+  const stale = deferred !== text || deferredOpener !== openerText
   const apply = () => {
-    if (!result?.sim) return
-    const applied = kqm
-      ? simulateWritten({
-          text,
-          opener: openerShown ? openerText : '',
-          timing,
-          frameData,
-          team: ownTeam,
-          names,
-          members,
-          database,
-          teamId,
-          gender,
-          openerWarning: (warning) => warning,
-        })
-      : result
+    if (!result?.sim && !stale) return
+    const applied =
+      kqm || stale
+        ? simulateWritten({
+            text,
+            opener: openerShown ? openerText : '',
+            timing,
+            frameData,
+            team: ownTeam,
+            names,
+            members,
+            database,
+            teamId,
+            gender,
+            openerWarning: (warning) => warning,
+          })
+        : result
     if (!applied?.sim) return
+    closing.current = true
     const undo = applyWritten({
       database,
       teamId,
@@ -1669,9 +1711,9 @@ function WriterModal({
           </Button>
           <Button
             variant="contained"
-            disabled={!result?.sim}
+            disabled={!result?.sim && !stale}
             onClick={apply}
-            sx={result?.sim ? giCtaSx : undefined}
+            sx={result?.sim || stale ? giCtaSx : undefined}
           >
             {hadRotation
               ? t('teamOpt.writer.replace', 'Replace rotation')

@@ -115,13 +115,16 @@ export function RotationInline({
   // (played once typing pauses: a play takes tens of ms, too long to run on every key)
   const typed = pending ? text : ''
   const [settled, setSettled] = useState(typed)
+  // (not while the writer is open: it plays the same text, and this panel is behind it)
+  const writing = writer.open
   useEffect(() => {
+    if (writing) return
     const timer = setTimeout(
       () => startTransition(() => setSettled(typed)),
       typed ? 220 : 0
     )
     return () => clearTimeout(timer)
-  }, [typed])
+  }, [typed, writing])
   const { opener, timing, frameData } = settings
   const play = useMemo(
     () =>
