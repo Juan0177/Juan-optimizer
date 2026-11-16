@@ -108,8 +108,8 @@ export interface SimulationResult {
    */
   skillUses?: { characterKey: CharacterKey; t: number; hold: boolean }[]
   /**
-   * The kept rotation's swaps: who to whom, when the swap began (frame), how long it took (swap
-   * time and ping) and how long it first waited for the 1 s swap cooldown
+   * The kept rotation's swaps: who to whom, when the swap began (frame), how long it took (the
+   * swap time) and how long it first waited for the 1 s swap cooldown
    */
   swaps?: {
     from: CharacterKey
@@ -232,7 +232,6 @@ export function simulateRotation({
   auraTimeline,
   frameOverrides = {},
   frameData = {},
-  pingFrames = 0,
 }: {
   rotation: ParsedRotation
   members: CharacterKey[]
@@ -243,7 +242,11 @@ export function simulateRotation({
   /** Benchmarks retain the same complete fixed-loop interval as the native reference. */
   keep?: 'middle' | 'all' | 'last2'
   kits?: Partial<Record<CharacterKey, KitModel>>
-  /** Frames spent swapping, with the previous member still on field (gcsim's default: 12). */
+  /**
+   * Frames spent swapping, with the previous member still on field (KQM's standard: 12). A swap
+   * waits on the server, so this is where ping goes (gcsim: frames = ping ms × 2 × 60 / 1000);
+   * other actions are not delayed by it.
+   */
   swapFrames?: number
   target?: { radius: number; distance: number; maxHp?: number }
   /** The members' artifact sets (pieces), for set effects the simulation plays (Thundering Fury) */
@@ -261,8 +264,6 @@ export function simulateRotation({
   frameOverrides?: Partial<Record<number, number>>
   /** Player-edited character frame data, by member and `actionFrameKey` */
   frameData?: FrameData
-  /** Input delay (ping) added to every action and swap, frames */
-  pingFrames?: number
 }): SimulationResult {
   const notes = new Set<string>()
   const warnings = [...rotation.warnings]
@@ -1161,10 +1162,10 @@ export function simulateRotation({
         from: onField,
         to: characterKey,
         start: swapStart,
-        frames: swapFrames + pingFrames,
+        frames: swapFrames,
         cooldown: swapStart - now,
       })
-      now = swapStart + swapFrames + pingFrames
+      now = swapStart + swapFrames
       runUntil(now, true)
       const prev = kits[onField]
       prev?.onSwapOut?.(ctxAt(now, onField), states.get(onField))
@@ -1412,7 +1413,6 @@ export function simulateRotation({
         frames = updated
       }
     }
-    frames += pingFrames
     const defaultFrames = frames
     const edited = opener ? undefined : frameOverrides[i]
     if (edited !== undefined) frames = Math.max(1, Math.round(edited))
@@ -2150,7 +2150,7 @@ export const FRAME_ACTIONS: RotationAction[] = [
 export function actionFrameDefaults(
   options: Omit<
     Parameters<typeof simulateRotation>[0],
-    'rotation' | 'frameData' | 'frameOverrides' | 'pingFrames' | 'repeats'
+    'rotation' | 'frameData' | 'frameOverrides' | 'repeats'
   >,
   member: CharacterKey,
   actions: RotationAction[] = FRAME_ACTIONS

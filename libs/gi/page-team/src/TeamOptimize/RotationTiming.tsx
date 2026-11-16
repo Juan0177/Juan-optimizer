@@ -33,8 +33,41 @@ export interface RotationTimingSettings {
   edits: Record<number, TimingEdit>
   /** Frames from pressing swap to the next member acting (undefined: the default 12) */
   swapFrames?: number
+  /** The ping typed in, which set `swapFrames` (shown as typed; otherwise from the swap time) */
+  pingMs?: number
 }
+/** KQM's standard swap: 12 frames, about 100 ms of ping */
 export const DEFAULT_SWAP_FRAMES = 12
+/**
+ * A swap waits on the server (a round trip), so ping sets the swap time; other actions are not
+ * delayed by it. gcsim's rule: frames = ping ms × 2 × 60 / 1000 (100 ms ≈ 12 frames)
+ */
+export const pingToSwapFrames = (ms: number) =>
+  Math.round((ms * 2 * FPS) / 1000)
+export const swapFramesToPing = (frames: number) =>
+  Math.round((frames * 1000) / (2 * FPS))
+/** The ping a team's timing shows: as typed, or the swap time's */
+export const timingPing = (timing: RotationTimingSettings) =>
+  timing.pingMs ?? swapFramesToPing(timing.swapFrames ?? DEFAULT_SWAP_FRAMES)
+/** Timing with a typed ping: the swap time it gives (KQM's 12 frames: no edit) */
+export function withPing(
+  timing: RotationTimingSettings,
+  ms: number
+): RotationTimingSettings {
+  const frames = pingToSwapFrames(ms)
+  const { swapFrames: _s, pingMs: _p, ...rest } = timing
+  return frames === DEFAULT_SWAP_FRAMES
+    ? rest
+    : { ...rest, swapFrames: frames, pingMs: ms }
+}
+/** Timing with a typed swap time (the ping then follows it) */
+export function withSwapFrames(
+  timing: RotationTimingSettings,
+  frames: number
+): RotationTimingSettings {
+  const { swapFrames: _s, pingMs: _p, ...rest } = timing
+  return frames === DEFAULT_SWAP_FRAMES ? rest : { ...rest, swapFrames: frames }
+}
 
 /** The written actions in order (the simulator's action positions) */
 export function flatActions(rotation: ParsedRotation) {
