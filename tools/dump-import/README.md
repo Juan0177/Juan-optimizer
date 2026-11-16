@@ -203,19 +203,19 @@ tools/dump-import/restore_dm.sh   # unlink dump + restore official deobf.ts
 - C1 energy regen, C6 34% beacon chance, Overloaded beacon generation: not modelled (no stat impact).
 
 ## Danica / Anastasya modelling notes (7.3 beta)
-- Danica: toggles Anchor, Maid Form (Defense/Battle), Burst enhanced (cast in Radiance — community confirmed
-  "stellar glimmer locked"), A4 stacks 1–3, Radiance, C2 Toast (party) / self Toast stacks 1–7.
-  Defense burst ATK = min(ratio × Danica pre-buff ATK, cap), party-wide (`teamBuff.total.atk`), C1 ×1.8.
-  Battle burst "+X% On-Field E2 DMG" modelled as a Stellar-Conduct DMG bonus on that hit only (unconfirmed).
-  C2 Toast = flat `stellarconduct_dmgInc` (+100% ATK; self in Battle Maid +150% ATK per stack on On-Field E2).
-  C6 party 20% is **Elevated** (CHS 擢升). A4 ATK SPD 20% is a text value (not in params).
+- Danica: toggles Storm Anchor, Attendant Form (Royal Guard / Cleaner), Burst enhanced (cast in Radiance — community confirmed
+  "stellar glimmer locked"), A4 stacks 1–3, Radiance, C2 Toast (party) / self Toast stacks 1–2.
+  Royal Guard burst ATK = min(ratio × Danica pre-buff ATK, cap), party-wide (`teamBuff.total.atk`), C1 ×2.0.
+  Cleaner burst "+X% Will to Purge DMG" modelled as a Stellar-Conduct DMG bonus on that hit only (unconfirmed).
+  C2 Toast = flat `stellarconduct_dmgInc` (+80% ATK; self in Maid: Cleaner +350% ATK per stack, up to 2 stacks, on Cleaner Stellar-Conduct hits), plus the once-per-combat 150% Cleaning Decree Will to Purge line.
+  C6 party 15% is **Elevated** (CHS 擢升). A4 ATK SPD 20% is a text value (not in params).
 - Anastasya: toggles Blessing (Love/Honor), To the New World active, Radiance (Stellar-Conduct / Stellar Swirl),
   Accolades (normal / Anastasya Sealed / teammates Sealed; assumes a 4-member party).
   Accolades units: normal 1; Ana sealed → others 1⅓ (C1: ×3 = 4), Ana 0 (C1: 1); Honor → Ana 4, others 0 (C1: 1);
   C4 ×1.3. Matches community notes (16/16/16/0, C1 48/48/48/12).
   Burst Stellar hits are Stellar-Conduct by default, Stellar Swirl in Radiance: Stellar Swirl; skill Crown 2nd
   instance / Honor NA last instance are Stellar only while in Radiance.
-  A4: `stellarswirl_mult_` +15% — engine hook in `libs/gi/wr/src/reaction/stellar.ts` makes it scale the Stellar
+  A4: `stellarswirl_mult_` +10% — engine hook in `libs/gi/wr/src/reaction/stellar.ts` makes it scale the Stellar
   Swirl reaction (incl. vortices) as well as direct Stellar Swirl hits. A4 Stellar-Conduct part (extra Polestar
   stacks) is left to the existing Polestar stack setting (note shown in the sheet).
   Not modelled: Sealing timers/meters, 8s Accolades linger, C6 "possesses everyone's Accolades" for the C6 Doom hit.

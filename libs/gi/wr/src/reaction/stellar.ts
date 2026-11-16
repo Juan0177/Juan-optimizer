@@ -42,7 +42,7 @@ function stellarDmgMultiplier(
   base: 'reaction' | MainStatKey | SubstatKey,
   variant: StellarReactionKey
 ) {
-  // Stellar Swirl's base reaction multiplier can be increased (e.g. Anastasya A4: +15%).
+  // Stellar Swirl's base reaction multiplier can be increased (e.g. Anastasya A4: +10%).
   // `stellarswirl_mult_` is 0 unless a sheet sets it, so other reactions are unaffected.
   if (base === 'reaction')
     return variant === 'stellarswirl'

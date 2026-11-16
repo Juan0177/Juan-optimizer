@@ -1,7 +1,9 @@
 import { objKeyMap, range } from '@genshin-optimizer/common/util'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
+import type { NumNode } from '@genshin-optimizer/gi/wr'
 import {
+  compareEq,
   constant,
   equal,
   equalStr,
@@ -108,9 +110,11 @@ const dm = {
     battleInc: skillParam_gen.constellation1[3],
   },
   constellation2: {
-    stacks: skillParam_gen.constellation2[0],
+    decreeMult: skillParam_gen.constellation2[0], // Cleaning Decree Will to Purge: 150% DMG
+    stacks: skillParam_gen.constellation2[1],
     allyAtkMult: skillParam_gen.constellation2[2],
-    selfAtkMult: skillParam_gen.constellation2[3],
+    selfMaxStacks: skillParam_gen.constellation2[3],
+    selfAtkMult: skillParam_gen.constellation2[4],
   },
   constellation6: {
     stellarconduct_specialDmg_: skillParam_gen.constellation6[0],
@@ -141,7 +145,7 @@ const [condRadiancePath, condRadiance] = cond(key, 'a0StellarRadianceSc')
 const radianceOn = equal(condRadiance, 'on', 1)
 const [condC2ToastPath, condC2Toast] = cond(key, 'c2Toast')
 const [condC2SelfToastPath, condC2SelfToast] = cond(key, 'c2SelfToast')
-const c2SelfToastArr = range(1, 7)
+const c2SelfToastArr = range(1, dm.constellation2.selfMaxStacks)
 
 const inDefense = equal(condMaid, 'defense', 1)
 const inBattle = equal(condMaid, 'battle', 1)
@@ -241,7 +245,8 @@ const burstBattle_onField_dmg_ = infoMut(
   { path: 'stellarconduct_dmg_' }
 )
 
-// C2 "Toast": party Stellar-Conduct DMG +100% of Danica's ATK per stack consumed
+// C2 "Toast" (10 stacks per member when the Anchor is summoned): party Stellar-Conduct DMG
+// +80% of Danica's ATK per stack consumed
 const c2Toast_dmgIncDisp = greaterEq(
   input.constellation,
   2,
@@ -252,7 +257,7 @@ const c2Toast_dmgIncDisp = greaterEq(
   ),
   { path: 'stellarconduct_dmgInc', isTeamBuff: true }
 )
-// C2: Battle Maid, Danica consumes all her stacks (150% ATK each) on her Stellar-Conduct hit
+// C2: Battle Maid, Danica consumes up to 2 of her stacks (350% ATK each) on her Stellar-Conduct hit
 const c2SelfToast_dmgInc = greaterEq(
   input.constellation,
   2,
@@ -269,8 +274,23 @@ const c2SelfToast_dmgInc = greaterEq(
   ),
   { path: 'stellarconduct_dmgInc' }
 )
+const c2SelfToastOn = equal(
+  inBattle,
+  1,
+  lookup(
+    condC2SelfToast,
+    objKeyMap(c2SelfToastArr, () => constant(1)),
+    naught
+  )
+)
+const c2Toast_dmgInc = compareEq(
+  target.charKey,
+  key,
+  equal(c2SelfToastOn, 0, c2Toast_dmgIncDisp),
+  c2Toast_dmgIncDisp
+)
 
-// C6: Anchor -> party Stellar-Conduct DMG Elevated (擢升) 20%
+// C6: Anchor -> party Stellar-Conduct DMG Elevated (擢升) 15%
 const c6_stellarconduct_specialDmg_ = greaterEq(
   input.constellation,
   6,
@@ -340,14 +360,16 @@ const c6Battle_critDMG_ = greaterEq(
 const scTalent = (
   lvlMultiplier: number[],
   talentType: 'skill' | 'burst',
-  additional = {}
+  additional = {},
+  specialMultiplier?: NumNode
 ) =>
   stellarDmgNode(
     subscript(input.total[`${talentType}Index`], lvlMultiplier, { unit: '%' }),
     'atk',
     'stellarconduct',
     'electro',
-    additional
+    additional,
+    specialMultiplier
   )
 
 const onFieldAddl = {
@@ -379,6 +401,18 @@ const dmgFormulas = {
     ),
     entryDmg: scTalent(dm.skill.entryDmg, 'skill'),
     onFieldDmg: scTalent(dm.skill.onFieldDmg, 'skill', onFieldAddl),
+    // C2: once per combat, the Will to Purge cast with Cleaning Decree (hold Normal Attack within
+    // 6s of the combat-entry Will to Protect) deals 150% of its original DMG
+    decreeDmg: greaterEq(
+      input.constellation,
+      2,
+      scTalent(
+        dm.skill.onFieldDmg,
+        'skill',
+        onFieldAddl,
+        constant(dm.constellation2.decreeMult)
+      )
+    ),
     shield: shieldNodeTalent(
       'atk',
       dm.skill.shieldAtk_,
@@ -392,10 +426,22 @@ const dmgFormulas = {
   },
   burst: {
     hit1Dmg: dmgNode('atk', dm.burst.hit1Dmg, 'burst'),
-    hit1ScDmg: equal(radianceOn, 1, scTalent(dm.burst.hit1ScDmg, 'burst')),
+    hit1ScDmg: equal(
+      radianceOn,
+      1,
+      scTalent(dm.burst.hit1ScDmg, 'burst', {
+        premod: { stellarconduct_dmgInc: c2SelfToast_dmgInc },
+      })
+    ),
     hit234Dmg: dmgNode('atk', dm.burst.hit234Dmg, 'burst'),
     hit5Dmg: dmgNode('atk', dm.burst.hit5Dmg, 'burst'),
-    hit5ScDmg: equal(radianceOn, 1, scTalent(dm.burst.hit5ScDmg, 'burst')),
+    hit5ScDmg: equal(
+      radianceOn,
+      1,
+      scTalent(dm.burst.hit5ScDmg, 'burst', {
+        premod: { stellarconduct_dmgInc: c2SelfToast_dmgInc },
+      })
+    ),
   },
   passive3: {
     a0_stellarconduct_baseDmg_,
@@ -417,7 +463,7 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
       electro_enemyRes_: a1_electro_enemyRes_,
       cryo_enemyRes_: a1_cryo_enemyRes_,
       stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
-      stellarconduct_dmgInc: c2Toast_dmgIncDisp,
+      stellarconduct_dmgInc: c2Toast_dmgInc,
       stellarconduct_specialDmg_: c6_stellarconduct_specialDmg_,
       stellarconduct_dmg_: c6Defense_dmg_,
     },
@@ -704,6 +750,15 @@ const sheet: TalentSheet = {
   passive: ct.talentTem('passive'),
   constellation1: ct.talentTem('constellation1'),
   constellation2: ct.talentTem('constellation2', [
+    {
+      fields: [
+        {
+          node: infoMut(dmgFormulas.skill.decreeDmg, {
+            name: ct.ch('c2DecreeDmg'),
+          }),
+        },
+      ],
+    },
     ct.condTem('constellation2', {
       path: condC2ToastPath,
       value: condC2Toast,
