@@ -454,6 +454,18 @@ export interface KitModel {
     state: any,
     action: RotationAction
   ) => number
+  /**
+   * Why an action had to wait, when the kit can say more than "waited for its cooldown" (no side
+   * effects; asked once, at the frame it started waiting): a note for the player
+   */
+  waitNote?: (
+    state: any,
+    action: RotationAction,
+    /** The frame the action started waiting */
+    now: number,
+    /** Whether the member's same kind of action comes earlier in this written rotation */
+    again: boolean
+  ) => string | undefined
   /** Evaluate impact-dependent conditions before capturing the damage context. */
   onBeforeHit?: (ctx: SimContext, state: any, hit: SimHit) => void
   /** Called for every hit that lands (anyone's), in time order: for triggered mechanics */

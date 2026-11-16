@@ -126,6 +126,8 @@ export interface SimulationResult {
    * shows here
    */
   stalls?: Record<string, number>
+  /** The same waits one by one: what waited, from which frame, for how long */
+  stallSpans?: { label: string; t: number; frames: number }[]
   /** Each member's actions' own frame data (before `frameData` edits), by `actionFrameKey` */
   actionData?: Partial<
     Record<
@@ -1261,10 +1263,23 @@ export function simulateRotation({
         t: waitStart,
         frames: now - waitStart,
       })
-      if (r === Math.min(1, repeats - 1))
+      if (r === Math.min(1, repeats - 1)) {
         notes.add(
           `Waited ${((now - waitStart) / FPS).toFixed(1)} s for ${characterKey}'s ${action.text}.`
         )
+        const why = kit.waitNote?.(
+          states.get(characterKey),
+          action,
+          waitStart,
+          list
+            .slice(0, i)
+            .some(
+              (x) =>
+                x.characterKey === characterKey && x.action.kind === action.kind
+            )
+        )
+        if (why) notes.add(why)
+      }
     }
     const actCtx = ctxAt(now, characterKey)
     // a mode or stance's version of the action has its own frame data and edits
@@ -1544,6 +1559,7 @@ export function simulateRotation({
         out[w.label] = (out[w.label] ?? 0) + w.frames
         return out
       }, {}),
+    stallSpans: stalled.filter((w) => w.t >= start && w.t < end),
     actionData,
   }
 }
@@ -1581,12 +1597,33 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
   }
   const starts = sim.rotationStarts
   if (!starts || starts.length < 2) return sim
-  const from = starts[starts.length - 1]
-  const end = sim.start + sim.frames
+  let from = starts[starts.length - 1]
+  let end = sim.start + sim.frames
+  // A rotation that starts by waiting for a cooldown left from the one before (Odette EE alone):
+  // shown from its first action, the wait at its end. (The one before it, played the same, from
+  // its first action to the last one's.)
+  const firstAt = (a: number, b: number) =>
+    Math.min(
+      ...[...sim.actions, ...(sim.waits ?? [])]
+        .filter((x) => x.index === 0 && x.start >= a && x.start < b)
+        .map((x) => x.start)
+    )
+  const prev = starts[starts.length - 2]
+  const lastFirst = firstAt(from, end)
+  const prevFirst = firstAt(prev, from)
+  if (
+    Number.isFinite(lastFirst) &&
+    Number.isFinite(prevFirst) &&
+    sim.stallSpans?.some((w) => w.t >= from && w.t < lastFirst)
+  ) {
+    from = prevFirst
+    end = lastFirst
+  }
+  const within = (t: number) => t >= from && t < end
   const index = new Map<number, number>()
   const hits: SimHit[] = []
   sim.hits.forEach((h, i) => {
-    if (h.t < from) return
+    if (!within(h.t)) return
     index.set(i, hits.length)
     hits.push(h)
   })
@@ -1600,7 +1637,7 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
     .filter((b) => b.hits.size)
   const auras = sim.auras && [
     { t: from, auras: sim.auras.filter((a) => a.t <= from).pop()?.auras ?? {} },
-    ...sim.auras.filter((a) => a.t > from),
+    ...sim.auras.filter((a) => a.t > from && a.t < end),
   ]
   return {
     ...sim,
@@ -1610,10 +1647,11 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
     frames: end - from,
     rotationStarts: [from],
     countedBuffs,
-    actions: sim.actions.filter((a) => a.start >= from),
-    waits: sim.waits?.filter((a) => a.start >= from),
-    skillUses: sim.skillUses?.filter((u) => u.t >= from),
-    swaps: sim.swaps?.filter((w) => w.start >= from),
+    actions: sim.actions.filter((a) => within(a.start)),
+    waits: sim.waits?.filter((a) => within(a.start)),
+    skillUses: sim.skillUses?.filter((u) => within(u.t)),
+    swaps: sim.swaps?.filter((w) => within(w.start)),
+    stallSpans: sim.stallSpans?.filter((w) => within(w.t)),
     stalls: Object.fromEntries(
       Object.entries(sim.stalls ?? {}).map(([label, frames]) => [
         label,
