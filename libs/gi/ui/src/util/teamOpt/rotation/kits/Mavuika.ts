@@ -112,9 +112,14 @@ interface MavuikaState {
   spirit: number
   /** Flamestrider form (otherwise Ring) */
   bike: boolean
-  /** The burst's buff is from burstStart to burstEnd (it ends early on a swap) */
+  /**
+   * The burst's buff is from burstStart to burstEnd (it ends early on a swap). Its end is unknown
+   * (MAX_SAFE_INTEGER) until her own clock reaches it: gcsim's Crucible status is a hitlag one
+   */
   burstStart: number
   burstEnd: number
+  /** Only the latest burst's buff ends on its clock */
+  burstToken: number
   /** The Fighting Spirit the burst spent: its buff's state */
   chargeToken: number
   burstStacks: number
@@ -283,15 +288,19 @@ const burstState = (stacks: number) =>
  * with the form, and a window can't be cut once pushed: each is on for the hit's frame only.
  */
 function hitAt(ctx: SimContext, s: MavuikaState, delay: number, hit: MavHit) {
-  const t = ctx.now + delay
-  if (t >= s.burstStart && t < s.burstEnd)
-    ctx.buff(
-      'Mavuika',
-      ['Mavuika', 'burstSpirit'],
-      burstState(s.burstStacks),
-      delay,
-      1
-    )
+  // (the burst's buff as the hit lands, as gcsim reads it then: its end follows her own clock)
+  const crucible = (c: SimContext) => {
+    if (inBurst(s, c.now))
+      c.buff(
+        'Mavuika',
+        ['Mavuika', 'burstSpirit'],
+        burstState(s.burstStacks),
+        0,
+        1
+      )
+  }
+  if (delay <= 0) crucible(ctx)
+  else ctx.at(delay, crucible)
   // C2 in the blessing, Flamestrider form: her own hits deal more (+200 base ATK); in Ring form
   // the base ATK comes with the Ring's shred state (c2Update)
   if (ctx.constellation('Mavuika') >= 2 && s.bike && s.blessing)
@@ -395,6 +404,7 @@ export const kit: KitModel = {
     bike: false,
     burstStart: -1,
     burstEnd: -1,
+    burstToken: 0,
     burstStacks: 0,
     chargeToken: 0,
     ringSrc: -1,
@@ -617,7 +627,15 @@ export const kit: KitModel = {
         s.burstStacks = s.spirit
         s.spirit = 0
         s.burstStart = ctx.now + BURST_BUFF_START
-        s.burstEnd = s.burstStart + BURST_BUFF
+        // (gcsim's Crucible status is a hitlag one: 7 s of her own clock, which her hitlag pauses,
+        // so its end is set when her clock gets there)
+        s.burstEnd = Number.MAX_SAFE_INTEGER
+        const crucible = ++s.burstToken
+        ctx.atCharacter('Mavuika', BURST_BUFF_START + BURST_BUFF, (c) => {
+          if (s.burstToken !== crucible) return
+          settle(s, c.now, c.constellation('Mavuika'))
+          s.burstEnd = Math.min(s.burstEnd, c.now)
+        })
         // A4 buffs the active party member for 20 seconds, independently of the
         // seven-second Crucible window that adds flat damage to Mavuika's attacks.
         // (states, so a burst within 20 s of the last one replaces its buff instead of overlapping)

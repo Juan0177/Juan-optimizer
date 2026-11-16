@@ -266,6 +266,11 @@ export function gearEffects({
     for (const weapon of LEAF_WEAPONS)
       if (holds(k, weapon)) window(k, [weapon, 'passive'], 'on', 0, 0)
   // Frostbreath: declared off, on only from the wielder's own Cryo- or Hydro-related reactions
+  // A Thousand Blazing Suns: its Nightsoul boost declared off, on for the wielder's hits in
+  // Nightsoul's Blessing
+  for (const k of members)
+    if (holds(k, 'AThousandBlazingSuns'))
+      window(k, ['AThousandBlazingSuns', 'nightsoul'], 'on', 0, 0)
   for (const k of members)
     if (holds(k, 'Frostbreath')) window(k, ['Frostbreath', 'react'], 'on', 0, 0)
   // Heretic's Molten Blade: declared off, on only after the wielder's Skill while on the field
@@ -596,6 +601,16 @@ export function gearEffects({
         shieldCreated(ctx, hit)
         return
       }
+      // A Thousand Blazing Suns (gcsim): Scorching Brilliance's ATK and CRIT DMG x1.75 while the
+      // wielder is in Nightsoul's Blessing, as each of its hits lands
+      if (
+        holds(k, 'AThousandBlazingSuns') &&
+        !hit.path[0].startsWith('_') &&
+        inNightsoul(k, t)
+      )
+        ctx.buff(k, ['AThousandBlazingSuns', 'nightsoul'], 'on', 0, 1, {
+          recipient: k,
+        })
       // (a Normal Attack performed: a Starspark)
       // (a Starspark per Normal Attack performed: in onAction, not from its hits)
       if (
