@@ -69,7 +69,12 @@ export function GeneralAutocomplete<T extends string>({
       autoHighlight
       options={options}
       value={value ?? null}
-      onChange={(_event, newValue, _reason) => onChange(newValue?.key ?? null)}
+      onChange={(_event, newValue, reason) => {
+        // juanlab: svuotare il testo serve a cercare, non a scegliere. Prima il valore null diventava la prima
+        // opzione della lista (es. il set "A Day Carved From Rising Winds", o "Inventory" per il personaggio)
+        if (reason === 'clear') return
+        onChange(newValue?.key ?? null)
+      }}
       isOptionEqualToValue={(option, value) => option.key === value?.key}
       renderInput={(params) => {
         const variant = value?.color
