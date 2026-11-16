@@ -3,6 +3,7 @@ import type { WeaponKey } from '@genshin-optimizer/gi/consts'
 import {
   equal,
   inferInfoMut,
+  infoMut,
   input,
   subscript,
   sum,
@@ -29,21 +30,24 @@ const atk_ = equal(
 )
 
 const [condMeasurePath, condMeasure] = cond(key, 'measure')
-const measure_stellarconduct_dmg_ = sum(
-  equal(
-    condMeasure,
-    'on',
-    subscript(input.weapon.refinement, stellar_dmg_arr, { unit: '%' })
-  ),
-  equal(
-    condMeasure,
-    'enhanced',
-    subscript(
-      input.weapon.refinement,
-      stellar_dmg_arr.map((v, i) => v + enhancedStellar_dmg_arr[i]),
-      { unit: '%' }
+const measure_stellarconduct_dmg_ = infoMut(
+  sum(
+    equal(
+      condMeasure,
+      'on',
+      subscript(input.weapon.refinement, stellar_dmg_arr, { unit: '%' })
+    ),
+    equal(
+      condMeasure,
+      'enhanced',
+      subscript(
+        input.weapon.refinement,
+        stellar_dmg_arr.map((v, i) => v + enhancedStellar_dmg_arr[i]),
+        { unit: '%' }
+      )
     )
-  )
+  ),
+  { path: 'stellarconduct_dmg_', isTeamBuff: true }
 )
 const measure_stellarconduct_dmg_active = equal(
   input.activeCharKey,
