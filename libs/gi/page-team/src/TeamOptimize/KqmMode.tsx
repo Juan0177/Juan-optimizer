@@ -31,6 +31,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CloseIcon from '@mui/icons-material/Close'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
@@ -1633,6 +1634,83 @@ function KqmThreads() {
   )
 }
 
+/**
+ * Above preliminary results: they are the run's best so far, not final (with its progress), and
+ * once its result replaces them, a moment, that they are final. Its own component: the progress
+ * redraws it, not the results.
+ */
+function KqmPreliminary({ teamId, final }: { teamId: string; final: boolean }) {
+  const { t } = useTranslation('page_team')
+  const step = useKqmProgress(teamId)
+  const percent = Math.round((step?.progress ?? 0) * 100)
+  const tone = final ? 'success.main' : tokens.gold
+  return (
+    <Box
+      role="status"
+      aria-live="polite"
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        mb: 2,
+        px: 1.5,
+        py: 1,
+        borderRadius: tokens.radius.inset,
+        border: '1px solid',
+        borderColor: final
+          ? (theme) => alpha(theme.palette.success.main, 0.4)
+          : alpha(tokens.gold, 0.45),
+        bgcolor: final
+          ? (theme) => alpha(theme.palette.success.main, 0.08)
+          : alpha(tokens.gold, 0.08),
+      }}
+    >
+      {final ? (
+        <CheckCircleOutlineIcon sx={{ fontSize: 18, color: tone }} />
+      ) : (
+        <CircularProgress size={14} thickness={5} sx={{ color: tone }} />
+      )}
+      <Typography sx={{ ...type.body, fontWeight: 600, color: tone }}>
+        {final
+          ? t('teamOpt.kqm.finalBuilds', 'Final builds')
+          : t('teamOpt.kqm.preliminary', 'Preliminary builds')}
+      </Typography>
+      {!final && (
+        <>
+          <Typography sx={type.label}>
+            {t('teamOpt.kqm.stillImproving', 'still improving')}
+          </Typography>
+          <InfoTooltipInline
+            title={t(
+              'teamOpt.kqm.preliminaryTip',
+              'The best builds found so far. The run is still trying better weapons, sets and teammates’ builds: the figures, builds and rankings here can still change, and update when it finds better ones.'
+            )}
+          />
+          <Typography sx={{ ...type.label, ...numSx, ml: 'auto' }}>
+            {percent}%
+          </Typography>
+          <LinearProgress
+            aria-hidden
+            variant="determinate"
+            value={percent}
+            sx={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: 2,
+              bgcolor: 'transparent',
+              '& .MuiLinearProgress-bar': { bgcolor: tokens.gold },
+            }}
+          />
+        </>
+      )}
+    </Box>
+  )
+}
+
 export function KqmResults({
   teamId,
   runSettings,
@@ -1710,6 +1788,17 @@ export function KqmResults({
   const unit = rotationTime
     ? t('teamOpt.kqm.dpsUnit', 'DPS')
     : t('teamOpt.kqm.dmgUnit', 'DMG')
+  // the run's result replacing its preliminary builds: said for a moment
+  const [finished, setFinished] = useState(false)
+  const wasImproving = useRef(improving)
+  useEffect(() => {
+    const was = wasImproving.current
+    wasImproving.current = improving
+    if (!was || improving) return
+    setFinished(true)
+    const id = setTimeout(() => setFinished(false), 4000)
+    return () => clearTimeout(id)
+  }, [improving])
   return (
     <Box
       id={`kqm-results-${teamId}`}
@@ -1719,6 +1808,10 @@ export function KqmResults({
         containerType: 'inline-size',
       }}
     >
+      {/* while the run improves on them: these are not final; then, a moment, that they are */}
+      {(improving || finished) && (
+        <KqmPreliminary teamId={teamId} final={!improving} />
+      )}
       {/* the team's result, and what to do with it */}
       <Box
         sx={{
@@ -1748,34 +1841,14 @@ export function KqmResults({
               {formatRateFull(view.after.total, rotationTime)}
             </Typography>
             <Typography sx={type.label}>
-              {rotationTime
-                ? t('teamOpt.kqm.teamDps', 'team DPS')
-                : t('teamOpt.kqm.teamDmg', 'team DMG')}
+              {improving
+                ? rotationTime
+                  ? t('teamOpt.kqm.teamDpsSoFar', 'team DPS so far')
+                  : t('teamOpt.kqm.teamDmgSoFar', 'team DMG so far')
+                : rotationTime
+                  ? t('teamOpt.kqm.teamDps', 'team DPS')
+                  : t('teamOpt.kqm.teamDmg', 'team DMG')}
             </Typography>
-            {improving && (
-              <Tooltip
-                arrow
-                title={t(
-                  'teamOpt.kqm.improvingTip',
-                  'The best builds so far. The run is still looking for better ones: these update when it finds them.'
-                )}
-              >
-                <Typography
-                  sx={{
-                    ...type.label,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.75,
-                    alignSelf: 'center',
-                    color: 'text.secondary',
-                    cursor: 'help',
-                  }}
-                >
-                  <CircularProgress size={10} thickness={6} color="inherit" />
-                  {t('teamOpt.kqm.improving', 'Improving')}
-                </Typography>
-              </Tooltip>
-            )}
             {comparing && (
               <Tooltip
                 arrow
