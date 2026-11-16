@@ -54,6 +54,26 @@ it('advances Windborne levels using Sword Essence and ends Armed after three max
   ).toBe('4')
 })
 
+it('summons Wind Pinions only in Armed for Action', () => {
+  const pinions = (text: string) =>
+    run(text).hits.filter((h) => h.label === 'Wind Pinion').length
+  expect(pinions('Vesna N1 CA W1')).toBe(0)
+  expect(pinions('Vesna E N1 CA W1')).toBe(2)
+})
+
+it('keeps a Burst’s Sword Essence for her next Skill, and caps Sword Essence at 3', () => {
+  const lv3 = (text: string) =>
+    run(text).hits.filter(
+      (h) => h.label === 'Windborne Blade Lv. 3 Spirit Blade Final'
+    ).length
+  // Q (+1) then E (+2): Lv. 1, 2 and 3 with no normal attacks in between
+  const opener = run('Vesna Q E E E E W1')
+  expect(opener.notes.some((n) => n.includes('Waited'))).toBe(false)
+  expect(lv3('Vesna Q E E E E W1')).toBe(1)
+  // E (2) + two N6 (1.5 each) is 3 at most: Lv. 1, 2 and one Lv. 3
+  expect(lv3('Vesna E N6 N6 E E E E W1')).toBe(1)
+})
+
 it('keeps normal hits on world time while hitlag pauses animation and character tasks', () => {
   const sim = run('Vesna E N3 W1')
   const third = sim.hits.filter((h) => h.label === 'Normal 3')
