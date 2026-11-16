@@ -44,6 +44,10 @@ export const kqmStandardDetail = (t: TFunction, rolls: number) =>
     cap: kqmPieceCap(rolls),
   })
 
+/** A team's artifact standard: its distributed rolls (KQMS: 20) */
+export const kqmStandardRolls = (kqm: Pick<TeamOptKqm, 'rolls'> | undefined) =>
+  kqmRollBudget(kqm?.rolls)
+
 /** Whether a team's KQM settings use KQM Standards' artifacts */
 export const isKqmStandard = (kqm: Pick<TeamOptKqm, 'rolls'> | undefined) =>
   kqmRollBudget(kqm?.rolls) === KQM_ROLLS

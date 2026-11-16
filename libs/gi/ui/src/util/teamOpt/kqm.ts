@@ -45,6 +45,7 @@ import {
   KqmSearchCancelled,
   kqmProblem,
   kqmRarity,
+  kqmRollBudget,
   kqmRollCaps,
   kqmStatValues,
   queueKqmSetTasks,
@@ -309,8 +310,11 @@ const kqmMainValues = () =>
     ),
   })
 /** KQMS for a build's artifact rarities (see `kqmRarity`): its substat scale and its rolls */
-export const kqmBuildRarity = (build: Pick<KqmBuild, 'sets'>) =>
-  kqmRarity(build.sets, kqmMainValues())
+export const kqmBuildRarity = (
+  build: Pick<KqmBuild, 'sets'>,
+  /** The artifact standard's distributed rolls (`TeamOptKqm.rolls`; KQMS: 20) */
+  rolls?: number
+) => kqmRarity(build.sets, kqmMainValues(), kqmRollBudget(rolls))
 
 /** A build's artifact stats, as the solver reads them (`dyn`: fractions for % stats) */
 export function kqmValues(
@@ -370,8 +374,8 @@ export function kqmArtifactStats(
 
 /**
  * Greedy damage-equivalent estimate, re-evaluated for each added roll and a fractional last roll.
- * It adds up to 20 hypothetical rolls beyond KQMS while respecting the per-stat placement caps.
- * The build, equipment, main stats, teammates and ER constraints remain fixed.
+ * It adds up to 20 hypothetical rolls beyond the artifact standard while respecting its per-stat
+ * placement caps. The build, equipment, main stats, teammates and ER constraints remain fixed.
  */
 export function estimateKqmCatchUp(
   build: KqmBuild,
@@ -379,11 +383,13 @@ export function estimateKqmCatchUp(
   evaluate: (values: Record<string, number>) => {
     total: number
     valid: boolean
-  }
+  },
+  /** The artifact standard's distributed rolls (KQMS: 20), for its caps */
+  budget = KQM_ROLLS
 ): KqmCatchUp {
   const values = kqmValues(build)
   const rolls: KqmRolls = {}
-  const caps = kqmRollCaps(build.mains)
+  const caps = kqmRollCaps(build.mains, budget)
   // (a roll is worth what this build's rolls are: less with 4★ pieces)
   const { subScale } = kqmBuildRarity(build)
   const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * subScale
@@ -725,9 +731,10 @@ const better = betterScore
 
 let problemCount = 0
 /** A built problem, compiled here and given its id (it goes to the search workers) */
-function compile(built: KqmBuiltProblem): Problem {
+function compile(built: KqmBuiltProblem, rolls: number): Problem {
   const { paths, ...rest } = built
-  const spec: KqmProblemSpec = { id: `kqm${++problemCount}`, ...rest }
+  // (the artifact standard's distributed rolls go with the spec to the search workers)
+  const spec: KqmProblemSpec = { id: `kqm${++problemCount}`, ...rest, rolls }
   return { ...kqmProblem(spec), spec, paths }
 }
 
@@ -1202,6 +1209,8 @@ async function runKqm({
 }): Promise<KqmResult | undefined> {
   const tick = ticker(isCancelled)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+  /** The artifact standard's distributed rolls (KQMS: 20) */
+  const rollBudget = kqmRollBudget(kqm.rolls)
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
   // The rotation the builds are for: as played for them (`replay`), else the team's attacks. A
@@ -1546,7 +1555,7 @@ async function runKqm({
       onField: teamOpt.onField,
       bonusStats,
     })
-    const problem = built.then((b) => b && compile(b))
+    const problem = built.then((b) => b && compile(b, rollBudget))
     // (one that failed is built again when asked for again; a wait that was cancelled is no error)
     problem.catch(() => {
       if (problemCache.get(cacheKey) === problem) problemCache.delete(cacheKey)
@@ -1700,7 +1709,11 @@ async function runKqm({
     const evalPick = (sets: KqmSets, mains: KqmMains) =>
       scoreOf(
         problem,
-        kqmValues({ sets, mains, rolls: cappedRolls(current.rolls, mains) })
+        kqmValues({
+          sets,
+          mains,
+          rolls: cappedRolls(current.rolls, mains, rollBudget),
+        })
       )
     const combos = setsList ?? setCombos(problem, space, current)
     // sets screened with the current main stats and rolls
@@ -2161,10 +2174,15 @@ async function runKqm({
             ...current.team,
           })
           if (!own) continue
-          current.behind = estimateKqmCatchUp(current, best.total, (values) => {
-            const score = scoreOf(own, values)
-            return { total: score.total, valid: meetsAsChosen(score) }
-          })
+          current.behind = estimateKqmCatchUp(
+            current,
+            best.total,
+            (values) => {
+              const score = scoreOf(own, values)
+              return { total: score.total, valid: meetsAsChosen(score) }
+            },
+            rollBudget
+          )
         }
         return options
       }
