@@ -8,7 +8,7 @@ import { Health } from './health'
 import { kitFramesInto, kitModels } from './kits/index'
 import { NORMAL_START_DELAYS } from './normalDelays'
 import type { ParsedRotation, RotationAction } from './parse'
-import { rotationRandom } from './random'
+import { rotationRandom, stratifiedRandoms } from './random'
 import {
   type AuraTrace,
   elementalReactions,
@@ -281,6 +281,60 @@ export function simulateRotation({
   }
   const hits: SimHit[] = []
   const windows: SimBuffWindow[] = []
+  /**
+   * The attack-speed windows among them: every context reads its attack speed from these, and a
+   * context is made each frame for every Natlan member (the Nightsoul poll), so scanning all the
+   * windows each time was most of a rotation's play
+   */
+  const speedWindows: SimBuffWindow[] = []
+  const addWindow = (w: SimBuffWindow) => {
+    windows.push(w)
+    if (w.path[1] === '_attackSpeed' || w.path[1] === '_selfAttackSpeed')
+      speedWindows.push(w)
+  }
+  /**
+   * Obsidian Codex's 4-piece window (6 s) for an on-field member who consumed Nightsoul points at
+   * frame `t`. A draining blessing consumes every frame, so a window still running is extended
+   * (the same frames covered) instead of one more window each frame, thousands a rotation
+   */
+  const codexWindows = new Map<CharacterKey, SimBuffWindow>()
+  const codexConsumed = (member: CharacterKey, t: number) => {
+    const last = codexWindows.get(member)
+    if (last && last.start <= t && t <= last.end) {
+      last.end = Math.max(last.end, t + 360)
+      return
+    }
+    const next = {
+      owner: member,
+      path: ['ObsidianCodex', '4NightsoulConsume'],
+      value: 'on',
+      start: t,
+      end: t + 360,
+    }
+    codexWindows.set(member, next)
+    addWindow(next)
+  }
+  /** A state that lasts until changed (`SimContext.state`), from frame `t` */
+  const setState = (
+    t: number,
+    owner: SimBuffOwner,
+    path: string[],
+    value: string
+  ) => {
+    const key = `${owner}.${path.join('.')}`
+    const previous = liveStates.get(key)
+    if (previous?.value === value) return
+    if (previous) previous.end = t
+    const next = {
+      owner,
+      path,
+      value,
+      start: t,
+      end: Number.MAX_SAFE_INTEGER,
+    }
+    liveStates.set(key, next)
+    addWindow(next)
+  }
   const liveStates = new Map<string, SimBuffWindow>()
   const characterTasks = new Set<{ member: CharacterKey; end: number }>()
   /** The enemy's task queue (atEnemy) and the end of its current hitlag freeze */
@@ -367,9 +421,26 @@ export function simulateRotation({
     rotation.opener?.[0]?.characterKey ??
     rotation.steps[0]?.characterKey ??
     members[0]
+  /**
+   * The context of a kit's `nightsoul` (its points and blessing) and `onNightsoulConsume`. Those
+   * read the frame and constellations, and the Nightsoul poll calls them for every Natlan member on
+   * every frame, so the full context (its hundred functions) is made only if a hook reads more
+   */
+  const nightsoulCtx = (t: number, actor: CharacterKey): SimContext => {
+    let full: SimContext | undefined
+    const constellation = (ck: CharacterKey) => constellations[ck] ?? 0
+    return new Proxy({} as SimContext, {
+      get: (_, key) =>
+        key === 'now'
+          ? t
+          : key === 'constellation'
+            ? constellation
+            : Reflect.get((full ??= ctxAt(t, actor)), key),
+    })
+  }
   /** Whether a member is in their own Nightsoul's Blessing (their kit's state, else its windows) */
   const inNightsoulAt = (k: CharacterKey, t: number): boolean =>
-    kits[k]?.nightsoul?.(ctxAt(t, k), states.get(k)).active ??
+    kits[k]?.nightsoul?.(nightsoulCtx(t, k), states.get(k)).active ??
     windows.some(
       (w) =>
         w.owner === k &&
@@ -385,7 +456,7 @@ export function simulateRotation({
     onField,
     cooldown: (k, key, t) => cooldowns.readyAt(`${k}.${key}`, t) - t,
     window: (owner, path, value, start, end) =>
-      windows.push({ owner, path, value, start, end }),
+      addWindow({ owner, path, value, start, end }),
     reduceCooldown: (k, key, frames, t) => {
       cooldowns.reduce(`${k}.${key}`, t, frames)
     },
@@ -551,7 +622,7 @@ export function simulateRotation({
       return first
     },
     target,
-    attackSpeed: windows
+    attackSpeed: speedWindows
       .filter(
         (w) =>
           (w.path[1] === '_attackSpeed' ||
@@ -605,7 +676,7 @@ export function simulateRotation({
       return members.reduce(
         (total, m) =>
           total +
-          (kits[m]?.nightsoul?.(ctxAt(t, m), states.get(m)).points ?? 0),
+          (kits[m]?.nightsoul?.(nightsoulCtx(t, m), states.get(m)).points ?? 0),
         0
       )
     },
@@ -658,7 +729,7 @@ export function simulateRotation({
     buff(owner, path, value, delay, duration, options) {
       const start = t + Math.max(0, delay)
       const opts = typeof options === 'number' ? { max: options } : options
-      windows.push({
+      addWindow({
         owner,
         path,
         value,
@@ -667,21 +738,7 @@ export function simulateRotation({
         ...opts,
       })
     },
-    state(owner, path, value) {
-      const key = `${owner}.${path.join('.')}`
-      const previous = liveStates.get(key)
-      if (previous?.value === value) return
-      if (previous) previous.end = t
-      const next = {
-        owner,
-        path,
-        value,
-        start: t,
-        end: Number.MAX_SAFE_INTEGER,
-      }
-      liveStates.set(key, next)
-      windows.push(next)
-    },
+    state: (owner, path, value) => setState(t, owner, path, value),
     infuse(element, delay, duration, recipient) {
       const start = t + Math.max(0, delay)
       infusions.push({
@@ -783,14 +840,7 @@ export function simulateRotation({
         member,
         (reportedConsumption.get(member) ?? 0) + amount
       )
-      if (member === onField)
-        ctxAt(t, member).buff(
-          member,
-          ['ObsidianCodex', '4NightsoulConsume'],
-          'on',
-          0,
-          360
-        )
+      if (member === onField) codexConsumed(member, t)
       for (const recipient of members)
         kits[recipient]?.onNightsoulConsume?.(
           ctxAt(t, recipient),
@@ -1060,8 +1110,7 @@ export function simulateRotation({
     for (const m of members) {
       const kit = kits[m]
       if (!kit?.nightsoul) continue
-      const ctx = ctxAt(frame, m)
-      const next = kit.nightsoul(ctx, states.get(m))
+      const next = kit.nightsoul(nightsoulCtx(frame, m), states.get(m))
       const previous = previousNightsoul.get(m)
       if (
         previous?.active &&
@@ -1072,17 +1121,18 @@ export function simulateRotation({
           0,
           previous.points - next.points - (reportedConsumption.get(m) ?? 0)
         )
-        if (amount > 0 && m === onField)
-          ctx.buff(m, ['ObsidianCodex', '4NightsoulConsume'], 'on', 0, 360)
+        // (a draining blessing consumes points every frame: its hooks get a light context)
+        if (amount > 0 && m === onField) codexConsumed(m, frame)
         for (const recipient of amount > 0 ? members : [])
           kits[recipient]?.onNightsoulConsume?.(
-            ctxAt(frame, recipient),
+            nightsoulCtx(frame, recipient),
             states.get(recipient),
             m,
             amount
           )
       }
-      ctx.state(
+      setState(
+        frame,
         m,
         ['ObsidianCodex', '2NightsoulBlessing'],
         next.active && m === onField ? 'on' : ''
@@ -1354,7 +1404,7 @@ export function simulateRotation({
           now < w.end
         )
           w.end = now
-      windows.push({
+      addWindow({
         owner: characterKey,
         path: [characterKey, 'moonsignAfterSkillBurst'],
         value: 'on',
@@ -1661,12 +1711,30 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
   }
 }
 
+/**
+ * The samples a team's rotation is played with: the most any member's kit needs
+ * (`KitModel.sampled`: true is 64, a number its own), at most `requested`. A sample is a whole
+ * play of the rotation, so a kit whose randomness is small (Citlali's 30-frame delay) asks for few.
+ */
+export function rotationSamples(
+  members: readonly CharacterKey[],
+  kits: Partial<Record<CharacterKey, KitModel>> = kitModels,
+  requested?: number
+) {
+  const need = Math.max(
+    1,
+    ...members.map((m) => {
+      const sampled = kits[m]?.sampled
+      return sampled === true ? 64 : typeof sampled === 'number' ? sampled : 1
+    })
+  )
+  return requested === undefined ? need : Math.max(1, Math.min(requested, need))
+}
+
 /** Sample whole timelines so random extra hits retain their own aura and buff history. */
 export function simulateRotationSamples(
   options: Parameters<typeof simulateRotation>[0],
-  count = options.members.some((m) => (options.kits ?? kitModels)[m]?.sampled)
-    ? 64
-    : 1,
+  count = rotationSamples(options.members, options.kits ?? kitModels),
   seed = 0x4b514d
 ): SimulationResult {
   if (!Number.isInteger(count) || count < 1 || count > 1024)
@@ -1676,12 +1744,10 @@ export function simulateRotationSamples(
     throw new Error(
       'Sampled rotations require independent reaction and random state'
     )
-  const samples = Array.from({ length: count }, (_, i) => ({
+  const randoms = stratifiedRandoms(count, seed)
+  const samples = randoms.map((random) => ({
     probability: 1 / count,
-    result: simulateRotation({
-      ...options,
-      random: rotationRandom(seed + Math.imul(i, 0x9e3779b9)),
-    }),
+    result: simulateRotation({ ...options, random }),
   }))
   const unique = (key: 'notes' | 'warnings') => [
     ...new Set(samples.flatMap(({ result }) => result[key])),
