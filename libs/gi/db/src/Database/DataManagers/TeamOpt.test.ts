@@ -176,6 +176,28 @@ describe('team.teamOpt (Team Optimize settings)', () => {
       expect(kqm(bad)?.refinementBp).toBeUndefined()
     expect(kqm(9)?.refinement4).toBe(5)
   })
+  it('keeps the refinements ticked per weapon group (two or more, R1 to R5), and the 4★ standard wish one', () => {
+    const kqm = (extra: Record<string, unknown>) =>
+      validateTeamOpt({ kqm: { refinement5: 1, refinement4: 5, ...extra } })
+        ?.kqm
+    expect(
+      kqm({ compareRefinements: { wish4: [5, 1, 1], bp: [1, 5] } })
+        ?.compareRefinements
+    ).toEqual({ wish4: [1, 5], bp: [1, 5] })
+    // (one alone is no comparison; unknown groups and refinements out of range are dropped)
+    expect(
+      kqm({ compareRefinements: { wish4: [5], nope: [1, 5] } })
+        ?.compareRefinements
+    ).toBeUndefined()
+    expect(
+      kqm({ compareRefinements: { wish4: [0, 6] } })?.compareRefinements
+    ).toBeUndefined()
+    expect(
+      kqm({ compareRefinements: 'R1' })?.compareRefinements
+    ).toBeUndefined()
+    expect(kqm({ refinementStandard4: 1 })?.refinementStandard4).toBe(1)
+    expect(kqm({ refinementStandard4: 7 })?.refinementStandard4).toBeUndefined()
+  })
   it('drops rotation times that are not durations', () => {
     for (const rotationTime of [-3, 0, 'x', Number.NaN, 9999])
       expect(validateTeamOpt({ rotationTime })?.rotationTime).toBeUndefined()
