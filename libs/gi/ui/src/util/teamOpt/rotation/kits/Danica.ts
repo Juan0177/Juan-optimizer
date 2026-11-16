@@ -58,6 +58,11 @@ const anchorNormals = normals
 const ON_FIELD_HITMARK = 42
 const ON_FIELD_FRAMES = 60
 const ANCHOR_DURATION = 1500
+/** Entry Skill E2 (Will to Protect) cooldown: 16 s */
+const ENTRY_CD = 960
+/** C2 Toast: 10 stacks per member; Danica consumes up to 2 of hers in Battle Maid */
+const TOAST_STACKS = 10
+const TOAST_SELF_MAX = 2
 
 type Maid = '' | 'defense' | 'battle'
 interface State {
@@ -76,9 +81,8 @@ interface State {
   comboNext: number
   /** Burst enhancement of the current Maid Form */
   enhanced: boolean
-  /** C2 Toast stacks per member, and the party's consumed count towards a bonus stack */
+  /** C2 Toast stacks per member */
   toast: Partial<Record<CharacterKey, number>>
-  toastConsumed: number
 }
 const hit = (
   c: SimContext,
@@ -117,11 +121,9 @@ function anchor(c: SimContext, s: State, duration: number) {
   const id = ++s.anchorId
   s.anchorEnd = c.now + duration
   set(c, 'anchor', 'on')
-  // C2: (re)summoning or refreshing the Anchor resets everyone's Toast to 7 stacks.
-  if (c.constellation('Danica') >= 2) {
-    s.toast = Object.fromEntries(c.members.map((m) => [m, 7]))
-    s.toastConsumed = 0
-  }
+  // C2: (re)summoning or refreshing the Anchor resets everyone's Toast to 10 stacks.
+  if (c.constellation('Danica') >= 2)
+    s.toast = Object.fromEntries(c.members.map((m) => [m, TOAST_STACKS]))
   const tick = (c: SimContext) => {
     if (id !== s.anchorId) return
     radiance(c)
@@ -238,10 +240,13 @@ export const kit: KitModel = {
     comboNext: 0,
     enhanced: false,
     toast: {},
-    toastConsumed: 0,
   }),
   onStart(c) {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
+    if (c.constellation('Danica') >= 2)
+      c.note(
+        'Danica C2: the combat-entry Will to Protect and the Cleaning Decree Will to Purge (hold Normal Attack, 150% DMG, once per combat) are not modelled; Toast stacks are.'
+      )
     if (c.constellation('Danica') >= 4)
       c.note(
         'Danica C4: energy regeneration and the Battle Maid shield are not modelled (neither is in the reference).'
@@ -319,7 +324,7 @@ export const kit: KitModel = {
             syncMaid(end, s)
           })
         })
-        return { frames: 100, cooldown: { key: 'burst', frames: 900 } }
+        return { frames: 100, cooldown: { key: 'burst', frames: 1080 } }
       case 'normal':
         if (ctx.now < s.anchorEnd)
           return anchorString(ctx, s, action.count ?? 1)
@@ -352,8 +357,8 @@ export const kit: KitModel = {
   onHit(ctx, s: State, h) {
     if (h.path[0].startsWith('_')) return
     // C2 Toast: each Stellar-Conduct DMG instance a member deals consumes one of their stacks
-    // (+100% of Danica's ATK); every 6 consumed gives the active member one more. In Battle Maid
-    // Danica's own Stellar-Conduct DMG consumes all of hers (+150% ATK each).
+    // (+80% of Danica's ATK). In Battle Maid Danica's own Stellar-Conduct DMG consumes up to 2 of
+    // hers (+350% ATK each).
     if (
       ctx.constellation('Danica') >= 2 &&
       h.tag === 'directStellarConduct' &&
@@ -361,7 +366,7 @@ export const kit: KitModel = {
     ) {
       const stacks = s.toast[h.characterKey] ?? 0
       const self = h.characterKey === 'Danica' && s.maid === 'battle'
-      const used = self ? stacks : Math.min(1, stacks)
+      const used = Math.min(self ? TOAST_SELF_MAX : 1, stacks)
       h.states = [
         ...(h.states ?? []),
         {
@@ -375,14 +380,7 @@ export const kit: KitModel = {
           value: used && self ? String(used) : '',
         },
       ]
-      if (used) {
-        s.toast[h.characterKey] = stacks - used
-        s.toastConsumed += used
-        while (s.toastConsumed >= 6) {
-          s.toastConsumed -= 6
-          s.toast[ctx.onField] = (s.toast[ctx.onField] ?? 0) + 1
-        }
-      }
+      if (used) s.toast[h.characterKey] = stacks - used
     }
     if (
       ctx.now >= s.anchorEnd ||
@@ -417,7 +415,7 @@ export const kit: KitModel = {
     )
       return
     s.excite = 0
-    s.entryReady = ctx.now + 840
+    s.entryReady = ctx.now + ENTRY_CD
     // Entry Skill E2: Defense Maid and a refreshed Anchor (which ends any previous Maid Form).
     anchor(ctx, s, ANCHOR_DURATION)
     s.maid = 'defense'

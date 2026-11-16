@@ -175,7 +175,7 @@ function sealTick(c: SimContext, s: State, id: number) {
   sealPoints(c, s, 1)
   c.at(12, (c2) => sealTick(c2, s, id))
 }
-/** The other members' (Honor) Sealing ends: Doom becomes available; C6 effects are removed. */
+/** The other members' (Honor) Sealing ends: Doom becomes available; C6 Honor's tap-E trigger is removed. */
 function othersSealPoints(c: SimContext, s: State, points: number) {
   if (!s.othersSealed) return
   s.othersSealPoints = Math.max(0, s.othersSealPoints - points)
@@ -184,9 +184,7 @@ function othersSealPoints(c: SimContext, s: State, points: number) {
   s.othersShareUntil = c.now + 480
   s.doomStage = 1
   s.doomUntil = c.now + DOOM_WINDOW
-  s.c6LoveEnd = Math.min(s.c6LoveEnd, c.now)
-  s.c6HonorEnd = Math.min(s.c6HonorEnd, c.now)
-  s.c6LoveArmed = s.c6HonorArmed = false
+  s.c6HonorArmed = false
   sync(c, s)
   syncAt(c, s, s.othersShareUntil)
 }
@@ -447,7 +445,7 @@ export const kit: KitModel = {
           }
         }
         // C6 Honor: the next tapped Skill also deals an effect equal to Doom's third attack at
-        // 200%; with nobody Sealed she counts as holding every member's Accolades for it.
+        // 250%; with nobody Sealed she counts as holding every member's Accolades for it.
         if (s.c6HonorArmed && ctx.now < s.c6HonorEnd) {
           s.c6HonorArmed = false
           const accolades = s.othersSealed ? 'on' : 'honorSeal'
@@ -504,7 +502,7 @@ export const kit: KitModel = {
           })
           return {
             frames: BURST_FRAMES,
-            cooldown: { key: 'burst', frames: 900 },
+            cooldown: { key: 'burst', frames: 1080 },
           }
         }
         ctx.at(105, (c) => {
@@ -521,7 +519,7 @@ export const kit: KitModel = {
           sync(c, s)
           c.at(LOVE_DURATION, (c2) => sync(c2, s))
         })
-        return { frames: 109, cooldown: { key: 'burst', frames: 900 } }
+        return { frames: 109, cooldown: { key: 'burst', frames: 1080 } }
       case 'dash':
         return { frames: 21, framesInto: { jump: 2 } }
       case 'jump':
@@ -548,7 +546,7 @@ export const kit: KitModel = {
       ctx.warn(
         `Anastasya: ${to} is Sealed by The Evernight Yields to Dawn and could not be switched in yet.`
       )
-    // C6 Love: the next switch to another member triggers Triumph at 250%.
+    // C6 Love: the next switch to another member triggers Triumph at 200%.
     if (s.c6LoveArmed && ctx.now < s.c6LoveEnd) {
       s.c6LoveArmed = false
       ctx.at(28, (c2) => {

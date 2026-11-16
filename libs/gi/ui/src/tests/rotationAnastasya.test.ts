@@ -1,6 +1,11 @@
+import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { ArtCharDatabase, type LoadoutDatum } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
+import { input } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
+import { getTeamDataWith } from '../'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import {
   rotationAttacks,
@@ -94,7 +99,7 @@ describe('Anastasya', () => {
     expect(windowAt(sim, 'c2LoveWindow', 1900)).toBe('off')
   })
 
-  it('C6 Love triggers a 250% Triumph on the next switch to another member', () => {
+  it('C6 Love triggers a 200% Triumph on the next switch to another member', () => {
     const sim = run('Anastasya E -> Bennett E', ['Anastasya', 'Bennett'], {
       Anastasya: 6,
     })
@@ -120,5 +125,101 @@ describe('Anastasya', () => {
       path: ['Anastasya', 'accolades'],
       value: 'honorSeal',
     })
+  })
+
+  it('uses 18 s Burst CD in both Blessings and clears only the Honor tap-E trigger when others unseal at C6', () => {
+    for (const rot of ['Anastasya E Q Q', 'Anastasya hE Q Q']) {
+      const sim = run(rot, ['Anastasya'])
+      const qs = sim.actions.filter(
+        (a) => a.characterKey === 'Anastasya' && a.text === 'Q'
+      )
+      expect(qs[1].start - qs[0].start).toBeGreaterThanOrEqual(1080)
+    }
+
+    const c6 = run('Anastasya hE Q N5 N5 N5 N5 E E E E', ['Anastasya'], {
+      Anastasya: 6,
+    })
+    const doom3 = c6.hits.find((h) => h.path.join('.') === 'burst.doom2Sc')!
+    // 20% C6 Honor Elevation window stays active after others unseal (only tap-E C6 Doom is removed)
+    expect(windowAt(c6, 'c6HonorWindow', doom3.t)).toBe('on')
+    expect(c6.hits.some((h) => h.label.startsWith('Doom 3-Hit (C6)'))).toBe(
+      false
+    )
+  })
+
+  it('sheet reflects 7.2.52 CRIT DMG ascension, A4 10% Swirl coeff, C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
+    const db = new ArtCharDatabase(1, new SandboxStorage({}))
+    db.chars.set('Anastasya', {
+      key: 'Anastasya',
+      level: 90,
+      ascension: 6,
+      talent: { auto: 9, skill: 9, burst: 9 },
+      constellation: 6,
+    })
+    db.weapons.new({
+      key: 'HuntersBow',
+      level: 90,
+      ascension: 6,
+      refinement: 1,
+      location: 'Anastasya',
+      lock: false,
+    })
+    const loveId = db.teamChars.new('Anastasya', {
+      conditional: {
+        Anastasya: {
+          blessing: 'love',
+          a0StellarRadianceSc: 'on',
+        },
+      },
+    })
+    const loveTeamId = db.teams.new({
+      loadoutData: [{ teamCharId: loveId }] as LoadoutDatum[],
+    })
+    const loveAna = uiDataForTeam(
+      getTeamDataWith(db, loveTeamId, {})! as never,
+      'F',
+      'Anastasya'
+    ).Anastasya!.target
+    expect(loveAna.getDisplay()['basic']['critDMG_'].value).toBeCloseTo(
+      0.884,
+      5
+    )
+    expect(loveAna.getDisplay()['basic']['critRate_'].value).toBeCloseTo(
+      0.05,
+      5
+    )
+    expect(loveAna.get(input.total.stellarswirl_mult_).value).toBeCloseTo(
+      0.1,
+      6
+    )
+    expect(loveAna.get(input.total.stellarconduct_critDMG_).value).toBeCloseTo(
+      0.5,
+      6
+    )
+    expect(
+      loveAna.getDisplay()['constellation6']['triumphSc'].value /
+        loveAna.getDisplay()['burst']['triumphSc'].value
+    ).toBeCloseTo(2.0, 5)
+
+    const honorId = db.teamChars.new('Anastasya', {
+      conditional: {
+        Anastasya: {
+          blessing: 'honor',
+          a0StellarRadianceSc: 'on',
+        },
+      },
+    })
+    const honorTeamId = db.teams.new({
+      loadoutData: [{ teamCharId: honorId }] as LoadoutDatum[],
+    })
+    const honorAna = uiDataForTeam(
+      getTeamDataWith(db, honorTeamId, {})! as never,
+      'F',
+      'Anastasya'
+    ).Anastasya!.target
+    expect(
+      honorAna.getDisplay()['constellation6']['doom3Sc'].value /
+        honorAna.getDisplay()['burst']['doom2Sc'].value
+    ).toBeCloseTo(2.5, 5)
   })
 })

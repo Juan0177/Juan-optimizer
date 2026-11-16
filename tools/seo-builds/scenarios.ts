@@ -45,8 +45,8 @@ export const scenarios: Scenario[] = [
   {
     charKey: 'Danica',
     label:
-      'Battle Maid on-field, in Radiance: Stellar-Conduct, after her Elemental Burst',
-    target: 'On-Field Skill E2 damage (Stellar-Conduct)',
+      'Maid: Cleaner on-field, in Radiance: Stellar-Conduct, after her Elemental Burst',
+    target: 'Will to Purge damage (Stellar-Conduct)',
     targets: [['skill', 'onFieldDmg']],
     conditional: {
       Danica: {
