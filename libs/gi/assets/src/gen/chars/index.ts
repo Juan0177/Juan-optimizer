@@ -5,6 +5,7 @@ import Alhaitham from './Alhaitham'
 import Aloy from './Aloy'
 import Alyosha from './Alyosha'
 import Amber from './Amber'
+import Anastasya from './Anastasya'
 import AratakiItto from './AratakiItto'
 import Arlecchino from './Arlecchino'
 import Baizhu from './Baizhu'
@@ -23,6 +24,7 @@ import Collei from './Collei'
 import Columbina from './Columbina'
 import Cyno from './Cyno'
 import Dahlia from './Dahlia'
+import Danica from './Danica'
 import Dehya from './Dehya'
 import Diluc from './Diluc'
 import Diona from './Diona'
@@ -139,6 +141,7 @@ const data = {
   Aloy,
   Alyosha,
   Amber,
+  Anastasya,
   AratakiItto,
   Arlecchino,
   Baizhu,
@@ -157,6 +160,7 @@ const data = {
   Columbina,
   Cyno,
   Dahlia,
+  Danica,
   Dehya,
   Diluc,
   Diona,

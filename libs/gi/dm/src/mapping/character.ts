@@ -192,7 +192,9 @@ export const characterIdMap: Record<
   10000137: 'Valeriy',
   10000140: 'Vodyanitsa',
   10000143: 'Vesna',
+  10000147: 'Danica', // juanlab-beta 7.3
   10000148: 'Alyosha',
+  10000149: 'Anastasya', // juanlab-beta 7.3
   10000150: 'Odette',
   // 11000008: "TEMPLATE",
   // 11000009: "TEMPLATE",

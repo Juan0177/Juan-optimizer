@@ -1,0 +1,24 @@
+{
+  "name": "Torrents of Spring",
+  "description": {
+    "0": "A colossal sword as weighty as a ship's anchor. Legend has it that it once belonged to the founder of Port Belovodye."
+  },
+  "passiveName": "Wavebreaking Thunder",
+  "passiveDescription": {
+    "0": {
+      "0": "The equipping character's ATK is increased by <cryo>16%</cryo>, and they gain \"Attendant's Measure\" for <cryo>15s</cryo>: When their Electro attacks hit opponents, the Stellar-Conduct reaction DMG dealt by your active character is increased by <cryo>20%</cryo>. While this effect is active, hits from the equipping character's attacks that are considered to deal Stellar-Conduct reaction DMG enhance the effect, granting the equipping character an additional <cryo>16%</cryo> ATK and your active character an additional <cryo>20%</cryo> Stellar-Conduct reaction DMG. These effects can be triggered even when the equipping character is off-field."
+    },
+    "1": {
+      "0": "The equipping character's ATK is increased by <cryo>20%</cryo>, and they gain \"Attendant's Measure\" for <cryo>15s</cryo>: When their Electro attacks hit opponents, the Stellar-Conduct reaction DMG dealt by your active character is increased by <cryo>25%</cryo>. While this effect is active, hits from the equipping character's attacks that are considered to deal Stellar-Conduct reaction DMG enhance the effect, granting the equipping character an additional <cryo>20%</cryo> ATK and your active character an additional <cryo>25%</cryo> Stellar-Conduct reaction DMG. These effects can be triggered even when the equipping character is off-field."
+    },
+    "2": {
+      "0": "The equipping character's ATK is increased by <cryo>24%</cryo>, and they gain \"Attendant's Measure\" for <cryo>15s</cryo>: When their Electro attacks hit opponents, the Stellar-Conduct reaction DMG dealt by your active character is increased by <cryo>30%</cryo>. While this effect is active, hits from the equipping character's attacks that are considered to deal Stellar-Conduct reaction DMG enhance the effect, granting the equipping character an additional <cryo>24%</cryo> ATK and your active character an additional <cryo>30%</cryo> Stellar-Conduct reaction DMG. These effects can be triggered even when the equipping character is off-field."
+    },
+    "3": {
+      "0": "The equipping character's ATK is increased by <cryo>28%</cryo>, and they gain \"Attendant's Measure\" for <cryo>15s</cryo>: When their Electro attacks hit opponents, the Stellar-Conduct reaction DMG dealt by your active character is increased by <cryo>35%</cryo>. While this effect is active, hits from the equipping character's attacks that are considered to deal Stellar-Conduct reaction DMG enhance the effect, granting the equipping character an additional <cryo>28%</cryo> ATK and your active character an additional <cryo>35%</cryo> Stellar-Conduct reaction DMG. These effects can be triggered even when the equipping character is off-field."
+    },
+    "4": {
+      "0": "The equipping character's ATK is increased by <cryo>32%</cryo>, and they gain \"Attendant's Measure\" for <cryo>15s</cryo>: When their Electro attacks hit opponents, the Stellar-Conduct reaction DMG dealt by your active character is increased by <cryo>40%</cryo>. While this effect is active, hits from the equipping character's attacks that are considered to deal Stellar-Conduct reaction DMG enhance the effect, granting the equipping character an additional <cryo>32%</cryo> ATK and your active character an additional <cryo>40%</cryo> Stellar-Conduct reaction DMG. These effects can be triggered even when the equipping character is off-field."
+    }
+  }
+}

@@ -17,6 +17,8 @@ export const allArtifactSetKeys = [
   'DisenchantmentInDeepShadow',
   'EchoesOfAnOffering',
   'EmblemOfSeveredFate',
+  'EmpyreanSojourn', // juanlab-beta 7.3
+  'EpochalAdvent', // juanlab-beta 7.3
   'FinaleOfTheDeepGalleries',
   'FlowerOfParadiseLost',
   'FragmentOfHarmonicWhimsy',

@@ -15,6 +15,8 @@ import DesertPavilionChronicle from './DesertPavilionChronicle'
 import DisenchantmentInDeepShadow from './DisenchantmentInDeepShadow'
 import EchoesOfAnOffering from './EchoesOfAnOffering'
 import EmblemOfSeveredFate from './EmblemOfSeveredFate'
+import EmpyreanSojourn from './EmpyreanSojourn'
+import EpochalAdvent from './EpochalAdvent'
 import FinaleOfTheDeepGalleries from './FinaleOfTheDeepGalleries'
 import FlowerOfParadiseLost from './FlowerOfParadiseLost'
 import FragmentOfHarmonicWhimsy from './FragmentOfHarmonicWhimsy'
@@ -80,6 +82,8 @@ const data = {
   DisenchantmentInDeepShadow,
   EchoesOfAnOffering,
   EmblemOfSeveredFate,
+  EmpyreanSojourn,
+  EpochalAdvent,
   FinaleOfTheDeepGalleries,
   FlowerOfParadiseLost,
   FragmentOfHarmonicWhimsy,

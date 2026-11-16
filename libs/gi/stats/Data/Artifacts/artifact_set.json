@@ -1052,5 +1052,39 @@
       "flower",
       "sands"
     ]
+  },
+  "EpochalAdvent": {
+    "setNum": [
+      2,
+      4
+    ],
+    "rarities": [
+      4,
+      5
+    ],
+    "slots": [
+      "goblet",
+      "plume",
+      "circlet",
+      "flower",
+      "sands"
+    ]
+  },
+  "EmpyreanSojourn": {
+    "setNum": [
+      2,
+      4
+    ],
+    "rarities": [
+      4,
+      5
+    ],
+    "slots": [
+      "goblet",
+      "plume",
+      "circlet",
+      "flower",
+      "sands"
+    ]
   }
 }

@@ -1,0 +1,12 @@
+{
+  "anchorCond": "Storm Anchor present (opponents nearby)",
+  "formCond": "Attendant Form",
+  "royalGuard": "Maid: Royal Guard",
+  "cleaner": "Maid: Cleaner",
+  "purge_dmg_": "Will to Purge DMG Bonus",
+  "a4StacksCond": "Will to Purge stacks",
+  "c2ToastCond": "Consuming a stack of Let Us Toast",
+  "c2Cleaner": "Danica in Maid: Cleaner form: Stellar-Conduct DMG Increase",
+  "purgeCritRate_": "Will to Purge CRIT Rate",
+  "purgeCritDMG_": "Will to Purge CRIT DMG"
+}

@@ -80,6 +80,7 @@ export const allWeaponClaymoreKeys = [
   'BeaconOfTheReedSea',
   'BlackcliffSlasher',
   'BladeOfAtonement',
+  'BlazingLionfang', // juanlab-beta 7.3
   'BloodtaintedGreatsword',
   'DebateClub',
   'EarthShaker',
@@ -113,6 +114,7 @@ export const allWeaponClaymoreKeys = [
   'TheBell',
   'TheUnforged',
   'TidalShadow',
+  'TorrentsOfSpring', // juanlab-beta 7.3
   'UltimateOverlordsMegaMagicSword',
   'Verdict',
   'WasterGreatsword',
@@ -209,6 +211,7 @@ export const allWeaponBowKeys = [
   'SeasonedHuntersBow',
   'SequenceOfSolitude',
   'SharpshootersOath',
+  'Silverdawn', // juanlab-beta 7.3
   'SilvershowerHeartstrings',
   'SkywardHarp',
   'Slingshot',
