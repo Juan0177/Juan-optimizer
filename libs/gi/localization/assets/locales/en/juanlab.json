@@ -1,6 +1,6 @@
 {
   "import": {
-    "title": "Import from showcase (UID)",
+    "title": "Import from UID",
     "uidLabel": "Player UID",
     "load": "Load",
     "hint": "Imports the characters in the in-game showcase (with details visible), with their equipped weapons and artifacts. Data from <enka>Enka.network</enka>.",
@@ -22,6 +22,23 @@
       "500": "Enka.network error: try again later.",
       "503": "Enka.network is not responding: try again later.",
       "other": "Error {{status}} from Enka.network."
+    },
+    "sourceLabel": "Where to import from",
+    "sourceEnka": "Enka · current showcase",
+    "sourceAkasha": "Akasha · every saved build",
+    "hintAkasha": "Imports every build saved on <akasha>Akasha</akasha> (also of characters no longer in the showcase), several per character: each becomes a Genshin Optimizer build (weapon and 5 artifacts) in the character's build menu, on the Teams page. The “current” build, or the latest, stays equipped.",
+    "akashaProgress": "Reading artifacts from Akasha: {{done}} of {{total}} builds…",
+    "akashaEmpty": "Akasha has no builds for this UID: open the profile on akasha.cv to create and refresh it, then try again.",
+    "akashaOf": "Akasha builds of UID {{uid}}",
+    "akashaLoaded_one": "{{count}} character with {{builds}} builds. Check the preview below and confirm the import.",
+    "akashaLoaded_other": "{{count}} characters with {{builds}} builds. Check the preview below and confirm the import.",
+    "akashaNetwork": "Cannot read from Akasha: check the connection and try again.",
+    "akashaErrors": {
+      "400": "The JuanLab Worker does not know Akasha yet: update it with the new worker.js (tools/enka-proxy).",
+      "404": "Akasha does not know this UID: open the profile on akasha.cv to create it, then try again.",
+      "429": "Too many requests to Akasha: wait a minute and try again.",
+      "502": "Akasha did not answer with data (maybe its bot check): try again later.",
+      "other": "Error {{status}} from Akasha."
     }
   },
   "home": {
@@ -33,7 +50,9 @@
     "creditsTitle": "Credits",
     "credits1": "Juan-optimizer is a copy of <go>Genshin Optimizer</go> by <frzyc>frzyc</frzyc> and all its <contrib>contributors</contrib>, released under the <mit>MIT</mit> license. Calculations, data and interface are their work: the original site is <site>frzyc.github.io/genshin-optimizer</site>.",
     "credits2": "Player showcases from <enka>Enka.network</enka>. This copy is by <juanlab>JuanLab</juanlab> (<code>source code</code>) and is not affiliated with the original project.",
-    "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse."
+    "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse.",
+    "importButtonAkasha": "Load the Akasha builds",
+    "importHintAkasha": "Loads every build saved on Akasha, several per character, into the current database. Before saving you see a preview of what changes."
   },
   "gcweb": {
     "title": "Link to gc-web",

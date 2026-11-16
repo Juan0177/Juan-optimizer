@@ -8,6 +8,8 @@ import {
   fetchAvatarStore,
   GCWEB_PARAM,
   getGcwebSettings,
+  getImportSource,
+  ImportSourceToggle,
   isAccountLink,
   isUid,
   payloadToGood,
@@ -64,6 +66,7 @@ export function ImportUidCard() {
   const index = Math.max(0, databases.indexOf(database))
   const [uid, setUid] = useState('')
   const [open, setOpen] = useState('')
+  const [source, setSource] = useState(getImportSource)
   const clean = uid.replace(/\D/g, '')
   return (
     <CardThemed>
@@ -73,6 +76,9 @@ export function ImportUidCard() {
       />
       <Divider />
       <CardContent>
+        <Box sx={{ mb: 1 }}>
+          <ImportSourceToggle value={source} onChange={setSource} />
+        </Box>
         <Box
           component="form"
           onSubmit={(e) => {
@@ -98,11 +104,15 @@ export function ImportUidCard() {
             startIcon={<CloudDownload />}
             sx={{ alignSelf: 'flex-start', height: 40 }}
           >
-            {t('home.importButton')}
+            {t(
+              source === 'akasha'
+                ? 'home.importButtonAkasha'
+                : 'home.importButton'
+            )}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {t('home.importHint')}
+          {t(source === 'akasha' ? 'home.importHintAkasha' : 'home.importHint')}
         </Typography>
       </CardContent>
       {open && (
