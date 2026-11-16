@@ -95,6 +95,7 @@ export const nonTravelerCharacterKeys = [
   'Aloy',
   'Alyosha',
   'Amber',
+  'Anastasya', // juanlab-beta 7.3
   'AratakiItto',
   'Arlecchino',
   'Baizhu',
@@ -113,6 +114,7 @@ export const nonTravelerCharacterKeys = [
   'Columbina',
   'Cyno',
   'Dahlia',
+  'Danica', // juanlab-beta 7.3
   'Dehya',
   'Diluc',
   'Diona',

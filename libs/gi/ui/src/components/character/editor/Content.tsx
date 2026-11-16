@@ -24,6 +24,7 @@ import { useCallback, useContext, useMemo } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { BuildEditContext, DataContext, SillyContext } from '../../../context'
+import { BetaNotice } from '../../../juanlab/beta' // juanlab-beta
 import { SendToGcwebButton } from '../../../juanlab/GcwebLink' // juanlab
 import { AddTeamInfo } from '../../AddTeamInfo'
 import { CharacterLevelSelect } from '../CharacterLevelSelect'
@@ -98,6 +99,7 @@ export function Content({ onClose }: { onClose?: () => void }) {
           </IconButton>
         )}
       </Box>
+      <BetaNotice characterKey={characterKey} />
       <Box>
         <Grid container spacing={1} sx={{ justifyContent: 'center' }}>
           <Grid

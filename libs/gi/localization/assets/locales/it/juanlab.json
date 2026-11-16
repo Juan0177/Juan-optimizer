@@ -72,5 +72,8 @@
     "accountLabel_other": "Personaggi di gc-web: {{name}} (UID {{uid}}), {{count}} personaggi",
     "accountSkipped_one": "{{count}} elemento non riconosciuto (personaggio, arma o manufatto, forse troppo nuovo per questa versione) è stato escluso.",
     "accountSkipped_other": "{{count}} elementi non riconosciuti (personaggi, armi o manufatti, forse troppo nuovi per questa versione) sono stati esclusi."
+  },
+  "beta": {
+    "notice": "Dati della beta {{label}} ({{source}}): numeri provvisori, possono cambiare prima dell'uscita. Icone dalla beta, cartoncino provvisorio."
   }
 }

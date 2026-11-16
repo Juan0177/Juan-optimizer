@@ -1,0 +1,264 @@
+{
+  "name": "Danica",
+  "title": "Winter Palace's Attendant Shadow",
+  "description": "???",
+  "constellationName": "",
+  "auto": {
+    "name": "Canon of Cleanliness",
+    "fields": {
+      "normal": {
+        "0": "<strong>Normal Attack</strong>",
+        "1": "Performs up to 4 consecutive strikes."
+      },
+      "charged": {
+        "0": "<strong>Charged Attack</strong>",
+        "1": "Drains Stamina over time to perform continuous slashes.",
+        "2": "At the end of the sequence, performs a more powerful slash."
+      },
+      "plunging": {
+        "0": "<strong>Plunging Attack</strong>",
+        "1": "Plunges from mid-air to strike the ground, damaging opponents along the path and dealing AoE DMG upon impact."
+      }
+    },
+    "skillParams": {
+      "0": "1-Hit DMG",
+      "1": "2-Hit DMG",
+      "2": "3-Hit DMG",
+      "3": "4-Hit DMG",
+      "4": "Charged Attack Cyclic DMG",
+      "5": "Charged Attack Final DMG",
+      "6": "Charged Attack Stamina Cost",
+      "7": "Max Duration",
+      "8": "Plunge DMG",
+      "9": "Low/High Plunge DMG",
+      "10": "",
+      "11": "",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    },
+    "skillParamsEncoding": {
+      "0": "{{0, percent(fixed: 1)}}%",
+      "1": "{{1, percent(fixed: 1)}}%",
+      "2": "{{2, percent(fixed: 1)}}%×2",
+      "3": "{{3, percent(fixed: 1)}}%",
+      "4": "{{4, percent(fixed: 1)}}%",
+      "5": "{{5, percent}}%",
+      "6": "{{6, fixed(fixed: 1)}}/s",
+      "7": "{{7, fixed(fixed: 1)}}s",
+      "8": "{{8, percent(fixed: 1)}}%",
+      "9": "{{9, percent}}%/{{10, percent}}%",
+      "10": "",
+      "11": "",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    }
+  },
+  "skill": {
+    "name": "Scouring Anchor",
+    "description": {
+      "0": "Swings her chain and anchor to deal <electro>AoE Electro DMG</electro> to nearby opponents and summon a <strong>Storm Anchor</strong>, an indispensable tool for any maid.",
+      "1": "The <strong>Storm Anchor</strong> follows your own active character and assists in combat in different ways depending on whether or not Danica is on the field. If Danica is:",
+      "2": [
+        "<strong>Off field</strong>: The <strong>Storm Anchor</strong> performs a coordinated attack that deals <electro>AoE Electro DMG</electro> when your active character's <electro>Electro</electro> or <cryo>Cryo</cryo> attacks hit an opponent. This effect can be triggered once every 1.5s;",
+        "<strong>On field</strong>: Danica uses the <strong>Storm Anchor</strong> for her Normal Attacks, dealing <electro>Electro DMG</electro> that cannot be overridden by any other elemental infusion. She cannot perform Charged or Plunging Attacks."
+      ],
+      "3": "<br/>",
+      "4": "Additionally, Danica can accumulate the special resource <strong>Will to Cleanse</strong> while the <strong>Storm Anchor</strong> is present. She gains this resource when another active character in your party hits an opponent with an <electro>Electro</electro> or <cryo>Cryo</cryo> attack, or when her own Normal Attacks using the <strong>Storm Anchor</strong> hit an opponent.",
+      "5": "Once <strong>Will to Cleanse</strong> reaches its maximum, Danica can consume all her <strong>Will to Cleanse</strong> to use a special Elemental Skill based on whether or not she is on the field. If Danica is:",
+      "6": [
+        "<strong>Off field</strong>: Switching to Danica unleashes the special Elemental Skill <strong>Will to Protect</strong>, creating a Royal Aegis and causing her to enter <strong>Maid: Royal Guard</strong> form;",
+        "<strong>On field</strong>: Danica can use the special Elemental Skill <strong>Will to Purge</strong> and enter <strong>Maid: Cleaner</strong> form."
+      ]
+    },
+    "skillParams": {
+      "0": "Skill DMG",
+      "1": "Will to Protect DMG",
+      "2": "Will to Purge DMG",
+      "3": "Storm Anchor Coordinated Attack DMG",
+      "4": "Shield DMG Absorption",
+      "5": "Storm Anchor Normal Attack 1-Hit Electro DMG",
+      "6": "Storm Anchor Normal Attack 2-Hit Electro DMG",
+      "7": "Storm Anchor Normal Attack 3-Hit Electro DMG",
+      "8": "Storm Anchor Normal Attack 4-Hit Electro DMG",
+      "9": "Storm Anchor Duration",
+      "10": "Will to Protect CD",
+      "11": "Skill CD",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    },
+    "skillParamsEncoding": {
+      "0": "{{0, percent(fixed: 1)}}%",
+      "1": "{{1, percent(fixed: 1)}}%",
+      "2": "{{2, percent(fixed: 1)}}%",
+      "3": "{{3, percent(fixed: 1)}}%",
+      "4": "{{4, percent(fixed: 1)}}% ATK+{{5, fixed(fixed: 1)}}",
+      "5": "{{6, percent(fixed: 1)}}%",
+      "6": "{{7, percent(fixed: 1)}}%",
+      "7": "{{8, percent(fixed: 1)}}%×2",
+      "8": "{{9, percent(fixed: 1)}}%",
+      "9": "{{10, fixed(fixed: 1)}}s",
+      "10": "{{11, fixed(fixed: 1)}}s",
+      "11": "{{12, fixed(fixed: 1)}}s",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    }
+  },
+  "burst": {
+    "name": "Rite to Cleanse the World",
+    "description": {
+      "0": "Takes command of the battlefield as befits the Tsaritsa's trusted retainer, unleashing 5 consecutive attacks that each deal <electro>AoE Electro DMG</electro>.",
+      "1": "<br/>",
+      "2": "<strong>Radiance: Stellar-Conduct</strong>:",
+      "3": [
+        "The first and fifth attacks deal additional <electro>AoE Electro DMG</electro> that is considered Stellar-Conduct reaction DMG;",
+        "For 20s after using her Elemental Burst, Danica also gains additional enhancements while in an <strong>Attendant Form</strong>, depending on the form she is in. If Danica is in:"
+      ],
+      "4": "<strong>Maid: Royal Guard</strong> form: Increases the ATK of all party members;",
+      "5": "<strong>Maid: Cleaner</strong> form: Fills Danica's <strong>Will to Cleanse</strong> to its maximum and increases the DMG dealt by the special Elemental Skill <strong>Will to Purge</strong>.",
+      "6": "The corresponding enhancements are removed when Danica leaves her <strong>Attendant Form</strong>."
+    },
+    "skillParams": {
+      "0": "1-Hit Electro DMG/Stellar-Conduct DMG",
+      "1": "2/3/4-Hit Electro DMG",
+      "2": "5-Hit Electro DMG/Stellar-Conduct DMG",
+      "3": "ATK Bonus Ratio",
+      "4": "Max ATK Bonus",
+      "5": "Will to Purge DMG Increase",
+      "6": "Buff Duration",
+      "7": "CD",
+      "8": "Energy Cost",
+      "9": "",
+      "10": "",
+      "11": "",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    },
+    "skillParamsEncoding": {
+      "0": "{{0, percent(fixed: 1)}}%/{{1, percent(fixed: 1)}}%",
+      "1": "{{2, percent(fixed: 1)}}%",
+      "2": "{{3, percent(fixed: 1)}}%/{{4, percent(fixed: 1)}}%",
+      "3": "{{5, percent(fixed: 1)}}%",
+      "4": "{{6, fixed(fixed: 1)}}",
+      "5": "{{7, percent(fixed: 1)}}%",
+      "6": "{{8, fixed(fixed: 1)}}s",
+      "7": "{{9, fixed(fixed: 1)}}s",
+      "8": "{{10}}",
+      "9": "",
+      "10": "",
+      "11": "",
+      "12": "",
+      "13": "",
+      "14": "",
+      "15": "",
+      "16": "",
+      "17": "",
+      "18": "",
+      "19": ""
+    }
+  },
+  "passive1": {
+    "name": "Hymn of Ancient Waves",
+    "description": {
+      "0": "The <strong>Storm Anchor</strong> also reduces nearby opponents' <electro>Electro RES</electro> by 15%.",
+      "1": "<strong>Radiance: Stellar-Conduct</strong>: Opponents near the <strong>Storm Anchor</strong> have their <electro>Electro RES</electro> reduced by an additional 15% and their <cryo>Cryo RES</cryo> reduced by 30%."
+    }
+  },
+  "passive2": {
+    "name": "Time to Clean House",
+    "description": {
+      "0": "After using <strong>Will to Purge</strong>, Danica gains 20% ATK SPD, and her Normal Attacks using the <strong>Storm Anchor</strong> grant her an additional 25 <strong>Will to Cleanse</strong> when they hit an opponent. The above effects can stack up to 3 times.",
+      "1": "Danica gains 20% ATK after using <strong>Will to Protect</strong>.",
+      "2": "Each of these effects lasts until its corresponding <strong>Attendant Form</strong> ends."
+    }
+  },
+  "passive3": {
+    "name": "Stellar Jubilee: Nothing Overlooked",
+    "description": {
+      "0": "When party members trigger Superconduct, it will be changed to Stellar-Conduct, and party members' Base Stellar-Conduct DMG will be increased based on Danica's ATK: Every 100 ATK she has increases the Base Stellar-Conduct DMG by 0.7%. The maximum increase that can be gained this way is 14%.",
+      "1": "Additionally, when Danica is within a <strong>Polestar Field</strong>, she will enter the <strong>Radiance: Stellar-Conduct</strong> state."
+    }
+  },
+  "passive": {
+    "name": "Unbothered by Frost and Snow",
+    "description": {
+      "0": "Increases your own party members' Movement SPD by 10% and reduces their Stamina consumption by 10% in extremely cold environments."
+    }
+  },
+  "constellation1": {
+    "name": "Service in the Frozen Palace",
+    "description": {
+      "0": "Danica regenerates 20 Elemental Energy when she uses the special Elemental Skill <strong>Will to Purge</strong> or <strong>Will to Protect</strong>. This effect can be triggered once every 14s.",
+      "1": "Additionally, using the Elemental Burst <strong>Rite to Cleanse the World</strong> increases the enhancements for <strong>Maid: Cleaner</strong> form by 120% and the enhancements for <strong>Maid: Royal Guard</strong> form by 80%."
+    }
+  },
+  "constellation2": {
+    "name": "Stillness Amid Searing Sands",
+    "description": {
+      "0": "Danica also grants 7 stacks of <strong>Let Us Toast</strong> to all nearby party members when she uses her Elemental Skill <strong>Scouring Anchor</strong>.",
+      "1": "Characters with this effect consume 1 stack of <strong>Let Us Toast</strong> when dealing Stellar-Conduct reaction DMG, increasing that DMG by an amount equal to 100% of Danica's ATK.",
+      "2": "Additionally, Danica consumes all her stacks of <strong>Let Us Toast</strong> when she deals Stellar-Conduct reaction DMG in <strong>Maid: Cleaner</strong> form, increasing that DMG by an amount equal to 150% of her ATK.",
+      "3": "Your own active character also gains 1 stack of <strong>Let Us Toast</strong> when nearby party members consume a combined total of 6 stacks of <strong>Let Us Toast</strong>. Using the Elemental Skill <strong>Scouring Anchor</strong> or the special Elemental Skill <strong>Will to Protect</strong> resets the number of <strong>Let Us Toast</strong> stacks held by all nearby party members."
+    }
+  },
+  "constellation3": {
+    "name": "Shadow in a Forest of Blades",
+    "description": {
+      "0": "Increases the Level of <strong>Rite to Cleanse the World</strong> by 3.",
+      "1": "Maximum upgrade level is 15."
+    }
+  },
+  "constellation4": {
+    "name": "Shield in the Bitter Cold",
+    "description": {
+      "0": "Other nearby party members regenerate 3 Elemental Energy when the active character protected by Royal Aegis deals Stellar-Conduct reaction DMG to an opponent. This effect can be triggered once every 3.5s.",
+      "1": "Danica also creates a Royal Aegis when she enters <strong>Maid: Cleaner</strong> form. This shield lasts until she leaves this form or leaves the field."
+    }
+  },
+  "constellation5": {
+    "name": "Mediation Amid Discord",
+    "description": {
+      "0": "Increases the Level of <strong>Scouring Anchor</strong> by 3.",
+      "1": "Maximum upgrade level is 15."
+    }
+  },
+  "constellation6": {
+    "name": "The Star That Wakes Ere Dawn Breaks",
+    "description": {
+      "0": "Nearby party members' Stellar-Conduct reaction DMG is <strong>elevated</strong> by 20% while the <strong>Storm Anchor</strong> is present.",
+      "1": "Additionally, Danica's <strong>Attendant Forms</strong> gain the following enhancements:",
+      "2": "<strong>Maid: Royal Guard</strong> form: Increases the Stellar-Conduct reaction DMG dealt by your active character by 10% for every 1000 ATK Danica has, up to a maximum increase of 40%;",
+      "3": "<strong>Maid: Cleaner</strong> form: Danica's special Elemental Skill <strong>Will to Purge</strong> gains 2.5% CRIT Rate and 25% CRIT DMG for every 500 ATK she has. These bonuses are capped at 10% CRIT Rate and 100% CRIT DMG.",
+      "4": "These form-specific enhancements last until Danica leaves the corresponding <strong>Attendant Form</strong>."
+    }
+  }
+}

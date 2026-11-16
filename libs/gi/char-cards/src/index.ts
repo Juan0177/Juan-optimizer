@@ -21,6 +21,7 @@ import Chongyun from './Character_Chongyun_Card.jpg'
 import Citlali from './Character_Citlali_Card.jpg'
 import Clorinde from './Character_Clorinde_Card.jpg'
 import Collei from './Character_Collei_Card.jpg'
+import Anastasya from './Character_Anastasya_Card.webp' // juanlab-beta 7.3: provvisorio (icona)
 import Columbina from './Character_Columbina_Card.webp'
 import Cyno from './Character_Cyno_Card.jpg'
 import Dahlia from './Character_Dahlia_Card.jpg'
@@ -28,6 +29,7 @@ import Dehya from './Character_Dehya_Card.jpg'
 import Diluc from './Character_Diluc_Card.jpg'
 import Diona from './Character_Diona_Card.png'
 import Dori from './Character_Dori_Card.jpg'
+import Danica from './Character_Danica_Card.webp' // juanlab-beta 7.3: provvisorio (icona)
 import Durin from './Character_Durin_Card.webp'
 import Emilie from './Character_Emilie_Card.jpg'
 import Escoffier from './Character_Escoffier_Card.jpg'
@@ -132,6 +134,7 @@ const charCards = {
   Aloy,
   Alyosha,
   Amber,
+  Anastasya,
   AratakiItto,
   Arlecchino,
   Baizhu,
@@ -150,6 +153,7 @@ const charCards = {
   Columbina,
   Cyno,
   Dahlia,
+  Danica,
   Dehya,
   Diluc,
   Diona,

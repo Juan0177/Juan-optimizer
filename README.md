@@ -76,6 +76,10 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
     inventario) nella forma della vetrina di Enka: la home li importa con lo stesso convertitore dell'import da UID.
   - Il link porta un formato neutro con gli ID del gioco (`JuanLabBuild` versione 1: set, slot `EQUIP_…`, statistiche
     `FIGHT_PROP_…` con il valore mostrato in gioco), uguale a `public/juanlab.js` di gc-web.
+- **Contenuti della beta** (marcatore `juanlab-beta`, dettagli in `libs/gi/dm/juanlab-beta/README.md`): la 7.3 (Danica,
+  Anastasya, Torrents of Spring, Silverdawn, Blazing Lionfang, Epochal Advent, Empyrean Sojourn) dai dati di Nanoka,
+  generati con lo stesso percorso della pipeline beta di GO e controllati su gachabase. Le schede mostrano l'avviso
+  "dati provvisori".
 - **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, inventario, squadre e crediti;
   tolti pubblicità, link a social e donazioni, video guida, note di versione e resina.
 - **Niente pubblicità** in tutto il sito (`ADS_ENABLED = false` in `libs/common/ad/src/consts.ts`).
