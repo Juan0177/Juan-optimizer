@@ -79,8 +79,12 @@ interface State {
   a4: number
   /** Battle Maid combo: the next stage within the current round */
   comboNext: number
-  /** Burst enhancement of the current Maid Form */
+  /** Burst enhancement of the current Maid Form (lit by `syncMaid`) */
   enhanced: boolean
+  /** End of the Burst's FormalDress_State (20 s from the cast; -1: none) */
+  burstEnd: number
+  /** End of the open Royal Aegis shield marker (-1: none) */
+  aegisEnd: number
   /** C2 Toast stacks per member */
   toast: Partial<Record<CharacterKey, number>>
 }
@@ -104,13 +108,37 @@ const set = (c: SimContext, name: string, value: string) =>
   c.state('Danica', ['Danica', name], value)
 const radiance = (c: SimContext) =>
   set(c, 'a0StellarRadianceSc', c.radiance === 'conduct' ? 'on' : '')
+/**
+ * The form's conditionals. The Burst's enhancement is live (dump UNIQUE_Danica_FormalDress_State,
+ * 20 s from the cast in any form): while Danica is in a form and in Radiance (its StarMode_State,
+ * checked every 0.1 s), the form's Guard_State or Combat_State is on, and Combat_State's onAdded
+ * fills Will to Cleanse.
+ */
 function syncMaid(c: SimContext, s: State) {
+  const lit = !!s.maid && c.now < s.burstEnd && c.radiance === 'conduct'
+  if (lit && !s.enhanced && s.maid === 'battle') s.excite = 100
+  s.enhanced = lit
   set(c, 'maidForm', s.maid)
-  set(c, 'burstEnhanced', s.maid && s.enhanced ? 'on' : '')
+  set(c, 'burstEnhanced', lit ? 'on' : '')
   set(c, 'a4Stacks', s.maid === 'battle' && s.a4 ? String(s.a4) : '')
+}
+/** The Royal Aegis (UNIQUE_Danica_GuardMaid_Shield_Main, a party shield) until the Anchor ends */
+function aegisOn(c: SimContext, s: State, label: string) {
+  const frames = Math.max(0, s.anchorEnd - c.now)
+  shieldMarker(c, 0, frames, label)
+  s.aegisEnd = c.now + frames
+}
+/** The Royal Aegis removed early: a 0-frame shield of the same kind ends the open one */
+function aegisOff(c: SimContext, s: State) {
+  if (c.now < s.aegisEnd) shieldMarker(c, 0, 0, 'Royal Aegis ends')
+  s.aegisEnd = -1
 }
 function endMaid(c: SimContext, s: State) {
   if (s.maid === 'battle') c.modifyAttackSpeed('DanicaA4', 0, 1, 'Danica')
+  // (the shield goes with the form: the Anchor handler's removal, or C4's attached one)
+  if (s.maid) aegisOff(c, s)
+  // (a form's onRemoved also removes the Burst's FormalDress_State)
+  if (s.maid) s.burstEnd = -1
   s.maid = ''
   s.enhanced = false
   s.a4 = 0
@@ -127,6 +155,7 @@ function anchor(c: SimContext, s: State, duration: number) {
   const tick = (c: SimContext) => {
     if (id !== s.anchorId) return
     radiance(c)
+    syncMaid(c, s)
     if (c.now >= s.anchorEnd) {
       set(c, 'anchor', '')
       s.toast = {}
@@ -145,10 +174,12 @@ function onFieldE2(c: SimContext, s: State): ActionResult {
   s.excite = 0
   if (s.maid !== 'battle') {
     s.maid = 'battle'
-    s.enhanced = false
     s.a4 = 0
     s.battleUses = 0
     s.comboNext = 0
+    // C4: entering Cleaner also creates a Royal Aegis (UNIQUE_Danica_CombatMaid_Form's onAdded),
+    // until she leaves the form or the field
+    if (c.constellation('Danica') >= 4) aegisOn(c, s, 'Royal Aegis (C4)')
   }
   s.battleUses++
   // A4: +20% ATK SPD per On-Field Skill E2 (max 3) until Battle Maid ends.
@@ -159,9 +190,12 @@ function onFieldE2(c: SimContext, s: State): ActionResult {
     Math.max(1, s.anchorEnd - c.now),
     'Danica'
   )
+  // (entering Cleaner inside a lit Burst window fills Will to Cleanse again: Combat_State)
   syncMaid(c, s)
   c.at(ON_FIELD_HITMARK, (c2) => {
     radiance(c2)
+    // the DMG increase is read at the hit (E2_Field_Attack checks FormalDress_StarMode_State)
+    syncMaid(c2, s)
     hit(c2, 0, ['skill', 'onFieldDmg'], 'On-Field Skill E2 (Stellar-Conduct)')
   })
   // After 5 uses Danica leaves Battle Maid and the Anchor is destroyed.
@@ -239,6 +273,8 @@ export const kit: KitModel = {
     a4: 0,
     comboNext: 0,
     enhanced: false,
+    burstEnd: -1,
+    aegisEnd: -1,
     toast: {},
   }),
   onStart(c) {
@@ -246,10 +282,6 @@ export const kit: KitModel = {
     if (c.constellation('Danica') >= 2)
       c.note(
         'Danica C2: the combat-entry Will to Protect and the Cleaning Decree Will to Purge (hold Normal Attack, 150% DMG, once per combat) are not modelled; Toast stacks are.'
-      )
-    if (c.constellation('Danica') >= 4)
-      c.note(
-        'Danica C4: energy regeneration and the Battle Maid shield are not modelled (neither is in the reference).'
       )
   },
   // With the Anchor out her normal attacks are the Anchor's (estimated frames of their own), and
@@ -274,9 +306,16 @@ export const kit: KitModel = {
           return onFieldE2(ctx, s)
         }
         hit(ctx, 22, ['skill', 'dmg'], 'Anchor Skill', true, 'skill')
-        // A re-summon replaces the Anchor without a gap: the Maid Form only ends when the Anchor
-        // disappears (as kqmsim, whose Maid statuses survive a new Skill).
-        ctx.at(22, (c) => anchor(c, s, ANCHOR_DURATION))
+        // Dump Avatar_Danica_ElementalArt_InsertClaymore: Will to Cleanse to 0, Will to Protect's
+        // cooldown (UNIQUE_Danica_E2_GuardMaid_CD) removed, and the Anchor handler removed and
+        // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
+        // (kqmsim keeps the forms)
+        ctx.at(22, (c) => {
+          endMaid(c, s)
+          s.excite = 0
+          s.entryReady = -1
+          anchor(c, s, ANCHOR_DURATION)
+        })
         return withHitlag(
           {
             frames: 44,
@@ -309,21 +348,11 @@ export const kit: KitModel = {
               )
           })
         )
-        // Radiance: Stellar-Conduct: the current Maid Form is Enhanced until it ends (20 s); Battle
-        // Maid also restores all Excitement.
-        ctx.at(106, (c) => {
-          if (c.radiance !== 'conduct' || !s.maid) return
-          s.enhanced = true
-          if (s.maid === 'battle') s.excite = 100
-          syncMaid(c, s)
-          const maid = s.maid
-          const id = s.anchorId
-          c.at(1200, (end) => {
-            if (s.maid !== maid || s.anchorId !== id) return
-            s.enhanced = false
-            syncMaid(end, s)
-          })
-        })
+        // FormalDress_State: added at the cast for 20 s, whatever the form (dump
+        // Avatar_Danica_ElementalBurst_Initialize); `syncMaid` lights the form's part in Radiance
+        s.burstEnd = ctx.now + 1200
+        syncMaid(ctx, s)
+        ctx.at(1200, (c) => syncMaid(c, s))
         return { frames: 100, cooldown: { key: 'burst', frames: 1080 } }
       case 'normal':
         if (ctx.now < s.anchorEnd)
@@ -406,6 +435,10 @@ export const kit: KitModel = {
       )
     }
   },
+  // C4's Cleaner Royal Aegis ends when she leaves the field (CombatMaid_Form's switch-out)
+  onSwapOut(ctx, s: State) {
+    if (s.maid === 'battle') aegisOff(ctx, s)
+  },
   onSwapIn(ctx, s: State) {
     if (
       ctx.now >= s.anchorEnd ||
@@ -416,14 +449,15 @@ export const kit: KitModel = {
       return
     s.excite = 0
     s.entryReady = ctx.now + ENTRY_CD
-    // Entry Skill E2: Defense Maid and a refreshed Anchor (which ends any previous Maid Form).
+    // Entry Skill E2: Defense Maid and a refreshed Anchor; a Burst window still open lights it
+    // (Guard_State)
     anchor(ctx, s, ANCHOR_DURATION)
     s.maid = 'defense'
-    s.enhanced = false
     s.a4 = 0
     syncMaid(ctx, s)
-    // Defense Maid's party shield, for 25 s from the Entry Skill (kqmsim newShield)
-    shieldMarker(ctx, 0, 25 * 60, 'Defense Maid shield')
+    // Defense Maid's party shield (kqmsim newShield), until the form ends: 25 s from the Entry
+    // Skill's refreshed Anchor at most
+    aegisOn(ctx, s, 'Defense Maid shield')
     hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
     return { frames: 60 }
   },

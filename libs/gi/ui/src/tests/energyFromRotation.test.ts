@@ -268,6 +268,113 @@ describe('energy inputs: Flins (two Bursts)', () => {
   })
 })
 
+describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
+  const team: CharacterKey[] = ['Danica', 'Mitya', 'Odette', 'Anastasya']
+  const sc = (t: number, characterKey: CharacterKey, onField = characterKey) =>
+    ({
+      t,
+      characterKey,
+      onField,
+      tag: 'directStellarConduct',
+      element: 'electro',
+      path: ['skill', 'sc'],
+    }) as never
+  const aegis = (t: number, frames: number) =>
+    ({
+      t,
+      characterKey: 'Danica',
+      onField: 'Danica',
+      tag: 'other',
+      element: 'physical',
+      path: ['_marker', 'shield', `${frames}`, '', ''],
+    }) as never
+  const act = (start: number, text: string, variant?: string) =>
+    ({
+      characterKey: 'Danica',
+      text,
+      start,
+      frames: 60,
+      ...(variant ? { variant: { key: variant, label: '', mode: '' } } : {}),
+    }) as never
+  const sim = {
+    start: 0,
+    frames: 1200,
+    swaps: [],
+    skillUses: [],
+    // Will to Protect (Entry) at 0 and 900, a Will to Purge at 300 (inside C1's 14 s), a plain E
+    actions: [
+      act(0, 'Entry'),
+      act(300, 'E', 'battleMaid'),
+      act(900, 'Entry'),
+      act(1000, 'E'),
+    ],
+    // the Royal Aegis from 0, ended at 600 by a 0-frame one, a new one from 900
+    hits: [
+      aegis(0, 1500),
+      sc(42, 'Danica'),
+      sc(100, 'Mitya'), // (inside C4's 3.5 s)
+      sc(300, 'Mitya'),
+      sc(350, 'Odette', 'Mitya'), // (off the field)
+      aegis(600, 0),
+      sc(700, 'Mitya'), // (no Aegis)
+      aegis(900, 1500),
+      sc(950, 'Anastasya'),
+    ],
+  }
+  it('C1: 20 to herself per Will to Protect or Will to Purge, once per 14 s', () => {
+    const c1 = energyFromRotation(sim as never, team, 1, { Danica: 1 })
+    expect(c1.members.Danica!.flatEnergy).toBe(40)
+    expect(c1.members.Mitya!.flatEnergy ?? 0).toBe(0)
+    const c0 = energyFromRotation(sim as never, team, 1, { Danica: 0 })
+    expect(c0.members.Danica!.flatEnergy ?? 0).toBe(0)
+  })
+  it('C4: 3 to each other member when the Aegis-protected member on the field deals Stellar-Conduct DMG, once per 3.5 s', () => {
+    const c4 = energyFromRotation(sim as never, team, 1, { Danica: 4 })
+    // (procs at 42, 300 and 950)
+    for (const k of ['Mitya', 'Odette', 'Anastasya'] as const)
+      expect(c4.members[k]!.flatEnergy).toBe(9)
+    expect(c4.members.Danica!.flatEnergy).toBe(40)
+    const c3 = energyFromRotation(sim as never, team, 1, { Danica: 3 })
+    expect(c3.members.Mitya!.flatEnergy ?? 0).toBe(0)
+  })
+  it('as the kit plays them: each Entry gives C1 and its own Stellar-Conduct hit under the Aegis C4', () => {
+    const played = simulateRotation({
+      rotation: parseRotation(
+        'Danica E Q -> Odette E Q -> Mitya hE Q CA -> Tsaritsa hE Q N5 D N5 E E E',
+        team.map((characterKey) => ({
+          characterKey,
+          name: characterKey === 'Anastasya' ? 'Tsaritsa' : characterKey,
+        }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: { Danica: 6, Mitya: 6, Odette: 6, Anastasya: 6 },
+      repeats: 4,
+      keep: 'last2',
+    })
+    const entries = played.actions.filter(
+      (a) =>
+        a.characterKey === 'Danica' &&
+        a.text === 'Entry' &&
+        a.start >= played.start &&
+        a.start < played.start + played.frames
+    ).length
+    expect(entries).toBe(2)
+    const at = (cons: number) =>
+      energyFromRotation(played, team, 2, { Danica: cons })
+    expect(
+      at(1).members.Danica!.flatEnergy! -
+        (at(0).members.Danica!.flatEnergy ?? 0)
+    ).toBeCloseTo(20, 2)
+    // (the Aegis lasts from the Entry to her E: the Entry hit is the one proc a rotation)
+    expect(
+      at(4).members.Mitya!.flatEnergy! - (at(3).members.Mitya!.flatEnergy ?? 0)
+    ).toBeCloseTo(3, 2)
+  })
+})
+
 describe('Normal and Charged Attack energy (random, as gcsim/kqmsim)', () => {
   const hit = (t: number, characterKey: CharacterKey, tag = 'normal') =>
     ({ t, characterKey, tag, path: ['normal', '0'] }) as never
