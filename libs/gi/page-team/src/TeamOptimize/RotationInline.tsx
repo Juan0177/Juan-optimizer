@@ -32,12 +32,14 @@ import {
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
 import { laneColor } from './RotationTimeline'
+import { FIRST_ROTATIONS, firstRotations } from './RotationTiming'
 import {
   applyWritten,
   editorSx,
   exampleRotation,
   insertWord,
   type RotationWriterHandle,
+  saveRotationTiming,
   simulateWritten,
   useMemberNames,
   useRotationSettings,
@@ -48,7 +50,16 @@ import {
   writtenHits,
   writtenSeconds,
 } from './RotationWriter'
-import { focusSx, insetSx, numSx, quickSx, tokens, type } from './ui'
+import {
+  FieldLabel,
+  focusSx,
+  insetSx,
+  numSx,
+  quickSx,
+  Segmented,
+  tokens,
+  type,
+} from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
@@ -551,6 +562,125 @@ function Step({
           {actionCode(a)}
         </Box>
       ))}
+    </Box>
+  )
+}
+
+/**
+ * The rotations Team optimize and KQM count, on the page beside the rotation: the pace it keeps
+ * repeating, or the first 1–6 from the start. Changing it plays the rotation in use again with it
+ * (Undo as for using a rotation).
+ */
+export function RotationsSetting({
+  teamId,
+  members,
+  setTeamOpt,
+  writer,
+  disabled,
+}: {
+  teamId: string
+  members: TeamOptMember[]
+  setTeamOpt: (update: TeamOptUpdate) => void
+  writer: RotationWriterHandle
+  disabled?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  const { applied } = useRotationText(teamId)
+  const { opener, timing, frameData } = useRotationSettings(teamId)
+  const names = useMemberNames(members)
+  // (the attacks a rotation leaves on the team are Team optimize's: the members' own)
+  const ownTeam = useSimTeam(members)
+  const first = firstRotations(timing)
+  const set = (rotations: number | undefined) => {
+    const { rotations: _previous, ...rest } = timing
+    const next = rotations === undefined ? rest : { ...rest, rotations }
+    if (applied.trim()) {
+      try {
+        const result = simulateWritten({
+          text: applied,
+          opener,
+          timing: next,
+          frameData,
+          team: ownTeam,
+          names,
+          members,
+          database,
+          teamId,
+          gender,
+          openerWarning: (warning) => warning,
+        })
+        if (result?.sim) {
+          const undo = applyWritten({
+            database,
+            teamId,
+            members,
+            setTeamOpt,
+            result,
+            text: applied,
+            opener,
+            timing: next,
+            frameData,
+          })
+          if (undo) writer.onApplied(undo)
+          return
+        }
+      } catch {
+        // (a rotation that does not play: the setting is still saved)
+      }
+    }
+    saveRotationTiming(teamId, next)
+  }
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <FieldLabel
+        tip={t(
+          'teamOpt.timing.rotationsTip',
+          'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Team optimize and KQM use the same choice.'
+        )}
+      >
+        {t('teamOpt.timing.rotations', 'Rotations')}
+      </FieldLabel>
+      <Segmented
+        size="small"
+        aria-label={t('teamOpt.timing.rotations', 'Rotations')}
+        value={first === undefined ? 'repeat' : 'start'}
+        onChange={(key) => set(key === 'repeat' ? undefined : (first ?? 1))}
+        options={[
+          {
+            value: 'repeat',
+            label: t('teamOpt.timing.repeating', 'Repeating'),
+            disabled,
+          },
+          {
+            value: 'start',
+            label: t('teamOpt.timing.fromStart', 'From the start'),
+            disabled,
+          },
+        ]}
+      />
+      {first !== undefined && (
+        <>
+          <Typography component="span" sx={type.label}>
+            {t('teamOpt.timing.first', 'First')}
+          </Typography>
+          <Segmented
+            size="small"
+            aria-label={t(
+              'teamOpt.timing.rotationsFromStart',
+              'Rotations from the start'
+            )}
+            value={String(first)}
+            onChange={(key) => set(Number(key))}
+            options={FIRST_ROTATIONS.map((n) => ({
+              value: String(n),
+              label: String(n),
+              disabled,
+            }))}
+          />
+        </>
+      )}
     </Box>
   )
 }
