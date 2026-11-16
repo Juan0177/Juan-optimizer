@@ -12,7 +12,13 @@ import {
   Typography,
 } from '@mui/material'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { enkaToGood, fetchAvatarStore, fetchEnka } from './enkaToGood'
+import { Trans, useTranslation } from 'react-i18next'
+import {
+  EnkaError,
+  enkaToGood,
+  fetchAvatarStore,
+  fetchEnka,
+} from './enkaToGood'
 
 export const isUid = (uid: string) => /^\d{9,10}$/.test(uid)
 
@@ -23,6 +29,7 @@ export function EnkaUidImport({
   onData: (json: string, label: string) => void
   initialUid?: string
 }) {
+  const { t } = useTranslation('juanlab')
   const [uid, setUid] = useState(initialUid)
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<{
@@ -34,7 +41,7 @@ export function EnkaUidImport({
     async (value: string) => {
       const clean = value.replace(/\D/g, '')
       if (!isUid(clean)) {
-        setMsg({ kind: 'error', text: 'Scrivi un UID di 9 o 10 cifre.' })
+        setMsg({ kind: 'error', text: t('import.uidInvalid') })
         return
       }
       setLoading(true)
@@ -48,34 +55,43 @@ export function EnkaUidImport({
         if (!data.avatarInfoList?.length) {
           setMsg({
             kind: 'error',
-            text: 'La vetrina è vuota oppure i dettagli dei personaggi sono nascosti nelle impostazioni del gioco.',
+            text: t('import.empty'),
           })
           return
         }
         const res = enkaToGood(data, store)
         const who = res.nickname ? `${res.nickname} (${clean})` : clean
-        onData(JSON.stringify(res.good), `Vetrina di ${who}`)
+        onData(JSON.stringify(res.good), t('import.showcaseOf', { who }))
+        const SKIP = {
+          char: 'import.skippedChar',
+          weapon: 'import.skippedWeapon',
+          artifact: 'import.skippedArtifact',
+        } as const
+        const list = res.skipped.map((s) => t(SKIP[s.kind], { id: s.id }))
         setMsg({
-          kind: res.skipped.length ? 'warning' : 'success',
-          text:
-            `${res.imported.length} personaggi in vetrina, con armi e manufatti. Controlla l'anteprima qui sotto e conferma l'import.` +
-            (res.skipped.length
-              ? ` Non riconosciuti (forse troppo nuovi per questa versione): ${res.skipped.join(', ')}.`
-              : ''),
+          kind: list.length ? 'warning' : 'success',
+          text: [
+            t('import.loaded', { count: res.imported.length }),
+            list.length ? t('import.skipped', { list: list.join(', ') }) : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
         })
       } catch (e) {
         setMsg({
           kind: 'error',
           text:
-            e instanceof Error && e.message
-              ? e.message
-              : 'Non riesco a leggere la vetrina: controlla la connessione e riprova.',
+            e instanceof EnkaError
+              ? t([`import.errors.${e.status}`, 'import.errors.other'], {
+                  status: e.status,
+                })
+              : t('import.network'),
         })
       } finally {
         setLoading(false)
       }
     },
-    [onData]
+    [onData, t]
   )
 
   // dalla home: l'UID arriva gia scritto e si carica subito
@@ -91,7 +107,7 @@ export function EnkaUidImport({
     <CardThemed sx={{ mb: 2 }}>
       <CardContent>
         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
-          Importa dalla vetrina (UID)
+          {t('import.title')}
         </Typography>
         <Box
           component="form"
@@ -103,7 +119,7 @@ export function EnkaUidImport({
         >
           <TextField
             size="small"
-            label="UID del giocatore"
+            label={t('import.uidLabel')}
             value={uid}
             onChange={(e) => setUid(e.target.value)}
             slotProps={{
@@ -119,19 +135,27 @@ export function EnkaUidImport({
               loading ? <CircularProgress size="1em" /> : <CloudDownload />
             }
           >
-            Carica
+            {t('import.load')}
           </Button>
         </Box>
         <Typography
           variant="caption"
           sx={{ display: 'block', mt: 1, color: 'text.secondary' }}
         >
-          Vengono importati i personaggi della vetrina del gioco (con i dettagli
-          visibili), con armi e manufatti equipaggiati. Dati da{' '}
-          <a href="https://enka.network/" target="_blank" rel="noreferrer">
-            Enka.network
-          </a>
-          .
+          <Trans
+            t={t}
+            i18nKey="import.hint"
+            components={{
+              enka: (
+                // biome-ignore lint/a11y/useAnchorContent: il testo del link arriva dalla traduzione
+                <a
+                  href="https://enka.network/"
+                  target="_blank"
+                  rel="noreferrer"
+                />
+              ),
+            }}
+          />
         </Typography>
         {msg && (
           <Alert severity={msg.kind} sx={{ mt: 1 }}>

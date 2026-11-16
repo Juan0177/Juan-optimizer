@@ -1,0 +1,38 @@
+{
+  "import": {
+    "title": "Import from showcase (UID)",
+    "uidLabel": "Player UID",
+    "load": "Load",
+    "hint": "Imports the characters in the in-game showcase (with details visible), with their equipped weapons and artifacts. Data from <enka>Enka.network</enka>.",
+    "uidInvalid": "Enter a UID with 9 or 10 digits.",
+    "empty": "The showcase is empty, or character details are hidden in the game settings.",
+    "loaded_one": "{{count}} character in the showcase, with weapons and artifacts. Check the preview below and confirm the import.",
+    "loaded_other": "{{count}} characters in the showcase, with weapons and artifacts. Check the preview below and confirm the import.",
+    "skipped": "Not recognized (maybe too new for this version): {{list}}.",
+    "skippedChar": "character {{id}}",
+    "skippedWeapon": "weapon {{id}}",
+    "skippedArtifact": "artifact from set {{id}}",
+    "showcaseOf": "Showcase of {{who}}",
+    "network": "Can't read the showcase: check your connection and try again.",
+    "errors": {
+      "400": "Invalid UID.",
+      "404": "This UID doesn't exist.",
+      "424": "Enka.network is under maintenance after a game update: try again later.",
+      "429": "Too many requests: wait a minute and try again.",
+      "500": "Enka.network error: try again later.",
+      "503": "Enka.network is not responding: try again later.",
+      "other": "Error {{status}} from Enka.network."
+    }
+  },
+  "home": {
+    "intro": "The <gi>Genshin Impact</gi> build calculator by <juanlab>JuanLab</juanlab>, based on Genshin Optimizer. Import the characters in your showcase with your UID and find the best build with what you have.",
+    "importTitle": "Import from showcase",
+    "importButton": "Load showcase",
+    "uidDigits": "9 or 10 digits",
+    "importHint": "Loads the characters in your showcase, with equipped weapons and artifacts, into the current database. You'll see a preview of what changes before saving. Character details must be visible in the game.",
+    "creditsTitle": "Credits",
+    "credits1": "Juan-optimizer is a copy of <go>Genshin Optimizer</go> by <frzyc>frzyc</frzyc> and all its <contrib>contributors</contrib>, released under the <mit>MIT</mit> license. Calculations, data and interface are their work: the original site is <site>frzyc.github.io/genshin-optimizer</site>.",
+    "credits2": "Player showcases from <enka>Enka.network</enka>. This copy is by <juanlab>JuanLab</juanlab> (<code>source code</code>) and is not affiliated with the original project.",
+    "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse."
+  }
+}

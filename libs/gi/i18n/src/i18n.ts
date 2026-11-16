@@ -22,6 +22,14 @@ export const languageCodeList = [
   'vi',
 ]
 
+// juanlab: italiano come lingua predefinita, se l'utente non ne ha ancora scelta una
+try {
+  if (!localStorage.getItem('i18nextLng'))
+    localStorage.setItem('i18nextLng', 'it')
+} catch {
+  // senza localStorage resta il rilevamento automatico
+}
+
 /**
  * @see: https://www.i18next.com/translation-function/essentials
  * @see: https://react.i18next.com/latest/using-with-hooks

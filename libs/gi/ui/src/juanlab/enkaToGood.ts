@@ -104,6 +104,7 @@ export type EnkaResponse = {
   avatarInfoList?: EnkaAvatar[]
 }
 
+export type EnkaSkipped = { kind: 'char' | 'weapon' | 'artifact'; id: number }
 export type EnkaImport = {
   good: {
     format: 'GOOD'
@@ -115,24 +116,21 @@ export type EnkaImport = {
   }
   nickname: string
   imported: CharacterKey[]
-  skipped: string[]
+  skipped: EnkaSkipped[]
 }
 
-export const ENKA_ERRORS: Record<number, string> = {
-  400: 'UID non valido.',
-  404: 'Questo UID non esiste.',
-  424: 'Enka.network è in manutenzione dopo un aggiornamento del gioco: riprova più tardi.',
-  429: 'Troppe richieste: aspetta un minuto e riprova.',
-  500: 'Errore di Enka.network: riprova più tardi.',
-  503: 'Enka.network non risponde: riprova più tardi.',
+// Errore di Enka con lo stato HTTP: il testo per l'utente sta nelle traduzioni (namespace juanlab, import.errors)
+export class EnkaError extends Error {
+  status: number
+  constructor(status: number) {
+    super(`Enka.network ${status}`)
+    this.status = status
+  }
 }
 
 export async function fetchEnka(uid: string): Promise<EnkaResponse> {
   const res = await fetch(ENKA_PROXY + uid)
-  if (!res.ok)
-    throw new Error(
-      ENKA_ERRORS[res.status] ?? `Errore ${res.status} da Enka.network.`
-    )
+  if (!res.ok) throw new EnkaError(res.status)
   return res.json()
 }
 
@@ -181,11 +179,11 @@ export function enkaToGood(
   const weapons: unknown[] = []
   const artifacts: unknown[] = []
   const imported: CharacterKey[] = []
-  const skipped: string[] = []
+  const skipped: EnkaSkipped[] = []
   for (const a of data.avatarInfoList ?? []) {
     const key = characterKeyOf(a, store)
     if (!key) {
-      skipped.push(`personaggio ${a.avatarId}`)
+      skipped.push({ kind: 'char', id: a.avatarId })
       continue
     }
     const location = charKeyToLocCharKey(key)
@@ -201,7 +199,7 @@ export function enkaToGood(
       if (e.flat.itemType === 'ITEM_WEAPON') {
         const wKey: WeaponKey | undefined = weaponIdMap[e.itemId]
         if (!wKey) {
-          skipped.push(`arma ${e.itemId}`)
+          skipped.push({ kind: 'weapon', id: e.itemId })
           continue
         }
         const affix = Object.values(e.weapon?.affixMap ?? {})[0] ?? 0
@@ -221,7 +219,7 @@ export function enkaToGood(
         const main = e.flat.reliquaryMainstat
         const mainStatKey = main && PROP[main.mainPropId]
         if (!setKey || !slotKey || !mainStatKey) {
-          skipped.push(`manufatto del set ${setId}`)
+          skipped.push({ kind: 'artifact', id: setId })
           continue
         }
         artifacts.push({

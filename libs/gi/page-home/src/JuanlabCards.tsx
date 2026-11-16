@@ -13,9 +13,17 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import type { ReactElement } from 'react'
 import { useContext, useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
+
+// link esterni dei testi tradotti: <go>…</go>, <enka>…</enka>, ecc.
+const ext = (href: string): ReactElement => (
+  <Link href={href} target="_blank" rel="noreferrer" />
+)
 
 export function IntroCard() {
+  const { t } = useTranslation('juanlab')
   return (
     <CardThemed>
       <CardContent>
@@ -23,24 +31,14 @@ export function IntroCard() {
           Juan-optimizer
         </Typography>
         <Typography>
-          Il calcolatore di build di{' '}
-          <Link
-            href="https://genshin.hoyoverse.com/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <i>Genshin Impact</i>
-          </Link>{' '}
-          di{' '}
-          <Link
-            href="https://juan0177.github.io/JuanLab/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            JuanLab
-          </Link>
-          , basato su Genshin Optimizer. Importa i personaggi della tua vetrina
-          con l&apos;UID e trova la build migliore con quello che hai.
+          <Trans
+            t={t}
+            i18nKey="home.intro"
+            components={{
+              gi: ext('https://genshin.hoyoverse.com/'),
+              juanlab: ext('https://juan0177.github.io/JuanLab/'),
+            }}
+          />
         </Typography>
       </CardContent>
     </CardThemed>
@@ -48,6 +46,7 @@ export function IntroCard() {
 }
 
 export function ImportUidCard() {
+  const { t } = useTranslation('juanlab')
   const { databases, database } = useContext(DatabaseContext)
   const index = Math.max(0, databases.indexOf(database))
   const [uid, setUid] = useState('')
@@ -56,7 +55,7 @@ export function ImportUidCard() {
   return (
     <CardThemed>
       <CardHeader
-        title={<Typography variant="h5">Importa dalla vetrina</Typography>}
+        title={<Typography variant="h5">{t('home.importTitle')}</Typography>}
         avatar={<CloudDownload fontSize="large" />}
       />
       <Divider />
@@ -71,11 +70,11 @@ export function ImportUidCard() {
         >
           <TextField
             size="small"
-            label="UID del giocatore"
+            label={t('import.uidLabel')}
             value={uid}
             onChange={(e) => setUid(e.target.value)}
             error={!!uid && !isUid(clean)}
-            helperText={uid && !isUid(clean) ? '9 o 10 cifre' : ' '}
+            helperText={uid && !isUid(clean) ? t('home.uidDigits') : ' '}
             slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 10 } }}
             sx={{ flex: '1 1 14em' }}
           />
@@ -86,13 +85,11 @@ export function ImportUidCard() {
             startIcon={<CloudDownload />}
             sx={{ alignSelf: 'flex-start', height: 40 }}
           >
-            Carica la vetrina
+            {t('home.importButton')}
           </Button>
         </Box>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Carica i personaggi in vetrina con armi e manufatti equipaggiati, nel
-          database attuale. Prima di salvare vedi l&apos;anteprima di cosa
-          cambia. Nel gioco i dettagli dei personaggi devono essere visibili.
+          {t('home.importHint')}
         </Typography>
       </CardContent>
       {open && (
@@ -109,83 +106,42 @@ export function ImportUidCard() {
 }
 
 export function CreditsCard() {
+  const { t } = useTranslation('juanlab')
+  const GO = 'https://github.com/frzyc/genshin-optimizer'
   return (
     <CardThemed>
       <CardHeader
-        title={<Typography variant="h5">Crediti</Typography>}
+        title={<Typography variant="h5">{t('home.creditsTitle')}</Typography>}
         avatar={<Favorite fontSize="large" />}
       />
       <Divider />
       <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         <Typography>
-          Juan-optimizer è una copia di{' '}
-          <Link
-            href="https://github.com/frzyc/genshin-optimizer"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Genshin Optimizer
-          </Link>{' '}
-          di{' '}
-          <Link
-            href="https://github.com/frzyc"
-            target="_blank"
-            rel="noreferrer"
-          >
-            frzyc
-          </Link>{' '}
-          e di tutti i suoi{' '}
-          <Link
-            href="https://github.com/frzyc/genshin-optimizer/graphs/contributors"
-            target="_blank"
-            rel="noreferrer"
-          >
-            contributori
-          </Link>
-          , distribuito con licenza{' '}
-          <Link
-            href="https://github.com/frzyc/genshin-optimizer/blob/master/LICENSE"
-            target="_blank"
-            rel="noreferrer"
-          >
-            MIT
-          </Link>
-          . Calcoli, dati e interfaccia sono il loro lavoro: il sito originale è{' '}
-          <Link
-            href="https://frzyc.github.io/genshin-optimizer/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            frzyc.github.io/genshin-optimizer
-          </Link>
-          .
+          <Trans
+            t={t}
+            i18nKey="home.credits1"
+            components={{
+              go: ext(GO),
+              frzyc: ext('https://github.com/frzyc'),
+              contrib: ext(`${GO}/graphs/contributors`),
+              mit: ext(`${GO}/blob/master/LICENSE`),
+              site: ext('https://frzyc.github.io/genshin-optimizer/'),
+            }}
+          />
         </Typography>
         <Typography>
-          Vetrine dei giocatori da{' '}
-          <Link href="https://enka.network/" target="_blank" rel="noreferrer">
-            Enka.network
-          </Link>
-          . Questa copia è di{' '}
-          <Link
-            href="https://juan0177.github.io/JuanLab/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            JuanLab
-          </Link>{' '}
-          (
-          <Link
-            href="https://github.com/Juan0177/Juan-optimizer"
-            target="_blank"
-            rel="noreferrer"
-          >
-            codice
-          </Link>
-          ) e non è collegata al progetto originale.
+          <Trans
+            t={t}
+            i18nKey="home.credits2"
+            components={{
+              enka: ext('https://enka.network/'),
+              juanlab: ext('https://juan0177.github.io/JuanLab/'),
+              code: ext('https://github.com/Juan0177/Juan-optimizer'),
+            }}
+          />
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          Genshin Impact è un marchio di HoYoverse. Questo sito non è affiliato
-          né approvato da HoYoverse.
+          {t('home.credits3')}
         </Typography>
       </CardContent>
     </CardThemed>
