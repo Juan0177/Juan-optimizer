@@ -195,7 +195,8 @@ const newWorld_stellarswirl_dmg_ = { ...newWorld_stellarconduct_dmg_ }
 const c2_stellarconduct_specialDmg_ = greaterEq(
   input.constellation,
   2,
-  percent(dm.constellation2.stellar_specialDmg_)
+  percent(dm.constellation2.stellar_specialDmg_),
+  { path: 'stellarconduct_specialDmg_', isTeamBuff: true }
 )
 const c2Love_stellarconduct_critDMG_ = greaterEq(
   input.constellation,
@@ -216,7 +217,8 @@ const c2HonorMult = sum(
 const c6Love_stellarconduct_specialDmg_ = greaterEq(
   input.constellation,
   6,
-  equal(condBlessing, 'love', percent(dm.constellation6.love_specialDmg_))
+  equal(condBlessing, 'love', percent(dm.constellation6.love_specialDmg_)),
+  { path: 'stellarconduct_specialDmg_', isTeamBuff: true }
 )
 const c6Honor_stellarconduct_specialDmg_ = greaterEq(
   input.constellation,

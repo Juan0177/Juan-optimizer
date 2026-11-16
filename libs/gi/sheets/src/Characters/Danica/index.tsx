@@ -619,7 +619,7 @@ const sheet: TalentSheet = {
       states: {
         on: {
           fields: [
-            { node: royalGuardAtkDisp },
+            { node: royalGuardAtk },
             {
               node: infoMut(cleanerPurge_dmg_, {
                 name: ct.ch('purge_dmg_'),
