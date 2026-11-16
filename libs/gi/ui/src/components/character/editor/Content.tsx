@@ -24,6 +24,7 @@ import { useCallback, useContext, useMemo } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { BuildEditContext, DataContext, SillyContext } from '../../../context'
+import { SendToGcwebButton } from '../../../juanlab/GcwebLink' // juanlab
 import { AddTeamInfo } from '../../AddTeamInfo'
 import { CharacterLevelSelect } from '../CharacterLevelSelect'
 import {
@@ -80,11 +81,14 @@ export function Content({ onClose }: { onClose?: () => void }) {
         }}
       >
         <TravelerGenderSelect />
+        {/* juanlab: solo con il collegamento a gc-web attivo */}
+        <Box sx={{ marginLeft: 'auto' }}>
+          <SendToGcwebButton />
+        </Box>
         <Button
           color="error"
           onClick={() => deleteCharacter()}
           startIcon={<DeleteForeverIcon />}
-          sx={{ marginLeft: 'auto' }}
         >
           {t('delete')}
         </Button>
