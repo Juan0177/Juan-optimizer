@@ -74,7 +74,7 @@ const sheet: IWeaponSheet = {
             ...Object.values(all_ele_dmg_map).map((node) => ({ node })),
             {
               text: stg('duration'),
-              value: 12,
+              value: 15,
               unit: 's',
             },
             {

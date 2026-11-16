@@ -48,7 +48,6 @@ const sheet: IWeaponSheet = {
     {
       value: condPassive,
       path: condPassivePath,
-      teamBuff: true,
       header: headerTemplate(key, st('conditional')),
       name: tr('passiveName'),
       states: {

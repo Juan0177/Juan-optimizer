@@ -54,7 +54,6 @@ const sheet: IWeaponSheet = {
     {
       value: condMarksConsumed,
       path: condSymbolsConsumedPath,
-      teamBuff: true,
       header: headerTemplate(key, st('stacks')),
       name: trm('condName'),
       states: objKeyMap(marksConsumedArr, (mark) => ({

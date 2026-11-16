@@ -28,7 +28,7 @@ const atk = lookup(
 const dmg_ = equal(
   input.weapon.key,
   key,
-  customDmgNode(prod(percent(2), input.premod.atk), 'elemental', {
+  customDmgNode(prod(percent(2), input.total.atk), 'elemental', {
     hit: { ele: constant('physical') },
   })
 )

@@ -30,7 +30,7 @@ const sheet: IWeaponSheet = {
     {
       value: condPassive,
       path: condPassivePath,
-      header: headerTemplate(key, st('stacks')),
+      header: headerTemplate(key, st('conditional')),
       name: trm('condName'),
       states: {
         on: {

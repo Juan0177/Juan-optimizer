@@ -37,7 +37,6 @@ const sheet: IWeaponSheet = {
     {
       value: condPassive,
       path: condPassivePath,
-      teamBuff: true,
       header: headerTemplate(key, st('stacks')),
       name: st('afterDefeatEnemy'),
       states: Object.fromEntries(
