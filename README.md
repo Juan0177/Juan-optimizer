@@ -11,7 +11,7 @@ Copia personale di [Genshin Optimizer](https://github.com/frzyc/genshin-optimize
 Solo Genshin Optimizer: l'app `apps/frontend` e le librerie che usa (`libs/gi`, `libs/common`, `libs/pando`, `libs/game-opt`).
 Sono stati tolti Star Rail (`libs/sr`, `apps/sr-frontend`), Zenless (`libs/zzz`, `apps/zzz-frontend`), il bot Somnia, il frontend sperimentale `apps/gi-frontend` e i workflow dell'originale.
 
-Le build si caricano dalla vetrina di Enka (import da UID tramite il Worker di JuanLab) o arrivano da gc-web con un link.
+Le build si caricano dalla vetrina di Enka o da Akasha (import da UID tramite il Worker di JuanLab) o arrivano da gc-web con un link.
 I personaggi della beta verranno dopo: il piano è nel documento "Genshin Optimizer di JuanLab: specifica e piano".
 
 ## Aggiornare dall'originale
@@ -62,6 +62,8 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
   La vetrina arriva da Enka.network tramite il Worker di JuanLab (`juanlab-enka…workers.dev`), viene convertita in GOOD
   (tabelle ID → chiave del datamine di GO, ordine dei talenti dai dati pubblici di Enka) e passa dall'import GOOD di GO,
   con l'anteprima prima di salvare. Armi e manufatti già presenti e non in vetrina restano nel database.
+  In alternativa **da Akasha** (scelta salvata nel browser): tutte le build salvate su akasha.cv, più build per personaggio,
+  diventano Build di Genshin Optimizer (`akashaToGood.ts`, percorsi `/akasha/…` dello stesso Worker).
 - **Collegamento a gc-web** (`libs/gi/ui/src/juanlab/gcweb.ts`, `GcwebLink.tsx`): scambio di build con gc-web, il pannello
   di LunaGC sul PC. Si attiva nella finestra d'import (voce "Collegamento a gc-web", con l'indirizzo di gc-web, di base
   `http://127.0.0.1:8090/`); spento, i link in arrivo vengono ignorati e il pulsante non compare.
