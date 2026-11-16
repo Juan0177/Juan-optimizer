@@ -127,7 +127,7 @@ describe('Anastasya', () => {
     })
   })
 
-  it('uses 18 s Burst CD in both Blessings and clears only the Honor tap-E trigger when others unseal at C6', () => {
+  it('uses 18 s Burst CD in both Blessings; at C6 Honor’s strike is Doom’s third stage, after the others unseal', () => {
     for (const rot of ['Anastasya E Q Q', 'Anastasya hE Q Q']) {
       const sim = run(rot, ['Anastasya'])
       const qs = sim.actions.filter(
@@ -139,12 +139,25 @@ describe('Anastasya', () => {
     const c6 = run('Anastasya hE Q N5 N5 N5 N5 E E E E', ['Anastasya'], {
       Anastasya: 6,
     })
-    const doom3 = c6.hits.find((h) => h.path.join('.') === 'burst.doom2Sc')!
-    // 20% C6 Honor Elevation window stays active after others unseal (only tap-E C6 Doom is removed)
-    expect(windowAt(c6, 'c6HonorWindow', doom3.t)).toBe('on')
-    expect(c6.hits.some((h) => h.label.startsWith('Doom 3-Hit (C6)'))).toBe(
+    // (the dump's Breaking_Descender: with the C6 flag from the hold Skill, the third stage deals
+    // the C6 version, 250% with every member's Accolades, instead of its own DMG, once)
+    const strikes = c6.hits.filter(
+      (h) => h.path.join('.') === 'constellation6.doom3Sc'
+    )
+    expect(strikes).toHaveLength(1)
+    expect(c6.hits.some((h) => h.path.join('.') === 'burst.doom2Sc')).toBe(
       false
     )
+    expect(
+      strikes[0].states?.find((x) => x.path.join('.') === 'Anastasya.accolades')
+        ?.value
+    ).toBe('honorSeal')
+    // (its 20% Elevation window is on then)
+    expect(windowAt(c6, 'c6HonorWindow', strikes[0].t)).toBe('on')
+    // (below C6, the third stage is Doom's own)
+    const c0 = run('Anastasya hE Q N5 N5 N5 N5 E E E E', ['Anastasya'])
+    expect(c0.hits.some((h) => h.path.join('.') === 'burst.doom2Sc')).toBe(true)
+    expect(c0.hits.some((h) => h.path[0] === 'constellation6')).toBe(false)
   })
 
   it('sheet reflects 7.2.52 CRIT DMG ascension, A4 10% Swirl coeff, C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {

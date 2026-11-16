@@ -178,7 +178,10 @@ function sealTick(c: SimContext, s: State, id: number) {
   sealPoints(c, s, 1)
   c.at(12, (c2) => sealTick(c2, s, id))
 }
-/** The other members' (Honor) Sealing ends: Doom becomes available; C6 Honor's tap-E trigger is removed. */
+/**
+ * The other members' (Honor) Sealing ends: Doom becomes available. C6 Honor stays armed: its strike
+ * is Doom's third stage (the dump's Breaking_Descender reads the C6 flag at Doom time).
+ */
 function othersSealPoints(c: SimContext, s: State, points: number) {
   if (!s.othersSealed) return
   s.othersSealPoints = Math.max(0, s.othersSealPoints - points)
@@ -187,7 +190,6 @@ function othersSealPoints(c: SimContext, s: State, points: number) {
   s.othersShareUntil = c.now + 480
   s.doomStage = 1
   s.doomUntil = c.now + DOOM_WINDOW
-  s.c6HonorArmed = false
   sync(c, s)
   syncAt(c, s, s.othersShareUntil)
 }
@@ -278,9 +280,33 @@ function doom(c: SimContext, s: State): ActionResult {
     })
     return { frames: 65 }
   }
+  // C6 Honor (armed by the hold Skill): the third stage deals the C6 version instead, 250% of its
+  // DMG with every member's Accolades (nobody is Sealed by now), and uses the C6 up (as the dump's
+  // Breaking_Descender03_C6_Damage and RemoveC6Free)
+  const c6 = s.c6HonorArmed && c.now < s.c6HonorEnd
+  if (c6) s.c6HonorArmed = false
   c.at(36, (c2) => {
     sync(c2, s)
-    stellar(c2, 'burst', 'doom2', 'Palestar Edict: Doom 3-Hit')
+    if (c6)
+      stellar(
+        c2,
+        'constellation6',
+        'doom3',
+        'Palestar Edict: Doom 3-Hit (C6)',
+        [
+          {
+            owner: 'Anastasya',
+            path: ['Anastasya', 'blessing'],
+            value: 'honor',
+          },
+          {
+            owner: 'Anastasya',
+            path: ['Anastasya', 'accolades'],
+            value: 'honorSeal',
+          },
+        ]
+      )
+    else stellar(c2, 'burst', 'doom2', 'Palestar Edict: Doom 3-Hit')
   })
   if (c.now < s.freezeEnd) {
     s.freezeEnd = c.now
