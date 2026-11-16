@@ -2,9 +2,13 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import { DatabaseContext } from '@genshin-optimizer/gi/db-ui'
 import {
+  decodeAccount,
   decodePayload,
+  enkaToGood,
+  fetchAvatarStore,
   GCWEB_PARAM,
   getGcwebSettings,
+  isAccountLink,
   isUid,
   payloadToGood,
   UploadCard,
@@ -159,10 +163,11 @@ export function CreditsCard() {
 
 type Incoming =
   | { kind: 'off' | 'bad' }
-  | { kind: 'ok'; json: string; label: string; skipped: number }
+  | { kind: 'ok'; json: string; label: string; warning: string }
 
-/** Build arrivata da gc-web (#/?gcweb=...): con il collegamento attivo apre l'import con l'anteprima,
- *  altrimenti avvisa e non legge nulla. Il parametro viene tolto dall'indirizzo subito. */
+/** Link arrivato da gc-web (#/?gcweb=...): una build, o tutti i personaggi dell'account del server privato
+ *  (link "z.", compresso). Con il collegamento attivo apre l'import con l'anteprima, altrimenti avvisa e non legge
+ *  nulla. Il parametro viene tolto dall'indirizzo subito. */
 export function GcwebIncoming() {
   const { t } = useTranslation('juanlab')
   const { databases, database } = useContext(DatabaseContext)
@@ -177,24 +182,50 @@ export function GcwebIncoming() {
       setIncoming({ kind: 'off' })
       return
     }
-    try {
+    const read = async (): Promise<Incoming> => {
+      if (isAccountLink(raw)) {
+        const account = await decodeAccount(raw)
+        const { good, skipped } = enkaToGood(
+          {
+            playerInfo: { nickname: account.nickname },
+            avatarInfoList: account.avatarInfoList,
+          },
+          await fetchAvatarStore()
+        )
+        if (!good.characters.length) throw new Error('empty')
+        return {
+          kind: 'ok',
+          json: JSON.stringify({
+            ...good,
+            source: 'Juan-optimizer (gc-web)',
+          }),
+          label: t('gcweb.accountLabel', {
+            name: account.nickname || '?',
+            uid: account.uid ?? '?',
+            count: good.characters.length,
+          }),
+          warning: skipped.length
+            ? t('gcweb.accountSkipped', { count: skipped.length })
+            : '',
+        }
+      }
       const payload = decodePayload(raw)
       const { good, skipped } = payloadToGood(
         payload,
         (key) => !!database.chars.get(key)
       )
       if (!good.artifacts.length) throw new Error('empty')
-      setIncoming({
+      return {
         kind: 'ok',
         json: JSON.stringify(good),
         label: t('gcweb.incomingLabel', {
           name: payload.name || payload.character?.name || '',
         }),
-        skipped,
-      })
-    } catch {
-      setIncoming({ kind: 'bad' })
+        warning: skipped ? t('gcweb.skipped', { count: skipped }) : '',
+      }
     }
+    // Niente annullamento: togliere il parametro qui sopra rilancia l'effetto, e la lettura deve arrivare comunque.
+    read().then(setIncoming, () => setIncoming({ kind: 'bad' }))
   }, [raw, setParams, database, t])
   if (!incoming) return null
   const close = () => setIncoming(null)
@@ -211,9 +242,9 @@ export function GcwebIncoming() {
   return (
     <ModalWrapper open onClose={close}>
       <Box>
-        {incoming.skipped > 0 && (
+        {incoming.warning && (
           <Alert severity="warning" sx={{ mb: 1 }}>
-            {t('gcweb.skipped', { count: incoming.skipped })}
+            {incoming.warning}
           </Alert>
         )}
         <UploadCard

@@ -39,15 +39,19 @@
     "title": "Link to gc-web",
     "enable": "Enable",
     "urlLabel": "gc-web address",
-    "hint": "gc-web is the LunaGC panel on your PC. When the link is on, the character page has “Send to gc-web” (the equipped artifacts become a CharacterBuilder build), and builds sent from gc-web (“Open in Juan-optimizer”) open here ready to import. When it is off, incoming links are ignored.",
+    "hint": "gc-web is the LunaGC panel on your PC. When the link is on, the character page shows “Send to gc-web” (the equipped artifacts become a CharacterBuilder build); builds (“Open in Juan-optimizer”) and your account's characters (“Export the characters to Juan-optimizer”) sent from gc-web open here ready to import. When it is off, incoming links are ignored.",
     "send": "Send to gc-web",
     "sendTitle": "Open gc-web with this character's equipped artifacts, ready to save as a CharacterBuilder build",
     "noArtifacts": "This character has no equipped artifacts to send.",
     "incomingTitle": "Build from gc-web",
-    "incomingOff": "A build arrived from gc-web, but the link is off. Turn it on in Settings → Database → Upload, under “Link to gc-web”, then open the link from gc-web again.",
-    "incomingBad": "The link from gc-web does not hold a valid build.",
+    "incomingOff": "A link arrived from gc-web, but the link is off. Turn it on in Settings → Database → Upload, under “Link to gc-web”, then open the link from gc-web again.",
+    "incomingBad": "The link from gc-web does not hold a valid build or characters.",
     "incomingLabel": "gc-web build: {{name}}",
     "skipped_one": "{{count}} piece not recognized was left out.",
-    "skipped_other": "{{count}} pieces not recognized were left out."
+    "skipped_other": "{{count}} pieces not recognized were left out.",
+    "accountLabel_one": "Characters from gc-web: {{name}} (UID {{uid}}), {{count}} character",
+    "accountLabel_other": "Characters from gc-web: {{name}} (UID {{uid}}), {{count}} characters",
+    "accountSkipped_one": "{{count}} unrecognized item (character, weapon or artifact, maybe too new for this version) was left out.",
+    "accountSkipped_other": "{{count}} unrecognized items (characters, weapons or artifacts, maybe too new for this version) were left out."
   }
 }

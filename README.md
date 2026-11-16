@@ -69,6 +69,9 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
     (`#juanlab=…`), che lì diventano una build di CharacterBuilder.
   - gc-web → Juan-optimizer: "Apri in Juan-optimizer" su una build apre `#/?gcweb=…`; la home la converte in GOOD (manufatti
     equipaggiati al personaggio, che viene aggiunto se manca) e apre l'import con l'anteprima. Il resto dell'inventario resta.
+  - Personaggi dell'account: «Esporta i personaggi in Juan-optimizer» in gc-web apre `#/?gcweb=z.…` (JSON compresso) con tutti
+    i personaggi del server privato (livello, ascensione, costellazioni, talenti, arma e manufatti equipaggiati, niente
+    inventario) nella forma della vetrina di Enka: la home li importa con lo stesso convertitore dell'import da UID.
   - Il link porta un formato neutro con gli ID del gioco (`JuanLabBuild` versione 1: set, slot `EQUIP_…`, statistiche
     `FIGHT_PROP_…` con il valore mostrato in gioco), uguale a `public/juanlab.js` di gc-web.
 - **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, inventario, squadre e crediti;
