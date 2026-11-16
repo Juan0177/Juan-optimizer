@@ -412,6 +412,19 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
   },
 })
 
+const purgeDmgDisp = infoMut(
+  { ...cleanerPurge_dmg_ },
+  { name: ct.ch('purge_dmg_'), unit: '%' }
+)
+const purgeCritRateDisp = infoMut(
+  { ...c6Cleaner_critRate_ },
+  { name: ct.ch('purgeCritRate_'), unit: '%' }
+)
+const purgeCritDMGDisp = infoMut(
+  { ...c6Cleaner_critDMG_ },
+  { name: ct.ch('purgeCritDMG_'), unit: '%' }
+)
+
 const formStates = (fields: { royalGuard: any[]; cleaner: any[] }) => ({
   royalGuard: { name: ct.ch('royalGuard'), fields: fields.royalGuard },
   cleaner: { name: ct.ch('cleaner'), fields: fields.cleaner },
@@ -561,9 +574,35 @@ const sheet: TalentSheet = {
       teamBuff: true,
       name: ct.ch('formCond'),
       states: formStates({
-        royalGuard: [{ node: a4_atk_ }],
-        cleaner: [],
+        royalGuard: [
+          { node: a4_atk_ },
+          { node: royalGuardAtk },
+          { node: c6RoyalGuard_stellarconduct_dmg_Disp },
+        ],
+        cleaner: [
+          {
+            node: infoMut(dmgFormulas.skill.purgeDmg, {
+              name: ct.chg('skill.skillParams.2'),
+            }),
+          },
+          { text: ct.ch('cleanerA4') },
+          { node: a4_atkSPD_ },
+          { node: purgeDmgDisp },
+          { node: purgeCritRateDisp },
+          { node: purgeCritDMGDisp },
+        ],
       }),
+    }),
+    // A4 in forma Pulizie: cariche dopo Will to Purge (le stesse della passiva)
+    ct.condTem('skill', {
+      path: condA4StacksPath,
+      value: condA4Stacks,
+      canShow: greaterEq(input.asc, 4, equal(condForm, 'cleaner', 1)),
+      name: ct.ch('a4StacksCond'),
+      states: objKeyMap(a4StacksArr, (n) => ({
+        name: st('stack', { count: n }),
+        fields: [{ node: a4_atkSPD_ }],
+      })),
     }),
   ]),
 
@@ -620,12 +659,7 @@ const sheet: TalentSheet = {
         on: {
           fields: [
             { node: royalGuardAtk },
-            {
-              node: infoMut(cleanerPurge_dmg_, {
-                name: ct.ch('purge_dmg_'),
-                unit: '%',
-              }),
-            },
+            { node: purgeDmgDisp },
             {
               text: stg('duration'),
               value: dm.burst.duration,
@@ -704,18 +738,8 @@ const sheet: TalentSheet = {
       teamBuff: true,
       fields: [
         { node: c6RoyalGuard_stellarconduct_dmg_Disp },
-        {
-          node: infoMut(c6Cleaner_critRate_, {
-            name: ct.ch('purgeCritRate_'),
-            unit: '%',
-          }),
-        },
-        {
-          node: infoMut(c6Cleaner_critDMG_, {
-            name: ct.ch('purgeCritDMG_'),
-            unit: '%',
-          }),
-        },
+        { node: purgeCritRateDisp },
+        { node: purgeCritDMGDisp },
       ],
     }),
   ]),

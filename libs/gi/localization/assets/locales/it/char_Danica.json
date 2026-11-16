@@ -8,5 +8,6 @@
   "c2ToastCond": "Consumo di una carica di Let Us Toast",
   "c2Cleaner": "Danica in forma Pulizie: aumento DAN Astroconduzione",
   "purgeCritRate_": "Tasso di CRIT di Will to Purge",
-  "purgeCritDMG_": "DAN da CRIT di Will to Purge"
+  "purgeCritDMG_": "DAN da CRIT di Will to Purge",
+  "cleanerA4": "Dopo Will to Purge: gli attacchi normali con l'Ancora danno 25 Will to Cleanse in più a colpo (A4, fino a 3 cariche insieme alla VEL d'attacco)."
 }

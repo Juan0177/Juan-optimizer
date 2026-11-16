@@ -23,10 +23,10 @@ const stellar_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
 const enhancedAtk_arr = [-1, 0.16, 0.2, 0.24, 0.28, 0.32]
 const enhancedStellar_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
 
-const atk_ = equal(
-  input.weapon.key,
-  key,
-  subscript(input.weapon.refinement, atk_arr)
+// I due ATT finiscono sommati nel premod: senza il percorso i valori da soli si vedrebbero senza nome (0.160)
+const atk_ = infoMut(
+  equal(input.weapon.key, key, subscript(input.weapon.refinement, atk_arr)),
+  { path: 'atk_' }
 )
 
 const [condMeasurePath, condMeasure] = cond(key, 'measure')
@@ -54,10 +54,13 @@ const measure_stellarconduct_dmg_active = equal(
   target.charKey,
   measure_stellarconduct_dmg_
 )
-const enhanced_atk_ = equal(
-  condMeasure,
-  'enhanced',
-  subscript(input.weapon.refinement, enhancedAtk_arr)
+const enhanced_atk_ = infoMut(
+  equal(
+    condMeasure,
+    'enhanced',
+    subscript(input.weapon.refinement, enhancedAtk_arr)
+  ),
+  { path: 'atk_' }
 )
 
 const data = dataObjForWeaponSheet(
