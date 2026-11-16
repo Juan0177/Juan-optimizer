@@ -1,5 +1,25 @@
 [
   {
+    "version": "1.11.0",
+    "date": "2026-11-16",
+    "new": [
+      "Weapons now follow your written rotation: for 4★ and 5★ weapons, timed buffs, stacks, their cooldowns and weapon damage procs (Skyward, Prototype, The Flute, Kagotsurube Isshin and more) count from the hits and actions that trigger them.",
+      "Weapons that react to healing (Song of Stillness, Tidal Shadow, Dialogues of the Desert Sages and others) now count heals from Diona, Qiqi, Yaoyao, Charlotte, Chevreuse, Sayu and Iansan, and heals by Max HP % (Gaming, Furina, Neuvillette, Wriothesley, Lyney).",
+      "ER calculator: Energy from Amenoma Kageuchi, Everlasting Moonglow, Kitain Cross Spear, Katsuragikiri Nagamasa, Frostbreath and other energy weapons is counted from the written rotation, and Favonius below R5 procs less often, as in the game.",
+      "The rotation writer reads KQM's Mavuika notation: C3 holds her Flamestrider Charged Attack for 3 spins and F waits for its finisher, as in \"C3FD C3FD CF\"."
+    ],
+    "fixed": [
+      "Navia's Verdict gets its Seals from the Crystallize shards she and Gorou pull in.",
+      "A Thousand Blazing Suns' Nightsoul boost counts for the wielder's hits during Nightsoul's Blessing, and the Ring Mavuika leaves when she swaps out keeps hitting.",
+      "Frostbreath's ATK buff lasts only as its wielder's Cryo- and Hydro-related reactions keep it up.",
+      "The Unforged, Summit Shaper, Memory of Dust and Vortex Vanquisher build their Golden Majesty stacks from the wielder's hits instead of always counting 5.",
+      "Attacks that take their stats when cast (Xiao's Skill, Zhongli's Stone Stele and others) now count weapon and set buffs that were up at the cast.",
+      "Amos' Bow gives Ganyu's Frostflake Bloom its 4 stacks for the arrow's flight.",
+      "Tulaytullah's Remembrance, Song of Broken Pines and Cashflow Supervision speed up Normal Attacks in the rotation.",
+      "KQM: weapon buffs a rotation can't show (Talking Stick, Wine and Song, Prospector's Drill and others) are no longer counted by default, and weapons such as Mistsplitter Reforged, Azurelight and Haran Geppaku Futsu count only what the member's attacks can give."
+    ]
+  },
+  {
     "version": "1.10.2",
     "date": "2026-11-16",
     "new": [
