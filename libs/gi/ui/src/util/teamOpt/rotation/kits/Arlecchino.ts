@@ -123,8 +123,10 @@ function absorbDirective(c: SimContext, s: ArleState) {
   if (c.now < s.limitUntil) add = Math.min(1.45 - s.skillDebt, add)
   if (add > 0) {
     s.skillDebt += add
+    const prev = s.debt
     s.debt = Math.min(2, s.debt + add)
-    bondChanged(c)
+    // (at the cap nothing changes, so no event)
+    if (s.debt > prev) bondChanged(c, 'gain')
   }
   if (cons >= 4 && c.now >= s.c4Icd) {
     s.c4Icd = c.now + 600
@@ -162,10 +164,13 @@ function directiveTick(
   if (count > 1) c.at(300, (c2) => directiveTick(c2, s, src, count - 1))
 }
 
-/** Bond of Life changed (for Fragment of Harmonic Whimsy and the like) */
-const bondChanged = (c: SimContext, delay = 0) =>
+/**
+ * Bond of Life changed, and which way (Fragment of Harmonic Whimsy counts both, Absolution gains;
+ * kqmsim's OnHPDebt)
+ */
+const bondChanged = (c: SimContext, dir: 'gain' | 'loss', delay = 0) =>
   c.hit(delay, {
-    path: ['_marker', 'bondOfLife'],
+    path: ['_marker', 'bondOfLife', dir],
     tag: 'other',
     element: 'physical',
     label: 'Bond of Life changed',
@@ -212,7 +217,7 @@ export const kit: KitModel = {
               if (masque && c.now >= s.bondIcd) {
                 s.bondIcd = c.now + 2
                 s.debt *= 0.925
-                bondChanged(c)
+                bondChanged(c, 'loss')
                 c.reduceCooldown(`skill${s.skillEpoch}`, 48)
               }
             }),
@@ -339,7 +344,7 @@ export const kit: KitModel = {
         ctx.at(22, (c2) => absorbDirective(c2, s))
         // the burst's heal (1.5x the debt + 1.5x ATK) repays all of it
         ctx.at(123, (c2) => {
-          if (s.debt > 0) bondChanged(c2)
+          if (s.debt > 0) bondChanged(c2, 'loss')
           s.debt = 0
         })
         // it also resets the Skill's cooldown (at frame 107; the Skill can't come before frame 146 anyway)

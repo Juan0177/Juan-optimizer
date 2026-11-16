@@ -1,6 +1,12 @@
 import { REACTION_MARK } from '../lunarCrystallize'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/navia, main as of 2026-11-10. */
 
@@ -202,7 +208,13 @@ export const kit: KitModel = {
               s.shards = s.shards.filter((shard) => {
                 if (shard.end <= c.now) return false
                 if (shard.t + 31 > arrive) return true
-                c.at(9, (c2) => gainShrapnel(s, c2.now))
+                c.at(9, (c2) => {
+                  gainShrapnel(s, c2.now)
+                  // (the shard's Crystallize shield, 15.1 s: kqmsim crystallize/shard.go)
+                  shieldMarker(c2, 0, 906, 'Crystallize shard', {
+                    kind: 'crystallize',
+                  })
+                })
                 return false
               })
             })

@@ -298,7 +298,11 @@ export function simulateRotation({
   const speedWindows: SimBuffWindow[] = []
   const addWindow = (w: SimBuffWindow) => {
     windows.push(w)
-    if (w.path[1] === '_attackSpeed' || w.path[1] === '_selfAttackSpeed')
+    if (
+      w.path[1] === '_attackSpeed' ||
+      w.path[1] === '_selfAttackSpeed' ||
+      w.path[1] === '_normalAttackSpeed'
+    )
       speedWindows.push(w)
   }
   /**
@@ -465,7 +469,7 @@ export function simulateRotation({
     onField,
     cooldown: (k, key, t) => cooldowns.readyAt(`${k}.${key}`, t) - t,
     window: (owner, path, value, start, end) =>
-      addWindow({ owner, path, value, start, end }),
+      addWindow({ owner, path, value, start, end, late: true }),
     reduceCooldown: (k, key, frames, t) => {
       cooldowns.reduce(`${k}.${key}`, t, frames)
     },
@@ -589,6 +593,16 @@ export function simulateRotation({
       return result.amount
     },
     healPercent(source, fraction, targets = members) {
+      // (a heal event for what heals trigger, as kit heals are: Tidal Shadow, Dialogues; no sheet
+      // node, so it heals nothing itself: the tracked HP below does)
+      ctxAt(t, source).hit(0, {
+        characterKey: source,
+        path: ['_heal', '_percent'],
+        tag: 'other',
+        element: 'physical',
+        healTargets: [...targets],
+        label: 'Heal (Max HP %)',
+      })
       for (const member of targets) {
         const max = calculateAt(t, member, ['total', 'hp'])
         if (max) healAt(t, source, member, max * fraction, targets.length > 1)
@@ -646,6 +660,16 @@ export function simulateRotation({
       ),
     normalAttackSpeed: (continuing) =>
       ctxAt(t, actor).attackSpeed +
+      // (a weapon's Normal Attack SPD: its wielder's, or each recipient's)
+      speedWindows
+        .filter(
+          (w) =>
+            w.path[1] === '_normalAttackSpeed' &&
+            (w.recipient ?? w.owner) === actor &&
+            w.start <= t &&
+            t < w.end
+        )
+        .reduce((total, w) => total + Number(w.value), 0) +
       members.reduce(
         (total, m) =>
           total +
@@ -931,7 +955,8 @@ export function simulateRotation({
       return
     }
     if (hit.path[0] === '_heal') {
-      if (health) {
+      // (`healPercent`'s event: its heal is already done)
+      if (health && hit.path[1] !== '_percent') {
         const source = hit.characterKey
         const value = calculateAt(hit.t, source, [
           'display',
@@ -1346,6 +1371,7 @@ export function simulateRotation({
     const variant = kit.variant?.(actCtx, states.get(characterKey), action)
     const frameKey = actionFrameKey(action, variant)
     const edit = frameData[characterKey]?.[frameKey]
+    gearFx.beforeAction(actCtx, characterKey, action)
     const kitResult = kit.act(
       edit?.hitDelay
         ? {
@@ -1870,6 +1896,19 @@ function buffStates(
   }
   const windowsOf = byKey(sim.buffWindows)
   const countedOf = byKey(sim.countedBuffs)
+  const lateWindows = sim.buffWindows.filter((w) => w.late && w.end > w.start)
+  /** The buffs with a window written after the fact (`SimBuffWindow.late`) on at `t` */
+  const lateAt = (t: number, character: CharacterKey) => {
+    const late = new Set<string>()
+    for (const w of lateWindows)
+      if (
+        w.start <= t &&
+        t < endAt(w, character) &&
+        (!w.recipient || w.recipient === character)
+      )
+        late.add(refKey(w))
+    return late
+  }
   const stateAt = (hit: SimHit, index: number) => {
     // (the hit's own states by buff; the first one for a buff, as `find` took it)
     let snapshots: Map<string, string> | undefined
@@ -1917,7 +1956,7 @@ function buffStates(
     }
     return keys.map((key) => by.get(key) ?? '')
   }
-  return { refs, keys, stateAt, valuesFrom }
+  return { refs, keys, stateAt, valuesFrom, lateAt }
 }
 
 /**
@@ -2016,7 +2055,7 @@ export function rotationAttacks(
       (out[member] ??= []).push(attack)
     return out
   }
-  const { refs, keys, stateAt, valuesFrom } = buffStates(sim, declared)
+  const { refs, keys, stateAt, valuesFrom, lateAt } = buffStates(sim, declared)
   const groups = new Map<
     string,
     {
@@ -2079,9 +2118,23 @@ export function rotationAttacks(
   ): SimHit => {
     if (hit.snapshotT === undefined) return hit
     const onField = hit.snapshotOnField ?? hit.onField ?? hit.characterKey
-    const then = hit.snapshotStates
-      ? valuesFrom(hit.snapshotStates)
-      : stateAt({ ...hit, t: hit.snapshotT, onField, states: undefined }, index)
+    const atSnapshot = () =>
+      stateAt({ ...hit, t: hit.snapshotT!, onField, states: undefined }, index)
+    // (a set's or weapon's window written after the snapshot, for frames before it: as it was)
+    let snapshotStates = hit.snapshotStates
+    if (snapshotStates) {
+      const late = lateAt(hit.snapshotT, hit.characterKey)
+      if (late.size) {
+        const settled = atSnapshot()
+        snapshotStates = [
+          ...refs.flatMap((ref, i) =>
+            late.has(keys[i]) ? [{ ...ref, value: settled[i] }] : []
+          ),
+          ...snapshotStates.filter((x) => !late.has(refKey(x))),
+        ]
+      }
+    }
+    const then = snapshotStates ? valuesFrom(snapshotStates) : atSnapshot()
     // (the hit's own snapshotted states stand at both times)
     const own = new Set(hit.states?.map(refKey))
     if (then.every((v, i) => v === states[i] || own.has(keys[i]))) return hit
@@ -2122,12 +2175,12 @@ export function rotationAttacks(
             t: hit.snapshotT!,
             onField,
             // (the hit's own states hold at the snapshot too, unless it snapshotted another value)
-            ...(hit.snapshotStates
+            ...(snapshotStates
               ? {
                   states: [
-                    ...hit.snapshotStates,
+                    ...snapshotStates,
                     ...(hit.states ?? []).filter(
-                      (x) => !hit.snapshotStates!.some((y) => sameRef(x, y))
+                      (x) => !snapshotStates!.some((y) => sameRef(x, y))
                     ),
                   ],
                 }

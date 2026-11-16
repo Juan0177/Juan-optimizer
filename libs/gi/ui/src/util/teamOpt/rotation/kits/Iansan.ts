@@ -80,6 +80,27 @@ interface IansanState {
   c4Stacks: number
   c4Generated: boolean
   overflow: number
+  /** A4 Warming Up: on until, and its heal's 2.8 s ICD until, these frames of her clock */
+  a4Until: number
+  a4Icd: number
+}
+
+/**
+ * A4 (assumed: ascension 4): within 10 s of a Nightsoul Burst, a Scale restore of 1+ point heals
+ * the active member, once per 2.8 s of her clock (kqmsim iansan/asc.go:94-116, burst.go:130)
+ */
+function a4Heal(ctx: SimContext, s: IansanState) {
+  const frame = ctx.characterFrame('Iansan')
+  if (frame > s.a4Until || frame <= s.a4Icd) return
+  s.a4Icd = frame + 168
+  ctx.hit(0, {
+    characterKey: 'Iansan',
+    path: ['_heal', 'passive2', 'heal'],
+    tag: 'other',
+    element: 'electro',
+    healTargets: [ctx.onField],
+    label: 'Warming Up (A4, Heal)',
+  })
 }
 
 /** Points at frame `t` (the blessing is on, or they are gone) */
@@ -213,6 +234,7 @@ function restore(ctx: SimContext, s: IansanState, gen: number, c6: boolean) {
     s.points = Math.min(NS_MAX, s.points + gain)
     scheduleExit(ctx, s)
   }
+  if (gain >= 1) a4Heal(ctx, s)
   ctx.at(RESTORE, (c2) => restore(c2, s, gen, c6))
 }
 
@@ -301,7 +323,13 @@ export const kit: KitModel = {
     c4Stacks: 0,
     c4Generated: false,
     overflow: 0,
+    a4Until: -1,
+    a4Icd: -1,
   }),
+  // A4: 10 s after any Nightsoul Burst (a status on her clock)
+  onNightsoulBurst(ctx, s: IansanState) {
+    s.a4Until = ctx.characterFrame('Iansan') + 600
+  },
   onPartyAction(ctx, s: IansanState, actor, action) {
     // C4 Surging Force: the active member (not Iansan) bursting while the Scale is up gives 2
     // stacks, once per Scale

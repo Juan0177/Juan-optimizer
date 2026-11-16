@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  shieldMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/gorou, main as of 2026-11-10. */
 
@@ -204,7 +210,13 @@ export const kit: KitModel = {
             const shard = s.shards.find((x) => x.t + 31 <= c2.now + 8)
             if (shard) {
               s.shards = s.shards.filter((x) => x !== shard)
-              c2.at(8, (c3) => c2Extend(c3, s))
+              c2.at(8, (c3) => {
+                c2Extend(c3, s)
+                // (the shard's Crystallize shield, 15.1 s: kqmsim crystallize/shard.go)
+                shieldMarker(c3, 0, 906, 'Crystallize shard', {
+                  kind: 'crystallize',
+                })
+              })
             }
             c2.at(90, collapse)
           }

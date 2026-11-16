@@ -57,7 +57,7 @@ interface ChevreuseState {
   /** C4: a Hold E has no cooldown until this frame, for `c4Shots` more casts */
   c4Until: number
   c4Shots: number
-  /** C6: the healing of E is running (a recast only refreshes it) */
+  /** The healing of E is running (a recast only refreshes it) */
   healChain: boolean
   healEnd: number
   /** C6: the team heal at the end of the healing is queued */
@@ -72,23 +72,32 @@ const c6Stack = (ctx: SimContext) =>
   })
 
 /**
- * C6: E's healing (every 2 s for 12 s) gives a stack to the active member, and one to each
- * member at its end. The sheet's stacks are team-wide, so the tick stacks count for the team.
+ * E's healing: the active member every 2 s for 12 s (world time, active on its expiry frame); a
+ * recast while it runs only refreshes it (kqmsim chevreuse/skill.go:197-226). C6: each heal gives
+ * the active member a stack, and at its end the party is healed and each member gets one
+ * (cons.go:120-140). The sheet's stacks are team-wide, so the tick stacks count for the team.
  */
-function startHealing(ctx: SimContext, s: ChevreuseState) {
+function startHealing(ctx: SimContext, s: ChevreuseState, c6: boolean) {
   s.healEnd = ctx.now + 12 * 60 + 1
   if (s.healChain) return
   s.healChain = true
   const tick = (c: SimContext) => {
-    if (c.now >= s.healEnd) {
+    if (c.now > s.healEnd) {
       s.healChain = false
       return
     }
-    c6Stack(c)
+    c.hit(0, {
+      path: ['_heal', 'skill', 'heal'],
+      tag: 'other',
+      element: 'pyro',
+      healTargets: [c.onField],
+      label: 'Short-Range Rapid Interdiction Fire (Heal)',
+    })
+    if (c6) c6Stack(c)
     c.at(2 * 60, tick)
   }
   ctx.at(2 * 60, tick)
-  if (!s.teamHealQueued) {
+  if (c6 && !s.teamHealQueued) {
     s.teamHealQueued = true
     ctx.at(12 * 60, (c) => {
       s.teamHealQueued = false
@@ -96,6 +105,13 @@ function startHealing(ctx: SimContext, s: ChevreuseState) {
         c.buff('Chevreuse', ['Chevreuse', 'c6AfterHealStacks'], '1', 0, 480, {
           recipient,
         })
+      c.hit(0, {
+        path: ['_heal', 'constellation6', 'heal'],
+        tag: 'other',
+        element: 'pyro',
+        healTargets: [...c.members],
+        label: 'In Pursuit of Ending Evil (C6, Heal)',
+      })
     })
   }
 }
@@ -213,8 +229,8 @@ export const kit: KitModel = {
               label: 'Sniper Induced Explosion (C2)',
             })
         }
-        // C6: the healing (from the E's cooldown delay) stacks Pyro/Electro DMG
-        if (c >= 6) ctx.at(cdDelay, (c2) => startHealing(c2, s))
+        // the healing starts at the cooldown's start (C6: it stacks Pyro/Electro DMG)
+        ctx.at(cdDelay, (c2) => startHealing(c2, s, c >= 6))
         // C4: after a Ring of Bursting Grenades, the Hold E has no cooldown (2 casts, 6 s)
         const noCooldown = hold && s.c4Until > ctx.now
         if (noCooldown) {
