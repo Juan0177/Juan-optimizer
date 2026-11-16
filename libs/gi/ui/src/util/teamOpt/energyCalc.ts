@@ -557,6 +557,80 @@ export interface RotationEnergy {
 }
 
 /**
+ * Normal and Charged Attack energy (gcsim/kqmsim `SetupOnNormalHitEnergy`, the game's): a hit has
+ * a chance to restore 1 flat Energy to its attacker. The chance starts at 0 (10% with a sword),
+ * grows by the weapon's step with each miss and is reset by a success or by a swap; a success
+ * starts a 12-frame pause for the whole party.
+ */
+const ATTACK_ENERGY: Record<string, { base: number; step: number }> = {
+  sword: { base: 0.1, step: 0.05 },
+  claymore: { base: 0, step: 0.1 },
+  polearm: { base: 0, step: 0.04 },
+  bow: { base: 0, step: 0.05 },
+  catalyst: { base: 0, step: 0.1 },
+}
+/** Runs of the rotation's hits the random energy is averaged over (seeded: the same each time) */
+const ATTACK_ENERGY_RUNS = 400
+
+/**
+ * Each member's expected Energy a rotation from its Normal and Charged Attack hits in the played
+ * rotation (the random energy above, averaged over seeded runs of the same hits)
+ */
+export function attackEnergyFromRotation(
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits' | 'swaps'>,
+  keys: readonly CharacterKey[],
+  rotations = 1
+): Partial<Record<CharacterKey, number>> {
+  const start = sim.start
+  const end = sim.start + sim.frames
+  const hits = sim.hits
+    .filter(
+      (h) =>
+        (h.tag === 'normal' || h.tag === 'charged') &&
+        !h.path[0].startsWith('_') &&
+        keys.includes(h.characterKey) &&
+        h.t < end
+    )
+    .sort((a, b) => a.t - b.t)
+  if (!hits.length) return {}
+  const swaps = (sim.swaps ?? []).map((s) => s.start).sort((a, b) => a - b)
+  const rule = (k: CharacterKey) =>
+    ATTACK_ENERGY[getCharStat(k).weaponType] ?? ATTACK_ENERGY.sword
+  const totals = new Map<CharacterKey, number>()
+  for (let run = 0; run < ATTACK_ENERGY_RUNS; run++) {
+    // (a small seeded generator: mulberry32)
+    let seed = (run + 1) * 0x9e3779b9
+    const random = () => {
+      seed = (seed + 0x6d2b79f5) | 0
+      let x = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+      x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x
+      return ((x ^ (x >>> 14)) >>> 0) / 4294967296
+    }
+    const chance = new Map<CharacterKey, number>()
+    let pauseUntil = Number.NEGATIVE_INFINITY
+    let swap = 0
+    for (const h of hits) {
+      for (; swap < swaps.length && swaps[swap] <= h.t; swap++) chance.clear()
+      if (h.t < pauseUntil) continue
+      const k = h.characterKey
+      const { base, step } = rule(k)
+      const p = chance.get(k) ?? base
+      if (random() > p) {
+        chance.set(k, p + step)
+        continue
+      }
+      chance.set(k, base)
+      pauseUntil = h.t + 12
+      if (h.t >= start) totals.set(k, (totals.get(k) ?? 0) + 1)
+    }
+  }
+  const per = Math.max(1, rotations) * ATTACK_ENERGY_RUNS
+  return Object.fromEntries(
+    [...totals].map(([k, n]) => [k, Math.round((n / per) * 100) / 100])
+  )
+}
+
+/**
  * The ER calculator's inputs as a played rotation has them, per written rotation (`rotations` of
  * them in the simulation's kept span):
  * - field time: how long each member is on the field;
@@ -630,6 +704,8 @@ export function energyFromRotation(
       ? Math.round((sim.frames / 60 / procs) * 10) / 10
       : 0
   }
+  // (the random Energy of Normal and Charged Attack hits, a member's own)
+  const attackEnergy = attackEnergyFromRotation(sim, keys, per)
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -724,17 +800,6 @@ export function energyFromRotation(
     }
     if (SKILL_FLAT_ENERGY[key] !== undefined)
       member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
-    const bonus = ROTATION_BONUS[key]
-    if (bonus) {
-      const charged = sim.actions.filter(
-        (a) =>
-          a.characterKey === key &&
-          a.start >= start &&
-          a.start < end &&
-          (a.frameKey ?? '').startsWith('charged')
-      ).length
-      member.flatEnergy = bonus(charged / per)
-    }
     // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
     // as the rotation triggers them
     const reactionEnergy = REACTION_ENERGY[key]
@@ -755,6 +820,9 @@ export function energyFromRotation(
       member.flatEnergy =
         (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
     }
+    if (attackEnergy[key])
+      member.flatEnergy =
+        Math.round(((member.flatEnergy ?? 0) + attackEnergy[key]!) * 100) / 100
     // the catcher: who is on the field when each use's particles arrive (the first hit of the
     // member's Skill after the use, then the particles' travel)
     const primary = data.skills[member.skillMode!]
@@ -860,7 +928,10 @@ export function withRotationEnergy(
  * full Charged Attacks (the ERC sheet's note).
  */
 const START_USES: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
-/** Bonus energy a member starts with: Sandrone's 5 in a rotation of 3 Charged Attacks */
+/**
+ * Bonus energy a member starts with: Sandrone's 5 in a rotation of 3 Charged Attacks (the ERC
+ * sheet's note: her Charged Attacks' random energy; from a rotation, counted as played instead)
+ */
 const START_BONUS: Partial<Record<CharacterKey, number>> = { Sandrone: 5 }
 /**
  * Special Bursts that spend only part of the Energy: the sheet option ("-30 a use") and the kit's
@@ -888,10 +959,3 @@ const SHORT_BURSTS: Partial<
   Varesa: { label: 'Kablam', variant: 'apex' },
   Flins: { label: 'Thunderous Symphony', variant: 'symphony' },
 }
-/**
- * Bonus energy a rotation gives a member, by its Charged Attacks per rotation: Sandrone's 5 with
- * 3 or more
- */
-const ROTATION_BONUS: Partial<
-  Record<CharacterKey, (charged: number) => number>
-> = { Sandrone: (charged) => (charged >= 3 ? 5 : 0) }

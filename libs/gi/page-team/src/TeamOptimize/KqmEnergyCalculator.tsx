@@ -892,7 +892,7 @@ function MemberEnergy({
             label={t('teamOpt.kqm.calc.flat', 'Bonus energy')}
             tip={t(
               'teamOpt.kqm.calc.flatTip',
-              'Energy per rotation from character abilities or effects shared by every build.'
+              'Energy per rotation from character abilities or effects shared by every build. From a written rotation it includes the random Energy of the member’s Normal and Charged Attack hits.'
             )}
           >
             <NumberField
