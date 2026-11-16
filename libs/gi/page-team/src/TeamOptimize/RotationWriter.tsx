@@ -145,6 +145,13 @@ function writeStored(key: string, value: string | null) {
   else localStorage.setItem(key, value)
   window.dispatchEvent(new Event(storageEvent))
 }
+/** Saves the rotation's timing settings (the page's Rotations setting writes it directly) */
+export function saveRotationTiming(
+  teamId: string,
+  timing: RotationTimingSettings
+) {
+  writeStored(timingKey(teamId), JSON.stringify(timing))
+}
 function subscribeStored(onChange: () => void) {
   window.addEventListener(storageEvent, onChange)
   return () => window.removeEventListener(storageEvent, onChange)
@@ -1171,11 +1178,7 @@ function WriterModal({
   ]
 
   return (
-    <ModalWrapper
-      open
-      onClose={onClose}
-      containerProps={{ maxWidth: timingOpen ? 'xl' : 'lg' }}
-    >
+    <ModalWrapper open onClose={onClose} containerProps={{ maxWidth: 'xl' }}>
       <CardThemed>
         {/* title, the timing inspector's toggle, close */}
         <Box
@@ -1258,12 +1261,11 @@ function WriterModal({
         >
           <Box
             sx={{
-              p: { xs: 1.5, sm: 2.5 },
+              p: { xs: 1.5, sm: 3 },
               display: 'flex',
               flexDirection: 'column',
-              gap: 1.25,
               minWidth: 0,
-              maxHeight: { md: '76vh' },
+              maxHeight: { md: '80vh' },
               overflowY: { md: 'auto' },
               // (the column scrolls: its parts keep their height. Shrunk, the timeline's box went
               // to 0 on a laptop at 100% zoom and the hit cards covered the chart)
@@ -1274,321 +1276,333 @@ function WriterModal({
               },
             }}
           >
-            {/* the rotation, as text */}
-            <TextField
-              autoFocus
-              multiline
-              minRows={2}
-              fullWidth
-              value={text}
-              placeholder={exampleRotation(names.map((n) => n.name))}
-              onChange={(e) => setText(e.target.value)}
-              inputRef={inputRef}
-              inputProps={{
-                spellCheck: false,
-                'aria-label': t('teamOpt.writer.loop', 'Rotation'),
-              }}
-              sx={editorSx}
-            />
-            <WriterQuickRow
-              members={members}
-              onInsert={insert}
-              draft={
-                isDraft ? (
+            {/* the rotation: its text, quick words, the first-rotation-only opener */}
+            <WriterSection first title={t('teamOpt.writer.loop', 'Rotation')}>
+              <TextField
+                autoFocus
+                multiline
+                minRows={2}
+                fullWidth
+                value={text}
+                placeholder={exampleRotation(names.map((n) => n.name))}
+                onChange={(e) => setText(e.target.value)}
+                inputRef={inputRef}
+                inputProps={{
+                  spellCheck: false,
+                  'aria-label': t('teamOpt.writer.loop', 'Rotation'),
+                }}
+                sx={editorSx}
+              />
+              <WriterQuickRow
+                members={members}
+                onInsert={insert}
+                draft={
+                  isDraft ? (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => setText(applied)}
+                      sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+                    >
+                      {t('teamOpt.writer.revert', 'Not used yet · Revert')}
+                    </Button>
+                  ) : undefined
+                }
+              />
+              {openerShown ? (
+                <Box
+                  sx={(theme) => ({
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    pl: 1.25,
+                    borderLeft: `2px solid ${alpha(theme.palette.primary.main, 0.5)}`,
+                  })}
+                >
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+                  >
+                    {t('teamOpt.writer.opener', 'First rotation only')}
+                  </Typography>
+                  <InfoTooltipInline
+                    title={t(
+                      'teamOpt.writer.openerTip',
+                      'Actions played once before the rotation starts looping, like a setup skill (“mitya hE”). They set up cooldowns, summons and auras for the loop but are not counted in its time or damage.'
+                    )}
+                  />
+                  <TextField
+                    fullWidth
+                    size="small"
+                    value={openerText}
+                    placeholder="mitya hE"
+                    onChange={(e) => setOpenerText(e.target.value)}
+                    inputProps={{
+                      spellCheck: false,
+                      'aria-label': t(
+                        'teamOpt.writer.opener',
+                        'First rotation only'
+                      ),
+                    }}
+                    sx={editorSx}
+                  />
+                  <Tooltip title={t('teamOpt.writer.removeOpener', 'Remove')}>
+                    <IconButton
+                      size="small"
+                      aria-label={t('teamOpt.writer.removeOpener', 'Remove')}
+                      onClick={() => {
+                        setOpenerShown(false)
+                        setOpenerText('')
+                      }}
+                    >
+                      <CloseIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              ) : (
+                <Box>
                   <Button
                     size="small"
                     color="inherit"
-                    onClick={() => setText(applied)}
-                    sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+                    startIcon={<AddIcon fontSize="small" />}
+                    onClick={() => setOpenerShown(true)}
+                    sx={{ color: 'text.secondary', ml: -0.5 }}
                   >
-                    {t('teamOpt.writer.revert', 'Not used yet · Revert')}
+                    {t(
+                      'teamOpt.writer.addOpener',
+                      'Add a first-rotation-only opener'
+                    )}
                   </Button>
-                ) : undefined
-              }
-            />
-            {openerShown ? (
-              <Box
-                sx={(theme) => ({
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  pl: 1.25,
-                  borderLeft: `2px solid ${alpha(theme.palette.primary.main, 0.5)}`,
-                })}
-              >
-                <Typography
-                  variant="body2"
-                  sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+                </Box>
+              )}
+              {!!warnings.length && (
+                <Box
+                  role="status"
+                  sx={(theme) => ({
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0.25,
+                    px: 1.25,
+                    py: 0.75,
+                    borderRadius: 1.5,
+                    bgcolor: alpha(theme.palette.warning.main, 0.08),
+                    border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
+                  })}
                 >
-                  {t('teamOpt.writer.opener', 'First rotation only')}
-                </Typography>
-                <InfoTooltipInline
-                  title={t(
-                    'teamOpt.writer.openerTip',
-                    'Actions played once before the rotation starts looping, like a setup skill (“mitya hE”). They set up cooldowns, summons and auras for the loop but are not counted in its time or damage.'
-                  )}
-                />
-                <TextField
-                  fullWidth
-                  size="small"
-                  value={openerText}
-                  placeholder="mitya hE"
-                  onChange={(e) => setOpenerText(e.target.value)}
-                  inputProps={{
-                    spellCheck: false,
-                    'aria-label': t(
-                      'teamOpt.writer.opener',
-                      'First rotation only'
-                    ),
-                  }}
-                  sx={editorSx}
-                />
-                <Tooltip title={t('teamOpt.writer.removeOpener', 'Remove')}>
-                  <IconButton
-                    size="small"
-                    aria-label={t('teamOpt.writer.removeOpener', 'Remove')}
-                    onClick={() => {
-                      setOpenerShown(false)
-                      setOpenerText('')
-                    }}
-                  >
-                    <CloseIcon sx={{ fontSize: 18 }} />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            ) : (
-              <Box>
-                <Button
-                  size="small"
-                  color="inherit"
-                  startIcon={<AddIcon fontSize="small" />}
-                  onClick={() => setOpenerShown(true)}
-                  sx={{ color: 'text.secondary', ml: -0.5 }}
-                >
-                  {t(
-                    'teamOpt.writer.addOpener',
-                    'Add a first-rotation-only opener'
-                  )}
-                </Button>
-              </Box>
-            )}
-            {!!warnings.length && (
-              <Box
-                role="status"
-                sx={(theme) => ({
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0.25,
-                  px: 1.25,
-                  py: 0.75,
-                  borderRadius: 1.5,
-                  bgcolor: alpha(theme.palette.warning.main, 0.08),
-                  border: `1px solid ${alpha(theme.palette.warning.main, 0.25)}`,
-                })}
-              >
-                {warnings.map((w) => (
-                  <Typography key={w} variant="body2" color="warning.main">
-                    {w}
-                  </Typography>
-                ))}
-              </Box>
-            )}
+                  {warnings.map((w) => (
+                    <Typography key={w} variant="body2" color="warning.main">
+                      {w}
+                    </Typography>
+                  ))}
+                </Box>
+              )}
+            </WriterSection>
             {result?.sim && seconds !== undefined ? (
               <>
-                {/* how long it takes, and the frame settings it plays with */}
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    flexWrap: 'wrap',
-                    columnGap: 1.5,
-                    rowGap: 0.5,
-                    mt: 1,
-                  }}
-                >
-                  <Typography
-                    sx={{
-                      fontSize: 26,
-                      fontWeight: 650,
-                      letterSpacing: '-0.02em',
-                      lineHeight: 1.1,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {seconds.toFixed(1)}
-                    <Box
-                      component="span"
-                      sx={{ fontSize: 15, fontWeight: 500, ml: 0.5 }}
-                    >
-                      s
-                    </Box>
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ fontVariantNumeric: 'tabular-nums' }}
-                  >
-                    {t('teamOpt.writer.perRotation', 'per rotation')} ·{' '}
-                    {Math.round(seconds * 60)}{' '}
-                    {t('teamOpt.writer.frames', 'frames')}
-                  </Typography>
-                  {waited && (
-                    <Tooltip
-                      title={t(
-                        'teamOpt.writer.waitedTip',
-                        'Played over and over, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
-                      )}
-                      placement="top"
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: 'warning.main',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >
-                        {t('teamOpt.writer.firstTime', {
-                          defaultValue: '{{seconds}} s without waiting',
-                          seconds: waited.first.toFixed(1),
-                        })}
-                        {!!waited.waits.length &&
-                          ` · ${t('teamOpt.writer.waitsRepeat', 'Waits for cooldowns from the previous rotation:')} ${waited.waits
-                            .slice(0, 3)
-                            .map((w) => `${w.label} ${w.seconds.toFixed(1)} s`)
-                            .join(', ')}`}
-                      </Typography>
-                    </Tooltip>
-                  )}
-                  <Box sx={{ flexGrow: 1 }} />
-                  <SettingChip
-                    label={t('teamOpt.timing.swap', 'Swap time')}
-                    value={`${timing.swapFrames ?? DEFAULT_SWAP_FRAMES} f`}
-                    edited={timing.swapFrames !== undefined}
-                    onClick={() => toggleTiming(true)}
-                  />
-                  <SettingChip
-                    label={t('teamOpt.frames.ping', 'Ping')}
-                    value={`${timingPing(timing)} ms`}
-                    edited={timing.swapFrames !== undefined}
-                    onClick={() => toggleTiming(true)}
-                  />
-                  <SettingChip
-                    label={t('teamOpt.timing.rotations', 'Rotations')}
-                    value={
-                      firstRotations(timing)
-                        ? t('teamOpt.timing.firstN', {
-                            defaultValue: 'First {{count}}',
-                            count: firstRotations(timing),
-                          })
-                        : t('teamOpt.timing.repeating', 'Repeating')
-                    }
-                    edited={timing.rotations !== undefined}
-                    onClick={() => toggleTiming(true)}
-                  />
-                </Box>
-                <RotationTimeline
-                  {...timelineProps(result.rotation, result.sim)}
-                  stats={detailOpen ? undefined : momentStats}
-                  onMoment={figures && !detailOpen ? setMoment : undefined}
-                  onOpenDetail={() => setDetailOpen(true)}
-                />
-                {/* the detailed timeline: its own large window */}
-                <Dialog
-                  open={detailOpen}
-                  onClose={() => setDetailOpen(false)}
-                  maxWidth={false}
-                  fullScreen={fullScreen}
-                  PaperProps={{
-                    sx: {
-                      width: fullScreen
-                        ? '100vw'
-                        : 'min(1760px, calc(100vw - 32px))',
-                      maxHeight: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
-                      m: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      bgcolor: tokens.panel,
-                      backgroundImage: 'none',
-                      border: fullScreen
-                        ? 'none'
-                        : `1px solid ${tokens.hairline}`,
-                      borderRadius: fullScreen ? 0 : tokens.radius.panel,
-                    },
-                  }}
-                >
+                {/* how long it takes (the frame settings it plays with beside), then its timeline */}
+                <WriterSection>
                   <Box
                     sx={{
                       display: 'flex',
                       alignItems: 'baseline',
-                      gap: 2,
-                      flexShrink: 0,
-                      pl: fullScreen ? 1.5 : 3,
-                      pr: fullScreen ? 0.5 : 1.5,
-                      py: fullScreen ? 0.25 : 1.75,
-                      borderBottom: `1px solid ${tokens.hairline}`,
+                      flexWrap: 'wrap',
+                      columnGap: 1.5,
+                      rowGap: 0.5,
+                      mb: 1.5,
                     }}
                   >
-                    <Typography component="h2" sx={type.section}>
-                      {t('teamOpt.timeline.title', 'Timeline')}
-                    </Typography>
                     <Typography
                       sx={{
-                        fontSize: 15,
+                        fontSize: 26,
                         fontWeight: 650,
+                        letterSpacing: '-0.02em',
+                        lineHeight: 1.1,
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {(seconds ?? result.sim.frames / 60).toFixed(1)} s
+                      {seconds.toFixed(1)}
+                      <Box
+                        component="span"
+                        sx={{ fontSize: 15, fontWeight: 500, ml: 0.5 }}
+                      >
+                        s
+                      </Box>
                     </Typography>
                     <Typography
-                      noWrap
-                      sx={{
-                        flex: 1,
-                        minWidth: 0,
-                        fontSize: 13,
-                        color: 'text.secondary',
-                        fontFamily: 'ui-monospace, monospace',
-                      }}
+                      variant="body2"
+                      color="text.secondary"
+                      sx={{ fontVariantNumeric: 'tabular-nums' }}
                     >
-                      {text}
+                      {t('teamOpt.writer.perRotation', 'per rotation')} ·{' '}
+                      {Math.round(seconds * 60)}{' '}
+                      {t('teamOpt.writer.frames', 'frames')}
                     </Typography>
-                    <IconButton
-                      onClick={() => setDetailOpen(false)}
-                      aria-label={t('teamOpt.editor.close', 'Close')}
-                      sx={{ alignSelf: 'center', ...quickSx, ...focusSx }}
-                    >
-                      <CloseIcon />
-                    </IconButton>
-                  </Box>
-                  <Box
-                    sx={{
-                      minHeight: 0,
-                      p: fullScreen ? 1 : 3,
-                      overflowY: 'auto',
-                    }}
-                  >
-                    {detailOpen && (
-                      <RotationTimeline
-                        {...timelineProps(result.rotation, result.sim)}
-                        detail
-                        stats={momentStats}
-                        onMoment={figures ? setMoment : undefined}
+                    {waited && (
+                      <Tooltip
+                        title={t(
+                          'teamOpt.writer.waitedTip',
+                          'Played over and over, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
+                        )}
+                        placement="top"
+                      >
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: 'warning.main',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {t('teamOpt.writer.firstTime', {
+                            defaultValue: '{{seconds}} s without waiting',
+                            seconds: waited.first.toFixed(1),
+                          })}
+                          {!!waited.waits.length &&
+                            ` · ${t('teamOpt.writer.waitsRepeat', 'Waits for cooldowns from the previous rotation:')} ${waited.waits
+                              .slice(0, 3)
+                              .map(
+                                (w) => `${w.label} ${w.seconds.toFixed(1)} s`
+                              )
+                              .join(', ')}`}
+                        </Typography>
+                      </Tooltip>
+                    )}
+                    <Box sx={{ flexGrow: 1 }} />
+                    <SettingChip
+                      label={t('teamOpt.timing.swap', 'Swap time')}
+                      value={`${timing.swapFrames ?? DEFAULT_SWAP_FRAMES} f`}
+                      edited={timing.swapFrames !== undefined}
+                      onClick={() => toggleTiming(true)}
+                    />
+                    <SettingChip
+                      label={t('teamOpt.frames.ping', 'Ping')}
+                      value={`${timingPing(timing)} ms`}
+                      edited={timing.swapFrames !== undefined}
+                      onClick={() => toggleTiming(true)}
+                    />
+                    {/* (the Rotations setting is on the page, beside the rotation: shown, not set) */}
+                    {firstRotations(timing) !== undefined && (
+                      <SettingChip
+                        label={t('teamOpt.timing.rotations', 'Rotations')}
+                        value={t('teamOpt.timing.firstN', {
+                          defaultValue: 'First {{count}}',
+                          count: firstRotations(timing),
+                        })}
+                        edited
                       />
                     )}
                   </Box>
-                </Dialog>
-                <HitsSummary
-                  members={members}
-                  teamData={teamData}
-                  attacks={result.attacks}
-                  unsupported={result.sim.unsupported}
-                />
+                  <RotationTimeline
+                    {...timelineProps(result.rotation, result.sim)}
+                    stats={detailOpen ? undefined : momentStats}
+                    onMoment={figures && !detailOpen ? setMoment : undefined}
+                    onOpenDetail={() => setDetailOpen(true)}
+                  />
+                  {/* the detailed timeline: its own large window */}
+                  <Dialog
+                    open={detailOpen}
+                    onClose={() => setDetailOpen(false)}
+                    maxWidth={false}
+                    fullScreen={fullScreen}
+                    PaperProps={{
+                      sx: {
+                        width: fullScreen
+                          ? '100vw'
+                          : 'min(1760px, calc(100vw - 32px))',
+                        maxHeight: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
+                        m: 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        bgcolor: tokens.panel,
+                        backgroundImage: 'none',
+                        border: fullScreen
+                          ? 'none'
+                          : `1px solid ${tokens.hairline}`,
+                        borderRadius: fullScreen ? 0 : tokens.radius.panel,
+                      },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: 2,
+                        flexShrink: 0,
+                        pl: fullScreen ? 1.5 : 3,
+                        pr: fullScreen ? 0.5 : 1.5,
+                        py: fullScreen ? 0.25 : 1.75,
+                        borderBottom: `1px solid ${tokens.hairline}`,
+                      }}
+                    >
+                      <Typography component="h2" sx={type.section}>
+                        {t('teamOpt.timeline.title', 'Timeline')}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: 15,
+                          fontWeight: 650,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {(seconds ?? result.sim.frames / 60).toFixed(1)} s
+                      </Typography>
+                      <Typography
+                        noWrap
+                        sx={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: 13,
+                          color: 'text.secondary',
+                          fontFamily: 'ui-monospace, monospace',
+                        }}
+                      >
+                        {text}
+                      </Typography>
+                      <IconButton
+                        onClick={() => setDetailOpen(false)}
+                        aria-label={t('teamOpt.editor.close', 'Close')}
+                        sx={{ alignSelf: 'center', ...quickSx, ...focusSx }}
+                      >
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                    <Box
+                      sx={{
+                        minHeight: 0,
+                        p: fullScreen ? 1 : 3,
+                        overflowY: 'auto',
+                      }}
+                    >
+                      {detailOpen && (
+                        <RotationTimeline
+                          {...timelineProps(result.rotation, result.sim)}
+                          detail
+                          stats={momentStats}
+                          onMoment={figures ? setMoment : undefined}
+                        />
+                      )}
+                    </Box>
+                  </Dialog>
+                </WriterSection>
+                <WriterSection
+                  title={t('teamOpt.writer.hitsTitle', 'Hits per rotation')}
+                >
+                  <HitsSummary
+                    members={members}
+                    teamData={teamData}
+                    attacks={result.attacks}
+                    unsupported={result.sim.unsupported}
+                  />
+                </WriterSection>
                 {!!result.sim.notes.length && (
-                  <RotationNotes notes={result.sim.notes} />
+                  <WriterSection>
+                    <RotationNotes notes={result.sim.notes} />
+                  </WriterSection>
                 )}
               </>
             ) : (
-              <EmptyTimeline />
+              <WriterSection>
+                <EmptyTimeline />
+              </WriterSection>
             )}
           </Box>
           {timingOpen && (
@@ -1698,7 +1712,7 @@ export const editorSx = (theme: Theme) => ({
   },
 })
 
-/** A frame setting in the summary (opens the timing inspector) */
+/** A frame setting in the summary (opens the timing inspector; without `onClick`, shown only) */
 function SettingChip({
   label,
   value,
@@ -1708,11 +1722,12 @@ function SettingChip({
   label: string
   value: string
   edited: boolean
-  onClick: () => void
+  onClick?: () => void
 }) {
   return (
     <ButtonBase
       onClick={onClick}
+      disabled={!onClick}
       sx={(theme) => ({
         gap: 0.75,
         px: 1,
@@ -1874,6 +1889,47 @@ function HitRow({
         </Box>
       </Box>
     </Tooltip>
+  )
+}
+
+/**
+ * A part of the writer: a hairline above it (not the first), its heading in sentence case, then
+ * its content
+ */
+function WriterSection({
+  title,
+  aside,
+  first,
+  children,
+}: {
+  title?: ReactNode
+  aside?: ReactNode
+  first?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Box
+      component="section"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        minWidth: 0,
+        ...(first ? {} : { mt: 2.5, pt: 2.5, borderTop: tokensHairline }),
+      }}
+    >
+      {(title || aside) && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {title && (
+            <Typography component="h3" sx={{ ...type.title, flexGrow: 1 }}>
+              {title}
+            </Typography>
+          )}
+          {aside}
+        </Box>
+      )}
+      {children}
+    </Box>
   )
 }
 
