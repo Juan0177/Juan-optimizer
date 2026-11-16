@@ -4,5 +4,7 @@
   "honor": "Blessing of Honor (hold)",
   "accoladesCond": "Accolades active",
   "newWorldCond": "To the New World active",
-  "honorMult": "Blessing of Honor DMG multiplier"
+  "honorMult": "Blessing of Honor DMG multiplier",
+  "accoladesOn": "Accolades for the whole party",
+  "accoladesSealed": "3 others Sealed: all Accolades on Anastasya"
 }
