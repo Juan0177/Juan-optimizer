@@ -1,7 +1,7 @@
 # Juan-optimizer
 
 Fork personale di [Genshin Optimizer](https://github.com/frzyc/genshin-optimizer) (licenza MIT) per [JuanLab](https://juan0177.github.io/JuanLab/).
-Serve ad aggiungere i personaggi della beta prima che arrivino nel ramo ufficiale; per il resto è identico a upstream.
+Serve ad aggiungere i personaggi della beta prima che arrivino nel ramo ufficiale. Tiene solo Genshin Optimizer (`apps/frontend` e le librerie `gi`, `common`, `pando`, `game-opt`): Star Rail, Zenless, Somnia, il frontend sperimentale `gi-frontend` e i workflow di upstream sono tolti, e il sync li toglie di nuovo a ogni unione.
 
 - Sito: https://juan0177.github.io/Juan-optimizer/
 - Ramo di lavoro (e default): `juanlab`. Il ramo `master` non si usa.
