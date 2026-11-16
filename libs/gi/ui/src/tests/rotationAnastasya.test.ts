@@ -338,3 +338,35 @@ describe('Anastasya', () => {
     expect(critDMG('honorSeal') - critDMG('on')).toBeCloseTo(3 * 0.12 * 1.3, 5)
   })
 })
+
+describe('Anastasya: stopping Doom after two stages', () => {
+  // (each Doom stage frees one Sealed member: after two, the next swap can go to a freed one;
+  // leaving the field ends Doom, so the next rotation's hold Skill is a hold Skill, not stage 3)
+  it('the next rotation starts with a hold Skill, not Doom stage 3', () => {
+    const members: CharacterKey[] = ['Danica', 'Mitya', 'Odette', 'Anastasya']
+    for (const text of [
+      'Danica E\nMitya E\nOdette E E\nDanica Q\nAnastasya hE Q N5D N5D E E',
+      'Danica E\nMitya E\nOdette E E\nDanica Q\nAnastasya hE Q E N5D N5D E E',
+    ]) {
+      const sim = simulateRotation({
+        rotation: parseRotation(
+          text,
+          members.map((characterKey) => ({ characterKey, name: characterKey }))
+        ),
+        members,
+        elements: Object.fromEntries(members.map((k) => [k, getCharEle(k)])),
+        constellations: { Danica: 6, Mitya: 6, Odette: 6, Anastasya: 6 },
+        repeats: 2,
+        keep: 'all',
+      })
+      const ana = sim.actions
+        .filter((a) => a.characterKey === 'Anastasya')
+        .map((a) => a.frameKey)
+      // (both rotations: hold Skill, Burst, then two Doom stages and no third)
+      expect(ana.filter((k) => k === 'skillHold')).toHaveLength(2)
+      expect(ana.filter((k) => k?.includes('doom3'))).toHaveLength(0)
+      expect(ana.filter((k) => k === 'skill@doom2')).toHaveLength(2)
+      expect(sim.notes.some((n) => n.startsWith('Waited'))).toBe(false)
+    }
+  })
+})
