@@ -126,9 +126,11 @@ describe('energy inputs: Varesa Overload (KQM quick guide)', () => {
   it('counts Volcanic Kablams as the sheet’s Kablam option, her 70-cost Burst unused', () => {
     expect(energy.members.Varesa!.burstEvery).toBe(0)
     expect(energy.members.Varesa!.secondaryUses).toBe(3)
+    // (no weapons held: the Favonius triggers filled in count only with one)
     const result = calculateEnergyRecharge(
       team,
-      withRotationEnergy(defaultEnergyCalculator(team, 21.3), team, energy)
+      withRotationEnergy(defaultEnergyCalculator(team, 21.3), team, energy),
+      {}
     )
     // (3 Kablams, 30 each, from her particle energy: well above 100%)
     expect(result.members.Varesa!.flatEnergy).toBeCloseTo(
@@ -346,5 +348,51 @@ describe('Normal and Charged Attack energy (random, as gcsim/kqmsim)', () => {
       ['Mona']
     )
     expect(got.Mona ?? 0).toBe(0)
+  })
+})
+
+describe('Favonius from the rotation', () => {
+  const sim = play()
+  const energy = energyFromRotation(sim, members, 2)
+  it('fills in what each member’s hits would trigger with a Favonius (R5, CRIT half the time)', () => {
+    for (const k of members)
+      expect(energy.members[k]!.favoniusProcs ?? 0).toBeGreaterThanOrEqual(0)
+    // (Kinich hits all rotation: at least one trigger, at most one per 6 s)
+    const kinich = energy.members.Kinich!.favoniusProcs!
+    expect(kinich).toBeGreaterThan(0.5)
+    expect(kinich).toBeLessThanOrEqual(sim.frames / 2 / 360 + 1)
+  })
+  it('lowers the ER targets only for a member that holds a Favonius', () => {
+    const settings = withRotationEnergy(
+      defaultEnergyCalculator(members, sim.frames / 60 / 2),
+      members,
+      energy
+    )
+    const without = calculateEnergyRecharge(members, settings, {})
+    const withFav = calculateEnergyRecharge(
+      members,
+      settings,
+      { Kinich: 'FavoniusGreatsword' },
+      { Kinich: 5 }
+    )
+    expect(withFav.targets.Kinich!).toBeLessThan(without.targets.Kinich!)
+    // (its particles go to the team too)
+    expect(
+      members.some((k) => withFav.targets[k]! < without.targets[k]!) &&
+        withFav.members.Emilie!.particleEnergy >=
+          without.members.Emilie!.particleEnergy
+    ).toBe(true)
+  })
+  it('a count typed by hand is kept (edited)', () => {
+    const settings = defaultEnergyCalculator(members, 20)
+    settings.members.Kinich = {
+      ...settings.members.Kinich!,
+      favoniusProcs: 1,
+      edited: ['favoniusProcs'],
+    }
+    expect(
+      withRotationEnergy(settings, members, energy).members.Kinich!
+        .favoniusProcs
+    ).toBe(1)
   })
 })

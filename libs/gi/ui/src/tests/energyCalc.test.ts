@@ -623,6 +623,8 @@ describe('ER calculator weapons', () => {
 
   it('assumes, before KQM picks, the Favonius or energy weapon a member may use', () => {
     const settings = favSettings(2)
+    // (Favonius triggers set by hand: those filled in from a rotation are not assumed held)
+    settings.members.Bennett!.edited = ['favoniusProcs']
     settings.members.Xingqiu!.weaponEnergyTriggers = 1
     const allowed: Partial<
       Record<CharacterKey, { key: WeaponKey; refinement: number }[]>
@@ -651,6 +653,11 @@ describe('ER calculator weapons', () => {
     )
     expect(result.members.Bennett!.particleEnergy).toBe(12)
     expect(result.members.Xingqiu!.flatEnergy).toBe(12)
+    // filled in from a rotation (not set by hand): no Favonius assumed before KQM picks
+    const filled = favSettings(2)
+    expect(
+      energyCalcWeapons(team, filled, (k) => allowed[k] ?? []).weapons.Bennett
+    ).toBeUndefined()
     // no Favonius allowed: its triggers count for nothing, as in the KQM run
     const none = energyCalcWeapons(team, settings, () => [
       { key: 'TheFlute', refinement: 5 },

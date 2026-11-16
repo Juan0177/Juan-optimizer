@@ -161,6 +161,8 @@ export const teamOptEnergyRotationFields = [
   'catchBy',
   'funnelShare',
   'flatEnergy',
+  'favoniusProcs',
+  'favoniusCatchBy',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
