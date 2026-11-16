@@ -3,7 +3,7 @@
     "version": "1.10.0",
     "date": "2026-11-16",
     "new": [
-      "Rotation writer: choose whether to count the repeating pace or only the first 1 to 3 rotations from the start, with every cooldown ready (as in a timed challenge's first rotation). Team optimize and the KQM tab use the same choice."
+      "Rotation writer: choose whether to count the repeating pace or only the first 1 to 6 rotations from the start, with every cooldown ready (as in a timed challenge's first rotation). Team optimize and the KQM tab use the same choice."
     ],
     "fixed": [
       "KQM tab: builds can now pair two sets with the same 2-piece bonus, such as Gladiator's Finale + Shimenawa's Reminiscence (ATK) or Wanderer's Troupe + Gilded Dreams (Elemental Mastery).",

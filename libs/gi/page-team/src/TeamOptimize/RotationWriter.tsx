@@ -85,6 +85,7 @@ import type { TimelineMoment } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
   DEFAULT_SWAP_FRAMES,
+  firstRotations,
   frameOverrides,
   type RotationTimingSettings,
   timingPing,
@@ -419,11 +420,7 @@ export function simulateWritten({
     loops,
   }
 }
-/** The rotations a team's timing counts from the start (undefined: the repeating pace) */
-export const firstRotations = (timing: RotationTimingSettings) =>
-  timing.rotations && timing.rotations > 0
-    ? Math.min(3, Math.round(timing.rotations))
-    : undefined
+
 /** Played the writer's way (default `repeats`): 4 rotations in a row, the last 2 counted */
 const STEADY_REPEATS = 4
 const STEADY_COUNTED = 2
