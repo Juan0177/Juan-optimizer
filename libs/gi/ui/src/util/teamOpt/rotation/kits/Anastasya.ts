@@ -22,45 +22,48 @@ const normals: NormalHit[] = [
   { hitmarks: [27], toNormal: 52, toCharged: 17, toAbil: 17, frames: 52 },
 ]
 /**
- * ESTIMATE: the Blessed Spear string (1 / 2 / 1 / 3 / 3 instances). No reference has it; the
- * cadence is gcsim's Shenhe (a lady-body polearm, internal/characters/shenhe/attack.go), with the
- * extra instances spread inside her hit windows. No hitlag is modelled.
+ * The Blessing of Honor's frames follow a measured on-field turn, hE Q N5 D N5 E E E: 12.1 s
+ * (hE Q 3.4 s, N5 D 2.9 s, N5 into Doom 2.5 s, Doom's three stages 3.3 s) plus 0.3 s of buffer,
+ * 12.4 s in all.
+ *
+ * The Blessed Spear string (1 / 2 / 1 / 3 / 3 instances): 154 frames into the Skill after N5. No
+ * hitlag is modelled.
  */
 const spear: NormalHit[] = [
-  { hitmarks: [14], toNormal: 23, toCharged: 23, toAbil: 14, frames: 23 },
-  { hitmarks: [12, 17], toNormal: 29, toCharged: 29, toAbil: 17, frames: 29 },
-  { hitmarks: [19], toNormal: 32, toCharged: 33, toAbil: 19, frames: 33 },
+  { hitmarks: [16], toNormal: 26, toCharged: 26, toAbil: 16, frames: 26 },
+  { hitmarks: [13, 19], toNormal: 33, toCharged: 33, toAbil: 19, frames: 33 },
+  { hitmarks: [21], toNormal: 36, toCharged: 37, toAbil: 21, frames: 37 },
   {
-    hitmarks: [14, 18, 22],
-    toNormal: 27,
-    toCharged: 27,
-    toAbil: 22,
-    frames: 27,
+    hitmarks: [16, 20, 25],
+    toNormal: 30,
+    toCharged: 30,
+    toAbil: 25,
+    frames: 30,
   },
   {
-    hitmarks: [18, 22, 26],
-    toNormal: 49,
-    toCharged: 49,
-    toAbil: 26,
-    frames: 49,
+    hitmarks: [20, 25, 29],
+    toNormal: 55,
+    toCharged: 55,
+    toAbil: 29,
+    frames: 55,
   },
 ]
-/** ESTIMATE: hold Skill = the tap (17 / 35 frames) plus Mitya's hold-over-tap 16 frames. */
-const HOLD_HITMARK = 33
-const HOLD_FRAMES = 51
-/** ESTIMATE: The Evernight Yields to Dawn uses To the New World's 105 / 109 frames. */
-const BURST_HITMARK = 105
-const BURST_FRAMES = 109
+/** Hold Skill, then The Evernight Yields to Dawn: 212 frames together (see `spear`). */
+const HOLD_HITMARK = 43
+const HOLD_FRAMES = 67
+const BURST_HITMARK = 140
+const BURST_FRAMES = 145
 /** Blessing of Honor 15 s; The Evernight Yields to Dawn (and its Sealing) 14 s; Love burst 20 s. */
 const HONOR_DURATION = 900
 const EVERNIGHT_DURATION = 840
 const LOVE_DURATION = 1200
 /**
  * ESTIMATE: the Honor Sealing uses the Love Sealing's clock (1 point every 12 frames, so 70 points
- * for 14 s) and each Blessed Spear hit removes 2 points (as each Stellar Glimmer hit does for Love).
+ * for 14 s) and each Blessed Spear hit removes 3 points: it ends during the second N5, so Doom can
+ * cancel that N5 (see `spear`).
  */
 const HONOR_SEAL_POINTS = 70
-const SPEAR_SEAL_POINTS = 2
+const SPEAR_SEAL_POINTS = 3
 /** ESTIMATE: Palestar Edict: Doom can be used for 20 s after the Sealing ends (as Triumph). */
 const DOOM_WINDOW = 1200
 
@@ -245,15 +248,15 @@ function c6OnSkill(c: SimContext, s: State, blessing: 'love' | 'honor') {
 }
 /**
  * Palestar Edict: Doom, stage by stage (selecting a just-unsealed member or pressing the Skill;
- * only the Skill press is modelled). ESTIMATE frames: stage 1 slashes 8 frames apart from 18 and
- * its Stellar finisher at 66 (80 frames); stage 2's leap slash at 30 (50 frames); stage 3 is the
- * thrown spear, timed like Triumph (lands at 28, 26 frames). Stage 3 ends the Evernight freeze.
+ * only the Skill press is modelled). Frames, 203 for the three (see `spear`): stage 1's slashes
+ * from 23 to 65 and its Stellar finisher at 86 (104 frames); stage 2's leap slash at 39 (65
+ * frames); stage 3's thrown spear lands at 36 (34 frames). Stage 3 ends the Evernight freeze.
  */
 function doom(c: SimContext, s: State): ActionResult {
   const stage = s.doomStage
   s.doomStage = stage < 3 ? stage + 1 : 0
   if (stage === 1) {
-    for (const d of [18, 26, 34, 42, 50])
+    for (const d of [23, 34, 44, 55, 65])
       c.hit(d, {
         path: ['burst', 'doom1Dmg'],
         label: 'Palestar Edict: Doom 1-Hit (Cryo)',
@@ -262,20 +265,20 @@ function doom(c: SimContext, s: State): ActionResult {
         applies: true,
         icd: 'skill',
       })
-    c.at(66, (c2) => {
+    c.at(86, (c2) => {
       sync(c2, s)
       stellar(c2, 'burst', 'doom0', 'Palestar Edict: Doom 1-Hit')
     })
-    return { frames: 80 }
+    return { frames: 104 }
   }
   if (stage === 2) {
-    c.at(30, (c2) => {
+    c.at(39, (c2) => {
       sync(c2, s)
       stellar(c2, 'burst', 'doom1', 'Palestar Edict: Doom 2-Hit')
     })
-    return { frames: 50 }
+    return { frames: 65 }
   }
-  c.at(28, (c2) => {
+  c.at(36, (c2) => {
     sync(c2, s)
     stellar(c2, 'burst', 'doom2', 'Palestar Edict: Doom 3-Hit')
   })
@@ -284,7 +287,7 @@ function doom(c: SimContext, s: State): ActionResult {
     s.honorEnd = c.now + s.honorLeft
     syncAt(c, s, s.honorEnd)
   }
-  return { frames: 26 }
+  return { frames: 34 }
 }
 const doomReady = (c: SimContext, s: State) =>
   s.doomStage > 0 && c.now < s.doomUntil
