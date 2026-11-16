@@ -75,6 +75,11 @@ import {
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmShareMenu } from './KqmShareMenu'
+import {
+  KqmArtifactStandard,
+  kqmStandardName,
+  kqmStandardRolls,
+} from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
 import { elementColor } from './TeamOptResults'
@@ -519,7 +524,10 @@ export function KqmSettings({
               ? t('teamOpt.kqm.setup', 'KQM setup')
               : t('teamOpt.kqm.tab', 'KQM Theorycrafting')}
           </Typography>
-          <KqmAssumptions talents={kqmTalentLevel(kqm)} />
+          <KqmAssumptions
+            talents={kqmTalentLevel(kqm)}
+            rolls={kqmStandardRolls(kqm)}
+          />
         </Box>
         <Box
           sx={{
@@ -602,10 +610,11 @@ export function KqmSettings({
           >
             {t('teamOpt.kqm.membersAll', 'Members')}
             <InfoTooltipInline
-              title={t(
-                'teamOpt.kqm.membersAllHelp',
-                'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and 20 rolls placed for damage.'
-              )}
+              title={t('teamOpt.kqm.membersAllHelp', {
+                defaultValue:
+                  'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
+                rolls: kqmStandardRolls(kqm),
+              })}
             />
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 0.5 }}>
@@ -634,6 +643,7 @@ export function KqmSettings({
               }
             />
           </Box>
+          <KqmArtifactStandard kqm={kqm} setTeamOpt={setTeamOpt} />
           {calculated && (
             <FieldLabel
               tip={t(
@@ -941,7 +951,14 @@ export function KqmSettings({
 }
 
 /** The build rules under the title, in one muted line (the full rule in its tooltip) */
-function KqmAssumptions({ talents }: { talents: 9 | 10 }) {
+function KqmAssumptions({
+  talents,
+  rolls,
+}: {
+  talents: 9 | 10
+  /** The artifact standard's distributed rolls (KQMS: 20) */
+  rolls: number
+}) {
   const { t } = useTranslation('page_team')
   const labels = [
     t('teamOpt.kqm.ruleLevel', 'Lv. 90'),
@@ -951,15 +968,19 @@ function KqmAssumptions({ talents }: { talents: 9 | 10 }) {
       level: talents,
     }),
     t('teamOpt.kqm.ruleArtifacts', '+20 artifacts'),
-    t('teamOpt.kqm.ruleRolls', '2 fixed + 20 rolls'),
+    t('teamOpt.kqm.ruleRolls', {
+      defaultValue: '2 fixed + {{rolls}} rolls',
+      rolls,
+    }),
   ]
   return (
     <FieldLabel
       sx={{ mt: 0.5, lineHeight: 1.5 }}
-      tip={t(
-        'teamOpt.kqm.subtitle',
-        'Standard KQM builds for this rotation: level 90, 4★ C6 / 5★ C0, the talent levels set below, five +20 artifacts with 2 fixed rolls per substat and 20 rolls placed for damage.'
-      )}
+      tip={t('teamOpt.kqm.subtitle', {
+        defaultValue:
+          'Standard KQM builds for this rotation: level 90, 4★ C6 / 5★ C0, the talent levels set below, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
+        rolls,
+      })}
     >
       {labels.join('  ·  ')}
     </FieldLabel>
@@ -1064,6 +1085,16 @@ export function KqmSetupSummary({
           nowIs(
             `${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}`
           )}
+      </Box>
+      <Box component="span" sx={item}>
+        {t('teamOpt.kqm.standardRun', {
+          defaultValue: '{{name}} artifacts ({{rolls}} rolls)',
+          name: kqmStandardName(t, kqmStandardRolls(kqm)),
+          rolls: kqmStandardRolls(kqm),
+        })}
+        {nowKqm &&
+          kqmStandardRolls(nowKqm) !== kqmStandardRolls(kqm) &&
+          nowIs(`${kqmStandardRolls(nowKqm)}`)}
       </Box>
       <Box component="span" sx={item}>
         {t('teamOpt.kqm.weaponsCount', {

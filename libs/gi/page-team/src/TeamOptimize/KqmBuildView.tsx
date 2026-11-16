@@ -4,20 +4,20 @@ import {
 } from '@genshin-optimizer/common/ui'
 import { artifactAsset } from '@genshin-optimizer/gi/assets'
 import type { ArtifactSetKey, CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { KqmBuild } from '@genshin-optimizer/gi/ui'
+import { getArtSetStat } from '@genshin-optimizer/gi/stats'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
+import type { KqmBuild } from '@genshin-optimizer/gi/ui'
 import {
   ArtifactSetName,
   ArtifactSetTooltip,
   KQM_FIXED_ROLLS,
   kqmArtifactStats,
   kqmBuildRarity,
-  quickTooltipProps,
   kqmWeaponData,
+  quickTooltipProps,
   statName,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
-import { getArtSetStat } from '@genshin-optimizer/gi/stats'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { TooltipProps } from '@mui/material'
 import { Box, Tooltip, Typography } from '@mui/material'
@@ -38,10 +38,13 @@ export function KqmBuildView({
   characterKey,
   build,
   equipment,
+  rolls,
 }: {
   characterKey: CharacterKey
   build: KqmBuild
   equipment?: ReactNode
+  /** The run's artifact standard: its distributed rolls (absent: KQMS's 20) */
+  rolls?: number
 }) {
   const { t } = useTranslation('page_team')
   const weapon = kqmWeaponData(build.weapon, characterKey)
@@ -59,7 +62,7 @@ export function KqmBuildView({
     'def',
   ]
   // (a 4★ set: four of its pieces are 4★, one of sands, goblet and circlet the 5★ off-piece)
-  const rarity = kqmBuildRarity(build)
+  const rarity = kqmBuildRarity(build, rolls)
   const fourStar = rarity.four
   const slotFour = (slot: 'sands' | 'goblet' | 'circlet') =>
     fourStar >= 4 && (build.mains.off ?? 'circlet') !== slot
