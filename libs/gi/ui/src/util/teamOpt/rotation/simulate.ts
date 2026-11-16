@@ -507,31 +507,87 @@ export function simulateRotation({
 
   let health: Health | undefined
   let healthFrame = 0
-  const snapshotAt = (t: number, member: CharacterKey) => {
-    const sim = {
-      hits,
-      buffWindows: windows,
-      countedBuffs: [],
-      hitlagEvents: hits,
-    } as unknown as SimulationResult
-    const { refs, stateAt } = buffStates(sim)
-    const values = stateAt(
-      {
-        t,
-        characterKey: member,
-        onField,
-        path: [],
-        tag: 'other',
-        element: 'physical',
-        label: 'calculation',
-      },
-      -1
-    )
-    return {
-      t,
-      onField,
-      states: refs.map((ref, i) => ({ ...ref, value: values[i] })),
+  /**
+   * The buff states a calculation reads at a frame (`snapshotAt`), indexed as windows and hits
+   * come in. A team with tracked HP calculates at every HP check (Furina's Salon drains, a
+   * healer's ticks: thousands a rotation), and building every buff's state from all the windows
+   * and hits each time was most of its play (seconds). The same states, in the same order, as
+   * `buffStates` reads them: the windows' buffs, then those only hits' own states name.
+   */
+  type SnapshotRef = {
+    owner: SimBuffOwner
+    path: string[]
+    windows: SimBuffWindow[]
+  }
+  const windowRefs = new Map<string, SnapshotRef>()
+  const stateRefs = new Map<string, SnapshotRef>()
+  let windowsIndexed = 0
+  let hitsIndexed = 0
+  const indexStates = (hit: SimHit) => {
+    for (const s of hit.states ?? []) {
+      if (s.path[1]?.startsWith('_')) continue
+      const key = refKey(s)
+      if (!windowRefs.has(key) && !stateRefs.has(key))
+        stateRefs.set(key, { owner: s.owner, path: s.path, windows: [] })
     }
+  }
+  /** Each hitlag window's end for a character so far: the pauses read, continued from there */
+  const hitlagEnds = new WeakMap<
+    SimBuffWindow,
+    Map<CharacterKey, HitlagEnd & { base: number; read: number }>
+  >()
+  const snapshotEnd = (w: SimBuffWindow, character: CharacterKey) => {
+    if (!w.hitlag) return w.end
+    let byCharacter = hitlagEnds.get(w)
+    if (!byCharacter) hitlagEnds.set(w, (byCharacter = new Map()))
+    let known = byCharacter.get(character)
+    // (a window ended early again: its pauses read anew)
+    if (!known || known.base !== w.end)
+      byCharacter.set(
+        character,
+        (known = { base: w.end, read: 0, end: w.end, enemyPauseEnd: -1 })
+      )
+    // (every hit is a pause, as a calculation's snapshot reads them; the last one may still be
+    // landing, but its pause is set as it lands, before anything calculates)
+    extendHitlagEnd(w, character, hits, known.read, known)
+    known.read = hits.length
+    return known.end
+  }
+  const snapshotAt = (t: number, member: CharacterKey) => {
+    for (; windowsIndexed < windows.length; windowsIndexed++) {
+      const w = windows[windowsIndexed]
+      if (w.path[1]?.startsWith('_')) continue
+      const key = refKey(w)
+      let ref = windowRefs.get(key)
+      if (!ref) {
+        ref = { owner: w.owner, path: w.path, windows: [] }
+        stateRefs.delete(key)
+        windowRefs.set(key, ref)
+      }
+      ref.windows.push(w)
+    }
+    // (the last hit may still be landing: the kits give it states as it lands, read again)
+    for (; hitsIndexed < hits.length - 1; hitsIndexed++)
+      indexStates(hits[hitsIndexed])
+    if (hits.length) indexStates(hits[hits.length - 1])
+    const states: { owner: SimBuffOwner; path: string[]; value: string }[] = []
+    for (const refs of [windowRefs, stateRefs])
+      for (const ref of refs.values()) {
+        const on: SimBuffWindow[] = []
+        for (const w of ref.windows)
+          if (
+            w.start <= t &&
+            t < snapshotEnd(w, member) &&
+            (!w.recipient || w.recipient === member)
+          )
+            on.push(w)
+        states.push({
+          owner: ref.owner,
+          path: ref.path,
+          value: windowsValue(ref.path, on),
+        })
+      }
+    return { t, onField, states }
   }
   const calculateAt = (t: number, member: CharacterKey, path: string[]) => {
     if (!calculate) return undefined
@@ -1835,6 +1891,52 @@ const sameRef = (
 const refKey = (a: { owner: string; path: string[] }) =>
   `${a.owner}|${a.path.join('.')}`
 
+/** A hitlag window's end so far, and the enemy's pause read last (`extendHitlagEnd`) */
+type HitlagEnd = { end: number; enemyPauseEnd: number }
+/**
+ * A hitlag window's end for a character: lengthened by the pauses in it, read in order from the
+ * `from`th (the character's own, or the enemy's for an enemy window). Updates `at` and returns it
+ */
+function extendHitlagEnd(
+  window: SimBuffWindow,
+  character: CharacterKey,
+  pauses: readonly Pick<
+    SimHit,
+    'characterKey' | 't' | 'animationPause' | 'enemyAnimationPause'
+  >[],
+  from: number,
+  at: HitlagEnd
+) {
+  for (let i = from; i < pauses.length; i++) {
+    const pause = pauses[i]
+    if (
+      (window.hitlag === 'enemy' || pause.characterKey === character) &&
+      pause.t >= window.start &&
+      pause.t < at.end
+    ) {
+      if (window.hitlag === 'enemy') {
+        const next =
+          pause.t + (pause.enemyAnimationPause ?? pause.animationPause ?? 0)
+        at.end += Math.max(0, next - Math.max(pause.t, at.enemyPauseEnd))
+        at.enemyPauseEnd = Math.max(at.enemyPauseEnd, next)
+      } else at.end += pause.animationPause ?? 0
+    }
+  }
+  return at
+}
+/** A buff's state from its windows on at a moment ('' when none is) */
+function windowsValue(path: string[], on: SimBuffWindow[]) {
+  if (!on.length) return ''
+  // stacking windows (e.g. Columbina's A1, one per Gravity Interference): the count
+  if (
+    on.every((w) => w.value === '1') &&
+    (path[1]?.toLowerCase().includes('stack') ||
+      on.some((w) => w.max !== undefined))
+  )
+    return `${Math.min(Math.max(...on.map((w) => w.max ?? 3)), on.length)}`
+  return on.reduce((latest, w) => (w.start >= latest.start ? w : latest)).value
+}
+
 /** Every buff the simulation decides, and its state at each hit ('' when off) */
 function buffStates(
   sim: SimulationResult,
@@ -1850,21 +1952,10 @@ function buffStates(
     if (!byCharacter) ends.set(window, (byCharacter = new Map()))
     const cached = byCharacter.get(character)
     if (cached !== undefined) return cached
-    let end = window.end
-    let enemyPauseEnd = -1
-    for (const pause of pauses)
-      if (
-        (window.hitlag === 'enemy' || pause.characterKey === character) &&
-        pause.t >= window.start &&
-        pause.t < end
-      ) {
-        if (window.hitlag === 'enemy') {
-          const next =
-            pause.t + (pause.enemyAnimationPause ?? pause.animationPause ?? 0)
-          end += Math.max(0, next - Math.max(pause.t, enemyPauseEnd))
-          enemyPauseEnd = Math.max(enemyPauseEnd, next)
-        } else end += pause.animationPause ?? 0
-      }
+    const { end } = extendHitlagEnd(window, character, pauses, 0, {
+      end: window.end,
+      enemyPauseEnd: -1,
+    })
     byCharacter.set(character, end)
     return end
   }
@@ -1933,16 +2024,7 @@ function buffStates(
           hit.t < endAt(w, hit.characterKey) &&
           (!w.recipient || w.recipient === hit.characterKey)
       )
-      if (!on.length) return ''
-      // stacking windows (e.g. Columbina's A1, one per Gravity Interference): the count
-      if (
-        on.every((w) => w.value === '1') &&
-        (ref.path[1]?.toLowerCase().includes('stack') ||
-          on.some((w) => w.max !== undefined))
-      )
-        return `${Math.min(Math.max(...on.map((w) => w.max ?? 3)), on.length)}`
-      return on.reduce((latest, w) => (w.start >= latest.start ? w : latest))
-        .value
+      return windowsValue(ref.path, on)
     })
   }
   /** A list of states as each buff's value (the first one for a buff; '' if none) */
