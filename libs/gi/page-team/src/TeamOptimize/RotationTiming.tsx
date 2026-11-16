@@ -459,7 +459,18 @@ export function actionName(
             defaultValue: 'Charged attack, {{count}} beams',
             count: a.beams,
           })
-        : t('teamOpt.timing.kind.charged', 'Charged attack')
+        : a.spins
+          ? a.final
+            ? t('teamOpt.timing.kind.chargedSpinsFinal', {
+                defaultValue:
+                  'Charged attack, {{count}} spins and the finisher',
+                count: a.spins,
+              })
+            : t('teamOpt.timing.kind.chargedSpins', {
+                defaultValue: 'Charged attack, {{count}} spins',
+                count: a.spins,
+              })
+          : t('teamOpt.timing.kind.charged', 'Charged attack')
     case 'plunge':
       return t('teamOpt.timing.kind.plunge', 'Plunge')
     case 'dash':
