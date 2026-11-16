@@ -28,12 +28,12 @@ import {
 import { Fragment, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
-import { FieldLabel, Segmented } from './ui'
 import {
   actionName,
   DEFAULT_SWAP_FRAMES,
   FIRST_ROTATIONS,
   FramesInput,
+  firstRotations,
   frameOverrides,
   type RotationTimingSettings,
   StepTiming,
@@ -42,6 +42,7 @@ import {
   withPing,
   withSwapFrames,
 } from './RotationTiming'
+import { FieldLabel, Segmented } from './ui'
 
 type ActionDefaults = NonNullable<SimulationResult['actionData']>[CharacterKey]
 
@@ -140,6 +141,7 @@ export function FrameDataPanel({
     setTiming({ edits: {} })
   }
   const swap = timing.swapFrames ?? DEFAULT_SWAP_FRAMES
+  const first = firstRotations(timing)
   // a step's action, for every rotation: the member's frame data, that action open
   const editCharacter = (characterKey: CharacterKey, actionKey: string) => {
     setSelected(characterKey)
@@ -238,12 +240,12 @@ export function FrameDataPanel({
             )}
           </Button>
         )}
-        {/* the rotations counted: the repeating pace, or the first few from the start */}
+        {/* the rotations counted: the repeating pace, or a number of them from the start */}
         <Box sx={{ mt: 1.25 }}>
           <FieldLabel
             tip={t(
               'teamOpt.timing.rotationsTip',
-              'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). First 1 to 3: only that many rotations from the start, with every cooldown ready, as in the first rotation of a timed challenge. Team optimize and KQM use the same choice.'
+              'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Team optimize and KQM use the same choice.'
             )}
           >
             {t('teamOpt.timing.rotations', 'Rotations')}
@@ -252,11 +254,11 @@ export function FrameDataPanel({
             fullWidth
             size="small"
             aria-label={t('teamOpt.timing.rotations', 'Rotations')}
-            value={String(timing.rotations ?? 'repeat')}
+            value={first ? 'start' : 'repeat'}
             onChange={(key) => {
               const { rotations: _r, ...rest } = timing
               setTiming(
-                key === 'repeat' ? rest : { ...rest, rotations: Number(key) }
+                key === 'repeat' ? rest : { ...rest, rotations: first ?? 1 }
               )
             }}
             options={[
@@ -264,15 +266,46 @@ export function FrameDataPanel({
                 value: 'repeat',
                 label: t('teamOpt.timing.repeating', 'Repeating'),
               },
-              ...FIRST_ROTATIONS.map((n) => ({
-                value: String(n),
-                label: t('teamOpt.timing.firstN', {
-                  defaultValue: 'First {{count}}',
-                  count: n,
-                }),
-              })),
+              {
+                value: 'start',
+                label: t('teamOpt.timing.fromStart', 'From the start'),
+              },
             ]}
           />
+          {first !== undefined && (
+            <Box
+              sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 1 }}
+            >
+              <Typography
+                component="span"
+                sx={{
+                  fontSize: 12.5,
+                  color: 'text.secondary',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t('teamOpt.timing.first', 'First')}
+              </Typography>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Segmented
+                  fullWidth
+                  size="small"
+                  aria-label={t(
+                    'teamOpt.timing.rotationsFromStart',
+                    'Rotations from the start'
+                  )}
+                  value={String(first)}
+                  onChange={(key) =>
+                    setTiming({ ...timing, rotations: Number(key) })
+                  }
+                  options={FIRST_ROTATIONS.map((n) => ({
+                    value: String(n),
+                    label: String(n),
+                  }))}
+                />
+              </Box>
+            </Box>
+          )}
         </Box>
       </Box>
 

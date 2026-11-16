@@ -37,12 +37,17 @@ export interface RotationTimingSettings {
   pingMs?: number
   /**
    * Rotations counted from the start, nothing waited for from before (a timed challenge's first
-   * rotation): 1 to 3. Undefined: the pace it keeps played over and over (KQM's way)
+   * rotations): 1 to 6. Undefined: the pace it keeps played over and over (KQM's way)
    */
   rotations?: number
 }
 /** The choices for `RotationTimingSettings.rotations` */
-export const FIRST_ROTATIONS = [1, 2, 3] as const
+export const FIRST_ROTATIONS = [1, 2, 3, 4, 5, 6] as const
+/** The rotations a team's timing counts from the start (undefined: the repeating pace) */
+export const firstRotations = (timing: RotationTimingSettings) =>
+  timing.rotations && timing.rotations > 0
+    ? Math.min(FIRST_ROTATIONS.length, Math.round(timing.rotations))
+    : undefined
 /** KQM's standard swap: 12 frames, about 100 ms of ping */
 export const DEFAULT_SWAP_FRAMES = 12
 /**
