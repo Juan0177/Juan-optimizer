@@ -33,6 +33,29 @@ describe('Vesna constellations', () => {
     expect(sim.notes.some((n) => n.includes('Waited'))).toBe(false)
   })
 
+  it('C1: the free first Lv. 3 needs no Sword Essence', () => {
+    const sim = run('Vesna E E E E W1', ['Vesna'], { Vesna: 1 })
+    expect(
+      sim.hits.filter(
+        (h) => h.label === 'Windborne Blade Lv. 3 Spirit Blade Final'
+      )
+    ).toHaveLength(1)
+    expect(sim.notes.some((n) => n.includes('Waited'))).toBe(false)
+  })
+
+  it('C1: the last max-level use’s Spirit Blades still count as in Armed for Action', () => {
+    const sim = run('Vesna E E E Q E E N6 E N6 E W1', ['Vesna'], { Vesna: 1 })
+    const blades = sim.hits.filter((h) =>
+      h.label.startsWith('Windborne Blade Lv. 3 Spirit Blade')
+    )
+    expect(blades).toHaveLength(20)
+    for (const blade of blades.slice(-5))
+      expect(
+        blade.states?.find((x) => x.path.join('.') === 'Vesna.skillArmed')
+          ?.value
+      ).toBe('on')
+  })
+
   it('C2: maximum Disciplinary Action on entering Armed for Action', () => {
     const sim = run('Vesna E E W1', ['Vesna'], { Vesna: 2 })
     const blade = sim.hits.find((h) => h.label === 'Windborne Blade Lv. 1')!
@@ -42,6 +65,19 @@ describe('Vesna constellations', () => {
         (w) => w.path.join('.') === 'Vesna.a1Stacks' && w.value === '6'
       )
     ).toBe(true)
+  })
+
+  it('C6: leaving the field ends the Transpose window', () => {
+    const sim = run(
+      'Vesna E E E Q E -> Mona E -> Vesna E W1',
+      ['Vesna', 'Mona'],
+      {
+        Vesna: 6,
+      }
+    )
+    expect(
+      sim.hits.some((h) => h.label.startsWith('Windborne Sword: Transpose'))
+    ).toBe(false)
   })
 
   it('C6: a tap after a max-level Windborne Sword unleashes Transpose', () => {
