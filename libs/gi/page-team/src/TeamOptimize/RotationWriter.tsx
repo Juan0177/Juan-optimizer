@@ -193,6 +193,7 @@ export function useRotationSettings(teamId: string) {
   const edited =
     !!opener.trim() ||
     timing.swapFrames !== undefined ||
+    timing.rotations !== undefined ||
     Object.keys(timing.edits).length > 0 ||
     Object.values(frameData).some((m) => Object.keys(m ?? {}).length > 0)
   return { opener, timing, frameData, edited }
@@ -365,8 +366,10 @@ export function simulateWritten({
   const nth = burstEvery ? everyNthBursts(rotation, burstEvery) : undefined
   const edits = frameOverrides(rotation, timing.edits)
   const loops = nth?.loops ?? 1
-  // (the writer's and Team optimize's own play: the pace it keeps, as KQM counts it)
+  // (the writer's and Team optimize's own play: the pace it keeps, as KQM counts it, or the first
+  // few rotations from the start when chosen)
   const steady = repeats === undefined
+  const first = firstRotations(timing)
   const sampled = team.members.some((m) => kitModels[m]?.sampled)
   const sim = simulateRotationSamples(
     {
@@ -384,8 +387,8 @@ export function simulateWritten({
         : edits,
       swapFrames: timing.swapFrames,
       frameData,
-      repeats: steady ? STEADY_REPEATS : repeats,
-      keep: steady ? 'last2' : keep,
+      repeats: first ?? (steady ? STEADY_REPEATS : repeats),
+      keep: first ? 'all' : steady ? 'last2' : keep,
       auraTimeline,
     },
     // (two rotations kept: half the samples each, as much as one rotation of 64)
@@ -404,17 +407,23 @@ export function simulateWritten({
       counted: undefined,
       loops,
     }
+  const counted = first ?? STEADY_COUNTED
   return {
     rotation,
-    // (what the timeline shows: the last of the two counted)
-    sim: lastRotation(sim),
+    // (what the timeline shows: the last of the two counted; the first few, all of them)
+    sim: first ? sim : lastRotation(sim),
     own,
-    // per rotation: the hits of the two counted, averaged
-    attacks: perRotation(rotationAttacks(sim, own), STEADY_COUNTED),
-    counted: { sim, rotations: STEADY_COUNTED },
+    // per rotation: the hits of those counted, averaged
+    attacks: perRotation(rotationAttacks(sim, own), counted),
+    counted: { sim, rotations: counted },
     loops,
   }
 }
+/** The rotations a team's timing counts from the start (undefined: the repeating pace) */
+export const firstRotations = (timing: RotationTimingSettings) =>
+  timing.rotations && timing.rotations > 0
+    ? Math.min(3, Math.round(timing.rotations))
+    : undefined
 /** Played the writer's way (default `repeats`): 4 rotations in a row, the last 2 counted */
 const STEADY_REPEATS = 4
 const STEADY_COUNTED = 2
@@ -570,7 +579,8 @@ export function kqmRotationReplay({
       )
     // (per rotation: the hits and time of the 2 counted, averaged, each of them `loops` written
     // rotations; members the simulation has no kit for keep the attacks entered for them)
-    const counted = KQM_COUNTED * (played.loops ?? 1)
+    const counted =
+      (firstRotations(common.timing) ?? KQM_COUNTED) * (played.loops ?? 1)
     const attacks = { ...teamOpt.attacks }
     for (const k of keys)
       if (!played.sim.unsupported.includes(k))
@@ -862,7 +872,7 @@ export function RotationConfigureButton({
       arrow
       title={t(
         'teamOpt.writer.configureTip',
-        'Timeline, frame data and opener'
+        'Write the rotation and see its timeline, frame data and opener'
       )}
     >
       <span>
@@ -888,7 +898,7 @@ export function RotationConfigureButton({
             '& .MuiButton-startIcon svg': { fontSize: 16 },
           }}
         >
-          {t('teamOpt.writer.configure', 'Configure')}
+          {t('teamOpt.writer.configure', 'Write rotation')}
           {edited && (
             <Box
               component="span"
@@ -1112,6 +1122,7 @@ function WriterModal({
   }, [frameDefaults, result])
   const timingEdited =
     timing.swapFrames !== undefined ||
+    timing.rotations !== undefined ||
     keys.some((k) => Object.keys(frameData[k] ?? {}).length > 0) ||
     (!!result &&
       Object.keys(frameOverrides(result.rotation, timing.edits)).length > 0)
@@ -1462,6 +1473,19 @@ function WriterModal({
                     label={t('teamOpt.frames.ping', 'Ping')}
                     value={`${timingPing(timing)} ms`}
                     edited={timing.swapFrames !== undefined}
+                    onClick={() => toggleTiming(true)}
+                  />
+                  <SettingChip
+                    label={t('teamOpt.timing.rotations', 'Rotations')}
+                    value={
+                      firstRotations(timing)
+                        ? t('teamOpt.timing.firstN', {
+                            defaultValue: 'First {{count}}',
+                            count: firstRotations(timing),
+                          })
+                        : t('teamOpt.timing.repeating', 'Repeating')
+                    }
+                    edited={timing.rotations !== undefined}
                     onClick={() => toggleTiming(true)}
                   />
                 </Box>

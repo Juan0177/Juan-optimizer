@@ -28,10 +28,11 @@ import {
 import { Fragment, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
-import { FieldLabel } from './ui'
+import { FieldLabel, Segmented } from './ui'
 import {
   actionName,
   DEFAULT_SWAP_FRAMES,
+  FIRST_ROTATIONS,
   FramesInput,
   frameOverrides,
   type RotationTimingSettings,
@@ -130,6 +131,7 @@ export function FrameDataPanel({
   const anyEdit =
     members.some(memberEdited) ||
     timing.swapFrames !== undefined ||
+    timing.rotations !== undefined ||
     stepEdits > 0
   const resetAll = () => {
     const next = { ...frameData }
@@ -236,6 +238,42 @@ export function FrameDataPanel({
             )}
           </Button>
         )}
+        {/* the rotations counted: the repeating pace, or the first few from the start */}
+        <Box sx={{ mt: 1.25 }}>
+          <FieldLabel
+            tip={t(
+              'teamOpt.timing.rotationsTip',
+              'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). First 1 to 3: only that many rotations from the start, with every cooldown ready, as in the first rotation of a timed challenge. Team optimize and KQM use the same choice.'
+            )}
+          >
+            {t('teamOpt.timing.rotations', 'Rotations')}
+          </FieldLabel>
+          <Segmented
+            fullWidth
+            size="small"
+            aria-label={t('teamOpt.timing.rotations', 'Rotations')}
+            value={String(timing.rotations ?? 'repeat')}
+            onChange={(key) => {
+              const { rotations: _r, ...rest } = timing
+              setTiming(
+                key === 'repeat' ? rest : { ...rest, rotations: Number(key) }
+              )
+            }}
+            options={[
+              {
+                value: 'repeat',
+                label: t('teamOpt.timing.repeating', 'Repeating'),
+              },
+              ...FIRST_ROTATIONS.map((n) => ({
+                value: String(n),
+                label: t('teamOpt.timing.firstN', {
+                  defaultValue: 'First {{count}}',
+                  count: n,
+                }),
+              })),
+            ]}
+          />
+        </Box>
       </Box>
 
       {/* this rotation's steps, or each member's frame data */}

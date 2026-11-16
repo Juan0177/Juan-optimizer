@@ -336,6 +336,18 @@ export const kit: KitModel = {
     ctx.now < s.recastReady
       ? s.recastReady
       : ctx.now,
+  // A second tap E in the rotation past the 6 s window to switch the Detection Core (the core
+  // still up) is a new Skill: it waits for the 18 s cooldown (usually something before it waited
+  // and pushed it out of the window)
+  waitNote: (s: State, action, now, again) =>
+    again &&
+    action.kind === 'skill' &&
+    !action.hold &&
+    s.recastEnd >= 0 &&
+    now >= s.recastEnd &&
+    now < s.end
+      ? `Mitya's ${action.text} came more than 6 s after his Skill, so it is a new Skill (18 s cooldown) instead of switching the Detection Core: switch it within 6 s (what comes before it waiting can push it out).`
+      : undefined,
   cooldownKey: (s: State, action, now) =>
     action.kind === 'skill' && !action.hold && now < s.recastEnd
       ? undefined
