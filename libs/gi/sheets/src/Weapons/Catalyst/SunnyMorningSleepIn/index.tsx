@@ -46,7 +46,6 @@ const sheet: IWeaponSheet = {
       header: headerTemplate(key, st('conditional')),
       path: condSwirlPath,
       value: condSwirl,
-      teamBuff: true,
       name: st('swirlReaction.base'),
       states: {
         on: {
@@ -67,7 +66,6 @@ const sheet: IWeaponSheet = {
       header: headerTemplate(key, st('conditional')),
       path: condAfterSkillPath,
       value: condAfterSkill,
-      teamBuff: true,
       name: st('hitOp.skill'),
       states: {
         on: {
@@ -88,7 +86,6 @@ const sheet: IWeaponSheet = {
       header: headerTemplate(key, st('conditional')),
       path: condAfterBurstPath,
       value: condAfterBurst,
-      teamBuff: true,
       name: st('hitOp.burst'),
       states: {
         on: {

@@ -136,7 +136,7 @@ const sheet: IWeaponSheet = {
             },
             {
               text: stg('duration'),
-              value: 10,
+              value: 12,
               unit: 's',
             },
           ],
@@ -149,7 +149,7 @@ const sheet: IWeaponSheet = {
             },
             {
               text: stg('duration'),
-              value: 10,
+              value: 12,
               unit: 's',
             },
           ],
@@ -160,7 +160,7 @@ const sheet: IWeaponSheet = {
             ...Object.values(contra_stellar_dmg_obj).map((node) => ({ node })),
             {
               text: stg('duration'),
-              value: 10,
+              value: 12,
               unit: 's',
             },
           ],

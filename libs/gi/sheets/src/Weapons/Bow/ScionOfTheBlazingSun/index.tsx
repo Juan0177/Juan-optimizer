@@ -32,11 +32,15 @@ const charged_dmg_ = equal(
   subscript(input.weapon.refinement, charged_dmg_arr)
 )
 
-const data = dataObjForWeaponSheet(key, {
-  premod: {
-    charged_dmg_,
+const data = dataObjForWeaponSheet(
+  key,
+  {
+    premod: {
+      charged_dmg_,
+    },
   },
-})
+  { dmg }
+)
 
 const sheet: IWeaponSheet = {
   document: [
@@ -61,7 +65,7 @@ const sheet: IWeaponSheet = {
             },
             {
               text: stg('duration'),
-              value: 12,
+              value: 10,
               unit: 's',
             },
             {

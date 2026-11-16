@@ -8,12 +8,12 @@ import {
   subscript,
 } from '@genshin-optimizer/gi/wr'
 import { customDmgNode } from '../../../Characters/dataUtil'
-import { cond, st, trans } from '../../../SheetUtil'
+import { cond, st, stg, trans } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
 import { headerTemplate, WeaponSheet } from '../../WeaponSheet'
 
-// 7.3 beta weapon; the passive is only in CHS in the dump (断剑重铸, translated "Reforged Blade")
+// Song of Our Covenant: Reforged Blade after 5 s off the field in total, lost after 10 s on it
 const key: WeaponKey = 'BlazingLionfang'
 const [, trm] = trans('weapon', key)
 
@@ -63,7 +63,7 @@ const sheet: IWeaponSheet = {
           fields: [
             { node: infoMut(reforged_atk_, { path: 'atk_' }) },
             { node: infoMut(switchInDmg, { name: trm('switchInDmg') }) },
-            { text: st('cd'), value: 14, unit: 's' },
+            { text: stg('cd'), value: 14, unit: 's' },
           ],
         },
       },

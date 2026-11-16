@@ -103,7 +103,7 @@ const sheet: IWeaponSheet = {
             },
             {
               text: stg('duration'),
-              value: 12,
+              value: 4,
               unit: 's',
             },
           ],

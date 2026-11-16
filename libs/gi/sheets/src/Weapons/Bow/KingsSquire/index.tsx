@@ -1,5 +1,6 @@
 import type { WeaponKey } from '@genshin-optimizer/gi/consts'
 import {
+  constant,
   equal,
   infoMut,
   input,
@@ -30,7 +31,10 @@ const dmg = equal(
       subscript(input.weapon.refinement, dmg_arr, { unit: '%' }),
       input.total.atk
     ),
-    'elemental'
+    'elemental',
+    {
+      hit: { ele: constant('physical') },
+    }
   )
 )
 

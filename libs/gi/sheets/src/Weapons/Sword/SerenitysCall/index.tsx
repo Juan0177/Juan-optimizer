@@ -20,13 +20,13 @@ const gleam_hp_arr = [-1, 0.16, 0.2, 0.24, 0.28, 0.32]
 const [condAfterReactionPath, condAfterReaction] = cond(key, 'afterReaction')
 
 const hp_ = equal(
-  input.weapon.key,
-  key,
+  condAfterReaction,
+  'on',
   subscript(input.weapon.refinement, hp_arr, { unit: '%' })
 )
 const gleam_hp_ = equal(
-  input.weapon.key,
-  key,
+  condAfterReaction,
+  'on',
   greaterEq(
     tally.moonsign,
     2,

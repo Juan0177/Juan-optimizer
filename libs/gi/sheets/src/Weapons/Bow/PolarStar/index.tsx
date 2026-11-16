@@ -11,7 +11,7 @@ const [, trm] = trans('weapon', key)
 const eleSrc = [-1, 0.12, 0.15, 0.18, 0.21, 0.24]
 const ashenStack1 = [-1, 0.1, 0.125, 0.15, 0.175, 0.2]
 const ashenStack2 = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
-const ashenStack3 = [-1, 0.3, 0.375, 0.45, 0.528, 0.6]
+const ashenStack3 = [-1, 0.3, 0.375, 0.45, 0.525, 0.6]
 const ashenStack4 = [-1, 0.48, 0.6, 0.72, 0.84, 0.96]
 
 const [condPassivePath, condPassive] = cond(key, 'GoldenMajesty')
