@@ -10,7 +10,7 @@ Serve ad aggiungere i personaggi della beta prima che arrivino nel ramo ufficial
 
 Il workflow `.github/workflows/juanlab-pages.yml`:
 
-- il 1° e il 15 di ogni mese (o quando lo lanci a mano da Actions → "JuanLab - sync e Pages" → Run workflow) unisce `frzyc/genshin-optimizer` (`master`) in `juanlab` e, se ci sono novità, ricostruisce e pubblica il sito;
+- quando lo lanci a mano (Actions → "JuanLab - sync e Pages" → Run workflow) unisce `frzyc/genshin-optimizer` (`master`) in `juanlab`, ricostruisce e pubblica il sito. Non parte da solo: il controllo degli aggiornamenti è un promemoria nel calendario;
 - a ogni push su `juanlab` ricostruisce e pubblica;
 - se l'unione fallisce non pubblica nulla e prova ad aprire una issue "Sync da upstream non riuscito".
 
