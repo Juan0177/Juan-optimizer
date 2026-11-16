@@ -1,0 +1,10 @@
+{
+  "SprawlingGreenery": {
+    "cond2ele": "Dopo aver attivato reazioni di <pyro>Ustione</pyro>, <spread>Vivificazione</spread>, <bloom>Fioritura</bloom> o <lunarbloom>Fioritura lunare</lunarbloom>",
+    "cond3ele": "Dopo aver attivato reazioni di <aggravate>Accentuazione</aggravate>, <spread>Propagazione</spread>, <hyperbloom>Iperfioritura</hyperbloom> o <burgeon>Germinazione</burgeon>"
+  },
+  "EnduringRock": {
+    "baseCond": "Personaggio protetto da uno scudo o con Gabbie lunari create dalla <lunarcrystallize>Cristallizzazione lunare</lunarcrystallize> nelle vicinanze",
+    "hitCond": "Dopo aver inflitto DAN ai nemici mentre si è protetti da uno scudo o con Gabbie lunari della <lunarcrystallize>Cristallizzazione lunare</lunarcrystallize> nelle vicinanze"
+  }
+}

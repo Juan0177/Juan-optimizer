@@ -1,0 +1,20 @@
+{
+  "rebukeDmg": "DAN da Rimprovero: Pugno guizzante",
+  "a4Cond": "Editto d'accusa",
+  "icicleDmg": "DAN da spuntone di ghiaccio",
+  "rebuke_critRate_": "Tasso di CRIT Rimprovero: Pugno guizzante",
+  "rebuke_critDMG_": "DAN da CRIT Rimprovero: Pugno guizzante",
+  "rebuke_dmg_": "Bonus DAN Rimprovero: Pugno guizzante",
+  "hit3AddlMult": "Molt. DAN aggiuntivi 3º colpo Pugno espulsore Punizione rigente",
+  "hit5AddlMult": "Molt. DAN aggiuntivi 5º colpo Pugno espulsore Punizione rigente",
+  "lusterDmg": "DAN da Lustro: Pugno guizzante",
+  "lusterAddlMult": "Molt. DAN aggiuntivi Lustro: Pugno guizzante",
+  "5Hit_stellarconduct_dmg_": "Bonus DAN da Astroconduzione 5º colpo Pugno espulsore Punizione rigente",
+  "luster_stellarconduct_dmg_": "Bonus DAN da Astroconduzione Lustro: Pugno guizzante",
+  "chillingRepellingLuster_critRate_": "Tasso di CRIT Pugno espulsore Punizione rigente e Lustro: Pugno guizzante",
+  "chillingRepellingLuster_critDMG_": "DAN da CRIT Pugno espulsore Punizione rigente e Lustro: Pugno guizzante",
+  "normalAddlMult": "Molt. DAN aggiuntivi attacco normale",
+  "chargedAddlMult": "Molt. DAN aggiuntivi attacco caricato",
+  "c1LusterCond": "Dopo aver colpito un avversario con Lustro: Pugno guizzante",
+  "c15HitCond": "Dopo aver colpito un avversario con il 5º colpo del Pugno espulsore Punizione rigente"
+}

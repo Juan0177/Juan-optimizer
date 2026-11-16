@@ -1,0 +1,20 @@
+{
+  "skill": {
+    "unableToAuto": "Impossibile usare attacchi caricati o in picchiata",
+    "namisenStacks": "Namisen",
+    "shun_dmgInc": "<hydro>Aumento DAN Shunsuiken</hydro>"
+  },
+  "passive1": {
+    "afterUse": "Accumuli di Namisen ottenuti dopo l'uso dell'abilità",
+    "afterExplode": "Accumuli di Namisen ottenuti dopo l'esplosione dell'illusione d'acqua"
+  },
+  "c1": {
+    "shun_dmg_": "<hydro>Bonus DAN Shunsuiken</hydro"
+  },
+  "c2": {
+    "addlStacks": "Aumento accumuli max di Namisen"
+  },
+  "c6": {
+    "dmg": "DAN da Fonte infinita"
+  }
+}

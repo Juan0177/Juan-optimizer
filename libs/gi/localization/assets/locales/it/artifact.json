@@ -1,29 +1,130 @@
 {
-  "artifactFilter": "Filtro Artefatti",
-  "filterLocation": {
-    "inventory": "Inventario",
-    "currentlyEquipped": "Equipaggiato"
-  },
-  "button": {
-    "unequipArtifacts": "Disequipaggia Artefatti",
-    "deleteArtifacts": "Elimina Artefatti"
-  },
-  "buttonHint": "Nota: I pulsanti rossi precedenti si applicano solo a <1>filtered artifacts</1>",
-  "mainStat": "Stat Principale",
-  "slot": "Slot",
   "editor": {
-    "substat": {
-      "noSubstat": "Vuoto",
-      "selectSub": "Seleziona Valore",
-      "noStat": "Nessun Valore"
-    },
+    "title": "Editor manufatti",
     "rarity": "Rarità",
     "level": "Livello",
-    "unknownPieceName": "Nome Sconosciuto",
-    "preview": "Anteprima Artefatto",
-    "dupArt": "Artefatto Duplicato Trovato",
-    "upArt": "Artefatto Aggiornato Trovato",
-    "btnSave": "Salva Artefatto",
-    "btnAdd": "Aggiungi Artefatto"
-  }
+    "unknownPieceName": "Nome pezzo sconosciuto",
+    "unknownSetName": "Nome set sconosciuto",
+    "curSubEff": "Roll Value attuale",
+    "curSubEffDesc": "Ogni 4 potenziamenti del manufatto ottieni un roll di una statistica secondaria. Il <strong>Roll Value</strong> calcola, in percentuale, quanto è stato alto il roll della statistica secondaria.",
+    "maxSubEff": "Roll Value max.",
+    "maxSubEffDesc": "Il <strong>Roll Value massimo delle statistiche secondarie</strong> di un manufatto calcola l'RV supponendo che i potenziamenti rimanenti ottengano i valori massimi.",
+    "substat": {
+      "selectSub": "Seleziona valore",
+      "error": {
+        "noCalc": "Impossibile calcolare i roll della statistica.",
+        "noOverRoll": "La statistica secondaria non può ricevere più di {{value}} roll."
+      },
+      "noRoll": "Nessun roll",
+      "RollCount_one": "{{count}} roll",
+      "RollCount_other": "{{count}} roll",
+      "noStat": "Nessun valore",
+      "eff": "RV: <1></1>",
+      "noSubstat": "Vuota",
+      "substatFormat": "Statistica secondaria {{value}}",
+      "nextRolls": "Roll successivi:",
+      "initialRoll": "Roll iniziale"
+    },
+    "preview": "Anteprima manufatto",
+    "dupArt": "Rilevato manufatto duplicato",
+    "upArt": "Rilevato manufatto potenziato",
+    "beforeEdit": "Prima della modifica",
+    "btnSave": "Salva manufatto",
+    "btnAdd": "Aggiungi manufatto",
+    "btnClear": "Svuota",
+    "btnRandom": "Casuale",
+    "btnUpdate": "Aggiorna manufatto",
+    "clearPrompt": "C'è un manufatto in modifica. Vuoi davvero svuotare l'editor?",
+    "delete": "Elimina",
+    "confirmDelete": "Vuoi davvero eliminare questo manufatto?",
+    "uploadBtn": "Carica screenshot (o Ctrl-V)",
+    "uploadExp": {
+      "title": "Come caricare gli screenshot da analizzare",
+      "alert": "NOTA: al momento la scansione funziona solo con manufatti in <strong>INGLESE</strong>.",
+      "section1": "<0>Usare gli screenshot può ridurre drasticamente il tempo che passi a inserire a mano le statistiche in Genshin Optimizer.</0><1>Dove ritagliare lo screenshot.</1><2>Nel gioco, apri lo zaino e vai alla scheda dei manufatti. Seleziona il manufatto che vuoi scansionare con Genshin Optimizer. <2>Si possono scansionare solo i manufatti da questa schermata.</2></2><3>Singolo manufatto</3><4>Per fare uno screenshot su Windows, la scorciatoia è <2>Alt + Stamp</2>. Una volta selezionata l'area, l'immagine viene copiata automaticamente negli appunti.</4><5>Più manufatti</5><6>Per sfruttare il caricamento multiplo, puoi usare uno strumento come <2>PicPick</2> per creare una macro e catturare facilmente più manufatti alla volta.</6><7>Cosa includere nello screenshot.</7><8>L'intera finestra di Genshin, o almeno un'area che comprenda la scheda del manufatto.</8>",
+      "section2": "<0>Aggiungere lo screenshot a Genshin Optimizer</0><1>A questo punto dovresti avere lo screenshot del manufatto salvato sul disco o negli appunti.</1><2>Puoi cliccare sul riquadro accanto a \"Sfoglia\" per cercare più screenshot tra i file del disco.</2><3>Per i singoli screenshot ritagliati, premi <2>Ctrl + V</2> per incollarli dagli appunti.</3><4>Dovresti vedere un'anteprima del ritaglio e, dopo qualche secondo, il set e le statistiche secondarie del manufatto verranno compilati nell'<1>Editor manufatti</1>.</4><5>Completare il manufatto</5><6>Purtroppo la visione artificiale non è precisa al 100%: ci saranno sempre casi in cui qualcosa non viene scansionato correttamente. Controlla sempre i valori del manufatto scansionato! Una volta compilato il manufatto, clicca su <2>Aggiungi manufatto</2> per terminare la modifica.</6>"
+    },
+    "unactivated": "Non attivata"
+  },
+  "slot": "Slot",
+  "setEffectNum": "Set da {{setNum}} pezzi",
+  "slotName": {
+    "flower": "Fiore della vita",
+    "plume": "Piuma della morte",
+    "sands": "Sabbie del tempo",
+    "goblet": "Calice di Eonotema",
+    "circlet": "Corona del logos"
+  },
+  "info": {
+    "title": "Guida alla modifica e gestione dei manufatti",
+    "section1": "<0>Roll delle statistiche secondarie</0><1>Il <1>numero di roll</1> di una statistica secondaria è indicato a destra della statistica dal numero di barre. Inoltre, più aumentano i roll, più la statistica diventa luminosa. Ogni singola barra diventa anche più colorata man mano che il valore del roll aumenta:<3></3>.</1><2>Roll Value delle statistiche secondarie</2><3>Il Roll Value (RV) di una statistica secondaria è la percentuale del valore attuale rispetto al valore più alto possibile per un 5<1></1>. Nell'immagine, il valore massimo di un roll di PS% è 5,8%. In RV: <3>5,3/5,8 ~ 90%.</3></3><4>Roll Value attuale e Roll Value massimo</4><5>Quando un 5<1></1> ha 9 roll totali (4 base + 5 aggiuntivi), tutti con il valore più alto, si parla di un manufatto con RV del 900%. La maggior parte dei manufatti però non è così fortunata. L'<3>RV attuale</3> di un manufatto è la percentuale rispetto a quel manufatto dal valore massimo. L'<5>RV massimo</5> è l'RV più alto che un manufatto può raggiungere, se i roll rimanenti dei potenziamenti ottengono il valore più alto possibile.</5>",
+    "section2": "<0>Editor manufatti</0><1>Un editor di manufatti completo, che accetta qualsiasi manufatto da 3<1></1> a 5<3></3>. Quando inserisci una statistica secondaria, vengono calcolati i valori esatti dei roll. Verifica inoltre che il manufatto abbia il numero corretto di roll in base al livello, oltre a convalidare altri parametri.</1><2>Scansione degli screenshot</2><3>Non ti va di inserire i dati a mano? Puoi scansionare i manufatti dagli screenshot! Nell'editor manufatti, clicca sul pulsante <1>Mostrami come!</1> per saperne di più.</3><4>Scanner automatico di manufatti</4><5>Se giochi a Genshin su PC, puoi scaricare uno strumento che scansiona automaticamente tutti i tuoi manufatti e poi importare quei dati in <1></1> Impostazioni. <3>Clicca qui</3> per un elenco di scanner compatibili con GO.</5><6>Rilevamento di manufatti duplicati/potenziati</6><7>Sapevi che GO può rilevare se stai aggiungendo un manufatto <1>duplicato</1> già presente nel sistema? Può anche rilevare se il manufatto nell'editor è un <3>potenziamento</3> di uno esistente. Quando viene rilevato un duplicato/potenziamento, un'anteprima ti permette di confrontare i due manufatti (vedi immagine).</7>",
+    "section3": "<0>Inventario manufatti</0><1>Qui vengono mostrati tutti i manufatti che hai aggiunto a GO. I filtri ti permettono di affinare la visualizzazione dei tuoi manufatti. </1><2>Esempio: trovare manufatti da sacrificare</2><3>Usando il filtro dei manufatti e l'RV, puoi trovare rapidamente i manufatti da usare come materiale di potenziamento.</3><4>In questo esempio i filtri sono impostati così: </4><5><0><0>Livello limitato a 0-8.</0><1>Manufatti sbloccati nell'inventario.</1><2>PS fissi, DIF fissa e Ricarica di energia esclusi dal calcolo dell'RV.</2><3>Ordinamento per Roll Value massimo crescente.</3></0></5><6>In questo modo l'inventario mostra i manufatti con l'RV più basso per le statistiche secondarie desiderate.</6>"
+  },
+  "artifactFilter": "Filtro manufatti",
+  "efficiencyFilter": {
+    "title": "Statistiche secondarie da usare nel calcolo del Roll Value"
+  },
+  "filterLocation": {
+    "location": "Personaggi",
+    "inventory": "Inventario",
+    "currentlyEquipped": "Attualmente equipaggiati"
+  },
+  "button": {
+    "unequipArtifact": "Rimuovi manufatto",
+    "unequipArtifacts": "Rimuovi manufatti",
+    "deleteArtifacts": "Elimina manufatti",
+    "lockArtifacts": "Blocca manufatti",
+    "unlockrtifacts": "Sblocca manufatti"
+  },
+  "buttonHint": "Nota: i pulsanti rossi qui sopra si applicano solo ai <1>manufatti filtrati</1>",
+  "tipsOfTheDay": [
+    "L'RV massimo di un manufatto a 4 stelle è circa 540%.",
+    "L'RV massimo di un manufatto di solito diminuisce man mano che lo potenzi. È del tutto normale!",
+    "Le statistiche secondarie che contengono degli \"1\" sono le più difficili da scansionare negli screenshot.",
+    "Se tutti i roll (6) sono finiti in una sola statistica secondaria, sarà viola!",
+    "Clicca su \"Dettagli\" quando potenzi i manufatti nel gioco per scansionarli durante il potenziamento.",
+    "Ora puoi caricare più screenshot di manufatti da scansionare!"
+  ],
+  "sortMap": {
+    "level": "Livello",
+    "efficiency": "Roll Value attuale",
+    "mefficiency": "Roll Value massimo"
+  },
+  "mainStat": "Statistica principale",
+  "showingNum_one": "Visualizzato <1>{{count}}</1> manufatto su {{value}}",
+  "showingNum_other": "Visualizzati <1>{{count}}</1> manufatti su {{value}}",
+  "resetFilters": "Reimposta filtri",
+  "edit": "Modifica manufatto",
+  "autocompleteLabels": {
+    "sets": "Set di manufatti",
+    "mainStats": "Statistiche principali",
+    "substats": "Statistiche secondarie",
+    "set": "Set di manufatti"
+  },
+  "substat_one": "{{count}} statistica secondaria",
+  "substat_other": "{{count}} statistiche secondarie",
+  "sub_one": "{{count}} sec.",
+  "sub_other": "{{count}} sec.",
+  "addNew": "Aggiungi nuovo manufatto",
+  "showDup": "Mostra duplicati",
+  "noDupAlert": "Non ci sono manufatti duplicati nel tuo inventario.",
+  "cantDeleteLock": "Impossibile eliminare il manufatto perché è bloccato",
+  "equippedArt": "Tutti i manufatti equipaggiati",
+  "artInInv": "Tutti i manufatti non equipaggiati",
+  "locationsTooltip": "Disattiva \"Tutti i manufatti equipaggiati\" per filtrare per personaggio",
+  "noArtifacts": "Sembra che tu non abbia ancora aggiunto manufatti. Se vuoi, ci sono <1>scanner automatici</1> che possono velocizzare l'importazione!",
+  "subheadings": {
+    "general": "Generale",
+    "inventory": "Inventario",
+    "rollvalue": "Roll Value"
+  },
+  "levelSliderTitle": "Livello",
+  "rvSliderBtn": {
+    "maximum": "MRV",
+    "current": "RV"
+  },
+  "builds_one": "{{count}} build",
+  "builds_other": "{{count}} build",
+  "artifactUsage": "Il manufatto è usato nelle seguenti build dei personaggi: "
 }

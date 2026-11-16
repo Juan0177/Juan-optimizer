@@ -1,0 +1,88 @@
+{
+  "buildDropdown": {
+    "tcBadge": "TC",
+    "equipped": "Build equipaggiata"
+  },
+  "buildCard": {
+    "source": "Fonte: {{name}}"
+  },
+  "buildCardTip": {
+    "edit": "Modifica impostazioni build",
+    "copyTc": "Copia nelle build TC",
+    "duplicate": "Duplica build",
+    "equip": "Equipaggia build",
+    "delete": "Elimina build"
+  },
+  "buildEqCard": {
+    "name": "Build equipaggiata",
+    "copy": {
+      "nameReal": "Copia della build equipaggiata",
+      "nameTc": "Build equipaggiata - Copia",
+      "desc": "Copiata dalla build equipaggiata"
+    }
+  },
+  "buildRealCard": {
+    "copy": {
+      "nameReal": "Copia di {{name}}",
+      "nameTc": "{{name}} - Copia",
+      "equipped": "Equipaggiata"
+    },
+    "edit": {
+      "title": "Impostazioni build",
+      "label": "Nome build",
+      "placeholder": "Nome build",
+      "desc": "Descrizione build"
+    }
+  },
+  "buildTcCard": {
+    "copy": {
+      "nameTc": "Copia di {{name}}"
+    },
+    "edit": {
+      "title": "Impostazioni build",
+      "label": "Nome build",
+      "placeholder": "Nome build",
+      "desc": "Descrizione build"
+    }
+  },
+  "equipBuildModal": {
+    "title": "Conferma modifiche all'equipaggiamento di <2>{{currentName}}</2>",
+    "desc": "Vuoi applicare le modifiche mostrate qui sotto?",
+    "overwrite": "Copia l'equipaggiamento attuale di <2>{{currentName}}</2> in una nuova build. Altrimenti verrà sovrascritto.",
+    "label": "Nome build",
+    "newName": "Copia di {{currentName}}",
+    "cancel": "Annulla",
+    "equip": "Equipaggia"
+  },
+  "compareBtn": {
+    "compare": "Confronta",
+    "equipped": "Equipaggiata ",
+    "crrBadge": "Attuale",
+    "tcBadge": "TC"
+  },
+  "createBuildTc": {
+    "button": "Nuova build TC",
+    "title": "Nuova build theorycraft",
+    "desc": "Copia questa build in una nuova build TC",
+    "label": "Nome build TC",
+    "cancel": "Annulla",
+    "create": "Crea"
+  },
+  "createBuildReal": {
+    "button": "Nuova build",
+    "title": "Nuova build",
+    "desc": "Copia questa build in una nuova build",
+    "label": "Nome build",
+    "cancel": "Annulla",
+    "create": "Crea"
+  },
+  "buildDisplay": {
+    "equippedBadge": "(Equipaggiata)",
+    "currentBadge": "(build attuale)",
+    "equipped": "Equipaggiata",
+    "equipToCrr": "Equipaggia nella build attuale",
+    "oldWeapon": "Arma precedente",
+    "tcWeapon": "Arma TC",
+    "newWeapon": "Nuova arma"
+  }
+}

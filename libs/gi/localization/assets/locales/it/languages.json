@@ -1,12 +1,17 @@
 {
-  "chs": "Cinese (Semplificato)",
-  "cht": "Cinese (Tradizionale)",
+  "chs": "Cinese semplificato",
+  "cht": "Cinese tradizionale",
   "de": "Tedesco",
   "en": "Inglese",
   "es": "Spagnolo",
   "fr": "Francese",
   "id": "Indonesiano",
+  "it": "Italiano",
   "ja": "Giapponese",
+  "ko": "Coreano",
   "pt": "Portoghese",
-  "ru": "Russo"
+  "ru": "Russo",
+  "th": "Thailandese",
+  "tr": "Turco",
+  "vi": "Vietnamita"
 }

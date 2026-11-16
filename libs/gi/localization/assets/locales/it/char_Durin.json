@@ -1,0 +1,13 @@
+{
+  "burstForm": "Stato di <strong>Trasmutazione essenziale</strong>",
+  "whiteForm": "<strong>Conferma della purezza</strong>",
+  "darkForm": "<strong>Negazione delle tenebre</strong>",
+  "a1Dendro": "Dopo che un membro del gruppo innesca <pyro>Ustione</pyro> o infligge <pyro>DAN da Pyro</pyro> o <dendro>DAN da Dendro</dendro> a un avversario sotto l'effetto di <pyro>Ustione</pyro>",
+  "a1Anemo": "Dopo che un membro del gruppo innesca <pyro>Turbinio di Pyro</pyro>",
+  "a1Geo": "Dopo che un membro del gruppo innesca <pyro>Cristallizzazione di Pyro</pyro>",
+  "burstPeriodic_mult_": "Molt. DAN periodici Tripudio",
+  "a4Cond": "Consumo di un accumulo di Fusione primordiale",
+  "c1Cond": "Consumo di un accumulo di <strong>Ciclo dell'illuminazione</strong>",
+  "burst_defIgn_": "Ignora DIF Tripudio elementale",
+  "dark_burst_defIgn_": "Ignora DIF Tripudio elementale Negazione delle tenebre"
+}

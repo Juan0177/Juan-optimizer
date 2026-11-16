@@ -1,0 +1,13 @@
+{
+  "skillSongCond": "Nello stato <strong>Canzone di ere passate</strong>",
+  "a1Cond": "Dopo aver generato o fatto esplodere un Vortice errante",
+  "a4LeadVocalCond": "Consumo di un accumulo di <strong>Voce solista</strong>",
+  "a4ChorusCond": "Consumo di un accumulo di <strong>Coro</strong>",
+  "c1Cond": "Dopo aver attivato l'effetto di guarigione di <strong>Canzone di ere passate</strong>",
+  "c2Cond": "Stato Due voci in bianco e nero",
+  "c2VoiceCond": "Dopo aver colpito un avversario con il <strong>Richiamo della Cornucopia</strong>",
+  "c2VortexCond": "Dopo aver colpito un avversario con il <strong>Richiamo della Cornucopia</strong> mentre un Vortice errante è presente o è appena esploso",
+  "c4HealMult_": "Molt. guarigione Canzone di ere passate",
+  "c4AboveCond_one": "PS maggiori o uguali al 40% ({{count}} accumulo)",
+  "c4AboveCond_other": "PS maggiori o uguali al 40% ({{count}} accumuli)"
+}

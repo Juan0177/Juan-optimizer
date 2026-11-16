@@ -1,0 +1,12 @@
+{
+  "fpLow": "DAN da ATT in picchiata basso in Passione ardente",
+  "fpHigh": "DAN da ATT in picchiata alto in Passione ardente",
+  "fpImpact_dmgInc": "Aumento DAN impatto ATT in picchiata in Passione ardente",
+  "a1RainbowCond": "Sotto l'effetto Schianto iridato",
+  "a1FpCond": "Nello stato di Passione ardente",
+  "c1Text": "Talento passivo \"Triplice salto di squadra!\" potenziato",
+  "c1Effect": "L'aumento DAN impatto ATT in picchiata in Passione ardente del passivo 1 si applica ora ai DAN da Slancio vulcanico",
+  "c4DiligentCond": "Sotto l'effetto Miglioramento diligente",
+  "c4FpApexCond": "Nello stato di Passione ardente o Spinta culminante",
+  "volcanoDmg_": "Bonus DAN Slancio vulcanico"
+}

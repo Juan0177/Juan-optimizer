@@ -1,0 +1,10 @@
+{
+  "c2BrillianceCond": "Sotto l'effetto <strong>Splendore selenico</strong>",
+  "c2lunarchargedCond": "<strong>Interferenza gravitazionale</strong> di tipo Carica lunare",
+  "c2lunarbloomCond": "<strong>Interferenza gravitazionale</strong> di tipo Fioritura lunare",
+  "c2lunarcrystallizeCond": "<strong>Interferenza gravitazionale</strong> di tipo Cristallizzazione lunare",
+  "c4Cond": "Potenziamento di Interferenza gravitazionale attivo",
+  "c6lunarchargedCond": "Dopo che un membro del gruppo innesca una reazione di <lunarcharged>Carica lunare</lunarcharged> nel <strong>Dominio lunare</strong>",
+  "c6lunarbloomCond": "Dopo che un membro del gruppo innesca una reazione di <lunarbloom>Fioritura lunare</lunarbloom> nel <strong>Dominio lunare</strong>",
+  "c6lunarcrystallizeCond": "Dopo che un membro del gruppo innesca una reazione di <lunarcrystallize>Cristallizzazione lunare</lunarcrystallize> nel <strong>Dominio lunare</strong>"
+}

@@ -1,0 +1,14 @@
+{
+  "blossomCD": "TdR Bocciolo effimero",
+  "blossomDmg_": "Bonus DAN Bocciolo effimero",
+  "isotomaOnField": "Isotoma solare in campo",
+  "enerPerBlossom": "Energia rigenerata per Bocciolo effimero",
+  "c2Stacks": "Accumuli di Giudizio fatale consumati",
+  "transBlossom_dmgInc": "Aumento DAN aggiuntivi Bocciolo effimero",
+  "a1LockCond": "Isotoma argentea in campo",
+  "createSolar": "Dopo aver creato un'Isotoma solare",
+  "createSilver": "Dopo aver creato un'Isotoma argentea",
+  "c4JumpCond": "Dopo che il membro attivo del gruppo salta vicino a un'Isotoma argentea",
+  "fatalBlossom_dmgInc": "Aumento DAN aggiuntivi Bocciolo fatale",
+  "c6Cond": "Dopo aver usato il Tripudio elementale e distrutto un'Isotoma argentea"
+}

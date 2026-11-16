@@ -1,12 +1,73 @@
 {
   "title": "Impostazioni",
+  "letsnow": "Fai nevicare",
   "languageCard": {
     "languageFormat": "Lingua: {{language}}"
   },
+  "sillyCard": {
+    "desc": "Abbiamo <1>rubato</1> preso in prestito (con permesso) tutte le immagini dei personaggi da <strong>Silly Wisher</strong> e le abbiamo innestate in Genshin Optimizer.",
+    "toggle": {
+      "enabled": "Silly Optimizer attivato",
+      "disabled": "Silly Optimizer disattivato"
+    }
+  },
+  "count": {
+    "chars": "Personaggi:",
+    "arts": "Manufatti:",
+    "weapons": "Armi:",
+    "teams": "Squadre:",
+    "loadouts": "Configurazioni:",
+    "builds": "Build: ",
+    "buildTcs": "Build TC: ",
+    "total": "Totale:",
+    "new": "Nuovi:",
+    "updated": "Aggiornati:",
+    "removed": "Rimossi:",
+    "unchanged": "Invariati:",
+    "upgraded": "Potenziati:",
+    "invalid": "Non validi:",
+    "dbTotal": "Totale unito:",
+    "notInImport": "Non nell'importazione:"
+  },
+  "DatabaseCard": {
+    "title": "Database",
+    "button": {
+      "download": "Scarica",
+      "copy": "Appunti",
+      "delete": "Elimina",
+      "upload": "Carica",
+      "swap": "Scambia"
+    },
+    "currentDB": "Database attuale"
+  },
   "uploadCard": {
-    "title": "Carica Database",
-    "replaceDatabase": "Aggiorna Database",
+    "title": "Caricamento database",
+    "replaceDatabase": "Aggiorna database",
     "hint": "Carica qui il tuo file JSON...",
-    "hintPaste": "...o incolla qui i dati."
+    "hintPaste": "...oppure incolla i dati qui sotto.",
+    "dbSource": "Origine dati:",
+    "goodUpload": {
+      "title": "Formato <strong>Genshin Open Object Description</strong> (GOOD)"
+    },
+    "error": {
+      "jsonParse": "Impossibile leggere il file JSON.",
+      "unknown": "Formato di file sconosciuto.",
+      "monaInvalid": "Formato di file Mona-Uranai non valido",
+      "goInvalid": "Formato di backup GO non valido."
+    },
+    "buttons": {
+      "open": "Apri",
+      "detectDups": "Rileva aggiornamenti/duplicati",
+      "delWepArtiNotInImport": "Elimina armi/manufatti non presenti nell'importazione",
+      "delCharNotInImport": "Elimina personaggi non presenti nell'importazione"
+    },
+    "tooltip": {
+      "detectdup": "Trova potenziamenti/duplicati nell'inventario di GO e unisci l'importazione a GO.",
+      "ignoreDup": "Non rilevare potenziamenti/duplicati. L'importazione verrà aggiunta all'inventario esistente di GO.",
+      "delWepArtiNotInImport": "Considera l'importazione come il tuo inventario completo di armi e manufatti. Le armi e i manufatti nell'inventario di GO che non sono presenti nell'importazione verranno eliminati.",
+      "keepWepArtiNotInImport": "Considera l'importazione come un inventario parziale di armi e manufatti. Non verrà eliminato nulla.",
+      "delCharNotInImport": "Considera l'importazione come l'elenco completo dei tuoi personaggi. I personaggi nell'inventario di GO che non sono presenti nell'importazione verranno eliminati.",
+      "keepCharNotInImport": "Considera l'importazione come un elenco parziale dei tuoi personaggi. Non verrà eliminato nulla."
+    }
   }
 }

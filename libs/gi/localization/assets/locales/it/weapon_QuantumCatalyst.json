@@ -1,0 +1,12 @@
+{
+  "name": "Gatto-lizzatore quantistico",
+  "description": "Questo catalizzatore avanzato è infuso del misterioso potere della meccanica quantistica e ha le sembianze di un gatto curioso, con occhi verdi luminosi, una coda che sfavilla di energia Electro e qualche scintilla che di tanto in tanto scocca tra le orecchie.",
+  "passiveName": "Miaomento miagolico",
+  "passiveDescription": {
+    "0": "Aumenta la ricarica di energia di un <cryo>18%</cryo>. Aumenta i DAN da attacco normale e caricato di una quantità pari al <cryo>6%</cryo> della maestria elementale. Innescando una <electro>reazione elementale legata a Electro</electro>, ottieni <cryo>10</cryo> di maestria elementale per 12 secondi. Questo effetto è cumulabile fino a 5 volte e la durata di ciascun accumulo è calcolata in modo indipendente.",
+    "1": "Aumenta la ricarica di energia di un <cryo>22,5%</cryo>. Aumenta i DAN da attacco normale e caricato di una quantità pari al <cryo>7,5%</cryo> della maestria elementale. Innescando una <electro>reazione elementale legata a Electro</electro>, ottieni <cryo>12</cryo> di maestria elementale per 12 secondi. Questo effetto è cumulabile fino a 5 volte e la durata di ciascun accumulo è calcolata in modo indipendente.",
+    "2": "Aumenta la ricarica di energia di un <cryo>27%</cryo>. Aumenta i DAN da attacco normale e caricato di una quantità pari al <cryo>9%</cryo> della maestria elementale. Innescando una <electro>reazione elementale legata a Electro</electro>, ottieni <cryo>14</cryo> di maestria elementale per 12 secondi. Questo effetto è cumulabile fino a 5 volte e la durata di ciascun accumulo è calcolata in modo indipendente.",
+    "3": "Aumenta la ricarica di energia di un <cryo>31,5%</cryo>. Aumenta i DAN da attacco normale e caricato di una quantità pari al <cryo>10,5%</cryo> della maestria elementale. Innescando una <electro>reazione elementale legata a Electro</electro>, ottieni <cryo>16</cryo> di maestria elementale per 12 secondi. Questo effetto è cumulabile fino a 5 volte e la durata di ciascun accumulo è calcolata in modo indipendente.",
+    "4": "Aumenta la ricarica di energia di un <cryo>36%</cryo>. Aumenta i DAN da attacco normale e caricato di una quantità pari al <cryo>12%</cryo> della maestria elementale. Innescando una <electro>reazione elementale legata a Electro</electro>, ottieni <cryo>18</cryo> di maestria elementale per 12 secondi. Questo effetto è cumulabile fino a 5 volte e la durata di ciascun accumulo è calcolata in modo indipendente."
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "title": "🛑 Si è verificato un errore imprevisto 🛑",
+  "p1.1": "GO ha riscontrato un errore imprevisto. Probabilmente è colpa nostra, quindi aiutaci ad aiutarti!",
+  "p1.2": "Ecco alcune cose che puoi provare per risolvere il problema:",
+  "fixes": {
+    "1": "Ricarica la pagina",
+    "2": "Disattiva le estensioni del browser e ricarica di nuovo",
+    "3": "Scarica i tuoi DB qui sotto e conservali in un posto sicuro. Clicca sul pulsante 'Elimina TUTTI i dati di GO' e ricarica i tuoi DB"
+  },
+  "p2": "Se hai provato tutto questo e il problema si ripresenta, invia una segnalazione nella pagina Issues del nostro GitHub",
+  "report": {
+    "1": "Scarica i tuoi DB qui sotto",
+    "2": "Copia il testo della segnalazione dal riquadro qui sotto",
+    "3": "Clicca <1>qui</1> per inviare la segnalazione su GitHub. Incolla il testo nella descrizione, indica i passaggi per riprodurre il problema e allega i tuoi file JSON (potrebbe essere necessario rinominarli con estensione '.txt')",
+    "4": "In alternativa, clicca <1>qui</1> per consultare le segnalazioni già aperte su GitHub: se il problema è già stato segnalato, aggiungi i tuoi dettagli e i file JSON in un commento."
+  },
+  "refresh": "Ricarica la pagina",
+  "caption": "Immagini in diretta dei nostri ingegneri che indagano sul problema",
+  "confirmNuke": "Vuoi davvero eliminare TUTTI i dati di GO? L'operazione è irreversibile!",
+  "finishNuke": "Tutti i dati di GO sono stati cancellati. Ricaricamento della pagina in corso.",
+  "nuke": "Elimina TUTTI i dati di GO"
+}

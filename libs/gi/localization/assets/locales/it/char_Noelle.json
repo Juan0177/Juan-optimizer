@@ -1,4 +1,6 @@
 {
   "p4cd": "24s - 1s ogni 4 colpi",
-  "c6duration": "15s + 1s ogni uccisione (massimo 25s)"
+  "c6duration": "15s + 1s ogni uccisione (massimo 25s)",
+  "qlarger": "Area d'effetto degli attacchi più ampia",
+  "c4dmg": "DAN da distruzione Corazza"
 }

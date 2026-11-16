@@ -1,0 +1,6 @@
+{
+  "condName": {
+    "atk_": "Personaggio sotto l'effetto di <pyro>Pyro</pyro>",
+    "dmg_": "Personaggio sotto l'effetto di <hydro>Hydro</hydro>, <cryo>Cryo</cryo> o <electro>Electro</electro>"
+  }
+}

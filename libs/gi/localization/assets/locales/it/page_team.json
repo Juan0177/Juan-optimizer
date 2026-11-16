@@ -1,0 +1,89 @@
+{
+  "searchLabel": {
+    "char": "Personaggi",
+    "team": "Nome squadra"
+  },
+  "addTeamBtn": "Aggiungi squadra",
+  "importTeamBtn": "Importa squadra",
+  "importForm": {
+    "title": "Importa squadra",
+    "desc": "Importa una squadra in formato JSON qui sotto.",
+    "label": "Dati JSON",
+    "placeholder": "Incolla qui il JSON della squadra",
+    "importBtn": "Importa",
+    "error": {
+      "verifi": "Verifica dei dati non riuscita.",
+      "import": "Importazione dei dati non riuscita.",
+      "multiOpt": "I dati importati sono un multi-opt, non una squadra. Vai alla squadra e al personaggio desiderati per importare il multi-opt"
+    }
+  },
+  "teamDelModal": {
+    "teamName": "Elimina squadra:",
+    "alert": "Eliminando la squadra verranno rimossi i buff di risonanza e le impostazioni del nemico salvati nella squadra. Anche le configurazioni presenti solo in questa squadra sono selezionate per l'eliminazione in modo predefinito.",
+    "delBtn": "Elimina",
+    "onlyCrrTeam": "Solo nella squadra attuale",
+    "usingMltTeams": "In {{count}} squadre"
+  },
+  "teamSettings": {
+    "tab": {
+      "team": "Impostazioni squadra",
+      "char": "Personaggio {{count}}"
+    },
+    "alert": {
+      "desc": "Le <strong>squadre</strong> raccolgono 4 configurazioni di personaggi. Permettono ai personaggi di applicare buff di squadra e di impostare le statistiche del nemico. Le configurazioni possono essere condivise tra più squadre.",
+      "first": "Il primo personaggio della squadra riceve tutti i buff destinati al \"personaggio attivo in campo\" e non può essere vuoto."
+    },
+    "title": "Membri della squadra",
+    "exportBtn": "Esporta squadra",
+    "dupBtn": "Duplica squadra",
+    "deleteBtn": "Elimina squadra",
+    "addCharBtn": "Aggiungi personaggio",
+    "toFieldBtn": "Metti in campo",
+    "onFieldBtn": "Personaggio in campo"
+  },
+  "exportModal": {
+    "msg": "Dati della squadra copiati negli appunti.",
+    "title": "Esportazione squadra",
+    "alert": "Esporta i dati della squadra perché un altro utente possa importarli. Vengono esportati tutti i dati della squadra e delle configurazioni (statistiche bonus, impostazioni del nemico, impostazioni di ottimizzazione). Tutte le build non TC esportate vengono convertite in build TC.",
+    "selAll": "Seleziona tutto",
+    "unselAll": "Deseleziona tutto",
+    "export": "Esporta",
+    "target": "Obiettivo di ottimizzazione:",
+    "mTargets": "Multi-obiettivi da esportare",
+    "builds": "Build da esportare",
+    "equipped": "Build equipaggiata",
+    "tcBadge": "Build TC"
+  },
+  "enemyEditor": {
+    "enemyLevel": "Nemico ",
+    "defIgn": "DIF ignorata {{value}}%",
+    "defRed": "Rid. DIF {{value}}%",
+    "announceBtn": "Per conoscere i valori di resistenza specifici dei nemici, visita la wiki.",
+    "note": "Nota: Genshin Impact dimezza le riduzioni di resistenza sotto lo 0%. Per i calcoli inserisci il valore GREZZO e GO farà il resto (es. 10% - 20% = -10%)",
+    "immunity": "Immunità"
+  },
+  "teamComponents": {
+    "teamBuffs": "Buff di squadra ricevuti",
+    "tcBadge": "Build TC"
+  },
+  "buildInfo": {
+    "editorTitle": "Gestione build",
+    "equipped": "Questa è la build attualmente equipaggiata dal personaggio: rappresenta l'equipaggiamento nel gioco e resta valida anche al di fuori della configurazione.",
+    "build": "Una <strong>build</strong> è composta da un'arma e 5 manufatti.",
+    "tcbuild": "Una <strong>build theorycraft</strong> permette di definire una build tramite statistiche grezze."
+  },
+  "buildTcCharOverride": {
+    "tip": "Imposta per questa build TC un livello, una costellazione, un'ascensione o un livello dei talenti diversi da quelli del personaggio di base",
+    "btn": "Sovrascrivi i dati del personaggio per questa build TC"
+  },
+  "team": {
+    "editNameDesc": "Modifica nome e descrizione della squadra",
+    "name": "Nome squadra",
+    "desc": "Descrizione squadra"
+  },
+  "loadout": {
+    "edit": "Modifica configurazione",
+    "name": "Nome configurazione",
+    "desc": "Descrizione configurazione"
+  }
+}

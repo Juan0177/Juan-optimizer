@@ -1,0 +1,10 @@
+{
+  "omen": "Avversario affetto da Presagio",
+  "hitOp": {
+    "affectedByOmen": "Dopo aver colpito un avversario affetto da Presagio"
+  },
+  "frozenDuration": "Durata <shattered>Congelamento</shattered>",
+  "uponSprint": "Dopo aver usato Torrente illusorio",
+  "lockStacksCond": "Accumuli di <strong>Bagliore astrale di Mercurio</strong>",
+  "ca_mult_": "Moltiplicatore DAN da ATT caricato"
+}

@@ -1,0 +1,14 @@
+{
+  "karmaDmg_": "Bonus DAN Purificazione trikarmica",
+  "karmaCritRate_": "Bonus tasso di CRIT Purificazione trikarmica",
+  "karmaIntervalDec": "Riduzione intervallo di attivazione Purificazione trikarmica",
+  "noBurstEffect": "Suggerimento: nessun effetto del Tripudio attivo. Attiva C1 e/o aggiungi compagni <pyro>Pyro</pyro>, <electro>Electro</electro> e/o <hydro>Hydro</hydro>",
+  "partyInBurst": "Gruppo nel campo",
+  "c1Key": "Membri <pyro>Pyro</pyro>, <electro>Electro</electro> e <hydro>Hydro</hydro> aggiuntivi per il bonus di <strong>Santuario di Maya</strong>",
+  "c2": {
+    "bloomCondName": "Avversario marchiato con il <strong>Seme di Skandha</strong>",
+    "qasCondName": "Dopo aver innescato <spread>Vivificazione</spread>, <aggravate>Accentuazione</aggravate> o <spread>Propagazione</spread> sull'avversario marchiato con i Semi di Skandha"
+  },
+  "c4CondName": "Avversari affetti dai <strong>Semi di Skandha</strong>",
+  "c6KarmicDmg": "DAN da Oblio karmico"
+}

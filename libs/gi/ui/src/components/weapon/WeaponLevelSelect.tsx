@@ -90,7 +90,7 @@ export function WeaponLevelSelect({
         color={warning ? 'warning' : undefined}
         focused={warning ? true : undefined}
         sx={{ height: '100%', mr: '4px', flexGrow: 1 }}
-        label="Level"
+        label={t('sortMap.level')} // juanlab: tradotto (era "Level" fisso)
       />
       <DropdownButton
         title={t('selectlevel')}

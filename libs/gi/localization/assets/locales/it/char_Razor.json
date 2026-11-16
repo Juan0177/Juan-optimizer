@@ -1,0 +1,14 @@
+{
+  "soulCompanion": {
+    "1": "DAN da 1º colpo Spirito del lupo",
+    "2": "DAN da 2º colpo Spirito del lupo",
+    "3": "DAN da 3º colpo Spirito del lupo",
+    "4": "DAN da 4º colpo Spirito del lupo"
+  },
+  "electroSigil": "Sigillo di Electro",
+  "electroSigilAbsorbed": "Energia rigenerata all'azzeramento dei Sigilli di Electro",
+  "opHitWithClawAndThunder": "Avversario colpito da <strong>Artiglio tonante</strong> (pressione)",
+  "electroSigilPerProc": "Sigilli di Electro per attivazione",
+  "wolf_dmgInc": "Aumento DAN aggiuntivi <strong>Lupo interiore</strong>",
+  "c6LockCond": "Dopo aver consumato Sigilli di Electro"
+}

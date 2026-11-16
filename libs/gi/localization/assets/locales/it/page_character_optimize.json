@@ -1,0 +1,183 @@
+{
+  "specialized": "Specializzazione:",
+  "mainStat": {
+    "levelAssTooltip": {
+      "title": "Livello presunto della statistica principale",
+      "desc": "Imposta il valore della statistica principale almeno pari a quello del livello indicato. Non modifica le statistiche secondarie."
+    },
+    "assumptionLvl": {
+      "no": "Nessun livello presunto",
+      "lvl": "Stat. principale almeno al Liv. {{lvl}}"
+    },
+    "title": "Filtro/configurazione statistica principale"
+  },
+  "tcGraph": {
+    "vs": "Grafico obiettivo di ottimizzazione vs.",
+    "notSel": "Non selezionato",
+    "showStatThr": "Mostra linea soglia statistica",
+    "downloadData": "Scarica dati",
+    "generatedBuilds": "Build generate",
+    "statReqThr": "Linea soglia requisito statistica",
+    "desc": "Usando i dati del generatore, crea un grafico che mette a confronto l'obiettivo di ottimizzazione con l'obiettivo del grafico selezionato. Il grafico mostra il valore massimo dell'obiettivo di ottimizzazione per ogni 0,01 dell'obiettivo del grafico. È facoltativo, e attivarlo rallenta la generazione delle build",
+    "currentBuild": "Build attuale",
+    "highlightedBuilds": "Build evidenziate",
+    "buildAlreadyInList": "La build è già nella lista"
+  },
+  "levelFilter": "Filtro livello manufatti",
+  "upOptLevelFilter": "Filtro livello potenziatore manufatti",
+  "upOptLevelFilterTooltip": "Questo filtro di livello non è sincronizzato con la configurazione dell'ottimizzatore.",
+  "upOptNoResults": "Sembra che non ci siano manufatti da potenziare in grado di migliorare la tua configurazione. Forse i filtri dei manufatti sono troppo restrittivi. In alternativa, prova l'ottimizzatore di manufatti principale per trovare una build migliore.",
+  "upOptInfo": "Il potenziatore di manufatti individua i manufatti con un alto potenziale di aumentare il valore dell'obiettivo di ottimizzazione, indicandoti quali vale la pena potenziare.<br/>Dato che sostituisce un solo manufatto alla volta, per la build migliore in assoluto usa l'ottimizzatore di manufatti principale.",
+  "upOptEmptyBuild": "Stai usando una build parzialmente vuota. Poiché il potenziatore di manufatti sostituisce un manufatto alla volta, è difficile che completi un set. Ti consigliamo di partire da una build base, possibilmente generata dall'ottimizzatore principale.",
+  "upOptShowingNum": "{{count}} manufatti mostrati su {{value}}",
+  "upOptReshape": {
+    "label": "Rimodella",
+    "tooltip": "Valuta i manufatti di livello 20 come candidati da rimodellare. Ogni manufatto idoneo viene valutato una volta per ogni coppia di statistiche secondarie, per 6 combinazioni in totale.<br/>Nota: richiede l'importazione dei dati con <4>Irminsul</4>",
+    "rolls": "Numero di potenziamenti nelle statistiche secondarie garantite:",
+    "rollOption": "{{count}} potenziamenti"
+  },
+  "upOptDefine": {
+    "label": "Definisci",
+    "tooltip": "Valuta manufatti ipotetici creati tramite definizione (Elisir santificatore). I candidati vengono generati per i set, gli slot e le statistiche principali selezionati e per ogni coppia delle statistiche secondarie selezionate qui sotto.",
+    "substats": "Statistiche secondarie da considerare per la definizione:",
+    "sets": "Set considerati:",
+    "setsEmpty": "Nessun set considerato. Attiva Definisci con almeno 2 statistiche secondarie e scegli un obiettivo di ottimizzazione.",
+    "setsArbitrary": "Nessun set disponibile influisce sull'obiettivo di ottimizzazione in questi slot, quindi è stato scelto un set arbitrario (evidenziato sopra) solo per mostrare dei risultati."
+  },
+  "upOptChart": {
+    "est": " (stima)",
+    "prob": "Prob. miglioramento{{est}}: ",
+    "average": "Aumento medio{{est}}: ",
+    "equipped": "Equipaggiato",
+    "current": "Attuale nella build",
+    "reshape": "Rimodella",
+    "reshapeStats": "Garantiti: {{count}} potenziamenti in {{stats}}",
+    "define": "Definisci",
+    "defineStats": "Garantiti: 2 potenziamenti in {{stats}}",
+    "incLabel": "Aumento relativo dell'obiettivo",
+    "probLabel": "Probabilità",
+    "const": " vincolata",
+    "exactDist": "Distribuzione esatta{{const}}",
+    "estimatedDist": "Distribuzione stimata",
+    "currentTarget": "Obiettivo attuale",
+    "currentLine": "Valore obiettivo attuale",
+    "averageLine": "Aumento medio"
+  },
+  "excludeArt": {
+    "title_exclude": "Manufatti esclusi",
+    "title_tooltip": "Aggiungi manufatti alla lista di esclusione di questo personaggio. I manufatti nella lista di esclusione non verranno considerati nella generazione delle build.",
+    "button_txt": "Escludi manufatti",
+    "usingNum": "<1>{{totalStr}}</1> manufatti esclusi in uso",
+    "excNum_one": "<0>{{count}}</0> manufatto escluso",
+    "excNum_other": "<0>{{count}}</0> manufatti esclusi",
+    "addExc": "Aggiungi il manufatto alla lista di esclusione di questo personaggio",
+    "selExc": "Seleziona un manufatto da aggiungere alla lista di esclusione di questo personaggio",
+    "deSelectExc": "Clicca su un manufatto per rimuoverlo dalla lista di esclusione",
+    "includeArtifactTip": "Includere un manufatto permette al generatore di build di usarlo per questo personaggio.",
+    "includeArtifactButton": "Includi questo manufatto nell'ottimizzazione"
+  },
+  "optExcludeModal": {
+    "excludeMsg": "Vuoi davvero escludere {{count}} manufatti dall'ottimizzazione delle build?",
+    "includeMsg": "Vuoi davvero includere {{count}} manufatti nell'ottimizzazione delle build?",
+    "excludeBtn": "Escludi manufatti",
+    "includeBtn": "Includi manufatti"
+  },
+  "excludeChar": {
+    "title": "Usa manufatti equipaggiati",
+    "modal": {
+      "allow_all": "Aggiungi tutti i personaggi mostrati alla lista consentiti",
+      "disallow_All": "Rimuovi tutti i personaggi mostrati dalla lista consentiti"
+    },
+    "allowEquip": "Consenti l'uso dei manufatti di",
+    "usingNumTot_one": "Uso di <1>{{arts}}</1> manufatti da <3>{{count}}</3> personaggio",
+    "usingNumTot_other": "Uso di <1>{{arts}}</1> manufatti da <3>{{count}}</3> personaggi",
+    "chars": "Prendi dai personaggi",
+    "artis": "Manufatti equipaggiati",
+    "states": {
+      "unequippedOnly": "Solo non equipaggiati",
+      "customList": "Lista personalizzata",
+      "all": "Tutti i manufatti"
+    },
+    "usingState": "In uso"
+  },
+  "useTeamArts": "Usa i manufatti delle build attive dei compagni di squadra",
+  "tcBadge": "Build TC",
+  "allowPartial": "Consenti build parziali (<5 manufatti)",
+  "constraintFilter": {
+    "title": "Requisiti minimi della build",
+    "tooltip": "Imposta dei requisiti minimi che le build generate devono rispettare, ad es. almeno il 140% di ricarica di energia."
+  },
+  "artSetConfig": {
+    "title": "Configurazione set di manufatti",
+    "setEffCond": "Condizioni degli effetti set",
+    "enabled": "Attivati",
+    "allowed": "Consentiti",
+    "excluded": "Esclusi",
+    "selected": "Selezionati",
+    "2rainbow": "Arcobaleno da 3",
+    "4rainbow": "Arcobaleno da 5",
+    "allowAll2set": "Consenti tutti i set da 2",
+    "excludeAll2set": "Escludi tutti i set da 2",
+    "allowAll4set": "Consenti tutti i set da 4",
+    "excludeAll4set": "Escludi tutti i set da 4",
+    "alExRainbow": "<0>Consenti <1></1></0> / <2>Escludi <1></1></2> build arcobaleno",
+    "modal": {
+      "setCond": {
+        "title": "Effetti condizionali dei set di manufatti",
+        "reset": "Reimposta condizioni",
+        "text": "Alcuni effetti dei set di manufatti forniscono statistiche condizionali. Questa finestra ti permette di selezionare quegli effetti, in modo che contribuiscano alle statistiche quando durante l'ottimizzazione viene calcolata una build che soddisfa l'effetto del set."
+      },
+      "ArtSetFilter": {
+        "title": "Set di manufatti <1>consentiti<1></1></1> / <3>esclusi<1></1></3>",
+        "intro": "Puoi consentire/escludere i set che il generatore deve considerare. Negli esempi seguenti, <strong>A</strong> è un pezzo del set e <strong>R</strong> è arcobaleno (fuori set)",
+        "2set": "<0><0>Escludere<1></1> set da 2</0></0> esclude le build con set da 2: <2><0>AA</0>RRR</2> e <4><0>AAA</0>RR</4>.",
+        "4set": "<0><0>Escludere<1></1> set da 4</0></0> esclude le build con set da 4: <2><0>AAAA</0>R</2> e <4><0>AAAAA</0></4>.",
+        "2rain": "<0><0>Escludere<1></1> arcobaleno da 3</0></0> esclude le build con set da 2 + arcobaleno da 3: <2>AA<1>RRR</1></2> e <4>AAA<1>RR</1></4>.",
+        "4rain": "<0><0>Escludere<1></1> arcobaleno da 5</0></0> esclude le build interamente arcobaleno: <2><0>RRRRR</0></2>."
+      }
+    }
+  },
+  "bonusStats": {
+    "title": "Statistiche bonus"
+  },
+  "buildDropdownDesc": "Ridurre il numero di build generate riduce il tempo di calcolo quando le build sono molte.",
+  "threadDropdownDesc": "Aumentare il numero di thread velocizza la generazione delle build, ma usa più potenza della CPU.",
+  "noArtis": "Ops! Sembra che tu non abbia ancora aggiunto manufatti a GO! Vai alla pagina <1>Manufatti</1> e aggiungine qualcuno!",
+  "build_one": "<0>{{count}}</0> build",
+  "build_other": "<0>{{count}}</0> build",
+  "thread_one": "<0>{{count}}</0> thread",
+  "thread_other": "<0>{{count}}</0> thread",
+  "optAlert": {
+    "scalesWith": "L'obiettivo di ottimizzazione e i requisiti selezionati dipendono da: "
+  },
+  "targetSelector": {
+    "selectOptTarget": "Seleziona un obiettivo di ottimizzazione",
+    "selectGraphTarget": "Seleziona un obiettivo del grafico",
+    "selectBuildTarget": "Seleziona un requisito della build",
+    "invalidTarget": "OBIETTIVO NON VALIDO"
+  },
+  "selectTargetFirst": "Seleziona prima un obiettivo di ottimizzazione",
+  "emptyTarget": "Questo obiettivo è vuoto; verifica di aver impostato correttamente le condizioni dei talenti pertinenti",
+  "generateButton": {
+    "cancel": "Annulla",
+    "generateBuilds": "Genera build"
+  },
+  "buildShowingNum": "<2>{{count}}</2> build generate per <6/>.",
+  "generatedOn": "Build generata il: ",
+  "selectChar": "Seleziona un personaggio per generare le build.",
+  "clearBuildsBtn": "Cancella build",
+  "removeBuildButton": "Rimuovi build",
+  "theorycraftButton": "Theorycraft",
+  "currentlyEquippedBuild": "Equipaggiata ora",
+  "activeBuild": "Build attiva",
+  "addBuildToList": "Aggiungi build alla lista",
+  "graphBuildLabel": "Grafico #<1>{{count}}</1>",
+  "buildCompleted": "Build completata",
+  "notifyTooltip": "Riproduci un suono quando la generazione delle build termina. Mostra anche un avviso se sei in un'altra scheda.",
+  "targetSelectorTitle": "Selezione obiettivo",
+  "compareArtModal": {
+    "newArt": "Nuovo manufatto",
+    "oldArt": "Vecchio manufatto",
+    "tcArt": "Manufatto TC"
+  }
+}

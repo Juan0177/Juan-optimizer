@@ -1,0 +1,16 @@
+{
+  "title": "🛑 Rilevata una nuova scheda dell'Optimizer 🛑",
+  "p1": "Sembra che tu abbia aperto Genshin Optimizer in un'altra scheda 💞. GO non è fatto per funzionare su più schede 📵! Farlo può causare:",
+  "symptom": {
+    "1": "Dati non sincronizzati tra le schede 🙃",
+    "2": "Database danneggiato 💔",
+    "3": "Mal di pancia 🤰 e sviluppatori di Genshin Optimizer esasperati 😡",
+    "4": "In rari casi, la MORTE ☠️"
+  },
+  "p2": "Lo abbiamo evitato mostrandoti questo messaggio 📝. Ora puoi scegliere se:",
+  "choice": {
+    "1": "Chiudere questa scheda 🔪 e usare quella nuova 🆕",
+    "2": "Chiudere la nuova scheda ↩️ e, quando sei sicuro che questa sia l'UNICA scheda rimasta 🔂, ricaricare questa pagina 🔄"
+  },
+  "refresh": "Ricarica la pagina"
+}

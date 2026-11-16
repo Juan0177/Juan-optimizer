@@ -1,0 +1,10 @@
+{
+  "a1Name": "DAN da Folgore del castigo (tiro caricato)",
+  "a2Name": "DAN da Folgore del castigo",
+  "c1Name": "DAN da attacco congiunto",
+  "c4AoeDmg": "DAN ad area aggiuntivi",
+  "c6OzDmg": "DAN da attacco coordinato",
+  "lockEcLcCond": "Dopo che un membro del gruppo innesca una reazione di <electrocharged>Electrocarica</electrocharged> o <lunarcharged>Carica lunare</lunarcharged>",
+  "c6Cond": "Dopo che Oz ha effettuato un attacco coordinato",
+  "c6Text": "Aumento degli effetti di <strong>Rito della Vigilia della strega: Notturno fantasmatico</strong>"
+}

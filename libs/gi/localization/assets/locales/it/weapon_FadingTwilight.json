@@ -1,0 +1,8 @@
+{
+  "states": {
+    "evengleam": "Vesprolume",
+    "afterglow": "Crepuscoluce",
+    "dawnblaze": "Ardiaurora"
+  },
+  "condName": "Stato attuale"
+}

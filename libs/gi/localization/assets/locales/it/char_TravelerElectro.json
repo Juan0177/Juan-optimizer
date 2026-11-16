@@ -1,0 +1,21 @@
+{
+  "skill": {
+    "amuletGenAmt": "Numero di Amuleti dell'abbondanza generati",
+    "absorb": "Dopo aver assorbito un Amuleto dell'abbondanza",
+    "enerRest": {
+      "none": "RIGEN energia per Amuleto",
+      "over35": "RIGEN energia per Amuleto (oltre il 35% di energia)",
+      "under35": "RIGEN energia per Amuleto (sotto il 35% di energia)"
+    }
+  },
+  "burst": {
+    "3rd": "DAN da 3ª Pioggia di tuoni",
+    "thunderCd": "TdR Pioggia di tuoni"
+  },
+  "passive2": {
+    "enerRech_": "Ricarica di energia aggiuntiva Amuleto dell'abbondanza"
+  },
+  "c2": {
+    "thunderHit": "Avversario colpito da <strong>Pioggia di tuoni</strong>"
+  }
+}

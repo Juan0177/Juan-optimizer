@@ -1,0 +1,25 @@
+{
+  "skill": {
+    "pyroShield": {
+      "1": "Assorbimento DAN da Pyro Livello scudo 1",
+      "2": "Assorbimento DAN da Pyro Livello scudo 2",
+      "3": "Assorbimento DAN da Pyro Livello scudo 3"
+    }
+  },
+  "p1": {
+    "desc": "Riduce di 1 il numero di colpi richiesti da <strong>Esecuzione sfrenata</strong>"
+  },
+  "p2": {
+    "activeShield": "Personaggio protetto da <strong>Esecuzione sfrenata</strong>"
+  },
+  "c2": {
+    "key_": "Bonus tasso di CRIT DAN fisici <strong>Riff ribelle</strong>",
+    "shield": "Genera uno scudo Livello 3: Delirio al lancio"
+  },
+  "c4": {
+    "swingHit": "Avversario colpito da <pyro>DAN da sferzata</pyro>"
+  },
+  "c6": {
+    "duringCharge": "Durante un attacco caricato"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "social": {
+    "paypal": "PayPal",
+    "patreon": "Patreon",
+    "discord": "Discord"
+  },
+  "link": {
+    "download": "Link per il download",
+    "discord": "Link di invito Discord"
+  },
+  "unselect": "Deseleziona",
+  "inventory": "Inventario",
+  "ascending": "Crescente",
+  "descending": "Decrescente",
+  "sortBy": "Ordina per: ",
+  "loading": "Caricamento...",
+  "edit": "Modifica",
+  "error": "Errore",
+  "reset": "Reimposta",
+  "info": "Info",
+  "close": "Chiudi",
+  "delete": "Elimina",
+  "clear": "Svuota",
+  "randomize": "Casuale",
+  "locked": "Bloccato",
+  "unlocked": "Sbloccato",
+  "excluded": "Escluso",
+  "included": "Incluso",
+  "selectlevel": "Seleziona livello",
+  "gender": {
+    "F": "Femmina",
+    "M": "Maschio"
+  },
+  "storage": {
+    "title": "Spazio di archiviazione",
+    "info": "Lo spazio di archiviazione locale è limitato a 5 MB in totale ed è condiviso tra Genshin Optimizer e Zenless Optimizer. Ogni database salvato occupa un po' di spazio, e il database attivo ne occupa altro.\n\nSe ti avvicini al limite, il salvataggio potrebbe non riuscire o i dati potrebbero essere cancellati senza preavviso.",
+    "warning": "Sei vicino al limite dello spazio di archiviazione locale: il salvataggio potrebbe non riuscire o i dati potrebbero essere cancellati senza preavviso.",
+    "category": "Categoria",
+    "size": "Spazio usato",
+    "activeGo": "Database GO attivo",
+    "goDb1": "Database GO 1",
+    "goDb2": "Database GO 2",
+    "goDb3": "Database GO 3",
+    "goDb4": "Database GO 4",
+    "activeZo": "Database ZO attivo",
+    "zoDb1": "Database ZO 1",
+    "zoDb2": "Database ZO 2",
+    "zoDb3": "Database ZO 3",
+    "zoDb4": "Database ZO 4"
+  }
+}

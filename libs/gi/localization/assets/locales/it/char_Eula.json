@@ -1,6 +1,17 @@
 {
+  "burstC": {
+    "name": "Accumuli di energia Spada di luce cadente",
+    "dmg": "DAN da esplosione Spada di luce cadente",
+    "start5": "Inizia con 5 accumuli di energia Spada di luce cadente",
+    "addStacks": "50% di probabilità di ottenere accumuli di energia aggiuntivi da attacchi normali, abilità elementali e Tripudi elementali",
+    "bonusScaling": "Scalatura bonus Spada di luce cadente"
+  },
   "c1C": {
-    "name": "Dopo aver consumato cariche di <strong>Grimheart</strong>",
-    "durationStack": "6s + 6s per carica, fino a 18s"
-  }
+    "name": "Dopo aver consumato accumuli di <strong>Cuortetro</strong>",
+    "durationStack": "6 s + 6 s per accumulo, fino a 18 s"
+  },
+  "c4C": {
+    "dmgBonus": "Bonus DAN esplosione Spada di luce cadente"
+  },
+  "passive1": "DAN da Spada di luce cadente in frantumi"
 }

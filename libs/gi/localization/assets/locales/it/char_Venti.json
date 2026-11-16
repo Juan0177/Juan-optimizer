@@ -1,0 +1,14 @@
+{
+  "addAimed": "DAN da ATT mirato aggiuntivi",
+  "addFullAimed": "DAN da ATT mirato a piena carica aggiuntivi",
+  "upcurrentDuration": "Durata corrente ascendente",
+  "regenEner": "Rigenera 15 di energia a Venti al termine dell'effetto",
+  "c6": "Nemico colpito da <strong>Ode all'Archon di Anemo</strong>",
+  "q": "Rigenera 15 di energia a tutti i personaggi del gruppo dell'elemento assorbito.",
+  "c2": {
+    "hit": "Avversario colpito",
+    "launched": "Avversario sbalzato in aria"
+  },
+  "lockCond": "In mezzo alla tempesta attivo e un personaggio attivo vicino innesca una reazione di Turbinio",
+  "stormeye_mult_": "Molt. DAN In mezzo alla tempesta"
+}

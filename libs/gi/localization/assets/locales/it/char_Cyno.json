@@ -1,0 +1,13 @@
+{
+  "duringBurst": "Nello stato di <strong>Precorritore giurato</strong>",
+  "p1Dmg": "DAN da Dardo del braccatore",
+  "p1StellarDmg": "DAN da Dardo del braccatore: Armonia stellare",
+  "judication": "Attivazione dell'effetto Verdetto",
+  "afterBurstOrJudication": "Dopo aver usato <strong>Rito sacro: Destrezza del lupo</strong> o attivato l'effetto Verdetto",
+  "burstNormalDmgInc": "Aumento DAN ATT normale di Precorritore giurato",
+  "boltDmgInc": "Aumento DAN Dardo del braccatore",
+  "boltStellarDmgInc": "Aumento DAN Dardo del braccatore: Armonia stellare",
+  "a1soulfarer_dmg_": "Bonus DAN Guida delle anime del baratro",
+  "c1Cond": "Personaggio sotto l'effetto <strong>Insieme sorgeremo</strong>",
+  "c2Cond": "Dopo aver colpito un avversario con un attacco normale o caricato sotto l'effetto <strong>Insieme sorgeremo</strong>"
+}

@@ -1,0 +1,15 @@
+{
+  "paramita": {
+    "enter": "Nello stato di <strong>Paramita Papilio</strong>",
+    "end": "Al termine dello stato di <strong>Paramita Papilio</strong>"
+  },
+  "constellation2": {
+    "applyBloodBlossom": "Applica l'effetto <strong>Bocciolo di sangue</strong>"
+  },
+  "constellation4": {
+    "condName": "Dopo aver sconfitto un nemico sotto l'effetto di <strong>Bocciolo di sangue</strong>"
+  },
+  "constellation6": {
+    "condName": "Dopo che i PS scendono sotto il 25% o dopo un colpo letale"
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "loadoutSettings": {
+    "alert": "Le <strong>configurazioni</strong> forniscono i dati di contesto del personaggio, tra cui statistiche bonus, condizionali, multi-obiettivi e impostazioni di ottimizzazione. Una singola <strong>configurazione</strong> può essere usata in più squadre.",
+    "builds": "Build",
+    "newBuildBtn": "Nuova build",
+    "tcBuilds": "Build TC",
+    "newTcBuildBtn": "Nuova build TC"
+  },
+  "mTargetEditor": {
+    "title": "Editor obiettivi",
+    "rankMobile": "#",
+    "rank": "Posizione #",
+    "desc": "Descrizione obiettivo",
+    "noReaction": "Nessuna reazione"
+  },
+  "mTargetImport": {
+    "invalid": "Configurazione multi-ottimizzazione non valida",
+    "failed": "Importazione dei dati non riuscita.",
+    "team": "Stai cercando di importare una squadra. Vuoi andare alla pagina di importazione delle squadre?",
+    "button": "Importa multi-opt",
+    "title": "Importa multi-opt",
+    "desc": "Importa un multi-opt in formato JSON qui sotto.",
+    "label": "Dati JSON",
+    "placeholder": "Incolla qui il tuo JSON",
+    "import": "Importa"
+  },
+  "showFormulas": {
+    "title": "Formule e calcoli"
+  },
+  "loDropdown": {
+    "createModal": {
+      "title": "Crea una nuova configurazione per <2/>",
+      "label": "Nome nuova configurazione",
+      "placeholder": "Nome nuova configurazione",
+      "desc": "Descrizione nuova configurazione",
+      "cancel": "Annulla",
+      "confirm": "Conferma"
+    },
+    "label": "Configurazione: ",
+    "create": "Crea una nuova configurazione",
+    "multi": "{{count}} multi-opt"
+  },
+  "loadoutHeader": {
+    "mltTargets": "Multi-obiettivi personalizzati: ",
+    "optTarget": "Obiettivo di ottimizzazione:"
+  },
+  "loadoutEditor": {
+    "label": "Nome configurazione",
+    "placeholder": "Nome configurazione",
+    "desc": "Descrizione configurazione",
+    "dupBtn": "Duplica configurazione",
+    "delBtn": "Elimina configurazione",
+    "optTarget": "Obiettivo di ottimizzazione",
+    "conditionals": "Condizionali: ",
+    "teams": "Squadre",
+    "addNewTeam": "Aggiungi nuova squadra",
+    "bonusStats": "Statistiche bonus",
+    "mltTargets": "Multi-obiettivi personalizzati"
+  },
+  "loadoutDelModal": {
+    "title": "Eliminare la configurazione <1>{{name}}</１>?",
+    "desc": "Eliminando la configurazione verranno eliminati anche i seguenti dati:",
+    "mTargets": "Tutti i multi-obiettivi personalizzati: ",
+    "bonus": "Statistiche bonus: ",
+    "condi": "Condizionali: ",
+    "optConfig": "Impostazioni di ottimizzazione",
+    "affected": "La configurazione verrà rimossa da tutte le squadre che la usano, ma le squadre non verranno eliminate. Squadre interessate: ",
+    "cancel": "Annulla",
+    "delete": "Elimina"
+  }
+}

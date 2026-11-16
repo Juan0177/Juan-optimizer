@@ -1,0 +1,20 @@
+{
+  "skill": {
+    "eye": "Con l'Occhio del giudizio tempestoso",
+    "partyCost": "Costo energia"
+  },
+  "burst": {
+    "active": "Nello stato <strong>Musou Isshin</strong>",
+    "burstDmg": "DAN da Musou no Hitotachi",
+    "resolves": "Accumuli di Risoluzione",
+    "resolveInitial_": "<electro>Incremento bonus DAN Musou no Hitotachi</electro",
+    "resolveInfused_": "<electro>Incremento bonus DAN Musou Isshin</electro>"
+  },
+  "a4": {
+    "enerRest": "Ripristino energia aggiuntivo da <strong>Musou Isshin</strong>",
+    "eleDMG": "Bonus DAN da Electro"
+  },
+  "c4": {
+    "expires": "Dopo la fine dello stato <strong>Musou Isshin</strong>"
+  }
+}

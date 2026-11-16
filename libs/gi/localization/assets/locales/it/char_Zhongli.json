@@ -1,0 +1,10 @@
+{
+  "skill": {
+    "stele": "DAN da Stele di pietra",
+    "resonance": "DAN da risonanza",
+    "maxStele": "Numero massimo di Stele",
+    "nearShield": "Nemico vicino allo <strong>Scudo di giada</strong>"
+  },
+  "p1cond": "Dopo che lo <strong>Scudo di giada</strong> ha subito DAN",
+  "c6heal": "RIGEN PS massima"
+}
