@@ -74,6 +74,10 @@ export class WorkerCoordinator<
   }
 
   onError(e: { message: string }) {
+    // juanlab: un worker che non si avvia (errore senza messaggio) e quasi sempre un file sparito con un deploy
+    // mentre la pagina era aperta: la pagina si ricarica (una volta, vedi apps/frontend/src/main.tsx)
+    if (e.message === undefined && typeof window !== 'undefined')
+      window.dispatchEvent(new Event('juanlab-stale-worker'))
     this.cancel(new Error(`Worker Error: ${e.message}`))
   }
   onMessage(msg: Command | Response, worker: Worker) {

@@ -10,14 +10,17 @@ import NewTab from './app/NewTab'
 import './index.css'
 
 // juanlab: se la pagina era aperta durante un deploy, i file del deploy precedente non esistono piu
-// (import dinamico in 404): si ricarica una volta invece di mostrare la schermata di errore
-window.addEventListener('vite:preloadError', (event) => {
+// (import dinamico in 404, o worker dell'ottimizzatore che non parte): si ricarica una volta invece di mostrare
+// la schermata di errore
+const reloadAfterDeploy = (event: Event) => {
   const key = 'juanlab-reloaded-after-deploy'
   if (sessionStorage.getItem(key)) return
   sessionStorage.setItem(key, '1')
   event.preventDefault()
   window.location.reload()
-})
+}
+window.addEventListener('vite:preloadError', reloadAfterDeploy)
+window.addEventListener('juanlab-stale-worker', reloadAfterDeploy)
 window.addEventListener('load', () =>
   setTimeout(
     () => sessionStorage.removeItem('juanlab-reloaded-after-deploy'),
