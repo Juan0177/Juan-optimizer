@@ -69,7 +69,7 @@ const DEPOT_ELEMENT: Record<string, ElementKey> = {
   '8': 'dendro',
 }
 
-type EnkaAvatarStore = Record<
+export type EnkaAvatarStore = Record<
   string,
   { Element?: string; SkillOrder?: number[] } | undefined
 >
@@ -91,7 +91,7 @@ type EnkaEquip = {
     reliquarySubstats?: { appendPropId: string; statValue: number }[]
   }
 }
-type EnkaAvatar = {
+export type EnkaAvatar = {
   avatarId: number
   skillDepotId?: number
   propMap?: Record<string, { val?: string }>
@@ -144,7 +144,7 @@ export async function fetchAvatarStore(): Promise<EnkaAvatarStore> {
   }
 }
 
-function characterKeyOf(
+export function characterKeyOf(
   a: EnkaAvatar,
   store: EnkaAvatarStore
 ): CharacterKey | undefined {
