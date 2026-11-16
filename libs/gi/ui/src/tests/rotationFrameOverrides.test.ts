@@ -133,21 +133,17 @@ describe('character frame data', () => {
     expect(skill.frames).toBe(200)
     expect(sim.frames).toBeGreaterThan(base.frames)
   })
-  it('adds ping to every action', () => {
-    const sim = simulateRotation({
-      rotation,
-      members,
-      constellations: { Zibai: 1, Columbina: 0, Linnea: 2, Illuga: 6 },
-      elements: {
-        Zibai: 'geo',
-        Linnea: 'geo',
-        Columbina: 'hydro',
-        Illuga: 'geo',
-      },
-      pingFrames: 4,
-    })
-    const a = sim.actions.find((x) => x.index === 6)!
-    const b = base.actions.find((x) => x.index === 6)!
-    expect(a.frames).toBe(b.frames + 4)
+  it('puts ping in the swaps only: actions keep their own frames', () => {
+    // (200 ms of ping: a 24-frame swap, as gcsim's ping × 2 × 60 / 1000)
+    const sim = run(undefined, 24)
+    expect(sim.swaps!.length).toBeGreaterThan(0)
+    for (const swap of sim.swaps!) expect(swap.frames).toBe(24)
+    const frames = (s: typeof sim) =>
+      s.actions
+        .filter((x) => x.index !== undefined)
+        .sort((x, y) => x.index! - y.index!)
+        .map((x) => x.frames)
+    expect(frames(sim)).toEqual(frames(base))
+    expect(sim.frames).toBeGreaterThan(base.frames)
   })
 })

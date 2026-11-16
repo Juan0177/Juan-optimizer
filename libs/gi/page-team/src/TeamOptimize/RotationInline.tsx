@@ -109,7 +109,7 @@ export function RotationInline({
     )
     return () => clearTimeout(timer)
   }, [typed])
-  const { opener, timing, frameData, pingMs } = settings
+  const { opener, timing, frameData } = settings
   const play = useMemo(
     () =>
       (value: string, as: typeof team = team) => {
@@ -120,7 +120,6 @@ export function RotationInline({
               opener,
               timing,
               frameData,
-              pingMs,
               team: as,
               names,
               members,
@@ -142,7 +141,6 @@ export function RotationInline({
       opener,
       timing,
       frameData,
-      pingMs,
       team,
       names,
       members,
@@ -189,7 +187,6 @@ export function RotationInline({
       opener,
       timing,
       frameData,
-      pingMs,
     })
     if (undo) writer.onApplied(undo)
     inputRef.current?.blur()

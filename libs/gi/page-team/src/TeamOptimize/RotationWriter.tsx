@@ -79,7 +79,7 @@ import { useTranslation } from 'react-i18next'
 import { useAttackInfo, variantColor } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
-import { FrameDataPanel, pingToFrames } from './FrameDataPanel'
+import { FrameDataPanel } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import type { TimelineMoment } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
@@ -87,6 +87,7 @@ import {
   DEFAULT_SWAP_FRAMES,
   frameOverrides,
   type RotationTimingSettings,
+  timingPing,
 } from './RotationTiming'
 import {
   TimelineHitStats,
@@ -102,9 +103,11 @@ const draftKey = (teamId: string) => `teamOptRotationDraft_${teamId}`
 const openerKey = (teamId: string) => `teamOptRotationOpener_${teamId}`
 const timingKey = (teamId: string) => `teamOptRotationTiming_${teamId}`
 const timingOpenKey = 'teamOpt.timingOpen'
-/** Character frame data and ping: the player's own, for every team */
+/**
+ * Character frame data: the player's own, for every team. (Ping, once its own setting that
+ * delayed every action, is now the swap time it gives, in each team's timing.)
+ */
 const frameDataKey = 'teamOpt.frameData'
-const pingKey = 'teamOpt.pingMs'
 /** A placeholder rotation with the team's own members: the supports, then the first member */
 export const exampleRotation = (names: string[]) => {
   if (!names.length) return 'Zibai E N1 E N4 Q -> Zibai'
@@ -180,21 +183,19 @@ export function useRotationText(teamId: string) {
   return { applied, text, setText, isDraft: text !== applied }
 }
 
-/** The settings the rotation plays with besides its text: opener, timing edits, frame data, ping */
+/** The settings the rotation plays with besides its text: opener, timing (swap) edits, frame data */
 export function useRotationSettings(teamId: string) {
   const opener = useStored(openerKey(teamId)) ?? ''
   const timingRaw = useStored(timingKey(teamId))
   const frameRaw = useStored(frameDataKey)
-  const pingMs = Number(useStored(pingKey)) || 0
   const timing = useMemo(() => parseTiming(timingRaw), [timingRaw])
   const frameData = useMemo(() => parseFrameData(frameRaw), [frameRaw])
   const edited =
     !!opener.trim() ||
-    pingMs > 0 ||
     timing.swapFrames !== undefined ||
     Object.keys(timing.edits).length > 0 ||
     Object.values(frameData).some((m) => Object.keys(m ?? {}).length > 0)
-  return { opener, timing, frameData, pingMs, edited }
+  return { opener, timing, frameData, edited }
 }
 
 /** The members' names as the parser matches them (any language) */
@@ -301,7 +302,6 @@ export function simulateWritten({
   opener,
   timing,
   frameData,
-  pingMs,
   team,
   names,
   members,
@@ -328,7 +328,6 @@ export function simulateWritten({
   opener: string
   timing: RotationTimingSettings
   frameData: FrameData
-  pingMs: number
   team: SimTeam
   names: RotationMember[]
   members: TeamOptMember[]
@@ -385,7 +384,6 @@ export function simulateWritten({
         : edits,
       swapFrames: timing.swapFrames,
       frameData,
-      pingFrames: pingToFrames(pingMs),
       repeats: steady ? STEADY_REPEATS : repeats,
       keep: steady ? 'last2' : keep,
       auraTimeline,
@@ -514,7 +512,6 @@ export function kqmRotationReplay({
     opener: localStorage.getItem(openerKey(teamId)) ?? '',
     timing: parseTiming(localStorage.getItem(timingKey(teamId))),
     frameData: parseFrameData(localStorage.getItem(frameDataKey)),
-    pingMs: Number(localStorage.getItem(pingKey)) || 0,
     names,
     members,
     database,
@@ -616,7 +613,6 @@ export function applyWritten({
   opener,
   timing,
   frameData,
-  pingMs,
 }: {
   database: Database
   teamId: string
@@ -627,7 +623,6 @@ export function applyWritten({
   opener: string
   timing: RotationTimingSettings
   frameData: FrameData
-  pingMs: number
 }): WriterUndo | undefined {
   const { own } = result
   // (the rotations counted: their buffs, attacks and time, per rotation)
@@ -654,7 +649,6 @@ export function applyWritten({
         openerKey(teamId),
         timingKey(teamId),
         frameDataKey,
-        pingKey,
       ].map((k) => [k, localStorage.getItem(k)])
     ),
     replaced: Object.values(before?.teamOpt?.attacks ?? {}).some(
@@ -715,7 +709,6 @@ export function applyWritten({
   writeStored(openerKey(teamId), opener)
   writeStored(timingKey(teamId), JSON.stringify(timing))
   writeStored(frameDataKey, JSON.stringify(frameData))
-  writeStored(pingKey, String(pingMs))
   return {
     ...snapshot,
     after: JSON.stringify(database.teams.get(teamId)?.teamOpt?.attacks),
@@ -982,10 +975,6 @@ function WriterModal({
     parseFrameData(localStorage.getItem(frameDataKey))
   )
   const deferredFrameData = useDeferredValue(frameData)
-  const [pingMs, setPingMs] = useState(
-    () => Number(localStorage.getItem(pingKey)) || 0
-  )
-  const deferredPing = useDeferredValue(pingMs)
   const [timingOpen, setTimingOpen] = useState(
     () => localStorage.getItem(timingOpenKey) === 'on'
   )
@@ -1031,7 +1020,6 @@ function WriterModal({
         opener: deferredOpener,
         timing: deferredTiming,
         frameData: deferredFrameData,
-        pingMs: deferredPing,
         team,
         names,
         members,
@@ -1050,7 +1038,6 @@ function WriterModal({
       deferred,
       deferredTiming,
       deferredFrameData,
-      deferredPing,
       deferredOpener,
       t,
       team,
@@ -1124,7 +1111,6 @@ function WriterModal({
     return out
   }, [frameDefaults, result])
   const timingEdited =
-    pingMs > 0 ||
     timing.swapFrames !== undefined ||
     keys.some((k) => Object.keys(frameData[k] ?? {}).length > 0) ||
     (!!result &&
@@ -1143,7 +1129,6 @@ function WriterModal({
           opener: openerShown ? openerText : '',
           timing,
           frameData,
-          pingMs,
           team: ownTeam,
           names,
           members,
@@ -1164,7 +1149,6 @@ function WriterModal({
       opener: openerShown ? openerText : '',
       timing,
       frameData,
-      pingMs,
     })
     if (undo) onApplied(undo)
     onClose()
@@ -1476,8 +1460,8 @@ function WriterModal({
                   />
                   <SettingChip
                     label={t('teamOpt.frames.ping', 'Ping')}
-                    value={`${pingMs} ms`}
-                    edited={pingMs > 0}
+                    value={`${timingPing(timing)} ms`}
+                    edited={timing.swapFrames !== undefined}
                     onClick={() => toggleTiming(true)}
                   />
                 </Box>
@@ -1615,8 +1599,6 @@ function WriterModal({
                 defaults={frameDefaultsWithVersions}
                 frameData={frameData}
                 setFrameData={setFrameData}
-                pingMs={pingMs}
-                setPingMs={setPingMs}
                 timing={timing}
                 setTiming={setTiming}
                 tab={inspectorTab}
