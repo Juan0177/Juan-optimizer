@@ -8,7 +8,7 @@ import {
   prod,
   subscript,
 } from '@genshin-optimizer/gi/wr'
-import { customDmgNode } from '../../../Characters/dataUtil'
+import { customDmgNode, customHealNode } from '../../../Characters/dataUtil'
 import { st, stg } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
@@ -22,12 +22,15 @@ const atk_arr = data_gen.refinementBonus.atk_
 if (!atk_arr)
   throw new Error(`data_gen.refinementBonus.atk_ for ${key} was undefined`)
 const atk_ = subscript(input.weapon.refinement, atk_arr)
+// (the heal and the DMG scale from total ATK, the heal with Healing Bonus, as kqmsim aquila.go)
 const heal = equal(
   input.weapon.key,
   key,
-  prod(
-    subscript(input.weapon.refinement, hpRegen, { unit: '%' }),
-    input.premod.atk
+  customHealNode(
+    prod(
+      subscript(input.weapon.refinement, hpRegen, { unit: '%' }),
+      input.total.atk
+    )
   )
 )
 const dmg = equal(
@@ -36,7 +39,7 @@ const dmg = equal(
   customDmgNode(
     prod(
       subscript(input.weapon.refinement, atkDealt, { unit: '%' }),
-      input.premod.atk
+      input.total.atk
     ),
     'elemental',
     { hit: { ele: constant('physical') } }

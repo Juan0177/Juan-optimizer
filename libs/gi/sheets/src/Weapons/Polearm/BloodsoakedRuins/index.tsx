@@ -57,7 +57,7 @@ const sheet: IWeaponSheet = {
       value: condAfterLc,
       path: condAfterLcPath,
       header: headerTemplate(key, st('conditional')),
-      name: st('hitOp.none'),
+      name: st('elementalReaction.lunarcharged'),
       states: {
         on: {
           fields: [

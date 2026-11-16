@@ -22,13 +22,9 @@ const afterSkillBurst_atk_ = equal(
   subscript(input.weapon.refinement, atk_arr, { unit: '%' })
 )
 const afterShield_lc_dmg_ = equal(
-  condAfterSkillBurst,
+  condAfterShield,
   'on',
-  equal(
-    condAfterShield,
-    'on',
-    subscript(input.weapon.refinement, lc_dmg_arr, { unit: '%' })
-  )
+  subscript(input.weapon.refinement, lc_dmg_arr, { unit: '%' })
 )
 
 const data = dataObjForWeaponSheet(key, {
@@ -49,7 +45,6 @@ const sheet: IWeaponSheet = {
       path: condAfterSkillBurstPath,
       header: headerTemplate(key, st('conditional')),
       name: st('afterUse.skillOrBurst'),
-      teamBuff: true,
       states: {
         on: {
           fields: [
@@ -68,7 +63,6 @@ const sheet: IWeaponSheet = {
     {
       value: condAfterShield,
       path: condAfterShieldPath,
-      canShow: equal(condAfterSkillBurst, 'on', 1),
       header: headerTemplate(key, st('conditional')),
       teamBuff: true,
       name: st('creatingShield'),
