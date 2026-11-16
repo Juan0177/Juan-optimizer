@@ -62,7 +62,9 @@ import {
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
-const mono = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+// (Windows has none of the first three: Consolas or Cascadia Mono there)
+const mono =
+  'ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace'
 const shortcut =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
     ? '⌘ Enter'
@@ -537,31 +539,45 @@ function Step({
       }}
     >
       <MemberAvatar characterKey={step.characterKey} size={20} />
+      {/* (the name and its codes on one baseline: the two fonts sit differently in their boxes,
+          so centred they drift apart on some systems, e.g. Consolas on Windows) */}
       <Box
         component="span"
-        sx={(theme) => ({
-          color: laneColor(theme, step.characterKey),
-          fontWeight: 650,
-          fontSize: 13.5,
-          whiteSpace: 'nowrap',
-        })}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          flexWrap: 'wrap',
+          columnGap: 0.625,
+          rowGap: 0.25,
+          minWidth: 0,
+        }}
       >
-        {name}
-      </Box>
-      {step.actions.map((a, j) => (
         <Box
-          key={j}
           component="span"
-          sx={{
-            fontFamily: mono,
+          sx={(theme) => ({
+            color: laneColor(theme, step.characterKey),
+            fontWeight: 650,
             fontSize: 13.5,
-            color: 'text.primary',
-            letterSpacing: '0.01em',
-          }}
+            whiteSpace: 'nowrap',
+          })}
         >
-          {actionCode(a)}
+          {name}
         </Box>
-      ))}
+        {step.actions.map((a, j) => (
+          <Box
+            key={j}
+            component="span"
+            sx={{
+              fontFamily: mono,
+              fontSize: 13.5,
+              color: 'text.primary',
+              letterSpacing: '0.01em',
+            }}
+          >
+            {actionCode(a)}
+          </Box>
+        ))}
+      </Box>
     </Box>
   )
 }
