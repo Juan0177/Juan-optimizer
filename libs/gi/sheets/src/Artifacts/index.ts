@@ -19,6 +19,8 @@ import DesertPavilionChronicle from './DesertPavilionChronicle'
 import DisenchantmentInDeepShadow from './DisenchantmentInDeepShadow'
 import EchoesOfAnOffering from './EchoesOfAnOffering'
 import EmblemOfSeveredFate from './EmblemOfSeveredFate'
+import EmpyreanSojourn from './EmpyreanSojourn' // juanlab-beta 7.3
+import EpochalAdvent from './EpochalAdvent' // juanlab-beta 7.3
 import FinaleOfTheDeepGalleries from './FinaleOfTheDeepGalleries'
 import FlowerOfParadiseLost from './FlowerOfParadiseLost'
 import FragmentOfHarmonicWhimsy from './FragmentOfHarmonicWhimsy'
@@ -84,6 +86,8 @@ export const artifactSheets: Record<ArtifactSetKey, ArtifactSheet> = {
   DisenchantmentInDeepShadow,
   EchoesOfAnOffering,
   EmblemOfSeveredFate,
+  EmpyreanSojourn,
+  EpochalAdvent,
   FinaleOfTheDeepGalleries,
   FlowerOfParadiseLost,
   FragmentOfHarmonicWhimsy,
