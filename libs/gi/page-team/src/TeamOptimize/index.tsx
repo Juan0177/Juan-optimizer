@@ -52,7 +52,7 @@ import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
-import { RotationInline } from './RotationInline'
+import { RotationInline, RotationsSetting } from './RotationInline'
 import { RotationTransfer } from './RotationTransfer'
 import { RotationConfigureButton, useRotationWriter } from './RotationWriter'
 import { RunDialog } from './RunDialog'
@@ -385,6 +385,13 @@ export default function TeamBuildWorkspace({
                 else delete o.rotationTime
               })
             }
+          />
+          <RotationsSetting
+            teamId={teamId}
+            members={members}
+            setTeamOpt={setTeamOpt}
+            writer={writer}
+            disabled={running}
           />
           {onField && members.length > 1 && (
             <OnFieldPicker
