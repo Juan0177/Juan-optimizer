@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.9.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.9.1) (2026-11-16)
+
+### Fixed
+
+- Rotation writer: ping now sets the swap time instead of delaying every action. A swap waits for the server, so it takes about twice your ping (100 ms is 12 frames, the KQM standard), and attacks, Skills and Bursts keep their own timing.
+- The Human timing preset is gone: type your ping instead, or use the KQM standard button to go back to 12 frames.
+- ER calculator: Flins' particles now come from his Manifest Flame normal attacks (one every 2 s), Thunderous Symphony counts as its own 30-Energy Burst next to his 80-Energy one, and his C1 gives 8 Energy on the party's Lunar-Charged.
+- ER calculator: a Burst cadence you set by hand no longer counts Thunderous Symphony or Volcanic Kablam on top of it.
+- Prototype Amber's Energy now counts once per Burst of its wielder.
+- KQM tab: Deathmatch now counts a single opponent (ATK +24% at R1) instead of the bonus for two or more.
+
 ## [v1.9.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.9.0) (2026-11-15)
 
 ### New
