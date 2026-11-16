@@ -4,8 +4,9 @@ import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/anastasya (Tsaritsa).
  * The pinned source has only the Blessing of Love; the Blessing of Honor (hold Skill, Blessed
  * Spear, The Evernight Yields to Dawn, Palestar Edict: Doom), the Palestar Crown freeze, C2's
- * own timers and the C6 triggers are implemented from the game text, with the frame estimates
- * marked ESTIMATE below. */
+ * own timers and the C6 triggers are implemented from the game text and the ability dump
+ * (YuanShenResources 7.2.51 ConfigAbility_Avatar_Anastasya), with the frame estimates marked
+ * ESTIMATE below. */
 // Hitmarks include the 10-frame arrow travel. gcsim's InitNormalCancelSlice lets aim (and every
 // ability) cancel at the last release frame, so toCharged equals toAbil.
 const normals: NormalHit[] = [
@@ -58,14 +59,17 @@ const HONOR_DURATION = 900
 const EVERNIGHT_DURATION = 840
 const LOVE_DURATION = 1200
 /**
- * ESTIMATE: the Honor Sealing uses the Love Sealing's clock (1 point every 12 frames, so 70 points
- * for 14 s) and each Blessed Spear hit removes 3 points: it ends during the second N5, so Doom can
- * cancel that N5 (see `spear`).
+ * The others' (Honor) Sealing, as the dump's ElementalBurst_Descender: it ends when
+ * `_ABILITY_Anastasya_Descender_Value` reaches `_ABILITY_Anastasya_Descender_ValueMax` (120).
+ * Descender_TimeGrow adds 0.5 every 0.1 s (1 point every 12 frames) and each Blessed Spear attack
+ * adds `Descender_NormalAttack_0X_Add` (10/20/20/30/30) at 10% of its state (N5's through
+ * NormalAttack_05_AddValue_Delay, 0.65 s later): one N5 string ends it. Time alone gets 70 in the
+ * 14 s Descender_Handler, which then runs out: the others unseal without Doom.
  */
-const HONOR_SEAL_POINTS = 70
-const SPEAR_SEAL_POINTS = 3
-/** ESTIMATE: Palestar Edict: Doom can be used for 20 s after the Sealing ends (as Triumph). */
-const DOOM_WINDOW = 1200
+const HONOR_SEAL_POINTS = 120
+const SPEAR_SEAL_ADD = [10, 20, 20, 30, 30]
+/** Frames into each Blessed Spear attack its value lands */
+const SPEAR_SEAL_AT = [3, 3, 4, 3, 44]
 
 interface State {
   skillEnd: number
@@ -179,8 +183,9 @@ function sealTick(c: SimContext, s: State, id: number) {
   c.at(12, (c2) => sealTick(c2, s, id))
 }
 /**
- * The other members' (Honor) Sealing ends: Doom becomes available. C6 Honor stays armed: its strike
- * is Doom's third stage (the dump's Breaking_Descender reads the C6 flag at Doom time).
+ * The other members' (Honor) Sealing ends: Doom becomes available for as long as the
+ * Descender_Handler lasts (the freeze). Frozen_SwitchSkill_Prepare also removes
+ * Constellation_6_Descender_Ready: an unused C6 Honor strike is lost.
  */
 function othersSealPoints(c: SimContext, s: State, points: number) {
   if (!s.othersSealed) return
@@ -189,9 +194,24 @@ function othersSealPoints(c: SimContext, s: State, points: number) {
   s.othersSealed = false
   s.othersShareUntil = c.now + 480
   s.doomStage = 1
-  s.doomUntil = c.now + DOOM_WINDOW
+  s.doomUntil = s.freezeEnd
+  s.c6HonorArmed = false
   sync(c, s)
   syncAt(c, s, s.othersShareUntil)
+}
+/**
+ * The Descender_Handler is removed before the Sealing ends (it ran out, or the Blessing ended): the
+ * others unseal without Doom, and the C6 Honor strike goes with it.
+ */
+function othersUnseal(c: SimContext, s: State) {
+  if (s.othersSealed) {
+    s.othersSealed = false
+    s.othersShareUntil = c.now + 480
+    syncAt(c, s, s.othersShareUntil)
+  }
+  s.doomStage = 0
+  s.c6HonorArmed = false
+  sync(c, s)
 }
 function othersSealTick(c: SimContext, s: State, id: number) {
   if (id !== s.othersSealId || !s.othersSealed) return
@@ -235,17 +255,17 @@ function triumph(c: SimContext, s: State): ActionResult {
   })
   return { frames: 26 }
 }
-/** C6 arms on a Skill use (30 s; once every 15 s) according to the Blessing it grants. */
+/**
+ * C6 arms on a Skill use (30 s; once every 15 s) according to the Blessing it grants. Out of its
+ * TriggerCD the dump's Constellation_6 first removes both Mercy_Ready and Descender_Ready.
+ */
 function c6OnSkill(c: SimContext, s: State, blessing: 'love' | 'honor') {
   if (c.constellation('Anastasya') < 6 || c.now < s.c6Ready) return
   s.c6Ready = c.now + 900
-  if (blessing === 'love') {
-    s.c6LoveEnd = c.now + 1800
-    s.c6LoveArmed = true
-  } else {
-    s.c6HonorEnd = c.now + 1800
-    s.c6HonorArmed = true
-  }
+  s.c6LoveArmed = blessing === 'love'
+  s.c6HonorArmed = blessing === 'honor'
+  if (blessing === 'love') s.c6LoveEnd = c.now + 1800
+  else s.c6HonorEnd = c.now + 1800
   syncAt(c, s, c.now + 1800)
 }
 /**
@@ -280,33 +300,10 @@ function doom(c: SimContext, s: State): ActionResult {
     })
     return { frames: 65 }
   }
-  // C6 Honor (armed by the hold Skill): the third stage deals the C6 version instead, 250% of its
-  // DMG with every member's Accolades (nobody is Sealed by now), and uses the C6 up (as the dump's
-  // Breaking_Descender03_C6_Damage and RemoveC6Free)
-  const c6 = s.c6HonorArmed && c.now < s.c6HonorEnd
-  if (c6) s.c6HonorArmed = false
+  // (after the Sealing, Frozen_SwitchSkill_Prepare has removed C6 Honor: always its own DMG)
   c.at(36, (c2) => {
     sync(c2, s)
-    if (c6)
-      stellar(
-        c2,
-        'constellation6',
-        'doom3',
-        'Palestar Edict: Doom 3-Hit (C6)',
-        [
-          {
-            owner: 'Anastasya',
-            path: ['Anastasya', 'blessing'],
-            value: 'honor',
-          },
-          {
-            owner: 'Anastasya',
-            path: ['Anastasya', 'accolades'],
-            value: 'honorSeal',
-          },
-        ]
-      )
-    else stellar(c2, 'burst', 'doom2', 'Palestar Edict: Doom 3-Hit')
+    stellar(c2, 'burst', 'doom2', 'Palestar Edict: Doom 3-Hit')
   })
   if (c.now < s.freezeEnd) {
     s.freezeEnd = c.now
@@ -317,6 +314,41 @@ function doom(c: SimContext, s: State): ActionResult {
 }
 const doomReady = (c: SimContext, s: State) =>
   s.doomStage > 0 && c.now < s.doomUntil
+/**
+ * C6 Honor: from the hold Skill until the others' Sealing ends (or the Blessing does),
+ * Constellation_6_Descender_Ready makes the Skill button Doom's third attack (11498, no cooldown).
+ */
+const c6StrikeAt = (s: State, now: number) =>
+  s.c6HonorArmed &&
+  now < s.c6HonorEnd &&
+  now < s.honorEnd &&
+  !(s.doomStage > 0 && now < s.doomUntil)
+/**
+ * The C6 Honor strike, an extra attack: Doom's third stage animation with FreeCount 3, so
+ * Breaking_Descender03_C6_Damage at 250% (C6_Descender_DamageRatio, times C2's ratio) with every
+ * member's Accolades (C6_VirtualSealed_Bonus, or the real share while they are Sealed). Its
+ * Breaking_Descender03_AS keeps the Descender_Handler (FreeCount 3): no freeze end, and Doom's own
+ * stages are untouched.
+ */
+function c6Strike(c: SimContext, s: State): ActionResult {
+  s.c6HonorArmed = false
+  c.at(36, (c2) => {
+    sync(c2, s)
+    stellar(c2, 'constellation6', 'doom3', 'Palestar Edict: Doom 3-Hit (C6)', [
+      {
+        owner: 'Anastasya',
+        path: ['Anastasya', 'blessing'],
+        value: 'honor',
+      },
+      {
+        owner: 'Anastasya',
+        path: ['Anastasya', 'accolades'],
+        value: 'honorSeal',
+      },
+    ])
+  })
+  return { frames: 34 }
+}
 
 export const kit: KitModel = {
   characterKey: 'Anastasya',
@@ -354,12 +386,13 @@ export const kit: KitModel = {
     sync(c, s)
     if (c.constellation('Anastasya') >= 6)
       c.note(
-        'Anastasya C6: the Love Triumph on the next switch and the Honor Doom strike follow the game text (the reference never triggers them).'
+        'Anastasya C6: the Love Triumph on the next switch and the Honor strike (her Skill before the others’ Sealing ends) follow the game’s logic (the reference never triggers them).'
       )
   },
-  // Her E is Triumph after the Love Sealing, or Palestar Edict: Doom's next attack after the Honor
-  // Sealing; with the Blessing of Honor her normal attacks are the Blessed Spear and her Q is The
-  // Evernight Yields to Dawn (each with frames of its own, estimates)
+  // Her E is Triumph after the Love Sealing, Palestar Edict: Doom's next attack after the Honor
+  // Sealing, or C6 Honor's strike before it ends; with the Blessing of Honor her normal attacks are
+  // the Blessed Spear and her Q is The Evernight Yields to Dawn (each with frames of its own,
+  // estimates)
   variant(ctx, s: State, action) {
     if (action.kind === 'skill') {
       if (ctx.now < s.triumphUntil) return { key: 'triumph', label: 'Triumph' }
@@ -368,6 +401,8 @@ export const kit: KitModel = {
           key: `doom${s.doomStage}`,
           label: `Palestar Edict: Doom ${s.doomStage}-Hit`,
         }
+      if (c6StrikeAt(s, ctx.now))
+        return { key: 'c6doom', label: 'Palestar Edict: Doom 3-Hit (C6)' }
       return undefined
     }
     if (!honorActive(ctx, s)) return undefined
@@ -387,7 +422,12 @@ export const kit: KitModel = {
           return normalString(
             spear,
             action.count ?? 1,
-            (i, t, j) =>
+            (i, t, j) => {
+              // Descender_NormalAttack_0X_AddValue: each attack brings the Sealing's end closer
+              if (j === 0)
+                ctx.at(t - spear[i].hitmarks[0] + SPEAR_SEAL_AT[i], (c2) =>
+                  othersSealPoints(c2, s, SPEAR_SEAL_ADD[i])
+                )
               ctx.at(t, (c2) => {
                 const label = `Blessed Spear N${i + 1}`
                 if (j === spear[i].hitmarks.length - 1 && c2.radiance)
@@ -407,7 +447,8 @@ export const kit: KitModel = {
                     icd: 'normal',
                     label,
                   })
-              }),
+              })
+            },
             ctx
           )
         return normalString(
@@ -443,6 +484,7 @@ export const kit: KitModel = {
       case 'skill': {
         if (ctx.now < s.triumphUntil) return triumph(ctx, s)
         if (doomReady(ctx, s)) return doom(ctx, s)
+        if (c6StrikeAt(s, ctx.now)) return c6Strike(ctx, s)
         const cons = ctx.constellation('Anastasya')
         s.a1End = ctx.now + 1200
         syncAt(ctx, s, s.a1End)
@@ -459,6 +501,12 @@ export const kit: KitModel = {
           s.honorEnd = ctx.now + HONOR_DURATION
           s.freezeEnd = -1
           syncAt(ctx, s, s.honorEnd)
+          // ElementalArt_Hold removes the Palestar Crown (Click_Handler) and To the New World
+          // (Mercy_Handler, Mercy_StarReact_DamageUp); Constellation_2 removes C2 Love's handler
+          s.skillEnd = -1
+          s.burstEnd = Math.min(s.burstEnd, ctx.now)
+          s.sealArmed = false
+          s.c2LoveEnd = Math.min(s.c2LoveEnd, ctx.now)
           if (cons >= 2) {
             s.c2HonorEnd = ctx.now + 900
             syncAt(ctx, s, s.c2HonorEnd)
@@ -473,29 +521,13 @@ export const kit: KitModel = {
             cooldown: { key: 'skill', frames: 900, delay: 30 },
           }
         }
-        // C6 Honor: the next tapped Skill also deals an effect equal to Doom's third attack at
-        // 250%; with nobody Sealed she counts as holding every member's Accolades for it.
-        if (s.c6HonorArmed && ctx.now < s.c6HonorEnd) {
-          s.c6HonorArmed = false
-          const accolades = s.othersSealed ? 'on' : 'honorSeal'
-          ctx.at(28, (c2) =>
-            stellar(c2, 'constellation6', 'doom3', 'Doom 3-Hit (C6)', [
-              {
-                owner: 'Anastasya',
-                path: ['Anastasya', 'blessing'],
-                value: 'honor',
-              },
-              {
-                owner: 'Anastasya',
-                path: ['Anastasya', 'accolades'],
-                value: accolades,
-              },
-            ])
-          )
-        }
         hit(ctx, 17, ['skill', 'tapDmg'], 'Skill (Tap)', 'skill', true)
+        // ElementalArt_Click removes the Hold_Handler and Descender_Handler (the Blessing of
+        // Honor, its Sealing and Doom); Constellation_2 removes C2 Honor's handler
+        if (s.othersSealed || s.doomStage) othersUnseal(ctx, s)
         s.honorEnd = -1
         s.freezeEnd = -1
+        s.c2HonorEnd = Math.min(s.c2HonorEnd, ctx.now)
         // The Love burst freezes the Palestar Crown while it lasts.
         s.skillEnd = ctx.now + 1200 + Math.max(0, s.burstEnd - ctx.now)
         if (cons >= 2) {
@@ -528,6 +560,10 @@ export const kit: KitModel = {
             const id = ++s.othersSealId
             sync(c, s)
             c.at(12, (c2) => othersSealTick(c2, s, id))
+            // the 14 s Descender_Handler runs out before the Sealing ends: no Doom
+            c.at(EVERNIGHT_DURATION, (c2) => {
+              if (id === s.othersSealId && s.othersSealed) othersUnseal(c2, s)
+            })
           })
           return {
             frames: BURST_FRAMES,
@@ -561,6 +597,17 @@ export const kit: KitModel = {
     }
   },
   onSwapOut(ctx, s: State) {
+    // Avatar_Anastasya_AvatarOut_Handler: leaving the field removes the Hold_Handler (the Blessing
+    // of Honor, its freeze, C6 Honor) and the Descender_Handler (the others' Sealing and Doom)
+    if (honorActive(ctx, s)) {
+      if (s.othersSealed)
+        ctx.warn(
+          'Anastasya: the other members are Sealed by The Evernight Yields to Dawn and could not be switched in yet.'
+        )
+      s.honorEnd = ctx.now
+      s.freezeEnd = -1
+      othersUnseal(ctx, s)
+    }
     if (!s.sealArmed) return
     s.sealArmed = false
     s.sealed = true
@@ -571,10 +618,6 @@ export const kit: KitModel = {
   },
   onPartySwap(ctx, s: State, _from, to) {
     if (to === 'Anastasya') return
-    if (s.othersSealed)
-      ctx.warn(
-        `Anastasya: ${to} is Sealed by The Evernight Yields to Dawn and could not be switched in yet.`
-      )
     // C6 Love: the next switch to another member triggers Triumph at 200%.
     if (s.c6LoveArmed && ctx.now < s.c6LoveEnd) {
       s.c6LoveArmed = false
@@ -597,7 +640,9 @@ export const kit: KitModel = {
   },
   cooldownKey: (s: State, action, now) =>
     action.kind === 'skill' &&
-    (now < s.triumphUntil || (s.doomStage > 0 && now < s.doomUntil))
+    (now < s.triumphUntil ||
+      (s.doomStage > 0 && now < s.doomUntil) ||
+      c6StrikeAt(s, now))
       ? undefined
       : action.kind === 'skill' || action.kind === 'burst'
         ? action.kind
@@ -611,12 +656,5 @@ export const kit: KitModel = {
         (h.path[0] === 'reaction' && h.path[1].startsWith('stellar')))
     )
       sealPoints(ctx, s, 2)
-    // Honor: her Blessed Spear Normal Attacks shorten the other members' Sealing.
-    if (
-      h.characterKey === 'Anastasya' &&
-      h.path[0] === 'skill' &&
-      h.path[1]?.startsWith('honor')
-    )
-      othersSealPoints(ctx, s, SPEAR_SEAL_POINTS)
   },
 }
