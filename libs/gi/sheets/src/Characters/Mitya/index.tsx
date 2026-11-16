@@ -213,6 +213,16 @@ const c6SteadyMult = sum(
   percent(1),
   greaterEq(input.constellation, 6, percent(dm.constellation6.steadyDmgInc))
 )
+// C6's 115% on the C4 strike too, unless the core is Overloaded (the game's C4 formula reads
+// AS_Constellation_6_StableDamageUp with a Steady core or from a detonation)
+const c6C4Mult = sum(
+  percent(1),
+  greaterEq(
+    input.constellation,
+    6,
+    unequal(condCore, 'overloaded', percent(dm.constellation6.steadyDmgInc))
+  )
+)
 
 /* ---------- Damage ---------- */
 
@@ -279,7 +289,9 @@ const dmgFormulas = {
         percent(dm.constellation4.dmg),
         'eleMas',
         'stellarconduct',
-        'electro'
+        'electro',
+        undefined,
+        c6C4Mult
       )
     ),
   },

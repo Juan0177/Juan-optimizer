@@ -95,15 +95,8 @@ function detonate(c: SimContext, s: State) {
       tag: 'directStellarConduct',
       element: 'electro',
       weight: s.prisms,
-      // kqmsim snapshots before clearing the prisms: their A1 EM and C6 Steady bonus still apply.
-      states: [
-        {
-          owner: 'Mitya',
-          path: ['Mitya', 'gradientBeacons'],
-          value: `${s.prisms}`,
-        },
-        { owner: 'Mitya', path: ['Mitya', 'detectionCore'], value: 'steady' },
-      ],
+      // (the game clears the Beacons as the detonation appears, 0.25 s before its strike: the strike
+      // reads A1's EM without them; C6's 115% is in its own formula)
     })
   s.prisms = 0
   sync(c, s)
@@ -123,7 +116,8 @@ function pulse(c: SimContext, s: State, version: number) {
 }
 function core(c: SimContext, s: State, mode: State['mode']) {
   if (s.mode === 'steady' && c.now < s.end) detonate(c, s)
-  s.c4 = 0 // each Detection Core counts its own consumed Beacons
+  // (C4's count of consumed Beacons carries over from core to core: the game's
+  // _ABILITY_Mitya_C4_ConsumeCount is reset only when the ability starts)
   s.mode = mode
   s.end = c.now + 1500
   s.recastEnd = c.now + 360
@@ -237,8 +231,8 @@ export const kit: KitModel = {
           true
         )
         ctx.at(hold ? 36 : 22, (c) => {
+          // (the hold makes no Beacon of its own in the dump; kqmsim adds one)
           core(c, s, hold ? 'overloaded' : 'steady')
-          if (hold) addPrism(c, s)
         })
         return {
           frames: hold ? 46 : 24,
