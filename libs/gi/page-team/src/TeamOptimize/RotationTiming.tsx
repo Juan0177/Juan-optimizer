@@ -35,7 +35,14 @@ export interface RotationTimingSettings {
   swapFrames?: number
   /** The ping typed in, which set `swapFrames` (shown as typed; otherwise from the swap time) */
   pingMs?: number
+  /**
+   * Rotations counted from the start, nothing waited for from before (a timed challenge's first
+   * rotation): 1 to 3. Undefined: the pace it keeps played over and over (KQM's way)
+   */
+  rotations?: number
 }
+/** The choices for `RotationTimingSettings.rotations` */
+export const FIRST_ROTATIONS = [1, 2, 3] as const
 /** KQM's standard swap: 12 frames, about 100 ms of ping */
 export const DEFAULT_SWAP_FRAMES = 12
 /**

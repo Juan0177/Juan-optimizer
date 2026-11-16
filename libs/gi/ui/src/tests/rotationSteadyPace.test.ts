@@ -2,7 +2,7 @@
  * The pace a rotation keeps played over and over (4 in a row, the last 2 counted, as KQM and the
  * writer count it): a cooldown not ready again in time makes it wait, which its first time
  * through does not show; and the last counted rotation alone (`lastRotation`), what a timeline
- * shows.
+ * shows (from its first action when it starts by waiting).
  */
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { describe, expect, it } from 'vitest'
@@ -43,12 +43,14 @@ describe('the pace a rotation keeps', () => {
   it('the last counted rotation alone: its hits, actions and counted-buff indices', () => {
     const sim = play(text, 1)
     const last = lastRotation(sim)
-    const [, lastStart] = sim.rotationStarts!
-    expect(last.start).toBe(lastStart)
-    expect(last.start + last.frames).toBe(sim.start + sim.frames)
+    // (it starts by waiting for Sucrose's charge: shown from her Skill, the wait at its end)
+    const firstAction = Math.min(...last.actions.map((a) => a.start))
+    expect(last.start).toBe(firstAction)
+    expect(last.frames).toBeCloseTo(sim.frames / 2, -1)
+    const end = last.start + last.frames
     expect(last.hits.length).toBeGreaterThan(0)
-    expect(last.hits.every((h) => h.t >= lastStart)).toBe(true)
-    expect(last.actions.every((a) => a.start >= lastStart)).toBe(true)
+    expect(last.hits.every((h) => h.t >= last.start && h.t < end)).toBe(true)
+    expect(last.actions.every((a) => a.start >= last.start)).toBe(true)
     expect(last.hits.length).toBeLessThan(sim.hits.length)
     for (const b of last.countedBuffs)
       for (const i of b.hits) expect(i).toBeLessThan(last.hits.length)
