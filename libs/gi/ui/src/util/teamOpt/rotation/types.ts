@@ -408,9 +408,10 @@ export interface KitModel {
   characterKey: CharacterKey
   /**
    * Its timeline has random parts (ctx.random): rotations with it are averaged over seeded samples
-   * (simulateRotationSamples), as the reference simulators average over trials
+   * (simulateRotationSamples), as the reference simulators average over trials. A number: the
+   * samples its randomness needs (a small one plays a rotation fewer times; true: 64)
    */
-  sampled?: boolean
+  sampled?: boolean | number
   /** Moonsign levels it adds to the party */
   moonsign?: number
   element: HitElement
