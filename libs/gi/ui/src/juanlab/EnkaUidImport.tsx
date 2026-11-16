@@ -39,6 +39,7 @@ export function EnkaUidImport({
       }
       setLoading(true)
       setMsg(undefined)
+      onData('', '') // l'anteprima di una vetrina precedente non resta importabile
       try {
         const [data, store] = await Promise.all([
           fetchEnka(clean),
@@ -113,7 +114,7 @@ export function EnkaUidImport({
           <Button
             type="submit"
             color="info"
-            disabled={loading}
+            disabled={loading || !isUid(uid.replace(/\D/g, ''))}
             startIcon={
               loading ? <CircularProgress size="1em" /> : <CloudDownload />
             }
