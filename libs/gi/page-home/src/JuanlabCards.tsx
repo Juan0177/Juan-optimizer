@@ -67,7 +67,7 @@ export function ImportUidCard() {
             e.preventDefault()
             if (isUid(clean)) setOpen(clean)
           }}
-          sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}
+          sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}
         >
           <TextField
             size="small"

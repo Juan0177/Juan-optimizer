@@ -10,11 +10,9 @@ on:
     branches:
       - juanlab
 
+# Permessi minimi; Pages e OIDC solo al job di deploy (il token OIDC non deve esistere durante la build)
 permissions:
-  contents: write
-  issues: write
-  pages: write
-  id-token: write
+  contents: read
 
 concurrency:
   group: juanlab-pages
@@ -24,6 +22,9 @@ jobs:
   sync:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
     timeout-minutes: 20
     outputs:
       changed: ${{ steps.merge.outputs.changed }}
@@ -54,8 +55,8 @@ jobs:
           DROP="apps/somnia apps/somnia-e2e apps/sr-frontend apps/zzz-frontend apps/gi-frontend libs/sr libs/zzz"
           git rm -r -q -f --ignore-unmatch $DROP
           git ls-files .github/workflows | grep -v '/juanlab-pages.yml$' | xargs -r git rm -q -f --ignore-unmatch
-          # file del fork riscritti da noi (README, home): si tiene sempre la nostra versione
-          git checkout HEAD -- README.md libs/gi/page-home/src/index.tsx && git add README.md libs/gi/page-home/src/index.tsx
+          # file del fork riscritti da noi (README, home, index.html): si tiene sempre la nostra versione
+          git checkout HEAD -- README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html && git add README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html
           if git diff --name-only --diff-filter=U | grep -q .; then
             git diff --name-only --diff-filter=U
             git merge --abort || true
@@ -100,6 +101,20 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'yarn'
       - run: yarn install --immutable
+      - name: Link e impostazioni dell'app
+        # l'.env dell'originale ha valori segnaposto (quelli veri li mette la loro CI): qui i link giusti, niente analytics
+        run: |
+          cat > apps/frontend/.env.local <<'ENV'
+          NX_URL_GITHUB_GO=https://github.com/frzyc/genshin-optimizer
+          NX_URL_GITHUB_FRZYC=https://github.com/frzyc
+          NX_URL_GITHUB_LANTUA=https://github.com/lantua
+          NX_URL_GITHUB_VAN=https://github.com/nguyentvan7
+          NX_URL_WEBSITE_KQM=https://keqingmains.com/
+          NX_URL_KQM_MULTI_GUIDE=https://keqingmains.com/misc/multi-optimization/
+          NX_URL_GITHUB_API_GO_RELEASES=https://api.github.com/repos/frzyc/genshin-optimizer/releases/tags/
+          NX_GA_TRACKINGID=
+          ENV
+          sed -i 's/^ *//' apps/frontend/.env.local
       - name: Build frontend
         run: |
           export NX_URL_GITHUB_GO_CURRENT_VERSION="https://github.com/${{ github.repository }}/commit/$(git rev-parse HEAD)"
@@ -114,6 +129,9 @@ jobs:
     needs: build
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
     timeout-minutes: 10
     environment:
       name: github-pages

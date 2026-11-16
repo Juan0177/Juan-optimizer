@@ -68,7 +68,13 @@ export default defineConfig(() => ({
   ],
 
   define: {
-    'process.env': process.env,
+    // juanlab: solo le variabili NX_* (URL e impostazioni dell'app) e NODE_ENV. Prima passava tutto process.env
+    // e nel JavaScript pubblicato finivano le variabili del runner di GitHub Actions, token compresi.
+    'process.env': Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([k]) => k.startsWith('NX_') || k === 'NODE_ENV'
+      )
+    ),
     __VERSION__: `"${pkg.version}"`,
   },
 

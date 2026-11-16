@@ -131,7 +131,8 @@ export function UploadCard({
         <EnkaUidImport
           initialUid={initialUid}
           onData={(json, label) => {
-            setKeepWepArtiNotInImport(true)
+            setErrorMsg('')
+            if (json) setKeepWepArtiNotInImport(true)
             setfilename(label)
             setdata(json)
           }}
