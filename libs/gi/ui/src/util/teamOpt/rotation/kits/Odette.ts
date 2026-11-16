@@ -99,6 +99,8 @@ function summonDance(
   ctx.at(DANCE_DURATION, (c) => {
     if (c.now < s.danceEnd) return // a burst refreshed the summon
     c.state('Odette', ['Odette', 'a1TeamSplendor'], '')
+    // The Coda's upgrade of the moves (Partner_StarReactBuff) ends only with the Double.
+    s.upgradeEnd = -1
   })
   if (!refresh) {
     s.splendorSelf = ctx.constellation('Odette') >= 1 ? 6 : 4
@@ -209,7 +211,11 @@ function coda(ctx: SimContext, s: OdetteState): ActionResult {
       label: "Coda at Dawn's Tolling (DoT)",
     })
   ctx.atCharacter('Odette', 62, (c) => {
-    s.upgradeEnd = c.now + 1200
+    // From here the Double's moves add their Stellar hits (in Radiance) until the Double leaves:
+    // the dump's E2_DuoDance_Executed sets _ABILITY_Odette_Partner_StarReactBuff with no timer,
+    // and only the Double's exit (UNIQUE_Odette_PartnerDetect_Handler removed) clears it, so a
+    // Burst's refresh keeps it (gcsim/kqmsim: a 20 s status).
+    s.upgradeEnd = Number.MAX_SAFE_INTEGER
     const swirl = c.radiance === 'swirl'
     c.hit(0, {
       path: ['skill', swirl ? 'codaStellarswirlDmg' : 'codaStellarconductDmg'],
@@ -384,23 +390,27 @@ export const kit: KitModel = {
             icd: 'burst',
             label: 'Presto: Bluebird Finale (Final)',
           })
+        })
+        // The Burst's first step (dump Avatar_Odette_ElementalBurst, Burst_Triggerability, on
+        // entering the ElementalBurst state) starts its CD, summons the Dance Double and grants
+        // Snow Swan's Dream (Odette_FinalAct) and, at C4, its 50% to the others
+        // (UNIQUE_Odette_FinalAct_OnAvatars), all at the cast, not at the final slash as gcsim.
+        ctx.atCharacter('Odette', 1, (c2) => {
           // Snow Swan's Dream lasts 20 s on Odette's clock, including after swapping out.
-          at.buff('Odette', ['Odette', 'burst'], 'on', 0, 20 * 60, {
+          c2.buff('Odette', ['Odette', 'burst'], 'on', 0, 20 * 60, {
             hitlag: 'recipient',
             recipient: 'Odette',
           })
           // C4: the other members gain 50% of it (the sheet reads the same condition for them),
           // each on their own hitlag clock as native c4OnBurst.
-          if (at.constellation('Odette') >= 4)
-            for (const m of at.members)
+          if (c2.constellation('Odette') >= 4)
+            for (const m of c2.members)
               if (m !== 'Odette')
-                at.buff('Odette', ['Odette', 'burst'], 'on', 0, 20 * 60, {
+                c2.buff('Odette', ['Odette', 'burst'], 'on', 0, 20 * 60, {
                   hitlag: 'recipient',
                   recipient: m,
                 })
-        })
-        // the Dance Double is summoned 1 frame in; a live one carries on with its next move
-        ctx.atCharacter('Odette', 1, (c2) => {
+          // the Dance Double is summoned 1 frame in; a live one carries on with its next move
           const live = c2.now < s.danceEnd
           summonDance(c2, s, (live && s.danceNext) || 'plume', 252, live)
         })
