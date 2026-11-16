@@ -272,6 +272,7 @@ export function ArtifactFilterDisplay({
             />
             {/* Sub stat dropdown */}
             <SubstatMultiAutocomplete
+              fullWidth // juanlab: largo come i filtri dei set e delle principali
               totals={subStatTotal}
               substatKeys={substats}
               setSubstatKeys={(substats) => filterOptionDispatch({ substats })}

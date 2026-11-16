@@ -129,7 +129,8 @@ class ErrorBoundary extends Component<Props, State> {
                               <Trans t={t} i18nKey="report.3">
                                 Click
                                 <a
-                                  href={`${process.env.NX_URL_GITHUB_GO}/issues/new?title=Unexpected%20Crash%Occurred`}
+                                  // juanlab: le segnalazioni vanno al fork, mai al progetto originale
+                                  href="https://github.com/Juan0177/Juan-optimizer/issues/new?title=Unexpected%20Crash%20Occurred"
                                   style={{ color: 'white' }}
                                   target="_blank"
                                   rel="noreferrer"
@@ -142,24 +143,7 @@ class ErrorBoundary extends Component<Props, State> {
                               </Trans>
                             </li>
                           </Typography>
-                          <Typography>
-                            <li>
-                              <Trans t={t} i18nKey="report.4">
-                                Or click
-                                <a
-                                  href={process.env.NX_URL_DISCORD_GO}
-                                  style={{ color: 'white' }}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  here
-                                </a>
-                                to report on Discord. Open the #🐛bug-reports
-                                channel, create a new thread and paste the text
-                                in the message box. Also upload your JSON files.
-                              </Trans>
-                            </li>
-                          </Typography>
+                          {/* juanlab: tolta la segnalazione su Discord (era il Discord del progetto originale) */}
                         </ul>
                       </CardContent>
                       <Stack
