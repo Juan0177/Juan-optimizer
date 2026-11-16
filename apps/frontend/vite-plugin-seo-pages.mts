@@ -94,10 +94,10 @@ const ALIASES: Record<string, { name: string; short: string; slug: string }> = {
 /** What the optimizer models for characters whose talent names are not out yet */
 const KIT_NOTES: Record<string, string[]> = {
   Danica: [
-    'Anchor: Electro RES shred, with extra Electro and Cryo shred in Radiance',
-    "Maid Form: Defense (party ATK from Danica's ATK) or Battle (On-Field Skill damage bonus)",
+    'Storm Anchor: Electro RES shred, with extra Electro and Cryo shred in Radiance',
+    "Attendant Form: Maid: Royal Guard (party ATK from Danica's ATK) or Maid: Cleaner (Will to Purge damage bonus)",
     'Elemental Burst cast in Radiance: Stellar-Conduct, and the A4 ATK SPD stacks',
-    'Stellar-Conduct hits, C2 "Toast" stacks and the C6 Elevated Stellar-Conduct damage',
+    'Stellar-Conduct hits, C2 "Let Us Toast" stacks and the C6 Elevated Stellar-Conduct damage',
   ],
   Anastasya: [
     'Blessing of Love or Honor, and To the New World',
@@ -136,14 +136,14 @@ const SUPPORT_NOTES: Record<string, (sp: SkillParams) => string> = {
     const p = (x: number) => pct(x * 100)
     return `<section class="summary">
 <h2>Danica as a support</h2>
-<p>Danica is mainly played as a support, in Defense Maid. What she gives the party, at talent level 9:</p>
+<p>Danica is mainly played as a support, in Maid: Royal Guard form. What she gives the party, at talent level 9:</p>
 <ul>
-<li><strong>Party ATK:</strong> after her Elemental Burst in Radiance: Stellar-Conduct, Defense Maid gives every party member ATK equal to ${p(share)} of Danica's own ATK, up to ${fmtInt(cap)}. That cap needs about ${fmtInt(Math.round(cap / share / 100) * 100)} ATK, so in practice every point of her ATK counts.</li>
+<li><strong>Party ATK:</strong> after her Elemental Burst in Radiance: Stellar-Conduct, Maid: Royal Guard gives every party member ATK equal to ${p(share)} of Danica's own ATK, up to ${fmtInt(cap)}. That cap needs about ${fmtInt(Math.round(cap / share / 100) * 100)} ATK, so in practice every point of her ATK counts.</li>
 <li><strong>Stellar-Conduct:</strong> every 100 ATK she has raises the party's Base Stellar-Conduct DMG by ${p(perHundredAtk)}, up to ${p(maxBase)} at ${fmtInt(Math.round((maxBase / perHundredAtk) * 100))} ATK.</li>
-<li><strong>RES shred:</strong> her Anchor lowers enemies' Electro RES by ${p(shred)}, and in Radiance by another ${p(radShred)} plus ${p(radCryoShred)} Cryo RES, whatever her stats.</li>
+<li><strong>RES shred:</strong> her Storm Anchor lowers enemies' Electro RES by ${p(shred)}, and in Radiance by another ${p(radShred)} plus ${p(radCryoShred)} Cryo RES, whatever her stats.</li>
 </ul>
-<p>So a support Danica wants ATK: ATK% main stats (or an Energy Recharge sands if she needs one), ATK% substats and a weapon with high base ATK, plus enough Energy Recharge for her ${energy}-Energy burst. In the app, turn on Defense Maid and the burst enhancement to see the exact ATK she gives each teammate.</p>
-<p class="note">The rankings below are for her on-field DPS build (Battle Maid).</p>
+<p>So a support Danica wants ATK: ATK% main stats (or an Energy Recharge sands if she needs one), ATK% substats and a weapon with high base ATK, plus enough Energy Recharge for her ${energy}-Energy burst. In the app, turn on Maid: Royal Guard and the burst enhancement to see the exact ATK she gives each teammate.</p>
+<p class="note">The rankings below are for her on-field DPS build (Maid: Cleaner).</p>
 </section>`
   },
   Mitya: (sp) => {
