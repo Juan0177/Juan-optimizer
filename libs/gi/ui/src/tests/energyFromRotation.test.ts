@@ -396,3 +396,99 @@ describe('Favonius from the rotation', () => {
     ).toBe(1)
   })
 })
+
+describe('Frostbreath from the rotation', () => {
+  // (Xiangling's Pyronado on Xingqiu's Hydro: her own Vaporizes, a Hydro-related reaction)
+  const team: CharacterKey[] = ['Xiangling', 'Xingqiu', 'Bennett', 'Sucrose']
+  const playTeam = (gear = {}) =>
+    simulateRotation({
+      rotation: parseRotation(
+        'Bennett Q E -> Xingqiu Q E -> Sucrose E -> Xiangling Q E N1 -> Bennett E -> Xingqiu E N3 -> Sucrose N3 -> Xiangling',
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      gear,
+      repeats: 4,
+      keep: 'last2',
+    })
+  const sim = playTeam()
+  const energy = energyFromRotation(sim, team, 2)
+  it('fills in the triggers a Frostbreath would have: its own Cryo- or Hydro-related reactions, once per 16 s', () => {
+    const xiangling = energy.members.Xiangling!.weaponTriggers!.Frostbreath!
+    expect(xiangling).toBeGreaterThan(0)
+    expect(xiangling).toBeLessThanOrEqual(sim.frames / 2 / 960 + 1)
+    // (everyone's own reactions count, each at most once per 16 s: Bennett's Pyro on Xingqiu's
+    // Hydro is a Vaporize of his)
+    for (const k of team)
+      expect(
+        energy.members[k]!.weaponTriggers?.Frostbreath ?? 0
+      ).toBeLessThanOrEqual(sim.frames / 2 / 960 + 1)
+  })
+  it('gives the other members its energy only when the member holds a Frostbreath', () => {
+    const settings = withRotationEnergy(
+      defaultEnergyCalculator(team, sim.frames / 60 / 2),
+      team,
+      energy
+    )
+    const without = calculateEnergyRecharge(team, settings, {
+      Xiangling: 'TheCatch',
+    })
+    const withFrost = calculateEnergyRecharge(
+      team,
+      settings,
+      { Xiangling: 'Frostbreath' },
+      { Xiangling: 5 }
+    )
+    const triggers = Math.min(
+      energy.members.Xiangling!.weaponTriggers!.Frostbreath!,
+      settings.rotationTime / 16
+    )
+    // (12 Energy each at R5, the others only)
+    for (const k of ['Xingqiu', 'Bennett', 'Sucrose'] as const)
+      expect(
+        withFrost.members[k]!.flatEnergy - without.members[k]!.flatEnergy
+      ).toBeCloseTo(12 * triggers, 5)
+    expect(withFrost.members.Xiangling!.flatEnergy).toBeCloseTo(
+      without.members.Xiangling!.flatEnergy,
+      5
+    )
+    // (a count typed by hand wins)
+    const typed = {
+      ...settings,
+      members: {
+        ...settings.members,
+        Xiangling: {
+          ...settings.members.Xiangling!,
+          weaponEnergyTriggers: 0.5,
+        },
+      },
+    }
+    expect(
+      calculateEnergyRecharge(
+        team,
+        typed,
+        { Xiangling: 'Frostbreath' },
+        { Xiangling: 5 }
+      ).members.Xingqiu!.flatEnergy - without.members.Xingqiu!.flatEnergy
+    ).toBeCloseTo(6, 5)
+  })
+  it('times its ATK buff for the wielder: 15 s after its own reaction, once per 16 s', () => {
+    const played = playTeam({ Xiangling: { weapon: 'Frostbreath' } })
+    const on = played.buffWindows
+      .filter(
+        (w) =>
+          w.path.join('.') === 'Frostbreath.react' &&
+          w.value === 'on' &&
+          w.end > w.start
+      )
+      .sort((a, b) => a.start - b.start)
+    expect(on.length).toBeGreaterThan(0)
+    for (const w of on) expect(w.end - w.start).toBe(900)
+    for (let i = 1; i < on.length; i++)
+      expect(on[i].start - on[i - 1].start).toBeGreaterThanOrEqual(960)
+  })
+})
