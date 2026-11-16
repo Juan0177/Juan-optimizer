@@ -10,6 +10,8 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   Q       Elemental Burst                  N1–N6  a Normal Attack string of that many hits
  *   CA / C  Charged Attack                   P    Plunging Attack
  *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default, 6 from C1)
+ *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
+ *                its finisher waited for (F): KQM's "C3FD C3FD CF"
  *   D       dash                             J    jump
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
@@ -37,6 +39,10 @@ export interface RotationAction {
   optional?: boolean
   /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
   beams?: number
+  /** Charged: Mavuika's Flamestrider spins held ("C3": 3) */
+  spins?: number
+  /** Charged: Mavuika's Flamestrider finisher, waited for ("C3F", "CF") */
+  final?: boolean
   /** As written (for messages) */
   text: string
 }
@@ -174,6 +180,8 @@ export function matchMember(
 
 /** Members whose Charged Attack takes a number of beams ("CA[beams=2]"), and the most it can take */
 const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
+/** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
+const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
 
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
@@ -190,7 +198,7 @@ function parseActions(
     .map((word) => word.split('/')[0])
     .join(' ')
   const token =
-    /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
+    /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
   let i = 0
   const s = cleaned.trim()
   while (i < s.length) {
@@ -228,8 +236,29 @@ function parseActions(
       })
     else if (m[8])
       actions.push({ kind: 'normal', count: Number(m[9]), text: raw })
-    else if (m[10]) {
-      const beams = m[11] !== undefined ? Number(m[11]) : undefined
+    else if (m[10] && (m[11] !== undefined || m[12])) {
+      // (KQM's held Charged Attack: "C3F" spins 3 times, then its finisher)
+      const spins = m[11] !== undefined ? Number(m[11]) : 1
+      const most = characterKey && CHARGE_SPINS[characterKey]
+      if (!most) {
+        warnings.push(
+          `${who}: "${raw}": spins and a finisher are Mavuika's Flamestrider Charged Attack only (played as a Charged Attack)`
+        )
+        actions.push({ kind: 'charged', text: raw })
+      } else if (spins < 1 || spins > most) {
+        warnings.push(
+          `${who}: "${raw}": 1 to ${most} spins (played as a Charged Attack)`
+        )
+        actions.push({ kind: 'charged', text: raw })
+      } else
+        actions.push({
+          kind: 'charged',
+          spins,
+          ...(m[12] && { final: true }),
+          text: raw,
+        })
+    } else if (m[10]) {
+      const beams = m[13] !== undefined ? Number(m[13]) : undefined
       const most = characterKey && CHARGE_BEAMS[characterKey]
       if (beams === undefined) actions.push({ kind: 'charged', text: raw })
       else if (!most) {
@@ -243,9 +272,9 @@ function parseActions(
         )
         actions.push({ kind: 'charged', text: raw })
       } else actions.push({ kind: 'charged', beams, text: raw })
-    } else if (m[12]) actions.push({ kind: 'plunge', text: raw })
-    else if (m[13]) actions.push({ kind: 'dash', text: raw })
-    else if (m[14]) actions.push({ kind: 'jump', text: raw })
+    } else if (m[14]) actions.push({ kind: 'plunge', text: raw })
+    else if (m[15]) actions.push({ kind: 'dash', text: raw })
+    else if (m[16]) actions.push({ kind: 'jump', text: raw })
   }
   return actions
 }
