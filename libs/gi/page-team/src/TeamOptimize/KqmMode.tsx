@@ -143,11 +143,15 @@ function useRotationEnergy(
   teamId: string,
   members: TeamOptMember[],
   teamOpt: TeamOpt
-): RotationEnergy | undefined {
+): { text: string; energy?: RotationEnergy; for?: string } {
   const database = useDatabase()
   const { gender } = useDBMeta()
   const { i18n } = useTranslation()
-  const [energy, setEnergy] = useState<RotationEnergy>()
+  // (with the rotation text it was worked out for: a newer text's is still on its way)
+  const [worked, setWorked] = useState<{
+    for: string
+    energy?: RotationEnergy
+  }>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
   let text = ''
@@ -168,7 +172,7 @@ function useRotationEnergy(
   const keys = members.map((m) => m.characterKey).join()
   useEffect(() => {
     if (!text.trim()) {
-      setEnergy(undefined)
+      setWorked(undefined)
       return
     }
     let cancelled = false
@@ -195,7 +199,7 @@ function useRotationEnergy(
       } catch {
         next = undefined
       }
-      if (!cancelled) setEnergy(next)
+      if (!cancelled) setWorked({ for: text, energy: next })
     }, 0)
     return () => {
       cancelled = true
@@ -203,7 +207,7 @@ function useRotationEnergy(
     }
     // (members by their keys; the rest of the team's settings read when it runs)
   }, [database, gender, i18n, teamId, text, constellations, cadence, keys])
-  return energy
+  return { text, energy: worked?.energy, for: worked?.for }
 }
 
 /** KQM assumptions and equipment, saved with the team as they change. */
@@ -245,7 +249,11 @@ export function KqmSettings({
     )
   )
   // (the written rotation fills in the inputs not set by hand)
-  const rotationEnergy = useRotationEnergy(teamId, members, teamOpt)
+  const {
+    text: writtenText,
+    energy: rotationEnergy,
+    for: energyFor,
+  } = useRotationEnergy(teamId, members, teamOpt)
   // The rotation length above is shared by both workflows and the ER calculator.
   const rotationTime = teamOpt.rotationTime ?? 20
   const calculatorDraft = useMemo(
@@ -326,34 +334,63 @@ export function KqmSettings({
         )
       )
   }, [teamOpt.kqm?.energyRecharge, teamOpt.kqm?.energySource, members])
-  // Keep applied ER targets current when the common rotation length or the written rotation's
-  // inputs change. (Written once per change: if the saved settings come back different, e.g.
-  // a value the database does not keep, the same inputs are not written again, or it would loop.)
+  // Applied ER targets stay current when the common rotation length or the written rotation's
+  // inputs change. They also apply by themselves: with a written rotation (its energy worked
+  // out), for a team that has not typed its own, and whenever the rotation is saved or changed
+  // (over ones typed by hand: those were for the rotation before)
   const lastWritten = useRef<string>()
   useEffect(() => {
-    const applied = teamOpt.kqm?.energyCalculator
+    const kqm = teamOpt.kqm
+    const source = kqm?.energySource
+    const written = writtenText.trim()
+    const ready = !!written && energyFor === writtenText && !!rotationEnergy
+    // (typed by hand before the rotation was recorded: kept, and the rotation is recorded now)
+    if (source === 'manual' && ready && kqm?.energyRotation === undefined) {
+      setTeamOpt((o) => {
+        o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), energyRotation: written }
+      })
+      return
+    }
+    const newRotation = ready && kqm?.energyRotation !== written
+    if (source !== 'calculator' && !(ready && (!source || newRotation))) return
+    const applied = kqm?.energyCalculator
     const rotationTime = teamOpt.rotationTime ?? 20
-    if (teamOpt.kqm?.energySource !== 'calculator' || !applied) return
     const energyCalculator = {
-      ...teamCalculator(members, teamOpt, applied, rotationEnergy),
+      ...teamCalculator(
+        members,
+        teamOpt,
+        applied,
+        ready ? rotationEnergy : undefined
+      ),
       rotationTime,
     }
     const json = JSON.stringify(energyCalculator)
-    if (json === JSON.stringify(applied) || json === lastWritten.current) return
-    lastWritten.current = json
+    if (
+      source === 'calculator' &&
+      !newRotation &&
+      json === JSON.stringify(applied)
+    )
+      return
+    // (written once per change: if the saved settings come back different, e.g. a value the
+    // database does not keep, the same inputs are not written again, or it would loop)
+    const key = `${json}|${ready ? written : ''}`
+    if (key === lastWritten.current) return
+    lastWritten.current = key
     const estimate = kqmEnergyEstimate(
       members.map((m) => m.characterKey),
       energyCalculator,
-      teamOpt.kqm
+      kqm
     )
     setTeamOpt((o) => {
       o.kqm = {
         ...(o.kqm ?? defaultTeamOptKqm),
+        energySource: 'calculator',
         energyCalculator,
         energyRecharge: estimate.targets,
+        ...(ready ? { energyRotation: written } : {}),
       }
     })
-  }, [teamOpt, members, setTeamOpt, rotationEnergy])
+  }, [teamOpt, members, setTeamOpt, rotationEnergy, energyFor, writtenText])
   const problem = !canRun
     ? t('teamOpt.kqm.addAttacks', 'Add rotation attacks above')
     : !optimized.length

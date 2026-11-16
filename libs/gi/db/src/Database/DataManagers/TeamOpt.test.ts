@@ -260,6 +260,30 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
   })
 
+  it('keeps the rotation the ER targets were worked out for (kqm.energyRotation)', () => {
+    // (the KQM tab applies the calculator's targets when the rotation changes: dropping this would
+    // make it see a new rotation on every pass)
+    const first = new ArtCharDatabase(1, new SandboxStorage())
+    first.importGOOD(good(), false, false, false)
+    const [id] = first.teams.keys
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      kqm: {
+        refinement5: 1,
+        refinement4: 5,
+        energySource: 'manual',
+        energyRecharge: { KamisatoAyaka: 140 },
+        energyRotation: 'Ayaka E Q -> Shenhe E Q -> Ayaka N2 CA',
+      },
+    }
+    first.teams.set(id, { teamOpt })
+    expect(first.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    const second = new ArtCharDatabase(1, new SandboxStorage())
+    second.importGOOD(first.exportGOOD() as IGOOD & IGO, false, false, false)
+    const [secondId] = second.teams.keys
+    expect(second.teams.get(secondId)!.teamOpt).toEqual(teamOpt)
+  })
+
   it('keeps a calculator member whose skill options go past the third (Flins: Manifest Flame hit)', () => {
     // (dropping it made the KQM tab's prefill write it again and again: React error 185)
     const first = new ArtCharDatabase(1, new SandboxStorage())

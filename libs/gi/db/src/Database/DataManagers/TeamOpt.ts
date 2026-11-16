@@ -204,6 +204,11 @@ export interface TeamOptKqm {
   talents?: 9 | 10
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
+  /**
+   * The written rotation the ER targets were last worked out for: a different one (saved or
+   * changed since) has the calculator's targets applied again, over ones typed by hand
+   */
+  energyRotation?: string
   /** 5★ event wish weapons' refinement (default 1) */
   refinement5: number
   /** 4★ event wish and shop weapons' refinement (default 5); free weapons go by their source */
@@ -487,6 +492,7 @@ const teamOptSchema = z.object({
         .optional()
         .catch(undefined),
       energyCalculator: energyCalculatorSchema.optional().catch(undefined),
+      energyRotation: z.string().optional().catch(undefined),
       energyRecharge: z
         .unknown()
         .optional()
