@@ -4,6 +4,21 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.11.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.11.2) (2026-11-16)
+
+### New
+
+- Anastasya C6: her Honor strike (Doom's third attack at 250%, with every member's Accolades) is used by tapping her Skill while the others are still Sealed, with no cooldown, so write it right after her Burst: "hE Q E N5D N5D E E E".
+- You can stop Anastasya's Doom after two stages and swap: the next rotation starts with her hold Skill again.
+
+### Fixed
+
+- Anastasya: one Blessed Spear N5 string ends the others' Sealing, leaving the field ends the Blessing of Honor and Doom, and a hold Skill ends the Blessing of Love, as in the game.
+- Danica: her Skill ends her Maid form and her Burst's buff window, as in the game; use her Skill before swapping back in for her Burst to keep Royal Guard. A Burst cast first now also enhances a later Will to Purge, its DMG bonus multiplies the base DMG, and her C2 Toast counts once.
+- ER calculator: Danica's C1 and C4 Energy is counted from the written rotation.
+- Mitya: his C4 strike gets C6's 115% with a Steady core and counts Beacons across Skills; his detonation and hold Skill no longer count Beacons the game doesn't give.
+- Odette: her C6 self Elevation needs her Dance Double out, Snow Swan's Dream starts when her Burst is cast, and the Double's Stellar moves last until it leaves.
+
 ## [v1.11.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.11.1) (2026-11-16)
 
 ### Fixed
