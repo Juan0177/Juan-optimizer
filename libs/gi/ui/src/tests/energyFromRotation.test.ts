@@ -8,6 +8,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { describe, expect, it } from 'vitest'
 import {
+  attackEnergyFromRotation,
   calculateEnergyRecharge,
   defaultEnergyCalculator,
   energyCalcData,
@@ -41,7 +42,11 @@ describe('energy inputs from the rotation', () => {
   const energy = energyFromRotation(sim, members, 2)
   it('counts skill uses by cooldown (Durin E E is one), and Durin’s bonus energy', () => {
     expect(energy.members.Durin!.skillUses).toBe(1)
-    expect(energy.members.Durin!.flatEnergy).toBe(30)
+    // (30 from his Skill, plus his Normal and Charged Attacks' random Energy)
+    expect(energy.members.Durin!.flatEnergy).toBeCloseTo(
+      30 + (attackEnergyFromRotation(sim, members, 2).Durin ?? 0),
+      1
+    )
     expect(energy.members.Nicole!.skillUses).toBe(1)
     expect(energy.members.Emilie!.skillUses).toBe(1)
   })
@@ -126,7 +131,10 @@ describe('energy inputs: Varesa Overload (KQM quick guide)', () => {
       withRotationEnergy(defaultEnergyCalculator(team, 21.3), team, energy)
     )
     // (3 Kablams, 30 each, from her particle energy: well above 100%)
-    expect(result.members.Varesa!.flatEnergy).toBe(-90)
+    expect(result.members.Varesa!.flatEnergy).toBeCloseTo(
+      -90 + (attackEnergyFromRotation(sim, team, 2).Varesa ?? 0),
+      1
+    )
     expect(result.targets.Varesa!).toBeGreaterThan(200)
   })
 })
@@ -154,7 +162,11 @@ describe('energy inputs: Sandrone', () => {
     })
     const energy = energyFromRotation(sim, team, 2)
     expect(energy.members.Sandrone!.skillUses).toBe(5)
-    expect(energy.members.Sandrone!.flatEnergy).toBe(5)
+    // (her Charged Attacks' random Energy, as played: about the ERC sheet's 5 for 3 of them)
+    const attack = attackEnergyFromRotation(sim, team, 2).Sandrone ?? 0
+    expect(energy.members.Sandrone!.flatEnergy).toBeCloseTo(attack, 1)
+    expect(attack).toBeGreaterThan(3)
+    expect(attack).toBeLessThan(8)
   })
 })
 
@@ -200,7 +212,8 @@ describe('energy inputs: Flins (two Bursts)', () => {
       energy
     )
     const result = calculateEnergyRecharge(team, settings)
-    expect(result.members.Flins!.flatEnergy).toBe(-30)
+    const flinsAttack = attackEnergyFromRotation(sim, team, 2).Flins ?? 0
+    expect(result.members.Flins!.flatEnergy).toBeCloseTo(-30 + flinsAttack, 1)
     // 80 for the Burst plus 30 for the Symphony, from his particles
     const without = calculateEnergyRecharge(team, {
       ...settings,
@@ -243,8 +256,95 @@ describe('energy inputs: Flins (two Bursts)', () => {
         last = h.t
       }
     const c1 = energyFromRotation(sim, team, 2, { Flins: 1 })
-    expect(c1.members.Flins!.flatEnergy).toBeCloseTo((8 * procs) / 2, 9)
-    // (C0: none)
-    expect(energy.members.Flins!.flatEnergy ?? 0).toBe(0)
+    const attack = attackEnergyFromRotation(sim, team, 2).Flins ?? 0
+    expect(c1.members.Flins!.flatEnergy).toBeCloseTo(
+      (8 * procs) / 2 + attack,
+      1
+    )
+    // (C0: none from C1)
+    expect(energy.members.Flins!.flatEnergy ?? 0).toBeCloseTo(attack, 1)
+  })
+})
+
+describe('Normal and Charged Attack energy (random, as gcsim/kqmsim)', () => {
+  const hit = (t: number, characterKey: CharacterKey, tag = 'normal') =>
+    ({ t, characterKey, tag, path: ['normal', '0'] }) as never
+  it('matches the expected value of the chance that grows with each miss (a catalyst: +10%)', () => {
+    // ten hits 30 frames apart: no 12-frame pause in the way. The exact expectation, by the
+    // chance after each miss (0, 10%, 20%… reset to 0 by a success)
+    const hits = Array.from({ length: 10 }, (_, i) => hit(i * 30, 'Mona'))
+    let states = new Map<number, number>([[0, 1]])
+    let expected = 0
+    for (let i = 0; i < 10; i++) {
+      const next = new Map<number, number>()
+      for (const [misses, p] of states) {
+        const chance = Math.min(1, misses * 0.1)
+        expected += p * chance
+        next.set(0, (next.get(0) ?? 0) + p * chance)
+        next.set(misses + 1, (next.get(misses + 1) ?? 0) + p * (1 - chance))
+      }
+      states = next
+    }
+    const got = attackEnergyFromRotation(
+      { start: 0, frames: 600, hits, swaps: [] },
+      ['Mona']
+    ).Mona!
+    expect(got).toBeCloseTo(expected, 1)
+  })
+  it('a success pauses the whole party for 12 frames; a swap resets every chance', () => {
+    // two members hitting at the same frames: the second hit of a pair cannot restore Energy
+    // right after the first did
+    const paired = attackEnergyFromRotation(
+      {
+        start: 0,
+        frames: 3000,
+        hits: Array.from({ length: 60 }, (_, i) => [
+          hit(i * 40, 'Mona'),
+          hit(i * 40 + 1, 'Fischl', 'charged'),
+        ]).flat(),
+        swaps: [],
+      },
+      ['Mona', 'Fischl']
+    )
+    const alone = attackEnergyFromRotation(
+      {
+        start: 0,
+        frames: 3000,
+        hits: Array.from({ length: 60 }, (_, i) =>
+          hit(i * 40 + 1, 'Fischl', 'charged')
+        ),
+        swaps: [],
+      },
+      ['Fischl']
+    )
+    expect(paired.Fischl!).toBeLessThan(alone.Fischl!)
+    // swaps before every hit: the chance never grows past its start (0 for a catalyst)
+    const reset = attackEnergyFromRotation(
+      {
+        start: 0,
+        frames: 600,
+        hits: Array.from({ length: 10 }, (_, i) => hit(i * 30 + 5, 'Mona')),
+        swaps: Array.from(
+          { length: 10 },
+          (_, i) => ({ start: i * 30 }) as never
+        ),
+      },
+      ['Mona']
+    )
+    expect(reset.Mona ?? 0).toBe(0)
+  })
+  it('plunges and the simulation’s markers do not count', () => {
+    const got = attackEnergyFromRotation(
+      {
+        start: 0,
+        frames: 600,
+        hits: Array.from({ length: 10 }, (_, i) =>
+          hit(i * 30, 'Mona', 'plunge')
+        ),
+        swaps: [],
+      },
+      ['Mona']
+    )
+    expect(got.Mona ?? 0).toBe(0)
   })
 })
