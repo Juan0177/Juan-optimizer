@@ -1003,7 +1003,17 @@ export function energyFromRotation(
   const favonius = favoniusFromRotation(sim, keys, per, onFieldAt)
   // (energy weapons: what each member would trigger with one, counted only if it holds one)
   const weaponTriggers = weaponTriggersFromRotation(sim, keys, per)
-  const danica = danicaEnergyFromRotation(sim, keys, per, constellations)
+  // (members whose constellations give flat Energy as the rotation plays them)
+  const kitEnergy: Partial<Record<CharacterKey, number>> = {}
+  for (const [owner, count] of Object.entries(KIT_ENERGY) as [
+    CharacterKey,
+    KitEnergy,
+  ][])
+    if (keys.includes(owner))
+      for (const [k, v] of Object.entries(
+        count(owner, sim, keys, per, constellations)
+      ) as [CharacterKey, number][])
+        kitEnergy[k] = (kitEnergy[k] ?? 0) + v
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -1118,10 +1128,10 @@ export function energyFromRotation(
       member.flatEnergy =
         (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
     }
-    // Danica's C1 and C4 Energy, as the rotation plays them
-    if (danica[key])
+    // flat Energy from members' constellations, as the rotation plays them (KIT_ENERGY)
+    if (kitEnergy[key])
       member.flatEnergy =
-        Math.round(((member.flatEnergy ?? 0) + danica[key]!) * 100) / 100
+        Math.round(((member.flatEnergy ?? 0) + kitEnergy[key]!) * 100) / 100
     if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
     if (favonius[key]) {
       member.favoniusProcs = favonius[key]!.procs
@@ -1265,14 +1275,15 @@ const REACTION_ENERGY: Partial<
  *   kit's shield markers, a later one ending an earlier one), deals Stellar-Conduct DMG, once per
  *   3.5 s (UNIQUE_Danica_C4_EnergyRecover_CD).
  */
-function danicaEnergyFromRotation(
+function maidEnergyFromRotation(
+  owner: CharacterKey,
   sim: Pick<SimulationResult, 'start' | 'frames' | 'hits' | 'actions'>,
   keys: readonly CharacterKey[],
   per: number,
   constellations?: Partial<Record<CharacterKey, number>>
 ): Partial<Record<CharacterKey, number>> {
-  const cons = constellations?.Danica ?? 0
-  if (!keys.includes('Danica') || cons < 1) return {}
+  const cons = constellations?.[owner] ?? 0
+  if (!keys.includes(owner) || cons < 1) return {}
   const start = sim.start
   const end = sim.start + sim.frames
   const out: Partial<Record<CharacterKey, number>> = {}
@@ -1280,7 +1291,7 @@ function danicaEnergyFromRotation(
   let c1 = 0
   for (const a of [...sim.actions].sort((x, y) => x.start - y.start))
     if (
-      a.characterKey === 'Danica' &&
+      a.characterKey === owner &&
       a.start >= start &&
       a.start < end &&
       (a.text === 'Entry' || a.variant?.key === 'battleMaid') &&
@@ -1289,12 +1300,12 @@ function danicaEnergyFromRotation(
       c1++
       last = a.start
     }
-  if (c1) out.Danica = (20 * c1) / per
+  if (c1) out[owner] = (20 * c1) / per
   if (cons < 4) return out
   const aegis: [number, number][] = []
   for (const h of [...sim.hits].sort((x, y) => x.t - y.t))
     if (
-      h.characterKey === 'Danica' &&
+      h.characterKey === owner &&
       h.path[0] === '_marker' &&
       h.path[1] === 'shield'
     ) {
@@ -1318,8 +1329,16 @@ function danicaEnergyFromRotation(
     }
   if (c4)
     for (const k of keys)
-      if (k !== 'Danica') out[k] = (out[k] ?? 0) + (3 * c4) / per
+      if (k !== owner) out[k] = (out[k] ?? 0) + (3 * c4) / per
   return out
+}
+type KitEnergy = typeof maidEnergyFromRotation
+/**
+ * Flat Energy from a member's constellations, counted from the rotation (one entry per line: the
+ * released-only build drops unreleased characters' lines)
+ */
+const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
+  Danica: maidEnergyFromRotation,
 }
 /** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
 const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
