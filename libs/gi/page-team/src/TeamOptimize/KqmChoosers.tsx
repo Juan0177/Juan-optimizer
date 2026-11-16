@@ -34,6 +34,7 @@ import {
   kqmEnergyRelief,
   kqmExcludedWeapons,
   kqmGroupRefinementKey,
+  kqmGroupRefinements,
   kqmRuleConditionals,
   kqmSets,
   kqmWeaponGroup,
@@ -83,7 +84,6 @@ import {
   numSx,
   Pill,
   quickSx,
-  Segmented,
   tokens,
   type as typeScale,
 } from './ui'
@@ -334,7 +334,16 @@ function useKqmWeaponGroups(): {
         short: t('teamOpt.kqm.groupWish4Short', '4★ event wish'),
         tip: t(
           'teamOpt.kqm.groupWish4Tip',
-          'Only from a weapon banner’s rate-up (event wishes), and the Starglitter shop. Off by default. The standard wish pool’s 4★ (Favonius, Sacrificial…), from any banner, are on at R5.'
+          'Only from a weapon banner’s rate-up (event wishes), and the Starglitter shop. Off by default.'
+        ),
+      },
+      {
+        group: 'standard4',
+        label: t('teamOpt.kqm.groupStandard4', '4★ standard wish weapons'),
+        short: t('teamOpt.kqm.groupStandard4Short', '4★ standard wish'),
+        tip: t(
+          'teamOpt.kqm.groupStandard4Tip',
+          'The standard wish pool’s 4★ (Favonius, Sacrificial…), from any banner. On by default at R5.'
         ),
       },
       {
@@ -382,19 +391,29 @@ function toggleKqmWeaponGroup(kqm: TeamOptKqm, keys: WeaponKey[]): TeamOptKqm {
   }
 }
 
-/** A group's weapons all counted at `value` (their own refinements, set one by one, are cleared) */
-function setKqmGroupRefinement(
+/**
+ * A group's weapons counted at the refinements ticked (`values`, one at least): built at the
+ * highest, ranked at the others too for comparison (their own refinements, set one by one, are
+ * cleared)
+ */
+function setKqmGroupRefinements(
   kqm: TeamOptKqm,
   group: KqmWeaponGroup,
   keys: WeaponKey[],
-  value: number
+  values: number[]
 ): TeamOptKqm {
+  const ticked = [...new Set(values)].sort((a, b) => a - b)
+  if (!ticked.length) return kqm
   const refinements = { ...(kqm.refinements ?? {}) }
   for (const k of keys) delete refinements[k]
+  const compare = { ...(kqm.compareRefinements ?? {}) }
+  if (ticked.length > 1) compare[group] = ticked
+  else delete compare[group]
   return {
     ...kqm,
-    [kqmGroupRefinementKey[group]]: value,
+    [kqmGroupRefinementKey[group]]: ticked[ticked.length - 1],
     refinements: Object.keys(refinements).length ? refinements : undefined,
+    compareRefinements: Object.keys(compare).length ? compare : undefined,
   }
 }
 
@@ -432,8 +451,7 @@ function KqmWeaponGroups({
       {shown.map(({ group, label, tip, keys }, i) => {
         const on = keys.filter((k) => !excludedKeys.has(k)).length
         const all = on === keys.length
-        const refinementKey = kqmGroupRefinementKey[group]
-        const refinement = kqm[refinementKey] ?? 1
+        const ticked = kqmGroupRefinements(group, kqm)
         return (
           <Box
             key={group}
@@ -470,19 +488,16 @@ function KqmWeaponGroups({
                 })}
               </Typography>
             </Box>
-            <Segmented
-              size="small"
-              value={refinement}
-              aria-label={t('teamOpt.kqm.groupRefinement', {
+            <RefinementToggles
+              label={t('teamOpt.kqm.groupRefinement', {
                 defaultValue: '{{group}} refinement',
                 group: label,
               })}
-              options={[1, 2, 3, 4, 5].map((r) => ({
-                value: r,
-                label: `R${r}`,
-              }))}
-              onChange={(value) =>
-                update((kqm) => setKqmGroupRefinement(kqm, group, keys, value))
+              ticked={ticked}
+              onChange={(values) =>
+                update((kqm) =>
+                  setKqmGroupRefinements(kqm, group, keys, values)
+                )
               }
             />
           </Box>
@@ -1059,24 +1074,84 @@ export function kqmChooserCounts(members: TeamOptMember[], teamOpt: TeamOpt) {
  * A weapon group in KQM Setup: one pill of two parts, its switch (on with all its weapons) and
  * the refinement its weapons count at (a menu, R1 to R5)
  */
+/**
+ * A group's refinements as toggles, several at once: the builds use the highest ticked, the
+ * rankings and charts show each (one stays ticked)
+ */
+function RefinementToggles({
+  label,
+  ticked,
+  onChange,
+}: {
+  label: string
+  ticked: number[]
+  onChange: (values: number[]) => void
+}) {
+  return (
+    <Box
+      role="group"
+      aria-label={label}
+      sx={{
+        display: 'inline-flex',
+        borderRadius: tokens.radius.pill,
+        border: `1px solid ${tokens.hairlineStrong}`,
+        overflow: 'hidden',
+      }}
+    >
+      {[1, 2, 3, 4, 5].map((r, i) => {
+        const on = ticked.includes(r)
+        const last = on && ticked.length === 1
+        return (
+          <ButtonBase
+            key={r}
+            aria-pressed={on}
+            disabled={last}
+            onClick={() =>
+              onChange(on ? ticked.filter((x) => x !== r) : [...ticked, r])
+            }
+            sx={(theme) => ({
+              ...numSx,
+              ...quickSx,
+              ...focusSx,
+              minWidth: 40,
+              minHeight: 28,
+              px: 1,
+              fontSize: 12.5,
+              fontWeight: 600,
+              borderLeft: i ? `1px solid ${tokens.hairlineStrong}` : undefined,
+              color: on ? 'text.primary' : 'text.secondary',
+              bgcolor: on ? alpha(theme.palette.primary.main, 0.16) : undefined,
+              '&.Mui-disabled': { color: 'text.primary' },
+              '&:hover': { bgcolor: alpha(theme.palette.text.primary, 0.06) },
+            })}
+          >
+            R{r}
+          </ButtonBase>
+        )
+      })}
+    </Box>
+  )
+}
+
 function GroupPill({
   label,
   short,
   tip,
   on,
   total,
-  refinement,
+  refinements,
   onToggle,
-  onRefinement,
+  onRefinements,
 }: {
   label: string
   short: string
   tip: string
   on: number
   total: number
-  refinement: number
+  /** the refinements ticked (the builds use the highest; the rankings show each) */
+  refinements: number[]
   onToggle: () => void
-  onRefinement: (value: number) => void
+  onRefinements: (values: number[]) => void
 }) {
   const { t } = useTranslation('page_team')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
@@ -1150,28 +1225,49 @@ function GroupPill({
           },
         })}
       >
-        R{refinement}
+        {refinements.map((r) => `R${r}`).join(' + ')}
         <ArrowDropDownIcon sx={{ fontSize: 18, ml: -0.125 }} />
       </ButtonBase>
       <Menu
         anchorEl={anchor}
         open={!!anchor}
         onClose={() => setAnchor(null)}
-        MenuListProps={{ dense: true }}
+        MenuListProps={{
+          dense: true,
+          'aria-label': t('teamOpt.kqm.groupRefinement', {
+            defaultValue: '{{group}} refinement',
+            group: label,
+          }),
+        }}
       >
-        {[1, 2, 3, 4, 5].map((r) => (
-          <MenuItem
-            key={r}
-            selected={r === refinement}
-            onClick={() => {
-              onRefinement(r)
-              setAnchor(null)
-            }}
-            sx={{ ...numSx, fontSize: 13.5, minWidth: 72 }}
-          >
-            R{r}
-          </MenuItem>
-        ))}
+        {[1, 2, 3, 4, 5].map((r) => {
+          const on = refinements.includes(r)
+          // (one stays ticked)
+          const last = on && refinements.length === 1
+          return (
+            <MenuItem
+              key={r}
+              role="menuitemcheckbox"
+              aria-checked={on}
+              disabled={last}
+              onClick={() =>
+                onRefinements(
+                  on ? refinements.filter((x) => x !== r) : [...refinements, r]
+                )
+              }
+              sx={{ ...numSx, fontSize: 13.5, minWidth: 96, gap: 0.5, pl: 0.5 }}
+            >
+              <Checkbox
+                size="small"
+                checked={on}
+                tabIndex={-1}
+                disableRipple
+                sx={{ p: 0.5 }}
+              />
+              R{r}
+            </MenuItem>
+          )
+        })}
       </Menu>
     </Box>
   )
@@ -1294,7 +1390,7 @@ export function KqmPool({
           }}
         >
           {groups.map(({ group, short, label, tip, keys, on }) => {
-            const refinement = kqm[kqmGroupRefinementKey[group]] ?? 1
+            const refinements = kqmGroupRefinements(group, kqm)
             return (
               <GroupPill
                 key={group}
@@ -1303,7 +1399,7 @@ export function KqmPool({
                 tip={tip}
                 on={on}
                 total={keys.length}
-                refinement={refinement}
+                refinements={refinements}
                 onToggle={() =>
                   setTeamOpt((o) => {
                     o.kqm = toggleKqmWeaponGroup(
@@ -1312,13 +1408,13 @@ export function KqmPool({
                     )
                   })
                 }
-                onRefinement={(value) =>
+                onRefinements={(values) =>
                   setTeamOpt((o) => {
-                    o.kqm = setKqmGroupRefinement(
+                    o.kqm = setKqmGroupRefinements(
                       o.kqm ?? defaultTeamOptKqm,
                       group,
                       keys,
-                      value
+                      values
                     )
                   })
                 }
