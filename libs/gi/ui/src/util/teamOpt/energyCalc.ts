@@ -359,8 +359,10 @@ export function energyCalcWeapons(
     const member = settings.members[key]
     if (!member) continue
     const candidates = allowed(key)
+    // (Favonius triggers filled in from the rotation are what a Favonius would give: assumed
+    // held only when set by hand; KQM's runs count it for the builds that do hold one)
     const weapon =
-      (member.favoniusProcs > 0
+      (member.favoniusProcs > 0 && member.edited?.includes('favoniusProcs')
         ? candidates.find((w) => isFavonius(w.key))
         : undefined) ??
       ((member.weaponEnergyTriggers ?? 0) > 0
@@ -595,7 +597,7 @@ export function attackEnergyFromRotation(
   if (!hits.length) return {}
   const swaps = (sim.swaps ?? []).map((s) => s.start).sort((a, b) => a - b)
   const rule = (k: CharacterKey) =>
-    ATTACK_ENERGY[getCharStat(k).weaponType] ?? ATTACK_ENERGY.sword
+    ATTACK_ENERGY[getCharStat(k).weaponType] ?? ATTACK_ENERGY['sword']
   const totals = new Map<CharacterKey, number>()
   for (let run = 0; run < ATTACK_ENERGY_RUNS; run++) {
     // (a small seeded generator: mulberry32)
@@ -628,6 +630,73 @@ export function attackEnergyFromRotation(
   return Object.fromEntries(
     [...totals].map(([k, n]) => [k, Math.round((n / per) * 100) / 100])
   )
+}
+
+/**
+ * Favonius, as the calculator assumes it from a written rotation: R5 (KQM's 4★ refinement: a
+ * CRIT hit makes particles every time, once per 6 s), the wielder's hits CRIT half the time.
+ * A smaller refinement's longer cooldown is applied by the calculator (`favoniusCooldown`).
+ */
+const FAVONIUS_ASSUMED = { cooldown: 360, crit: 0.5 }
+const FAVONIUS_RUNS = 400
+
+/**
+ * Each member's expected Favonius triggers a rotation if it held a Favonius weapon (its own CRIT
+ * hits in the played rotation, as `FAVONIUS_ASSUMED`), and who is on the field when the particles
+ * of most of them arrive
+ */
+export function favoniusFromRotation(
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'>,
+  keys: readonly CharacterKey[],
+  rotations = 1,
+  onFieldAt: (t: number) => CharacterKey = (t) => keys[0] ?? ('' as never)
+): Partial<
+  Record<CharacterKey, { procs: number; catchBy: CharacterKey | undefined }>
+> {
+  const start = sim.start
+  const end = sim.start + sim.frames
+  const out: Partial<
+    Record<CharacterKey, { procs: number; catchBy: CharacterKey | undefined }>
+  > = {}
+  for (const key of keys) {
+    // (its own hits that can CRIT: not the simulation's markers, not the reactions that cannot)
+    const hits = sim.hits
+      .filter(
+        (h) =>
+          h.characterKey === key &&
+          h.t < end &&
+          !h.path[0].startsWith('_') &&
+          !(h.path[0] === 'reaction' && !h.path[1]?.startsWith('lunar'))
+      )
+      .map((h) => h.t)
+      .sort((a, b) => a - b)
+    if (!hits.length) continue
+    let procs = 0
+    const caught = new Map<CharacterKey, number>()
+    for (let run = 0; run < FAVONIUS_RUNS; run++) {
+      // (a small seeded generator: mulberry32)
+      let seed = (run + 1) * 0x85ebca6b
+      const random = () => {
+        seed = (seed + 0x6d2b79f5) | 0
+        let x = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+        x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x
+        return ((x ^ (x >>> 14)) >>> 0) / 4294967296
+      }
+      let ready = Number.NEGATIVE_INFINITY
+      for (const t of hits) {
+        if (t < ready || random() >= FAVONIUS_ASSUMED.crit) continue
+        ready = t + FAVONIUS_ASSUMED.cooldown
+        if (t < start) continue
+        procs++
+        const who = onFieldAt(t + particleDelay(key))
+        caught.set(who, (caught.get(who) ?? 0) + 1)
+      }
+    }
+    const per = Math.max(1, rotations) * FAVONIUS_RUNS
+    const [catchBy] = [...caught].sort((a, b) => b[1] - a[1])[0] ?? []
+    out[key] = { procs: Math.round((procs / per) * 10) / 10, catchBy }
+  }
+  return out
 }
 
 /**
@@ -706,6 +775,8 @@ export function energyFromRotation(
   }
   // (the random Energy of Normal and Charged Attack hits, a member's own)
   const attackEnergy = attackEnergyFromRotation(sim, keys, per)
+  // (Favonius: what each member's hits would trigger with one, counted only if it holds one)
+  const favonius = favoniusFromRotation(sim, keys, per, onFieldAt)
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -819,6 +890,11 @@ export function energyFromRotation(
         }
       member.flatEnergy =
         (member.flatEnergy ?? 0) + (reactionEnergy.energy * procs) / per
+    }
+    if (favonius[key]) {
+      member.favoniusProcs = favonius[key]!.procs
+      if (favonius[key]!.catchBy)
+        member.favoniusCatchBy = favonius[key]!.catchBy
     }
     if (attackEnergy[key])
       member.flatEnergy =
