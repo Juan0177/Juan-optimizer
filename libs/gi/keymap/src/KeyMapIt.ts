@@ -174,6 +174,8 @@ allStellarReactionKeys.forEach((key) => {
   special(key)
   statMapIt[`${key}_mult_`] = `Moltiplicatore ${r(key)}`
 })
+statMapIt['stellarswirl_reactionMult_'] =
+  'Moltiplicatore base della reazione Turbinio astrale'
 statMapIt['stellarconduct_electro_critDMG_'] =
   'DAN da CRIT Astroconduzione Electro'
 

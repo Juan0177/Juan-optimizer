@@ -16,8 +16,9 @@ Personaggi, armi e set della beta aggiunti dal fork prima che l'originale li pub
 
 Le stesse cose che la pipeline di GO genera per le chiavi Hakushin (gen-stats, gen-assets-data, gen-assets,
 gen-locale), solo per le chiavi di `config.json`: `stats/Data/...`, `allStat_gen.json`, `AssetsData_gen.json` e le
-icone in `assets/src/gen` (PNG dalle icone della beta), i testi inglesi `*_gen.json`, i materiali e un cartoncino
-provvisorio del personaggio (icona sullo sfondo dell'elemento). La passiva della regione va in `passive3` e quella
+icone in `assets/src/gen` (PNG dalle icone della beta), i testi inglesi `*_gen.json`, i materiali e il cartoncino
+verticale del personaggio, ritagliato dal Gacha Banner di [Lunaris](https://lunaris.moe/) (`cardCenterX` in
+`config.json` dice dove sta il personaggio nel banner; senza banner, l'icona sullo sfondo dell'elemento). La passiva della regione va in `passive3` e quella
 di utilita in `passive`, come nel datamine di GO.
 
 ```bash

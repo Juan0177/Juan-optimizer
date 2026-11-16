@@ -8,5 +8,6 @@
     "12517": "TorrentsOfSpring",
     "15517": "Silverdawn"
   },
-  "artifacts": { "15049": "EpochalAdvent", "15050": "EmpyreanSojourn" }
+  "artifacts": { "15049": "EpochalAdvent", "15050": "EmpyreanSojourn" },
+  "cardCenterX": { "Anastasya": 980, "Danica": 1070 }
 }

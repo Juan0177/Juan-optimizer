@@ -345,6 +345,7 @@ const inputPremodKeyToGroupMap: Record<InputPremodKey, GroupKey> = {
   stellarswirl_specialDmg_: 'reaction_dmg_bonus',
   stellarswirl_dmg_: 'reaction_dmg_bonus',
   stellarswirl_mult_: 'reaction_dmg_bonus',
+  stellarswirl_reactionMult_: 'reaction_dmg_bonus',
   vaporize_dmg_: 'reaction_dmg_bonus',
   melt_dmg_: 'reaction_dmg_bonus',
   spread_dmg_: 'reaction_dmg_bonus',
