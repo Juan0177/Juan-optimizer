@@ -107,11 +107,12 @@ describe('KQM set hand-off', () => {
     const sets = Object.fromEntries(
       MEMBERS.map((k) => [k, Object.keys(result!.builds[k]!.sets)])
     )
-    // Danica, first on the field after Anastasya's Burst, keeps Tenacity up for the team;
-    // Anastasya wears the Furnace for her own Stellar Glimmer hits
+    // Danica, first on the field after Anastasya's Burst, keeps Tenacity up for the team.
+    // (Anastasya's own set: Disenchantment since Danica's Scouring Anchor ends Royal Guard and its
+    // party ATK, as the game does; before, the Furnace)
     expect(sets).toMatchObject({
       Danica: ['TenacityOfTheMillelith'],
-      Anastasya: ['HeartOfTheFurnace'],
+      Anastasya: ['DisenchantmentInDeepShadow'],
     })
   }, 300_000)
 })
