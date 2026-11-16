@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { SubstatToggle } from '../../artifact/SubstatToggle'
 import { useBuildCardData } from './buildCardData'
 import { CARD_HEIGHT, CARD_WIDTH, renderBuildCard } from './renderBuildCard'
+import { embedWatermark, pngWithRecord } from './shareWatermark'
 
 const canCopyImage = () =>
   typeof window !== 'undefined' &&
@@ -127,6 +128,8 @@ export function CardImageDialog({
   aspectRatio,
   render,
   format = 'png',
+  watermark,
+  header,
   onClose,
   children,
 }: {
@@ -143,6 +146,13 @@ export function CardImageDialog({
    * shareable). Copying always copies a PNG (the clipboard takes no other images).
    */
   format?: 'png' | 'jpeg'
+  /**
+   * a hidden record of how the picture was made (any JSON), for debugging a shared picture: in
+   * its pixels and its PNG file (`shareWatermark.ts`; a JPEG keeps neither). Read when drawn.
+   */
+  watermark?: () => unknown
+  /** controls above the picture (what it shows: a member's tabs) */
+  header?: ReactNode
   onClose: () => void
   children?: ReactNode
 }) {
@@ -163,6 +173,9 @@ export function CardImageDialog({
     []
   )
 
+  const watermarkRef = useRef(watermark)
+  watermarkRef.current = watermark
+
   useEffect(() => {
     if (!render) return
     let cancelled = false
@@ -171,16 +184,22 @@ export function CardImageDialog({
     const timer = setTimeout(
       () =>
         render()
-          .then(
-            (canvas) =>
-              new Promise<[HTMLCanvasElement, Blob | null]>((resolve) =>
-                canvas.toBlob(
-                  (blob) => resolve([canvas, blob]),
-                  `image/${format}`,
-                  0.92
-                )
-              )
-          )
+          .then(async (canvas) => {
+            // (the record is extra: the picture is made without it if it fails)
+            let record: unknown
+            try {
+              if (format === 'png') record = watermarkRef.current?.()
+            } catch {
+              record = undefined
+            }
+            if (record) await embedWatermark(canvas, record).catch(() => {})
+            let blob = await new Promise<Blob | null>((resolve) =>
+              canvas.toBlob(resolve, `image/${format}`, 0.92)
+            )
+            if (blob && record)
+              blob = await pngWithRecord(blob, record).catch(() => blob)
+            return [canvas, blob] as const
+          })
           .then(([canvas, blob]) => {
             if (cancelled) return
             if (!blob) throw new Error('The image could not be made')
@@ -260,6 +279,7 @@ export function CardImageDialog({
           </IconButton>
         </CardContent>
         <Divider />
+        {header && <Box sx={{ px: 2, pt: 1 }}>{header}</Box>}
         <CardContent>
           {error ? (
             <Alert severity="error">{error}</Alert>

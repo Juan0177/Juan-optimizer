@@ -89,6 +89,7 @@ import {
   tokens,
   type,
 } from './ui'
+import { KqmShareMenu } from './KqmShareMenu'
 import { kqmReplayOf, useKqmProgress } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
@@ -1885,6 +1886,15 @@ export function KqmResults({
             ml: 'auto',
           }}
         >
+          <KqmShareMenu
+            teamId={teamId}
+            result={result}
+            setup={setup ?? runSettings}
+            members={members}
+            characterKey={compared}
+            rotationTime={rotationTime}
+            disabled={running}
+          />
           <Tooltip arrow title={t('teamOpt.result.discard', 'Discard')}>
             <span>
               <IconButton

@@ -74,6 +74,9 @@ vi.mock('@genshin-optimizer/gi/theme', () => ({
 }))
 vi.mock('@genshin-optimizer/gi/assets', () => ({
   artifactAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+  artifactDefIcon: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+  characterAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+  weaponAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
 }))
 vi.mock('@genshin-optimizer/gi/util', () => ({ getMainStatValue: () => 0.466 }))
 vi.mock('@genshin-optimizer/gi/i18n', () => ({

@@ -14,6 +14,8 @@ import type { Plugin } from 'vite'
 import { normalizePath } from 'vite'
 
 export type BetaContent = {
+  /** the beta's name ("7.3 beta v3"): marked over share pictures that show beta content */
+  label?: string
   characters: string[]
   weapons: string[]
   artifactSets: string[]
