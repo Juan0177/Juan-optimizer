@@ -57,7 +57,19 @@ Il risultato è in `dist/apps/frontend` e funziona anche sotto un sottopercorso 
 ## Modifiche proprie
 
 Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con una ricerca.
-Il README è nostro: durante il sync si tiene sempre questa versione.
+
+- **Import da UID** (`libs/gi/ui/src/juanlab/`): campo "Importa dalla vetrina" nella home e nella scheda di upload del database.
+  La vetrina arriva da Enka.network tramite il Worker di JuanLab (`juanlab-enka…workers.dev`), viene convertita in GOOD
+  (tabelle ID → chiave del datamine di GO, ordine dei talenti dai dati pubblici di Enka) e passa dall'import GOOD di GO,
+  con l'anteprima prima di salvare. Armi e manufatti già presenti e non in vetrina restano nel database.
+- **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, inventario, squadre e crediti;
+  tolti pubblicità, link a social e donazioni, video guida, note di versione e resina.
+- **Niente pubblicità** in tutto il sito (`ADS_ENABLED = false` in `libs/common/ad/src/consts.ts`).
+- **Correzione** in `libs/common/ui/src/components/GeneralAutocomplete.tsx`: le opzioni dei campi di ricerca (set, armi,
+  personaggi) usavano `MenuItem`, che con MUI 9 manda in crash l'editor dei manufatti ("MenuListContext is missing").
+
+Durante il sync si tiene sempre la nostra versione di README e home; le altre modifiche sono piccole e, se upstream tocca
+le stesse righe, il sync si ferma e va unito a mano.
 
 ## Crediti
 

@@ -25,6 +25,7 @@ import {
 import type { ChangeEventHandler, DragEventHandler } from 'react'
 import { useCallback, useContext, useMemo, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { EnkaUidImport } from '../../juanlab/EnkaUidImport' // juanlab
 
 const InvisInput = styled('input')({
   display: 'none',
@@ -33,9 +34,11 @@ const InvisInput = styled('input')({
 export function UploadCard({
   index,
   onReplace,
+  initialUid, // juanlab: UID scritto nella home, caricato subito
 }: {
   index: number
   onReplace: () => void
+  initialUid?: string
 }) {
   const { databases } = useContext(DatabaseContext)
   const database = databases[index]
@@ -124,6 +127,15 @@ export function UploadCard({
         <Trans t={t} i18nKey="settings:uploadCard.title" />
       </CardContent>
       <CardContent>
+        {/* juanlab: import dalla vetrina di Enka; i pezzi non in vetrina restano nel database */}
+        <EnkaUidImport
+          initialUid={initialUid}
+          onData={(json, label) => {
+            setKeepWepArtiNotInImport(true)
+            setfilename(label)
+            setdata(json)
+          }}
+        />
         <Grid container spacing={2} sx={{ mb: 1 }}>
           <Grid>
             <label htmlFor="icon-button-file">
