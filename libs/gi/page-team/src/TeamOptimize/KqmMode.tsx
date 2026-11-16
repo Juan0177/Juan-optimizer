@@ -1288,10 +1288,12 @@ export function KqmProgress({
           {step && !ranking && (
             <>
               <Box component="span" sx={{ fontWeight: 600 }}>
-                {t('teamOpt.kqm.progress.round', {
-                  defaultValue: 'Round {{round}}',
-                  round: step.round,
-                })}
+                {step.improving
+                  ? t('teamOpt.kqm.progress.improving', 'Improving')
+                  : t('teamOpt.kqm.progress.round', {
+                      defaultValue: 'Round {{round}}',
+                      round: step.round,
+                    })}
                 {' · '}
                 <CharacterName
                   characterKey={step.characterKey}
