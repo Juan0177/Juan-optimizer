@@ -22,13 +22,14 @@ interface Case {
 const cases: Record<string, Case> = {
   Anastasya: {
     members: ['Anastasya'],
-    // the Honor Sealing ends 14 s after the Evernight: Doom's three attacks follow
-    text: 'ana N2 hE N2 Q W15 E E E',
+    // one Blessed Spear N5 string ends the Honor Sealing (value 120): Doom's three attacks follow
+    text: 'ana N2 hE N2 Q N5 E E E',
     keys: [
       'normal2',
       'skillHold',
       'normal2@honor',
       'burst@honor',
+      'normal5@honor',
       'skill@doom1',
       'skill@doom2',
       'skill@doom3',
