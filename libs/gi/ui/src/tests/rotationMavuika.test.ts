@@ -68,3 +68,63 @@ describe('Mavuika', () => {
     ).toBe(true)
   })
 })
+
+describe('Mavuika against kqmsim (Mavuika / Citlali / Iansan / Nicole, 2026-11-16)', () => {
+  const team: CharacterKey[] = ['Mavuika', 'Citlali', 'Iansan', 'Nicole']
+  const play = (gear = {}) =>
+    simulateRotation({
+      rotation: parseRotation(
+        'Citlali E Q -> Iansan E Q -> Nicole E Q -> Mavuika E Q N4 N4 N4 N4 N4 -> Citlali',
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: {
+        Mavuika: 'pyro',
+        Citlali: 'cryo',
+        Iansan: 'electro',
+        Nicole: 'pyro',
+      },
+      constellations: {},
+      gear,
+      repeats: 4,
+      keep: 'all',
+    })
+  it('keeps the Crucible on her own clock: her hitlag lengthens it, so the Ring she leaves behind still hits', () => {
+    // (kqmsim: the Ring's hit 2 s after each swap out of the Flamestrider, frames 1446, 2771, 4096)
+    const rings = play()
+      .hits.filter((h) => h.label === 'Rings of Searing Radiance')
+      .map((h) => h.t)
+    expect(rings.length).toBe(3)
+    for (const [i, t] of [1446, 2771, 4096].entries())
+      expect(Math.abs(rings[i] - t)).toBeLessThanOrEqual(2)
+  })
+  it('A Thousand Blazing Suns: its Nightsoul boost is on for her hits in the blessing only', () => {
+    const sim = play({ Mavuika: { weapon: 'AThousandBlazingSuns' } })
+    const boosted = sim.buffWindows.filter(
+      (w) =>
+        w.path.join('.') === 'AThousandBlazingSuns.nightsoul' &&
+        w.value === 'on' &&
+        w.end > w.start &&
+        // (not a hit on the run's last frame: outside the counted span)
+        w.start < sim.start + sim.frames
+    )
+    expect(boosted.length).toBeGreaterThan(10)
+    // (each on the frame of one of her own hits)
+    for (const w of boosted)
+      expect(
+        sim.hits.some(
+          (h) =>
+            h.characterKey === 'Mavuika' &&
+            h.t === w.start &&
+            !h.path[0].startsWith('_')
+        )
+      ).toBe(true)
+    // (off the field too: the Ring left behind hits while she is still in the blessing)
+    const rings = sim.hits.filter(
+      (h) => h.label === 'Rings of Searing Radiance'
+    )
+    expect(rings.length).toBeGreaterThan(0)
+    for (const h of rings)
+      expect(boosted.some((w) => w.start === h.t)).toBe(true)
+  })
+})
