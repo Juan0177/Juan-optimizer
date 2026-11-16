@@ -7,7 +7,12 @@ import type {
   KqmSetSearch,
   KqmSets,
 } from './search.js'
-import { MAINS_SEARCHED, searchSet } from './search.js'
+import {
+  KQM_ROLLS,
+  kqmRollBudget,
+  MAINS_SEARCHED,
+  searchSet,
+} from './search.js'
 
 /*
  * The KQM searches' workers: a set's main stat and roll search (`searchSet`) runs in a pool of
@@ -182,13 +187,22 @@ export function queueKqmSetTasks(
   return promises
 }
 
+/**
+ * A problem's key in the workers: its id, and its distributed rolls when not KQMS's (a worker
+ * keeps problems by key, so a run with another artifact standard never reuses one)
+ */
+const keyOf = (problem: KqmProblemSpec) =>
+  kqmRollBudget(problem.rolls) === KQM_ROLLS
+    ? problem.id
+    : `${problem.id}|rolls ${kqmRollBudget(problem.rolls)}`
+
 /** Takes the next job for a worker: one whose problem it already has, else the first */
 function nextJob(slot: Slot): Job | undefined {
   while (queue.length) {
     const scan = Math.min(queue.length, 32)
     let index = 0
     for (let i = 0; i < scan; i++)
-      if (slot.problems.has(queue[i].task.problem.id)) {
+      if (slot.problems.has(keyOf(queue[i].task.problem))) {
         index = i
         break
       }
@@ -206,16 +220,17 @@ function dispatch() {
     if (!job) break
     slot.job = job
     const { problem } = job.task
-    const has = slot.problems.has(problem.id)
+    const key = keyOf(problem)
+    const has = slot.problems.has(key)
     if (!has) {
-      slot.problems.add(problem.id)
+      slot.problems.add(key)
       if (slot.problems.size > PROBLEMS_KEPT)
         slot.problems.delete(slot.problems.values().next().value!)
     }
     slot.worker.postMessage({
       type: 'set',
       id: job.id,
-      problem: has ? { id: problem.id } : problem,
+      problem: has ? { id: key } : { ...problem, id: key },
       sets: job.task.sets,
       mains: job.task.mains,
       mainsSearched: job.task.mainsSearched ?? MAINS_SEARCHED,
@@ -240,7 +255,7 @@ function onReply(slot: Slot, reply: KqmWorkerReply) {
       break
     case 'missing':
       // (it dropped the problem: send it again, with its source)
-      slot.problems.delete(job.task.problem.id)
+      slot.problems.delete(keyOf(job.task.problem))
       queue.unshift(job)
       break
     case 'error':

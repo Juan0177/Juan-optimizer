@@ -13,6 +13,17 @@ import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 
 /** Rolls placed freely on top of the fixed ones (KQMS) */
 export const KQM_ROLLS = 20
+/**
+ * Distributed rolls a stat may get per piece whose main stat is not that stat: 2 at KQMS's 20,
+ * one more per 10 rolls in a higher standard (rounded up), at most the game's 5 upgrades a piece
+ */
+export const kqmPieceCap = (rolls = KQM_ROLLS) =>
+  Math.min(5, Math.max(1, Math.ceil(rolls / 10)))
+/** A distributed-roll budget as set (absent or invalid: KQMS's 20) */
+export const kqmRollBudget = (rolls?: number) =>
+  rolls !== undefined && Number.isFinite(rolls) && rolls >= 0
+    ? Math.round(rolls)
+    : KQM_ROLLS
 /** Fixed rolls of every substat (KQMS) */
 export const KQM_FIXED_ROLLS = 2
 /** Main stats kept after the screening of a set's main stats, then searched with refined rolls */
@@ -78,12 +89,17 @@ export function kqmFourStarPieces(
  * KQMS for a build's artifact rarities: its substats' scale (the average of 1 a 5★ piece and 0.8
  * a 4★ one) and its distributed rolls (2 fewer a 4★ piece)
  */
-export function kqmRarity(sets: KqmSets, mainValues: KqmMainValues) {
+export function kqmRarity(
+  sets: KqmSets,
+  mainValues: KqmMainValues,
+  /** The standard's distributed rolls (KQMS: 20) */
+  budget = KQM_ROLLS
+) {
   const four = kqmFourStarPieces(sets, mainValues)
   return {
     four,
     subScale: (5 - four + KQM_FOUR_STAR_SCALE * four) / 5,
-    rolls: KQM_ROLLS - KQM_FOUR_STAR_ROLLS_LESS * four,
+    rolls: Math.max(0, budget - KQM_FOUR_STAR_ROLLS_LESS * four),
   }
 }
 
@@ -95,17 +111,25 @@ const slotMains = (m: KqmMains): MainStatKey[] => [
   m.circlet,
 ]
 /** How many free rolls a substat may get with these main stats */
-export function kqmRollCaps(mains: KqmMains): Record<SubstatKey, number> {
+export function kqmRollCaps(
+  mains: KqmMains,
+  /** The standard's distributed rolls (KQMS: 20), for its per-piece cap */
+  budget = KQM_ROLLS
+): Record<SubstatKey, number> {
   const all = slotMains(mains)
   return Object.fromEntries(
     allSubstatKeys.map((k) => [
       k,
-      (5 - all.filter((s) => s === k).length) * KQM_FIXED_ROLLS,
+      (5 - all.filter((s) => s === k).length) * kqmPieceCap(budget),
     ])
   ) as Record<SubstatKey, number>
 }
-export function cappedRolls(rolls: KqmRolls, mains: KqmMains): KqmRolls {
-  const caps = kqmRollCaps(mains)
+export function cappedRolls(
+  rolls: KqmRolls,
+  mains: KqmMains,
+  budget = KQM_ROLLS
+): KqmRolls {
+  const caps = kqmRollCaps(mains, budget)
   const out: KqmRolls = {}
   for (const [k, n] of Object.entries(rolls) as [SubstatKey, number][])
     if (n > 0) out[k] = Math.min(n, caps[k])
@@ -151,6 +175,8 @@ export interface KqmProblemSpec {
   mins: number[]
   /** The stats the damage or a requirement reads */
   scales: string[]
+  /** The artifact standard's distributed rolls (absent: KQMS's 20) */
+  rolls?: number
 }
 /** The rotation's damage and a member's requirements as a function of its artifacts */
 export interface KqmProblem {
@@ -164,6 +190,8 @@ export interface KqmProblem {
   nTerms: number
   mins: number[]
   scales: Set<string>
+  /** The artifact standard's distributed rolls (absent: KQMS's 20) */
+  rolls?: number
 }
 export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
   // The optimizer's compiled formulas, as `precompute` makes them, but writing their values into
@@ -198,6 +226,7 @@ export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
     nTerms,
     mins,
     scales: new Set(spec.scales),
+    rolls: kqmRollBudget(spec.rolls),
   }
 }
 
@@ -244,7 +273,7 @@ export function placeRolls(
   mainValues: KqmMainValues,
   refine = true
 ): { rolls: KqmRolls; score: KqmScore; mains: KqmMains } {
-  const rarity = kqmRarity(sets, mainValues)
+  const rarity = kqmRarity(sets, mainValues, problem.rolls)
   // four 4★ pieces: each slot tried as the one 5★ off-piece, the best kept
   if (rarity.four >= 4 && !given.off) {
     let best: ReturnType<typeof placeRolls> | undefined
@@ -263,7 +292,7 @@ export function placeRolls(
   const mains = given
   const budget = rarity.rolls
   const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * rarity.subScale
-  const caps = kqmRollCaps(mains)
+  const caps = kqmRollCaps(mains, problem.rolls)
   const subs = allSubstatKeys.filter(
     (k) => caps[k] > 0 && problem.scales.has(k)
   )

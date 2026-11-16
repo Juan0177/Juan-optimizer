@@ -211,6 +211,11 @@ export interface TeamOptKqm {
   constellations?: Partial<Record<CharacterKey, number>>
   /** The members' talent levels (all three; absent: 9, as KQM's guides) */
   talents?: 9 | 10
+  /**
+   * The artifact standard: rolls placed for damage on top of the fixed ones (absent: KQM
+   * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
+   */
+  rolls?: number
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
   /**
@@ -534,6 +539,7 @@ const teamOptSchema = z.object({
         .union([z.literal(9), z.literal(10)])
         .optional()
         .catch(undefined),
+      rolls: z.number().int().min(0).max(60).optional().catch(undefined),
       energySource: z
         .enum(['manual', 'calculator'])
         .optional()
