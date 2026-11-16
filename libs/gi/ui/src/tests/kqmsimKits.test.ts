@@ -105,8 +105,10 @@ describe('KQM-only character kits', () => {
     const stellar = sim.hits.filter(
       (h) => h.label === 'Special Charge (Stellar-Conduct)'
     )
-    expect(stellar).toHaveLength(4) // one from Hold, three from Q at frame 119
-    expect(ca.frames).toBe(62 + 3 * 15 + 43 + 3)
+    // three from Q at frame 119. The hold makes no Beacon of its own (the game's hold E has none,
+    // only C1's on-Skill one); kqmsim adds one, so we differ from it on purpose.
+    expect(stellar).toHaveLength(3)
+    expect(ca.frames).toBe(62 + 2 * 15 + 43 + 3)
     expect(after.start).toBe(ca.start + ca.frames)
     expect(stellar.at(-1)!.t).toBeLessThan(after.start)
   })
@@ -174,14 +176,18 @@ describe('KQM-only character kits', () => {
     const attack = rotationAttacks(fresh).Mitya!.find(
       (a) => a.path.join('.') === 'skill.steadyDetonateDmg'
     )!
+    // (the new tap E's core, Steady, is the one up when the strike lands)
     expect(attack.states).toContainEqual({
       owner: 'Mitya',
       path: ['Mitya', 'detectionCore'],
       value: 'steady',
     })
+    // The game clears the Beacons as the detonation appears, 0.25 s before its strike, so the strike
+    // gets no A1 EM from the three it consumes (none are left at C0). kqmsim snapshots them; we
+    // differ from it on purpose.
     expect(
-      Number(attack.states?.find((s) => s.path[1] === 'gradientBeacons')?.value)
-    ).toBe(3)
+      attack.states?.some((s) => s.path[1] === 'gradientBeacons')
+    ).toBeFalsy()
   })
 
   it('Mitya’s DPS loop (hold E opener, then tap E, switch, charged attack) never detonates', () => {
