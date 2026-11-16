@@ -48,8 +48,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatGain, formatRate, formatRateFull } from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
+import { kqmStandardRolls } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
-import { kqmReplayOf } from './useKqmRun'
 import { WeaponDetails, WeaponThumb } from './TeamOptResults'
 import {
   focusSx,
@@ -61,6 +61,7 @@ import {
   tokens,
   type,
 } from './ui'
+import { kqmReplayOf } from './useKqmRun'
 
 const cache = new WeakMap<KqmResult, Map<string, KqmResult>>()
 const choices = new WeakMap<
@@ -424,6 +425,7 @@ export function KqmCompare({
             characterKey={characterKey}
             build={build}
             equipment={equipment}
+            rolls={kqmStandardRolls(runSettings.kqm)}
           />
           {er && (
             <Tooltip
