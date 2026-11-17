@@ -104,7 +104,7 @@ export function FightTimeline({
     state === 'horns'
       ? t('enemy.fight.hornsState', 'Horns on (+150% RES)')
       : state === 'shielded' && preset?.boss.id === 1013061
-        ? t('enemy.fight.valiantState', 'Valiant State (shielded)')
+        ? t('enemy.fight.valiantAssault', 'Valiant Assault (shielded)')
         : stygianPhaseName(t, state)
   const eventName = (e: FightEvent) =>
     e.kind === 'backlash'

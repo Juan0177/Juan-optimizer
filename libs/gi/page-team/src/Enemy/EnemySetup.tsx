@@ -2,7 +2,7 @@ import { useBoolState } from '@genshin-optimizer/common/react-util'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { Team } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
-import type { FightTeam } from '@genshin-optimizer/gi/ui'
+import type { FightEstimate, FightTeam } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
   enemyFight,
@@ -12,9 +12,11 @@ import {
   formatDuration,
   stygianDifficulties,
   stygianFightModelled,
+  stygianPhaseName,
   teamDps,
 } from '@genshin-optimizer/gi/ui'
 import { Box, Button, Tooltip, Typography } from '@mui/material'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { hairline, insetSx, numSx, Segmented, type } from '../TeamOptimize/ui'
 import { EnemyDialog } from './EnemyDialog'
@@ -127,6 +129,32 @@ export function EnemySetup({
   )
 }
 
+/** What a boss's mechanics come to in its fight, in a few words (its breakdown: the tooltip's) */
+function mechanicsLine(t: TFunction, estimate: FightEstimate) {
+  for (const part of estimate.parts) {
+    if (part.key === 'valiant')
+      return t('enemy.valiantLine', {
+        defaultValue: '{{count}} Valiant Assaults, ≈ {{time}} each',
+        count: part.count,
+        time: formatDuration(t, part.seconds),
+      })
+    if (part.key === 'horns')
+      return part.count
+        ? t('enemy.hornsLine', {
+            defaultValue: 'Its horns broken {{count}} times',
+            count: part.count,
+          })
+        : t('enemy.hornsKeptLine', 'Its horns never broken')
+  }
+  const phase = estimate.parts.find((p) => p.key === 'phase')
+  return phase?.key === 'phase'
+    ? t('enemy.phaseLine', {
+        defaultValue: 'At its {{phase}} RES',
+        phase: stygianPhaseName(t, phase.phase),
+      })
+    : ''
+}
+
 /**
  * The setup's two figures: the enemy's HP, and about how long the builds take to defeat it (its
  * breakdown in the tooltip)
@@ -151,7 +179,7 @@ function EnemyFigures({ team, fight }: { team: Team; fight?: FightTeam }) {
               dps: compact(3).format(teamDps(fight)),
             })
           : stygianFightModelled(preset.boss.id)
-            ? t('enemy.mechanicsCounted', 'Its mechanics counted')
+            ? mechanicsLine(t, estimate)
             : t('enemy.hpOverDps', 'Its HP ÷ the team’s DPS')
   return (
     <Box

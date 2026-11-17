@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { stygianBoss } from '../components/enemy/stygianBosses'
 import type { FightTeam } from '../components/enemy/stygianFights'
 import {
+  COURAGE,
+  courageDrain,
   customFight,
   dpsAt,
   enemyFight,
@@ -86,6 +88,47 @@ describe('Stygian Onslaught fights', () => {
     // 600 Courage ÷ (15 + 8 × 1.5 × 2 per second)
     expect(length(fast)).toBeCloseTo(600 / 39, 9)
     expect(fast.seconds!).toBeLessThan(slow.seconds!)
+  })
+
+  it('Wavebinder: each Electro hit takes its Courage (the game files: 6 Stellar Glimmer, 1.5 per 1U, 0.6 without), 8× in its Valiant Assault', () => {
+    const boss = stygianBoss(1013061)!
+    const valiant = (electroHits: FightTeam['electroHits']) => {
+      const fight = stygianFight(boss, 'dire', {
+        ...team('electro', 300000),
+        ...(electroHits ? { electroHits } : {}),
+      })
+      return {
+        fight,
+        part: fight.parts.find((p) => p.key === 'valiant') as {
+          seconds: number
+          courage?: number
+          stellar?: number
+        },
+      }
+    }
+    // one Stellar Glimmer hit a second: 15 + 8 × 6 = 63 Courage/s
+    const stellar = valiant({ stellar: 1, units: 0, plain: 0 })
+    expect(stellar.part.seconds).toBeCloseTo(600 / 63, 9)
+    expect(stellar.part.courage).toBeCloseTo(48, 9)
+    expect(stellar.part.stellar).toBe(1)
+    // 2 units of Electro applied and 5 hits without: 15 + 8 × (2 × 1.5 + 5 × 0.6) = 63
+    expect(
+      valiant({ stellar: 0, units: 2, plain: 5 }).part.seconds
+    ).toBeCloseTo(600 / 63, 9)
+    // its hits taken from the attacks entered: said so; none known: said so too
+    expect(
+      valiant({ stellar: 0, units: 1, plain: 2, estimated: true }).fight.notes
+    ).toContain('electroEstimated')
+    const none = valiant(undefined)
+    expect(none.fight.notes).toContain('noRotation')
+    expect(none.part.seconds).toBe(40)
+    expect(none.part.courage).toBeUndefined()
+    // the stun its Electro hits build up to is not counted
+    expect(none.fight.notes).toContain('electroStun')
+    expect(courageDrain({ stellar: 2, units: 4, plain: 10 })).toBeCloseTo(
+      2 * COURAGE.stellar + 4 * COURAGE.unit + 10 * COURAGE.plain,
+      9
+    )
   })
 
   it('Emperor of Fire and Iron: its horns, broken by reactions on their 64U Pyro', () => {

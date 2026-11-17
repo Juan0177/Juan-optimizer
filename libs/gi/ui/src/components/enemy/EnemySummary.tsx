@@ -178,17 +178,26 @@ export function FightBreakdown({
           phase: stygianPhaseName(t, part.phase),
         })
       case 'valiant':
-        return part.electro !== undefined
-          ? t('enemyEditor.fight.valiant', {
-              defaultValue:
-                '{{count}} Valiant States of ≈ {{seconds}} s (its shield takes the damage; {{electro}} Electro gauge/s drains its Courage)',
-              count: part.count,
-              seconds: Math.round(part.seconds),
-              electro: part.electro.toFixed(1),
-            })
+        return part.courage !== undefined
+          ? part.stellar
+            ? t('enemyEditor.fight.valiantStellar', {
+                defaultValue:
+                  '{{count}} Valiant Assaults of ≈ {{seconds}} s: its shield takes the damage, and its 600 Courage drains 15/s, {{courage}}/s more from the team’s Electro hits ({{stellar}} Stellar Glimmer hits/s)',
+                count: part.count,
+                seconds: Math.round(part.seconds),
+                courage: Math.round(part.courage),
+                stellar: part.stellar.toFixed(1),
+              })
+            : t('enemyEditor.fight.valiantCourage', {
+                defaultValue:
+                  '{{count}} Valiant Assaults of ≈ {{seconds}} s: its shield takes the damage, and its 600 Courage drains 15/s, {{courage}}/s more from the team’s Electro hits',
+                count: part.count,
+                seconds: Math.round(part.seconds),
+                courage: Math.round(part.courage),
+              })
           : t('enemyEditor.fight.valiantNoGauge', {
               defaultValue:
-                '{{count}} Valiant States of ≈ {{seconds}} s (its shield takes the damage)',
+                '{{count}} Valiant Assaults of ≈ {{seconds}} s: its shield takes the damage, and its 600 Courage drains 15/s',
               count: part.count,
               seconds: Math.round(part.seconds),
             })
@@ -233,11 +242,19 @@ export function FightBreakdown({
         ({
           stellarGlimmer: t(
             'enemyEditor.fight.note.stellarGlimmer',
-            'Not counted: Stellar Glimmer (it cuts its drinks short)'
+            'Not counted: Radiance: Stellar Glimmer while it drinks (its Courage fills 25% slower)'
           ),
           noRotation: t(
             'enemyEditor.fight.note.noRotation',
             'No written rotation: the team’s element applications are not known (none counted)'
+          ),
+          electroEstimated: t(
+            'enemyEditor.fight.note.electroEstimated',
+            'No written rotation: its Electro hits are taken from the attacks entered (Stellar Glimmer DMG: Cyno’s, Mitya’s, Yae’s; of the others every 3rd applying 1U, as the standard ICD lets it)'
+          ),
+          electroStun: t(
+            'enemyEditor.fight.note.electroStun',
+            'Not counted: the stun Electro hits build up to (it delays its drinks)'
           ),
           noHornRemoval: t(
             'enemyEditor.fight.note.noHornRemoval',
@@ -284,7 +301,7 @@ export function FightBreakdown({
         <Box component="span" sx={{ opacity: 0.7 }}>
           {t(
             'enemyEditor.fight.source',
-            'HP and mechanics: stygian.moe and the Fandom wiki.'
+            'HP and mechanics: stygian.moe, the Fandom wiki and the game files.'
           )}
         </Box>
       )}
