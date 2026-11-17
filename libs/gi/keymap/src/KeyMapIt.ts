@@ -34,7 +34,7 @@ const base: Record<string, string> = {
   all_dmgInc: 'Aumento DAN comune',
   weakspotDMG_: 'DAN ai punti deboli',
   incHeal_: 'Bonus cure ricevute',
-  shield_: 'Forza dello scudo',
+  shield_: 'Efficacia dello scudo',
   cdRed_: 'Riduzione tempo di recupero',
   skillCDRed_: 'Riduz. TdR abilità elem.',
   burstCDRed_: 'Riduz. TdR tripudio elem.',
