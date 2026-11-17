@@ -10,6 +10,7 @@ import type {
   ArtifactSetKey,
   CharacterKey,
   InfusionAuraElementKey,
+  LocationCharacterKey,
   MultiOptHitModeKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
@@ -19,6 +20,7 @@ import {
   allArtifactSetKeys,
   allCharacterKeys,
   allInfusionAuraElementKeys,
+  allLocationCharacterKeys,
   allMultiOptHitModeKeys,
   allWeaponKeys,
   defaultOptArtifactLevel,
@@ -107,6 +109,11 @@ export interface TeamOpt {
   keep: CharacterKey[]
   /** Also take artifacts equipped on characters outside the team */
   useOtherChars: boolean
+  /**
+   * With `useOtherChars`: the characters outside the team whose equipped artifacts are not taken
+   * (absent: none left out; a character added later is taken from, as in the Optimize tab)
+   */
+  excludedLocations?: LocationCharacterKey[]
   /** Also take artifacts excluded in the members' own optimizer (Optimize tab) */
   useExcludedArts: boolean
   /** Artifacts this team's optimization never uses (ids) */
@@ -452,6 +459,21 @@ const teamOptSchema = z.object({
     }),
   keep: zodFilteredArray(allCharacterKeys, []),
   useOtherChars: zodBoolean(false),
+  // (absent when empty: a result found before the list existed is not "found with other settings")
+  excludedLocations: z
+    .array(z.unknown())
+    .optional()
+    .catch(undefined)
+    .transform((keys) => {
+      const valid = [
+        ...new Set(
+          (keys ?? []).filter((key): key is LocationCharacterKey =>
+            allLocationCharacterKeys.includes(key as LocationCharacterKey)
+          )
+        ),
+      ]
+      return valid.length ? valid : undefined
+    }),
   useExcludedArts: zodBoolean(false),
   excludedArts: z
     .array(z.unknown())

@@ -37,3 +37,47 @@ describe("Team Optimize: the team's excluded artifacts", () => {
     expect(initTeamOpt().excludedArts).toEqual([])
   })
 })
+
+describe('Team Optimize: whose artifacts it takes', () => {
+  // the member is Bennett; Fischl and Keqing are outside the team
+  const owned = [
+    art('a'),
+    art('b', 'Bennett'),
+    art('f', 'Fischl'),
+    art('k', 'Keqing'),
+  ]
+  const take = (teamOpt: ReturnType<typeof initTeamOpt>) =>
+    ids(
+      teamOptPool(
+        owned,
+        member,
+        optConfig(),
+        teamOpt,
+        new Set(['Bennett']),
+        new Set()
+      )
+    )
+  it("takes other characters' artifacts only when asked, and not those left out", () => {
+    expect(take(initTeamOpt())).toEqual(['a', 'b'])
+    const others = { ...initTeamOpt(), useOtherChars: true }
+    expect(take(others)).toEqual(['a', 'b', 'f', 'k'])
+    expect(take({ ...others, excludedLocations: ['Keqing'] })).toEqual([
+      'a',
+      'b',
+      'f',
+    ])
+    // (the list only narrows "Other characters’ artifacts": off, none are taken anyway)
+    expect(take({ ...initTeamOpt(), excludedLocations: ['Keqing'] })).toEqual([
+      'a',
+      'b',
+    ])
+  })
+  it("always takes the team's own artifacts, even if a member is listed", () => {
+    const teamOpt = {
+      ...initTeamOpt(),
+      useOtherChars: true,
+      excludedLocations: ['Bennett' as const],
+    }
+    expect(take(teamOpt)).toEqual(['a', 'b', 'f', 'k'])
+  })
+})

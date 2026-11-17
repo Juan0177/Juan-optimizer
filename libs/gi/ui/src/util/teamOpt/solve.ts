@@ -334,6 +334,8 @@ export function teamOptPool(
   teamLocations: ReadonlySet<string>,
   taken: ReadonlySet<string>
 ): ICachedArtifact[] {
+  // (characters outside the team whose artifacts are not taken)
+  const notFrom = new Set<string>(teamOpt.excludedLocations ?? [])
   return arts.filter((art) => {
     if (taken.has(art.id)) return false
     if (art.level < teamOpt.levelLow || art.level > teamOpt.levelHigh)
@@ -349,7 +351,7 @@ export function teamOptPool(
       art.location &&
       art.location !== member.location &&
       !teamLocations.has(art.location) &&
-      !teamOpt.useOtherChars
+      (!teamOpt.useOtherChars || notFrom.has(art.location))
     )
       return false
     return true
