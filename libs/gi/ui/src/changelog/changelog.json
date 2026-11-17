@@ -1,5 +1,29 @@
 [
   {
+    "version": "1.13.0",
+    "date": "2026-11-17",
+    "new": [
+      "Share → Constellations: compare each member's constellations by team DPS and their own DPS. Write another rotation for a constellation that plays differently (it carries to the higher ones), then make every member's chart with one click.",
+      "Constellation investment, the Team tab of the Constellations picture: the team's best constellations at each cost, counting copies (a 5★ is 1 at C0, each constellation 1 more). Rotations for combinations of constellations can be set under Advanced.",
+      "The ER calculator, redone: members as tabs, every setting in clear sections, a bar showing where each member's energy comes from against what its Bursts cost, its own Thunderous Symphony or Kablam count, and a tip for each character.",
+      "KQM Setup: choose the artifact standard: KQM Standards' 20 distributed rolls, or 25, 30, 40 or a custom number for better-farmed builds. The setup, the run summary and each build show it.",
+      "A Feedback button at the bottom right: report a bug or share an idea, with screenshots (add, drop or paste them)."
+    ],
+    "improved": [
+      "Rotation timeline: a scrollbar you can see, one pin shared with the detailed view, Escape to unpin, a legend for the buffs, and a detailed view that no longer jumps while you scrub.",
+      "Share: the team card shows the team as you picked it (another weapon or sets, a top team), and the charts' character art stands beside the bars, sized and centred for the list.",
+      "Sandrone's Charged Attack fires 3 beams at every constellation unless the rotation says otherwise (CA[beams=6] from C1), so a rotation plays the same at C1.",
+      "The ER calculator counts per rotation as the KQM run plays it (the written rotation's own length)."
+    ],
+    "fixed": [
+      "Weapon groups with several refinements ticked (R1 + R5) build at the group's usual refinement (Battle Pass R1, 4★ standard wish R5) and show the others as compared rows; the weapon chart's 100% is at that refinement.",
+      "ER calculator: the written rotation fills Skill uses and options correctly for more characters (Kazuha, Arlecchino, Cyno, Wanderer, Xilonen, Tartaglia, Amber, Alhaitham, Wriothesley and others), counts Ineffa's C4 Energy and fills in Exaiphanes Blade's triggers.",
+      "Thrilling Tales of Dragon Slayers: with a written rotation, only the wielder's switch-outs give its ATK (once every 20 s, to the member who comes in).",
+      "Flins: the rotation says when an E comes after Manifest Flame has ended (it starts it again and the next Q is a full Burst). Two Thunderous Symphonies fit at C0, three from C1.",
+      "Anastasya's and Danica's talent and constellation icons are the game's own."
+    ]
+  },
+  {
     "version": "1.12.0",
     "date": "2026-11-17",
     "new": [
