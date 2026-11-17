@@ -202,8 +202,9 @@ export function FightBreakdown({
               seconds: Math.round(part.seconds),
             })
       case 'backlash':
-        return t('enemyEditor.fight.backlash', {
-          defaultValue: 'Backlash on leaving them: {{hp}} of its HP',
+        return t('enemyEditor.fight.backlashStellar', {
+          defaultValue:
+            'Backlash on leaving them: 60% of the DMG its shield took (150% of the Stellar Glimmer DMG), at most 15% of its HP each: {{hp}} of its HP',
           hp: pct(part.hp),
         })
       case 'horns':

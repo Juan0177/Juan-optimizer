@@ -78,19 +78,18 @@ describe('Stygian Onslaught fights', () => {
   it('Wavebinder: Electro drains its Courage, shortening each Valiant State', () => {
     const boss = stygianBoss(1013061)!
     const slow = stygianFight(boss, 'dire', team('electro', 300000, {}))
-    const fast = stygianFight(
-      boss,
-      'dire',
-      team('electro', 300000, { electro: 2 })
-    )
+    const fast = stygianFight(boss, 'dire', {
+      ...team('electro', 300000),
+      electroHits: { stellar: 0, hits: 2, units: 2 },
+    })
     const length = (f: typeof slow) =>
       (f.parts.find((p) => p.key === 'valiant') as { seconds: number }).seconds
-    // 600 Courage ÷ (15 + 8 × 1.5 × 2 per second)
-    expect(length(fast)).toBeCloseTo(600 / 39, 9)
+    // 600 Courage ÷ (15 + 8 × (0.6 × 2 + 0.06 × 2) per second)
+    expect(length(fast)).toBeCloseTo(600 / (15 + 8 * 1.32), 9)
     expect(fast.seconds!).toBeLessThan(slow.seconds!)
   })
 
-  it('Wavebinder: each Electro hit takes its Courage (the game files: 6 Stellar Glimmer, 1.5 per 1U, 0.6 without), 8× in its Valiant Assault', () => {
+  it('Wavebinder: each Electro hit takes its Courage (the game files: 6 Stellar Glimmer, else 0.6 and 0.06 per unit), 8× in its Valiant Assault', () => {
     const boss = stygianBoss(1013061)!
     const valiant = (electroHits: FightTeam['electroHits']) => {
       const fight = stygianFight(boss, 'dire', {
@@ -107,17 +106,24 @@ describe('Stygian Onslaught fights', () => {
       }
     }
     // one Stellar Glimmer hit a second: 15 + 8 × 6 = 63 Courage/s
-    const stellar = valiant({ stellar: 1, units: 0, plain: 0 })
+    const stellar = valiant({ stellar: 1, hits: 0, units: 0 })
     expect(stellar.part.seconds).toBeCloseTo(600 / 63, 9)
     expect(stellar.part.courage).toBeCloseTo(48, 9)
     expect(stellar.part.stellar).toBe(1)
-    // 2 units of Electro applied and 5 hits without: 15 + 8 × (2 × 1.5 + 5 × 0.6) = 63
-    expect(
-      valiant({ stellar: 0, units: 2, plain: 5 }).part.seconds
-    ).toBeCloseTo(600 / 63, 9)
+    // 7 other hits applying 2 units: 15 + 8 × (7 × 0.6 + 2 × 0.06)
+    expect(valiant({ stellar: 0, hits: 7, units: 2 }).part.seconds).toBeCloseTo(
+      600 / (15 + 8 * 4.32),
+      9
+    )
+    // measured drains in its Valiant Assault: 48, 5.28 (1U applied), 4.8 (none)
+    const inValiant = (h: Parameters<typeof courageDrain>[0]) =>
+      COURAGE.valiant * courageDrain(h)
+    expect(inValiant({ stellar: 1, hits: 0, units: 0 })).toBeCloseTo(48, 9)
+    expect(inValiant({ stellar: 0, hits: 1, units: 1 })).toBeCloseTo(5.28, 9)
+    expect(inValiant({ stellar: 0, hits: 1, units: 0 })).toBeCloseTo(4.8, 9)
     // its hits taken from the attacks entered: said so; none known: said so too
     expect(
-      valiant({ stellar: 0, units: 1, plain: 2, estimated: true }).fight.notes
+      valiant({ stellar: 0, hits: 3, units: 1, estimated: true }).fight.notes
     ).toContain('electroEstimated')
     const none = valiant(undefined)
     expect(none.fight.notes).toContain('noRotation')
@@ -125,10 +131,24 @@ describe('Stygian Onslaught fights', () => {
     expect(none.part.courage).toBeUndefined()
     // the stun its Electro hits build up to is not counted
     expect(none.fight.notes).toContain('electroStun')
-    expect(courageDrain({ stellar: 2, units: 4, plain: 10 })).toBeCloseTo(
-      2 * COURAGE.stellar + 4 * COURAGE.unit + 10 * COURAGE.plain,
-      9
-    )
+  })
+
+  it('Wavebinder: its backlash counts the Stellar Glimmer DMG its shield took at 150%', () => {
+    const boss = stygianBoss(1013061)!
+    const hp = boss.hp.dire
+    // 20K DPS at Valiant RES (Physical 70%), 40 s: its shield takes 800K
+    const valiantDps = 20000
+    const regularDps = (valiantDps * resMultiplier(0.1)) / resMultiplier(0.7)
+    const backlash = (stellarShare: number) =>
+      (
+        stygianFight(boss, 'dire', {
+          ...team('physical', regularDps),
+          stellarShare,
+        }).timeline.events[0] as { hp: number }
+      ).hp * hp
+    expect(backlash(0)).toBeCloseTo(0.6 * 800000, 0)
+    expect(backlash(1)).toBeCloseTo(1.5 * 800000, 0)
+    expect(backlash(0.5)).toBeCloseTo((0.6 + 0.45) * 800000, 0)
   })
 
   it('Emperor of Fire and Iron: its horns, broken by reactions on their 64U Pyro', () => {
