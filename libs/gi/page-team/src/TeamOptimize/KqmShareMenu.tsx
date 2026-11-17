@@ -1202,7 +1202,7 @@ function ConstellationPicture({
           count={combos.length || undefined}
           info={s.t(
             'page_team:teamOpt.kqm.share.comboTip',
-            'When several members’ constellations change the rotation together (Flins C2 with Danica C1), write the rotation for that combination. It is used for those constellations and any higher ones; otherwise a combination plays the first member’s rotation for its constellation, else the team’s.'
+            'When several members’ constellations change the rotation together (one member’s C2 with another’s C1), write the rotation for that combination. It is used for those constellations and any higher ones; otherwise a combination plays the first member’s rotation for its constellation, else the team’s.'
           )}
           open={advancedOpen}
           onToggle={() => setAdvancedOpen((o) => !o)}
