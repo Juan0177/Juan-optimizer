@@ -8,6 +8,10 @@ Measured 2026-11-12 against the clean KQM-git/kqmsim checkout at
 
 ## Current checkpoint
 
+2026-11-18: natlan_mualani's kqmsim script ends with `walk[f=540]` instead of `wait(540)`. In her
+Nightsoul's Blessing the writer's wait is her walking on Sharky, which starts at gcsim's walk
+cancel (167 frames after the Burst). Remeasured alone: −2.7% DPS, −0.0% duration.
+
 All 14 fixed-build teams meet the numerical gate: DPS and rotation duration each within 5%,
 with no rejected actions. There are 41 distinct characters. This is a team-level checkpoint,
 not character/constellation certification: 33/41 have direct talent/gear damage within 5% in
@@ -27,7 +31,7 @@ Shared reaction ownership makes raw character DPS unsuitable as a reliability la
 | freeze_escoffier | +0.3% | -0.1% |
 | natlan_mavuika | +0.8% | -0.0% |
 | natlan_kinich | +0.9% | +3.5% |
-| natlan_mualani | -1.2% | -0.0% |
+| natlan_mualani | -2.7% | -0.0% |
 | natlan_chasca | +1.4% | +0.0% |
 | natlan_varesa | -0.5% | -0.5% |
 

@@ -183,6 +183,11 @@ export interface ActionResult {
    * member's
    */
   framesInto?: Partial<Record<RotationAction['kind'] | 'swap', number>>
+  /**
+   * A written wait after this action is a walk (Mualani on Sharky in her blessing): it starts at
+   * this frame, gcsim's walk cancel, rather than at the earliest cancel (gcsim's wait)
+   */
+  walkFrames?: number
   /** The action could not be done (e.g. not enough Phase Shift Radiance): why */
   failed?: string
   /**
