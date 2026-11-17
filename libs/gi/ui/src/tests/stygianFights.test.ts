@@ -61,7 +61,9 @@ describe('Stygian Onslaught fights', () => {
       hp: number
     }
     const each = Math.min(0.6 * 100000 * 40, 0.15 * hp) / hp
-    expect(backlash.hp).toBeCloseTo(each * backlash.count, 9)
+    // (the last one at most the HP left: it can be the one that defeats it)
+    expect(backlash.hp).toBeLessThanOrEqual(each * backlash.count + 1e-9)
+    expect(backlash.hp).toBeGreaterThan(each * (backlash.count - 1))
     // more than its HP ÷ the DPS: the Valiant States' 40 s are its shield's
     expect(fight.seconds!).toBeGreaterThan(hp / 300000)
     expect(fight.notes).toContain('stellarGlimmer')
@@ -111,6 +113,47 @@ describe('Stygian Onslaught fights', () => {
     expect(
       (pyro.parts.find((p) => p.key === 'horns') as { count: number }).count
     ).toBe(0)
+  })
+
+  it('lays the fight out over time: its states, its HP falling, its mechanics’ drops', () => {
+    for (const [id, gauge] of [
+      [1013061, { electro: 1.5 }],
+      [1006063, { hydro: 1.5 }],
+      [1004062, {}],
+    ] as const) {
+      const fight = stygianFight(
+        stygianBoss(id)!,
+        'dire',
+        team('electro', 250000, gauge)
+      )
+      const { segments, events } = fight.timeline
+      // one stretch after the other, from 0 to the end of the fight, HP only ever falling
+      expect(segments[0].start).toBe(0)
+      expect(segments[0].hpStart).toBe(1)
+      for (const [i, seg] of segments.entries()) {
+        expect(seg.end).toBeGreaterThanOrEqual(seg.start)
+        expect(seg.hpEnd).toBeLessThanOrEqual(seg.hpStart + 1e-12)
+        if (i) expect(seg.start).toBeCloseTo(segments[i - 1].end, 9)
+      }
+      const last = segments[segments.length - 1]
+      const lastEvent = events[events.length - 1]
+      expect(Math.max(last.end, lastEvent?.t ?? 0)).toBeCloseTo(
+        fight.seconds!,
+        6
+      )
+      // each drop: a backlash or a horn break, as many as the breakdown says
+      const count = (key: string) =>
+        (fight.parts.find((p) => p.key === key) as { count?: number })?.count
+      if (id === 1013061)
+        expect(events.filter((e) => e.kind === 'backlash').length).toBe(
+          count('valiant')
+        )
+      if (id === 1006063)
+        expect(events.filter((e) => e.kind === 'hornsBreak').length).toBe(
+          count('horns')
+        )
+      if (id === 1004062) expect(events).toEqual([])
+    }
   })
 
   it('other bosses: their HP ÷ the DPS, noted', () => {

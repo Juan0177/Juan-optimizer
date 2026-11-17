@@ -69,6 +69,7 @@ import type { SxProps, Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
 import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FightTimeline } from '../Enemy/FightTimeline'
 import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
 import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
@@ -133,6 +134,21 @@ export function TeamOptResults({
   const database = useDatabase()
   const team = useTeam(teamId)
   const { before, after } = result
+  // the team's builds in the fight against the enemy it was found for (a Stygian boss)
+  const fight = useMemo(
+    () =>
+      enemy &&
+      fightTeamOf({
+        members: members.map((m) => m.characterKey),
+        evaluation: after,
+        attacks: runTeamOpt.attacks,
+        teamData,
+        rotationTime,
+        enemyOverride: enemy.enemyOverride,
+        gauge,
+      }),
+    [enemy, members, after, runTeamOpt.attacks, teamData, rotationTime, gauge]
+  )
   const { gender } = useDBMeta()
   const gain = before.total > 0 ? after.total / before.total - 1 : 0
   // recomputed with the database: an applied result has no changes left
@@ -258,18 +274,7 @@ export function TeamOptResults({
             >
               <span>{t('teamOpt.result.enemy', 'For')}</span>
               <EnemySummary enemy={enemy} />
-              <StygianDefeatTime
-                enemy={enemy}
-                team={fightTeamOf({
-                  members: members.map((m) => m.characterKey),
-                  evaluation: after,
-                  attacks: runTeamOpt.attacks,
-                  teamData,
-                  rotationTime,
-                  enemyOverride: enemy.enemyOverride,
-                  gauge,
-                })}
-              />
+              <StygianDefeatTime enemy={enemy} team={fight} />
               {enemyNow && (
                 <Box
                   component="span"
@@ -594,6 +599,8 @@ export function TeamOptResults({
             />
           ))}
         </Box>
+        {/* a Stygian boss: its states and HP over the fight */}
+        {enemy && <FightTimeline enemy={enemy} team={fight} />}
       </Box>
       <Snackbar
         open={!!lastExcluded}

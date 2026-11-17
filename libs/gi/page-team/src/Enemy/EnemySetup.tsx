@@ -113,7 +113,7 @@ export function EnemySetup({
             {/* (its HP is in the line above: the time it takes, once there are builds) */}
             {fight ? (
               <Typography component="div" sx={{ fontSize: 13.5 }}>
-                <StygianDefeatTime enemy={team} team={fight} />
+                <StygianDefeatTime enemy={team} team={fight} hideHp />
               </Typography>
             ) : (
               <Typography sx={{ ...type.label, fontWeight: 400 }}>

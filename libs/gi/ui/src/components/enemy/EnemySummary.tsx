@@ -254,10 +254,13 @@ function FightBreakdown({
 export function StygianDefeatTime({
   enemy,
   team,
+  hideHp,
 }: {
   enemy: RunEnemy
   /** The team in the fight (absent: the HP only) */
   team?: FightTeam
+  /** Its HP is said beside it already: the time only */
+  hideHp?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const preset = appliedStygianPreset(enemy)
@@ -290,12 +293,14 @@ export function StygianDefeatTime({
           fontVariantNumeric: 'tabular-nums',
         }}
       >
-        <span>
-          {t('enemyEditor.stygian.hp', {
-            defaultValue: '{{hp}} HP',
-            hp: compact(3).format(hp),
-          })}
-        </span>
+        {!hideHp && (
+          <span>
+            {t('enemyEditor.stygian.hp', {
+              defaultValue: '{{hp}} HP',
+              hp: compact(3).format(hp),
+            })}
+          </span>
+        )}
         {estimate && (
           <Box component="span" sx={{ color: 'text.primary', fontWeight: 650 }}>
             {estimate.seconds !== undefined
