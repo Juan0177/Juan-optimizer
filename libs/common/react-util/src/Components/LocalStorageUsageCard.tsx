@@ -227,10 +227,11 @@ export function LocalStorageUsageCard() {
                     <TableRow
                       key={key}
                       sx={{
+                        // juanlab: WCAG AA, le righe quasi vuote restano leggibili (era opacita 0.5)
                         opacity:
                           percentByCategory[key] > DISPLAY_PERCENT_THRESH
                             ? undefined
-                            : 0.5,
+                            : 0.85,
                       }}
                     >
                       <TableCell>

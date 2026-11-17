@@ -69,7 +69,7 @@ export function ImportUidCard() {
   const [source, setSource] = useState(getImportSource)
   const clean = uid.replace(/\D/g, '')
   return (
-    <CardThemed>
+    <CardThemed id="juanlab-import-uid">
       <CardHeader
         title={<Typography variant="h5">{t('home.importTitle')}</Typography>}
         avatar={<CloudDownload fontSize="large" />}

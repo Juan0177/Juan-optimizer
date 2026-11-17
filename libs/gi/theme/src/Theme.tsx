@@ -205,23 +205,125 @@ declare module '@mui/material/SvgIcon' {
  * #211d33); warm charcoal, deep teal, a #0f0f11 graphite page and pure #000 were tried. Near-black
  * beats #000: same look, but no OLED smear when scrolling and shadows still read.
  */
-// juanlab: palette "Notte JuanLab" (i colori di juan0177.github.io/JuanLab): blu notte piatto, pannelli blu scuro,
-// oro per le azioni, azzurro per le informazioni. Niente gradienti: glow e uguale a ink.
-const surface = {
-  inkDeep: '#04060c',
-  ink: '#060810',
-  panelDark: '#0b101b',
-  panel: '#0f1626',
-  panelRaised: '#151e31',
-  panelHover: '#1b263d',
-  glow: '#060810',
-  line: '#1f2a3d',
-  muted: '#3a4660',
-} as const
+// juanlab: tre temi scuri, scelti in Impostazioni e salvati nel browser (la pagina si ricarica al cambio, perche i
+// colori sono costanti usate in tutto il sito). Tutti verificati WCAG 2.1 AA (testo 4,5:1 sui pannelli).
+// - juanlab: "Notte JuanLab" (i colori di juan0177.github.io/JuanLab): blu notte, oro per le azioni, azzurro per le info
+// - go: Genshin Optimizer classico: blu GO, pannelli blu-grigi, accento blu
+// - stellar: Stellar Optimizer: grafite, pergamena e oro
+type ThemePalette = {
+  surface: {
+    inkDeep: string
+    ink: string
+    panelDark: string
+    panel: string
+    panelRaised: string
+    panelHover: string
+    glow: string
+    line: string
+    muted: string
+  }
+  /** testo principale, come r, g, b (serve anche per le trasparenze) */
+  text: [number, number, number]
+  accent: string
+  accentLight: string
+  accentDark: string
+  info: string
+  neutral200: string
+  neutral300: string
+  neutral400: string
+}
+const themePalettes = {
+  juanlab: {
+    surface: {
+      inkDeep: '#04060c',
+      ink: '#060810',
+      panelDark: '#0b101b',
+      panel: '#0f1626',
+      panelRaised: '#151e31',
+      panelHover: '#1b263d',
+      glow: '#060810',
+      line: '#1f2a3d',
+      muted: '#3a4660',
+    },
+    text: [237, 245, 255],
+    accent: '#f5d787',
+    accentLight: '#f9e4a8',
+    accentDark: '#c9aa5a',
+    info: '#85cbff',
+    neutral200: '#d3dceb',
+    neutral300: '#a3aec2',
+    neutral400: '#8591a8',
+  },
+  go: {
+    surface: {
+      inkDeep: '#080b17',
+      ink: '#0c1020',
+      panelDark: '#172032',
+      panel: '#1b263b',
+      panelRaised: '#2a364d',
+      panelHover: '#33415c',
+      glow: '#0c1020',
+      line: '#2e3a52',
+      muted: '#4a5873',
+    },
+    text: [255, 255, 255],
+    accent: '#5aaaf0',
+    accentLight: '#86c1f5',
+    accentDark: '#1e78c8',
+    info: '#4fc3d9',
+    neutral200: '#dde3ee',
+    neutral300: '#b4bdcf',
+    neutral400: '#9aa6bd',
+  },
+  stellar: {
+    surface: {
+      inkDeep: '#050506',
+      ink: '#08080a',
+      panelDark: '#141416',
+      panel: '#19191c',
+      panelRaised: '#212124',
+      panelHover: '#2a2a2e',
+      glow: '#08080a',
+      line: '#27272b',
+      muted: '#3f3f45',
+    },
+    text: [236, 229, 216],
+    accent: '#d3bc8e',
+    accentLight: '#e6d5b1',
+    accentDark: '#a99260',
+    info: '#7aa7d9',
+    neutral200: '#d6cfc2',
+    neutral300: '#a9a397',
+    neutral400: '#9a968f',
+  },
+} as const satisfies Record<string, ThemePalette>
+export type ThemeChoice = keyof typeof themePalettes
+export const themeChoices = Object.keys(themePalettes) as ThemeChoice[]
+const THEME_KEY = 'juanlab-theme'
+export function getThemeChoice(): ThemeChoice {
+  try {
+    const saved = localStorage.getItem(THEME_KEY)
+    return saved && saved in themePalettes ? (saved as ThemeChoice) : 'juanlab'
+  } catch {
+    return 'juanlab'
+  }
+}
+/** Salva il tema e ricarica la pagina, che riparte con i colori nuovi */
+export function setThemeChoice(choice: ThemeChoice) {
+  try {
+    localStorage.setItem(THEME_KEY, choice)
+  } catch {
+    return
+  }
+  window.location.reload()
+}
+const P: ThemePalette = themePalettes[getThemeChoice()]
+const textRgba = (a: number) => `rgba(${P.text.join(', ')}, ${a})`
+const surface = P.surface
 
 const ink = surface.ink
-const parchment = '#edf5ff'
-const gold = '#f5d787'
+const parchment = `#${P.text.map((v) => v.toString(16).padStart(2, '0')).join('')}`
+const gold = P.accent
 export const giTokens = {
   ink,
   inkDeep: surface.inkDeep,
@@ -230,14 +332,14 @@ export const giTokens = {
   panelRaised: surface.panelRaised,
   panelHover: surface.panelHover,
   parchment,
-  parchmentMuted: 'rgba(237, 245, 255, 0.66)',
+  parchmentMuted: textRgba(0.66),
   gold,
-  goldLight: '#f9e4a8',
-  goldDark: '#c9aa5a',
+  goldLight: P.accentLight,
+  goldDark: P.accentDark,
   /** kept for components written against the first token set */
   starlight: gold,
-  hairline: 'rgba(237, 245, 255, 0.08)',
-  hairlineStrong: 'rgba(237, 245, 255, 0.16)',
+  hairline: textRgba(0.08),
+  hairlineStrong: textRgba(0.16),
   fontFamily: [
     'system-ui',
     '-apple-system',
@@ -271,8 +373,8 @@ const elementTheme = createTheme({
     background: { default: ink, paper: giTokens.panel },
     text: {
       primary: parchment,
-      secondary: 'rgba(237, 245, 255, 0.66)',
-      disabled: 'rgba(237, 245, 255, 0.38)',
+      secondary: textRgba(0.66),
+      disabled: textRgba(0.38),
     },
     divider: giTokens.hairline,
     primary: augment(gold, 'primary', {
@@ -282,7 +384,7 @@ const elementTheme = createTheme({
     }),
     secondary: augment(surface.muted, 'secondary', { contrastText: parchment }),
     success: augment('#5aae8b', 'success'),
-    info: augment('#85cbff', 'info'),
+    info: augment(P.info, 'info'),
     warning: augment('#e4b25c', 'warning'),
     error: augment('#df6f62', 'error'),
     contentNormal: augment(giTokens.panel, 'contentNormal'),
@@ -290,10 +392,10 @@ const elementTheme = createTheme({
     contentLight: augment(giTokens.panelRaised, 'contentLight'),
     brand500: augment(gold, 'brand500'),
     neutral100: augment(parchment, 'neutral100'),
-    neutral200: augment('#d3dceb', 'neutral200'),
-    neutral300: augment('#a3aec2', 'neutral300'),
+    neutral200: augment(P.neutral200, 'neutral200'),
+    neutral300: augment(P.neutral300, 'neutral300'),
     // juanlab: WCAG 2.1 AA, almeno 4,5:1 anche sui pannelli rialzati
-    neutral400: augment('#8591a8', 'neutral400'),
+    neutral400: augment(P.neutral400, 'neutral400'),
     neutral500: augment(surface.muted, 'neutral500'),
     neutral600: augment(surface.line, 'neutral600'),
     // the page background is a radial gradient from neutral700 (top) to neutral800
@@ -321,7 +423,7 @@ const elementTheme = createTheme({
       name: 'cryo',
     }),
     electro: commonTheme.palette.augmentColor({
-      color: { main: '#c07ae0' }, // juanlab: WCAG AA come testo sui pannelli (era #b25dcd)
+      color: { main: '#cd92e8' }, // juanlab: WCAG AA come testo sui pannelli in tutti i temi (era #b25dcd)
       name: 'electro',
     }),
     anemo: commonTheme.palette.augmentColor({

@@ -28,6 +28,7 @@ type Step = {
  */
 export default function GettingStartedCard() {
   const { t } = useTranslation('page_home')
+  const { t: tj } = useTranslation('juanlab') // juanlab
   const database = useDatabase()
   const chars = useDataManagerValues(database.chars)
   const arts = useDataManagerValues(database.arts)
@@ -123,6 +124,17 @@ export default function GettingStartedCard() {
               >
                 {t(`gettingStarted.steps.${step.key}.action`)}
               </Button>
+              {/* juanlab: anche l'import da UID (Enka o Akasha) per personaggi, armi e manufatti */}
+              {(step.key === 'characters' || step.key === 'artifacts') && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="info"
+                  onClick={focusUidImport}
+                >
+                  {tj('home.gettingStartedImport')}
+                </Button>
+              )}
               {step.secondary && (
                 <Button
                   size="small"
@@ -170,7 +182,7 @@ function StepItem({
         bgcolor: 'contentLight.main',
         outline: `1px solid ${isCurrent ? giTokens.starlight : 'transparent'}`,
         outlineOffset: -1,
-        opacity: done ? 0.75 : 1,
+        opacity: done ? 0.9 : 1, // juanlab: WCAG AA anche sui passi fatti (era 0.75)
       }}
     >
       <Box
@@ -227,4 +239,11 @@ function StepItem({
       </Box>
     </Box>
   )
+}
+
+/** juanlab: porta alla scheda "Importa dalla vetrina" della home e mette il cursore nel campo dell'UID */
+function focusUidImport() {
+  const card = document.getElementById('juanlab-import-uid')
+  card?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  card?.querySelector('input')?.focus({ preventScroll: true })
 }

@@ -45,5 +45,34 @@
       "translator": "Responsabile traduzioni",
       "TC": "Referente TC"
     }
+  },
+  "gettingStarted": {
+    "title": "Prepara la tua prima build",
+    "subtitle": "Quattro passi da un inventario vuoto a una squadra ottimizzata. Tutto resta salvato in questo browser.",
+    "hide": "Nascondi",
+    "done": "Fatto",
+    "steps": {
+      "characters": {
+        "title": "Aggiungi i tuoi personaggi",
+        "description": "Scegli i personaggi che usi, poi imposta livello, talenti e costellazione. Oppure importali con l'UID.",
+        "action": "Aggiungi personaggi"
+      },
+      "artifacts": {
+        "title": "Porta armi e manufatti",
+        "description": "Importa un file GOOD da uno scanner, aggiungi i manufatti a mano oppure importa le build equipaggiate con l'UID (Enka o Akasha).",
+        "action": "Importa un file",
+        "scanners": "Trova uno scanner"
+      },
+      "team": {
+        "title": "Crea una squadra",
+        "description": "Metti insieme fino a quattro personaggi, così contano buff di squadra, risonanza e reazioni.",
+        "action": "Crea una squadra"
+      },
+      "optimize": {
+        "title": "Ottimizza una build",
+        "description": "Scegli il danno da massimizzare e lascia che l'ottimizzatore cerchi tra i tuoi manufatti.",
+        "action": "Apri l'ottimizzatore"
+      }
+    }
   }
 }
