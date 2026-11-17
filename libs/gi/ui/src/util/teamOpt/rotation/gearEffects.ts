@@ -308,6 +308,11 @@ export function gearEffects({
   // The Widsith: declared off, on only after the wielder takes the field
   for (const k of members)
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
+  // Thrilling Tales of Dragon Slayers: declared off, on only for the member taking the field when
+  // the wielder leaves it (below), so a saved switch never adds uptime the swaps don't give
+  for (const k of members)
+    if (holds(k, 'ThrillingTalesOfDragonSlayers'))
+      window(k, ['ThrillingTalesOfDragonSlayers', 'Heritage'], 'on', 0, 0)
   for (const k of members)
     if (opens(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
