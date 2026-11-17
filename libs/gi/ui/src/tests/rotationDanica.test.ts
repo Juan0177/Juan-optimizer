@@ -140,6 +140,26 @@ describe('Danica', () => {
     ])
   })
 
+  it('notes that her E ended Royal Guard and its party ATK, and that "Danica Q" keeps it', () => {
+    const members: CharacterKey[] = ['Danica', 'Kaeya', 'Lisa']
+    const ended = (sim: ReturnType<typeof run>) =>
+      sim.notes.some((n) => n.includes('her E ended Maid: Royal Guard'))
+    // (the E after the Entry ends Royal Guard)
+    expect(
+      ended(run('Danica E -> Kaeya E -> Lisa E -> Danica E Q W2', members))
+    ).toBe(true)
+    // (a first E has no form to end)
+    expect(ended(run('Danica E Q W2', members))).toBe(false)
+    // (the advice: the Entry's Royal Guard with a Q and no E lights the party ATK)
+    const kept = run('Danica E -> Kaeya E -> Lisa E -> Danica Q W2', members)
+    expect(ended(kept)).toBe(false)
+    expect(
+      kept.buffWindows.some(
+        (w) => w.path.join('.') === 'Danica.burstEnhanced' && w.value === 'on'
+      )
+    ).toBe(true)
+  })
+
   it('Scouring Anchor clears Will to Protect’s cooldown: a second Entry within 16 s', () => {
     // (Lisa's Normal Attacks fill Will off the field; the second E waits out its own 18 s)
     const sim = run(
@@ -389,13 +409,16 @@ describe('Danica', () => {
     ])
     expect(noAnchor.actions.some((a) => a.text === 'Entry')).toBe(false)
     expect(noAnchor.notes.join(' ')).toContain('her Anchor was not out')
-    const notFull = run('Danica E -> Bennett E N2 -> Danica -> Bennett N2 -> Danica', [
+    const notFull = run(
+      'Danica E -> Bennett E N2 -> Danica -> Bennett N2 -> Danica',
+      ['Danica', 'Bennett']
+    )
+    expect(notFull.notes.join(' ')).toContain('Will to Cleanse was not full')
+    // an ordinary step is not noted
+    const plain = run('Danica E -> Bennett E -> Danica E W1', [
       'Danica',
       'Bennett',
     ])
-    expect(notFull.notes.join(' ')).toContain('Will to Cleanse was not full')
-    // an ordinary step is not noted
-    const plain = run('Danica E -> Bennett E -> Danica E W1', ['Danica', 'Bennett'])
     expect(plain.notes.join(' ')).not.toContain('no entry action')
   })
 })

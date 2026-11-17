@@ -79,6 +79,13 @@ describe('Sandrone charges with a number of beams (CA[beams=N], gcsim charge[bea
     expect(other.warnings[0]).toContain('only Sandrone')
     expect(parse('Sandrone CA[beams=7]').warnings[0]).toContain('1 to 6 beams')
   })
+  it('notes the CA[beams=N] syntax when a rotation writes a plain CA', () => {
+    const syntax = (text: string) =>
+      [...run(text).notes].find((n) => n.includes('"CA[beams=N]"'))
+    expect(syntax('Sandrone CA E')).toContain('after 3 condensed beams')
+    expect(syntax('Sandrone CA E')).toContain('(1 to 3, up to 6 from C1)')
+    expect(syntax('Sandrone CA[beams=2] E')).toBeUndefined()
+  })
   it('releases the charge after that many beams', () => {
     // gcsim: charge[beams=2]@1 skill@165, charge[beams=1]@1 skill@105
     const two = run('Sandrone CA[beams=2] E')
