@@ -185,7 +185,7 @@ export function KqmShareMenu({
     <MenuItem
       onClick={() => choose(picture)}
       disabled={picture !== 'team' && !chartable(picture).length}
-      sx={{ gap: 1.5, py: 1, px: 1.25, borderRadius: 2, minHeight: 0 }}
+      sx={{ gap: 1.5, py: 1, px: 1.25, borderRadius: 1.5, minHeight: 0 }}
     >
       <Box
         sx={{
@@ -245,7 +245,7 @@ export function KqmShareMenu({
               color: 'text.primary',
               border: '1px solid rgba(236, 229, 216, 0.14)',
               boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
-              borderRadius: 2.5,
+              borderRadius: 1.5,
               p: 1.25,
             },
           },
@@ -279,7 +279,7 @@ export function KqmShareMenu({
             sx: {
               mt: 0.75,
               minWidth: 260,
-              borderRadius: 3,
+              borderRadius: 1.5,
               border: '1px solid rgba(236, 229, 216, 0.12)',
               boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
             },

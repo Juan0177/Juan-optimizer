@@ -21,6 +21,7 @@ import {
 import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { KeyMap } from '@genshin-optimizer/gi/keymap'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   BuffRef,
   StatGain,
@@ -46,7 +47,6 @@ import {
   teamOptBonusStats,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
-import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import { uiInput } from '@genshin-optimizer/gi/wr'
 import AddIcon from '@mui/icons-material/Add'

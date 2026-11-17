@@ -685,7 +685,7 @@ export function ShareBar({
         {
           mt: 1,
           height: 3,
-          borderRadius: 2,
+          borderRadius: 1.5,
           bgcolor: share === undefined ? 'transparent' : tokens.hairline,
           overflow: 'hidden',
         },
@@ -696,7 +696,7 @@ export function ShareBar({
         sx={(theme) => ({
           height: '100%',
           width: `${Math.round((share ?? 0) * 100)}%`,
-          borderRadius: 2,
+          borderRadius: 1.5,
           bgcolor: memberHue(theme, characterKey),
           opacity: 0.85,
           transition: `width .3s ${tokens.ease}`,

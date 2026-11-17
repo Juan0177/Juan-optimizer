@@ -205,7 +205,7 @@ function EmptySlotButton({
         m: 1.5,
         flexDirection: 'column',
         gap: 1,
-        borderRadius: 2,
+        borderRadius: 1.5,
         borderStyle: 'dashed',
         borderColor: 'rgba(160, 180, 255, 0.22)',
         color: 'text.secondary',

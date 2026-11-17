@@ -166,7 +166,7 @@ function StepItem({
         display: 'flex',
         gap: 1.5,
         p: 2,
-        borderRadius: 2,
+        borderRadius: 1.5,
         bgcolor: 'contentLight.main',
         outline: `1px solid ${isCurrent ? giTokens.starlight : 'transparent'}`,
         outlineOffset: -1,

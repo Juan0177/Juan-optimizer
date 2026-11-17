@@ -7,7 +7,12 @@ import {
 } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
-import { CharacterName, CharIconSide, TeamIcon } from '@genshin-optimizer/gi/ui'
+import { getCharEle } from '@genshin-optimizer/gi/stats'
+import {
+  CharAvatarSide,
+  CharacterName,
+  TeamIcon,
+} from '@genshin-optimizer/gi/ui'
 import BorderColorIcon from '@mui/icons-material/BorderColor'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
@@ -143,7 +148,7 @@ export default function TeamCharacterSelector({
         {actions}
         <TeamActions teamId={teamId} />
       </Box>
-      {/* members: pills; the open one is gold, like the active nav item */}
+      {/* juanlab: schede squadrate come in Genshin Optimizer, ognuna col colore dell'elemento del personaggio */}
       <Tabs
         value={selected}
         // the clicked pill turns gold at once; the member renders in the navigation's transition
@@ -153,7 +158,9 @@ export default function TeamCharacterSelector({
         TabIndicatorProps={{ sx: { display: 'none' } }}
         sx={{
           minHeight: 0,
-          '& .MuiTabs-flexContainer': { gap: 1 },
+          '& .MuiTabs-flexContainer': { gap: 0.5 },
+          // spazio per l'icona del personaggio, che sporge un poco in alto come in GO
+          '& .MuiTabs-scroller': { pt: '12px' },
         }}
       >
         <Tab
@@ -168,16 +175,17 @@ export default function TeamCharacterSelector({
           const teamCharKey =
             loadoutDatum &&
             database.teamChars.get(loadoutDatum?.teamCharId)?.key
+          const ele = teamCharKey ? getCharEle(teamCharKey) : undefined
           return (
             <Tab
               icon={
                 teamCharKey ? (
-                  <CharIconSide characterKey={teamCharKey} sideMargin />
+                  <CharAvatarSide characterKey={teamCharKey} />
                 ) : (
                   <PersonIcon />
                 )
               }
-              sx={memberTabSx}
+              sx={(theme) => memberTabSx(theme, ele && theme.palette[ele].main)}
               iconPosition="start"
               value={teamCharKey ?? ind}
               key={ind}
@@ -286,32 +294,39 @@ function KqmTabIcon({ teamId }: { teamId: string }) {
 }
 
 /**
- * A member (or "Team settings") pill. The open one is gold with the same tint as the active nav
- * item; the others are quiet outlined pills (the avatar carries the character).
+ * juanlab: una scheda (membro, impostazioni squadra, ottimizzazione) squadrata come in Genshin Optimizer: bordo e
+ * tinta del colore dell'elemento del personaggio (oro per le altre), e una barra in basso su quella aperta.
  */
-function memberTabSx(theme: Theme) {
-  const { primary, text, divider } = theme.palette
+function memberTabSx(theme: Theme, color?: string) {
+  const { primary, text } = theme.palette
+  const c = color ?? primary.main
   return {
-    minHeight: 40,
-    py: 0.5,
+    minHeight: 44,
+    py: 0.75,
     px: 1.75,
-    borderRadius: 999,
+    borderRadius: 1,
+    overflow: 'visible',
     fontWeight: 600,
     color: text.secondary,
-    backgroundColor: alpha(text.primary, 0.03),
-    boxShadow: `inset 0 0 0 1px ${divider}`,
+    backgroundColor: alpha(c, 0.08),
+    // WCAG 2.1 (1.4.11): il bordo pieno dell'elemento resta sopra 3:1 sul pannello per ogni elemento
+    border: `1px solid ${c}`,
     transition:
-      'background-color 150ms ease, box-shadow 150ms ease, color 150ms ease',
+      'background-color 150ms ease, border-color 150ms ease, color 150ms ease',
     '&:hover': {
       color: text.primary,
-      backgroundColor: alpha(text.primary, 0.06),
+      backgroundColor: alpha(c, 0.16),
+    },
+    // focus da tastiera ben visibile (WCAG 2.4.7)
+    '&.Mui-focusVisible': {
+      outline: `2px solid ${text.primary}`,
+      outlineOffset: 2,
     },
     '&.Mui-selected': {
-      color: `${primary.light} !important`,
-      backgroundColor: alpha(primary.main, 0.14),
-      boxShadow: `inset 0 0 0 1px ${alpha(primary.main, 0.4)}`,
+      color: `${text.primary} !important`,
+      backgroundColor: alpha(c, 0.28),
+      boxShadow: `inset 0 -3px 0 ${c}`,
     },
-    '&.Mui-selected:hover': { backgroundColor: alpha(primary.main, 0.2) },
     '&.Mui-disabled': { opacity: 0.45 },
   }
 }

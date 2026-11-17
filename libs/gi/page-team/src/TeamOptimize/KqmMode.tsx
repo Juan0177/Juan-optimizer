@@ -1463,7 +1463,7 @@ function ErTag({ er }: { er: { value: number; minimum: number } }) {
             height: 18,
             pl: 0.625,
             pr: 0.75,
-            borderRadius: 999,
+            borderRadius: 1,
             flexShrink: 0,
             fontSize: 11.5,
             fontWeight: 650,
@@ -1595,7 +1595,7 @@ function ShareBar({
       sx={{
         mt: 1,
         height: 4,
-        borderRadius: 2,
+        borderRadius: 1.5,
         overflow: 'hidden',
         bgcolor: alpha(giTokens.parchment, 0.08),
       }}
@@ -1604,7 +1604,7 @@ function ShareBar({
         sx={(theme) => ({
           height: '100%',
           width: `${Math.min(1, Math.max(0, share)) * 100}%`,
-          borderRadius: 2,
+          borderRadius: 1.5,
           bgcolor: alpha(elementColor(theme, characterKey), 0.85),
           // (it moves when a pick changes the team)
           transition: 'width .35s cubic-bezier(.2,.7,.2,1)',
@@ -1624,7 +1624,7 @@ function ConstellationPill({ value }: { value: number }) {
         alignItems: 'center',
         height: 18,
         px: 0.75,
-        borderRadius: 999,
+        borderRadius: 1,
         fontSize: 11.5,
         fontWeight: 700,
         letterSpacing: 0.2,

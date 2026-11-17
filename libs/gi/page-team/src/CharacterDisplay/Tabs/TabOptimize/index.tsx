@@ -773,7 +773,7 @@ export default function TabBuild() {
           flexDirection: 'column',
           gap: 1,
           p: 1,
-          borderRadius: 2,
+          borderRadius: 1.5,
           bgcolor: 'rgba(12, 16, 32, 0.96)',
           outline: '1px solid rgba(160, 180, 255, 0.14)',
           boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',

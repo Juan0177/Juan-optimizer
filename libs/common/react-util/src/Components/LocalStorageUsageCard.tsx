@@ -136,7 +136,9 @@ export function LocalStorageUsageCard() {
               : t('storage.info')}
           </Typography>
           {/* Stack a bunch of circle bars together */}
+          {/* juanlab: anelli decorativi, i numeri sono nel testo accanto (WCAG 4.1.2) */}
           <CircularProgress
+            aria-hidden
             size={100}
             thickness={5}
             variant="determinate"
@@ -151,6 +153,7 @@ export function LocalStorageUsageCard() {
             .map(([key, percent]) => {
               const prog = (
                 <CircularProgress
+                  aria-hidden
                   key={key}
                   size={100}
                   thickness={5}
@@ -177,7 +180,7 @@ export function LocalStorageUsageCard() {
               {totalMB.toFixed(2)}MB
             </Box>{' '}
             {!!limitMB && (
-              <Box component="span" color="secondary.main">
+              <Box component="span" color="text.secondary">
                 /{' '}
                 {limitMB >= 1024
                   ? `${(limitMB / 1024).toFixed(0)}GB`
