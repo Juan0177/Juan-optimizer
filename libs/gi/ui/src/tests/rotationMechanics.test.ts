@@ -147,9 +147,11 @@ describe('native combat rules shared across character kits', () => {
     // fewer beams when Decoding Power is too high for 3 (at most 100 - 45.8 for 2)
     expect(sandroneChannel(300).beams).toEqual([60, 120])
     expect(sandroneChannel(300).exit).toBe(121)
-    // C1 halves the gain: 6 beams
-    expect(sandroneChannel(0, true).beams).toHaveLength(6)
-    expect(sandroneChannel(0, true).exit).toBe(361)
+    // C1 halves the gain: 6 beams when written, still 3 for a plain CA (the rotation plays the same)
+    expect(sandroneChannel(0, true, 6).beams).toHaveLength(6)
+    expect(sandroneChannel(0, true, 6).exit).toBe(361)
+    expect(sandroneChannel(0, true).beams).toEqual([60, 120, 180])
+    expect(sandroneChannel(0, true).exit).toBe(181)
     // full from the start: no beam, the charge ends as Power Overdrive begins
     expect(sandroneChannel(1000).beams).toEqual([])
     expect(sandroneChannel(1000).exit).toBe(20)

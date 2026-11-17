@@ -213,6 +213,8 @@ export function RotationTimeline({
   onMoment,
   detail = false,
   onOpenDetail,
+  pinned,
+  onPin,
 }: {
   /**
    * The detailed view (its own large window): the enemy's auras, every stack, resource and timed
@@ -221,6 +223,12 @@ export function RotationTimeline({
   detail?: boolean
   /** Opens the detailed view (the simple one's button) */
   onOpenDetail?: () => void
+  /**
+   * The pinned moment, kept by the page (with `onPin`): the writer's timeline and its detailed
+   * window share it, so a moment pinned in one is pinned in the other
+   */
+  pinned?: TimelinePin
+  onPin?: (pin: TimelinePin | undefined) => void
   members: CharacterKey[]
   rotation: ParsedRotation
   sim: SimulationResult
@@ -361,13 +369,42 @@ export function RotationTimeline({
   const store = useMemo(createMomentStore, [])
   const plotRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
-  const [pin, setPin] = useState<TimelinePin>()
-  // (another rotation: its moments are others)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the simulation changes
+  // whether the strip goes on past either side of its box (it scrolls sideways)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [edges, setEdges] = useState({ left: false, right: false })
+  const measureEdges = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const left = el.scrollLeft > 2
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2
+    setEdges((e) =>
+      e.left === left && e.right === right ? e : { left, right }
+    )
+  }, [])
   useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    measureEdges()
+    const observer = new ResizeObserver(measureEdges)
+    observer.observe(el)
+    if (el.firstElementChild) observer.observe(el.firstElementChild)
+    return () => observer.disconnect()
+  }, [measureEdges])
+  const [ownPin, setOwnPin] = useState<TimelinePin>()
+  const pin = onPin ? pinned : ownPin
+  const setPin = useCallback(
+    (next: TimelinePin | undefined) => (onPin ? onPin(next) : setOwnPin(next)),
+    [onPin]
+  )
+  // (another rotation: its moments are others; not when first shown, so that a pin handed over
+  // from the writer's timeline to the detailed window stays)
+  const shownSim = useRef(sim)
+  useEffect(() => {
+    if (shownSim.current === sim) return
+    shownSim.current = sim
     setPin(undefined)
     store.set(undefined)
-  }, [sim, store])
+  }, [sim, store, setPin])
   /** The hit at a moment: the nearest within a few pixels, on the pointed member's lane first */
   const hitAt = useCallback(
     (moment: Moment) => {
@@ -423,13 +460,34 @@ export function RotationTimeline({
     if (lineRef.current) lineRef.current.style.opacity = '0'
   }
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
+  // (the pinned moment kept in view: stepped to with the arrow keys, or handed over from the
+  // writer's timeline, the strip scrolls to it)
+  const pinFrame = pin?.frame
+  useEffect(() => {
+    const el = scrollRef.current
+    const plot = plotRef.current
+    if (!el || !plot || pinFrame === undefined) return
+    const x = nameColumn + ((pinFrame - start) / length) * plot.offsetWidth
+    const left = el.scrollLeft + nameColumn + 24
+    const right = el.scrollLeft + el.clientWidth - 24
+    if (x >= left && x <= right) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollTo({
+      left: Math.max(0, x - nameColumn - (el.clientWidth - nameColumn) / 2),
+      behavior: reduce ? 'auto' : 'smooth',
+    })
+  }, [pinFrame, nameColumn, start, length])
   const pinAt = (moment: Moment | undefined) => {
     if (!moment) return
     const hit = hitAt(moment)
     setPin({ frame: hit?.t ?? moment.frame, hit })
   }
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && pin) return setPin(undefined)
+    // (Escape unpins first; the detailed window closes on the next one)
+    if (e.key === 'Escape' && pin) {
+      e.stopPropagation()
+      return setPin(undefined)
+    }
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
     e.preventDefault()
     const from = pin?.frame ?? start
@@ -488,6 +546,9 @@ export function RotationTimeline({
       <Box
         sx={{
           display: 'grid',
+          // (one column, as wide as the space given: the strip scrolls inside it, the readout
+          // never widens it)
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: detail ? 2 : 1,
           minHeight: 0,
         }}
@@ -540,487 +601,553 @@ export function RotationTimeline({
             damage={figures ? damage : undefined}
             cumulative={cumulative}
             total={total}
+            brief={detail}
             onUnpin={() => setPin(undefined)}
           />
         </Box>
         <Box
           sx={(theme) => ({
+            position: 'relative',
             borderRadius: detail ? 3 : 2,
             border: `1px solid ${theme.palette.divider}`,
             bgcolor: theme.palette.contentDark.main,
-            overflowX: 'auto',
-            overflowY: 'hidden',
+            overflow: 'hidden',
           })}
         >
           <Box
-            role="application"
-            tabIndex={0}
-            aria-label={t('teamOpt.timeline.label', 'Rotation timeline')}
-            onPointerMove={onPointerMove}
-            onPointerLeave={onPointerLeave}
-            onClick={(e) => {
-              // (a block opens its step: not a pin)
-              if ((e.target as HTMLElement).closest('button')) return
-              pinAt(momentOf(e))
-            }}
-            onKeyDown={onKeyDown}
-            sx={{
-              '--timeline-names': `${nameColumn}px`,
-              minWidth: nameColumn + totalSeconds * MIN_PX_PER_SECOND,
-              position: 'relative',
-              pb: 0.75,
-              cursor: 'crosshair',
-              outline: 'none',
-              '&:focus-visible': {
-                boxShadow: `inset 0 0 0 2px ${alpha(tokens.gold, 0.6)}`,
+            ref={scrollRef}
+            onScroll={measureEdges}
+            sx={(theme) => ({
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              // (a scrollbar that always shows, so more rotations to the right are not missed:
+              // drawn in Chrome and Safari, which ignore that drawing while the standard
+              // properties are set (the app sets them for every element: reset here); those
+              // only where the drawing is not supported (Firefox))
+              scrollbarWidth: 'auto',
+              scrollbarColor: 'auto',
+              '&::-webkit-scrollbar': { height: 10 },
+              '&::-webkit-scrollbar-track': { background: 'transparent' },
+              '&::-webkit-scrollbar-thumb': {
+                borderRadius: 999,
+                border: '3px solid transparent',
+                backgroundClip: 'padding-box',
+                backgroundColor: alpha(theme.palette.text.primary, 0.28),
               },
-            }}
+              '&::-webkit-scrollbar-thumb:hover': {
+                backgroundColor: alpha(theme.palette.text.primary, 0.45),
+              },
+              '@supports not selector(::-webkit-scrollbar)': {
+                scrollbarWidth: 'thin',
+                scrollbarColor: `${alpha(theme.palette.text.primary, 0.3)} transparent`,
+              },
+            })}
           >
-            {/* the ruler */}
-            <Box sx={{ display: 'flex', height: 26, alignItems: 'flex-end' }}>
-              <Box sx={laneLabelSx} />
-              <Box
-                sx={{ position: 'relative', flex: 1, height: '100%', mr: 1.5 }}
-              >
-                {marks.map((s) => (
-                  <Typography
-                    key={s}
-                    component="span"
-                    sx={{
-                      position: 'absolute',
-                      left: pct(start + s * FPS),
-                      bottom: 4,
-                      transform: s ? 'translateX(-50%)' : 'none',
-                      fontSize: 11,
-                      color: 'text.secondary',
-                      whiteSpace: 'nowrap',
-                      ...numSx,
-                    }}
-                  >
-                    {s}s
-                  </Typography>
-                ))}
-              </Box>
-            </Box>
-            {/* the enemy's auras, and the team's own stacks (the Polestar Field…) */}
-            {detail && !!auras.length && (
-              <Row
-                label={t('teamOpt.timeline.enemy', 'Enemy aura')}
-                height={auras.length * 7 + 10}
-                value={<AuraValue store={store} pin={pin} sim={sim} />}
-              >
-                {auras.map(({ aura, segments }, i) =>
-                  segments.map((seg) => (
-                    <Box
-                      key={`${aura}${seg.start}`}
-                      sx={(theme) => ({
-                        position: 'absolute',
-                        top: 6 + i * 7,
-                        height: 5,
-                        left: pct(seg.start),
-                        width: span(seg.start, seg.end),
-                        borderRadius: 999,
-                        bgcolor: alpha(auraColor(theme, aura), 0.85),
-                      })}
-                    />
-                  ))
-                )}
-              </Row>
-            )}
-            {detail && (
-              <TrackGroup
-                tracks={teamTracks}
-                color={tokens.gold}
-                teamData={teamData}
-                store={store}
-                pin={pin}
-                pct={pct}
-                span={span}
-              />
-            )}
-            {members.map((characterKey) => (
-              <Box key={characterKey} data-lane={characterKey}>
+            <Box
+              role="application"
+              tabIndex={0}
+              aria-label={t('teamOpt.timeline.label', 'Rotation timeline')}
+              onPointerMove={onPointerMove}
+              onPointerLeave={onPointerLeave}
+              onClick={(e) => {
+                // (a block opens its step: not a pin)
+                if ((e.target as HTMLElement).closest('button')) return
+                pinAt(momentOf(e))
+              }}
+              onKeyDown={onKeyDown}
+              sx={{
+                '--timeline-names': `${nameColumn}px`,
+                minWidth: nameColumn + totalSeconds * MIN_PX_PER_SECOND,
+                position: 'relative',
+                pb: 0.75,
+                cursor: 'crosshair',
+                outline: 'none',
+                '&:focus-visible': {
+                  boxShadow: `inset 0 0 0 2px ${alpha(tokens.gold, 0.6)}`,
+                },
+              }}
+            >
+              {/* the ruler */}
+              <Box sx={{ display: 'flex', height: 26, alignItems: 'flex-end' }}>
+                <Box sx={laneLabelSx} />
                 <Box
-                  sx={(theme) => ({
-                    display: 'flex',
-                    alignItems: 'stretch',
-                    height: size.lane,
-                    borderTop: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
-                  })}
+                  sx={{
+                    position: 'relative',
+                    flex: 1,
+                    height: '100%',
+                    mr: 1.5,
+                  }}
                 >
-                  <Box sx={laneLabelSx}>
-                    <MemberAvatar
-                      characterKey={characterKey}
-                      size={detail ? 28 : 22}
-                    />
+                  {marks.map((s) => (
                     <Typography
-                      noWrap
-                      sx={{ fontSize: size.name, fontWeight: 600, minWidth: 0 }}
+                      key={s}
+                      component="span"
+                      sx={{
+                        position: 'absolute',
+                        left: pct(start + s * FPS),
+                        bottom: 4,
+                        transform: s ? 'translateX(-50%)' : 'none',
+                        fontSize: 11,
+                        color: 'text.secondary',
+                        whiteSpace: 'nowrap',
+                        ...numSx,
+                      }}
                     >
-                      <CharacterName
-                        characterKey={characterKey}
-                        gender={gender}
-                      />
+                      {s}s
                     </Typography>
-                  </Box>
-                  <Box sx={{ position: 'relative', flex: 1, mr: 1.5 }}>
-                    {/* the second marks, faint */}
-                    {marks.map((s) => (
+                  ))}
+                </Box>
+              </Box>
+              {/* the enemy's auras, and the team's own stacks (the Polestar Field…) */}
+              {detail && !!auras.length && (
+                <Row
+                  label={t('teamOpt.timeline.enemy', 'Enemy aura')}
+                  height={auras.length * 7 + 10}
+                  value={<AuraValue store={store} pin={pin} sim={sim} />}
+                >
+                  {auras.map(({ aura, segments }, i) =>
+                    segments.map((seg) => (
                       <Box
-                        key={s}
+                        key={`${aura}${seg.start}`}
                         sx={(theme) => ({
                           position: 'absolute',
-                          top: 0,
-                          bottom: 0,
-                          left: pct(start + s * FPS),
-                          width: '1px',
-                          bgcolor: alpha(theme.palette.text.primary, 0.05),
+                          top: 6 + i * 7,
+                          height: 5,
+                          left: pct(seg.start),
+                          width: span(seg.start, seg.end),
+                          borderRadius: 999,
+                          bgcolor: alpha(auraColor(theme, aura), 0.85),
                         })}
                       />
-                    ))}
-                    {(swaps.get(characterKey) ?? []).map((w) => (
-                      <Tooltip
-                        key={`swap-${w.start}`}
-                        arrow
-                        disableInteractive
-                        title={
-                          <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                            <Box sx={{ fontWeight: 700 }}>
-                              {t('teamOpt.timing.swap', 'Swap')}:{' '}
-                              <CharacterName
-                                characterKey={w.from}
-                                gender={gender}
-                              />{' '}
-                              →{' '}
-                              <CharacterName
-                                characterKey={w.to}
-                                gender={gender}
-                              />
-                            </Box>
-                            {seconds(w.start - start)}–
-                            {seconds(w.start - start + w.frames)} s · {w.frames}{' '}
-                            {t('teamOpt.timing.framesShort', 'f')}
-                            {w.cooldown > 0 && (
-                              <Box sx={{ color: 'text.secondary' }}>
-                                {t('teamOpt.timing.swapCooldown', {
-                                  defaultValue:
-                                    'Waited {{seconds}} s for the swap cooldown',
-                                  seconds: seconds(w.cooldown),
-                                })}
-                              </Box>
-                            )}
-                          </Box>
-                        }
+                    ))
+                  )}
+                </Row>
+              )}
+              {detail && (
+                <TrackGroup
+                  tracks={teamTracks}
+                  color={tokens.gold}
+                  teamData={teamData}
+                  store={store}
+                  pin={pin}
+                  pct={pct}
+                  span={span}
+                />
+              )}
+              {members.map((characterKey) => (
+                <Box key={characterKey} data-lane={characterKey}>
+                  <Box
+                    sx={(theme) => ({
+                      display: 'flex',
+                      alignItems: 'stretch',
+                      height: size.lane,
+                      borderTop: `1px solid ${alpha(theme.palette.text.primary, 0.06)}`,
+                    })}
+                  >
+                    <Box sx={laneLabelSx}>
+                      <MemberAvatar
+                        characterKey={characterKey}
+                        size={detail ? 28 : 22}
+                      />
+                      <Typography
+                        noWrap
+                        sx={{
+                          fontSize: size.name,
+                          fontWeight: 600,
+                          minWidth: 0,
+                        }}
                       >
+                        <CharacterName
+                          characterKey={characterKey}
+                          gender={gender}
+                        />
+                      </Typography>
+                    </Box>
+                    <Box sx={{ position: 'relative', flex: 1, mr: 1.5 }}>
+                      {/* the second marks, faint */}
+                      {marks.map((s) => (
                         <Box
-                          aria-label={`${t('teamOpt.timing.swap', 'Swap')} ${seconds(w.start - start)} s`}
+                          key={s}
                           sx={(theme) => ({
                             position: 'absolute',
-                            top: 6,
-                            height: size.lane - 16,
-                            // (the wait for the swap cooldown, hatched, then the swap itself)
-                            left: pct(w.start - w.cooldown),
-                            width: `max(4px, calc(${pct(start + w.cooldown + w.frames)} - 1px))`,
-                            display: 'flex',
-                            justifyContent: 'flex-end',
-                            overflow: 'hidden',
-                            borderRadius: 1,
-                            color: 'text.secondary',
-                            background: w.cooldown
-                              ? `linear-gradient(90deg, transparent 0 ${(w.cooldown / (w.cooldown + w.frames)) * 100}%, ${alpha(theme.palette.text.primary, 0.14)} ${(w.cooldown / (w.cooldown + w.frames)) * 100}%), repeating-linear-gradient(135deg, ${alpha(theme.palette.text.primary, 0.12)} 0 4px, transparent 4px 8px)`
-                              : alpha(theme.palette.text.primary, 0.14),
-                            boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.text.primary, 0.18)}`,
-                            zIndex: 1,
+                            top: 0,
+                            bottom: 0,
+                            left: pct(start + s * FPS),
+                            width: '1px',
+                            bgcolor: alpha(theme.palette.text.primary, 0.05),
                           })}
-                        >
-                          {/* the icon, centred on the swap itself (not its cooldown wait); hidden when it
-                            would not fit */}
-                          <Box
-                            sx={{
-                              width: `${(w.frames / (w.cooldown + w.frames)) * 100}%`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              containerType: 'inline-size',
-                              '& svg': { fontSize: 10 },
-                              '@container (max-width: 11px)': {
-                                '& svg': { display: 'none' },
-                              },
-                            }}
-                          >
-                            <SwapHorizIcon />
-                          </Box>
-                        </Box>
-                      </Tooltip>
-                    ))}
-                    {(blocks.get(characterKey) ?? []).map((a) => {
-                      const index = a.index
-                      // (the opener's own actions, counted from the start: named, not opened)
-                      const action = a.wait
-                        ? undefined
-                        : index !== undefined
-                          ? flat[index]?.action
-                          : a.openerIndex !== undefined
-                            ? opener[a.openerIndex]?.action
-                            : undefined
-                      const isSelected =
-                        index !== undefined && index === selected
-                      const isEdited = index !== undefined && edited.has(index)
-                      const name = a.wait
-                        ? t('teamOpt.timing.kind.wait', 'Wait')
-                        : action
-                          ? (a.variant?.label ?? actionName(t, action))
-                          : t('teamOpt.timing.entry', 'Entry (automatic)')
-                      return (
+                        />
+                      ))}
+                      {(swaps.get(characterKey) ?? []).map((w) => (
                         <Tooltip
-                          key={`${a.start}-${a.index ?? (a.wait ? 'wait' : 'entry')}`}
+                          key={`swap-${w.start}`}
                           arrow
                           disableInteractive
                           title={
                             <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>
                               <Box sx={{ fontWeight: 700 }}>
-                                {name}
-                                {a.text && (
-                                  <Box
-                                    component="span"
-                                    sx={{
-                                      ml: 0.75,
-                                      fontFamily: 'ui-monospace, monospace',
-                                      opacity: 0.7,
-                                    }}
-                                  >
-                                    {a.text}
-                                  </Box>
-                                )}
+                                {t('teamOpt.timing.swap', 'Swap')}:{' '}
+                                <CharacterName
+                                  characterKey={w.from}
+                                  gender={gender}
+                                />{' '}
+                                →{' '}
+                                <CharacterName
+                                  characterKey={w.to}
+                                  gender={gender}
+                                />
                               </Box>
-                              {seconds(a.start - start)}–
-                              {seconds(a.start - start + a.frames)} s ·{' '}
-                              {a.frames} {t('teamOpt.timing.framesShort', 'f')}
-                              {isEdited && (
-                                <Box sx={{ color: 'primary.main' }}>
-                                  {t('teamOpt.timing.edited', 'Edited')}
+                              {seconds(w.start - start)}–
+                              {seconds(w.start - start + w.frames)} s ·{' '}
+                              {w.frames} {t('teamOpt.timing.framesShort', 'f')}
+                              {w.cooldown > 0 && (
+                                <Box sx={{ color: 'text.secondary' }}>
+                                  {t('teamOpt.timing.swapCooldown', {
+                                    defaultValue:
+                                      'Waited {{seconds}} s for the swap cooldown',
+                                    seconds: seconds(w.cooldown),
+                                  })}
                                 </Box>
                               )}
                             </Box>
                           }
                         >
-                          <ButtonBase
-                            // (an automatic entry has no step to open: shown, not pressed)
-                            aria-disabled={index === undefined}
-                            tabIndex={index === undefined ? -1 : 0}
-                            disableRipple={index === undefined}
-                            onClick={() =>
-                              index !== undefined && onSelect(index)
-                            }
-                            aria-label={`${name} ${seconds(a.start - start)} s`}
-                            aria-pressed={isSelected}
-                            sx={(theme) => {
-                              const color = laneColor(theme, characterKey)
-                              return {
-                                position: 'absolute',
-                                top: 6,
-                                height: size.lane - 16,
-                                left: pct(a.start),
-                                width: `max(4px, calc(${pct(start + a.frames)} - 1px))`,
-                                px: 0.5,
-                                justifyContent: 'flex-start',
-                                overflow: 'hidden',
-                                borderRadius: 1,
-                                fontSize: 11,
-                                fontWeight: 700,
-                                fontFamily: 'ui-monospace, monospace',
-                                whiteSpace: 'nowrap',
-                                color: a.wait
-                                  ? 'text.secondary'
-                                  : theme.palette.getContrastText(color),
-                                bgcolor: a.wait
-                                  ? 'transparent'
-                                  : alpha(
-                                      color,
-                                      index !== undefined || action
-                                        ? 0.82
-                                        : 0.35
-                                    ),
-                                backgroundImage: a.wait
-                                  ? `repeating-linear-gradient(135deg, ${alpha(theme.palette.text.primary, 0.12)} 0 4px, transparent 4px 8px)`
-                                  : 'none',
-                                boxShadow: isSelected
-                                  ? `0 0 0 2px ${theme.palette.background.default}, 0 0 0 4px ${theme.palette.primary.main}`
-                                  : isEdited
-                                    ? `inset 0 0 0 2px ${theme.palette.primary.main}`
-                                    : `inset 0 0 0 1px ${alpha(theme.palette.common.black, 0.25)}`,
-                                zIndex: isSelected ? 2 : 1,
-                                transition: 'filter .12s, box-shadow .12s',
-                                cursor:
-                                  index === undefined ? 'default' : 'pointer',
-                                '&:hover': {
-                                  filter:
-                                    index === undefined
-                                      ? 'none'
-                                      : 'brightness(1.15)',
-                                },
-                              }
-                            }}
+                          <Box
+                            aria-label={`${t('teamOpt.timing.swap', 'Swap')} ${seconds(w.start - start)} s`}
+                            sx={(theme) => ({
+                              position: 'absolute',
+                              top: 6,
+                              height: size.lane - 16,
+                              // (the wait for the swap cooldown, hatched, then the swap itself)
+                              left: pct(w.start - w.cooldown),
+                              width: `max(4px, calc(${pct(start + w.cooldown + w.frames)} - 1px))`,
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              overflow: 'hidden',
+                              borderRadius: 1,
+                              color: 'text.secondary',
+                              background: w.cooldown
+                                ? `linear-gradient(90deg, transparent 0 ${(w.cooldown / (w.cooldown + w.frames)) * 100}%, ${alpha(theme.palette.text.primary, 0.14)} ${(w.cooldown / (w.cooldown + w.frames)) * 100}%), repeating-linear-gradient(135deg, ${alpha(theme.palette.text.primary, 0.12)} 0 4px, transparent 4px 8px)`
+                                : alpha(theme.palette.text.primary, 0.14),
+                              boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.text.primary, 0.18)}`,
+                              zIndex: 1,
+                            })}
                           >
-                            {a.text}
-                          </ButtonBase>
+                            {/* the icon, centred on the swap itself (not its cooldown wait); hidden when it
+                            would not fit */}
+                            <Box
+                              sx={{
+                                width: `${(w.frames / (w.cooldown + w.frames)) * 100}%`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                containerType: 'inline-size',
+                                '& svg': { fontSize: 10 },
+                                '@container (max-width: 11px)': {
+                                  '& svg': { display: 'none' },
+                                },
+                              }}
+                            >
+                              <SwapHorizIcon />
+                            </Box>
+                          </Box>
                         </Tooltip>
-                      )
-                    })}
-                    {/* each hit, a mark under the lane: as tall as its damage */}
-                    {[...(byMember.get(characterKey) ?? [])].map(
+                      ))}
+                      {(blocks.get(characterKey) ?? []).map((a) => {
+                        const index = a.index
+                        // (the opener's own actions, counted from the start: named, not opened)
+                        const action = a.wait
+                          ? undefined
+                          : index !== undefined
+                            ? flat[index]?.action
+                            : a.openerIndex !== undefined
+                              ? opener[a.openerIndex]?.action
+                              : undefined
+                        const isSelected =
+                          index !== undefined && index === selected
+                        const isEdited =
+                          index !== undefined && edited.has(index)
+                        const name = a.wait
+                          ? t('teamOpt.timing.kind.wait', 'Wait')
+                          : action
+                            ? (a.variant?.label ?? actionName(t, action))
+                            : t('teamOpt.timing.entry', 'Entry (automatic)')
+                        return (
+                          <Tooltip
+                            key={`${a.start}-${a.index ?? (a.wait ? 'wait' : 'entry')}`}
+                            arrow
+                            disableInteractive
+                            title={
+                              <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                                <Box sx={{ fontWeight: 700 }}>
+                                  {name}
+                                  {a.text && (
+                                    <Box
+                                      component="span"
+                                      sx={{
+                                        ml: 0.75,
+                                        fontFamily: 'ui-monospace, monospace',
+                                        opacity: 0.7,
+                                      }}
+                                    >
+                                      {a.text}
+                                    </Box>
+                                  )}
+                                </Box>
+                                {seconds(a.start - start)}–
+                                {seconds(a.start - start + a.frames)} s ·{' '}
+                                {a.frames}{' '}
+                                {t('teamOpt.timing.framesShort', 'f')}
+                                {isEdited && (
+                                  <Box sx={{ color: 'primary.main' }}>
+                                    {t('teamOpt.timing.edited', 'Edited')}
+                                  </Box>
+                                )}
+                              </Box>
+                            }
+                          >
+                            <ButtonBase
+                              // (an automatic entry has no step to open: shown, not pressed)
+                              aria-disabled={index === undefined}
+                              tabIndex={index === undefined ? -1 : 0}
+                              disableRipple={index === undefined}
+                              onClick={() =>
+                                index !== undefined && onSelect(index)
+                              }
+                              aria-label={`${name} ${seconds(a.start - start)} s`}
+                              aria-pressed={isSelected}
+                              sx={(theme) => {
+                                const color = laneColor(theme, characterKey)
+                                return {
+                                  position: 'absolute',
+                                  top: 6,
+                                  height: size.lane - 16,
+                                  left: pct(a.start),
+                                  width: `max(4px, calc(${pct(start + a.frames)} - 1px))`,
+                                  px: 0.5,
+                                  justifyContent: 'flex-start',
+                                  overflow: 'hidden',
+                                  borderRadius: 1,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  fontFamily: 'ui-monospace, monospace',
+                                  whiteSpace: 'nowrap',
+                                  color: a.wait
+                                    ? 'text.secondary'
+                                    : theme.palette.getContrastText(color),
+                                  bgcolor: a.wait
+                                    ? 'transparent'
+                                    : alpha(
+                                        color,
+                                        index !== undefined || action
+                                          ? 0.82
+                                          : 0.35
+                                      ),
+                                  backgroundImage: a.wait
+                                    ? `repeating-linear-gradient(135deg, ${alpha(theme.palette.text.primary, 0.12)} 0 4px, transparent 4px 8px)`
+                                    : 'none',
+                                  boxShadow: isSelected
+                                    ? `0 0 0 2px ${theme.palette.background.default}, 0 0 0 4px ${theme.palette.primary.main}`
+                                    : isEdited
+                                      ? `inset 0 0 0 2px ${theme.palette.primary.main}`
+                                      : `inset 0 0 0 1px ${alpha(theme.palette.common.black, 0.25)}`,
+                                  zIndex: isSelected ? 2 : 1,
+                                  transition: 'filter .12s, box-shadow .12s',
+                                  cursor:
+                                    index === undefined ? 'default' : 'pointer',
+                                  '&:hover': {
+                                    filter:
+                                      index === undefined
+                                        ? 'none'
+                                        : 'brightness(1.15)',
+                                  },
+                                }
+                              }}
+                            >
+                              {a.text}
+                            </ButtonBase>
+                          </Tooltip>
+                        )
+                      })}
+                      {/* each hit, a mark under the lane: as tall as its damage */}
+                      {[...(byMember.get(characterKey) ?? [])].map(
+                        ([frame, d]) => (
+                          <Box
+                            key={frame}
+                            sx={(theme) => ({
+                              position: 'absolute',
+                              bottom: 2,
+                              left: pct(frame),
+                              width: '2px',
+                              height: figures ? 3 + 9 * Math.sqrt(d / top) : 5,
+                              borderRadius: 1,
+                              bgcolor: alpha(
+                                laneColor(theme, characterKey),
+                                pin?.hit?.t === frame &&
+                                  pin.hit.characterKey === characterKey
+                                  ? 1
+                                  : 0.9
+                              ),
+                              boxShadow:
+                                pin?.hit?.t === frame &&
+                                pin.hit.characterKey === characterKey
+                                  ? `0 0 0 2px ${tokens.gold}`
+                                  : 'none',
+                            })}
+                          />
+                        )
+                      )}
+                    </Box>
+                  </Box>
+                  {detail && (
+                    <TrackGroup
+                      tracks={memberTracks(characterKey)}
+                      characterKey={characterKey}
+                      teamData={teamData}
+                      store={store}
+                      pin={pin}
+                      pct={pct}
+                      span={span}
+                    />
+                  )}
+                </Box>
+              ))}
+              {/* the damage as it lands (a bar a hit), and as it adds up (the line) */}
+              {detail && figures && (
+                <Row
+                  label={t('teamOpt.timeline.damage', 'Damage')}
+                  height={64}
+                  top
+                  value={
+                    <DamageValue
+                      store={store}
+                      pin={pin}
+                      cumulative={cumulative}
+                      total={total}
+                    />
+                  }
+                >
+                  <Box
+                    component="svg"
+                    viewBox="0 0 1000 100"
+                    preserveAspectRatio="none"
+                    sx={{
+                      position: 'absolute',
+                      inset: '6px 0 4px 0',
+                      width: '100%',
+                      height: 'calc(100% - 10px)',
+                      overflow: 'visible',
+                    }}
+                  >
+                    <polyline
+                      fill="none"
+                      stroke={alpha(tokens.gold, 0.7)}
+                      strokeWidth="1.5"
+                      vectorEffect="non-scaling-stroke"
+                      points={[
+                        '0,100',
+                        ...cumulative.flatMap((c, i) => {
+                          const x = ((c.t - start) / length) * 1000
+                          const before = cumulative[i - 1]?.total ?? 0
+                          return [
+                            `${x},${100 - (before / total) * 100}`,
+                            `${x},${100 - (c.total / total) * 100}`,
+                          ]
+                        }),
+                        '1000,0',
+                      ].join(' ')}
+                    />
+                  </Box>
+                  {members.map((characterKey) =>
+                    [...(byMember.get(characterKey) ?? [])].map(
                       ([frame, d]) => (
                         <Box
-                          key={frame}
+                          key={`${characterKey}${frame}`}
                           sx={(theme) => ({
                             position: 'absolute',
-                            bottom: 2,
+                            bottom: 4,
                             left: pct(frame),
-                            width: '2px',
-                            height: figures ? 3 + 9 * Math.sqrt(d / top) : 5,
-                            borderRadius: 1,
+                            width: '3px',
+                            ml: '-1px',
+                            height: `max(2px, ${(d / top) * 70}%)`,
+                            borderRadius: '2px 2px 0 0',
                             bgcolor: alpha(
                               laneColor(theme, characterKey),
-                              pin?.hit?.t === frame &&
-                                pin.hit.characterKey === characterKey
-                                ? 1
-                                : 0.9
+                              0.85
                             ),
-                            boxShadow:
-                              pin?.hit?.t === frame &&
-                              pin.hit.characterKey === characterKey
-                                ? `0 0 0 2px ${tokens.gold}`
-                                : 'none',
                           })}
                         />
                       )
-                    )}
-                  </Box>
-                </Box>
-                {detail && (
-                  <TrackGroup
-                    tracks={memberTracks(characterKey)}
-                    characterKey={characterKey}
-                    teamData={teamData}
-                    store={store}
-                    pin={pin}
-                    pct={pct}
-                    span={span}
-                  />
-                )}
-              </Box>
-            ))}
-            {/* the damage as it lands (a bar a hit), and as it adds up (the line) */}
-            {detail && figures && (
-              <Row
-                label={t('teamOpt.timeline.damage', 'Damage')}
-                height={64}
-                top
-                value={
-                  <DamageValue
-                    store={store}
-                    pin={pin}
-                    cumulative={cumulative}
-                    total={total}
-                  />
-                }
+                    )
+                  )}
+                </Row>
+              )}
+              {/* the pinned moment, and the one pointed at */}
+              <Box
+                ref={plotRef}
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: nameColumn,
+                  right: 12,
+                  pointerEvents: 'none',
+                  zIndex: 2,
+                }}
               >
-                <Box
-                  component="svg"
-                  viewBox="0 0 1000 100"
-                  preserveAspectRatio="none"
-                  sx={{
-                    position: 'absolute',
-                    inset: '6px 0 4px 0',
-                    width: '100%',
-                    height: 'calc(100% - 10px)',
-                    overflow: 'visible',
-                  }}
-                >
-                  <polyline
-                    fill="none"
-                    stroke={alpha(tokens.gold, 0.7)}
-                    strokeWidth="1.5"
-                    vectorEffect="non-scaling-stroke"
-                    points={[
-                      '0,100',
-                      ...cumulative.flatMap((c, i) => {
-                        const x = ((c.t - start) / length) * 1000
-                        const before = cumulative[i - 1]?.total ?? 0
-                        return [
-                          `${x},${100 - (before / total) * 100}`,
-                          `${x},${100 - (c.total / total) * 100}`,
-                        ]
-                      }),
-                      '1000,0',
-                    ].join(' ')}
+                {pin && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 20,
+                      bottom: 4,
+                      left: pct(pin.frame),
+                      width: '2px',
+                      ml: '-1px',
+                      borderRadius: 1,
+                      bgcolor: tokens.gold,
+                      boxShadow: `0 0 8px ${alpha(tokens.gold, 0.6)}`,
+                      transition: `left .16s ${tokens.ease}`,
+                      '@media (prefers-reduced-motion: reduce)': {
+                        transition: 'none',
+                      },
+                    }}
                   />
-                </Box>
-                {members.map((characterKey) =>
-                  [...(byMember.get(characterKey) ?? [])].map(([frame, d]) => (
-                    <Box
-                      key={`${characterKey}${frame}`}
-                      sx={(theme) => ({
-                        position: 'absolute',
-                        bottom: 4,
-                        left: pct(frame),
-                        width: '3px',
-                        ml: '-1px',
-                        height: `max(2px, ${(d / top) * 70}%)`,
-                        borderRadius: '2px 2px 0 0',
-                        bgcolor: alpha(laneColor(theme, characterKey), 0.85),
-                      })}
-                    />
-                  ))
                 )}
-              </Row>
-            )}
-            {/* the pinned moment, and the one pointed at */}
-            <Box
-              ref={plotRef}
-              sx={{
-                position: 'absolute',
-                top: 0,
-                bottom: 0,
-                left: nameColumn,
-                right: 12,
-                pointerEvents: 'none',
-                zIndex: 2,
-              }}
-            >
-              {pin && (
                 <Box
-                  sx={{
+                  ref={lineRef}
+                  sx={(theme) => ({
                     position: 'absolute',
                     top: 20,
                     bottom: 4,
-                    left: pct(pin.frame),
-                    width: '2px',
-                    ml: '-1px',
-                    borderRadius: 1,
-                    bgcolor: tokens.gold,
-                    boxShadow: `0 0 8px ${alpha(tokens.gold, 0.6)}`,
-                    transition: `left .16s ${tokens.ease}`,
-                    '@media (prefers-reduced-motion: reduce)': {
-                      transition: 'none',
-                    },
-                  }}
+                    width: '1px',
+                    opacity: 0,
+                    bgcolor: alpha(theme.palette.text.primary, 0.55),
+                    transition: 'opacity .12s',
+                  })}
                 />
-              )}
-              <Box
-                ref={lineRef}
-                sx={(theme) => ({
-                  position: 'absolute',
-                  top: 20,
-                  bottom: 4,
-                  width: '1px',
-                  opacity: 0,
-                  bgcolor: alpha(theme.palette.text.primary, 0.55),
-                  transition: 'opacity .12s',
-                })}
-              />
+              </Box>
             </Box>
           </Box>
+          {/* more of the strip to the left or right: a soft fade on that side */}
+          {(['left', 'right'] as const).map((side) => (
+            <Box
+              key={side}
+              aria-hidden
+              sx={(theme) => ({
+                position: 'absolute',
+                top: 0,
+                bottom: 10,
+                [side]: side === 'left' ? nameColumn : 0,
+                width: 40,
+                pointerEvents: 'none',
+                zIndex: 3,
+                opacity: edges[side] ? 1 : 0,
+                transition: 'opacity .16s',
+                background: `linear-gradient(to ${side}, ${alpha(theme.palette.contentDark.main, 0)}, ${theme.palette.contentDark.main})`,
+              })}
+            />
+          ))}
         </Box>
         {shown && (
           <MomentPanel
@@ -1205,7 +1332,37 @@ function TrackGroup({
         <Row
           indent={!!characterKey}
           height={Math.max(TRACK, buffs.length * 5 + 9)}
-          label={t('teamOpt.timeline.buffsRow', 'Buffs')}
+          label={
+            // (its lines named, top to bottom: hover the label)
+            <Tooltip
+              arrow
+              placement="right-start"
+              title={
+                <Box sx={{ display: 'grid', gap: 0.5, py: 0.25 }}>
+                  {buffs.map((track) => (
+                    <BuffLegendLine
+                      key={track.key}
+                      track={track}
+                      teamData={props.teamData}
+                      tint={(theme) => tint(theme, track)}
+                    />
+                  ))}
+                </Box>
+              }
+            >
+              <Box
+                component="span"
+                sx={{
+                  cursor: 'help',
+                  textDecoration: 'underline dotted',
+                  textUnderlineOffset: '3px',
+                  textDecorationColor: 'rgba(236, 229, 216, 0.35)',
+                }}
+              >
+                {t('teamOpt.timeline.buffsRow', 'Buffs')}
+              </Box>
+            </Tooltip>
+          }
           value={<BuffsUp tracks={buffs} store={store} pin={pin} />}
         >
           {buffs.map((track, i) =>
@@ -1226,6 +1383,46 @@ function TrackGroup({
           )}
         </Row>
       )}
+    </Box>
+  )
+}
+
+/** A buff's line in the Buffs row's legend: its colour, its name */
+function BuffLegendLine({
+  track,
+  teamData,
+  tint,
+}: {
+  track: TimelineTrack
+  teamData: TeamData | undefined
+  tint: (theme: Theme) => string
+}) {
+  const info = useTrackInfo(track, teamData)
+  // (its state when it has one, as the moment's chips name it: Viridescent Venerer Electro)
+  const states = [
+    ...new Set(track.segments.map((x) => x.value).filter((v) => v !== 'on')),
+  ]
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box
+        sx={(theme) => ({
+          width: 18,
+          height: 3,
+          flexShrink: 0,
+          borderRadius: 999,
+          bgcolor: alpha(tint(theme), 0.85),
+        })}
+      />
+      <Box component="span" sx={{ fontSize: 12.5 }}>
+        <Suspense fallback="…">{info.label}</Suspense>
+        {states.length === 1 && (
+          <Box component="span" sx={{ fontWeight: 650, ml: 0.5 }}>
+            <Suspense fallback={String(states[0])}>
+              {stateName(info, states[0])}
+            </Suspense>
+          </Box>
+        )}
+      </Box>
     </Box>
   )
 }
@@ -1504,9 +1701,15 @@ function Readout({
   damage,
   cumulative,
   total,
+  brief,
   onUnpin,
 }: {
   store: MomentStore
+  /**
+   * In the detailed window, where the moment's panel shows the rest: only whether a moment is
+   * pinned, and the damage so far
+   */
+  brief?: boolean
   pin: TimelinePin | undefined
   sim: SimulationResult
   /** The team's own stacks (the Polestar Field's…) */
@@ -1524,16 +1727,67 @@ function Readout({
   // (a touch screen has no pointer to hover with)
   const touch = useMediaQuery('(hover: none)')
   const moment = pointed ?? (pin ? { frame: pin.frame } : undefined)
-  if (!moment)
-    return (
-      <Typography sx={{ ...readoutLabelSx, ml: 0.5 }}>
-        {touch
-          ? t('teamOpt.timeline.hintTouch', 'Tap a moment to pin it')
-          : t('teamOpt.timeline.hint', 'Point at a moment · click to pin it')}
-      </Typography>
-    )
+  const hint = (
+    <Typography noWrap sx={{ ...readoutLabelSx, ml: 0.5, minWidth: 0 }}>
+      {touch
+        ? t('teamOpt.timeline.hintTouch', 'Tap a moment to pin it')
+        : t(
+            'teamOpt.timeline.hintKeys',
+            'Point at a moment · click to pin it · ← → from hit to hit'
+          )}
+    </Typography>
+  )
+  if (!moment) return hint
   const hit = pointed ? hitAt(pointed) : pin?.hit
   const frame = hit && pointed ? hit.t : moment.frame
+  const soFar = damage && total > 0 && (
+    <Typography noWrap sx={{ ...readoutLabelSx, ...numSx, flexShrink: 0 }}>
+      {t('teamOpt.timeline.soFar', {
+        defaultValue: '{{damage}} so far · {{percent}}%',
+        damage: formatDamage(damageUntil(cumulative, frame)),
+        percent: Math.round((damageUntil(cumulative, frame) / total) * 100),
+      })}
+    </Typography>
+  )
+  const unpin = pin && (
+    <Tooltip title={t('teamOpt.timeline.unpin', 'Unpin')}>
+      <IconButton
+        size="small"
+        onClick={onUnpin}
+        aria-label={t('teamOpt.timeline.unpin', 'Unpin')}
+        sx={{ p: 0.375, color: 'primary.main', ...focusSx }}
+      >
+        <PushPinOutlinedIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+    </Tooltip>
+  )
+  if (brief)
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          columnGap: 1.5,
+          minWidth: 0,
+          flex: 1,
+          height: 28,
+        }}
+      >
+        {pin ? (
+          <Typography noWrap sx={{ ...readoutLabelSx, ml: 0.5 }}>
+            {t('teamOpt.timeline.pinnedAt', {
+              defaultValue: 'Pinned at {{seconds}} s',
+              seconds: seconds(pin.frame - sim.start),
+            })}
+          </Typography>
+        ) : (
+          hint
+        )}
+        <Box sx={{ flexGrow: 1 }} />
+        {soFar}
+        {unpin}
+      </Box>
+    )
   const onField = hit?.onField ?? onFieldAt(sim, frame)
   const auras = aurasAt(sim, frame)
   const d = hit && damage?.(hit)
@@ -1543,10 +1797,14 @@ function Readout({
       sx={{
         display: 'flex',
         alignItems: 'center',
+        // (two lines at most, always as tall as two: the strip under it never moves)
+        flexWrap: 'wrap',
+        alignContent: 'center',
         columnGap: 1.5,
+        rowGap: 0.25,
         minWidth: 0,
         flex: 1,
-        height: 28,
+        height: 46,
         overflow: 'hidden',
       }}
     >
@@ -1620,27 +1878,8 @@ function Readout({
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
-      {damage && total > 0 && (
-        <Typography sx={{ ...readoutLabelSx, ...numSx }}>
-          {t('teamOpt.timeline.soFar', {
-            defaultValue: '{{damage}} so far · {{percent}}%',
-            damage: formatDamage(damageUntil(cumulative, frame)),
-            percent: Math.round((damageUntil(cumulative, frame) / total) * 100),
-          })}
-        </Typography>
-      )}
-      {pin && (
-        <Tooltip title={t('teamOpt.timeline.unpin', 'Unpin')}>
-          <IconButton
-            size="small"
-            onClick={onUnpin}
-            aria-label={t('teamOpt.timeline.unpin', 'Unpin')}
-            sx={{ p: 0.375, color: 'primary.main', ...focusSx }}
-          >
-            <PushPinOutlinedIcon sx={{ fontSize: 16 }} />
-          </IconButton>
-        </Tooltip>
-      )}
+      {soFar}
+      {unpin}
     </Box>
   )
 }

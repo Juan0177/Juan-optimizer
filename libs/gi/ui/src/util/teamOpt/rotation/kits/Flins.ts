@@ -49,6 +49,8 @@ interface FlinsState {
   /** Manifest Flame (E) is up until flameEnd (cleared by a callback at its end, or on swap out) */
   flame: boolean
   flameEnd: number
+  /** A Manifest Flame was started in this stint on the field (an E after it ended starts another) */
+  flameThisStint: boolean
   /** Thunderous Symphony (6 s after Northland Spearstorm): the next Q is the symphony */
   symphony: boolean
   symphonyEnd: number
@@ -77,6 +79,7 @@ export const kit: KitModel = {
   init: (): FlinsState => ({
     flame: false,
     flameEnd: -1,
+    flameThisStint: false,
     symphony: false,
     symphonyEnd: -1,
     c2Armed: false,
@@ -204,6 +207,13 @@ export const kit: KitModel = {
             framesInto: { normal: 28, burst: 28, dash: 26, jump: 26 },
           }
         }
+        // (a written "E Q N5 E Q N5 E Q" at C0: the third E comes after Manifest Flame has ended, so
+        // it starts it again and that Q is his full Burst; said, since the ER it needs jumps)
+        if (s.flameThisStint)
+          ctx.note(
+            `Flins: Manifest Flame (10 s) had ended before this E, so it started Manifest Flame again instead of Northland Spearstorm, and a Q before his next Spearstorm is his full Burst (80 Energy), not Thunderous Symphony. Northland Spearstorm's cooldown is 6 s (4 s from C1): two fit in one Manifest Flame at C0, three from C1.`
+          )
+        s.flameThisStint = true
         // Starts Manifest Flame (10 s). gcsim's first hit (Arcane Light) deals no damage: not modelled.
         s.flame = true
         s.flameEnd = ctx.now + 619
@@ -338,6 +348,7 @@ export const kit: KitModel = {
   onSwapOut(_ctx, s: FlinsState) {
     s.flame = false
     s.symphony = false
+    s.flameThisStint = false
   },
   onHitlag(ctx, s: FlinsState, frames) {
     if (s.flame && ctx.now < s.flameEnd) s.flameEnd += frames

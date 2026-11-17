@@ -9,7 +9,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   E / tE  Elemental Skill, tapped          hE   Elemental Skill, held
  *   Q       Elemental Burst                  N1–N6  a Normal Attack string of that many hits
  *   CA / C  Charged Attack                   P    Plunging Attack
- *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default, 6 from C1)
+ *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default; up to 6 from C1)
  *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
  *                its finisher waited for (F): KQM's "C3FD C3FD CF"
  *   D       dash                             J    jump
