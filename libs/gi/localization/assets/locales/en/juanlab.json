@@ -53,7 +53,8 @@
     "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse.",
     "importButtonAkasha": "Load the Akasha builds",
     "importHintAkasha": "Loads every build saved on Akasha, several per character, into the current database. Before saving you see a preview of what changes.",
-    "creditsStellar": "The optimizer, rotations, KQM Setup, ER calculator and beta kits come from <stellar>Stellar Optimizer</stellar> by s-naveen and its contributors. That is why Juan-optimizer is released under the <agpl>GNU AGPL v3</agpl>: the <code>source code</code> is public."
+    "creditsStellar": "The optimizer, rotations, KQM Setup, ER calculator and beta kits come from <stellar>Stellar Optimizer</stellar> by s-naveen and its contributors. That is why Juan-optimizer is released under the <agpl>GNU AGPL v3</agpl>: the <code>source code</code> is public.",
+    "gettingStartedImport": "Import by UID"
   },
   "gcweb": {
     "title": "Link to gc-web",
@@ -81,5 +82,11 @@
     "title": "Navigation bar",
     "top": "Top",
     "side": "Side"
+  },
+  "theme": {
+    "title": "Theme",
+    "juanlab": "JuanLab Night",
+    "go": "Genshin Optimizer",
+    "stellar": "Stellar"
   }
 }
