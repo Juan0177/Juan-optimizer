@@ -52,11 +52,11 @@ export default function TeamCharacterSelector({
   characterKey?: CharacterKey
   tab?: string
   /** The open team build workflow. */
-  teamBuildMode?: 'inventory' | 'kqm'
+  teamBuildMode?: 'inventory' | 'kqm' | 'kqm-compare'
   /** more header actions, before the team's (e.g. the open member's build card) */
   actions?: ReactNode
 }) {
-  const { t } = useTranslation(['page_team', 'ui'])
+  const { t } = useTranslation(['page_team', 'ui', 'juanlab'])
   const compact = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'))
   const navigate = useNavigate()
   const database = useDatabase()
@@ -68,9 +68,11 @@ export default function TeamCharacterSelector({
   const [selected, select] = useOptimisticValue<string | number>(
     teamBuildMode === 'kqm'
       ? 'kqm'
-      : teamBuildMode === 'inventory'
-        ? 'teamOpt'
-        : (characterKey ?? 'team')
+      : teamBuildMode === 'kqm-compare'
+        ? 'kqm-compare'
+        : teamBuildMode === 'inventory'
+          ? 'teamOpt'
+          : (characterKey ?? 'team')
   )
 
   return (
@@ -237,6 +239,26 @@ export default function TeamCharacterSelector({
             aria-label={t('teamOpt.kqm.tabBeta', 'KQM Theorycrafting (beta)')}
             disabled={loadoutData.every((datum) => !datum)}
             onClick={() => navigate(`/teams/${teamId}/kqm`)}
+            sx={memberTabSx}
+          />
+        )}
+        {kqmTheorycraftingEnabled && (
+          <Tab
+            icon={<TheorycraftIcon />}
+            iconPosition="start"
+            value="kqm-compare"
+            label={
+              <>
+                {t('juanlab:kqmCompare.tab')}
+                <BetaBadge
+                  label={t('juanlab:kqmCompare.alpha')}
+                  tip={t('juanlab:kqmCompare.alphaTip')}
+                />
+              </>
+            }
+            aria-label={t('juanlab:kqmCompare.tabAlpha')}
+            disabled={loadoutData.every((datum) => !datum)}
+            onClick={() => navigate(`/teams/${teamId}/kqm-compare`)}
             sx={memberTabSx}
           />
         )}

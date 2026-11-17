@@ -18,6 +18,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { RotationTimingSettings } from './RotationTiming'
 import { kqmRotationReplay } from './RotationWriter'
 
 export type KqmRunState =
@@ -188,12 +189,18 @@ export function kqmReplayOf(
   teamId: string,
   teamOpt: TeamOpt,
   /** Another rotation to play (one constellation's own); absent: the team's written one */
-  text?: string
+  text?: string,
+  /** Another opener to play before it; absent: the team's written one */
+  opener?: string,
+  /** Other timing settings (frame edits, swap time); absent: the team's own */
+  timing?: RotationTimingSettings
 ) {
   try {
     const members = teamOptMembers(database, teamId)
     return kqmRotationReplay({
       text,
+      opener,
+      timing,
       database,
       teamId,
       members,

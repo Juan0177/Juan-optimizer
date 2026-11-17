@@ -50,16 +50,23 @@ import { kqmTheorycraftingEnabled } from './featureFlags'
 import { TeamBuildCardButton } from './TeamBuildCardButton'
 import TeamCharacterSelector from './TeamCharacterSelector'
 import TeamBuildWorkspace from './TeamOptimize'
+import KqmCompare from './TeamOptimize/compare/KqmCompare'
 import TeamSetting from './TeamSetting'
 
 /** `/teams/:teamId/optimize`: Team Optimize (no character key is lowercase) */
 const TEAM_OPT_PATH = 'optimize'
 const KQM_PATH = 'kqm'
+/** `/teams/:teamId/kqm-compare`: KQM Compare (Alpha) */
+const KQM_COMPARE_PATH = 'kqm-compare'
 
 export default function PageTeam() {
   const database = useDatabase()
   const { teamId } = useParams<{ teamId?: string }>()
   const kqmRoute = useMatch({ path: '/teams/:teamId/kqm', end: false })
+  const kqmCompareRoute = useMatch({
+    path: `/teams/:teamId/${KQM_COMPARE_PATH}`,
+    end: false,
+  })
   const invalidKey = !teamId || !database.teams.keys.includes(teamId)
 
   // An edit is triggered whenever a team gets opened even if no edits are done
@@ -69,7 +76,7 @@ export default function PageTeam() {
   }, [teamId, database.teams, invalidKey])
 
   if (invalidKey) return <Navigate to="/teams" />
-  if (kqmRoute && !kqmTheorycraftingEnabled)
+  if ((kqmRoute || kqmCompareRoute) && !kqmTheorycraftingEnabled)
     return <Navigate to={`/teams/${teamId}/optimize`} replace />
 
   return (
@@ -123,7 +130,9 @@ function Page({ teamId }: { teamId: string }) {
   }, [])
   const isTeamOpt = characterKeyRaw === TEAM_OPT_PATH
   const isKqm = kqmTheorycraftingEnabled && characterKeyRaw === KQM_PATH
-  const isTeamBuild = isTeamOpt || isKqm
+  const isKqmCompare =
+    kqmTheorycraftingEnabled && characterKeyRaw === KQM_COMPARE_PATH
+  const isTeamBuild = isTeamOpt || isKqm || isKqmCompare
   useEffect(() => {
     if (!loadoutDatum && !isTeamBuild) navigate('', { replace: true })
   }, [loadoutDatum, navigate, isTeamBuild])
@@ -175,11 +184,13 @@ function Page({ teamId }: { teamId: string }) {
     'page_team',
     'tooltips_gen',
     'sheet_gen',
+    'juanlab',
   ])
 
   useTitle(
     useMemo(() => {
       if (isKqm) return `${team.name} - ${t('page_team:teamOpt.kqm.tab')}`
+      if (isKqmCompare) return `${team.name} - ${t('juanlab:kqmCompare.tab')}`
       if (isTeamOpt) return `${team.name} - ${t('page_team:teamOpt.title')}`
       const charName = characterKey
         ? t(
@@ -194,7 +205,16 @@ function Page({ teamId }: { teamId: string }) {
       return tabName
         ? `${team.name} - ${charName} - ${tabName}`
         : `${team.name} - ${charName}`
-    }, [t, team.name, characterKey, gender, tab, isTeamOpt, isKqm])
+    }, [
+      t,
+      team.name,
+      characterKey,
+      gender,
+      tab,
+      isTeamOpt,
+      isKqm,
+      isKqmCompare,
+    ])
   )
 
   const teamCharacterContextValue: TeamCharacterContextObj | undefined =
@@ -230,7 +250,15 @@ function Page({ teamId }: { teamId: string }) {
         teamId={teamId}
         characterKey={characterKey}
         tab={tab}
-        teamBuildMode={isKqm ? 'kqm' : isTeamOpt ? 'inventory' : undefined}
+        teamBuildMode={
+          isKqmCompare
+            ? 'kqm-compare'
+            : isKqm
+              ? 'kqm'
+              : isTeamOpt
+                ? 'inventory'
+                : undefined
+        }
         actions={
           // a member's tab: its build card, among the header's actions
           !isTeamBuild &&
@@ -247,7 +275,9 @@ function Page({ teamId }: { teamId: string }) {
       {/* `clip` still clips to the rounded corners but, unlike `hidden`, is not a scroll
           container, so sticky bars inside (the optimizer's generate bar) stick to the window */}
       {/* Team optimize and KQM: their sections are panels of their own, straight on the page */}
-      {isTeamBuild ? (
+      {isKqmCompare ? (
+        <KqmCompare key={teamId} teamId={teamId} teamData={teamData} />
+      ) : isTeamBuild ? (
         <TeamBuildWorkspace
           key={teamId}
           teamId={teamId}

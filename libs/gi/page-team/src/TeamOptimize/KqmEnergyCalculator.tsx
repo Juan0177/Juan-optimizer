@@ -796,7 +796,7 @@ function EnergyBalance({
 }
 
 /** One member's energy, all of it: why it needs what it needs, then its settings by section */
-function MemberEnergy({
+export function MemberEnergy({
   characterKey,
   keys,
   kqm,
@@ -806,8 +806,11 @@ function MemberEnergy({
   updateMember,
   fromRotation,
   onUseRotation,
+  lockFieldTime = false,
 }: {
   characterKey: CharacterKey
+  /** Its field time is shown, not edited (KQM Compare: the leaving member's) */
+  lockFieldTime?: boolean
   /** The written rotation fills in the inputs not set by hand */
   fromRotation: boolean
   /** Lets the rotation fill in all of this member's inputs again */
@@ -1277,6 +1280,7 @@ function MemberEnergy({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Slider
               size="small"
+              disabled={lockFieldTime}
               value={Number.isFinite(member.fieldTime) ? member.fieldTime : 0}
               onChange={(_, value) =>
                 updateMember(characterKey, { fieldTime: value as number })
@@ -1289,6 +1293,7 @@ function MemberEnergy({
               unit="%"
               width={84}
               ariaLabel={`${name}: ${t('teamOpt.kqm.calc.fieldTime', 'Field time')}`}
+              disabled={lockFieldTime}
               onChange={(fieldTime) =>
                 updateMember(characterKey, { fieldTime })
               }
@@ -1481,6 +1486,7 @@ function NumberField({
   min = 0,
   ariaLabel,
   width,
+  disabled,
 }: {
   value: number
   onChange: (value: number) => void
@@ -1488,6 +1494,7 @@ function NumberField({
   min?: number
   ariaLabel: string
   width?: number
+  disabled?: boolean
 }) {
   const [text, setText] = useState(() =>
     Number.isFinite(value) ? `${+value.toFixed(4)}` : ''
@@ -1505,6 +1512,7 @@ function NumberField({
         onChange(next.trim() ? Number(next.replace(',', '.')) : Number.NaN)
       }}
       error={!Number.isFinite(value) || value < min}
+      disabled={disabled}
       inputProps={{
         inputMode: 'decimal',
         'aria-label': ariaLabel,
