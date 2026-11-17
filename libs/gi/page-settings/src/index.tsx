@@ -1,6 +1,6 @@
 import { LocalStorageUsageCard } from '@genshin-optimizer/common/react-util'
 import { PageHeader } from '@genshin-optimizer/common/ui'
-import { DatabaseCard } from '@genshin-optimizer/gi/ui'
+import { DatabaseCard, NavLayoutToggle } from '@genshin-optimizer/gi/ui'
 import { Box, Grid } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import LanguageCard from './LanguageCard'
@@ -19,6 +19,10 @@ export default function PageSettings() {
         </Grid>
         <Grid item xs={12} sm={6}>
           <SnowToggle />
+        </Grid>
+        {/* juanlab: barra di navigazione in alto o laterale */}
+        <Grid item xs={12} sm={6}>
+          <NavLayoutToggle />
         </Grid>
       </Grid>
       <DatabaseCard />

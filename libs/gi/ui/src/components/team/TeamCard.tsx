@@ -364,10 +364,10 @@ const memberCardSx = (accent: string) =>
     pb: 1.25,
     borderRadius: cardRadius,
     border: `1px solid ${giTokens.hairline}`,
-    background: `linear-gradient(to top, ${alpha(accent, 0.16)}, ${alpha(
-      accent,
-      0
-    )} 62%), ${giTokens.panelRaised}`,
+    // juanlab: tinta piatta dell'elemento invece della sfumatura
+    // (un colore solo sopra il pannello: tinta uniforme, senza sfumatura)
+    backgroundColor: giTokens.panelRaised,
+    backgroundImage: `linear-gradient(${alpha(accent, 0.08)}, ${alpha(accent, 0.08)})`,
     boxShadow: '0 1px 0 rgba(255, 255, 255, 0.03) inset',
     transition:
       'border-color 120ms ease, transform 160ms ease, box-shadow 160ms ease',

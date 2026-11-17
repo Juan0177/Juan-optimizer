@@ -1508,7 +1508,7 @@ function TrackRow({
               left: pct(seg.start),
               width: span(seg.start, seg.end),
               height: 2 + (TRACK - 4) * (+seg.value / track.max),
-              background: `linear-gradient(to top, ${alpha(tint(theme), 0.06)}, ${alpha(tint(theme), 0.32)})`,
+              background: alpha(tint(theme), 0.2), // juanlab: piatto
               borderTop: `1.5px solid ${alpha(tint(theme), 0.95)}`,
               containerType: 'inline-size',
               overflow: 'hidden',

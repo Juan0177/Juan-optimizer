@@ -365,7 +365,7 @@ function CharacterTip({ characterKey }: { characterKey: CharacterKey }) {
         pr: { xs: 1.5, sm: 2 },
         py: 1.5,
         borderRadius: 2.5,
-        background: `linear-gradient(100deg, ${alpha(theme.palette.primary.main, 0.1)} 0%, ${alpha(theme.palette.primary.main, 0.03)} 55%, transparent 100%)`,
+        background: alpha(theme.palette.primary.main, 0.06), // juanlab: piatto
         boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.18)}`,
         // (a gold edge on the left)
         '&::before': {

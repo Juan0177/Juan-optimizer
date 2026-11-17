@@ -8,6 +8,7 @@ import { shouldShowDevComponents } from '@genshin-optimizer/common/util'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { FlowerIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
+import { SIDEBAR_WIDTH, useNavLayout } from '@genshin-optimizer/gi/ui' // juanlab
 import ArticleIcon from '@mui/icons-material/Article'
 import BookIcon from '@mui/icons-material/Book'
 import ConstructionIcon from '@mui/icons-material/Construction'
@@ -42,7 +43,7 @@ import type { ReactNode } from 'react'
 import { createContext, Suspense, useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link as RouterLink, useMatch } from 'react-router-dom'
-import juanLogo from './juan_logo.svg' // juanlab: logo del fork
+import juanLogo from './juan_logo.png' // juanlab: il logo di JuanLab
 
 type NavEntry = {
   i18Key: string
@@ -130,7 +131,7 @@ function NavCount({ count }: { count: number }) {
       sx={{
         minWidth: 20,
         px: 0.75,
-        borderRadius: 999,
+        borderRadius: 1, // juanlab: angoli contenuti (era una pillola)
         bgcolor: alpha(parchment, 0.08),
         fontSize: '0.75rem',
         fontWeight: 600,
@@ -170,7 +171,7 @@ function DBChip() {
         gap: 0.5,
         px: 1,
         height: 24,
-        borderRadius: 999,
+        borderRadius: 1,
         border: `1px solid ${hairlineStrong}`,
         color: 'text.secondary',
         fontSize: '0.75rem',
@@ -191,7 +192,7 @@ function navItemSx(active: boolean) {
     minWidth: 0,
     px: 1.25,
     gap: 0.75,
-    borderRadius: 999,
+    borderRadius: 1, // juanlab: angoli contenuti (era una pillola)
     flexShrink: 0,
     whiteSpace: 'nowrap',
     fontSize: '0.9rem',
@@ -419,7 +420,7 @@ function Brand({ onClick }: { onClick?: () => void }) {
         component="img"
         src={juanLogo}
         alt=""
-        sx={{ height: 26, width: 26, display: 'block' }}
+        sx={{ height: 28, width: 28, display: 'block', borderRadius: 1 }}
       />
       <Box
         component="span"
@@ -447,11 +448,10 @@ function Brand({ onClick }: { onClick?: () => void }) {
   )
 }
 
+// juanlab: barra opaca e piatta (era traslucida con sfocatura)
 const barSx = {
   top: 0,
-  // translucent, so the page reads as continuing under the bar while scrolling
-  bgcolor: alpha(giTokens.inkDeep, 0.78),
-  backdropFilter: 'saturate(140%) blur(14px)',
+  bgcolor: giTokens.inkDeep,
   borderBottom: `1px solid ${hairline}`,
   backgroundImage: 'none',
 } as const
@@ -474,14 +474,77 @@ function HeaderContent({ anchor }: { anchor: string }) {
   }
   // a clicked entry is the current page at once; the page renders in the navigation's transition
   const [currentTab, select] = useOptimisticValue(routeTab ?? '')
+  // juanlab: barra in alto o laterale, scelta nelle impostazioni (sul telefono sempre il menu a scomparsa)
+  const navLayout = useNavLayout()
   return (
     <SelectNavContext.Provider value={select}>
       {isMobile ? (
         <MobileHeader anchor={anchor} currentTab={currentTab} />
+      ) : navLayout === 'side' ? (
+        <SideHeader anchor={anchor} currentTab={currentTab} />
       ) : (
         <DesktopHeader anchor={anchor} currentTab={currentTab} />
       )}
     </SelectNavContext.Provider>
+  )
+}
+
+/** juanlab: menu fisso a sinistra, con tutte le pagine e il database attivo in fondo */
+function SideHeader({
+  anchor,
+  currentTab,
+}: {
+  anchor: string
+  currentTab: string
+}) {
+  const { t } = useTranslation('ui')
+  const item = (entry: NavEntry, suffix?: ReactNode) => (
+    <NavItem
+      key={entry.value}
+      entry={entry}
+      active={currentTab === entry.value}
+      showLabel
+      block
+      suffix={suffix}
+    />
+  )
+  return (
+    <>
+      <Box
+        component="nav"
+        aria-label={t('mainNav')}
+        sx={(theme) => ({
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          width: SIDEBAR_WIDTH,
+          zIndex: theme.zIndex.appBar,
+          bgcolor: giTokens.inkDeep,
+          borderRight: `1px solid ${hairline}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          p: 1.5,
+          overflowY: 'auto',
+        })}
+      >
+        <Box sx={{ px: 1, py: 1.5 }}>
+          <Brand />
+        </Box>
+        {primaryNav.map((entry) => item(entry))}
+        <Divider sx={{ my: 1, borderColor: hairline }} />
+        {secondaryNav.map((entry) => item(entry))}
+        <Box sx={{ flexGrow: 1 }} />
+        <Divider sx={{ my: 1, borderColor: hairline }} />
+        {item(settingsNav)}
+        <Box sx={{ px: 1.25, pt: 0.5, minWidth: 0, display: 'flex' }}>
+          <DBChip />
+        </Box>
+      </Box>
+      {/* scroll anchor of "back to top" */}
+      <Box id={anchor} />
+    </>
   )
 }
 

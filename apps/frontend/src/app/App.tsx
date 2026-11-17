@@ -7,7 +7,12 @@ import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import { DatabaseContext } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n' // also initializes translations
 import { theme } from '@genshin-optimizer/gi/theme'
-import { SnowContext, useSnow } from '@genshin-optimizer/gi/ui'
+import {
+  SIDEBAR_WIDTH,
+  SnowContext,
+  useNavLayout,
+  useSnow,
+} from '@genshin-optimizer/gi/ui'
 import {
   Box,
   Container,
@@ -224,6 +229,7 @@ function useContentMaxWidth() {
 
 function Content() {
   useTitle()
+  const navLayout = useNavLayout() // juanlab
   const contentMaxWidth = useContentMaxWidth()
   return (
     <Box
@@ -232,7 +238,12 @@ function Content() {
       minHeight="100vh"
       position="relative"
       sx={(theme) => ({
-        background: `radial-gradient(ellipse at top, ${theme.palette.neutral700.main} 0%, ${theme.palette.neutral800.main} 100%)`,
+        // juanlab: sfondo piatto, niente gradienti
+        background: theme.palette.neutral800.main,
+        // juanlab: con la barra laterale il contenuto parte dopo il menu (solo su schermi larghi)
+        [theme.breakpoints.up('md')]: {
+          pl: navLayout === 'side' ? `${SIDEBAR_WIDTH}px` : 0,
+        },
       })}
     >
       <Header anchor="back-to-top-anchor" />
