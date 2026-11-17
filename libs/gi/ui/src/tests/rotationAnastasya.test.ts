@@ -77,6 +77,24 @@ describe('Anastasya', () => {
     expect(windowAt(sim, 'blessing', 100)).toBe('honor')
   })
 
+  it('Blessed Spear N3 D spam takes 82 frames a round (footage: 80 at best) and keeps each N3 hit', () => {
+    const sim = run('Anastasya hE N3 D N3 D N3 D', ['Anastasya'])
+    const n3 = sim.actions.filter((a) => a.text === 'N3').map((a) => a.start)
+    expect(n3).toHaveLength(3)
+    expect(n3[1] - n3[0]).toBe(82)
+    expect(n3[2] - n3[1]).toBe(82)
+    // every round's N3 thrust still lands, after the dash has started
+    expect(
+      sim.hits.filter((h) => h.label.startsWith('Blessed Spear N3'))
+    ).toHaveLength(3)
+    // (her Burst cancels it as early as the dash does)
+    const q = run('Anastasya hE N3 Q', ['Anastasya'])
+    const [n, burst] = ['N3', 'Q'].map(
+      (text) => q.actions.find((a) => a.text === text)!.start
+    )
+    expect(burst - n).toBe(26 + 33 + 2)
+  })
+
   it('Evernight Seals the others, Blessed Spear hits shorten it, then Doom runs its three stages', () => {
     const sim = run('Anastasya hE Q N5 N5 W3 E E E W2', ['Anastasya'])
     const evernight = sim.hits.find((h) =>
