@@ -32,7 +32,7 @@
   "teammate": "Compagno {{count}}",
   "multiTarget": {
     "title": "Impostazioni obiettivi multi-ottimizzazione",
-    "info1": "Nota: puoi trovare obiettivi multi-ottimizzazione creati dalla community nel <1>Discord di GO</1> o nella <3>guida alla multi-ottimizzazione di KQM</3>, ma la validità di queste configurazioni non è garantita.",
+    "info1": "Nota: puoi trovare obiettivi multi-ottimizzazione creati dalla community nella <1>guida alla multi-ottimizzazione di KQM</1>, ma la validità di queste configurazioni non è garantita.",
     "info2": "Sta a te verificare che le impostazioni rispecchino davvero il tuo caso d'uso.",
     "addNewTarget": "Aggiungi obiettivo",
     "addNewMTarget": "Crea multi-opt",
