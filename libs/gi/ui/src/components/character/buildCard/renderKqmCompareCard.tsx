@@ -14,6 +14,7 @@ import {
   SLATE,
   WELL,
 } from './shareStyle'
+import { wrapTurns } from './wrapTurns'
 
 /** Everything the comparison card shows: team A and team B as the KQM sheet's data, and the change */
 export type KqmCompareCardData = {
@@ -66,7 +67,20 @@ export async function renderKqmCompareCard(
   const headH = 118
   const colHead = 44
   const totalsH = 2 * 52
-  const rotH = 92
+  // (each rotation over as many lines as its turns need: the taller of the two sets the height)
+  const ROT_SIZE = 18
+  const ROT_LINE = 27
+  const rotWidth = colW - 48
+  const measureCtx = page(W, 10, 1).ctx
+  measureCtx.font = `600 ${ROT_SIZE}px ${FONT}`
+  const rotLines = sides.map((s) =>
+    wrapTurns(
+      s.rotation ?? [],
+      (t) => measureCtx.measureText(t).width,
+      rotWidth
+    )
+  )
+  const rotH = 50 + Math.max(1, ...rotLines.map((l) => l.length)) * ROT_LINE
   const panelH = 20 + colHead + n * ROW + totalsH + rotH + 20
   const top = M + headH
   const H = top + panelH + M
@@ -159,9 +173,10 @@ export async function renderKqmCompareCard(
       ctx.fillRect(px, ry, pw, 1)
       face(ctx, faces[s][i], px, ry + (ROW - FACE) / 2, FACE, m.elementColor)
       const tx = px + FACE + 16
-      const textW = damageX - tx - 130
+      // (the damage figure's room: about 100 px)
+      const textW = damageX - tx - 100
       const hasGear = !!m.weapon.name
-      ink(ctx, m.name, tx, ry + (hasGear ? 36 : 50), {
+      ink(ctx, `C${m.constellation} ${m.name}`, tx, ry + (hasGear ? 36 : 50), {
         size: 21,
         weight: 700,
         maxWidth: textW,
@@ -241,21 +256,9 @@ export async function renderKqmCompareCard(
       weight: 600,
       color: SLATE,
     })
-    if (side.rotation?.length) {
-      const text = side.rotation.join('  >  ')
-      let size = 19
-      ctx.font = `600 ${size}px ${FONT}`
-      while (size > 13 && ctx.measureText(text).width > pw) {
-        size--
-        ctx.font = `600 ${size}px ${FONT}`
-      }
-      ink(ctx, text, px, y + 62, {
-        size,
-        weight: 600,
-        maxWidth: pw,
-        minSize: 12,
-      })
-    }
+    rotLines[s].forEach((line, k) =>
+      ink(ctx, line, px, y + 62 + k * ROT_LINE, { size: ROT_SIZE, weight: 600 })
+    )
   })
   return canvas
 }

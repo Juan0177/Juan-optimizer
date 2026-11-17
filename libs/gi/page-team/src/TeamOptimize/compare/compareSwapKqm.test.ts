@@ -225,7 +225,7 @@ describe('sideOf', () => {
   it('reads DPR, DPS, shares and ER from a KQM result', () => {
     const result = {
       builds: {},
-      constellations: {},
+      constellations: { Anastasya: 2 },
       energyRecharge: {
         Anastasya: { target: 130, minimum: 120, value: 135 },
         Danica: { target: 150, minimum: 150, value: 152 },
@@ -255,6 +255,7 @@ describe('sideOf', () => {
         er: 130,
         erValue: 135,
         build: undefined,
+        constellation: 2,
         fixed: false,
       },
       {
@@ -264,6 +265,7 @@ describe('sideOf', () => {
         er: 150,
         erValue: 152,
         build: undefined,
+        constellation: 0,
         fixed: true,
       },
     ])

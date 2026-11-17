@@ -423,6 +423,7 @@ describe('KqmCompare', () => {
       share: damage / 1000,
       er,
       erValue,
+      constellation: 0,
       fixed: key !== 'YaeMiko' && key !== 'Mitya',
     })
     mocks.compare.mockResolvedValue({

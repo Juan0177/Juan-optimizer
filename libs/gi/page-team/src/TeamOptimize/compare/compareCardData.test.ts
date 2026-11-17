@@ -14,6 +14,7 @@ const side = (over: Partial<Side>, keys: [string, number][]): Side => ({
     share: damage / 100000,
     er: 120,
     erValue: 121.4,
+    constellation: key === 'Danica' ? 2 : 0,
     fixed: key === 'Danica',
   })),
   ...over,
@@ -56,5 +57,37 @@ describe('compareCardData', () => {
     expect(d.swap).toEqual({ out: 'Yae Miko', in: 'Mitya' })
     expect(d.name).toBe('Team X')
     expect(d.labels.delta).toBeTruthy()
+  })
+
+  it('carries constellations', () => {
+    expect(d.a.members.map((m) => m.constellation)).toEqual([2, 0])
+  })
+  it('names the weapon and sets of a member with a build', () => {
+    const withBuild = side({}, [['Danica', 100000]])
+    withBuild.members[0].build = {
+      weapon: { key: 'WanderingEvenstar', refinement: 5 },
+      sets: { GildedDreams: 4 },
+    } as never
+    const m = compareCardData(withBuild, b, ctx).a.members[0]
+    expect(m.weapon.name).toBe('WanderingEvenstar')
+    expect(m.weapon.refinement).toBe(5)
+    expect(m.sets.map((x) => x.name)).toEqual(['GildedDreams'])
+    // (no build: no gear)
+    expect(d.a.members[0].weapon.name).toBe('')
+    expect(d.a.members[0].sets).toEqual([])
+  })
+  it('has no DPS or time when the rotation has no length', () => {
+    const r = compareCardData(
+      { ...a, rotationTime: 0, dps: 0 },
+      { ...b, rotationTime: 0, dps: 0 },
+      ctx
+    )
+    expect(r.a.dps).toBeUndefined()
+    expect(r.a.seconds).toBeUndefined()
+    expect(r.delta.dps).toBe('–')
+  })
+  it('shows a dash for the change from nothing', () => {
+    const r = compareCardData({ ...a, dpr: 0, dps: 0 }, b, ctx)
+    expect(r.delta).toEqual({ dpr: '–', dps: '–' })
   })
 })

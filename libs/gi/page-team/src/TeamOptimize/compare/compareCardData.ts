@@ -54,8 +54,7 @@ export function compareCardData(
     members: side.members.map((m) => ({
       ...kqmCardFace(m.key, gender),
       name: nameOf(m.key),
-      // (not shown on this card)
-      constellation: 0,
+      constellation: m.constellation,
       weapon: m.build
         ? {
             name: t(`weaponNames_gen:${m.build.weapon.key}`),

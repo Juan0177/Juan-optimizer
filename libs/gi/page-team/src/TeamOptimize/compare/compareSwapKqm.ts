@@ -73,6 +73,8 @@ export interface SideMember {
   /** Total ER its build reaches (%) */
   erValue: number
   build?: KqmBuild
+  /** Its constellation in the result */
+  constellation: number
   /** Holds A's build (a teammate of the swap) */
   fixed: boolean
 }
@@ -128,6 +130,7 @@ export function sideOf(
         er: energy?.target ?? 0,
         erValue: energy?.value ?? 0,
         build: result.builds[key],
+        constellation: result.constellations[key] ?? 0,
         fixed: fixed.includes(key),
       }
     }),
