@@ -12,6 +12,7 @@ import ArticleIcon from '@mui/icons-material/Article'
 import BookIcon from '@mui/icons-material/Book'
 import ConstructionIcon from '@mui/icons-material/Construction'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined'
 import GroupsIcon from '@mui/icons-material/Groups'
 import MenuIcon from '@mui/icons-material/Menu'
 import PeopleIcon from '@mui/icons-material/People'
@@ -23,6 +24,7 @@ import {
   alpha,
   Box,
   Button,
+  ButtonBase,
   Divider,
   Drawer,
   IconButton,
@@ -43,6 +45,7 @@ import { createContext, Suspense, useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link as RouterLink, useMatch } from 'react-router-dom'
 import { BetaBadge } from './BetaSiteLink'
+import { openFeedback } from './Feedback'
 import goLogo from './go_logo.svg'
 
 type NavEntry = {
@@ -567,6 +570,28 @@ function MobileHeader({
                 suffix={entry === settingsNav ? <DBChip /> : undefined}
               />
             ))}
+            {/* (phones: no floating Feedback button; it is here and in the footer) */}
+            <Divider sx={{ my: 1 }} />
+            <ButtonBase
+              onClick={() => {
+                toggle()
+                openFeedback()
+              }}
+              sx={{
+                justifyContent: 'flex-start',
+                gap: 1.5,
+                px: 1.5,
+                py: 1.25,
+                borderRadius: 2,
+                color: 'text.secondary',
+                fontSize: 15,
+                fontWeight: 600,
+                '&:hover': { color: 'text.primary' },
+              }}
+            >
+              <FeedbackOutlinedIcon />
+              {t('feedback.button', 'Feedback')}
+            </ButtonBase>
           </Box>
         </Drawer>
         <Toolbar sx={{ minHeight: '56px !important' }}>
@@ -574,10 +599,11 @@ function MobileHeader({
           <BetaBadge />
           <Box flexGrow={1} />
           <IconButton
-            color="inherit"
             aria-label={t('openMenu')}
             edge="end"
             onClick={toggle}
+            // (the menu's one way in on phones: as bright as the title)
+            sx={{ color: 'text.primary' }}
           >
             <MenuIcon />
           </IconButton>

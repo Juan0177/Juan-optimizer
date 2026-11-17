@@ -58,7 +58,8 @@ export default function InventoryCard() {
       <SectionTitle id="inventory-title">
         {t('inventoryCard.title')}
       </SectionTitle>
-      <Grid container spacing={1.5} columns={{ xs: 1, sm: 2, xl: 4 }}>
+      {/* (phones: two compact tiles a row, the counts only; the breakdowns from tablets up) */}
+      <Grid container spacing={1.5} columns={{ xs: 2, xl: 4 }}>
         <Grid item xs={1}>
           <StatTile
             to="/characters"
@@ -202,7 +203,7 @@ function StatTile({
         to={to}
         sx={{
           height: '100%',
-          p: 2,
+          p: { xs: 1.5, sm: 2 },
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'stretch',
@@ -221,12 +222,18 @@ function StatTile({
           {icon}
           <Typography sx={{ fontWeight: 600 }}>{label}</Typography>
         </Box>
-        <Typography sx={{ fontSize: '2rem', fontWeight: 650, lineHeight: 1.1 }}>
+        <Typography
+          sx={{
+            fontSize: { xs: '1.625rem', sm: '2rem' },
+            fontWeight: 650,
+            lineHeight: 1.1,
+          }}
+        >
           {count}
         </Typography>
         <Box
           sx={{
-            display: 'flex',
+            display: { xs: 'none', sm: 'flex' },
             flexWrap: 'wrap',
             gap: 1.25,
             minHeight: 22,

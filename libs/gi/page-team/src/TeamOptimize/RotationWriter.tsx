@@ -1270,7 +1270,9 @@ function WriterModal({
 
   return (
     <ModalWrapper open onClose={onClose} containerProps={{ maxWidth: 'xl' }}>
-      <CardThemed>
+      {/* (phones and tablets: the window scrolls as one; its footer stays at the bottom of the
+          screen, so the card must not clip it) */}
+      <CardThemed sx={{ overflow: { xs: 'visible', md: 'hidden' } }}>
         {/* title, the timing inspector's toggle, close */}
         <Box
           sx={{
@@ -1819,14 +1821,21 @@ function WriterModal({
         </Box>
         <Divider />
         <Box
-          sx={{
+          sx={(theme) => ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: 1,
             px: { xs: 1.5, sm: 2.5 },
             py: 1.5,
-          }}
+            // (phones and tablets: Use this rotation always in reach, not under the hit lists)
+            position: { xs: 'sticky', md: 'static' },
+            bottom: 0,
+            zIndex: 3,
+            bgcolor: 'contentNormal.main',
+            borderTop: { xs: `1px solid ${theme.palette.divider}`, md: 'none' },
+            borderRadius: { xs: '0 0 12px 12px', md: 0 },
+          })}
         >
           {timingEdited && (
             <Typography

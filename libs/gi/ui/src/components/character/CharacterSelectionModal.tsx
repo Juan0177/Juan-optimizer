@@ -35,6 +35,7 @@ import {
   useDBMeta,
 } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
+import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import CloseIcon from '@mui/icons-material/Close'
 import FavoriteIcon from '@mui/icons-material/Favorite'
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder'
@@ -467,7 +468,15 @@ function MultiSelectFooter({
             {t('multiSelect.hint')}
           </Typography>
         </Box>
-        <Button onClick={onDone}>{t('multiSelect.done')}</Button>
+        {/* (the step that applies the picks: gold once there are some) */}
+        <Button
+          variant={count ? 'contained' : 'outlined'}
+          color="inherit"
+          onClick={onDone}
+          sx={count ? { ...giCtaSx, px: 2.5 } : { px: 2.5 }}
+        >
+          {t('multiSelect.done')}
+        </Button>
       </Box>
     </>
   )
@@ -521,6 +530,8 @@ function CharacterSelectionModalBase({
 
   useEffect(() => {
     if (!show) return
+    // (not on touch screens: the keyboard would cover half the characters at once)
+    if (window.matchMedia?.('(pointer: coarse)').matches) return
     const id = requestAnimationFrame(() => searchInputRef.current?.focus())
     return () => cancelAnimationFrame(id)
   }, [show])
@@ -608,7 +619,12 @@ function CharacterSelectionModalBase({
               <CloseIcon />
             </IconButton>
           </Box>
-          <Box display="flex" gap={1}>
+          {/* (phones: the search on its own line, sorting under it) */}
+          <Box
+            display="flex"
+            gap={1}
+            sx={{ flexWrap: { xs: 'wrap', sm: 'nowrap' } }}
+          >
             <TextField
               inputRef={searchInputRef}
               value={searchTerm}
@@ -617,10 +633,14 @@ function CharacterSelectionModalBase({
               }
               label={t('characterName')}
               size="small"
-              sx={{ height: '100%', mr: 'auto' }}
+              sx={{
+                height: { xs: 'auto', sm: '100%' },
+                mr: 'auto',
+                flex: { xs: '1 1 100%', sm: '0 1 auto' },
+              }}
               inputProps={commandSearchInputProps}
               InputProps={{
-                sx: { height: '100%' },
+                sx: { height: { xs: 'auto', sm: '100%' } },
                 startAdornment: (
                   <InputAdornment position="start">
                     <SearchIcon fontSize="small" />
@@ -801,10 +821,11 @@ const MultiSelectCardWrapper = memo(function MultiSelectCardWrapper({
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
             <SqBadge
               color={'warning'}
+              // (its place in the team, at the card's top right: inside the card at any width)
               sx={{
                 position: 'absolute',
-                top: 60,
-                left: 204,
+                top: 6,
+                right: 8,
                 zIndex: 2,
                 textShadow: '0 0 5px gray',
               }}
@@ -921,7 +942,15 @@ const SelectionCard = memo(function SelectionCard({
               <SqBadge color="secondary">New</SqBadge>
             </Typography>
           )}
-          <StarsDisplay stars={rarity} colored />
+          {/* (one line at any width: smaller stars on phones) */}
+          <Box
+            sx={{
+              whiteSpace: 'nowrap',
+              '& svg': { fontSize: { xs: 15, sm: 'inherit' } },
+            }}
+          >
+            <StarsDisplay stars={rarity} colored />
+          </Box>
         </Box>
       </Box>
     </CardActionArea>
