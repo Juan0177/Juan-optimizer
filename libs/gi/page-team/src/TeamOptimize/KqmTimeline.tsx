@@ -1,15 +1,20 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
+import type { TeamOptAttack, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
   KqmBuild,
+  SimHit,
   TeamData,
+  TeamDataOverrides,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { Box } from '@mui/material'
-import { useDeferredValue, useMemo } from 'react'
+import { rotationAttacks } from '@genshin-optimizer/gi/ui'
+import { Box, Typography } from '@mui/material'
+import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AttackEditor } from './AttackEditor'
 import type { TeamBuff } from './buffs'
+import { buffsForAttacker } from './buffs'
 import { RotationTimeline } from './RotationTimeline'
 import {
   simulateWritten,
@@ -17,16 +22,47 @@ import {
   useRotationSettings,
   useRotationText,
   useSimTeam,
+  writtenSeconds,
 } from './RotationWriter'
-import { FieldLabel } from './ui'
+import { numSx, SubsectionTitle, subsectionSx, type } from './ui'
 
 /** No step of the written rotation is edited here (the timeline only shows it) */
 const NONE: ReadonlySet<number> = new Set()
+const noop = () => undefined
+/** The talent an action is (E, tE, hE: the Skill; Q: the Burst; N4: Normal Attacks…), if one */
+function talentOf(text: string) {
+  const action = text.replace(/^[a-z]+(?=[A-Z])/, '')
+  if (action.startsWith('E')) return 'skill'
+  if (action.startsWith('Q')) return 'burst'
+  if (action.startsWith('CA')) return 'charged'
+  if (action.startsWith('N')) return 'normal'
+  if (action.startsWith('P')) return 'plunging'
+  return undefined
+}
+/** An attack as one of a member's: everything but its hit count (and where it may land) */
+const sameAttack = (a: TeamOptAttack, b: TeamOptAttack) => {
+  const {
+    hits: _a,
+    limits: _al,
+    ...restA
+  } = a as TeamOptAttack & {
+    limits?: unknown
+  }
+  const {
+    hits: _b,
+    limits: _bl,
+    ...restB
+  } = b as TeamOptAttack & {
+    limits?: unknown
+  }
+  return JSON.stringify(restA) === JSON.stringify(restB)
+}
 
 /**
  * The written rotation as these builds play it, under the results: the simple timeline (each
  * member's actions, swaps and the buffs that matter), at the KQM constellations with the shown
- * builds' weapons and sets, never the members' own. A bar opens the rotation's writer.
+ * builds' weapons and sets, never the members' own. A bar opens its attack: its damage and the
+ * buffs during it.
  */
 export function KqmTimeline({
   teamId,
@@ -35,7 +71,10 @@ export function KqmTimeline({
   kqm,
   kqmBuilds,
   kqmBuffs,
-  onEdit,
+  kqmAttacks,
+  overrides,
+  onField,
+  mainStatAssumptionLevel = 0,
 }: {
   teamId: string
   members: TeamOptMember[]
@@ -44,8 +83,16 @@ export function KqmTimeline({
   /** The builds shown: their weapon and set effects are played */
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
   kqmBuffs?: TeamBuff[]
-  /** Opens the rotation's writer (a bar's step to edit) */
-  onEdit?: () => void
+  /**
+   * The run's attacks as the page lists them (played: per rotation): a bar opens its attack among
+   * these, as the rotation's member rows do
+   */
+  kqmAttacks?: Partial<Record<CharacterKey, TeamOptAttack[]>>
+  /** The KQM builds shown (an attack's figures are read with them, never the members' own) */
+  overrides?: TeamDataOverrides
+  /** Who is on the field by default */
+  onField?: CharacterKey
+  mainStatAssumptionLevel?: number
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -86,27 +133,126 @@ export function KqmTimeline({
       gender,
     ]
   )
+  // each hit of the timeline's play, its attack (the play shown, its first sample)
+  const mapping = useMemo(() => {
+    if (!result?.sim) return undefined
+    const hitAttacks = new Map<
+      SimHit,
+      { characterKey: CharacterKey; index: number }
+    >()
+    const attacks = rotationAttacks(
+      { ...result.sim, samples: undefined },
+      result.own,
+      [],
+      hitAttacks
+    )
+    return { attacks, hitAttacks }
+  }, [result])
+  // the attack a bar opened: among the run's, the one it is (else the first of its talent)
+  const [opened, setOpened] = useState<{
+    characterKey: CharacterKey
+    attack: TeamOptAttack
+  }>()
+  const openAction = ({
+    characterKey,
+    start,
+    text,
+  }: {
+    characterKey: CharacterKey
+    start: number
+    frames: number
+    text: string
+  }) => {
+    const sim = result?.sim
+    if (!sim || !mapping) return
+    // its hits: the member's from the action's start until its next action (damage lands after
+    // the action itself: projectiles, pulses, a summon's hits), the action's own talent first
+    const nextStart = Math.min(
+      sim.start + sim.frames,
+      ...sim.actions
+        .filter((x) => x.characterKey === characterKey && x.start > start)
+        .map((x) => x.start)
+    )
+    const hits = sim.hits.filter(
+      (h) =>
+        h.characterKey === characterKey &&
+        h.t >= start &&
+        h.t < nextStart &&
+        mapping.hitAttacks.has(h)
+    )
+    const talent = talentOf(text)
+    const hit = (talent && hits.find((h) => h.path[0] === talent)) ?? hits[0]
+    // (a swap, an entry or a buff with no hit of its own: nothing to open)
+    const at = hit && mapping.hitAttacks.get(hit)
+    const mine = at && mapping.attacks[at.characterKey]?.[at.index]
+    if (!mine) return
+    const listed = kqmAttacks?.[characterKey] ?? []
+    const samePath = listed.filter(
+      (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
+    )
+    const attack = samePath.find((x) => sameAttack(x, mine)) ?? samePath[0]
+    setOpened({ characterKey, attack: attack ?? mine })
+  }
   if (!result?.sim) return null
+  // (one written rotation's length, as the writer shows it)
+  const length =
+    writtenSeconds(result as NonNullable<typeof result>) ??
+    result.sim.frames / 60
   return (
-    <Box component="section" sx={{ mt: 3, minWidth: 0 }}>
-      <FieldLabel
-        tip={t(
+    <Box component="section" sx={{ ...subsectionSx, minWidth: 0 }}>
+      <SubsectionTitle
+        dense
+        actions={
+          <Typography
+            component="span"
+            sx={{ ...type.label, ...numSx, display: 'inline-flex', gap: 0.5 }}
+          >
+            {t('teamOpt.kqm.rotationLength', 'Rotation')}
+            <Box
+              component="span"
+              sx={{ color: 'text.primary', fontWeight: 650 }}
+            >
+              {length.toFixed(1)} s
+            </Box>
+          </Typography>
+        }
+        info={t(
           'teamOpt.kqm.timelineTip',
-          'The written rotation as these builds play it: each member’s actions and swaps, at the KQM constellations with these weapons and artifact sets. Pick an action to edit the rotation.'
+          'The written rotation as these builds play it: each member’s actions and swaps, at the KQM constellations with these weapons and artifact sets. Pick an attack to see its damage and the buffs during it.'
         )}
-        sx={{ mb: 0.75 }}
       >
         {t('teamOpt.kqm.timeline', 'Rotation timeline')}
-      </FieldLabel>
+      </SubsectionTitle>
       <RotationTimeline
         members={members.map((m) => m.characterKey)}
         rotation={result.rotation}
         sim={result.sim}
         edited={NONE}
-        onSelect={() => onEdit?.()}
+        onSelect={noop}
+        onAction={openAction}
         teamData={teamData}
         buffs={kqmBuffs}
       />
+      {/* the attack a bar opened: its damage and the buffs during it, as the KQM builds have them */}
+      {opened && (
+        <AttackEditor
+          open
+          readOnly
+          overrides={overrides}
+          onClose={() => setOpened(undefined)}
+          teamId={teamId}
+          characterKey={opened.characterKey}
+          data={teamData?.[opened.characterKey]?.target}
+          attack={opened.attack}
+          buffs={buffsForAttacker(kqmBuffs ?? [], opened.characterKey)}
+          mainStatAssumptionLevel={mainStatAssumptionLevel}
+          members={members}
+          onField={onField ?? opened.characterKey}
+          onChange={noop}
+          onDuplicate={noop}
+          onRemove={noop}
+        />
+      )}
     </Box>
   )
 }

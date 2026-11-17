@@ -215,6 +215,7 @@ export function RotationTimeline({
   onOpenDetail,
   pinned,
   onPin,
+  onAction,
 }: {
   /**
    * The detailed view (its own large window): the enemy's auras, every stack, resource and timed
@@ -229,6 +230,14 @@ export function RotationTimeline({
    */
   pinned?: TimelinePin
   onPin?: (pin: TimelinePin | undefined) => void
+  /** A bar pressed: its member and its frames (the attack window for it, under KQM's results) */
+  onAction?: (action: {
+    characterKey: CharacterKey
+    start: number
+    frames: number
+    /** The action as written (E, tE, N4, CA, Q…) */
+    text: string
+  }) => void
   members: CharacterKey[]
   rotation: ParsedRotation
   sim: SimulationResult
@@ -919,6 +928,12 @@ export function RotationTimeline({
                                     frame: a.start,
                                     hit: hits.find((h) => h.t === a.start),
                                   })
+                                onAction?.({
+                                  characterKey,
+                                  start: a.start,
+                                  frames: a.frames,
+                                  text: a.text,
+                                })
                                 if (index !== undefined) onSelect(index)
                               }}
                               aria-label={`${name} ${seconds(a.start - start)} s`}
@@ -1744,7 +1759,21 @@ function Readout({
           )}
     </Typography>
   )
-  if (!moment) return hint
+  // (as tall as the readout that replaces it on pointing: the timeline under it never moves)
+  if (!moment)
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          minWidth: 0,
+          flex: 1,
+          height: 28,
+        }}
+      >
+        {hint}
+      </Box>
+    )
   const hit = pointed ? hitAt(pointed) : pin?.hit
   const frame = hit && pointed ? hit.t : moment.frame
   const soFar = damage && total > 0 && (
@@ -1804,14 +1833,13 @@ function Readout({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        // (two lines at most, always as tall as two: the strip under it never moves)
-        flexWrap: 'wrap',
-        alignContent: 'center',
+        // (one line, always as tall as the hint it replaces: the chart under it never moves;
+        // what does not fit is cut, the detailed view has the rest)
+        flexWrap: 'nowrap',
         columnGap: 1.5,
-        rowGap: 0.25,
         minWidth: 0,
         flex: 1,
-        height: 46,
+        height: 28,
         overflow: 'hidden',
       }}
     >
@@ -2049,23 +2077,6 @@ function MomentPanel({
             )}
           </Box>
         )}
-        {team
-          .filter((x) => x.kind === 'steps')
-          .map((track) => (
-            <Meter
-              key={track.key}
-              track={track}
-              frame={frame}
-              teamData={teamData}
-            />
-          ))}
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, minWidth: 0 }}>
-          <BuffChips
-            tracks={team.filter((x) => x.kind === 'ribbon')}
-            frame={frame}
-            teamData={teamData}
-          />
-        </Box>
         <Box sx={{ flexGrow: 1 }} />
         {pinned && (
           <Tooltip title={t('teamOpt.timeline.unpin', 'Unpin')}>
@@ -2080,6 +2091,43 @@ function MomentPanel({
           </Tooltip>
         )}
       </Box>
+      {/* the team's own stacks and buffs (a resonance, the Polestar Field…): a row of its own */}
+      {(team.some((x) => x.kind === 'steps') ||
+        team.some((x) => x.kind === 'ribbon' && trackValueAt(x, frame))) && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            columnGap: 2,
+            rowGap: 0.75,
+            px: 1.5,
+            py: 1,
+            borderBottom: `1px solid ${tokens.hairline}`,
+          }}
+        >
+          <MomentLabel>{t('teamOpt.timeline.team', 'Team')}</MomentLabel>
+          {team
+            .filter((x) => x.kind === 'steps')
+            .map((track) => (
+              <Meter
+                key={track.key}
+                track={track}
+                frame={frame}
+                teamData={teamData}
+              />
+            ))}
+          <Box
+            sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, minWidth: 0 }}
+          >
+            <BuffChips
+              tracks={team.filter((x) => x.kind === 'ribbon')}
+              frame={frame}
+              teamData={teamData}
+            />
+          </Box>
+        </Box>
+      )}
       {/* a card a member */}
       <Box
         sx={{
@@ -2174,23 +2222,44 @@ function MomentPanel({
                   ))}
                 </Box>
               )}
-              {own
-                .filter((x) => x.kind === 'steps')
-                .map((track) => (
-                  <Meter
-                    key={track.key}
-                    track={track}
-                    frame={frame}
-                    teamData={teamData}
-                    characterKey={characterKey}
-                  />
-                ))}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                <BuffChips
-                  tracks={own.filter((x) => x.kind === 'ribbon')}
-                  frame={frame}
-                  teamData={teamData}
-                />
+              {own.some((x) => x.kind === 'steps') && (
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}
+                >
+                  {own
+                    .filter((x) => x.kind === 'steps')
+                    .map((track) => (
+                      <Meter
+                        key={track.key}
+                        track={track}
+                        frame={frame}
+                        teamData={teamData}
+                        characterKey={characterKey}
+                      />
+                    ))}
+                </Box>
+              )}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <MomentLabel>
+                  {t('teamOpt.timeline.buffsNow', 'Buffs')}
+                </MomentLabel>
+                {own.some(
+                  (x) => x.kind === 'ribbon' && trackValueAt(x, frame)
+                ) ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    <BuffChips
+                      tracks={own.filter((x) => x.kind === 'ribbon')}
+                      frame={frame}
+                      teamData={teamData}
+                    />
+                  </Box>
+                ) : (
+                  <Typography
+                    sx={{ fontSize: 12, color: 'text.secondary', opacity: 0.7 }}
+                  >
+                    {t('teamOpt.timeline.noBuffsNow', 'None now')}
+                  </Typography>
+                )}
               </Box>
             </Box>
           )
@@ -2312,12 +2381,26 @@ function BuffChips({
   const named = (x: TimelineTrack) => !x.constant || x.group === 'gear'
   const timed = up.filter(named)
   const always = up.filter((x) => !named(x))
+  // (a weapon's or set's effects are named by the item: one chip for the item, not one each)
+  const chips: TimelineTrack[][] = []
+  const byItem = new Map<string, TimelineTrack[]>()
+  for (const track of timed) {
+    const item = track.group === 'gear' ? `${track.owner}|${track.path[0]}` : ''
+    const group = item && byItem.get(item)
+    if (group) group.push(track)
+    else {
+      const next = [track]
+      if (item) byItem.set(item, next)
+      chips.push(next)
+    }
+  }
   return (
     <>
-      {timed.map((track) => (
+      {chips.map((group) => (
         <BuffChip
-          key={track.key}
-          track={track}
+          key={group[0].key}
+          track={group[0]}
+          more={group.slice(1)}
           frame={frame}
           teamData={teamData}
         />
@@ -2338,8 +2421,8 @@ function BuffChips({
             tabIndex={0}
             sx={[chipSx, { color: 'text.secondary', borderStyle: 'dashed' }]}
           >
-            {t('teamOpt.timeline.alwaysOn', {
-              defaultValue: 'Always on · {{count}}',
+            {t('teamOpt.timeline.alwaysOnMore', {
+              defaultValue: '+{{count}} always on',
               count: always.length,
             })}
           </Box>
@@ -2387,10 +2470,13 @@ function AlwaysLine({
 
 function BuffChip({
   track,
+  more = [],
   frame,
   teamData,
 }: {
   track: TimelineTrack
+  /** The item's other effects up now (its tooltip lists them) */
+  more?: TimelineTrack[]
   frame: number
   teamData: TeamData | undefined
 }) {
@@ -2405,6 +2491,9 @@ function BuffChip({
         <Suspense fallback="">
           {info.label}
           {info.title && <Box sx={{ opacity: 0.7 }}>{info.title}</Box>}
+          {more.map((other) => (
+            <MoreEffect key={other.key} track={other} teamData={teamData} />
+          ))}
         </Suspense>
       }
     >
@@ -2437,6 +2526,36 @@ function BuffChip({
         )}
       </Box>
     </Tooltip>
+  )
+}
+
+/** Another effect of the same weapon or set, in its chip's tooltip */
+function MoreEffect({
+  track,
+  teamData,
+}: {
+  track: TimelineTrack
+  teamData: TeamData | undefined
+}) {
+  const info = useTrackInfo(track, teamData)
+  return info.title ? <Box sx={{ opacity: 0.7 }}>{info.title}</Box> : null
+}
+
+/** A small label over a part of the moment's panel (Team, Stacks, Buffs) */
+function MomentLabel({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      component="span"
+      sx={{
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: '0.01em',
+        color: 'text.secondary',
+        lineHeight: 1.2,
+      }}
+    >
+      {children}
+    </Typography>
   )
 }
 

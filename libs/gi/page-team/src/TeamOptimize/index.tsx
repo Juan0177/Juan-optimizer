@@ -614,7 +614,10 @@ export default function TeamBuildWorkspace({
                 kqm={teamOpt.kqm ?? defaultTeamOptKqm}
                 kqmBuilds={kqmShown?.builds}
                 kqmBuffs={kqmBuffs}
-                onEdit={writer.openWriter}
+                kqmAttacks={kqmAttacks}
+                overrides={kqmOverrides}
+                onField={onField}
+                mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
               />
             }
             onDiscard={() => {

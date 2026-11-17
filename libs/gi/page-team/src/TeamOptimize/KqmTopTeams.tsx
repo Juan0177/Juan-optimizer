@@ -21,7 +21,15 @@ import { useTranslation } from 'react-i18next'
 import { formatGain, formatRateFull } from './format'
 import { KqmGearIcons } from './KqmBuildView'
 import { MemberAvatar } from './MemberAvatar'
-import { FieldLabel, focusSx, numSx, quickSx, tokens, type } from './ui'
+import {
+  focusSx,
+  numSx,
+  quickSx,
+  Segmented,
+  SubsectionTitle,
+  tokens,
+  type,
+} from './ui'
 
 /** Rows on the page; all of them (at most `MAX`) in the window */
 const SHOWN = 5
@@ -61,6 +69,8 @@ export function KqmTopTeams({
 }) {
   const { t } = useTranslation('page_team')
   const [open, setOpen] = useState(false)
+  // (the teams below #1 as their change only, or with every member's gear and the change lit)
+  const [allGear, setAllGear] = useState(false)
   const options = useMemo(() => kqmTopTeams(result, MAX), [result])
   if (options.length < 2) return null
   const members = result.optimized
@@ -68,7 +78,11 @@ export function KqmTopTeams({
     members.every((ck) => gearId(o.builds[ck]) === gearId(view.builds[ck]))
   )
   const title = t('teamOpt.kqm.topBuilds', 'Top builds')
-  const rows = (count: number, pick: (option: KqmTeamOption) => void) => (
+  const rows = (
+    count: number,
+    pick: (option: KqmTeamOption) => void,
+    bordered = true
+  ) => (
     <TeamRows
       options={options.slice(0, count)}
       members={members}
@@ -76,33 +90,92 @@ export function KqmTopTeams({
       rotationTime={rotationTime}
       disabled={disabled}
       onPick={pick}
+      allGear={allGear}
+      bordered={bordered}
     />
   )
   return (
-    <Box component="section" aria-label={title} sx={{ minWidth: 0 }}>
-      <FieldLabel
-        tip={t(
+    // (as tall as the card beside it: the table's box grows, its footer at the bottom)
+    <Box
+      component="section"
+      aria-label={title}
+      sx={{
+        minWidth: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <SubsectionTitle
+        info={t(
           'teamOpt.kqm.topBuildsTip',
           'The best builds, then the best that change one member’s weapon or artifact sets. Pick one to see it.'
         )}
-        sx={{ mb: 0.75 }}
+        actions={
+          <Segmented
+            size="small"
+            aria-label={t('teamOpt.kqm.topBuildsShow', 'Show')}
+            value={allGear ? 'all' : 'changes'}
+            onChange={(v) => setAllGear(v === 'all')}
+            options={[
+              {
+                value: 'changes',
+                label: t('teamOpt.kqm.topBuildsChanges', 'Changes'),
+                tip: t(
+                  'teamOpt.kqm.topBuildsChangesTip',
+                  'Below #1, only the member each team changes'
+                ),
+              },
+              {
+                value: 'all',
+                label: t('teamOpt.kqm.topBuildsAllGear', 'All gear'),
+                tip: t(
+                  'teamOpt.kqm.topBuildsAllGearTip',
+                  'Every member’s gear, the change lit in gold'
+                ),
+              },
+            ]}
+          />
+        }
       >
         {title}
-      </FieldLabel>
-      {rows(SHOWN, onPick)}
-      {options.length > SHOWN && (
-        <Button
-          size="small"
-          onClick={() => setOpen(true)}
-          aria-haspopup="dialog"
-          sx={{ mt: 0.5, color: 'text.secondary', textTransform: 'none' }}
-        >
-          {t('teamOpt.kqm.topBuildsAll', {
-            defaultValue: 'Show top {{count}}',
-            count: options.length,
-          })}
-        </Button>
-      )}
+      </SubsectionTitle>
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          border: `1px solid ${tokens.hairlineStrong}`,
+          borderRadius: tokens.radius.inset,
+          overflow: 'hidden',
+          minWidth: 0,
+        }}
+      >
+        {rows(SHOWN, onPick, false)}
+        {options.length > SHOWN && (
+          <Box
+            sx={{
+              mt: 'auto',
+              borderTop: `1px solid ${tokens.hairline}`,
+              display: 'flex',
+              justifyContent: 'center',
+              py: 0.5,
+            }}
+          >
+            <Button
+              size="small"
+              onClick={() => setOpen(true)}
+              aria-haspopup="dialog"
+              sx={{ color: 'text.secondary', textTransform: 'none' }}
+            >
+              {t('teamOpt.kqm.topBuildsAll', {
+                defaultValue: 'Show top {{count}}',
+                count: options.length,
+              })}
+            </Button>
+          </Box>
+        )}
+      </Box>
       {open && (
         <ModalWrapper
           open
@@ -163,7 +236,13 @@ function TeamRows({
   rotationTime,
   disabled,
   onPick,
+  allGear,
+  bordered = true,
 }: {
+  /** Every member's gear (the change lit), not only the change */
+  allGear?: boolean
+  /** Its own border (the page's sits in a box with a footer) */
+  bordered?: boolean
   options: KqmTeamOption[]
   members: CharacterKey[]
   /** The row of the team shown now (−1: none) */
@@ -197,8 +276,10 @@ function TeamRows({
         display: 'grid',
         gridTemplateColumns: columns,
         columnGap: { xs: 0.5, sm: 1.5 },
-        border: `1px solid ${tokens.hairlineStrong}`,
-        borderRadius: tokens.radius.inset,
+        ...(bordered && {
+          border: `1px solid ${tokens.hairlineStrong}`,
+          borderRadius: tokens.radius.inset,
+        }),
         overflowX: 'auto',
         overflowY: 'hidden',
       }}
@@ -299,7 +380,7 @@ function TeamRows({
                     alignItems: 'center',
                   }}
                 >
-                  {option.changed && !changed ? (
+                  {option.changed && !changed && !allGear ? (
                     // a member as in the best team (#1, above): a quiet dash, so the change stands out
                     <Tooltip
                       arrow

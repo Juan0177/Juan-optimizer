@@ -21,6 +21,7 @@ import {
 import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { KeyMap } from '@genshin-optimizer/gi/keymap'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   BuffRef,
   StatGain,
@@ -46,7 +47,6 @@ import {
   teamOptBonusStats,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
-import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import { uiInput } from '@genshin-optimizer/gi/wr'
 import AddIcon from '@mui/icons-material/Add'
@@ -63,6 +63,7 @@ import {
   ButtonBase,
   Checkbox,
   IconButton,
+  LinearProgress,
   ListItem,
   MenuItem,
   Select,
@@ -919,6 +920,16 @@ function BuffList({
     setEdited(true)
     onChange(next)
   }
+  // Until that is decided the list is not shown (it would fold in front of the user a moment
+  // later): what is being worked out instead, with its progress. After a few seconds it shows
+  // anyway, should one buff be slow.
+  const [waited, setWaited] = useState(false)
+  useEffect(() => {
+    const timer = setTimeout(() => setWaited(true), 8000)
+    return () => clearTimeout(timer)
+  }, [])
+  const deciding = !idle && !edited && !waited && inUse.length > 0
+  const checked = inUse.filter((b) => impacts[b.key]).length
   // the attacker's own buffs first, then each teammate's, then the team's
   const owners = useMemo(
     () => [
@@ -1019,6 +1030,44 @@ function BuffList({
         >
           {t('teamOpt.editor.noBuffsShort', 'No buffs are on in this team')}
         </EmptyLine>
+      ) : deciding ? (
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              ...type.label,
+            }}
+          >
+            {t('teamOpt.editor.checkingBuffs', {
+              defaultValue:
+                'Checking each buff on this attack… {{done}}/{{total}}',
+              done: checked,
+              total: inUse.length,
+            })}
+            <LinearProgress
+              variant="determinate"
+              value={(checked / inUse.length) * 100}
+              sx={{ flex: 1, maxWidth: 220, height: 3, borderRadius: 2 }}
+            />
+          </Box>
+          {[0, 1, 2].map((i) => (
+            <Skeleton
+              key={i}
+              variant="rounded"
+              height={58}
+              sx={{
+                borderRadius: tokens.radius.inset,
+                opacity: 0.5 - i * 0.12,
+              }}
+            />
+          ))}
+        </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {groups(shown)}

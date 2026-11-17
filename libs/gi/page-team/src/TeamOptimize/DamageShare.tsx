@@ -14,7 +14,7 @@ import { type ReactNode, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
-import { FieldLabel, numSx, tokens, type } from './ui'
+import { numSx, SubsectionTitle, tokens, type } from './ui'
 
 /** A part of the whole: who or what dealt it, its colour, its damage */
 interface Slice {
@@ -167,21 +167,29 @@ export function DamageShare({
     <Box
       component="section"
       aria-label={t('teamOpt.kqm.share', 'Damage share')}
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+      }}
     >
-      <FieldLabel
-        tip={t(
+      <SubsectionTitle
+        info={t(
           'teamOpt.kqm.shareTip',
           'How the team’s damage splits: by who deals it, and by the element it deals (a reaction’s damage counts as its element, Lunar-Charged as Electro).'
         )}
-        sx={{ mb: 0.75 }}
       >
         {t('teamOpt.kqm.share', 'Damage share')}
-      </FieldLabel>
+      </SubsectionTitle>
       <Box
         sx={{
           border: `1px solid ${tokens.hairlineStrong}`,
           borderRadius: tokens.radius.inset,
           p: { xs: 1.5, sm: 2 },
+          // (as tall as the table beside it, its rings in the middle)
+          flex: 1,
+          alignContent: 'center',
           display: 'grid',
           gap: { xs: 2.5, sm: 2 },
           gridTemplateColumns: 'minmax(0, 1fr)',
