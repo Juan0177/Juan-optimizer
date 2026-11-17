@@ -37,7 +37,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   FieldLabel,
@@ -74,13 +74,23 @@ export function EnemyPanel({ teamId }: { teamId: string }) {
   const { t } = useTranslation('page_team')
   const team = useTeam(teamId)
   const applied = team && appliedStygianPreset(team)
+  const database = useDatabase()
   const [mode, setMode] = useState<Mode>(applied ? 'stygian' : 'custom')
+  // Custom: the enemy is the team's own from now on (the boss's numbers, to edit); a boss is set
+  // by picking one in the catalogue
+  const pickMode = (next: Mode) => {
+    setMode(next)
+    if (next === 'custom' && team?.enemyPreset)
+      database.teams.set(teamId, (team) => {
+        delete team.enemyPreset
+      })
+  }
   if (!team) return null
   return (
     <Box sx={{ display: 'grid', gap: 2, minWidth: 0 }}>
       <Segmented
         value={mode}
-        onChange={setMode}
+        onChange={pickMode}
         aria-label={t('enemy.mode', 'How the enemy is set')}
         options={[
           { value: 'custom', label: t('enemy.custom', 'Custom RES') },
@@ -736,10 +746,6 @@ function BossDetail({
     defaultValue: [],
   }) as { name: string; text: string }[]
   const lore = t(`stygian:lore.${boss.id}`, { defaultValue: '' })
-  const levels = useMemo(
-    () => Object.fromEntries(stygianDifficulties.map((d) => [d.key, d.level])),
-    []
-  )
   return (
     <Box
       sx={(theme) => ({
@@ -778,11 +784,11 @@ function BossDetail({
             {difficulty === 'fearless'
               ? t('enemy.fearlessShort', {
                   defaultValue: 'Fearless, Lv. {{level}}',
-                  level: levels.fearless,
+                  level: levelOf('fearless'),
                 })
               : t('enemy.direShort', {
                   defaultValue: 'Dire, Lv. {{level}}',
-                  level: levels.dire,
+                  level: levelOf('dire'),
                 })}
           </Typography>
           {(tags.good || tags.bad) && (

@@ -1,7 +1,9 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
-import { Box } from '@mui/material'
+import { giCtaSx } from '@genshin-optimizer/gi/theme'
+import { Box, Button } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { DialogHead, floatSx } from '../TeamOptimize/OptionTile'
+import { hairline } from '../TeamOptimize/ui'
 import { EnemyPanel } from './EnemyPanel'
 
 /** The team's enemy, in a window: set by hand, or a Stygian Onslaught boss from its catalogue */
@@ -28,6 +30,24 @@ export function EnemyDialog({
           }}
         >
           <EnemyPanel teamId={teamId} />
+        </Box>
+        {/* (what is changed applies at once: done closes it) */}
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            px: { xs: 1.5, sm: 2.5 },
+            py: 1.5,
+            borderTop: hairline,
+          }}
+        >
+          <Button
+            variant="contained"
+            onClick={onClose}
+            sx={{ ...giCtaSx, px: 3 }}
+          >
+            {t('enemy.done', 'Done')}
+          </Button>
         </Box>
       </CardThemed>
     </ModalWrapper>
