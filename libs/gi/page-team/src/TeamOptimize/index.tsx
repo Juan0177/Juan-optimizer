@@ -1028,25 +1028,23 @@ function RunBar({
   const running = state.type === 'running' || kqmRunning
   // (members on a TC build are kept as they are: Team optimize picks real artifacts)
   const tcCount = members.filter((m) => m.isTc).length
+  // can't run at all: nothing to play, or nothing it could ever optimize
   const blocked = !attackCount
     ? t('teamOpt.run.noAttacks', 'Add the rotation’s attacks first.')
-    : optimizable.length
-      ? undefined
-      : tcCount === members.length
-        ? t(
-            'teamOpt.run.allTc',
-            'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
-          )
-        : tcCount
-          ? t('teamOpt.run.allKeptTc', {
-              defaultValue:
-                'Every member’s build is kept ({{count}} on TC builds, the others switched off in Optimize team): nothing to optimize.',
-              count: tcCount,
-            })
-          : t(
-              'teamOpt.run.allKept',
-              'Every member’s build is kept: nothing to optimize.'
-            )
+    : tcCount === members.length
+      ? t(
+          'teamOpt.run.allTc',
+          'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
+        )
+      : undefined
+  // every member switched off: the button still opens Optimize team, where they are switched on
+  const allOff =
+    !blocked && !optimizable.length
+      ? t(
+          'teamOpt.run.allSwitchedOff',
+          'Every member is switched off: turn members on in Optimize team.'
+        )
+      : undefined
 
   return (
     <Box
@@ -1117,18 +1115,20 @@ function RunBar({
               sx={{
                 ...type.body,
                 ...numSx,
-                fontWeight: blocked ? 400 : 500,
-                color: blocked ? 'text.secondary' : 'text.primary',
+                fontWeight: blocked || allOff ? 400 : 500,
+                color: blocked || allOff ? 'text.secondary' : 'text.primary',
                 fontSize: { xs: 13.5, sm: 14 },
                 lineHeight: 1.35,
-                // (one line; a reason may take two on phones)
+                // (one line; a reason it can't run may take more)
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: { xs: 2, sm: 1 },
+                WebkitLineClamp:
+                  blocked || allOff ? { xs: 4, sm: 2 } : { xs: 2, sm: 1 },
                 overflow: 'hidden',
               }}
             >
               {blocked ??
+                allOff ??
                 t('teamOpt.run.toOptimize', {
                   defaultValue: '{{count}} of {{total}} to optimize',
                   count: optimizable.length,

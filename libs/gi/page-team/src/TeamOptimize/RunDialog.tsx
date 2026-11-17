@@ -206,11 +206,13 @@ export function RunDialog({
           <Button
             variant="contained"
             startIcon={<TrendingUpIcon />}
+            // (no member switched on: nothing to optimize yet)
+            disabled={!optimized}
             onClick={() => {
               onClose()
               onStart()
             }}
-            sx={{ ...giCtaSx, px: 2.25 }}
+            sx={[{ px: 2.25 }, !!optimized && giCtaSx]}
           >
             {t('teamOpt.runDialog.start', 'Start')}
           </Button>
