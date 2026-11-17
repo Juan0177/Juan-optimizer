@@ -637,7 +637,7 @@ describe('KQM Standards builds', () => {
       expect(ten.after.members[k]!).toBeGreaterThan(nine.after.members[k]!)
   }, 300_000)
 
-  it('uses C6 for 4★ and C0 for 5★ and the chosen talents (10/10/10) in search, rankings and evaluation without changing saved characters', async () => {
+  it("uses C6 for 4★, C1 for the free constellation event's limited 5★ (C2 standard, else C0) and the chosen talents (10/10/10) in search, rankings and evaluation without changing saved characters", async () => {
     const { database, teamId, teamOpt } = setup()
     database.chars.set(ayaka, { constellation: 6, level: 40, ascension: 2 })
     const fischl: CharacterKey = 'Fischl'
@@ -667,16 +667,21 @@ describe('KQM Standards builds', () => {
     const snapshot = JSON.stringify(database.chars.values)
     const result = (await run(database, teamId, teamOpt))!
     expect(result.after.members[fischl]).toBeGreaterThan(0)
-    expect(kqmConstellation(ayaka)).toBe(0)
+    // (Ayaka and Shenhe are in the free constellation event: C1; standard 5★ C2; others C0)
+    expect(kqmConstellation(ayaka)).toBe(1)
     expect(kqmConstellation(fischl)).toBe(6)
+    expect(kqmConstellation('Diluc')).toBe(2)
+    expect(kqmConstellation('YumemizukiMizuki')).toBe(2)
+    expect(kqmConstellation('Furina')).toBe(0)
     expect(result.constellations).toEqual({
-      [ayaka]: 0,
-      [shenhe]: 0,
+      [ayaka]: 1,
+      [shenhe]: 1,
       [fischl]: 6,
     })
     expect(JSON.stringify(database.chars.values)).toBe(snapshot)
     // The same run with the saved characters already at the standards gives identical output.
-    database.chars.set(ayaka, { constellation: 0, level: 90, ascension: 6 })
+    database.chars.set(ayaka, { constellation: 1, level: 90, ascension: 6 })
+    database.chars.set(shenhe, { constellation: 1 })
     database.chars.set(fischl, {
       constellation: 6,
       talent: { auto: 10, skill: 10, burst: 10 },
@@ -697,7 +702,7 @@ describe('KQM Standards builds', () => {
     expect(chosen.after.members[ayaka]).toBeGreaterThan(
       standard.after.members[ayaka]
     )
-    expect(database.chars.get(ayaka)?.constellation).toBe(0)
+    expect(database.chars.get(ayaka)?.constellation).toBe(1)
     expect(
       kqmMemberConstellation(ayaka, { constellations: { [ayaka]: 2 } })
     ).toBe(2)
@@ -706,7 +711,7 @@ describe('KQM Standards builds', () => {
     // Team optimize's kept members still get a KQM build, at the KQM constellation
     database.chars.set(ayaka, { constellation: 6 })
     const kept = (await run(database, teamId, { ...teamOpt, keep: [ayaka] }))!
-    expect(kept.constellations[ayaka]).toBe(0)
+    expect(kept.constellations[ayaka]).toBe(1)
     expect(kept.builds[ayaka]).toBeDefined()
   }, 300_000)
 
