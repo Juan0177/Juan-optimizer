@@ -23,6 +23,7 @@ import './App.scss'
 import { getAppStorage } from '@genshin-optimizer/common/database'
 import { useDatabases } from '@genshin-optimizer/common/database-ui'
 import ErrorBoundary from './ErrorBoundary'
+import { FeedbackButton } from './Feedback'
 import Footer from './Footer'
 import Header from './Header'
 import { SaveErrorNotice } from './SaveErrorNotice'
@@ -194,6 +195,7 @@ function App() {
                 <NavigationProgress />
                 <Content />
                 <ScrollTop />
+                <FeedbackButton />
               </HashRouter>
               <SaveErrorNotice />
             </ErrorBoundary>
