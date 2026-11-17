@@ -6,8 +6,10 @@ import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { TeamOptAttack, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
+  ElectroHits,
   FightTeam,
   KqmBuild,
+  SimHit,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
@@ -24,12 +26,68 @@ import {
   useSimTeam,
 } from './RotationWriter'
 
+/** What the team's written rotation does to the enemy, per second */
+export interface FightApplications {
+  /** Gauge units applied, by element: its hits that apply it through their ICD */
+  gauge: Partial<Record<ElementWithPhyKey, number>>
+  /** Its Electro hits, by what each takes off Wavebinder's Courage */
+  electroHits: ElectroHits
+}
+
 /**
- * The gauge units the team's written rotation applies per second, by element: its hits that
- * apply their element through their ICD (as the reactions count them). No written rotation (or
- * `enabled` off): undefined.
+ * A played rotation's hits, per second: the gauge units each element applies through its ICD, and
+ * its Electro hits by what each takes off Wavebinder's Courage
  */
-export function useRotationGauge(
+export function applicationsOf(
+  hits: readonly SimHit[],
+  frames: number
+): FightApplications {
+  const passes = icdTracker()
+  const units: Partial<Record<ElementWithPhyKey, number>> = {}
+  const electro = { stellar: 0, units: 0, plain: 0 }
+  for (const hit of [...hits].sort((a, b) => a.t - b.t)) {
+    if (hit.path[0] === '_marker') continue
+    const weight = hit.weight ?? 1
+    // (an Electro hit: Stellar Glimmer DMG, or one applying its element, or none)
+    const isElectro = hit.element === 'electro'
+    const stellar =
+      isElectro &&
+      (hit.tag === 'directStellarConduct' || hit.tag === 'directStellarSwirl')
+    if (stellar) electro.stellar += weight
+    const durability = hit.durability ?? 25
+    if (
+      !hit.applies ||
+      hit.element === 'physical' ||
+      durability <= 0 ||
+      !passes(hit)
+    ) {
+      if (isElectro && !stellar) electro.plain += weight
+      continue
+    }
+    units[hit.element] = (units[hit.element] ?? 0) + (durability / 25) * weight
+    // (the game counts its durability in steps of 1U, at most 4U)
+    if (isElectro && !stellar)
+      electro.units += Math.min(4, Math.ceil(durability / 25)) * weight
+  }
+  const seconds = frames / 60
+  return {
+    gauge: Object.fromEntries(
+      Object.entries(units).map(([e, u]) => [e, u / seconds])
+    ) as Partial<Record<ElementWithPhyKey, number>>,
+    electroHits: {
+      stellar: electro.stellar / seconds,
+      units: electro.units / seconds,
+      plain: electro.plain / seconds,
+    },
+  }
+}
+
+/**
+ * The team's written rotation, played: the gauge units it applies per second, by element (its hits
+ * that apply their element through their ICD, as the reactions count them), and its Electro hits
+ * by kind. No written rotation (or `enabled` off): undefined.
+ */
+export function useRotationApplications(
   teamId: string,
   members: TeamOptMember[],
   enabled: boolean,
@@ -64,23 +122,11 @@ export function useRotationGauge(
       })
       const sim = played?.sim
       if (!sim || sim.frames <= 0) return undefined
-      const passes = icdTracker()
-      const units: Partial<Record<ElementWithPhyKey, number>> = {}
-      for (const hit of [...sim.hits].sort((a, b) => a.t - b.t)) {
-        if (!hit.applies || hit.element === 'physical') continue
-        const durability = hit.durability ?? 25
-        if (durability <= 0 || !passes(hit)) continue
-        units[hit.element] =
-          (units[hit.element] ?? 0) + (durability / 25) * (hit.weight ?? 1)
-      }
-      const seconds = sim.frames / 60
-      return Object.fromEntries(
-        Object.entries(units).map(([e, u]) => [e, u / seconds])
-      ) as Partial<Record<ElementWithPhyKey, number>>
+      return applicationsOf(sim.hits, sim.frames)
     } catch (e) {
       // (a rotation that cannot be played: no applications counted)
       if (process.env['NODE_ENV'] === 'development')
-        console.warn('[fight] rotation gauge', e)
+        console.warn('[fight] rotation applications', e)
       return undefined
     }
   }, [
@@ -99,9 +145,24 @@ export function useRotationGauge(
 }
 
 /**
+ * Attacks dealing Stellar Glimmer (Stellar-Conduct) Electro DMG, as the kits deal them (their hits
+ * tagged directStellarConduct, Electro): an attack entered by hand does not say so itself
+ */
+const ELECTRO_STELLAR: Partial<Record<CharacterKey, string>> = {
+  Cyno: 'passive1.boltStellarDmg',
+  Danica: 'skill.onFieldDmg skill.entryDmg burst.hit1ScDmg burst.hit5ScDmg',
+  Mitya:
+    'skill.tapDmg skill.holdDmg skill.steadyConsumeDmg skill.steadyDetonateDmg charged.gradientStellarDmg constellation4.dmg',
+  YaeMiko: 'lockedPassive.dmg passive1.stellarDmg',
+}
+export const electroStellarAttack = (ck: CharacterKey, attack: TeamOptAttack) =>
+  ELECTRO_STELLAR[ck]?.split(' ').includes(attack.path.join('.')) ?? false
+
+/**
  * The team in a fight, from an evaluation of its rotation: its DPS by element (each attack's
  * element from the members' data), the enemy's RES it was computed at, before and after the
- * team's shred, and its element applications
+ * team's shred, and its element applications (the written rotation's; without one, its Electro
+ * hits estimated from the attacks entered)
  */
 export function fightTeamOf({
   members,
@@ -110,7 +171,7 @@ export function fightTeamOf({
   teamData,
   rotationTime,
   enemyOverride,
-  gauge,
+  applications,
 }: {
   members: CharacterKey[]
   evaluation: TeamOptEvaluation | undefined
@@ -118,16 +179,23 @@ export function fightTeamOf({
   teamData: TeamData | undefined
   rotationTime: number | undefined
   enemyOverride: Partial<Record<string, number>>
-  gauge?: Partial<Record<ElementWithPhyKey, number>>
+  applications?: FightApplications
 }): FightTeam | undefined {
   if (!evaluation || !rotationTime || !teamData) return undefined
   const dps: Partial<Record<ElementWithPhyKey, number>> = {}
+  // (its Electro hits per rotation: Stellar Glimmer DMG, and the others)
+  let stellarHits = 0
+  let electroHits = 0
   for (const ck of members) {
     const damage = evaluation.attacks?.[ck] ?? []
     ;(attacks[ck] ?? []).forEach((attack, i) => {
+      const element = attackElement(teamData, ck, attack) as ElementWithPhyKey
+      if (element === 'electro') {
+        if (electroStellarAttack(ck, attack)) stellarHits += attack.hits
+        else electroHits += attack.hits
+      }
       const value = damage[i] ?? 0
       if (value <= 0) return
-      const element = attackElement(teamData, ck, attack) as ElementWithPhyKey
       dps[element] = (dps[element] ?? 0) + value / rotationTime
     })
   }
@@ -145,5 +213,20 @@ export function fightTeamOf({
       return [e, typeof v === 'number' && Number.isFinite(v) ? v : baseRes[e]]
     })
   ) as Record<ElementWithPhyKey, number>
-  return { dps, baseRes, effRes, ...(gauge ? { gauge } : {}) }
+  return {
+    dps,
+    baseRes,
+    effRes,
+    ...(applications
+      ? { gauge: applications.gauge, electroHits: applications.electroHits }
+      : {
+          // (no written rotation: every 3rd other hit applying 1U, as the standard ICD lets it)
+          electroHits: {
+            stellar: stellarHits / rotationTime,
+            units: electroHits / 3 / rotationTime,
+            plain: (electroHits * 2) / 3 / rotationTime,
+            estimated: true,
+          },
+        }),
+  }
 }

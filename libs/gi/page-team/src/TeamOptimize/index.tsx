@@ -54,7 +54,7 @@ import { kqmTheorycraftingEnabled } from '../featureFlags'
 import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
 import { EnemyRow } from './EnemyRow'
 import { ExtraBuffs } from './ExtraBuffs'
-import { fightTeamOf, useRotationGauge } from './fightTeam'
+import { fightTeamOf, useRotationApplications } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { KqmTimeline } from './KqmTimeline'
@@ -267,7 +267,7 @@ export default function TeamBuildWorkspace({
   // counted where they are known (with the written rotation's element applications); an enemy set
   // by hand, its HP ÷ the team's DPS
   const stygian = team && appliedStygianPreset(team)
-  const gauge = useRotationGauge(
+  const applications = useRotationApplications(
     teamId,
     members,
     !!stygian && stygianFightModelled(stygian.boss.id),
@@ -286,7 +286,7 @@ export default function TeamBuildWorkspace({
             rotationTime:
               mode === 'kqm' ? (kqmRotationTime ?? rotationTime) : rotationTime,
             enemyOverride: team.enemyOverride,
-            gauge,
+            applications,
           })
         : undefined,
     [
@@ -301,7 +301,7 @@ export default function TeamBuildWorkspace({
       teamData,
       kqmRotationTime,
       rotationTime,
-      gauge,
+      applications,
     ]
   )
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
@@ -730,7 +730,7 @@ export default function TeamBuildWorkspace({
             now={teamOpt}
             enemy={kqmResult.enemy}
             enemyNow={enemyChanged(kqmResult.enemy) ? team : undefined}
-            gauge={gauge}
+            applications={applications}
             onView={setKqmView}
             teamData={teamData}
             timeline={
@@ -796,7 +796,7 @@ export default function TeamBuildWorkspace({
             }
             enemy={result.enemy}
             enemyNow={enemyChanged(result.enemy) ? team : undefined}
-            gauge={gauge}
+            applications={applications}
             onRunAgain={() => setRunDialog(true)}
           />
         </Box>

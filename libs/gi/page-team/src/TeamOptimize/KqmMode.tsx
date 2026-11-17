@@ -79,6 +79,7 @@ import { useTranslation } from 'react-i18next'
 import { EnemySetup } from '../Enemy/EnemySetup'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { DamageShare } from './DamageShare'
+import type { FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
 import { formatRateFull } from './format'
 import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
@@ -2015,12 +2016,12 @@ export function KqmResults({
   timeline,
   enemy,
   enemyNow,
-  gauge,
+  applications,
 }: {
   teamId: string
   runSettings: TeamOpt
   /** The written rotation's element applications per second (a Stygian boss's mechanics) */
-  gauge?: FightTeam['gauge']
+  applications?: FightApplications
   /** The enemy it was found for (absent: found before this was kept) */
   enemy?: RunEnemy
   /** The team's enemy now, when it is not the same */
@@ -2091,7 +2092,7 @@ export function KqmResults({
         teamData,
         rotationTime,
         enemyOverride: enemy.enemyOverride,
-        gauge,
+        applications,
       }),
     [
       enemy,
@@ -2100,7 +2101,7 @@ export function KqmResults({
       runSettings.attacks,
       teamData,
       rotationTime,
-      gauge,
+      applications,
     ]
   )
   useEffect(() => onView?.(view), [onView, view])

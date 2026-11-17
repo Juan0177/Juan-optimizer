@@ -19,7 +19,6 @@ import {
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
-  FightTeam,
   RunEnemy,
   TeamData,
   TeamOptMember,
@@ -72,6 +71,7 @@ import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
+import type { FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
@@ -108,11 +108,11 @@ export function TeamOptResults({
   onRunAgain,
   enemy,
   enemyNow,
-  gauge,
+  applications,
 }: {
   teamId: string
   /** The written rotation's element applications per second (a Stygian boss's mechanics) */
-  gauge?: FightTeam['gauge']
+  applications?: FightApplications
   members: TeamOptMember[]
   result: TeamOptResult
   seconds: number
@@ -154,9 +154,17 @@ export function TeamOptResults({
         teamData,
         rotationTime,
         enemyOverride: enemy.enemyOverride,
-        gauge,
+        applications,
       }),
-    [enemy, members, after, runTeamOpt.attacks, teamData, rotationTime, gauge]
+    [
+      enemy,
+      members,
+      after,
+      runTeamOpt.attacks,
+      teamData,
+      rotationTime,
+      applications,
+    ]
   )
   const { gender } = useDBMeta()
   const gain = before.total > 0 ? after.total / before.total - 1 : 0
