@@ -222,6 +222,57 @@ const snapshot = (s: Awaited<ReturnType<typeof setup>>) => ({
   storage: storageKeys(s.teamId).map((k) => localStorage.getItem(k)),
 })
 
+type Outcome = Exclude<
+  Awaited<ReturnType<typeof compareSwapKqm>>,
+  { error: unknown }
+>
+type Preview = Pick<Outcome, 'a' | 'b' | 'resultB'>
+
+/**
+ * B's result as KQM Theorycrafting's: the entering member's rankings (weapons and sets), it
+ * alone ranked; its teammates' builds A's; the headline delivered first; B's sandbox and settings
+ */
+function expectRankedB(
+  s: Awaited<ReturnType<typeof setup>>,
+  out: Outcome,
+  previews: Preview[]
+) {
+  const { resultB, sandbox, teamOptB } = out
+  expect(resultB.optimized).toEqual(['Mitya'])
+  expect(Object.keys(resultB.rankings)).toEqual(['Mitya'])
+  const ranking = resultB.rankings.Mitya!
+  expect(ranking.weapons.length).toBeGreaterThan(0)
+  expect(ranking.sets.length).toBeGreaterThan(0)
+  for (const option of [...ranking.weapons, ...ranking.sets])
+    expect(option.total).toBeGreaterThan(0)
+  const savedBuilds = (s.saved.run.result as unknown as KqmResult).builds
+  for (const k of FIXED) expect(resultB.builds[k]).toEqual(savedBuilds[k])
+  expect(resultB.builds.Mitya).toEqual(
+    out.b.members.find((m) => m.key === 'Mitya')!.build
+  )
+  // the headline first, its rankings not yet
+  expect(previews).toHaveLength(1)
+  const [preview] = previews
+  expect(preview.resultB.rankings).toEqual({})
+  expect(preview.resultB.optimized).toEqual(['Mitya'])
+  expect(preview.resultB.builds).toEqual(resultB.builds)
+  expect(preview.a).toEqual(out.a)
+  expect(preview.b).toEqual(out.b)
+  // B's copy of the database, its team with the entering member, for the inspector
+  expect(sandbox).not.toBe(s.database)
+  expect(teamOptMembers(sandbox, s.teamId).map((m) => m.characterKey)).toEqual([
+    'Anastasya',
+    'Mitya',
+    'Odette',
+    'Danica',
+  ])
+  expect(
+    teamOptMembers(s.database, s.teamId).map((m) => m.characterKey)
+  ).toEqual(MEMBERS)
+  expect(sandbox.teams.get(s.teamId)?.teamOpt).toEqual(teamOptB)
+  expect(teamOptB.kqm?.constellations?.YaeMiko).toBeUndefined()
+}
+
 describe('sideOf', () => {
   it('reads DPR, DPS, shares and ER from a KQM result', () => {
     const result = {
@@ -287,10 +338,20 @@ describe('compareSwapKqm', () => {
   it('runs on a copy: no writes, the fixed members keep their builds', async () => {
     const s = await setup()
     const before = snapshot(s)
-    const out = await compareSwapKqm(argsOf(s))
+    const previews: Preview[] = []
+    let resolved = false
+    const out = await compareSwapKqm({
+      ...argsOf(s),
+      onPreview: (p) => {
+        expect(resolved).toBe(false)
+        previews.push(p)
+      },
+    })
+    resolved = true
     expect(snapshot(s)).toEqual(before)
     expect(s.database.teamKqmResults.getRun(s.teamId)).toEqual(s.saved)
     if ('error' in out) throw new Error(out.error)
+    expectRankedB(s, out, previews)
     const { a, b } = out
     expect(a.members.map((m) => m.key)).toEqual(MEMBERS)
     expect(b.members.map((m) => m.key)).toEqual([
@@ -323,12 +384,15 @@ describe('compareSwapKqm', () => {
   it('searches the entering member’s weapon and sets when both are auto', async () => {
     const s = await setup()
     const before = snapshot(s)
+    const previews: Preview[] = []
     const out = await compareSwapKqm({
       ...argsOf(s),
       swapIn: { ...MITYA, weapon: 'auto', sets: 'auto' },
+      onPreview: (p) => previews.push(p),
     })
     expect(snapshot(s)).toEqual(before)
     if ('error' in out) throw new Error(out.error)
+    expectRankedB(s, out, previews)
     const savedBuilds = (s.saved.run.result as unknown as KqmResult).builds
     for (const m of out.b.members.filter((m) => FIXED.includes(m.key)))
       expect(m.build).toEqual(savedBuilds[m.key])
@@ -370,20 +434,48 @@ describe('compareSwapKqm', () => {
       await compareSwapKqm({ ...argsOf(s), isCancelled: () => true })
     ).toEqual({ error: 'cancelled' })
     expect(snapshot(s)).toEqual(before)
-    // (cancelled while the search runs)
+    // (cancelled while the search runs: before the headline)
     for (const swapIn of [MITYA, { ...MITYA, weapon: 'auto', sets: 'auto' }]) {
       let calls = 0
+      let previewed = false
       expect(
         await compareSwapKqm({
           ...argsOf(s),
           swapIn: swapIn as SwapIn,
-          isCancelled: () => ++calls > 3,
+          isCancelled: () => ++calls > 2,
+          onPreview: () => {
+            previewed = true
+          },
         })
       ).toEqual({ error: 'cancelled' })
-      expect(calls).toBeGreaterThan(3)
+      expect(calls).toBeGreaterThan(2)
+      expect(previewed).toBe(false)
     }
     expect(snapshot(s)).toEqual(before)
   }, 60_000)
+
+  it('keeps the headline when cancelled after it: no rankings, no error', async () => {
+    const s = await setup()
+    const before = snapshot(s)
+    for (const swapIn of [MITYA, { ...MITYA, weapon: 'auto', sets: 'auto' }]) {
+      let preview: Preview | undefined
+      const out = await compareSwapKqm({
+        ...argsOf(s),
+        swapIn: swapIn as SwapIn,
+        onPreview: (p) => {
+          preview = p
+        },
+        isCancelled: () => !!preview,
+      })
+      if ('error' in out) throw new Error(out.error)
+      expect(preview).toBeDefined()
+      expect(out.resultB.rankings).toEqual({})
+      expect(out.resultB.builds).toEqual(preview!.resultB.builds)
+      expect(out.b).toEqual(preview!.b)
+      expect(out.sandbox).not.toBe(s.database)
+    }
+    expect(snapshot(s)).toEqual(before)
+  }, 300_000)
 
   it('leaves an existing build or a mixed weapon/sets choice unsupported', async () => {
     const s = await setup()

@@ -461,6 +461,11 @@ export default function KqmCompare({
         fragment,
         onStep,
         isCancelled: () => mine.cancelled,
+        // (the summary as soon as B's build is known: the rankings follow)
+        onPreview: ({ a, b }) => {
+          if (!mine.cancelled)
+            setState({ type: 'done', a, b, out, in: swapIn.key, for: runFor })
+        },
       })
       if (mine.cancelled) return
       if ('error' in result)
