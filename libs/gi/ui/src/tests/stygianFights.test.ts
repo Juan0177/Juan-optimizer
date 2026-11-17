@@ -72,7 +72,7 @@ describe('Stygian Onslaught fights', () => {
     expect(backlash.hp).toBeGreaterThan(each * (backlash.count - 1))
     // more than its HP ÷ the DPS: the Valiant States' 40 s are its shield's
     expect(fight.seconds!).toBeGreaterThan(hp / 300000)
-    expect(fight.notes).toContain('stellarGlimmer')
+    expect(fight.notes).toContain('electroStun')
   })
 
   it('Wavebinder: Electro drains its Courage, shortening each Valiant State', () => {
@@ -80,16 +80,16 @@ describe('Stygian Onslaught fights', () => {
     const slow = stygianFight(boss, 'dire', team('electro', 300000, {}))
     const fast = stygianFight(boss, 'dire', {
       ...team('electro', 300000),
-      electroHits: { stellar: 0, hits: 2, units: 2 },
+      electroHits: { stellar: 0, units: 2, plain: 0 },
     })
     const length = (f: typeof slow) =>
       (f.parts.find((p) => p.key === 'valiant') as { seconds: number }).seconds
-    // 600 Courage ÷ (15 + 8 × (0.6 × 2 + 0.06 × 2) per second)
-    expect(length(fast)).toBeCloseTo(600 / (15 + 8 * 1.32), 9)
+    // 600 Courage ÷ (15 + 8 × 1.5 × 2 per second)
+    expect(length(fast)).toBeCloseTo(600 / 39, 9)
     expect(fast.seconds!).toBeLessThan(slow.seconds!)
   })
 
-  it('Wavebinder: each Electro hit takes its Courage (the game files: 6 Stellar Glimmer, else 0.6 and 0.06 per unit), 8× in its Valiant Assault', () => {
+  it('Wavebinder: each Electro hit takes its Courage (stygian.moe, the game files: 6 Stellar Glimmer, 1.5 a unit applied, 0.6 none), 8× in its Valiant Assault', () => {
     const boss = stygianBoss(1013061)!
     const valiant = (electroHits: FightTeam['electroHits']) => {
       const fight = stygianFight(boss, 'dire', {
@@ -106,24 +106,23 @@ describe('Stygian Onslaught fights', () => {
       }
     }
     // one Stellar Glimmer hit a second: 15 + 8 × 6 = 63 Courage/s
-    const stellar = valiant({ stellar: 1, hits: 0, units: 0 })
+    const stellar = valiant({ stellar: 1, units: 0, plain: 0 })
     expect(stellar.part.seconds).toBeCloseTo(600 / 63, 9)
     expect(stellar.part.courage).toBeCloseTo(48, 9)
     expect(stellar.part.stellar).toBe(1)
-    // 7 other hits applying 2 units: 15 + 8 × (7 × 0.6 + 2 × 0.06)
-    expect(valiant({ stellar: 0, hits: 7, units: 2 }).part.seconds).toBeCloseTo(
-      600 / (15 + 8 * 4.32),
-      9
-    )
-    // measured drains in its Valiant Assault: 48, 5.28 (1U applied), 4.8 (none)
+    // 2 units of Electro applied and 5 hits without: 15 + 8 × (2 × 1.5 + 5 × 0.6) = 63
+    expect(
+      valiant({ stellar: 0, units: 2, plain: 5 }).part.seconds
+    ).toBeCloseTo(600 / 63, 9)
+    // in its Valiant Assault: 48 a Stellar Glimmer hit, 12 a 1U hit, 4.8 a hit applying none
     const inValiant = (h: Parameters<typeof courageDrain>[0]) =>
       COURAGE.valiant * courageDrain(h)
-    expect(inValiant({ stellar: 1, hits: 0, units: 0 })).toBeCloseTo(48, 9)
-    expect(inValiant({ stellar: 0, hits: 1, units: 1 })).toBeCloseTo(5.28, 9)
-    expect(inValiant({ stellar: 0, hits: 1, units: 0 })).toBeCloseTo(4.8, 9)
+    expect(inValiant({ stellar: 1, units: 0, plain: 0 })).toBeCloseTo(48, 9)
+    expect(inValiant({ stellar: 0, units: 1, plain: 0 })).toBeCloseTo(12, 9)
+    expect(inValiant({ stellar: 0, units: 0, plain: 1 })).toBeCloseTo(4.8, 9)
     // its hits taken from the attacks entered: said so; none known: said so too
     expect(
-      valiant({ stellar: 0, hits: 3, units: 1, estimated: true }).fight.notes
+      valiant({ stellar: 0, units: 1, plain: 2, estimated: true }).fight.notes
     ).toContain('electroEstimated')
     const none = valiant(undefined)
     expect(none.fight.notes).toContain('noRotation')
@@ -151,11 +150,45 @@ describe('Stygian Onslaught fights', () => {
     expect(backlash(0.5)).toBeCloseTo((0.6 + 0.45) * 800000, 0)
   })
 
+  it('Wavebinder: Radiance as it drinks (a Stellar Glimmer team) gives 540 Courage, so its Valiant Assault waits for the next drink', () => {
+    const boss = stygianBoss(1013061)!
+    const electroHits = { stellar: 0.5, units: 0.5, plain: 1 }
+    const plainTeam = stygianFight(boss, 'dire', {
+      ...team('electro', 300000),
+      electroHits,
+    })
+    const stellarTeam = stygianFight(boss, 'dire', {
+      ...team('electro', 300000),
+      electroHits,
+      stellarShare: 0.5,
+    })
+    const first = (f: typeof plainTeam) =>
+      f.timeline.segments.find((s) => s.state === 'shielded')!.start
+    // without: full at its first drink (10 s + 3 s)
+    expect(first(plainTeam)).toBeCloseTo(13, 9)
+    // with: 540 at its first drink, worn down by the hits until its next at 30 s, which fills it
+    const drink1 = stellarTeam.timeline.segments.find(
+      (s) => s.state === 'drinking'
+    )!
+    expect(drink1.meterEnd).toBeCloseTo(540, 9)
+    const outside = courageDrain(electroHits)
+    const atNext = 540 - outside * (30 - 13)
+    expect(first(stellarTeam)).toBeCloseTo(30 + ((600 - atNext) / 540) * 3, 6)
+    expect(
+      stellarTeam.parts.find((p) => p.key === 'radianceDrinks')
+    ).toBeDefined()
+    expect(stellarTeam.notes).toContain('sip')
+    // fewer Valiant Assaults in the fight: the Stellar Glimmer team's advantage
+    const count = (f: typeof plainTeam) =>
+      f.timeline.segments.filter((s) => s.state === 'shielded').length
+    expect(count(stellarTeam)).toBeLessThan(count(plainTeam))
+  })
+
   it('Wavebinder over time: its Courage fills over each 3 s drink and drains over each Valiant Assault', () => {
     const boss = stygianBoss(1013061)!
     const fight = stygianFight(boss, 'dire', {
       ...team('electro', 300000),
-      electroHits: { stellar: 1, hits: 2, units: 1 },
+      electroHits: { stellar: 1, units: 1, plain: 2 },
     })
     const { segments, meter } = fight.timeline
     expect(meter).toEqual({ key: 'courage', max: 600 })

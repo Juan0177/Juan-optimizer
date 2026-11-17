@@ -44,7 +44,7 @@ export function applicationsOf(
 ): FightApplications {
   const passes = icdTracker()
   const units: Partial<Record<ElementWithPhyKey, number>> = {}
-  const electro = { stellar: 0, hits: 0, units: 0 }
+  const electro = { stellar: 0, units: 0, plain: 0 }
   for (const hit of [...hits].sort((a, b) => a.t - b.t)) {
     if (hit.path[0] === '_marker') continue
     const weight = hit.weight ?? 1
@@ -54,17 +54,20 @@ export function applicationsOf(
       isElectro &&
       (hit.tag === 'directStellarConduct' || hit.tag === 'directStellarSwirl')
     if (stellar) electro.stellar += weight
-    else if (isElectro) electro.hits += weight
     const durability = hit.durability ?? 25
     if (
       !hit.applies ||
       hit.element === 'physical' ||
       durability <= 0 ||
       !passes(hit)
-    )
+    ) {
+      if (isElectro && !stellar) electro.plain += weight
       continue
+    }
     units[hit.element] = (units[hit.element] ?? 0) + (durability / 25) * weight
-    if (isElectro && !stellar) electro.units += (durability / 25) * weight
+    // (the game counts its durability in whole units, at most 4U)
+    if (isElectro && !stellar)
+      electro.units += Math.min(4, Math.ceil(durability / 25)) * weight
   }
   const seconds = frames / 60
   return {
@@ -73,8 +76,8 @@ export function applicationsOf(
     ) as Partial<Record<ElementWithPhyKey, number>>,
     electroHits: {
       stellar: electro.stellar / seconds,
-      hits: electro.hits / seconds,
       units: electro.units / seconds,
+      plain: electro.plain / seconds,
     },
   }
 }
@@ -231,8 +234,8 @@ export function fightTeamOf({
           // (no written rotation: every 3rd other hit applying 1U, as the standard ICD lets it)
           electroHits: {
             stellar: stellarHits / rotationTime,
-            hits: electroHits / rotationTime,
             units: electroHits / 3 / rotationTime,
+            plain: (electroHits * 2) / 3 / rotationTime,
             estimated: true,
           },
         }),

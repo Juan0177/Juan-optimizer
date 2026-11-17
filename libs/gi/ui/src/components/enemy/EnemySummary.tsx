@@ -201,6 +201,12 @@ export function FightBreakdown({
               count: part.count,
               seconds: Math.round(part.seconds),
             })
+      case 'radianceDrinks':
+        return t('enemyEditor.fight.radianceDrinks', {
+          defaultValue:
+            '{{count}} drinks under Radiance: Stellar Glimmer: 540 Courage, not 600 (its Valiant Assault waits for its next drink, the team’s Electro hits wearing it down in between)',
+          count: part.count,
+        })
       case 'backlash':
         return t('enemyEditor.fight.backlashStellar', {
           defaultValue:
@@ -241,9 +247,9 @@ export function FightBreakdown({
     (note) =>
       (
         ({
-          stellarGlimmer: t(
-            'enemyEditor.fight.note.stellarGlimmer',
-            'Not counted: Radiance: Stellar Glimmer while it drinks (its Courage fills 25% slower)'
+          sip: t(
+            'enemyEditor.fight.note.sip',
+            'Not counted: after a drink cut short, its next one has a 50% chance to be a sip of 189 Courage (a full drink counted)'
           ),
           noRotation: t(
             'enemyEditor.fight.note.noRotation',
