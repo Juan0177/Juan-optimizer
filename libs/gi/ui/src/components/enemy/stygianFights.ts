@@ -103,10 +103,17 @@ export type FightNote =
 export interface FightSegment {
   start: number
   end: number
-  /** Its state: one of its phases, or its horns on (the Emperor) */
-  state: StygianPhaseKey | 'horns'
+  /** Its state: one of its phases, its horns on (the Emperor) or its drink (Wavebinder) */
+  state: StygianPhaseKey | 'horns' | 'drinking'
   hpStart: number
   hpEnd: number
+  /** The team's DPS against it here (a shield state: what its shield takes) */
+  dps?: number
+  /** Its meter from start to end (linear): Wavebinder's Courage, the Emperor's horn gauge */
+  meterStart?: number
+  meterEnd?: number
+  /** A shield state: the share of what its shield takes that comes back as backlash (uncapped) */
+  backlashRatio?: number
 }
 /** A moment that takes HP off at once (fractions of its Max HP) */
 export interface FightEvent {
@@ -119,8 +126,12 @@ export interface FightEstimate {
   /** Seconds to defeat it; undefined: not within `FIGHT_LIMIT` */
   seconds: number | undefined
   parts: FightPart[]
-  /** The fight over time (as far as `FIGHT_LIMIT`) */
-  timeline: { segments: FightSegment[]; events: FightEvent[] }
+  /** The fight over time (as far as `FIGHT_LIMIT`), and its meter if it has one */
+  timeline: {
+    segments: FightSegment[]
+    events: FightEvent[]
+    meter?: { key: 'courage' | 'hornGauge'; max: number }
+  }
   /** What it does not count */
   notes: FightNote[]
   /** Whether the boss's mechanics are modelled (else: HP ÷ DPS) */
@@ -182,6 +193,7 @@ function plain(
           state: phase,
           hpStart: 1,
           hpEnd: Math.max(0, 1 - (dps * end) / hp),
+          dps,
         },
       ],
       events: [],
@@ -223,46 +235,72 @@ function wavebinder(
   let valiantTime = 0
   let regularTime = 0
   let backlash = 0
-  while (left > 0 && t < FIGHT_LIMIT) {
-    // the regular RES until its drink ends (the drink: 3 s, still at regular RES)
-    const until = Math.min(nextDrink + 3, FIGHT_LIMIT)
+  // at its regular RES until `until` (Courage from m0 to m1): whether it falls in it
+  const atRegular = (
+    state: 'regular' | 'drinking',
+    until: number,
+    m0: number,
+    m1: number
+  ) => {
+    if (until <= t) return false
     const hpStart = left / hp
-    if (regular * (until - t) >= left) {
+    const span = until - t
+    if (regular > 0 && regular * span >= left) {
       const dt = left / regular
       segments.push({
         start: t,
         end: t + dt,
-        state: 'regular',
+        state,
         hpStart,
         hpEnd: 0,
+        dps: regular,
+        meterStart: m0,
+        meterEnd: m0 + ((m1 - m0) * dt) / span,
       })
       t += dt
       regularTime += dt
       left = 0
-      break
+      return true
     }
-    left -= regular * (until - t)
-    regularTime += until - t
+    left -= regular * span
     segments.push({
       start: t,
       end: until,
-      state: 'regular',
+      state,
       hpStart,
       hpEnd: left / hp,
+      dps: regular,
+      meterStart: m0,
+      meterEnd: m1,
     })
+    regularTime += span
     t = until
+    return false
+  }
+  while (left > 0 && t < FIGHT_LIMIT) {
+    // its regular RES until it drinks; its drink (3 s, still at regular RES) fills its Courage
+    if (atRegular('regular', Math.min(nextDrink, FIGHT_LIMIT), 0, 0)) break
+    if (t >= FIGHT_LIMIT) break
+    const drinkEnd = Math.min(nextDrink + 3, FIGHT_LIMIT)
+    if (atRegular('drinking', drinkEnd, 0, (COURAGE.max * (drinkEnd - t)) / 3))
+      break
     if (t >= FIGHT_LIMIT) break
     // Valiant Assault: until its Courage is drained, or its shield (its Max HP) is broken
     const length = Math.min(
       COURAGE.max / drain,
       valiant > 0 ? hp / valiant : Number.POSITIVE_INFINITY
     )
+    const end = Math.min(t + length, FIGHT_LIMIT)
     segments.push({
       start: t,
-      end: Math.min(t + length, FIGHT_LIMIT),
+      end,
       state: 'shielded',
       hpStart: left / hp,
       hpEnd: left / hp,
+      dps: valiant,
+      meterStart: COURAGE.max,
+      meterEnd: Math.max(0, COURAGE.max - drain * (end - t)),
+      backlashRatio,
     })
     t += length
     valiants++
@@ -295,7 +333,11 @@ function wavebinder(
           ]
         : []),
     ],
-    timeline: { segments, events },
+    timeline: {
+      segments,
+      events,
+      meter: { key: 'courage', max: COURAGE.max },
+    },
     notes,
     modelled: true,
   }
@@ -350,6 +392,9 @@ function emperor(
         state: 'horns',
         hpStart,
         hpEnd: Math.max(0, hpStart - (withHorns * (end - t)) / hp),
+        dps: withHorns,
+        meterStart: 64,
+        meterEnd: Math.max(0, 64 - removal * (end - t)),
       })
       t += dt
       hornsTime += dt
@@ -357,12 +402,16 @@ function emperor(
       break
     }
     left -= withHorns * hornTime
+    const hornsEnd = Math.min(t + hornTime, FIGHT_LIMIT)
     segments.push({
       start: t,
-      end: Math.min(t + hornTime, FIGHT_LIMIT),
+      end: hornsEnd,
       state: 'horns',
       hpStart,
       hpEnd: left / hp,
+      dps: withHorns,
+      meterStart: 64,
+      meterEnd: Math.max(0, 64 - removal * (hornsEnd - t)),
     })
     t += hornTime
     hornsTime += hornTime
@@ -381,6 +430,9 @@ function emperor(
         state: 'regular',
         hpStart: hpAfter,
         hpEnd: 0,
+        dps: without,
+        meterStart: 0,
+        meterEnd: 0,
       })
       t += dt
       regularTime += dt
@@ -394,6 +446,9 @@ function emperor(
       state: 'regular',
       hpStart: hpAfter,
       hpEnd: left / hp,
+      dps: without,
+      meterStart: 0,
+      meterEnd: 0,
     })
     t += 10
     regularTime += 10
@@ -422,7 +477,11 @@ function emperor(
           ]
         : []),
     ],
-    timeline: { segments, events },
+    timeline: {
+      segments,
+      events,
+      meter: { key: 'hornGauge', max: 64 },
+    },
     notes,
     modelled: true,
   }
@@ -491,6 +550,7 @@ export function customFight(hp: number, team: FightTeam): FightEstimate {
           state: 'regular',
           hpStart: 1,
           hpEnd: Math.max(0, 1 - (dps * end) / hp),
+          dps,
         },
       ],
       events: [],
