@@ -271,6 +271,10 @@ function expectRankedB(
   ).toEqual(MEMBERS)
   expect(sandbox.teams.get(s.teamId)?.teamOpt).toEqual(teamOptB)
   expect(teamOptB.kqm?.constellations?.YaeMiko).toBeUndefined()
+  // B's rotation as it was played, for its inspector (not the team's written one)
+  expect(out.rotationB.text).toBe(out.b.rotation)
+  expect(out.rotationB.opener).toBeTypeOf('string')
+  expect(out.rotationB.timing.edits).toBeTypeOf('object')
 }
 
 describe('sideOf', () => {

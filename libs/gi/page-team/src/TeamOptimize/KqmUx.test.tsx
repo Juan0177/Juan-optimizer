@@ -51,10 +51,18 @@ const mocks = vi.hoisted(() => {
     },
   }
 })
-vi.mock('@genshin-optimizer/gi/db-ui', () => ({
-  useDatabase: () => mocks.database,
-  useDBMeta: () => ({ gender: 'F' }),
-}))
+vi.mock('@genshin-optimizer/gi/db-ui', async () => {
+  // (as the page's: the database from the context, the page's own when none is provided)
+  const { createContext, useContext } = await import('react')
+  const DatabaseContext = createContext({
+    database: mocks.database,
+  } as { database: unknown })
+  return {
+    DatabaseContext,
+    useDatabase: () => useContext(DatabaseContext).database,
+    useDBMeta: () => ({ gender: 'F' }),
+  }
+})
 vi.mock('@genshin-optimizer/gi/db', () => ({
   defaultTeamOptKqm: { refinement4: 5, refinement5: 1 },
 }))
@@ -833,5 +841,212 @@ describe('KQM focused results', () => {
     const hook = renderHook(() => useKqmRun('ui-other'))
     expect(hook.result.current.state.type).toBe('idle')
     expect(mocks.saved.runs['ui-other']).toBeUndefined()
+  })
+})
+
+describe('KQM results on another database (KQM Compare’s team B)', () => {
+  /** Team B's throwaway copy of the database (never the page's) */
+  const sandbox = () => ({
+    ...mocks.database,
+    teamKqmResults: {
+      ...mocks.database.teamKqmResults,
+      setRun: vi.fn(),
+    },
+  })
+  /** B as KQM Compare has it: every member's build, the entering member alone ranked */
+  function resultB(): KqmResult {
+    const result = sampleResult()
+    const held = (key: string): KqmBuild => ({
+      ...build,
+      weapon: { key, refinement: 5 } as KqmBuild['weapon'],
+    })
+    return {
+      ...result,
+      builds: {
+        KamisatoAyaka: build,
+        Shenhe: held('CalamityQueller'),
+        KaedeharaKazuha: held('FreedomSworn'),
+        Bennett: held('MistsplitterReforged'),
+      },
+      after: {
+        total: 1000,
+        members: {
+          KamisatoAyaka: 700,
+          Shenhe: 100,
+          KaedeharaKazuha: 100,
+          Bennett: 100,
+        },
+        unmet: {},
+      },
+      constellations: {
+        KamisatoAyaka: 0,
+        Shenhe: 0,
+        KaedeharaKazuha: 0,
+        Bennett: 6,
+      },
+    } as KqmResult
+  }
+  const rotationB = {
+    text: 'Ayaka E Q',
+    opener: '',
+    timing: { edits: {} },
+  }
+  const props = (teamId: string) => ({
+    teamId,
+    runSettings: initial(),
+    members,
+    result: resultB(),
+    seconds: 1,
+    rotationTime: 20,
+  })
+
+  it('compares the inspector’s picks on its database, writing nothing to the page’s', async () => {
+    const db = sandbox()
+    const setRun = vi.spyOn(mocks.database.teamKqmResults, 'setRun')
+    const runsBefore = JSON.stringify(mocks.saved.runs)
+    const setItem = vi.spyOn(Storage.prototype, 'setItem')
+    mocks.compare.mockImplementation(async ({ weapon, sets }) => ({
+      ...resultB(),
+      builds: {
+        ...resultB().builds,
+        KamisatoAyaka: { ...build, weapon, sets },
+      },
+      after: { ...resultB().after, total: 900 },
+    }))
+    try {
+      render(
+        <KqmResults
+          {...props('ui-b')}
+          database={db as never}
+          readOnly
+          replayRotation={rotationB}
+        />,
+        { wrapper: wrap }
+      )
+      fireEvent.click(screen.getByRole('button', { name: /TheBlackSword/ }))
+      await waitFor(() => expect(mocks.compare).toHaveBeenCalled())
+      for (const [args] of mocks.compare.mock.calls)
+        expect(args.database).toBe(db)
+      await waitFor(() =>
+        expect(screen.getByText('−10.0% vs best')).toBeTruthy()
+      )
+      expect(setRun).not.toHaveBeenCalled()
+      expect(db.teamKqmResults.setRun).not.toHaveBeenCalled()
+      expect(JSON.stringify(mocks.saved.runs)).toBe(runsBefore)
+      // (nothing kept for the team in the browser's storage either)
+      expect(
+        setItem.mock.calls.filter(([key]) => String(key).includes('ui-b'))
+      ).toEqual([])
+    } finally {
+      setRun.mockRestore()
+      setItem.mockRestore()
+    }
+  })
+
+  it('plays B’s own rotation in the inspector, not the team’s written one', async () => {
+    localStorage.setItem('teamOptRotationText_ui-b-rot', 'the team’s own')
+    const getItem = vi.spyOn(Storage.prototype, 'getItem')
+    mocks.compare.mockImplementation(async () => resultB())
+    try {
+      render(
+        <KqmResults
+          {...props('ui-b-rot')}
+          database={sandbox() as never}
+          readOnly
+          replayRotation={rotationB}
+        />,
+        { wrapper: wrap }
+      )
+      fireEvent.click(screen.getByRole('button', { name: /TheBlackSword/ }))
+      await waitFor(() => expect(mocks.compare).toHaveBeenCalled())
+      // (B's rotation played: a replay, though nothing of the team's was read)
+      expect(mocks.compare.mock.calls[0][0].replay).toBeTypeOf('function')
+      const read = getItem.mock.calls.map(([key]) => String(key))
+      expect(read.filter((key) => key.endsWith('_ui-b-rot'))).toEqual([])
+    } finally {
+      getItem.mockRestore()
+      localStorage.removeItem('teamOptRotationText_ui-b-rot')
+    }
+  })
+
+  it('read only: no discard and no share of B as the team', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-ro')}
+        database={sandbox() as never}
+        readOnly
+        replayRotation={rotationB}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.getByRole('tablist', { name: 'Team builds' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull()
+  })
+
+  it('shows every member, and the inspector only for the one ranked', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-tiles')}
+        database={sandbox() as never}
+        readOnly
+        replayRotation={rotationB}
+      />,
+      { wrapper: wrap }
+    )
+    const tiles = within(
+      screen.getByRole('tablist', { name: 'Team builds' })
+    ).getAllByRole('tab')
+    expect(tiles).toHaveLength(4)
+    const tile = (key: string) =>
+      tiles.find((t) => t.textContent?.includes(key))!
+    expect(tile('KamisatoAyaka').getAttribute('aria-selected')).toBe('true')
+    // (a held build: its tile shows it, there is nothing of its to rank)
+    for (const key of ['Shenhe', 'KaedeharaKazuha', 'Bennett']) {
+      expect(tile(key).hasAttribute('disabled')).toBe(true)
+      expect(tile(key).getAttribute('aria-selected')).toBe('false')
+    }
+    expect(
+      screen.getAllByRole('region', { name: 'Compare equipment' })
+    ).toHaveLength(1)
+  })
+
+  it('shows its own run’s progress on its preliminary builds', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-progress')}
+        database={sandbox() as never}
+        readOnly
+        replayRotation={rotationB}
+        running
+        improving
+        progress={0.42}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.getByText('Preliminary builds')).toBeTruthy()
+    expect(screen.getByText('42%')).toBeTruthy()
+  })
+
+  it('without them: the page’s database, discard and share, as before', async () => {
+    mocks.compare.mockImplementation(async () => sampleResult())
+    render(
+      <KqmResults
+        teamId="ui-page"
+        runSettings={initial()}
+        members={members}
+        result={sampleResult()}
+        seconds={1}
+        rotationTime={20}
+        onDiscard={vi.fn()}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Share' })).toBeTruthy()
+    expect(document.getElementById('kqm-results-ui-page')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /TheBlackSword/ }))
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalled())
+    expect(mocks.compare.mock.calls[0][0].database).toBe(mocks.database)
   })
 })

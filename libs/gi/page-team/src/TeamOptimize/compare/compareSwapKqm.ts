@@ -37,6 +37,7 @@ import {
 import type { i18n } from 'i18next'
 import type { RotationTimingSettings } from '../RotationTiming'
 import { readRotationTiming } from '../RotationWriter'
+import type { KqmRotation } from '../useKqmRun'
 import { kqmReplayOf } from '../useKqmRun'
 import { CompareSwapFailure } from './compareError'
 import { savedRunOf } from './savedRun'
@@ -493,7 +494,15 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
       }
     sandbox.teams.set(teamId, { teamOpt })
   }
-  return { run, fixed, keysB, teamOpt, sandbox, replay: replayOf(teamOpt) }
+  return {
+    run,
+    fixed,
+    keysB,
+    teamOpt,
+    sandbox,
+    replay: replayOf(teamOpt),
+    rotation: { text: swapped.text, opener: swapped.opener, timing },
+  }
 }
 
 /**
@@ -533,6 +542,11 @@ export interface CompareSwapOutcome extends CompareSwapPreview {
   sandbox: ArtCharDatabase
   /** Team B's KQM settings, as set on `sandbox` */
   teamOptB: TeamOpt
+  /**
+   * Team B's rotation as it was played (its text and opener with the entering member's actions,
+   * the team's frame edits moved onto them): its inspector plays this, not the team's written one
+   */
+  rotationB: KqmRotation
 }
 
 /**
@@ -561,7 +575,10 @@ export async function compareSwapKqm({
   const { swapped, search } = checked
   if (isCancelled()) return { error: 'cancelled' }
 
-  const { run, fixed, keysB, teamOpt, sandbox, replay } = teamB(args, checked)
+  const { run, fixed, keysB, teamOpt, sandbox, replay, rotation } = teamB(
+    args,
+    checked
+  )
   const a = sideOf(
     run.result,
     text,
@@ -663,5 +680,10 @@ export async function compareSwapKqm({
       `${changed}’s build changed in team B.`,
       changed
     )
-  return { ...viewOf(result), sandbox, teamOptB: teamOpt }
+  return {
+    ...viewOf(result),
+    sandbox,
+    teamOptB: teamOpt,
+    rotationB: rotation,
+  }
 }

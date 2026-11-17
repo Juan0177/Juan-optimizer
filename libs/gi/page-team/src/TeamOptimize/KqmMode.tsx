@@ -1,8 +1,16 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt, TeamOptEnergyCalculator } from '@genshin-optimizer/gi/db'
+import type {
+  ArtCharDatabase,
+  TeamOpt,
+  TeamOptEnergyCalculator,
+} from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
-import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import {
+  DatabaseContext,
+  useDatabase,
+  useDBMeta,
+} from '@genshin-optimizer/gi/db-ui'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
@@ -57,6 +65,7 @@ import {
 import {
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -95,7 +104,7 @@ import {
   tokens,
   type,
 } from './ui'
-import { kqmReplayOf, useKqmProgress } from './useKqmRun'
+import { type KqmRotation, kqmReplayOf, useKqmProgress } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 /** A member row's columns: name, build, constellation, minimum ER (one line from `sm`) */
@@ -1699,10 +1708,19 @@ function KqmThreads() {
  * once its result replaces them, a moment, that they are final. Its own component: the progress
  * redraws it, not the results.
  */
-function KqmPreliminary({ teamId, final }: { teamId: string; final: boolean }) {
+function KqmPreliminary({
+  teamId,
+  final,
+  progress,
+}: {
+  teamId: string
+  final: boolean
+  /** Another run's progress (0 to 1); absent: the team's KQM run's */
+  progress?: number
+}) {
   const { t } = useTranslation('page_team')
   const step = useKqmProgress(teamId)
-  const percent = Math.round((step?.progress ?? 0) * 100)
+  const percent = Math.round((progress ?? step?.progress ?? 0) * 100)
   const tone = final ? 'success.main' : tokens.gold
   return (
     <Box
@@ -1771,6 +1789,23 @@ function KqmPreliminary({ teamId, final }: { teamId: string; final: boolean }) {
   )
 }
 
+/** Its children on another database: what they read and compute with `useDatabase` is on it */
+function OnDatabase({
+  database,
+  children,
+}: {
+  database: ArtCharDatabase
+  children: ReactNode
+}) {
+  const context = useContext(DatabaseContext)
+  const value = useMemo(() => ({ ...context, database }), [context, database])
+  return (
+    <DatabaseContext.Provider value={value}>
+      {children}
+    </DatabaseContext.Provider>
+  )
+}
+
 export function KqmResults({
   teamId,
   runSettings,
@@ -1787,6 +1822,10 @@ export function KqmResults({
   improving,
   onDiscard,
   onView,
+  database,
+  readOnly = false,
+  replayRotation,
+  progress,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -1806,9 +1845,27 @@ export function KqmResults({
   running?: boolean
   /** The run's builds so far: it is still looking for better ones (its members can be viewed) */
   improving?: boolean
-  onDiscard: () => void
+  /** Absent (or read only): no discard */
+  onDiscard?: () => void
   /** The builds shown now: the run's, or the team with other equipment picked here */
   onView?: (view: KqmResult) => void
+  /**
+   * The database the result was computed on, when it is not the page's (KQM Compare's team B,
+   * on a throwaway copy): every comparison and read below is on it
+   */
+  database?: ArtCharDatabase
+  /**
+   * A result that is not the team's (KQM Compare's team B): nothing to discard, share as the
+   * team's, or keep; its picks are compared all the same
+   */
+  readOnly?: boolean
+  /**
+   * The rotation its picks are played with, when it is not the team's written one (KQM Compare's
+   * team B: its own); kept the same while shown
+   */
+  replayRotation?: KqmRotation
+  /** Its run's progress (0 to 1) while its builds are preliminary; absent: the team's KQM run's */
+  progress?: number
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -1859,9 +1916,12 @@ export function KqmResults({
     const id = setTimeout(() => setFinished(false), 4000)
     return () => clearTimeout(id)
   }, [improving])
-  return (
+  // (the members' tiles wait while a run has no builds to show)
+  const busy = running && !improving
+  const content = (
     <Box
-      id={`kqm-results-${teamId}`}
+      // (the team's own results: what the page scrolls to)
+      id={database ? undefined : `kqm-results-${teamId}`}
       sx={{
         p: { xs: 1, sm: 2 },
         scrollMarginTop: 88,
@@ -1870,7 +1930,11 @@ export function KqmResults({
     >
       {/* while the run improves on them: these are not final; then, a moment, that they are */}
       {(improving || finished) && (
-        <KqmPreliminary teamId={teamId} final={!improving} />
+        <KqmPreliminary
+          teamId={teamId}
+          final={!improving}
+          progress={progress}
+        />
       )}
       {/* the team's result, and what to do with it */}
       <Box
@@ -1937,38 +2001,42 @@ export function KqmResults({
             )}
           </Box>
         </Box>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            ml: 'auto',
-          }}
-        >
-          <KqmShareMenu
-            teamId={teamId}
-            result={result}
-            shown={view}
-            setup={setup ?? runSettings}
-            members={members}
-            characterKey={compared}
-            rotationTime={rotationTime}
-            disabled={running}
-          />
-          <Tooltip arrow title={t('teamOpt.result.discard', 'Discard')}>
-            <span>
-              <IconButton
-                size="small"
-                disabled={running}
-                onClick={onDiscard}
-                aria-label={t('teamOpt.result.discard', 'Discard')}
-                sx={{ ...quickSx, ...focusSx }}
-              >
-                <CloseIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
+        {!readOnly && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              ml: 'auto',
+            }}
+          >
+            <KqmShareMenu
+              teamId={teamId}
+              result={result}
+              shown={view}
+              setup={setup ?? runSettings}
+              members={members}
+              characterKey={compared}
+              rotationTime={rotationTime}
+              disabled={running}
+            />
+            {onDiscard && (
+              <Tooltip arrow title={t('teamOpt.result.discard', 'Discard')}>
+                <span>
+                  <IconButton
+                    size="small"
+                    disabled={running}
+                    onClick={onDiscard}
+                    aria-label={t('teamOpt.result.discard', 'Discard')}
+                    sx={{ ...quickSx, ...focusSx }}
+                  >
+                    <CloseIcon sx={{ fontSize: 18 }} />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            )}
+          </Box>
+        )}
       </Box>
       {/* what these builds were run with; what has changed since (→ now) */}
       <Box
@@ -2044,13 +2112,15 @@ export function KqmResults({
               ? (view.after.members[characterKey] ?? 0) / view.after.total
               : 0
           const selected = compared === characterKey
+          // (a member not ranked: its build held, KQM Compare's teammates; nothing to inspect)
+          const held = !!build && !result.optimized.includes(characterKey)
           return (
             <ButtonBase
               key={characterKey}
               role="tab"
               aria-selected={selected}
               aria-label={characterKey}
-              disabled={!build || (running && !improving)}
+              disabled={!build || held || busy}
               onClick={() => setShown(characterKey)}
               sx={(theme) => ({
                 display: 'flex',
@@ -2069,7 +2139,9 @@ export function KqmResults({
                     ? alpha(theme.palette.primary.main, 0.14)
                     : alpha(theme.palette.text.primary, 0.035),
                 },
-                '&.Mui-disabled': { opacity: build ? 0.6 : 0.5 },
+                '&.Mui-disabled': {
+                  opacity: !build ? 0.5 : held && !busy ? 1 : 0.6,
+                },
               })}
             >
               {/* who: its name, constellation and ER; its weapon and sets (on a phone the name
@@ -2189,6 +2261,7 @@ export function KqmResults({
           rotationTime={rotationTime}
           base={fromRun ? undefined : comparing}
           onView={showView}
+          rotation={replayRotation}
         />
       )}
       {/* (supplemental: the best teams that change one member, below the inspector) */}
@@ -2200,5 +2273,10 @@ export function KqmResults({
         onPick={pickTeam}
       />
     </Box>
+  )
+  return database ? (
+    <OnDatabase database={database}>{content}</OnDatabase>
+  ) : (
+    content
   )
 }

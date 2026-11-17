@@ -61,7 +61,7 @@ import {
   tokens,
   type,
 } from './ui'
-import { kqmReplayOf } from './useKqmRun'
+import { type KqmRotation, kqmReplayOf } from './useKqmRun'
 
 const cache = new WeakMap<KqmResult, Map<string, KqmResult>>()
 const choices = new WeakMap<
@@ -94,6 +94,7 @@ export function KqmCompare({
   disabled = false,
   base: baseProp,
   onView,
+  rotation,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -108,6 +109,11 @@ export function KqmCompare({
   base?: KqmResult
   /** The team as it plays with the equipment picked (undefined: the run's own builds) */
   onView?: (view: KqmResult | undefined) => void
+  /**
+   * The rotation the picks are played with (KQM Compare's team B: its own), kept the same while
+   * shown; absent: the team's written one
+   */
+  rotation?: KqmRotation
 }) {
   const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
@@ -188,7 +194,16 @@ export function KqmCompare({
       characterKey,
       ...choice,
       // (played again with the picked gear: what its effects change for the whole team)
-      replay: kqmReplayOf(database, gender, i18n, teamId, runSettings),
+      replay: kqmReplayOf(
+        database,
+        gender,
+        i18n,
+        teamId,
+        runSettings,
+        rotation?.text,
+        rotation?.opener,
+        rotation?.timing
+      ),
       isCancelled: () => cancelled,
       // (the figures as soon as the pick's build is found; the rankings after)
       onPreview: (preview) => {
@@ -225,6 +240,7 @@ export function KqmCompare({
     disabled,
     allOriginal,
     i18n,
+    rotation,
   ])
   // (a team with other members' picks ranks this member's options once compared on it; while a
   // pick's are worked out, the ones shown before)

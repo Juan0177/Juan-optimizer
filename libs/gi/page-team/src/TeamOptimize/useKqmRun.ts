@@ -176,6 +176,16 @@ function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
     }, 0)
 }
 
+/**
+ * A rotation played in place of the team's written one (KQM Compare's team B: its own, the
+ * entering member's actions in it), every part given: nothing read from the team's storage
+ */
+export interface KqmRotation {
+  text: string
+  opener: string
+  timing: RotationTimingSettings
+}
+
 /** Runs KQM theorycrafting for a team, in the background of whichever page is shown */
 /**
  * The written rotation, played by KQM theorycrafting itself (never with the members' own
