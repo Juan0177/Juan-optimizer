@@ -14,10 +14,12 @@ import {
   Typography,
 } from '@mui/material'
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 const RESIN_COUNTER_VALUES = [0, -1, -10, -20, -30, -40, -60, 1, 60, RESIN_MAX]
 
 export default function ResinCounter() {
+  const { t, i18n } = useTranslation('ui')
   const database = useDatabase()
   const [{ resin, resinDate }, setState] = useState(() =>
     database.displayTool.get()
@@ -73,7 +75,11 @@ export default function ResinCounter() {
       : resinDate + (RESIN_MAX - resin) * RESIN_RECH_MS
   const resinFullDate = new Date(resinFullDateNum)
 
-  const nextDeltaString = timeString(Math.abs(nextResinDateNum - Date.now()))
+  const nextDeltaString = timeString(Math.abs(nextResinDateNum - Date.now()), {
+    minutes: t('tools.minutes', 'Minutes'),
+    hours: t('tools.hours', 'Hours'),
+  })
+  const fullAt = `${resinFullDate.toLocaleTimeString(i18n.language)} ${resinFullDate.toLocaleDateString(i18n.language)}`
 
   const handleResinChange = (val: string) => {
     const MAX_ORIGINAL_RESIN = 2000
@@ -90,7 +96,9 @@ export default function ResinCounter() {
           <ImgIcon src={imgAssets.resin.fragile} size={2} />
         </Grid>
         <Grid item>
-          <Typography variant="h6">Resin Counter</Typography>
+          <Typography variant="h6">
+            {t('tools.resin.title', 'Resin Counter')}
+          </Typography>
         </Grid>
       </Grid>
       <Divider />
@@ -130,7 +138,7 @@ export default function ResinCounter() {
                       onClick={() => setResin(RESIN_MAX)}
                       disabled={resin >= RESIN_MAX}
                     >
-                      MAX {rcv}
+                      {t('tools.resin.max', 'MAX')} {rcv}
                     </Button>
                   )
                 }
@@ -160,24 +168,31 @@ export default function ResinCounter() {
             <Typography variant="subtitle1" sx={{ mt: 2 }}>
               {resin < RESIN_MAX ? (
                 <span>
-                  Next resin in {nextDeltaString}, full Resin at{' '}
-                  {resinFullDate.toLocaleTimeString()}{' '}
-                  {resinFullDate.toLocaleDateString()}
+                  {t('tools.resin.next', {
+                    defaultValue:
+                      'Next resin in {{delta}}, full Resin at {{date}}',
+                    delta: nextDeltaString,
+                    date: fullAt,
+                  })}
                 </span>
               ) : (
                 <span>
-                  Resin has been full for at least {nextDeltaString}, since{' '}
-                  {resinFullDate.toLocaleTimeString()}{' '}
-                  {resinFullDate.toLocaleDateString()}
+                  {t('tools.resin.full', {
+                    defaultValue:
+                      'Resin has been full for at least {{delta}}, since {{date}}',
+                    delta: nextDeltaString,
+                    date: fullAt,
+                  })}
                 </span>
               )}
             </Typography>
           </Grid>
           <Grid item xs={12}>
             <Typography variant="caption">
-              Because we do not provide a mechanism to synchronize resin time,
-              actual resin recharge time might be as much as 8 minutes earlier
-              than predicted.
+              {t(
+                'tools.resin.note',
+                'Because we do not provide a mechanism to synchronize resin time, actual resin recharge time might be as much as 8 minutes earlier than predicted.'
+              )}
             </Typography>
           </Grid>
         </Grid>

@@ -44,10 +44,12 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CharacterView } from './CharacterView'
 
 const rarties = [5, 4] as const
 export default function TabCharacter() {
+  const { t } = useTranslation('ui')
   const database = useDatabase()
   const archive = useDataEntryBase(database.displayArchive)
   const handleRarity = handleMultiSelect([...rarties])
@@ -106,10 +108,10 @@ export default function TabCharacter() {
     [charKeys, numShow, sortedCharKeys]
   )
   const columns: { key: SortKey; label: string; width: number }[] = [
-    { key: 'name', label: 'Name', width: 40 },
-    { key: 'rarity', label: 'Rarity', width: 20 },
-    { key: 'element', label: 'Element', width: 20 },
-    { key: 'type', label: 'Type', width: 20 },
+    { key: 'name', label: t('archive.name', 'Name'), width: 40 },
+    { key: 'rarity', label: t('archive.rarity', 'Rarity'), width: 20 },
+    { key: 'element', label: t('archive.element', 'Element'), width: 20 },
+    { key: 'type', label: t('archive.type', 'Type'), width: 20 },
   ]
   return (
     <Box>

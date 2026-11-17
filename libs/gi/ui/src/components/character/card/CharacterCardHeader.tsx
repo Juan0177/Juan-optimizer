@@ -18,6 +18,7 @@ import { input } from '@genshin-optimizer/gi/wr'
 import { Box, CardActionArea, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useCallback, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DataContext } from '../../../context'
 import { iconAsset } from '../../../util/iconAsset'
 import type { RollColorKey } from '../../artifact'
@@ -277,6 +278,7 @@ export function HeaderContentNew({
 }: {
   characterKey: CharacterKey
 }) {
+  const { t } = useTranslation('page_character')
   const { gender } = useDBMeta()
   const charStat = getCharStat(characterKey)
   return (
@@ -288,7 +290,7 @@ export function HeaderContentNew({
       />
       <Box mt={1}>
         <Typography variant="h4">
-          <SqBadge>NEW</SqBadge>
+          <SqBadge>{t('newBadgeUpper', 'NEW')}</SqBadge>
         </Typography>
       </Box>
       <Typography mt={1.5}>

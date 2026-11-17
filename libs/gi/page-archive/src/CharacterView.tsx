@@ -41,6 +41,7 @@ export function CharacterView({
   onClose?: () => void
 }) {
   const { t } = useTranslation('sheet_gen')
+  const { t: tUi } = useTranslation('ui')
   // Load tooltip translations
   useTranslation('tooltips_gen')
   const theme = useTheme()
@@ -146,7 +147,7 @@ export function CharacterView({
                   <SkillDisplayCard
                     characterKey={characterKey}
                     talentKey="passive"
-                    subtitle="Passive"
+                    subtitle={tUi('passive', 'Passive')}
                   />
                 </Grid>
               )}

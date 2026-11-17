@@ -41,7 +41,10 @@ export function UploadExplainationModal({
             <Grid item xs={8} md={6}>
               <Box
                 component="img"
-                alt="snippet of the screen to take"
+                alt={t(
+                  'editor.uploadExp.snippetAlt',
+                  'snippet of the screen to take'
+                )}
                 src={Snippet}
                 width="100%"
                 height="auto"
@@ -124,7 +127,10 @@ export function UploadExplainationModal({
             <Grid item xs={8} md={5}>
               <Box
                 component="img"
-                alt="main screen after importing stats"
+                alt={t(
+                  'editor.uploadExp.mainAlt',
+                  'main screen after importing stats'
+                )}
                 src={scan_art_main}
                 width="100%"
                 height="auto"

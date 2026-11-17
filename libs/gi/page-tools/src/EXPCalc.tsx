@@ -22,22 +22,23 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useState } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 
 const booksData = {
   advice: {
-    name: "Wanderer's Advice",
+    name: 'WanderersAdvice',
     exp: 1000,
     cost: 200,
     img: imgAssets.exp_books.advice,
   },
   experience: {
-    name: "Adventurer's Experience",
+    name: 'AdventurersExperience',
     exp: 5000,
     cost: 1000,
     img: imgAssets.exp_books.experience,
   },
   wit: {
-    name: "Hero's Wit",
+    name: 'HerosWit',
     exp: 20000,
     cost: 4000,
     img: imgAssets.exp_books.wit,
@@ -67,6 +68,7 @@ function initExpCalc() {
 }
 
 export default function EXPCalc() {
+  const { t } = useTranslation(['ui', 'material_gen'])
   const [state, setState] = useState(() => initExpCalc())
   const {
     mora,
@@ -106,16 +108,22 @@ export default function EXPCalc() {
   if (finalMora < 0)
     invalidText = (
       <span>
-        You don't have enough <b>Mora</b> for this operation.
+        <Trans t={t} i18nKey="tools.exp.noMora">
+          You don't have enough <b>Mora</b> for this operation.
+        </Trans>
       </span>
     )
   else if (bookResult.length === 0)
     invalidText = (
       <span>
-        You don't have enough <b>EXP. books</b> to level to the next milestone.
+        <Trans t={t} i18nKey="tools.exp.noBooks">
+          You don't have enough <b>EXP. books</b> to level to the next
+          milestone.
+        </Trans>
       </span>
     )
-  else if (level === 90) invalidText = 'You are at the maximum level.'
+  else if (level === 90)
+    invalidText = t('tools.exp.maxLevel', 'You are at the maximum level.')
   return (
     <CardThemed>
       <Grid container sx={{ px: 2, py: 1 }} spacing={2}>
@@ -123,7 +131,9 @@ export default function EXPCalc() {
           <ImgIcon src={booksData.wit.img} size={2} />
         </Grid>
         <Grid item flexGrow={1}>
-          <Typography variant="h6">Experience Calculator</Typography>
+          <Typography variant="h6">
+            {t('tools.exp.title', 'Experience Calculator')}
+          </Typography>
         </Grid>
         <Grid item>
           <ButtonGroup>
@@ -132,14 +142,14 @@ export default function EXPCalc() {
               disabled={!goUnder}
               onClick={() => setState({ ...state, goUnder: false })}
             >
-              Full Level
+              {t('tools.exp.fullLevel', 'Full Level')}
             </Button>
             <Button
               color="primary"
               disabled={goUnder}
               onClick={() => setState({ ...state, goUnder: true })}
             >
-              Don't fully level
+              {t('tools.exp.notFull', "Don't fully level")}
             </Button>
           </ButtonGroup>
         </Grid>
@@ -151,17 +161,27 @@ export default function EXPCalc() {
           <Grid item>
             <Typography>
               <span>
-                This calculator tries to calculate the amount of exp books
-                required to get to the next milestone level.{' '}
+                {t(
+                  'tools.exp.desc',
+                  'This calculator tries to calculate the amount of exp books required to get to the next milestone level.'
+                )}{' '}
               </span>
               {goUnder
-                ? 'It will try to get as close to the milestone level as possible, so you can grind the rest of the exp without any waste.'
-                : 'It will try to calculate the amount of books needed to minimize as much exp loss as possible.'}
+                ? t(
+                    'tools.exp.descUnder',
+                    'It will try to get as close to the milestone level as possible, so you can grind the rest of the exp without any waste.'
+                  )
+                : t(
+                    'tools.exp.descFull',
+                    'It will try to calculate the amount of books needed to minimize as much exp loss as possible.'
+                  )}
             </Typography>
           </Grid>
           <Grid item xs={6} md={3}>
             <ButtonGroup sx={{ display: 'flex' }}>
-              <TextButton>Current Level</TextButton>
+              <TextButton>
+                {t('tools.exp.curLevel', 'Current Level')}
+              </TextButton>
               <CustomNumberInputButtonGroupWrapper
                 sx={{ flexBasis: 30, flexGrow: 1 }}
               >
@@ -177,7 +197,7 @@ export default function EXPCalc() {
           </Grid>
           <Grid item xs={6} md={3}>
             <ButtonGroup sx={{ display: 'flex' }}>
-              <TextButton>Current EXP.</TextButton>
+              <TextButton>{t('tools.exp.curExp', 'Current EXP.')}</TextButton>
               <CustomNumberInputButtonGroupWrapper
                 sx={{ flexBasis: 30, flexGrow: 1 }}
               >
@@ -200,7 +220,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>Next Milestone Level:</Typography>
+                <Typography>
+                  {t('tools.exp.nextMilestone', 'Next Milestone Level:')}
+                </Typography>
                 <Typography>
                   <b>{milestoneLvl}</b>
                 </Typography>
@@ -212,7 +234,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>EXP. to milestone:</Typography>
+                <Typography>
+                  {t('tools.exp.toMilestone', 'EXP. to milestone:')}
+                </Typography>
                 <Typography>
                   <span>
                     <strong>{expFromBooks}</strong> / <strong>{expReq}</strong>
@@ -237,7 +261,7 @@ export default function EXPCalc() {
           })}
           <Grid item xs={12} md={4}>
             <ButtonGroup sx={{ display: 'flex' }}>
-              <TextButton>Current Mora</TextButton>
+              <TextButton>{t('tools.exp.curMora', 'Current Mora')}</TextButton>
               <CustomNumberInputButtonGroupWrapper
                 sx={{ flexBasis: 30, flexGrow: 1 }}
               >
@@ -256,7 +280,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>Mora Cost: </Typography>
+                <Typography>
+                  {t('tools.exp.moraCost', 'Mora Cost:')}{' '}
+                </Typography>
                 <Typography>
                   <b>{moraCost}</b>
                 </Typography>
@@ -268,7 +294,11 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>EXP {!goUnder ? 'Waste' : 'Diff'}: </Typography>
+                <Typography>
+                  {!goUnder
+                    ? t('tools.exp.waste', 'EXP Waste:')
+                    : t('tools.exp.diff', 'EXP Diff:')}{' '}
+                </Typography>
                 <Typography>
                   <b>
                     <ColorText color={expDiff < 0 ? 'error' : 'success'}>
@@ -284,7 +314,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>Final Mora: </Typography>
+                <Typography>
+                  {t('tools.exp.finalMora', 'Final Mora:')}{' '}
+                </Typography>
                 <Typography>
                   <b>
                     <ColorText color={finalMora < 0 ? 'error' : 'success'}>
@@ -300,7 +332,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>Final Level: </Typography>
+                <Typography>
+                  {t('tools.exp.finalLevel', 'Final Level:')}{' '}
+                </Typography>
                 <Typography>
                   <b>
                     <ColorText color="success">{finalLvl}</ColorText>
@@ -314,7 +348,9 @@ export default function EXPCalc() {
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
               >
-                <Typography>Final EXP: </Typography>
+                <Typography>
+                  {t('tools.exp.finalExp', 'Final EXP:')}{' '}
+                </Typography>
                 <Typography>
                   <b>
                     <ColorText color={finalExp < 0 ? 'error' : 'success'}>
@@ -356,7 +392,7 @@ export default function EXPCalc() {
               startIcon={<CheckIcon />}
               sx={{ height: '100%' }}
             >
-              Apply
+              {t('tools.exp.apply', 'Apply')}
             </Button>
           </Grid>
         </Grid>
@@ -365,11 +401,14 @@ export default function EXPCalc() {
   )
 }
 function BookDisplay(props) {
+  const { t } = useTranslation(['ui', 'material_gen'])
   const { bookKey, value = 0, setValue, required = 0 } = props
   return (
     <CardThemed bgt="light">
       <CardContent sx={{ py: 1 }}>
-        <Typography>{booksData[bookKey].name}</Typography>
+        <Typography>
+          {t(`material_gen:${booksData[bookKey].name}.name`)}
+        </Typography>
       </CardContent>
       <Divider />
       <CardContent>
@@ -379,7 +418,7 @@ function BookDisplay(props) {
           </Grid>
           <Grid item xs={9}>
             <ButtonGroup sx={{ display: 'flex' }}>
-              <TextButton>Amount</TextButton>
+              <TextButton>{t('tools.exp.amount', 'Amount')}</TextButton>
               <CustomNumberInputButtonGroupWrapper
                 sx={{ flexBasis: 30, flexGrow: 1 }}
               >
@@ -391,7 +430,7 @@ function BookDisplay(props) {
               </CustomNumberInputButtonGroupWrapper>
             </ButtonGroup>
             <Box display="flex" justifyContent="space-between" mt={1}>
-              <Typography>Required:</Typography>
+              <Typography>{t('tools.exp.required', 'Required:')}</Typography>
               <Typography>
                 <b>
                   <ColorText color={required ? 'success' : undefined}>

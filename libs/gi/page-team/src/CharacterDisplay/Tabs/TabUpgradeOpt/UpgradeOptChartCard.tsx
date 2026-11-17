@@ -138,6 +138,7 @@ function EquipButton({
   newArtId: string
   disabled: boolean
 }) {
+  const { t } = useTranslation('page_character_optimize')
   const database = useDatabase()
   const {
     loadoutDatum,
@@ -178,7 +179,11 @@ function EquipButton({
         }}
         onHide={onHide}
       />
-      <Tooltip title={<Typography>Equip</Typography>} placement="top" arrow>
+      <Tooltip
+        title={<Typography>{t('upOptChart.equip', 'Equip')}</Typography>}
+        placement="top"
+        arrow
+      >
         <Box>
           <Button
             color="info"

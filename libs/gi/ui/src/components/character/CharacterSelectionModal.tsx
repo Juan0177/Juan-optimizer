@@ -826,6 +826,7 @@ const SelectionCard = memo(function SelectionCard({
   characterKey: CharacterKey
   onSelect: (ck: CharacterKey) => void
 }) {
+  const { t } = useTranslation('page_character')
   const { gender } = useDBMeta()
   const character = useCharacter(characterKey)
 
@@ -918,7 +919,7 @@ const SelectionCard = memo(function SelectionCard({
             </Box>
           ) : (
             <Typography component="span" variant="body2">
-              <SqBadge color="secondary">New</SqBadge>
+              <SqBadge color="secondary">{t('newBadge', 'New')}</SqBadge>
             </Typography>
           )}
           <StarsDisplay stars={rarity} colored />

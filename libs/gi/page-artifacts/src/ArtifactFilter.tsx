@@ -134,7 +134,11 @@ export function ArtifactBulkActions({
       count: numUnequip,
       run: () =>
         window.confirm(
-          `Are you sure you want to unequip ${numUnequip} artifacts currently equipped on characters?`
+          t('bulk.confirmUnequip', {
+            defaultValue:
+              'Are you sure you want to unequip {{count}} artifacts currently equipped on characters?',
+            count: numUnequip,
+          })
         ) &&
         artifactIds.forEach((id) => database.arts.set(id, { location: '' })),
     },
@@ -145,7 +149,10 @@ export function ArtifactBulkActions({
       count: numUnlock,
       run: () =>
         window.confirm(
-          `Are you sure you want to lock ${numUnlock} artifacts?`
+          t('bulk.confirmLock', {
+            defaultValue: 'Are you sure you want to lock {{count}} artifacts?',
+            count: numUnlock,
+          })
         ) && artifactIds.forEach((id) => database.arts.set(id, { lock: true })),
     },
     {
@@ -155,7 +162,11 @@ export function ArtifactBulkActions({
       count: numLock,
       run: () =>
         window.confirm(
-          `Are you sure you want to unlock ${numLock} artifacts?`
+          t('bulk.confirmUnlock', {
+            defaultValue:
+              'Are you sure you want to unlock {{count}} artifacts?',
+            count: numLock,
+          })
         ) &&
         artifactIds.forEach((id) => database.arts.set(id, { lock: false })),
     },
@@ -167,7 +178,11 @@ export function ArtifactBulkActions({
       danger: true,
       run: () =>
         window.confirm(
-          `Are you sure you want to delete ${numDelete} artifacts?`
+          t('bulk.confirmDelete', {
+            defaultValue:
+              'Are you sure you want to delete {{count}} artifacts?',
+            count: numDelete,
+          })
         ) &&
         artifactIds.forEach(
           (id) => !database.arts.get(id)?.lock && database.arts.remove(id)

@@ -65,7 +65,10 @@ export function CustomMultiTargetModal({
       if (
         customMultiTargets[ind].targets.length &&
         !window.confirm(
-          `Are you sure you want to delete "${customMultiTargets[ind].name}"?`
+          t('mTargetDeleteConfirm', {
+            defaultValue: 'Are you sure you want to delete "{{name}}"?',
+            name: customMultiTargets[ind].name,
+          })
         )
       )
         return
@@ -73,17 +76,17 @@ export function CustomMultiTargetModal({
       customTargets_.splice(ind, 1)
       setCustomTargets(customTargets_)
     },
-    [customMultiTargets, setCustomTargets]
+    [customMultiTargets, setCustomTargets, t]
   )
   const dupCustomMultiTarget = useCallback(
     (ind: number) => () => {
       const customTargets_ = [...customMultiTargets]
       const newTarget = deepClone(customMultiTargets[ind])
-      newTarget.name = `${newTarget.name} (Duplicate)`
+      newTarget.name = `${newTarget.name} ${t('mTargetDuplicateSuffix', '(Duplicate)')}`
       customTargets_.splice(ind, 0, newTarget)
       setCustomTargets(customTargets_)
     },
-    [customMultiTargets, setCustomTargets]
+    [customMultiTargets, setCustomTargets, t]
   )
   const onClose = useCallback(() => {
     onCloseModal()

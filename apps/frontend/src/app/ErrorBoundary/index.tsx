@@ -114,8 +114,10 @@ class ErrorBoundary extends Component<Props, State> {
                           color="success"
                           onClick={() => window.location.reload()}
                         >
-                          This page runs an older version: reload to get the
-                          latest
+                          {t(
+                            'oldVersion',
+                            'This page runs an older version: reload to get the latest'
+                          )}
                         </Button>
                       </CardContent>
                     )}
