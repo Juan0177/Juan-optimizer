@@ -222,7 +222,9 @@ function TcEquipmentRow({
     artifact: { sets },
   } = useBuildTc(buildTcId)!
   return (
-    <CardThemed bgt="light" sx={{ flexGrow: 1 }}>
+    // juanlab: niente flexGrow, altrimenti nelle colonne piu corte della squadra il riquadro si allungava fino
+    // all'altezza della colonna piu lunga e spingeva l'arma in fondo
+    <CardThemed bgt="light">
       <Box
         sx={{
           p: 1,

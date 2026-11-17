@@ -4,7 +4,7 @@
   "description": "",
   "constellationName": "",
   "auto": {
-    "name": "test Danica Attacco normale",
+    "name": "Danica Attacco normale",
     "fields": {
       "normal": {
         "0": "<strong>Attacco normale</strong>",
@@ -44,7 +44,7 @@
     }
   },
   "skill": {
-    "name": "testAbilità elementale di Danica",
+    "name": "Abilità elementale di Danica",
     "description": {
       "0": "Brandisce la sua catena e il suo rilevatore, infliggendo <electro>DAN da Electro ad area</electro> agli avversari vicini ed evocando un <strong>rilevatore</strong> che segue i movimenti del personaggio attualmente in campo.",
       "1": "<br/>",
@@ -89,7 +89,7 @@
   "burst": {
     "name": "Tripudio elementale di Danica",
     "description": {
-      "0": "test Dominando il campo di battaglia con l'eleganza dell'ancella della Tsaritsa, sferra un attacco ad ampio raggio da 5 colpi, infliggendo <electro>DAN da Electro ad area</electro>.",
+      "0": "Dominando il campo di battaglia con l'eleganza dell'ancella della Tsaritsa, sferra un attacco ad ampio raggio da 5 colpi, infliggendo <electro>DAN da Electro ad area</electro>.",
       "1": "<br/>",
       "2": "<strong>Splendore: Astroconduzione</strong>:",
       "3": [
@@ -125,9 +125,9 @@
     }
   },
   "passive1": {
-    "name": "testTalento di Ascensione 1",
+    "name": "Talento di Ascensione 1",
     "description": {
-      "0": "test<strong>Rilevatore</strong> riduce la <electro>RES a Electro</electro> dei nemici vicini del 15%.",
+      "0": "<strong>Rilevatore</strong> riduce la <electro>RES a Electro</electro> dei nemici vicini del 15%.",
       "1": "<br/>",
       "2": "<strong>Splendore: Astroconduzione</strong>: riduce ulteriormente la <electro>RES a Electro</electro> dei nemici vicini del 15% e la loro <cryo>RES a Cryo</cryo> del 30%."
     }
@@ -135,13 +135,13 @@
   "passive2": {
     "name": "Talento d'ascensione 2",
     "description": {
-      "0": "test Dopo aver lanciato l'<strong>「Abilità d'ingresso E2」</strong>, l'ATT di Danica aumenta del 20%.",
+      "0": "Dopo aver lanciato l'<strong>「Abilità d'ingresso E2」</strong>, l'ATT di Danica aumenta del 20%.",
       "1": "Dopo aver lanciato l'<strong>「Abilità in campo E2」</strong>, la VEL d'ATT di Danica aumenta del 20% e, quando l'Attacco normale del Rilevatore speciale colpisce un nemico, ottiene inoltre 25 punti <strong>Eccitazione</strong>. Gli effetti sopracitati possono accumularsi fino a 3 volte.",
       "2": "Gli effetti sopracitati durano fino all'uscita dall'attuale stato di Maid di Difesa o Maid da battaglia. Un nuovo innesco ne ripristinerà la durata."
     }
   },
   "passive3": {
-    "name": "test Talento astrale",
+    "name": "Talento astrale",
     "description": {
       "0": "Quando i membri del gruppo innescano una reazione di Superconduzione, questa si trasforma in Astroconduzione, e i DAN base da Astroconduzione dei membri del gruppo vengono aumentati in base all'ATT di Danica. Per ogni punto di ATT di Danica, i suddetti DAN base aumentano di uno 0,7%, fino a un 14% massimo.",
       "1": "Inoltre, quando Danica si trova in un <tooltip ns=tooltips_gen baseKey18=11330003 values=[]><strong>Campo astropolare</strong></tooltip>, entra nello stato di <strong>Splendore: Astroconduzione</strong>."
@@ -150,18 +150,18 @@
   "passive": {
     "name": "Talento vitale",
     "description": {
-      "0": "test Quando i tuoi personaggi nel gruppo sono sotto l'effetto di Freddo estremo, la VEL di movimento aumenta del 10% e il consumo di vigore diminuisce del 10%."
+      "0": "Quando i tuoi personaggi nel gruppo sono sotto l'effetto di Freddo estremo, la VEL di movimento aumenta del 10% e il consumo di vigore diminuisce del 10%."
     }
   },
   "constellation1": {
-    "name": "test C1",
+    "name": "C1",
     "description": {
-      "0": "testQuando Danica usa l'<strong>\"abilità d'ingresso E2\"</strong> o l'<strong>\"abilità in campo E2\"</strong>, ripristina 20 di energia elementale per se stessa. Questo effetto può attivarsi al massimo una volta ogni 14 secondi.",
+      "0": "Quando Danica usa l'<strong>\"abilità d'ingresso E2\"</strong> o l'<strong>\"abilità in campo E2\"</strong>, ripristina 20 di energia elementale per se stessa. Questo effetto può attivarsi al massimo una volta ogni 14 secondi.",
       "1": "Inoltre, l'effetto di potenziamento <strong>Cameriera di Difesa</strong> nel <strong>Tripudio elementale</strong> aumenta dell'80% e l'effetto di potenziamento <strong>Cameriera da battaglia</strong> aumenta del 120%."
     }
   },
   "constellation2": {
-    "name": "testC2",
+    "name": "C2",
     "description": {
       "0": "Mentre il rilevatore di prova è presente, Danica fornisce 7 accumuli di \"Toast\" a tutti i personaggi vicini. Quando tutti i personaggi vicini hanno consumato un totale di 6 accumuli di \"Toast\", il personaggio attivo in campo ottiene inoltre 1 accumulo di \"Toast\".",
       "1": "\"Toast\": quando un personaggio del gruppo innesca una reazione di Astroconduzione, 1 accumulo di \"Toast\" verrà consumato, aumentando i DAN inflitti. Questo aumento è pari al 100% dell'ATT di Danica.",
@@ -177,14 +177,14 @@
     }
   },
   "constellation4": {
-    "name": "testC4",
+    "name": "C4",
     "description": {
-      "0": "test Quando il personaggio attivo in campo sotto la protezione dello Scudo di Danica infligge DAN da Astroconduzione agli avversari, rigenera 3 di energia elementale per gli altri membri del gruppo nelle vicinanze. Questo effetto può attivarsi al massimo una volta ogni 3,5 s.",
+      "0": "Quando il personaggio attivo in campo sotto la protezione dello Scudo di Danica infligge DAN da Astroconduzione agli avversari, rigenera 3 di energia elementale per gli altri membri del gruppo nelle vicinanze. Questo effetto può attivarsi al massimo una volta ogni 3,5 s.",
       "1": "Inoltre, quando Danica entra nello stato di Cameriera da Battaglia, verrà generato anche uno Scudo. Se Danica lascia il campo mentre lo Scudo è attivo, questo verrà distrutto."
     }
   },
   "constellation5": {
-    "name": "testC5",
+    "name": "C5",
     "description": {
       "0": "Aumenta di 3 il livello dell'<strong><tooltip ns=char_Danica_gen baseKey18=skill>abilità elementale</tooltip></strong>.",
       "1": "Il livello di potenziamento massimo è 15."

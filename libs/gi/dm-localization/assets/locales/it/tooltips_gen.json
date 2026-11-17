@@ -609,7 +609,7 @@
     }
   },
   "11470001": {
-    "name": "test Entusiasta",
+    "name": "Entusiasta",
     "description": {
       "0": "Finché il rilevatore è presente, Danica accumula <strong>Entusiasmo</strong>. L'Entusiasmo può essere ottenuto nei seguenti modi:",
       "1": [
@@ -623,9 +623,9 @@
     }
   },
   "11470002": {
-    "name": "test\"Abilità d'ingresso E2\"",
+    "name": "\"Abilità d'ingresso E2\"",
     "description": {
-      "0": "testDanica fa oscillare la catena del suo rilevatore per avvicinarsi rapidamente ai nemici, per poi schiantare il rilevatore a terra, infliggendo <electro>DAN da Electro</electro> ad area, considerati come DAN da reazione di Astroconduzione.",
+      "0": "Danica fa oscillare la catena del suo rilevatore per avvicinarsi rapidamente ai nemici, per poi schiantare il rilevatore a terra, infliggendo <electro>DAN da Electro</electro> ad area, considerati come DAN da reazione di Astroconduzione.",
       "1": "<br/>",
       "2": "Dopo aver usato questa abilità, Danica entra nello stato di <strong>Cameriera Guardiana</strong>, ottenendo i seguenti effetti:",
       "3": [
@@ -635,7 +635,7 @@
     }
   },
   "11470003": {
-    "name": "test\"Abilità in campo E2\"",
+    "name": "\"Abilità in campo E2\"",
     "description": {
       "0": "Fa oscillare la catena dell'ancora per avvicinarsi rapidamente ai nemici, dopodiché schianta l'ancora della nave al suolo, infliggendo un'ingente quantità di <electro>DAN da Electro ad area</electro> considerati come DAN da reazione di Astroconduzione.",
       "1": "<br/>",
@@ -645,13 +645,13 @@
     }
   },
   "11470004": {
-    "name": "testMaid Difensiva",
+    "name": "Maid Difensiva",
     "description": {
-      "0": "testLo stato in cui Danica entra dopo aver usato la sua speciale abilità elementale <strong>\"Abilità d'ingresso E2\"</strong>. Mentre si trova in questo stato, fornisce uno Scudo al personaggio attivo in campo e rinnova la durata di <strong>Rilevatore della nave</strong>."
+      "0": "Lo stato in cui Danica entra dopo aver usato la sua speciale abilità elementale <strong>\"Abilità d'ingresso E2\"</strong>. Mentre si trova in questo stato, fornisce uno Scudo al personaggio attivo in campo e rinnova la durata di <strong>Rilevatore della nave</strong>."
     }
   },
   "11470005": {
-    "name": "test Cameriera da battaglia",
+    "name": "Cameriera da battaglia",
     "description": {
       "0": "Lo stato in cui entra Danica dopo aver utilizzato la speciale abilità elementale <strong>\"On-Field Skill E2\"</strong>. Mentre si trova in questo stato, ogni volta che viene utilizzata \"On-Field Skill E2\", l'Attacco normale del rilevatore speciale salta una fase dell'Attacco normale, ignorando fino alle prime tre fasi dell'Attacco normale."
     }
