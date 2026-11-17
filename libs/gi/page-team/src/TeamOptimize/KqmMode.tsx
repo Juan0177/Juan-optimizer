@@ -114,7 +114,8 @@ const memberGrid = {
   columnGap: { xs: 1, sm: 1.5 },
   rowGap: 1,
   gridTemplateColumns: {
-    xs: 'minmax(0, 1fr) 76px 104px',
+    // (phones: room for "ER 139.8 %" whole)
+    xs: 'minmax(0, 1fr) 70px 122px',
     sm: 'minmax(140px, 1fr) 84px 128px',
   },
   gridTemplateAreas: { xs: '"name cons er"', sm: '"name cons er"' },
@@ -790,7 +791,13 @@ export function KqmSettings({
                     }}
                     sx={(theme) => ({
                       ...compactFieldSx,
-                      '& .MuiInputBase-root': { fontSize: 14, px: 1.25 },
+                      '& .MuiInputBase-root': {
+                        fontSize: 14,
+                        px: { xs: 1, sm: 1.25 },
+                      },
+                      '& .MuiInputAdornment-positionStart': {
+                        mr: { xs: 0.5, sm: 1 },
+                      },
                       '& .MuiInputBase-input': {
                         py: 0.875,
                         textAlign: 'right',

@@ -19,7 +19,9 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
+import type { Theme } from '@mui/material/styles'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
@@ -82,6 +84,10 @@ async function shrink(file: Blob): Promise<string | undefined> {
  * an idea, with screenshots (added, dropped anywhere on the panel or pasted) and, if they like, a
  * Discord name for a reply. The page and the app's version go with it. Drafts survive closing it.
  */
+/** Opens the feedback panel from elsewhere (phones: the menu and the footer, no floating button) */
+export const openFeedback = () =>
+  window.dispatchEvent(new Event('stellar:feedback'))
+
 export function FeedbackButton() {
   const { t, i18n } = useTranslation('ui')
   const { pathname } = useLocation()
@@ -117,6 +123,17 @@ export function FeedbackButton() {
     }
     setOpen(true)
   }
+  // (opened from the menu or the footer)
+  const openedRef = useRef(opened)
+  openedRef.current = opened
+  useEffect(() => {
+    const open = () => openedRef.current()
+    window.addEventListener('stellar:feedback', open)
+    return () => window.removeEventListener('stellar:feedback', open)
+  }, [])
+  // phones: no floating button (it covered the page's own bottom bar); the panel rises from
+  // the bottom of the screen
+  const phone = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'))
 
   const attach = async (files: Iterable<File>) => {
     const images = [...files].filter((f) => f.type.startsWith('image/'))
@@ -213,7 +230,7 @@ export function FeedbackButton() {
             right: 16,
             bottom: 20,
             zIndex: theme.zIndex.speedDial,
-            display: 'inline-flex',
+            display: { xs: 'none', sm: 'inline-flex' },
             alignItems: 'center',
             gap: 0.75,
             height: 40,
@@ -248,10 +265,21 @@ export function FeedbackButton() {
 
       <Popover
         open={open}
-        anchorEl={anchor.current}
         onClose={() => setOpen(false)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        {...(phone
+          ? {
+              anchorReference: 'anchorPosition' as const,
+              anchorPosition: {
+                top: window.innerHeight - 8,
+                left: window.innerWidth / 2,
+              },
+              transformOrigin: { vertical: 'bottom', horizontal: 'center' },
+            }
+          : {
+              anchorEl: anchor.current,
+              anchorOrigin: { vertical: 'top', horizontal: 'right' },
+              transformOrigin: { vertical: 'bottom', horizontal: 'right' },
+            })}
         // (the message box takes the focus once the panel is in: the popover keeps it otherwise)
         disableAutoFocus
         TransitionProps={{ onEntered: () => messageInput.current?.focus() }}

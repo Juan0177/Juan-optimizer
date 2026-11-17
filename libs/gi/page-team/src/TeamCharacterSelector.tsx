@@ -28,6 +28,7 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material'
+import { visuallyHidden } from '@mui/utils'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
@@ -148,19 +149,29 @@ export default function TeamCharacterSelector({
         value={selected}
         // the clicked pill turns gold at once; the member renders in the navigation's transition
         onChange={(_e, clicked: string | number) => select(clicked)}
-        variant="scrollable"
+        // (phones: every tab in view, in two rows, never scrolled off: the members as their
+        // avatars, then Team optimize and KQM)
+        variant={compact ? 'standard' : 'scrollable'}
         scrollButtons="auto"
         TabIndicatorProps={{ sx: { display: 'none' } }}
         sx={{
           minHeight: 0,
-          '& .MuiTabs-flexContainer': { gap: 1 },
+          '& .MuiTabs-flexContainer': {
+            gap: { xs: 0.75, sm: 1 },
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          },
         }}
       >
         <Tab
           icon={<GroupsIcon />}
           iconPosition="start"
           value={'team'}
-          label={t('teamSettings.tab.team')}
+          label={
+            compact
+              ? t('teamSettings.tab.teamShort', 'Team')
+              : t('teamSettings.tab.team')
+          }
+          aria-label={t('teamSettings.tab.team')}
           onClick={() => navigate(`/teams/${teamId}/`)}
           sx={memberTabSx}
         />
@@ -177,15 +188,30 @@ export default function TeamCharacterSelector({
                   <PersonIcon />
                 )
               }
-              sx={memberTabSx}
+              sx={(theme) => ({
+                ...memberTabSx(theme),
+                // (phones: the avatar alone, its name read out)
+                ...(compact && { minWidth: 0, px: 1 }),
+              })}
               iconPosition="start"
               value={teamCharKey ?? ind}
               key={ind}
               disabled={!loadoutData[ind]}
+              aria-label={
+                teamCharKey
+                  ? undefined
+                  : t('teamSettings.tab.char', { count: ind + 1 })
+              }
               label={
                 teamCharKey ? (
-                  <CharacterName characterKey={teamCharKey} gender={gender} />
-                ) : (
+                  // (phones: the avatar alone; its name still read out)
+                  <Box
+                    component="span"
+                    sx={compact ? visuallyHidden : undefined}
+                  >
+                    <CharacterName characterKey={teamCharKey} gender={gender} />
+                  </Box>
+                ) : compact ? undefined : (
                   t('teamSettings.tab.char', { count: ind + 1 })
                 )
               }

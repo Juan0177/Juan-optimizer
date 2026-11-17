@@ -163,6 +163,14 @@ export default function TeamBuildWorkspace({
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
   const [rotationExpanded, setRotationExpanded] = useState(() => !attackCount)
+  // a written rotation just applied to an empty team: its members' long attack lists fold away
+  // (the written rotation says it all; a click opens them)
+  const hadAttacks = useRef(attackCount > 0)
+  useEffect(() => {
+    if (!hadAttacks.current && attackCount > 0 && writtenRotation)
+      setRotationExpanded(false)
+    hadAttacks.current = attackCount > 0
+  }, [attackCount, writtenRotation])
   // Extra buffs: their count, and the section open when there are some
   const extraCount = Object.values(teamOpt.bonusStats ?? {}).reduce(
     (n, stats) => n + Object.values(stats ?? {}).filter((v) => !!v).length,

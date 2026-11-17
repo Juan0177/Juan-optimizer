@@ -5,6 +5,7 @@ import { AppBar, Box, Link, Skeleton, Typography } from '@mui/material'
 import { Suspense, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { ReleasedSiteLink } from './BetaSiteLink'
+import { openFeedback } from './Feedback'
 
 const GITHUB_URL = 'https://github.com/s-naveen/stellar-optimizer'
 const BUY_ME_A_COFFEE_URL = 'https://www.buymeacoffee.com/neevans'
@@ -65,6 +66,21 @@ function FooterContent() {
             </Link>
           </Typography>
           <ReleasedSiteLink />
+          {/* (phones have no floating Feedback button: here and in the menu) */}
+          <Link
+            component="button"
+            type="button"
+            onClick={openFeedback}
+            color="inherit"
+            underline="hover"
+            variant="caption"
+            sx={{
+              display: { xs: 'inline', sm: 'none' },
+              color: 'text.secondary',
+            }}
+          >
+            {t('feedback.button', 'Feedback')}
+          </Link>
           <Link
             href={GITHUB_URL}
             target="_blank"

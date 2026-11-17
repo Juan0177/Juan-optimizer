@@ -26,7 +26,13 @@ export function ScrollTop() {
       <Box
         onClick={handleClick}
         role="presentation"
-        sx={{ position: 'fixed', bottom: 100, right: 16 }}
+        // (not on phones: it covered rows and the pages' own bottom bars there)
+        sx={{
+          position: 'fixed',
+          bottom: 100,
+          right: 16,
+          display: { xs: 'none', sm: 'block' },
+        }}
       >
         <Fab color="secondary" size="small" aria-label="scroll back to top">
           <KeyboardArrowUpIcon />

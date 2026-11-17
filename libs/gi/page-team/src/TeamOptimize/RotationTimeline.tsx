@@ -97,6 +97,8 @@ const COMPACT: Sizes = {
   name: 13,
   label: 11.5,
 }
+/** The compact chart on a phone: avatars only, so the chart has the width */
+const PHONE: Sizes = { ...COMPACT, names: 46 }
 const ROOMY: Sizes = {
   lane: 46,
   track: 26,
@@ -250,7 +252,8 @@ export function RotationTimeline({
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
   const short = useMediaQuery(SHORT_SCREEN)
-  const size = detail ? (short ? SHORT : ROOMY) : COMPACT
+  const phone = useMediaQuery('(max-width: 599.95px)')
+  const size = detail ? (short ? SHORT : ROOMY) : phone ? PHONE : COMPACT
   const nameColumn = size.names
   const start = sim.start
   const length = Math.max(1, sim.frames)
@@ -748,19 +751,21 @@ export function RotationTimeline({
                         characterKey={characterKey}
                         size={detail ? 28 : 22}
                       />
-                      <Typography
-                        noWrap
-                        sx={{
-                          fontSize: size.name,
-                          fontWeight: 600,
-                          minWidth: 0,
-                        }}
-                      >
-                        <CharacterName
-                          characterKey={characterKey}
-                          gender={gender}
-                        />
-                      </Typography>
+                      {size !== PHONE && (
+                        <Typography
+                          noWrap
+                          sx={{
+                            fontSize: size.name,
+                            fontWeight: 600,
+                            minWidth: 0,
+                          }}
+                        >
+                          <CharacterName
+                            characterKey={characterKey}
+                            gender={gender}
+                          />
+                        </Typography>
+                      )}
                     </Box>
                     <Box sx={{ position: 'relative', flex: 1, mr: 1.5 }}>
                       {/* the second marks, faint */}
