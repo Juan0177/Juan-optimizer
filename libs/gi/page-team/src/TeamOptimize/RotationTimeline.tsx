@@ -604,6 +604,7 @@ export function RotationTimeline({
             cumulative={cumulative}
             total={total}
             brief={detail}
+            panel={!detail && !!pin}
             onUnpin={() => setPin(undefined)}
           />
         </Box>
@@ -1705,9 +1706,15 @@ function Readout({
   cumulative,
   total,
   brief,
+  panel,
   onUnpin,
 }: {
   store: MomentStore
+  /**
+   * The moment's panel is open under the strip (the writer, pinned): pointing at nothing else,
+   * the readout leaves the moment to it (its time, hit and enemy) and keeps the damage so far
+   */
+  panel?: boolean
   /**
    * In the detailed window, where the moment's panel shows the rest: only whether a moment is
    * pinned, and the damage so far
@@ -1778,6 +1785,23 @@ function Readout({
       </IconButton>
     </Tooltip>
   )
+  if (panel && !pointed)
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          columnGap: 1.5,
+          minWidth: 0,
+          flex: 1,
+          height: 28,
+        }}
+      >
+        {hint}
+        <Box sx={{ flexGrow: 1 }} />
+        {soFar}
+      </Box>
+    )
   if (brief)
     return (
       <Box
