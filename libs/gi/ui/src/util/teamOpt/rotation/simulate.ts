@@ -1337,8 +1337,7 @@ export function simulateRotation({
         actions.push({ characterKey, text: 'Entry', start: now, frames })
         now += frames
         runUntil(now, true)
-      }
-      else if (
+      } else if (
         (action.kind === 'swap' || action.kind === 'wait') &&
         r === Math.min(1, repeats - 1)
       ) {
@@ -1476,6 +1475,9 @@ export function simulateRotation({
       ? {
           ...kitResult,
           frames: edit.frames ?? kitResult.frames,
+          ...(kitResult.walkFrames !== undefined && {
+            walkFrames: Math.max(0, kitResult.walkFrames + shift),
+          }),
           framesInto: {
             ...Object.fromEntries(
               Object.entries(kitResult.framesInto ?? {}).map(([k, v]) => [
@@ -1556,7 +1558,12 @@ export function simulateRotation({
     let stateFrames = frames
     // gcsim queues the next item once the action reaches its earliest cancel (CanQueueAfter):
     // a written wait starts there, and the action after it is held until this one allows it
-    if (nextKind === 'wait' && !result.duration) {
+    if (nextKind === 'wait' && result.walkFrames !== undefined) {
+      // (a wait that is a walk: it starts at the action's walk cancel and ends it there, as an
+      // action of its own)
+      frames = result.walkFrames
+      stateFrames = frames
+    } else if (nextKind === 'wait' && !result.duration) {
       frames = Math.min(
         result.frames,
         ...Object.values(result.framesInto ?? {}).filter(

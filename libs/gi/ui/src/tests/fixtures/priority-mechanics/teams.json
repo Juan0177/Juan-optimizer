@@ -1732,7 +1732,7 @@
         }
       ],
       "text": "Furina E Q -> Xilonen E N2 -> Xiangling E Q -> Mualani E N3 Q W9 -> Furina",
-      "native": "furina skill,burst; xilonen skill,attack:2; xiangling skill,burst; mualani skill,attack:3,burst; wait(540);",
+      "native": "furina skill,burst; xilonen skill,attack:2; xiangling skill,burst; mualani skill,attack:3,burst,walk[f=540];",
       "checks": {
         "nodes": {}
       }
