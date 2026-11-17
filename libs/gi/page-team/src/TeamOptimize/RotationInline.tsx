@@ -405,8 +405,16 @@ const actionCode = (a: RotationAction) => {
       return 'D'
     case 'jump':
       return 'J'
-    case 'wait':
-      return `W${a.count ?? 0}`
+    case 'wait': {
+      // (as written when it reads well: W90f, W1.5; else seconds to 2 decimals, never 0.0166…)
+      const seconds = a.count ?? 0
+      const frames = Math.round(seconds * 60)
+      return /^W\d+(\.\d{1,2})?f?$/i.test(a.text ?? '')
+        ? a.text
+        : Math.abs(frames - seconds * 60) < 1e-6 && frames % 6
+          ? `W${frames}f`
+          : `W${+seconds.toFixed(2)}`
+    }
     default:
       return a.text
   }
