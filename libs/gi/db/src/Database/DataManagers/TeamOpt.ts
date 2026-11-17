@@ -230,8 +230,8 @@ export interface TeamOptKqm {
   refinementStandard4?: number
   /**
    * Per weapon group, every refinement ticked when more than one is (R1 and R5): the builds use
-   * the group's refinement (the highest ticked); the rankings and charts show each weapon of the
-   * group at the others too, for comparison
+   * the group's default one if ticked (Battle Pass R1), else the highest; the rankings and charts
+   * show each weapon of the group at the others too, for comparison
    */
   compareRefinements?: Partial<
     Record<'bp' | 'wish4' | 'standard4' | 'standard5' | 'wish5', number[]>

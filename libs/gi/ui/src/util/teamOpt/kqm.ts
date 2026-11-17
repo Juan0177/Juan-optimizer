@@ -534,11 +534,8 @@ export const kqmGroupRefinementKey = {
   standard5: 'refinementStandard5',
   wish5: 'refinement5',
 } as const satisfies Record<KqmWeaponGroup, keyof TeamOptKqm>
-/** The refinement a group's weapons are built at (its setting, else the group's default) */
-export function kqmGroupRefinement(
-  group: KqmWeaponGroup,
-  kqm: TeamOptKqm = defaultTeamOptKqm
-): number {
+/** A group's refinement setting (absent: the group's default) */
+function groupSetting(group: KqmWeaponGroup, kqm: TeamOptKqm): number {
   switch (group) {
     case 'bp':
       return kqm.refinementBp ?? 1
@@ -553,8 +550,33 @@ export function kqmGroupRefinement(
   }
 }
 /**
- * The refinements ticked for a group: the one its builds use, and any others its weapons are
- * ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
+ * The refinement a group's weapons are built at among several ticked (one at least): the group's
+ * default one if ticked (Battle Pass R1 with R5: R5 is compared, never built), else the highest
+ */
+export function kqmBuiltRefinement(
+  group: KqmWeaponGroup,
+  ticked: readonly number[]
+): number {
+  const usual = groupSetting(group, defaultTeamOptKqm)
+  return ticked.includes(usual) ? usual : Math.max(...ticked)
+}
+/**
+ * The refinement a group's weapons are built at: its setting, else the group's default; with
+ * several ticked, the default one when ticked (a setting saved as the highest ticked included)
+ */
+export function kqmGroupRefinement(
+  group: KqmWeaponGroup,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): number {
+  const setting = groupSetting(group, kqm)
+  const ticked = kqm.compareRefinements?.[group]
+  return ticked?.length
+    ? kqmBuiltRefinement(group, [...ticked, setting])
+    : setting
+}
+/**
+ * The refinements ticked for a group: the one its builds use (its default one when ticked), and
+ * any others its weapons are ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
  */
 export function kqmGroupRefinements(
   group: KqmWeaponGroup,
@@ -583,8 +605,8 @@ export function kqmCompareRefinements(
 
 /**
  * The refinement a weapon is counted at: as set for it, else by where it comes from (forged,
- * event and fishing weapons R5; one-copy rewards R1; Battle Pass, 4★ and 5★ standard-wish ones
- * their setting's: R1, R5, R1), else the settings' 5★ / 4★ event wish refinement
+ * event and fishing weapons R5; one-copy rewards R1), else its group's (Battle Pass, 4★ and 5★
+ * standard-wish ones by default R1, R5, R1; event-wish ones the settings' 5★ / 4★ refinement)
  */
 export function kqmRefinement(
   key: WeaponKey,
@@ -597,20 +619,13 @@ export function kqmRefinement(
     case 'event':
     case 'fishing':
       return 5
-    case 'standard':
-      return getWeaponStat(key)?.rarity === 5
-        ? (kqm.refinementStandard5 ?? 1)
-        : (kqm.refinementStandard4 ?? 5)
-    case 'bp':
-      return kqm.refinementBp ?? 1
     case 'quest':
     case 'console':
       return 1
-    default:
-      return getWeaponStat(key)?.rarity === 5
-        ? kqm.refinement5
-        : kqm.refinement4
   }
+  const group = kqmWeaponGroup(key)
+  if (group) return kqmGroupRefinement(group, kqm)
+  return getWeaponStat(key)?.rarity === 5 ? kqm.refinement5 : kqm.refinement4
 }
 
 /**
@@ -1104,6 +1119,12 @@ interface KqmRunArgs {
    * that run. Its result has no rankings.
    */
   from?: Partial<Record<CharacterKey, KqmBuild>>
+  /**
+   * With `from`: the members searched again (one, or several), their weapons and sets kept (main
+   * stats and rolls refitted); the others keep their builds. Members at other constellations, for
+   * about one ranking row's work each.
+   */
+  only?: CharacterKey | readonly CharacterKey[]
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1168,6 +1189,7 @@ async function runKqm({
   replay,
   onEarly,
   from,
+  only,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1258,6 +1280,27 @@ async function runKqm({
   const spaces = new Map(
     optimized.map((m) => [m.characterKey, memberSpace(m, kqm)])
   )
+  // (members refitted: their weapons and sets as they were, their main stats free; the others
+  // keep their builds)
+  const refitted =
+    from && only !== undefined
+      ? new Set<CharacterKey>(typeof only === 'string' ? [only] : only)
+      : undefined
+  for (const k of refitted ?? []) {
+    const build = from?.[k]
+    const space = spaces.get(k)
+    if (!build || !space) continue
+    const sets = Object.entries(build.sets) as [ArtifactSetKey, number][]
+    spaces.set(k, {
+      ...space,
+      weapons: space.weapons.filter(
+        (w) =>
+          w.key === build.weapon.key && w.refinement === build.weapon.refinement
+      ),
+      four: sets.filter(([, n]) => n >= 4).map(([k]) => k),
+      two: sets.filter(([, n]) => n === 2).map(([k]) => k),
+    })
+  }
   /**
    * The weapons a member may take with the others' builds in `state`: not a one-copy weapon
    * (`KQM_ONE_COPY`: a quest reward like Exaiphanes' Blade) another member already has
@@ -1855,6 +1898,8 @@ async function runKqm({
       let changed = false
       for (const [i, m] of optimized.entries()) {
         const ck = m.characterKey
+        // (members refitted: the others keep their builds)
+        if (refitted && !refitted.has(ck)) continue
         const base = (round - 1) * steps + i
         await emit(
           { phase: 'search', round, step: i + 1, steps, characterKey: ck },
