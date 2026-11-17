@@ -733,7 +733,7 @@
       "firstTime": "{{seconds}} s senza attese",
       "frames": "frame",
       "help": "Chi agisce, poi le sue azioni, con i passi separati da ->:\nE / tE abilità (tocco) · hE abilità (prolungata) · Q Tripudio · N1–N6 attacchi normali · CA caricato (Sandrone: 3 raggi condensati, CA[beams=2] per 2, fino a 6 dalla C1; Mavuika: C3F, 3 giri in Pyromoto e il colpo finale) · P picchiata · D scatto · J salto · W1.5 attesa di 1,5 s (W90f: 90 frame) · E? Q? solo se pronti (altrimenti saltati, senza attesa)\nTermina con il primo membro (\"-> bina\") dove la rotazione ricomincia.\nDati dei frame: gcsim e kqmsim (AGPLv3). Mitya: E di nuovo entro 6 s cambia nucleo. Le abilità automatiche di entrata sono incluse. Le azioni non implementate sono elencate qui sotto.",
-      "hitCount": "{{count}} colpi",
+      "hitCount": "{{count, number}} colpi",
       "hitsTitle": "Colpi per rotazione",
       "insertMember": "Inserisci {{name}}",
       "loop": "Rotazione",
@@ -768,8 +768,8 @@
         "wait": "Attesa: W1.5 è 1,5 s, W90f è 90 frame",
         "next": "Passo successivo o un altro membro"
       },
-      "hitCount_one": "{{count}} colpo",
-      "hitCount_other": "{{count}} colpi"
+      "hitCount_one": "{{count, number}} colpo",
+      "hitCount_other": "{{count, number}} colpi"
     },
     "timeline": {
       "aura": {
