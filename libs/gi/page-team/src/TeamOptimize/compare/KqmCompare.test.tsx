@@ -12,6 +12,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { srOnly } from './compareUi'
 import KqmCompare, { savedRunFor } from './KqmCompare'
 
 const { MEMBERS, NAMES } = vi.hoisted(() => ({
@@ -465,6 +466,15 @@ describe('KqmCompare', () => {
       within(table).getAllByText(/Yae Miko → Mitya/).length
     ).toBeGreaterThan(0)
     expect(within(table).getAllByText(/^−10(\.0)?%$/).length).toBeGreaterThan(0)
+    // both ER figures, each with its own label: the target and what the build reaches
+    expect(
+      within(table).getAllByText('kqmCompare.table.erTarget')
+    ).toHaveLength(4)
+    expect(within(table).getAllByText('kqmCompare.table.erBuild')).toHaveLength(
+      4
+    )
+    expect(within(table).getAllByText('150%').length).toBeGreaterThan(0)
+    expect(within(table).getAllByText('140%').length).toBeGreaterThan(0)
     // (Anastasya keeps A's build: 140% no longer reaches B's 150%)
     expect(within(table).getByText(/kqmCompare\.table\.erShort/)).toBeTruthy()
   })
@@ -657,5 +667,41 @@ describe('KqmCompare', () => {
       'entered'
     show()
     expect(screen.getByText('kqmCompare.notPlayed')).toBeTruthy()
+  })
+
+  it('says a refused fragment once, under the fragment, and points Confronta to it', () => {
+    withRun()
+    stored.set('teamOptRotationText_t1', `${TEXT} -> Yae Miko E`)
+    show()
+    chooseSwap()
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /kqmCompare\.confirm/ })
+    )
+    const message = screen.getAllByText(/kqmCompare\.error\.repeated/)
+    expect(message).toHaveLength(1)
+    const button = runButton() as HTMLButtonElement
+    expect(button.disabled).toBe(true)
+    const describedBy = button.getAttribute('aria-describedby')
+    expect(describedBy).toBeTruthy()
+    expect(document.getElementById(describedBy!)?.textContent).toContain(
+      'kqmCompare.error.repeated'
+    )
+  })
+})
+
+describe('srOnly', () => {
+  // (MUI's sx reads 1 as 100%: the hidden text would widen the page)
+  it('is the standard visually-hidden recipe, in pixels', () => {
+    expect(srOnly).toMatchObject({
+      position: 'absolute',
+      width: '1px',
+      height: '1px',
+      padding: 0,
+      margin: '-1px',
+      overflow: 'hidden',
+      clip: 'rect(0 0 0 0)',
+      whiteSpace: 'nowrap',
+      border: 0,
+    })
   })
 })

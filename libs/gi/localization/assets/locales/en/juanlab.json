@@ -158,7 +158,8 @@
       "dps": "DPS",
       "time": "Rotation time",
       "damage": "damage",
-      "er": "ER",
+      "erTarget": "ER required",
+      "erBuild": "ER build",
       "erShort": "below target: {{value}}% of {{target}}%"
     },
     "notPlayed": "KQM Theorycrafting's result uses the entered attacks, not the written rotation: A and B are not worked out the same way.",
@@ -183,7 +184,9 @@
       "share": "Share",
       "total": "Total",
       "rotation": "Rotation",
-      "delta": "Change (B vs A)"
+      "delta": "Change (B vs A)",
+      "erBuild": "ER build",
+      "erTarget": "ER required"
     }
   }
 }

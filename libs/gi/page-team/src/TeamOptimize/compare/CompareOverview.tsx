@@ -267,18 +267,36 @@ function MemberRows({
           <Delta value={delta} />
         </TableCell>
       </TableRow>
+      {/* the ER required (target) and the ER the build reaches, each labelled */}
+      <TableRow>
+        <TableCell component="th" scope="row" sx={{ ...cell, borderBottom: 0 }}>
+          <Box component="span" sx={srOnly}>
+            {name}{' '}
+          </Box>
+          <Box component="span" sx={{ ...type.label, pl: 0.25 }}>
+            {t('kqmCompare.table.erTarget')}
+          </Box>
+        </TableCell>
+        <TableCell sx={{ ...num, borderBottom: 0 }}>
+          {a.er ? pct(a.er) : '–'}
+        </TableCell>
+        <TableCell sx={{ ...num, borderBottom: 0 }}>
+          {b?.er ? pct(b.er) : '–'}
+        </TableCell>
+        <TableCell sx={{ ...num, borderBottom: 0 }} />
+      </TableRow>
       <TableRow>
         <TableCell component="th" scope="row" sx={cell}>
           <Box component="span" sx={srOnly}>
             {name}{' '}
           </Box>
           <Box component="span" sx={{ ...type.label, pl: 0.25 }}>
-            {t('kqmCompare.table.er')}
+            {t('kqmCompare.table.erBuild')}
           </Box>
         </TableCell>
-        <TableCell sx={num}>{a.er ? pct(a.er) : '–'}</TableCell>
+        <TableCell sx={num}>{a.erValue ? pct(a.erValue) : '–'}</TableCell>
         <TableCell sx={{ ...num, ...(short && { color: 'warning.main' }) }}>
-          {b?.er ? (
+          {b?.erValue ? (
             <Box
               component="span"
               sx={{
@@ -292,8 +310,8 @@ function MemberRows({
               {short && (
                 <WarningAmberRoundedIcon aria-hidden sx={{ fontSize: 15 }} />
               )}
-              {pct(b.er)}
-              {/* (in words, not only in colour: what its build reaches) */}
+              {pct(b.erValue)}
+              {/* (in words, not only in colour: below the ER required) */}
               {short && (
                 <Box
                   component="span"

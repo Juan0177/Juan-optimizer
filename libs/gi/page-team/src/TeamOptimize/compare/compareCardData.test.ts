@@ -49,6 +49,14 @@ describe('compareCardData', () => {
     expect(d.b.members[1].share).toBe(0.5)
     expect(d.a.members[0].er).toBe('121%')
   })
+  it('shows both the ER the build reaches and the ER required, labelled apart', () => {
+    expect(d.a.members[0].er).toBe('121%')
+    expect(d.a.members[0].erTarget).toBe('120%')
+    expect(d.labels.er).toBe('kqmCompare.card.erBuild')
+    expect(d.labels.erTarget).toBe('kqmCompare.card.erTarget')
+    expect(d.a.labels.er).toBe('kqmCompare.card.erBuild')
+    expect(d.a.labels.erTarget).toBe('kqmCompare.card.erTarget')
+  })
   it('has both rotations, split in turns', () => {
     expect(d.a.rotation).toEqual(['Danica E', 'Yae Miko E E', 'Danica Q'])
     expect(d.b.rotation).toEqual(['Danica E', 'Mitya E Q'])

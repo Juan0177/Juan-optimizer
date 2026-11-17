@@ -846,7 +846,11 @@ export default function KqmCompare({
                 {!text.trim() && (
                   <WarningLine>{t('kqmCompare.error.noRotation')}</WarningLine>
                 )}
-                {fragmentError && <WarningLine>{fragmentError}</WarningLine>}
+                {fragmentError && (
+                  <span id={`${titleId}-refusal`}>
+                    <WarningLine>{fragmentError}</WarningLine>
+                  </span>
+                )}
                 {warnings.map((w) => (
                   <WarningLine key={w}>{w}</WarningLine>
                 ))}
@@ -908,8 +912,10 @@ export default function KqmCompare({
                 justifyContent: 'flex-end',
               }}
             >
-              {!!problem && !running && (
+              {/* (a refused fragment is said once, under the fragment) */}
+              {!!problem && !running && problem !== fragmentError && (
                 <Typography
+                  id={`${titleId}-problem`}
                   role="status"
                   sx={{ ...type.label, color: 'text.secondary' }}
                 >
@@ -924,6 +930,13 @@ export default function KqmCompare({
               <Button
                 variant="contained"
                 disabled={!canRun}
+                aria-describedby={
+                  running || !problem
+                    ? undefined
+                    : problem === fragmentError
+                      ? `${titleId}-refusal`
+                      : `${titleId}-problem`
+                }
                 endIcon={<ArrowForwardIcon />}
                 onClick={start}
                 sx={{ ...giCtaSx, minHeight: 38, px: 2.25 }}

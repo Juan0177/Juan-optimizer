@@ -16,23 +16,33 @@ import {
 } from './shareStyle'
 import { wrapTurns } from './wrapTurns'
 
+/**
+ * One side of the comparison: the KQM sheet's data, each member with the ER its build reaches
+ * (`er`) and the ER required (`erTarget`)
+ */
+export type KqmCompareCardSide = Omit<KqmCardData, 'members' | 'labels'> & {
+  members: (KqmCardData['members'][number] & { erTarget: string })[]
+  labels: KqmCardData['labels'] & { erTarget: string }
+}
+
 /** Everything the comparison card shows: team A and team B as the KQM sheet's data, and the change */
 export type KqmCompareCardData = {
   name: string
-  a: KqmCardData
-  b: KqmCardData
+  a: KqmCompareCardSide
+  b: KqmCompareCardSide
   swap: { out: string; in: string }
-  labels: KqmCardData['labels'] & { delta: string }
+  labels: KqmCompareCardSide['labels'] & { delta: string }
   /** B against A: "+9.6%" (damage per rotation, per second) */
   delta: { dpr: string; dps: string }
 }
 
 export const KQM_COMPARE_CARD_WIDTH = 1600
-export const KQM_COMPARE_CARD_HEIGHT = 760
+export const KQM_COMPARE_CARD_HEIGHT = 808
 
 const M = 36
 const GAP = 28
-const ROW = 84
+// (a member: its name, its weapon, its sets on a line of their own)
+const ROW = 96
 const FACE = 60
 // (text on white: ink 16:1, slate 5.9:1; the change in a green and a red that read on white)
 const UP = '#1b7a3a'
@@ -138,7 +148,7 @@ export async function renderKqmCompareCard(
 
     const px = x + 24
     const pw = colW - 48
-    // columns: member | damage | share | ER (right edges)
+    // columns: member | damage | share | ER build over ER required (right edges)
     const damageX = x + colW * 0.6
     const shareX = x + colW * 0.82
     const erX = x + colW - 24
@@ -164,7 +174,19 @@ export async function renderKqmCompareCard(
       })
     head(side.labels.damage, damageX)
     head(side.labels.dist, shareX)
-    head(side.labels.er, erX)
+    // (two labels, as the cells: what the build reaches, then what it must reach)
+    ink(ctx, side.labels.er, erX, y + 22, {
+      size: 15,
+      weight: 600,
+      color: SLATE,
+      align: 'right',
+    })
+    ink(ctx, side.labels.erTarget, erX, y + 40, {
+      size: 13,
+      weight: 600,
+      color: SLATE,
+      align: 'right',
+    })
     y += colHead
 
     side.members.forEach((m, i) => {
@@ -173,10 +195,10 @@ export async function renderKqmCompareCard(
       ctx.fillRect(px, ry, pw, 1)
       face(ctx, faces[s][i], px, ry + (ROW - FACE) / 2, FACE, m.elementColor)
       const tx = px + FACE + 16
-      // (the damage figure's room: about 100 px)
-      const textW = damageX - tx - 100
+      // (the damage figure's room: about 90 px)
+      const textW = damageX - tx - 90
       const hasGear = !!m.weapon.name
-      ink(ctx, `C${m.constellation} ${m.name}`, tx, ry + (hasGear ? 36 : 50), {
+      ink(ctx, `C${m.constellation} ${m.name}`, tx, ry + (hasGear ? 30 : 56), {
         size: 21,
         weight: 700,
         maxWidth: textW,
@@ -184,39 +206,48 @@ export async function renderKqmCompareCard(
       })
       if (hasGear) {
         const icon = weapons[s][i]
-        if (icon) item(ctx, icon, tx, ry + 46, 26)
-        const gear = [
+        if (icon) item(ctx, icon, tx, ry + 38, 24)
+        ink(
+          ctx,
           `${m.weapon.name} R${m.weapon.refinement}`,
-          m.sets.map((set) => set.name).join(' / '),
-        ]
-          .filter(Boolean)
-          .join(' · ')
-        ink(ctx, gear, tx + (icon ? 34 : 0), ry + 65, {
-          size: 15,
-          color: SLATE,
-          maxWidth: textW - (icon ? 34 : 0),
-          minSize: 12,
-        })
+          tx + (icon ? 30 : 0),
+          ry + 56,
+          {
+            size: 15,
+            color: SLATE,
+            maxWidth: textW - (icon ? 30 : 0),
+            minSize: 12,
+          }
+        )
+        // (the sets on their own line, the whole width: their names fit)
+        const sets = m.sets.map((set) => set.name).join(' / ')
+        if (sets)
+          ink(ctx, sets, tx, ry + 80, {
+            size: 15,
+            color: SLATE,
+            maxWidth: textW,
+            minSize: 12,
+          })
       }
-      ink(ctx, m.damage, damageX, ry + 50, {
+      ink(ctx, m.damage, damageX, ry + 56, {
         size: 21,
         weight: 600,
         align: 'right',
       })
       // share: a thin bar under the figure
-      ink(ctx, `${(m.share * 100).toFixed(1)}%`, shareX, ry + 50, {
+      ink(ctx, `${(m.share * 100).toFixed(1)}%`, shareX, ry + 56, {
         size: 21,
         weight: 600,
         align: 'right',
       })
       const barW = 90
-      rounded(ctx, shareX - barW, ry + 62, barW, 6, 3)
+      rounded(ctx, shareX - barW, ry + 68, barW, 6, 3)
       ctx.fillStyle = WELL
       ctx.fill()
       rounded(
         ctx,
         shareX - barW,
-        ry + 62,
+        ry + 68,
         Math.max(0, Math.min(1, m.share)) * barW,
         6,
         3
@@ -224,6 +255,12 @@ export async function renderKqmCompareCard(
       ctx.fillStyle = m.elementColor
       ctx.fill()
       ink(ctx, m.er, erX, ry + 50, { size: 21, weight: 600, align: 'right' })
+      ink(ctx, m.erTarget, erX, ry + 74, {
+        size: 15,
+        weight: 600,
+        color: SLATE,
+        align: 'right',
+      })
     })
     y += n * ROW
 

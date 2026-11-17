@@ -158,7 +158,8 @@
       "dps": "DPS",
       "time": "Tempo rotazione",
       "damage": "danno",
-      "er": "ER",
+      "erTarget": "ER richiesta",
+      "erBuild": "ER build",
       "erShort": "sotto l'obiettivo: {{value}}% su {{target}}%"
     },
     "notPlayed": "Il risultato di KQM Theorycrafting usa gli attacchi inseriti, non la rotazione scritta: A e B non sono calcolati allo stesso modo.",
@@ -183,7 +184,9 @@
       "share": "Quota",
       "total": "Totale",
       "rotation": "Rotazione",
-      "delta": "Variazione (B su A)"
+      "delta": "Variazione (B su A)",
+      "erBuild": "ER build",
+      "erTarget": "ER richiesta"
     }
   }
 }

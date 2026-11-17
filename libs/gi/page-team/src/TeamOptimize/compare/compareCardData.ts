@@ -1,7 +1,10 @@
 import { artifactDefIcon, weaponAsset } from '@genshin-optimizer/gi/assets'
 import type { GenderKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
-import type { KqmCardData, KqmCompareCardData } from '@genshin-optimizer/gi/ui'
+import type {
+  KqmCompareCardData,
+  KqmCompareCardSide,
+} from '@genshin-optimizer/gi/ui'
 import { kqmCardFace } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
 import { formatDamage, formatGain } from '../format'
@@ -33,12 +36,14 @@ export function compareCardData(
 ): KqmCompareCardData {
   const { t, gender } = ctx
   const label = (key: string) => t(`juanlab:kqmCompare.card.${key}`)
-  const labels: KqmCardData['labels'] = {
+  const labels: KqmCompareCardSide['labels'] = {
     team: label('team'),
     damage: label('damage'),
     dist: label('share'),
     field: '',
-    er: 'ER',
+    // (what the build reaches, and what it must reach: both, each labelled)
+    er: label('erBuild'),
+    erTarget: label('erTarget'),
     total: label('total'),
     dpr: 'DPR',
     dps: 'DPS',
@@ -49,7 +54,7 @@ export function compareCardData(
   }
   const nameOf = (key: Side['members'][number]['key']) =>
     t(`charNames_gen:${charKeyToLocGenderedCharKey(key, gender)}`)
-  const sideData = (side: Side): KqmCardData => ({
+  const sideData = (side: Side): KqmCompareCardSide => ({
     name: side.members.map((m) => nameOf(m.key)).join(' / '),
     members: side.members.map((m) => ({
       ...kqmCardFace(m.key, gender),
@@ -71,6 +76,7 @@ export function compareCardData(
       damage: formatDamage(m.damage),
       share: m.share,
       er: `${Math.round(m.erValue)}%`,
+      erTarget: `${Math.round(m.er)}%`,
     })),
     total: formatDamage(side.dpr),
     dps: side.rotationTime > 0 ? formatDamage(side.dps) : undefined,
