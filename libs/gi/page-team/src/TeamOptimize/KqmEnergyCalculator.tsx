@@ -273,7 +273,7 @@ function Tag({
         alignItems: 'center',
         height: 22,
         px: 0.875,
-        borderRadius: 999,
+        borderRadius: 1,
         fontSize: 11.5,
         fontWeight: 600,
         whiteSpace: 'nowrap',
@@ -304,7 +304,7 @@ function Section({
       component="section"
       sx={{
         ...insetSx,
-        borderRadius: 2.5,
+        borderRadius: 1.5,
         px: { xs: 1.5, sm: 2 },
         pt: 1.5,
         pb: 1.75,
@@ -364,7 +364,7 @@ function CharacterTip({ characterKey }: { characterKey: CharacterKey }) {
         pl: { xs: 1.75, sm: 2.25 },
         pr: { xs: 1.5, sm: 2 },
         py: 1.5,
-        borderRadius: 2.5,
+        borderRadius: 1.5,
         background: alpha(theme.palette.primary.main, 0.06), // juanlab: piatto
         boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.18)}`,
         // (a gold edge on the left)
@@ -575,7 +575,7 @@ function NeedTile({
       onClick={onClick}
       sx={(theme) => ({
         ...insetSx,
-        borderRadius: 2.5,
+        borderRadius: 1.5,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'flex-start',
@@ -1069,7 +1069,7 @@ function MemberEnergy({
                       sx={(theme) => ({
                         height: 22,
                         px: 0.875,
-                        borderRadius: 999,
+                        borderRadius: 1,
                         gap: 0.5,
                         fontSize: 11.5,
                         fontWeight: 650,

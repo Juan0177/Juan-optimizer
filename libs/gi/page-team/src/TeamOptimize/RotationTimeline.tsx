@@ -1595,7 +1595,7 @@ function AuraChips({ auras }: { auras: AuraKey[] }) {
           component="span"
           sx={(theme) => ({
             px: 0.75,
-            borderRadius: 999,
+            borderRadius: 1,
             fontSize: 11.5,
             fontWeight: 650,
             lineHeight: '18px',
@@ -1970,7 +1970,7 @@ function MomentPanel({
   return (
     <Box
       sx={(theme) => ({
-        borderRadius: 2.5,
+        borderRadius: 1.5,
         border: `1px solid ${pinned ? alpha(tokens.gold, 0.35) : theme.palette.divider}`,
         bgcolor: tokens.inset,
         overflow: 'hidden',
@@ -2115,7 +2115,7 @@ function MomentPanel({
                       ml: 'auto',
                       flexShrink: 0,
                       px: 0.75,
-                      borderRadius: 999,
+                      borderRadius: 1,
                       fontSize: 10.5,
                       fontWeight: 650,
                       lineHeight: '18px',
@@ -2348,7 +2348,7 @@ const chipSx = (theme: Theme) => ({
   gap: 0.5,
   maxWidth: '100%',
   px: 0.875,
-  borderRadius: 999,
+  borderRadius: 1,
   fontSize: 11.5,
   lineHeight: '20px',
   whiteSpace: 'nowrap' as const,

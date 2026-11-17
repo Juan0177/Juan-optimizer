@@ -1796,7 +1796,7 @@ export const editorSx = (theme: Theme) => ({
     fontSize: 14.5,
     lineHeight: 1.75,
     bgcolor: theme.palette.contentDark.main,
-    borderRadius: 2,
+    borderRadius: 1.5,
     transition: 'box-shadow .15s',
   },
   '& .MuiOutlinedInput-notchedOutline': {
@@ -1872,7 +1872,7 @@ function EmptyTimeline() {
       sx={(theme) => ({
         mt: 1,
         height: 150,
-        borderRadius: 2,
+        borderRadius: 1.5,
         border: `1px dashed ${alpha(theme.palette.text.primary, 0.14)}`,
         backgroundImage: `repeating-linear-gradient(90deg, transparent 0 59px, ${alpha(theme.palette.text.primary, 0.05)} 59px 60px)`,
         display: 'grid',
@@ -2087,7 +2087,7 @@ function HitsSummary({
               px: 1.5,
               pt: 1.5,
               pb: 1.25,
-              borderRadius: 2.5,
+              borderRadius: 1.5,
               bgcolor: tokens.inset,
               border: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
               minWidth: 0,
@@ -2112,7 +2112,7 @@ function HitsSummary({
                   ml: 'auto',
                   flexShrink: 0,
                   px: 0.875,
-                  borderRadius: 999,
+                  borderRadius: 1,
                   fontSize: 11.5,
                   fontWeight: 600,
                   lineHeight: '20px',
@@ -2180,7 +2180,7 @@ function RotationNotes({ notes }: { notes: string[] }) {
           rowGap: 0.75,
           mt: 0.5,
           p: 1.5,
-          borderRadius: 2,
+          borderRadius: 1.5,
           bgcolor: tokens.inset,
           border: tokensHairline,
           fontSize: 12.5,
@@ -2219,7 +2219,7 @@ function RotationNotes({ notes }: { notes: string[] }) {
                   component="span"
                   sx={(theme) => ({
                     px: 0.875,
-                    borderRadius: 999,
+                    borderRadius: 1,
                     lineHeight: '22px',
                     fontVariantNumeric: 'tabular-nums',
                     color: 'text.secondary',

@@ -76,5 +76,6 @@
   },
   "notActive": "(Non attivato)",
   "basedOnStellar": "Basato su Stellar Optimizer",
-  "homeTitle": "Juan-optimizer: ottimizzatore di manufatti e build per Genshin Impact"
+  "homeTitle": "Juan-optimizer: ottimizzatore di manufatti e build per Genshin Impact",
+  "dbName": "Nome del database"
 }

@@ -5,10 +5,10 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { dataContextObj, TeamData } from '@genshin-optimizer/gi/ui'
 import {
+  CharAvatarSide,
   CharacterMultiSelectionModal,
   CharacterName,
   CharacterSingleSelectionModal,
-  CharIconSide,
   EnemyExpandCard,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
@@ -378,7 +378,7 @@ function AddMemberButton({
       disabled={disabled}
       sx={(theme) => ({
         minHeight: 148,
-        borderRadius: 3,
+        borderRadius: 1.5,
         flexDirection: 'column',
         gap: 0.5,
         fontWeight: 600,
@@ -454,9 +454,13 @@ function CharSelButton({
       <Box sx={{ display: 'flex', gap: 1 }}>
         <Button
           onClick={onClickChar}
-          startIcon={<CharIconSide characterKey={characterKey} />}
+          startIcon={<CharAvatarSide characterKey={characterKey} size={32} />}
           endIcon={<SwapHorizIcon />}
-          sx={(theme) => ({ ...fieldButtonSx(theme), flexGrow: 1 })}
+          sx={(theme) => ({
+            ...fieldButtonSx(theme),
+            flexGrow: 1,
+            minHeight: 44,
+          })}
         >
           <Box component="span" sx={ellipsisSx}>
             <CharacterName characterKey={characterKey} gender={gender} />
@@ -467,7 +471,7 @@ function CharSelButton({
             onClick={onDel}
             aria-label={t('teamSettings.removeBtn')}
             sx={(theme) => ({
-              borderRadius: 2,
+              borderRadius: 1.5,
               color: 'text.secondary',
               border: `1px solid ${alpha(theme.palette.text.primary, 0.16)}`,
               '&:hover': {
@@ -507,7 +511,7 @@ function CharSelButton({
           startIcon={<StarOutlineRoundedIcon />}
           sx={(theme) => ({
             minHeight: 32,
-            borderRadius: 2,
+            borderRadius: 1.5,
             fontWeight: 600,
             color: 'text.secondary',
             '&:hover': {
@@ -526,7 +530,7 @@ function CharSelButton({
             justifyContent: 'center',
             gap: 0.75,
             minHeight: 32,
-            borderRadius: 2,
+            borderRadius: 1.5,
             fontSize: '0.8125rem',
             fontWeight: 600,
             color: 'primary.light',

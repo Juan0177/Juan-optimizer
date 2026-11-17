@@ -116,5 +116,6 @@
     "resonance": "Elemental Resonance",
     "reaction": "Reaction"
   },
-  "basedOnStellar": "Based on Stellar Optimizer"
+  "basedOnStellar": "Based on Stellar Optimizer",
+  "dbName": "Database name"
 }

@@ -35,7 +35,7 @@ export default function ScalesWith() {
             gap: 0.5,
             height: 26,
             px: 1,
-            borderRadius: 999,
+            borderRadius: 1,
             bgcolor: alpha(theme.palette.text.primary, 0.06),
             fontSize: '0.8125rem',
             fontWeight: 500,

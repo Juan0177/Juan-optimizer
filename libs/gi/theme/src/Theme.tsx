@@ -292,7 +292,8 @@ const elementTheme = createTheme({
     neutral100: augment(parchment, 'neutral100'),
     neutral200: augment('#d3dceb', 'neutral200'),
     neutral300: augment('#a3aec2', 'neutral300'),
-    neutral400: augment('#76829a', 'neutral400'),
+    // juanlab: WCAG 2.1 AA, almeno 4,5:1 anche sui pannelli rialzati
+    neutral400: augment('#8591a8', 'neutral400'),
     neutral500: augment(surface.muted, 'neutral500'),
     neutral600: augment(surface.line, 'neutral600'),
     // the page background is a radial gradient from neutral700 (top) to neutral800
@@ -308,11 +309,11 @@ const elementTheme = createTheme({
       name: 'dendro',
     }),
     pyro: commonTheme.palette.augmentColor({
-      color: { main: '#FF3C32' },
+      color: { main: '#ff5a4f' }, // juanlab: WCAG AA come testo sui pannelli (era #FF3C32)
       name: 'pyro',
     }),
     hydro: commonTheme.palette.augmentColor({
-      color: { main: '#5680ff' },
+      color: { main: '#6b8cff' }, // juanlab: WCAG AA come testo sui pannelli (era #5680ff)
       name: 'hydro',
     }),
     cryo: commonTheme.palette.augmentColor({
@@ -320,7 +321,7 @@ const elementTheme = createTheme({
       name: 'cryo',
     }),
     electro: commonTheme.palette.augmentColor({
-      color: { main: '#b25dcd' },
+      color: { main: '#c07ae0' }, // juanlab: WCAG AA come testo sui pannelli (era #b25dcd)
       name: 'electro',
     }),
     anemo: commonTheme.palette.augmentColor({
@@ -542,6 +543,7 @@ const components: ThemeOptions['components'] = {
     styleOverrides: {
       root: ({ ownerState }) => ({
         fontWeight: 500,
+        borderRadius: 4, // juanlab: chip squadrati, niente pillole
         ...(ownerState.variant !== 'outlined' &&
           (!ownerState.color || ownerState.color === 'default') && {
             backgroundColor: alpha(parchment, 0.1),

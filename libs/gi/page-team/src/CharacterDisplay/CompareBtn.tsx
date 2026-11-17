@@ -230,7 +230,7 @@ function QuietBadge({ children }: { children: ReactNode }) {
       sx={(theme) => ({
         ml: 0.75,
         px: 0.75,
-        borderRadius: 999,
+        borderRadius: 1,
         bgcolor: alpha(theme.palette.text.primary, 0.08),
         color: 'text.secondary',
         fontSize: '0.75rem',

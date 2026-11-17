@@ -139,6 +139,8 @@ function DataCard({ index, readOnly }: { index: number; readOnly: boolean }) {
           size="small"
           fullWidth
           value={name}
+          // juanlab: etichetta per gli screen reader (WCAG 1.3.1 / 4.1.2)
+          inputProps={{ 'aria-label': t('ui:dbName', 'Database name') }}
           sx={{ borderRadius: 1, px: 1, flexGrow: 1 }}
           onChange={(name) => {
             database.dbMeta.set({ name })

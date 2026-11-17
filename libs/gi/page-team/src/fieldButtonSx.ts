@@ -11,7 +11,7 @@ export function fieldButtonSx(theme: Theme) {
     minWidth: 0,
     minHeight: 36,
     px: 1.25,
-    borderRadius: 2,
+    borderRadius: 1, // juanlab: angoli contenuti
     justifyContent: 'flex-start',
     textAlign: 'left',
     fontWeight: 600,

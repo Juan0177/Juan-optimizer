@@ -22,7 +22,8 @@ import { type ReactNode, Suspense } from 'react'
 /* ---------- tokens ---------- */
 
 export const tokens = {
-  radius: { panel: 3, inset: 2, control: 1.5, pill: 999 },
+  // juanlab: angoli contenuti come in Genshin Optimizer, niente pillole (era panel 3, inset 2, control 1.5, pill 999)
+  radius: { panel: 1.5, inset: 1, control: 1, pill: 1 },
   /** padding inside a panel (theme spacing): phones, then larger screens */
   pad: { xs: 1.5, sm: 2 },
   hairline: giTokens.hairline,

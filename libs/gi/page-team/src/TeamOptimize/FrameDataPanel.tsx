@@ -342,7 +342,7 @@ export function FrameDataPanel({
                     pl: 0.5,
                     pr: 1.25,
                     py: 0.5,
-                    borderRadius: 999,
+                    borderRadius: 1,
                     fontSize: 13,
                     fontWeight: 600,
                     whiteSpace: 'nowrap',

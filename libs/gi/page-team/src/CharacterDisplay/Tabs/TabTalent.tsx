@@ -441,7 +441,7 @@ function StatusTag({ locked }: { locked: boolean }) {
         flexShrink: 0,
         px: 1,
         py: 0.25,
-        borderRadius: 999,
+        borderRadius: 1,
         fontSize: '0.75rem',
         fontWeight: 600,
         ...(locked

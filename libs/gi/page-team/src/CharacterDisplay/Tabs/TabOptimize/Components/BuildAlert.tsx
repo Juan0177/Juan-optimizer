@@ -127,7 +127,7 @@ export default function BuildAlert({
         value={progress}
         color="primary"
         aria-label="Optimization progress"
-        sx={{ height: 4, borderRadius: 2 }}
+        sx={{ height: 4, borderRadius: 1.5 }}
       />
     )
   } else {
@@ -165,7 +165,7 @@ export default function BuildAlert({
         value={100}
         color={noBuild ? 'warning' : 'success'}
         aria-hidden
-        sx={{ height: 4, borderRadius: 2, opacity: 0.5 }}
+        sx={{ height: 4, borderRadius: 1.5, opacity: 0.5 }}
       />
     )
   }

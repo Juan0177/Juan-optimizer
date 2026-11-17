@@ -77,7 +77,15 @@ function BuffGroup({
   children?: ReactNode
 }) {
   return (
-    <CardThemed bgt="light" sx={{ width: '100%', opacity: active ? 1 : 0.6 }}>
+    <CardThemed
+      bgt="light"
+      sx={{
+        width: '100%',
+        opacity: active
+          ? 1
+          : 0.8 /* juanlab: WCAG AA anche sbiadito (era 0.6) */,
+      }}
+    >
       <CardHeader
         title={title}
         titleTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}

@@ -462,7 +462,7 @@ function GainList({
                     className="sv-bar"
                     sx={(theme) => ({
                       height: 6,
-                      borderRadius: 3,
+                      borderRadius: 1.5,
                       overflow: 'hidden',
                       bgcolor: alpha(theme.palette.text.primary, 0.08),
                     })}
@@ -471,7 +471,7 @@ function GainList({
                       sx={(theme) => ({
                         height: '100%',
                         width: `${top > 0 ? (Math.max(0, gain) / top) * 100 : 0}%`,
-                        borderRadius: 3,
+                        borderRadius: 1.5,
                         bgcolor: isBestTotal
                           ? theme.palette.primary.main
                           : alpha(theme.palette.primary.main, 0.5),
@@ -570,7 +570,7 @@ function BestChip({
         gap: 0.75,
         px: 1.25,
         py: 0.5,
-        borderRadius: 2,
+        borderRadius: 1.5,
         bgcolor: alpha(theme.palette.primary.main, 0.1),
         boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.3)}`,
       })}
@@ -617,7 +617,7 @@ function RollStepper({
         display: 'inline-flex',
         alignItems: 'center',
         height: 28,
-        borderRadius: 2,
+        borderRadius: 1.5,
         border: `1px solid ${alpha(custom ? theme.palette.primary.main : theme.palette.text.primary, custom ? 0.55 : 0.14)}`,
       })}
     >

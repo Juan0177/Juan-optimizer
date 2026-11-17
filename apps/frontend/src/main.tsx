@@ -1,5 +1,6 @@
 import { stopAppStorage } from '@genshin-optimizer/common/database'
 import { isDev } from '@genshin-optimizer/common/util'
+import { markDecorativeImages } from '@genshin-optimizer/gi/ui' // juanlab: WCAG, icone decorative
 import { reloadOnce, startUpdateCheck } from './app/updateCheck'
 import '@fontsource/roboto/300.css'
 import '@fontsource/roboto/400.css'
@@ -37,6 +38,7 @@ if ('serviceWorker' in navigator && !isDev && location.protocol === 'https:') {
   })
 }
 if (!isDev) startUpdateCheck()
+markDecorativeImages() // juanlab
 let mode: 'main' | 'newtab' = 'main'
 let root = createRoot(document.getElementById('root') as HTMLElement)
 // The data are read before the app starts (the loading screen shows until then): from IndexedDB,

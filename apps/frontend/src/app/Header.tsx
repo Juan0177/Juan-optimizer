@@ -409,7 +409,7 @@ function Brand({ onClick }: { onClick?: () => void }) {
         alignItems: 'center',
         gap: 1.25,
         pr: 1,
-        borderRadius: 2,
+        borderRadius: 1.5,
         color: 'text.primary',
         textDecoration: 'none',
         flexShrink: 0,

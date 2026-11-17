@@ -559,7 +559,7 @@ export function TeamOptResults({
             pl: 1.5,
             pr: 1,
             py: 0.75,
-            borderRadius: 2.5,
+            borderRadius: 1.5,
             bgcolor: tokens.raised,
             border: `1px solid ${tokens.hairlineStrong}`,
             boxShadow: '0 12px 32px rgba(0, 0, 0, 0.55)',
@@ -981,7 +981,7 @@ function MemberResult({
           sx={{
             mt: 1,
             height: 3,
-            borderRadius: 2,
+            borderRadius: 1.5,
             overflow: 'hidden',
             bgcolor: alpha(giTokens.parchment, 0.07),
           }}
@@ -990,7 +990,7 @@ function MemberResult({
             sx={(theme) => ({
               height: '100%',
               width: `${clamp(share, 0, 1) * 100}%`,
-              borderRadius: 2,
+              borderRadius: 1.5,
               bgcolor: alpha(elementColor(theme, characterKey), 0.85),
             })}
           />

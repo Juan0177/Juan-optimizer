@@ -40,7 +40,7 @@ function toggleRowSx(active: boolean) {
   return (theme: Theme) => {
     const { success, text, divider } = theme.palette
     return {
-      borderRadius: 2,
+      borderRadius: 1.5,
       justifyContent: 'flex-start',
       textAlign: 'left',
       minHeight: 40,
@@ -74,7 +74,7 @@ function selectFieldSx(active: boolean) {
     return {
       minWidth: 0,
       maxWidth: '100%',
-      borderRadius: 2,
+      borderRadius: 1.5,
       justifyContent: 'flex-start',
       textAlign: 'left',
       minHeight: 40,
