@@ -263,8 +263,9 @@ export default function TeamBuildWorkspace({
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
     kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
   })
-  // against a Stygian Onslaught boss: how long the team takes, its fight's mechanics counted where
-  // they are known (with the written rotation's element applications)
+  // how long the team takes to defeat the enemy: a Stygian Onslaught boss, its fight's mechanics
+  // counted where they are known (with the written rotation's element applications); an enemy set
+  // by hand, its HP ÷ the team's DPS
   const stygian = team && appliedStygianPreset(team)
   const gauge = useRotationGauge(
     teamId,
@@ -275,7 +276,7 @@ export default function TeamBuildWorkspace({
   )
   const fightNow = useMemo(
     () =>
-      team && stygian
+      team && (stygian || team.enemyHp)
         ? fightTeamOf({
             members: members.map((m) => m.characterKey),
             // (the damage shown: the equipped builds', or the KQM builds' played)

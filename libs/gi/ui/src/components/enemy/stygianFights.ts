@@ -1,11 +1,13 @@
 import type { ElementWithPhyKey } from '@genshin-optimizer/gi/consts'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
+import type { Team } from '@genshin-optimizer/gi/db'
 import type {
   StygianBoss,
   StygianDifficultyKey,
   StygianPhaseKey,
   StygianRes,
 } from './stygianBosses'
+import { appliedStygianPreset } from './stygianBosses'
 
 /**
  * How long a team takes to defeat a Stygian Onslaught boss, its fight's mechanics counted where
@@ -34,6 +36,8 @@ export type FightPart =
   | { key: 'backlash'; count: number; hp: number }
   | { key: 'horns'; count: number; seconds: number; removal: number }
   | { key: 'hornsBreak'; count: number; hp: number }
+  /** An enemy set by hand: its HP ÷ the team's DPS */
+  | { key: 'custom'; dps: number; seconds: number }
 export type FightNote =
   | 'stellarGlimmer'
   | 'noRotation'
@@ -402,3 +406,60 @@ export function stygianFight(
 
 /** Whether a boss's fight has its mechanics modelled */
 export const stygianFightModelled = (bossId: number) => !!models[bossId]
+
+/** The team's DPS against the enemy as set: all its elements' */
+export const teamDps = (team: FightTeam) =>
+  Object.values(team.dps).reduce<number>((sum, v) => sum + (v ?? 0), 0)
+
+/** An enemy set by hand: its HP ÷ the team's DPS (no mechanics) */
+export function customFight(hp: number, team: FightTeam): FightEstimate {
+  const dps = teamDps(team)
+  const seconds = dps > 0 ? hp / dps : undefined
+  const end = Math.min(seconds ?? FIGHT_LIMIT, FIGHT_LIMIT)
+  return {
+    seconds:
+      seconds !== undefined && seconds <= FIGHT_LIMIT ? seconds : undefined,
+    parts: seconds !== undefined ? [{ key: 'custom', dps, seconds }] : [],
+    timeline: {
+      segments: [
+        {
+          start: 0,
+          end,
+          state: 'regular',
+          hpStart: 1,
+          hpEnd: Math.max(0, 1 - (dps * end) / hp),
+        },
+      ],
+      events: [],
+    },
+    notes: [],
+    modelled: false,
+  }
+}
+
+/** An enemy in a fight: its level, RES and DEF, the preset it is, and its HP if set by hand */
+export type FightEnemy = Pick<Team, 'enemyOverride' | 'enemyPreset' | 'enemyHp'>
+
+/** The enemy's HP: a Stygian boss's at its difficulty, else the one set by hand (none: unknown) */
+export function enemyHpOf(enemy: FightEnemy): number | undefined {
+  const preset = appliedStygianPreset(enemy)
+  if (preset)
+    return preset.difficulty ? preset.boss.hp[preset.difficulty] : undefined
+  return enemy.enemyHp
+}
+
+/**
+ * How long the team takes to defeat the enemy: a Stygian boss's fight (its mechanics where they
+ * are known), else its HP (set by hand) ÷ the team's DPS; its HP unknown: undefined
+ */
+export function enemyFight(
+  enemy: FightEnemy,
+  team: FightTeam
+): FightEstimate | undefined {
+  const preset = appliedStygianPreset(enemy)
+  if (preset)
+    return preset.difficulty
+      ? stygianFight(preset.boss, preset.difficulty, team, preset.phase.key)
+      : undefined
+  return enemy.enemyHp ? customFight(enemy.enemyHp, team) : undefined
+}

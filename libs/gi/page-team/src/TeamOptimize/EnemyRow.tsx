@@ -1,7 +1,7 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
 import { useTeam } from '@genshin-optimizer/gi/db-ui'
 import type { FightTeam } from '@genshin-optimizer/gi/ui'
-import { EnemySummary, StygianDefeatTime } from '@genshin-optimizer/gi/ui'
+import { EnemyDefeatTime, EnemySummary } from '@genshin-optimizer/gi/ui'
 import { Box, Button } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { EnemyDialog } from '../Enemy/EnemyDialog'
@@ -57,7 +57,7 @@ export function EnemyRow({
         }}
       >
         <EnemySummary enemy={team} />
-        <StygianDefeatTime enemy={team} team={fight} />
+        <EnemyDefeatTime enemy={team} team={fight} />
       </Box>
       <Button
         size="small"

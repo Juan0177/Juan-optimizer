@@ -31,10 +31,11 @@ import {
   ArtifactSetName,
   ArtifactSetTooltip,
   CharacterName,
+  EnemyDefeatTime,
   EnemySummary,
   ExcludeIcon,
   resolveInfo,
-  StygianDefeatTime,
+  sameEnemy,
   statName,
   WeaponDetails,
   WeaponName,
@@ -134,7 +135,15 @@ export function TeamOptResults({
   const database = useDatabase()
   const team = useTeam(teamId)
   const { before, after } = result
-  // the team's builds in the fight against the enemy it was found for (a Stygian boss)
+  // the enemy the builds are for: the team's now while it takes the same damage (its preset and
+  // HP too: the builds do not depend on them), else the one they were found for
+  const fightEnemy = useMemo(
+    () =>
+      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
+        ? team
+        : enemy,
+    [enemy, team]
+  )
   const fight = useMemo(
     () =>
       enemy &&
@@ -274,7 +283,9 @@ export function TeamOptResults({
             >
               <span>{t('teamOpt.result.enemy', 'For')}</span>
               <EnemySummary enemy={enemy} />
-              <StygianDefeatTime enemy={enemy} team={fight} />
+              {fightEnemy && (
+                <EnemyDefeatTime enemy={fightEnemy} team={fight} />
+              )}
               {enemyNow && (
                 <Box
                   component="span"
@@ -599,8 +610,8 @@ export function TeamOptResults({
             />
           ))}
         </Box>
-        {/* a Stygian boss: its states and HP over the fight */}
-        {enemy && <FightTimeline enemy={enemy} team={fight} />}
+        {/* the enemy's HP over the fight (a Stygian boss: its states too) */}
+        {fightEnemy && <FightTimeline enemy={fightEnemy} team={fight} />}
       </Box>
       <Snackbar
         open={!!lastExcluded}

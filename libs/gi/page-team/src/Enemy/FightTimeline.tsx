@@ -1,17 +1,19 @@
 import { stygianBossIcons } from '@genshin-optimizer/gi/assets'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  FightEnemy,
   FightEvent,
   FightSegment,
   FightTeam,
-  RunEnemy,
 } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
+  enemyFight,
+  enemyHpOf,
   FIGHT_LIMIT,
+  formatDuration,
   formatFightTime,
   stygianBossName,
-  stygianFight,
   stygianPhaseName,
 } from '@genshin-optimizer/gi/ui'
 import type { Theme } from '@mui/material'
@@ -48,28 +50,33 @@ function marks(end: number) {
   return out
 }
 
+const compact = (digits: number) =>
+  new Intl.NumberFormat('en', {
+    notation: 'compact',
+    maximumSignificantDigits: digits,
+  })
+
 /**
- * The fight against a Stygian Onslaught boss, over time: its state (its phases; the Emperor's
- * horns) and its HP, with the moments its mechanics take HP off at once
+ * The fight against the enemy, over time: its HP and, a Stygian Onslaught boss's, its state (its
+ * phases; the Emperor's horns), with the moments its mechanics take HP off at once. An enemy set
+ * by hand: its HP going down at the team's DPS. Its HP unknown: nothing
  */
 export function FightTimeline({
   enemy,
   team,
 }: {
-  enemy: RunEnemy
+  enemy: FightEnemy
   team?: FightTeam
 }) {
   const { t } = useTranslation(['page_team', 'stygian'])
   const theme = useTheme()
   const preset = appliedStygianPreset(enemy)
   const estimate = useMemo(
-    () =>
-      preset?.difficulty && team
-        ? stygianFight(preset.boss, preset.difficulty, team, preset.phase.key)
-        : undefined,
-    [preset?.boss, preset?.difficulty, preset?.phase.key, team]
+    () => (team ? enemyFight(enemy, team) : undefined),
+    [enemy, team]
   )
-  if (!preset?.difficulty || !estimate) return null
+  const hp = enemyHpOf(enemy)
+  if (!estimate || hp === undefined) return null
   const { segments, events } = estimate.timeline
   const end = Math.max(
     1,
@@ -96,7 +103,7 @@ export function FightTimeline({
   const stateName = (state: FightSegment['state']) =>
     state === 'horns'
       ? t('enemy.fight.hornsState', 'Horns on (+150% RES)')
-      : state === 'shielded' && preset.boss.id === 1013061
+      : state === 'shielded' && preset?.boss.id === 1013061
         ? t('enemy.fight.valiantState', 'Valiant State (shielded)')
         : stygianPhaseName(t, state)
   const eventName = (e: FightEvent) =>
@@ -109,7 +116,7 @@ export function FightTimeline({
           defaultValue: 'Horns broken: −{{hp}}% of its HP',
           hp: (e.hp * 100).toFixed(1),
         })
-  const icon = stygianBossIcons[preset.boss.id]
+  const icon = preset && stygianBossIcons[preset.boss.id]
   return (
     <Box
       component="section"
@@ -139,36 +146,50 @@ export function FightTimeline({
             {t('enemy.fight.title', 'Fight timeline')}
           </Typography>
           <Typography sx={{ ...type.label, ...numSx }}>
-            {stygianBossName(t, preset.boss.id)}
-            {' · '}
-            {preset.difficulty === 'fearless'
-              ? t('enemy.fearlessShort', {
-                  defaultValue: 'Fearless, Lv. {{level}}',
-                  level: enemy.enemyOverride.enemyLevel,
-                })
-              : t('enemy.direShort', {
-                  defaultValue: 'Dire, Lv. {{level}}',
-                  level: enemy.enemyOverride.enemyLevel,
-                })}
+            {preset
+              ? [
+                  stygianBossName(t, preset.boss.id),
+                  preset.difficulty === 'fearless'
+                    ? t('enemy.fearlessShort', {
+                        defaultValue: 'Fearless, Lv. {{level}}',
+                        level: enemy.enemyOverride.enemyLevel,
+                      })
+                    : t('enemy.direShort', {
+                        defaultValue: 'Dire, Lv. {{level}}',
+                        level: enemy.enemyOverride.enemyLevel,
+                      }),
+                ].join(' · ')
+              : [
+                  t('enemy.customShort', 'Custom enemy'),
+                  t('enemy.hp', {
+                    defaultValue: '{{hp}} HP',
+                    hp: compact(3).format(hp),
+                  }),
+                  t('enemy.levelShort', {
+                    defaultValue: 'Lv. {{level}}',
+                    level: enemy.enemyOverride.enemyLevel ?? 100,
+                  }),
+                ].join(' · ')}
           </Typography>
         </Box>
         <Typography sx={{ ...type.stat, fontSize: 17 }}>
           {estimate.seconds !== undefined
             ? t('enemy.stygian.defeat', {
                 defaultValue: '≈ {{time}} to defeat',
-                time: formatFightTime(estimate.seconds),
+                time: formatDuration(t, estimate.seconds),
               })
             : t('enemy.stygian.defeatOver', {
                 defaultValue: 'over {{time}} to defeat',
-                time: formatFightTime(FIGHT_LIMIT),
+                time: formatDuration(t, FIGHT_LIMIT),
               })}
         </Typography>
       </Box>
 
-      {/* its state, then its HP over the fight */}
+      {/* its state (a boss's), then its HP over the fight */}
       <Box sx={{ display: 'grid', gap: 0.5 }}>
         <Box
           sx={{
+            display: preset ? 'block' : 'none',
             position: 'relative',
             height: 12,
             borderRadius: 1,
@@ -318,7 +339,15 @@ export function FightTimeline({
           borderTop: hairline,
         }}
       >
-        {states.map((state) => (
+        {!preset && (
+          <Typography sx={{ ...type.label, fontWeight: 400 }}>
+            {t(
+              'enemy.fight.customHint',
+              'Its HP ÷ the team’s DPS, the rotation repeated'
+            )}
+          </Typography>
+        )}
+        {(preset ? states : []).map((state) => (
           <Box
             key={state}
             sx={{

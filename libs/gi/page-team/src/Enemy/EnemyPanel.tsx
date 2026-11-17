@@ -2,6 +2,7 @@ import { stygianBossIcons } from '@genshin-optimizer/gi/assets'
 import type { ElementWithPhyKey } from '@genshin-optimizer/gi/consts'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { Team } from '@genshin-optimizer/gi/db'
+import { MAX_ENEMY_HP } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
@@ -13,6 +14,7 @@ import type {
 import {
   appliedStygianPreset,
   currentStygianSeason,
+  enemyHpOf,
   StygianResSummary,
   stygianBosses,
   stygianBossName,
@@ -52,6 +54,7 @@ import {
   type,
 } from '../TeamOptimize/ui'
 import { GameText } from './GameText'
+import { formatHp, parseHp } from './hp'
 
 const WIKI_RES =
   'https://genshin-impact.fandom.com/wiki/Resistance#Base_Enemy_Resistances'
@@ -66,7 +69,7 @@ const compact = (digits: number) =>
 type Mode = 'custom' | 'stygian'
 
 /**
- * The enemy the team's damage is for, set one of two ways: by hand (its level, each element's
+ * The enemy the team's damage is for, set one of two ways: by hand (its HP, level, each element's
  * RES, DEF shred) or as a Stygian Onslaught boss, picked from its catalogue (the game's icons and
  * text; its HP and RES per phase, stygian.moe's)
  */
@@ -76,13 +79,15 @@ export function EnemyPanel({ teamId }: { teamId: string }) {
   const applied = team && appliedStygianPreset(team)
   const database = useDatabase()
   const [mode, setMode] = useState<Mode>(applied ? 'stygian' : 'custom')
-  // Custom: the enemy is the team's own from now on (the boss's numbers, to edit); a boss is set
-  // by picking one in the catalogue
+  // Custom: the enemy is the team's own from now on (the boss's numbers, its HP too, to edit); a
+  // boss is set by picking one in the catalogue
   const pickMode = (next: Mode) => {
     setMode(next)
     if (next === 'custom' && team?.enemyPreset)
       database.teams.set(teamId, (team) => {
+        const hp = enemyHpOf(team)
         delete team.enemyPreset
+        if (hp) team.enemyHp = hp
       })
   }
   if (!team) return null
@@ -93,7 +98,7 @@ export function EnemyPanel({ teamId }: { teamId: string }) {
         onChange={pickMode}
         aria-label={t('enemy.mode', 'How the enemy is set')}
         options={[
-          { value: 'custom', label: t('enemy.custom', 'Custom RES') },
+          { value: 'custom', label: t('enemy.customMode', 'Custom enemy') },
           {
             value: 'stygian',
             label: t('enemy.stygian', 'Stygian Onslaught boss'),
@@ -178,6 +183,61 @@ function NumberField({
   )
 }
 
+/** The HP field: "20M", "1.5b" or "20,000,000"; emptied: no HP */
+function HpField({
+  value,
+  onChange,
+  'aria-label': ariaLabel,
+}: {
+  value: number | undefined
+  onChange: (value: number | undefined) => void
+  'aria-label': string
+}) {
+  const { t } = useTranslation('page_team')
+  const shown = value === undefined ? '' : formatHp(value)
+  const [text, setText] = useState(shown)
+  useEffect(() => setText(shown), [shown])
+  const save = () => {
+    const hp = parseHp(text)
+    if (hp === null) return setText(shown)
+    const next =
+      hp === undefined
+        ? undefined
+        : Math.max(1, Math.min(MAX_ENEMY_HP, Math.round(hp)))
+    if (next !== value) onChange(next)
+    else setText(shown)
+  }
+  return (
+    <InputBase
+      value={text}
+      placeholder={t('enemy.hpPlaceholder', 'e.g. 20M')}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+      }}
+      inputProps={{ inputMode: 'decimal', 'aria-label': ariaLabel }}
+      sx={{
+        width: 132,
+        height: 32,
+        px: 1,
+        borderRadius: tokens.radius.control,
+        bgcolor: giTokens.panelDark,
+        boxShadow: `inset 0 0 0 1px ${giTokens.hairlineStrong}`,
+        fontSize: 14,
+        fontWeight: 600,
+        ...numSx,
+        ...quickSx,
+        '& input': { textAlign: 'right', p: 0 },
+        '& input::placeholder': { fontWeight: 400 },
+        '&.Mui-focused': {
+          boxShadow: `inset 0 0 0 1px ${alpha(giTokens.gold, 0.7)}`,
+        },
+      }}
+    />
+  )
+}
+
 function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
   const { t } = useTranslation(['page_team', 'sheet_gen'])
   const database = useDatabase()
@@ -192,7 +252,7 @@ function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
   )
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
-      {/* the level and the team's DEF shred */}
+      {/* its HP and level, and the team's DEF shred */}
       <Box
         sx={{
           display: 'flex',
@@ -202,6 +262,26 @@ function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
           rowGap: 1.5,
         }}
       >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FieldLabel
+            tip={t(
+              'enemy.hpTip',
+              'Its Max HP: how long the team takes to defeat it is its HP ÷ the team’s DPS (the rotation repeated). Type 20M, 1.5B or 20,000,000; empty: not counted.'
+            )}
+          >
+            {t('enemy.hpLabel', 'HP')}
+          </FieldLabel>
+          <HpField
+            value={team.enemyHp}
+            onChange={(hp) =>
+              database.teams.set(teamId, (team) => {
+                if (hp === undefined) delete team.enemyHp
+                else team.enemyHp = hp
+              })
+            }
+            aria-label={t('enemy.hpLabel', 'HP')}
+          />
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <FieldLabel>{t('enemy.level', 'Level')}</FieldLabel>
           <NumberField
@@ -313,12 +393,20 @@ function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
                 })}
               >
                 <ElementIcon ele={e} iconProps={{ sx: { fontSize: 20 } }} />
+                {/* (on a phone, its icon only: the name has no room beside the field) */}
                 <Typography
                   noWrap
-                  sx={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600 }}
+                  sx={{
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    display: { xs: 'none', sm: 'block' },
+                  }}
                 >
                   {name}
                 </Typography>
+                <Box sx={{ flex: 1, display: { xs: 'block', sm: 'none' } }} />
                 <NumberField
                   value={immune ? 10 : value}
                   disabled={immune}
@@ -930,14 +1018,80 @@ function BossDetail({
   )
 }
 
-/** The enemy in one line: the boss's icon and name, or "Custom", its level and RES */
+/** Each element's RES, all eight: an icon and its value each (a custom enemy's, at a glance) */
+export function ResGrid({ team }: { team: Team }) {
+  const { t } = useTranslation(['page_team', 'sheet_gen'])
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+        gap: 0.75,
+      }}
+    >
+      {allElementWithPhyKeys.map((e) => {
+        const value = team.enemyOverride[`${e}_enemyRes_`] ?? 10
+        const name = t(`sheet_gen:element.${e}`, {
+          defaultValue: e[0].toUpperCase() + e.slice(1),
+        })
+        return (
+          <Tooltip
+            key={e}
+            arrow
+            title={t('enemy.resOf', {
+              defaultValue: '{{element}} RES',
+              element: name,
+            })}
+          >
+            <Box
+              sx={(theme) => ({
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 0.5,
+                minWidth: 0,
+                px: 0.75,
+                py: 0.5,
+                borderRadius: tokens.radius.control,
+                bgcolor: alpha(
+                  theme.palette[e].main,
+                  value === 10 ? 0.04 : 0.1
+                ),
+                boxShadow: `inset 0 0 0 1px ${alpha(theme.palette[e].main, value === 10 ? 0.12 : 0.3)}`,
+                color: value === 10 ? 'text.secondary' : theme.palette[e].main,
+                fontSize: 13,
+                fontWeight: 600,
+                ...numSx,
+              })}
+            >
+              <ElementIcon ele={e} iconProps={{ sx: { fontSize: 16 } }} />
+              <span>
+                {value === IMMUNE
+                  ? t('enemy.immuneShort', '∞')
+                  : `${value < 0 ? '−' : ''}${Math.abs(value)}%`}
+              </span>
+            </Box>
+          </Tooltip>
+        )
+      })}
+    </Box>
+  )
+}
+
+/** The enemy in one line: the boss's icon and name, or "Custom" (and its HP), its level and RES */
 export function EnemyHeadline({
   team,
   large,
+  hideHp,
+  hideRes,
 }: {
   team: Team
   /** Bigger, with its stage's name and HP (a setup's) */
   large?: boolean
+  /** Its HP is shown beside it already */
+  hideHp?: boolean
+  /** Its RES are shown beside it already */
+  hideRes?: boolean
 }) {
   const { t } = useTranslation(['page_team', 'stygian'])
   const applied = appliedStygianPreset(team)
@@ -973,7 +1127,8 @@ export function EnemyHeadline({
           <Typography sx={{ ...type.label, ...numSx }}>
             {[
               stygianBossTitle(t, applied.boss.id).stage,
-              applied.difficulty &&
+              !hideHp &&
+                applied.difficulty &&
                 t('enemy.hp', {
                   defaultValue: '{{hp}} HP',
                   hp: compact(3).format(applied.boss.hp[applied.difficulty]),
@@ -995,13 +1150,21 @@ export function EnemyHeadline({
             columnGap: 1,
           }}
         >
+          {!applied && !hideHp && team.enemyHp && (
+            <span>
+              {t('enemy.hp', {
+                defaultValue: '{{hp}} HP',
+                hp: compact(3).format(team.enemyHp),
+              })}
+            </span>
+          )}
           <span>
             {t('enemy.levelShort', {
               defaultValue: 'Lv. {{level}}',
               level: enemyOverride.enemyLevel ?? 100,
             })}
           </span>
-          <StygianResSummary res={res} />
+          {!hideRes && <StygianResSummary res={res} />}
         </Typography>
       </Box>
     </Box>
