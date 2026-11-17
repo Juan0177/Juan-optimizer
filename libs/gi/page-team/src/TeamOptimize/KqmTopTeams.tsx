@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRateFull } from './format'
+import { formatGain, formatRateFull, localizeDecimal } from './format'
 import { KqmGearIcons } from './KqmBuildView'
 import { MemberAvatar } from './MemberAvatar'
 import { FieldLabel, focusSx, numSx, quickSx, tokens, type } from './ui'
@@ -26,10 +26,13 @@ const SHOWN = 5
 const MAX = 50
 
 /** How far a team is from the best: −0.4%; under 0.1%, two decimals (−0.04%) */
-function gap(ratio: number) {
+function gap(ratio: number, locale?: string) {
   const pct = ratio * 100
-  if (Math.abs(pct) >= 0.1 || pct === 0) return formatGain(ratio)
-  return `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`
+  if (Math.abs(pct) >= 0.1 || pct === 0) return formatGain(ratio, locale)
+  return localizeDecimal(
+    `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`,
+    locale
+  )
 }
 
 const gearId = (
@@ -293,7 +296,7 @@ function TeamRows({
                     color: 'text.secondary',
                   }}
                 >
-                  {gap(option.total / best - 1)}
+                  {gap(option.total / best - 1, i18n?.language)}
                 </Typography>
               )}
             </Box>

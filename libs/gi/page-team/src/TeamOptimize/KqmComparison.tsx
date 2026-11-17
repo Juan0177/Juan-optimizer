@@ -46,7 +46,12 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRate, formatRateFull } from './format'
+import {
+  formatGain,
+  formatRate,
+  formatRateFull,
+  localizeDecimal,
+} from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
 import { kqmStandardRolls } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
@@ -489,13 +494,13 @@ export function KqmCompare({
                   {t('teamOpt.kqm.erCheck', 'ER check')}
                 </Typography>
                 <Typography sx={{ fontSize: 13.5, fontWeight: 600, ...numSx }}>
-                  {er.value.toFixed(1)}%
+                  {localizeDecimal(er.value.toFixed(1), i18n?.language)}%
                   <Box
                     component="span"
                     sx={{ color: 'text.secondary', fontWeight: 500 }}
                   >
                     {' / '}
-                    {er.minimum.toFixed(1)}%
+                    {localizeDecimal(er.minimum.toFixed(1), i18n?.language)}%
                   </Box>
                 </Typography>
               </Box>
@@ -967,7 +972,7 @@ function RankList({
   onSelect: (option: KqmOption) => void
   disabled: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const [expanded, setExpanded] = useState(false)
   const best = options.find((o) => !o.unmet)?.total ?? options[0]?.total ?? 0
   const columns = {
@@ -1026,7 +1031,7 @@ function RankList({
             {formatRate(option.total, rotationTime)}
           </Typography>
           <Typography sx={{ fontSize: 12, color: 'text.secondary', ...numSx }}>
-            {(ratio * 100).toFixed(1)}%
+            {localizeDecimal((ratio * 100).toFixed(1), i18n?.language)}%
           </Typography>
         </Box>
         <Box
