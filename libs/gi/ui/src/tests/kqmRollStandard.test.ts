@@ -35,8 +35,10 @@ const problem = (rolls?: number): KqmProblem => {
   const out = new Float64Array(1)
   const values = (v: Record<string, number>) => {
     out[0] =
-      (1 + (v.atk_ ?? 0)) *
-      (1 + Math.min(1, 0.05 + (v.critRate_ ?? 0)) * (0.5 + (v.critDMG_ ?? 0)))
+      (1 + (v['atk_'] ?? 0)) *
+      (1 +
+        Math.min(1, 0.05 + (v['critRate_'] ?? 0)) *
+          (0.5 + (v['critDMG_'] ?? 0)))
     return out
   }
   return {
