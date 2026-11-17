@@ -16,13 +16,13 @@ import {
   CharacterName,
   KQM_ER_DEFAULT,
   KQM_TALENT_DEFAULT,
+  kqmBuildThreads,
+  kqmBuildThreadsAuto,
+  kqmBuildThreadsMax,
   kqmConstellation,
   kqmEnergyRequirement,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
-  kqmBuildThreads,
-  kqmBuildThreadsAuto,
-  kqmBuildThreadsMax,
   kqmTalentLevel,
   kqmWeapons,
   setKqmBuildThreads,
@@ -74,6 +74,7 @@ import {
 } from './KqmChoosers'
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
+import { KqmShareMenu } from './KqmShareMenu'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
 import { elementColor } from './TeamOptResults'
@@ -89,7 +90,6 @@ import {
   tokens,
   type,
 } from './ui'
-import { KqmShareMenu } from './KqmShareMenu'
 import { kqmReplayOf, useKqmProgress } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
@@ -150,7 +150,13 @@ function useRotationEnergy(
   teamId: string,
   members: TeamOptMember[],
   teamOpt: TeamOpt
-): { text: string; energy?: RotationEnergy; for?: string } {
+): {
+  text: string
+  energy?: RotationEnergy
+  for?: string
+  /** The rotation's length as KQM plays it (s): what the inputs above are per */
+  rotationTime?: number
+} {
   const database = useDatabase()
   const { gender } = useDBMeta()
   const { i18n } = useTranslation()
@@ -158,6 +164,7 @@ function useRotationEnergy(
   const [worked, setWorked] = useState<{
     for: string
     energy?: RotationEnergy
+    rotationTime?: number
   }>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
@@ -185,9 +192,10 @@ function useRotationEnergy(
     let cancelled = false
     const id = setTimeout(() => {
       let next: RotationEnergy | undefined
+      let seconds: number | undefined
       try {
         const teamOpt = latest.current
-        next = kqmReplayOf(
+        const played = kqmReplayOf(
           database,
           gender,
           i18n,
@@ -202,11 +210,15 @@ function useRotationEnergy(
           ),
           gear: {},
           overrides: {},
-        }).energy
+        })
+        next = played?.energy
+        seconds = played?.rotationTime
       } catch {
         next = undefined
+        seconds = undefined
       }
-      if (!cancelled) setWorked({ for: text, energy: next })
+      if (!cancelled)
+        setWorked({ for: text, energy: next, rotationTime: seconds })
     }, 0)
     return () => {
       cancelled = true
@@ -214,7 +226,12 @@ function useRotationEnergy(
     }
     // (members by their keys; the rest of the team's settings read when it runs)
   }, [database, gender, i18n, teamId, text, constellations, cadence, keys])
-  return { text, energy: worked?.energy, for: worked?.for }
+  return {
+    text,
+    energy: worked?.energy,
+    for: worked?.for,
+    rotationTime: worked?.energy ? worked.rotationTime : undefined,
+  }
 }
 
 /** KQM assumptions and equipment, saved with the team as they change. */
@@ -260,9 +277,12 @@ export function KqmSettings({
     text: writtenText,
     energy: rotationEnergy,
     for: energyFor,
+    rotationTime: playedTime,
   } = useRotationEnergy(teamId, members, teamOpt)
-  // The rotation length above is shared by both workflows and the ER calculator.
-  const rotationTime = teamOpt.rotationTime ?? 20
+  // The rotation length above is shared by both workflows and the ER calculator; with a written
+  // rotation, the length KQM plays it at (the inputs it fills in are per that rotation, as in the
+  // run)
+  const rotationTime = playedTime ?? teamOpt.rotationTime ?? 20
   const calculatorDraft = useMemo(
     () => ({
       ...teamCalculator(members, teamOpt, calculatorInputs, rotationEnergy),
@@ -361,7 +381,7 @@ export function KqmSettings({
     const newRotation = ready && kqm?.energyRotation !== written
     if (source !== 'calculator' && !(ready && (!source || newRotation))) return
     const applied = kqm?.energyCalculator
-    const rotationTime = teamOpt.rotationTime ?? 20
+    const rotationTime = (ready && playedTime) || (teamOpt.rotationTime ?? 20)
     const energyCalculator = {
       ...teamCalculator(
         members,
@@ -397,7 +417,15 @@ export function KqmSettings({
         ...(ready ? { energyRotation: written } : {}),
       }
     })
-  }, [teamOpt, members, setTeamOpt, rotationEnergy, energyFor, writtenText])
+  }, [
+    teamOpt,
+    members,
+    setTeamOpt,
+    rotationEnergy,
+    energyFor,
+    writtenText,
+    playedTime,
+  ])
   const problem = !canRun
     ? t('teamOpt.kqm.addAttacks', 'Add rotation attacks above')
     : !optimized.length
@@ -1889,6 +1917,7 @@ export function KqmResults({
           <KqmShareMenu
             teamId={teamId}
             result={result}
+            shown={view}
             setup={setup ?? runSettings}
             members={members}
             characterKey={compared}
