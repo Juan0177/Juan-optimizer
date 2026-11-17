@@ -245,6 +245,26 @@ describe('drawKqmCard: the rotation’s marked turn', () => {
     expect(box[1]).toBeLessThan(own.y)
     expect(box[1] + box[3]).toBeGreaterThan(own.y)
   })
+  it('a line too long even at its smallest: the mark kept inside what is drawn, or left out', () => {
+    const huge = `Member1 ${'E '.repeat(200).trim()}`
+    const rotation = ['Danica E', huge, 'Zibai Q']
+    const unmarked = drawn(rotation, 99)
+    // (the marked turn starts past the cut: no mark, no overlay)
+    const past = drawn(rotation, 2)
+    expect(past.boxes).toHaveLength(unmarked.boxes.length)
+    expect(past.texts.find((t) => t.text.startsWith('Zibai'))).toBeUndefined()
+    // (the marked turn cut short: its box and overlay end where the drawn line ends)
+    const cut = drawn(rotation, 1)
+    const line = cut.texts.find((t) => t.text.startsWith('Member1'))!
+    expect(line.text.endsWith('…')).toBe(true)
+    const right = line.x + width(line.text, line.px) / 2
+    const box = cut.boxes.at(-1)!
+    expect(box[2]).toBeGreaterThanOrEqual(0)
+    expect(box[0] + box[2] - 10).toBeLessThanOrEqual(right + 0.001)
+    const own = cut.texts.filter((t) => t.text.startsWith('Member1')).at(-1)!
+    expect(own).not.toBe(line)
+    expect(own.x + width(own.text, own.px)).toBeLessThanOrEqual(right + 0.001)
+  })
   it('a rotation that fits: one line, marked as before', () => {
     const rotation = ['Danica E', 'Odette E E', 'Yae Miko E E E']
     const { texts, boxes } = drawn(rotation, 1)

@@ -973,6 +973,57 @@ describe('KqmCompare: B’s KQM results', () => {
     expect(props['preliminaryLabel']).toBe('kqmCompare.results.rankingLabel')
     expect(props['headingLevel']).toBe(4)
     expect(props['unfinished']).toBe(false)
+    expect(props['preliminaryFinalLabel']).toBe('kqmCompare.results.readyLabel')
+  })
+
+  it('announces the rankings’ end in the same status region that said their progress', async () => {
+    withRun()
+    const run = ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    const status = screen.getByText('kqmCompare.ranking percent=0')
+    expect(status.getAttribute('role')).toBe('status')
+    await act(async () => run.resolve!(outcome()))
+    // (the same element, still mounted: its new words are announced)
+    expect(status.isConnected).toBe(true)
+    expect(status.getAttribute('role')).toBe('status')
+    expect(status.textContent).toBe('kqmCompare.results.ready')
+  })
+
+  it('says a cancel in the same status region, and keeps the focus in B’s section', async () => {
+    withRun()
+    ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    const status = screen.getByText('kqmCompare.ranking percent=0')
+    const cancel = screen.getByRole('button', { name: 'kqmCompare.cancel' })
+    cancel.focus()
+    fireEvent.click(cancel)
+    expect(status.isConnected).toBe(true)
+    expect(status.textContent).toBe('kqmCompare.results.cancelled')
+    // (the button is gone: the focus on B's section title, not lost)
+    await waitFor(() =>
+      expect(document.activeElement?.textContent).toBe(
+        'kqmCompare.results.title'
+      )
+    )
+    expect(
+      screen
+        .getByRole('heading', { name: /kqmCompare\.results\.title/ })
+        .contains(document.activeElement)
+    ).toBe(true)
+  })
+
+  it('a cancel before the summary puts the focus back on Confronta', async () => {
+    withRun()
+    mocks.compare.mockImplementation(() => new Promise(() => {}))
+    await runOnce()
+    const cancel = await screen.findByRole('button', {
+      name: 'kqmCompare.cancel',
+    })
+    cancel.focus()
+    fireEvent.click(cancel)
+    await waitFor(() => expect(document.activeElement).toBe(runButton()))
   })
 
   it('keeps B’s rotation the same object while shown (the inspector follows it)', async () => {
@@ -1010,13 +1061,14 @@ describe('KqmCompare: B’s KQM results', () => {
     expect(shown()!['running']).toBe(false)
     // (not said final: its rankings did not finish)
     expect(shown()!['unfinished']).toBe(true)
-    expect(screen.getByText('kqmCompare.results.cancelled')).toBeTruthy()
+    // (said in B's section, and announced by the status region)
+    expect(screen.getAllByText('kqmCompare.results.cancelled')).toHaveLength(2)
     expect(
       screen.queryByRole('button', { name: 'kqmCompare.cancel' })
     ).toBeNull()
     // (the run ends with its headline: nothing changes)
     await act(async () => run.resolve!(outcome(false)))
-    expect(screen.getByText('kqmCompare.results.cancelled')).toBeTruthy()
+    expect(screen.getAllByText('kqmCompare.results.cancelled')).toHaveLength(2)
   })
 
   it('gives the rankings’ own progress: from the summary (0%) to their end (100%)', async () => {

@@ -718,16 +718,27 @@ export function drawKqmCard(
         const baseline = cy + px * 0.35
         const k = turn - first
         first += line.length
-        const marked = k >= 0 && k < line.length
+        // (a line too long even at 13px is cut short by `ink`: the mark stays inside what is
+        // drawn, and is left out when its turn starts past the cut)
+        const full = widthAt(lineText, px)
+        let shown = lineText
+        if (full > avail) {
+          while (shown.length > 1 && widthAt(`${shown}…`, px) > avail)
+            shown = shown.slice(0, -1)
+          shown = `${shown.trimEnd()}…`
+        }
+        const cut = shown !== lineText
+        const kept = cut ? shown.slice(0, -1) : lineText
+        const left = textX - (cut ? widthAt(shown, px) : full) / 2
+        const right = left + (cut ? widthAt(kept, px) : full)
+        const before = k > 0 ? line.slice(0, k).join(SEP) + SEP : ''
+        const marked =
+          k >= 0 && k < line.length && (!cut || before.length < kept.length)
         let startX = 0
+        let turnW = 0
         if (marked) {
-          const width = Math.min(avail, widthAt(lineText, px))
-          const before = line.slice(0, k).join(SEP)
-          startX = textX - width / 2 + (before ? widthAt(before + SEP, px) : 0)
-          const turnW = Math.min(
-            widthAt(line[k], px),
-            textX + width / 2 - startX
-          )
+          startX = left + (before ? widthAt(before, px) : 0)
+          turnW = Math.max(0, Math.min(widthAt(line[k], px), right - startX))
           ctx.fillStyle = 'rgba(37, 87, 167, 0.14)'
           ctx.beginPath()
           if (lines.length === 1)
@@ -758,6 +769,8 @@ export function drawKqmCard(
             size: px,
             weight: 800,
             color: KQM_CHANGED,
+            // (cut short as the line is)
+            ...(cut && { maxWidth: turnW, minSize: px }),
           })
       })
     }

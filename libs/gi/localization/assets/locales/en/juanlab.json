@@ -204,6 +204,8 @@
       "rankingLabel": "Ranking weapons and sets",
       "retune": "A pick can differ from its row",
       "retuneTip": "A weapon or set picked for {{name}} plays the rotation again with its own weapon and set effects (and re-tunes the teammates whose ER requirement it changes), so its figures can differ from its row, which is scored on the rotation as played with the current build.",
+      "ready": "B's rankings ready",
+      "readyLabel": "Rankings ready",
       "cancelled": "B's rankings cancelled: run the comparison again to see them.",
       "rankingFailed": "B's rankings failed: {{message}}"
     }

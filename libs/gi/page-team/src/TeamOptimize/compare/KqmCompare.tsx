@@ -390,10 +390,22 @@ export default function KqmCompare({
   const running = state.type === 'running'
   /** The headline shown, B's rankings still worked out */
   const ranking = state.type === 'done' && state.rankings === 'pending'
+  // Cancel's button goes once pressed: the focus goes to B's section title (cancelled while
+  // ranking), else back to Confronta
+  const resultsTitle = useRef<HTMLElement>(null)
+  const runButton = useRef<HTMLButtonElement>(null)
+  const refocus = useRef<'results' | 'run'>()
+  useEffect(() => {
+    const to = refocus.current
+    if (!to) return
+    refocus.current = undefined
+    ;(to === 'results' ? resultsTitle : runButton).current?.focus()
+  }, [state])
   // (cancelled while ranking: the headline and B's builds stay, without rankings)
   const cancel = () => {
     if (job.current) job.current.cancelled = true
     job.current = undefined
+    refocus.current = ranking ? 'results' : 'run'
     setState((s) =>
       s.type === 'done' && s.rankings === 'pending'
         ? { ...s, rankings: 'cancelled' }
@@ -646,6 +658,18 @@ export default function KqmCompare({
       : 0
     : (step?.progress ?? 0)
   const percent = Math.round(progress * 100)
+  const busy = running || ranking
+  const statusText = running
+    ? t('kqmCompare.running', { percent })
+    : ranking
+      ? t('kqmCompare.ranking', { percent })
+      : state.type === 'done' && state.resultsB
+        ? state.rankings === 'done'
+          ? t('kqmCompare.results.ready')
+          : state.rankings === 'cancelled'
+            ? t('kqmCompare.results.cancelled')
+            : ''
+        : ''
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -1133,6 +1157,7 @@ export default function KqmCompare({
                 </Button>
               )}
               <Button
+                ref={runButton}
                 variant="contained"
                 disabled={!canRun}
                 aria-describedby={
@@ -1163,9 +1188,10 @@ export default function KqmCompare({
             </Button>
           </Box>
         )}
-        {(running || ranking) && (
-          <Box sx={{ mt: 1.5 }}>
-            {/* (the status line below announces it) */}
+        {/* one status region, always there: the run's progress, then its rankings', then how they
+            ended (ready or cancelled; a failure is an alert), so each change is announced */}
+        <Box sx={busy ? { mt: 1.5 } : undefined}>
+          {busy && (
             <LinearProgress
               variant={step ? 'determinate' : 'indeterminate'}
               value={percent}
@@ -1177,13 +1203,14 @@ export default function KqmCompare({
                 '& .MuiLinearProgress-bar': { bgcolor: tokens.gold },
               }}
             />
-            <Typography role="status" sx={{ ...type.label, mt: 0.75 }}>
-              {ranking
-                ? t('kqmCompare.ranking', { percent })
-                : t('kqmCompare.running', { percent })}
-            </Typography>
-          </Box>
-        )}
+          )}
+          <Typography
+            role="status"
+            sx={busy ? { ...type.label, mt: 0.75 } : srOnly}
+          >
+            {statusText}
+          </Typography>
+        </Box>
         {state.type === 'error' && (
           <Box role="alert" sx={{ mt: 1.5, color: 'warning.main' }}>
             <WarningLine>{state.message}</WarningLine>
@@ -1235,14 +1262,20 @@ export default function KqmCompare({
         <Panel component="section" sx={{ p: 0 }}>
           <Box sx={{ px: { xs: 1, sm: 2 }, pt: { xs: 1.5, sm: 2 } }}>
             <PanelHeader
-              title={t('kqmCompare.results.title')}
+              title={
+                // (where the focus goes when its rankings are cancelled)
+                <Box component="span" ref={resultsTitle} tabIndex={-1}>
+                  {t('kqmCompare.results.title')}
+                </Box>
+              }
               info={t('kqmCompare.results.titleTip', {
                 name: nameOf(state.in),
               })}
               sx={{ mb: 0 }}
             />
+            {/* (announced by the status region above) */}
             {state.rankings === 'cancelled' && (
-              <Typography role="status" sx={{ ...type.label, mt: 0.5 }}>
+              <Typography sx={{ ...type.label, mt: 0.5 }}>
                 {t('kqmCompare.results.cancelled')}
               </Typography>
             )}
@@ -1279,6 +1312,7 @@ export default function KqmCompare({
             // (its progress said by the status line above; its banner's words its own)
             preliminary="quiet"
             preliminaryLabel={t('kqmCompare.results.rankingLabel')}
+            preliminaryFinalLabel={t('kqmCompare.results.readyLabel')}
             unfinished={
               state.rankings === 'cancelled' || state.rankings === 'failed'
             }

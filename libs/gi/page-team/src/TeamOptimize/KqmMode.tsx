@@ -1715,6 +1715,7 @@ function KqmPreliminary({
   progress,
   quiet = false,
   label,
+  finalLabel,
 }: {
   teamId: string
   final: boolean
@@ -1727,6 +1728,8 @@ function KqmPreliminary({
   quiet?: boolean
   /** In place of "Preliminary builds" (with `quiet`: what is still worked out) */
   label?: string
+  /** In place of "Final builds" (with `quiet`: what is now done) */
+  finalLabel?: string
 }) {
   const { t } = useTranslation('page_team')
   const step = useKqmProgress(teamId)
@@ -1761,7 +1764,7 @@ function KqmPreliminary({
       )}
       <Typography sx={{ ...type.body, fontWeight: 600, color: tone }}>
         {final
-          ? t('teamOpt.kqm.finalBuilds', 'Final builds')
+          ? (finalLabel ?? t('teamOpt.kqm.finalBuilds', 'Final builds'))
           : (label ?? t('teamOpt.kqm.preliminary', 'Preliminary builds'))}
       </Typography>
       {!final && (
@@ -1843,6 +1846,7 @@ export function KqmResults({
   inspectorNote,
   preliminary = 'default',
   preliminaryLabel,
+  preliminaryFinalLabel,
   unfinished = false,
   headingLevel = 2,
 }: {
@@ -1896,6 +1900,8 @@ export function KqmResults({
   preliminary?: 'default' | 'quiet'
   /** The banner's words in place of "Preliminary builds" (what is still worked out) */
   preliminaryLabel?: string
+  /** The banner's words in place of "Final builds" when it ends (what is now done) */
+  preliminaryFinalLabel?: string
   /** The run stopped before it finished (cancelled, failed): no "Final builds" when it ends */
   unfinished?: boolean
   /** The level of its title ("Team builds"), the inspector's a level below (default: 2) */
@@ -1975,6 +1981,7 @@ export function KqmResults({
           progress={progress}
           quiet={preliminary === 'quiet'}
           label={preliminaryLabel}
+          finalLabel={preliminaryFinalLabel}
         />
       )}
       {/* the team's result, and what to do with it */}

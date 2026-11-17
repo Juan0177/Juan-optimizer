@@ -1135,6 +1135,23 @@ describe('KQM results on another database (KQM Compare’s team B)', () => {
     expect(label.closest('[aria-live]')).toBeNull()
   })
 
+  it('a quiet banner ends with its host’s words, not “Final builds”', () => {
+    const base = {
+      ...props('ui-b-quiet-end'),
+      database: sandbox() as never,
+      replayRotation: rotationB,
+      preliminary: 'quiet' as const,
+      preliminaryLabel: 'Ranking weapons and sets',
+      preliminaryFinalLabel: 'Rankings ready',
+    }
+    const view = render(<KqmResults {...base} running improving />, {
+      wrapper: wrap,
+    })
+    view.rerender(<KqmResults {...base} />)
+    expect(screen.getByText('Rankings ready')).toBeTruthy()
+    expect(screen.queryByText('Final builds')).toBeNull()
+  })
+
   it('puts its headings at the level it is given, below its host’s', () => {
     const { unmount } = render(
       <KqmResults
