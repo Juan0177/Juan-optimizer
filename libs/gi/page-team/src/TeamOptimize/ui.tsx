@@ -163,6 +163,54 @@ export function StepTitle({
   )
 }
 
+/** A part of a step (Top builds, Damage share, Rotation timeline): its title and ⓘ */
+export function SubsectionTitle({
+  children,
+  info,
+  actions,
+  dense,
+}: {
+  children: ReactNode
+  info?: ReactNode
+  actions?: ReactNode
+  /** Less room under it (a part with its own line of help under the title) */
+  dense?: boolean
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1,
+        minHeight: 30,
+        mb: dense ? 0.25 : 1.25,
+      }}
+    >
+      <Typography
+        component="h3"
+        sx={{
+          ...type.title,
+          fontSize: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+        }}
+      >
+        {children}
+        {info && <InfoTooltipInline title={info} />}
+      </Typography>
+      {actions && <Box sx={{ ml: 'auto' }}>{actions}</Box>}
+    </Box>
+  )
+}
+
+/** The line and room between a step's parts */
+export const subsectionSx = {
+  mt: { xs: 3, sm: 4 },
+  pt: { xs: 3, sm: 4 },
+  borderTop: hairline,
+} as const
+
 /** A step's surface: inputs on the panel; the outcome raised, with a gold top edge */
 export const stepSurfaceSx = (result?: boolean) =>
   ({

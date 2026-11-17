@@ -100,6 +100,7 @@ import {
   Segmented,
   StepTitle,
   selectedSx,
+  subsectionSx,
   tokens,
   type,
 } from './ui'
@@ -2346,10 +2347,11 @@ export function KqmResults({
           shown team's damage splits; side by side where there is room, else one under the other) */}
       <Box
         sx={{
-          mt: 3,
+          ...subsectionSx,
           display: 'grid',
-          gap: 2.5,
-          alignItems: 'start',
+          columnGap: 3,
+          rowGap: 4,
+          alignItems: 'stretch',
           gridTemplateColumns:
             'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
         }}
