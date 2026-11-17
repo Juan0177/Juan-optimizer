@@ -4,6 +4,28 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.15.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.15.0) (2026-11-18)
+
+### New
+
+- Stygian Onslaught bosses as the enemy: pick one from a catalogue with each boss's icon, HP, RES and the game's description, at Fearless or Dire, and its level and RES are set at once. The enemy editor is redesigned around it: a custom enemy or a Stygian boss.
+- How long your builds take to defeat the enemy, beside its HP in Team optimize and KQM Theorycrafting. Wavebinder's Courage, drinks and Valiant Assaults are counted, so Stellar Glimmer teams face fewer of them; for now the other bosses are mostly their HP divided by the team's DPS.
+- A fight timeline under the results: the boss's states, its HP and Wavebinder's Courage over the fight. Point at a moment (or click to pin it) to read its HP, Courage, RES, the team's DPS there and what its shield has taken.
+- A custom enemy can have HP too (type 20M, 1.5B or 20,000,000) to see how long the builds take to defeat it.
+- Team optimize: choose whose artifacts the team may borrow, as the solo optimizer can.
+- Team optimize shows the enemy as KQM Theorycrafting does, and its results now include the rotation timeline, played with the result's weapons and artifact sets.
+- The rotation writer is redesigned: the rotation is coloured as you type, with unknown words underlined; the name and action chips insert into the box you're typing in, First rotation only included; a How to write it sheet; and one chip for the time spent waiting for cooldowns.
+
+### Improved
+
+- KQM Theorycrafting's setup shows the enemy beside the members, with its HP and time to defeat as figures.
+- A pinned moment on the writer's timeline is shown once, and Hits per rotation names each attack once, with its other parts (Stellar-Conduct, DoT) under it.
+- Rotation notes say when Danica's E ends Maid: Royal Guard and her Burst's party ATK, and how to set Sandrone's condensed beams (CA[beams=N]).
+
+### Fixed
+
+- Anastasya's Blessed Spear N3 can be cancelled by a dash or her Skill almost at once, as in footage.
+
 ## [v1.14.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.14.3) (2026-11-17)
 
 ### Fixed
