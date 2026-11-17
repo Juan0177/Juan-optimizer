@@ -130,6 +130,7 @@ export function CardImageDialog({
   format = 'png',
   watermark,
   header,
+  placeholder,
   onClose,
   children,
 }: {
@@ -153,6 +154,11 @@ export function CardImageDialog({
   watermark?: () => unknown
   /** controls above the picture (what it shows: a member's tabs) */
   header?: ReactNode
+  /**
+   * shown in the picture's place while there is nothing to draw (`render` undefined): what to set
+   * before it is made; absent: a placeholder of the picture's shape
+   */
+  placeholder?: ReactNode
   onClose: () => void
   children?: ReactNode
 }) {
@@ -281,7 +287,9 @@ export function CardImageDialog({
         <Divider />
         {header && <Box sx={{ px: 2, pt: 1 }}>{header}</Box>}
         <CardContent>
-          {error ? (
+          {placeholder && !render ? (
+            placeholder
+          ) : error ? (
             <Alert severity="error">{error}</Alert>
           ) : png ? (
             <Box sx={{ position: 'relative' }}>
@@ -344,7 +352,7 @@ export function CardImageDialog({
               color="neutral400"
               startIcon={<ContentCopyIcon />}
               onClick={copy}
-              disabled={!png || busy}
+              disabled={!png || busy || (!!placeholder && !render)}
             >
               {copied
                 ? t('buildCard.copied', 'Copied')
@@ -355,7 +363,7 @@ export function CardImageDialog({
             variant="contained"
             startIcon={<DownloadIcon />}
             onClick={download}
-            disabled={!png || busy}
+            disabled={!png || busy || (!!placeholder && !render)}
           >
             {format === 'jpeg'
               ? t('buildCard.downloadJpg', 'Download JPG')
