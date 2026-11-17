@@ -5,12 +5,10 @@ import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { Team } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import type { EleEnemyResKey } from '@genshin-optimizer/gi/keymap'
-import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import type { IconButtonProps } from '@mui/material'
 import {
   Box,
   Button,
@@ -19,28 +17,28 @@ import {
   Chip,
   Collapse,
   Grid,
-  IconButton,
   styled,
   Typography,
 } from '@mui/material'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { statName } from '../util/statName'
 
-interface ExpandMoreProps extends IconButtonProps {
-  expand: boolean
-}
-const ExpandButton = styled((props: ExpandMoreProps) => {
-  const { expand, ...other } = props
-  return <IconButton {...other} />
-})(({ theme, expand }) => ({
+/**
+ * Rotating "expand" chevron, sized like a small IconButton. It is not a button itself: it sits
+ * inside a CardActionArea (a <button>), which handles the click.
+ */
+const ExpandIcon = styled('span', {
+  shouldForwardProp: (prop) => prop !== 'expand',
+})<{ expand: boolean }>(({ theme, expand }) => ({
+  display: 'inline-flex',
+  padding: 5,
+  color: theme.palette.action.active,
   transform: !expand ? 'rotate(0deg)' : 'rotate(180deg)',
-  marginLeft: 'auto',
-  transition: (theme as any).transitions.create('transform', {
-    duration: (theme as any).transitions.duration.shortest,
+  transition: theme.transitions.create('transform', {
+    duration: theme.transitions.duration.shortest,
   }),
 }))
-
-export default ExpandButton
 export function EnemyExpandCard({ teamId }: { teamId: string }) {
   const { t } = useTranslation('page_team')
   const [expanded, setexpanded] = useState(false)
@@ -55,7 +53,7 @@ export function EnemyExpandCard({ teamId }: { teamId: string }) {
 
   return (
     <CardThemed bgt="light">
-      <CardActionArea onClick={toggle}>
+      <CardActionArea onClick={toggle} aria-expanded={expanded}>
         <CardContent
           sx={{
             display: 'flex',
@@ -85,24 +83,10 @@ export function EnemyExpandCard({ teamId }: { teamId: string }) {
           <Typography>
             {t('enemyEditor.defRed', { value: enemyDefRed_ })}
           </Typography>
-          <Box
-            sx={{
-              flexGrow: 1,
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 1,
-            }}
-          >
-            <ExpandButton
-              expand={expanded}
-              onClick={toggle}
-              aria-expanded={expanded}
-              aria-label="show more"
-              size="small"
-              sx={{ marginLeft: 0 }}
-            >
+          <Box flexGrow={1} display="flex" justifyContent="flex-end" gap={1}>
+            <ExpandIcon expand={expanded}>
               <ExpandMoreIcon />
-            </ExpandButton>
+            </ExpandIcon>
           </Box>
         </CardContent>
       </CardActionArea>
@@ -153,13 +137,12 @@ export function EnemyEditor({
   const eDefIgn = enemyOverride.enemyDefIgn_ ?? 0
   return (
     <Grid container spacing={1}>
-      <Grid>
+      <Grid item {...bsProps}>
         <Button
           fullWidth
           sx={{ height: '100%' }}
           size="small"
           component="a"
-          nativeButton={false}
           color="warning"
           href="https://genshin-impact.fandom.com/wiki/Resistance#Base_Enemy_Resistances"
           target="_blank"
@@ -168,12 +151,12 @@ export function EnemyEditor({
           {t('enemyEditor.announceBtn')}
         </Button>
       </Grid>
-      <Grid>
+      <Grid item {...bsProps}>
         <StatInput
           sx={{ bgcolor: (t) => t.palette.contentLight.main, width: '100%' }}
-          name={<b>{KeyMap.get('enemyLevel')}</b>}
+          name={<b>{statName('enemyLevel')}</b>}
           value={eLvl}
-          placeholder={KeyMap.getStr('enemyLevel')}
+          placeholder={statName('enemyLevel')}
           defaultValue={100}
           onValueChange={(value) =>
             database.teams.set(teamId, (team) => {
@@ -192,7 +175,7 @@ export function EnemyEditor({
         const val = enemyOverride[statKey]
         const elementImmunity = val === Number.MAX_VALUE
         return (
-          <Grid key={eleKey}>
+          <Grid item key={eleKey} {...bsProps}>
             <StatInput
               sx={{
                 bgcolor: (t) => t.palette.contentLight.main,
@@ -200,7 +183,7 @@ export function EnemyEditor({
               }}
               name={
                 <ColorText color={eleKey}>
-                  <b>{KeyMap.get(statKey)}</b>
+                  <b>{statName(statKey)}</b>
                 </ColorText>
               }
               value={
@@ -210,7 +193,7 @@ export function EnemyEditor({
                     : val
                   : 10
               }
-              placeholder={elementImmunity ? '∞ ' : KeyMap.getStr(statKey)}
+              placeholder={elementImmunity ? '∞ ' : statName(statKey)}
               defaultValue={defaultVal}
               onValueChange={(value) =>
                 database.teams.set(teamId, (team) => {
@@ -243,12 +226,12 @@ export function EnemyEditor({
           </Grid>
         )
       })}
-      <Grid>
+      <Grid item {...bsProps}>
         <StatInput
           sx={{ bgcolor: (t) => t.palette.contentLight.main, width: '100%' }}
-          name={<b>{KeyMap.get('enemyDefIgn_')}</b>}
+          name={<b>{statName('enemyDefIgn_')}</b>}
           value={eDefIgn}
-          placeholder={KeyMap.getStr('enemyDefIgn_')}
+          placeholder={statName('enemyDefIgn_')}
           defaultValue={0}
           onValueChange={(value) =>
             database.teams.set(teamId, (team) => {
@@ -258,12 +241,12 @@ export function EnemyEditor({
           percent
         />
       </Grid>
-      <Grid>
+      <Grid item {...bsProps}>
         <StatInput
           sx={{ bgcolor: (t) => t.palette.contentLight.main, width: '100%' }}
-          name={<b>{KeyMap.get('enemyDefRed_')}</b>}
+          name={<b>{statName('enemyDefRed_')}</b>}
           value={eDefRed}
-          placeholder={KeyMap.getStr('enemyDefRed_')}
+          placeholder={statName('enemyDefRed_')}
           defaultValue={0}
           onValueChange={(value) =>
             database.teams.set(teamId, (team) => {
@@ -273,7 +256,7 @@ export function EnemyEditor({
           percent
         />
       </Grid>
-      <Grid size={12}>
+      <Grid item xs={12}>
         <small>{t('enemyEditor.note')}</small>
       </Grid>
     </Grid>

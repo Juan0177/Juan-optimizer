@@ -312,13 +312,14 @@ const dmgFormulas = {
   passive3: {
     a0_stellarswirl_baseDmg_,
   },
+  // (Elemental Skill DMG: the dump tags Transpose's damage Vesna_Elemental_Art, kqmsim too)
   constellation6: {
     transposeDmg: greaterEq(
       input.constellation,
       6,
       customDmgNode(
         prod(percent(dm.constellation6.transposeDmg), input.total.atk),
-        'elemental',
+        'skill',
         hitEle.anemo
       )
     ),
@@ -334,7 +335,7 @@ const dmgFormulas = {
             input.total.atk,
             a1Stacks_spiritMult_
           ),
-          'elemental',
+          'skill',
           hitEle.anemo
         )
       )

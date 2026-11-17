@@ -23,10 +23,11 @@ import { Box, Button, Grid, IconButton, Typography } from '@mui/material'
 import { useCallback, useContext, useMemo } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { BuildEditContext, DataContext, SillyContext } from '../../../context'
+import { BuildEditContext, DataContext } from '../../../context'
 import { BetaNotice } from '../../../juanlab/beta' // juanlab-beta
 import { SendToGcwebButton } from '../../../juanlab/GcwebLink' // juanlab
 import { AddTeamInfo } from '../../AddTeamInfo'
+import { BuildCardButton } from '../buildCard'
 import { CharacterLevelSelect } from '../CharacterLevelSelect'
 import {
   CharacterCompactConstSelector,
@@ -43,7 +44,6 @@ export function Content({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation([
     'page_character',
     // Always load these 2 so character names are loaded for searching/sorting
-    'sillyWisher_charNames',
     'charNames_gen',
   ])
   const navigate = useNavigate()
@@ -54,39 +54,25 @@ export function Content({ onClose }: { onClose?: () => void }) {
   } = useContext(CharacterContext)
   const { gender } = useDBMeta()
   const characterSheet = getCharSheet(characterKey, gender)
-  const { silly } = useContext(SillyContext)
   const deleteCharacter = useCallback(async () => {
     const name = t(
-      `${
-        silly ? 'sillyWisher_charNames' : 'charNames_gen'
-      }:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+      `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
     )
 
     if (!window.confirm(t('removeCharacter', { value: name }))) return
     database.chars.remove(characterKey)
     navigate('/characters')
-  }, [database, navigate, characterKey, gender, silly, t])
+  }, [database, navigate, characterKey, gender, t])
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1,
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          gap: 1,
-        }}
-      >
+    <Box display="flex" flexDirection="column" gap={1}>
+      <Box display="flex" gap={1}>
         <TravelerGenderSelect />
+        <BuildCardButton sx={{ marginLeft: 'auto' }} />
         {/* juanlab: solo con il collegamento a gc-web attivo */}
-        <Box sx={{ marginLeft: 'auto' }}>
-          <SendToGcwebButton />
-        </Box>
+        <SendToGcwebButton />
         <Button
+          variant="outlined"
           color="error"
           onClick={() => deleteCharacter()}
           startIcon={<DeleteForeverIcon />}
@@ -102,14 +88,7 @@ export function Content({ onClose }: { onClose?: () => void }) {
       <BetaNotice characterKey={characterKey} />
       <Box>
         <Grid container spacing={1} sx={{ justifyContent: 'center' }}>
-          <Grid
-            size={{
-              xs: 8,
-              sm: 5,
-              md: 4,
-              lg: 3,
-            }}
-          >
+          <Grid item xs={8} sm={5} md={4} lg={3}>
             <CardThemed
               bgt="light"
               sx={{
@@ -154,18 +133,17 @@ export function Content({ onClose }: { onClose?: () => void }) {
             </CardThemed>
           </Grid>
           <Grid
+            item
+            xs={12}
+            sm={7}
+            md={8}
+            lg={9}
             sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-            size={{
-              xs: 12,
-              sm: 7,
-              md: 8,
-              lg: 9,
-            }}
           >
             <Box>
               <Grid container columns={3} spacing={1}>
                 {(['auto', 'skill', 'burst'] as const).map((talentKey) => (
-                  <Grid key={talentKey} size={1}>
+                  <Grid item xs={1} key={talentKey}>
                     <TalentDropdown
                       key={talentKey}
                       talentKey={talentKey}

@@ -5,6 +5,7 @@ import Alhaitham from './Character_Alhaitham_Card.jpg'
 import Aloy from './Character_Aloy_Card.png'
 import Alyosha from './Character_Alyosha_Card.webp'
 import Amber from './Character_Amber_Card.jpg'
+import Anastasya from './Character_Anastasya_Card.webp'
 import AratakiItto from './Character_Arataki_Itto_Card.jpg'
 import Arlecchino from './Character_Arlecchino_Card.jpg'
 import Baizhu from './Character_Baizhu_Card.jpg'
@@ -21,15 +22,14 @@ import Chongyun from './Character_Chongyun_Card.jpg'
 import Citlali from './Character_Citlali_Card.jpg'
 import Clorinde from './Character_Clorinde_Card.jpg'
 import Collei from './Character_Collei_Card.jpg'
-import Anastasya from './Character_Anastasya_Card.webp' // juanlab-beta 7.3: provvisorio (icona)
 import Columbina from './Character_Columbina_Card.webp'
 import Cyno from './Character_Cyno_Card.jpg'
 import Dahlia from './Character_Dahlia_Card.jpg'
+import Danica from './Character_Danica_Card.webp'
 import Dehya from './Character_Dehya_Card.jpg'
 import Diluc from './Character_Diluc_Card.jpg'
 import Diona from './Character_Diona_Card.png'
 import Dori from './Character_Dori_Card.jpg'
-import Danica from './Character_Danica_Card.webp' // juanlab-beta 7.3: provvisorio (icona)
 import Durin from './Character_Durin_Card.webp'
 import Emilie from './Character_Emilie_Card.jpg'
 import Escoffier from './Character_Escoffier_Card.jpg'
@@ -270,4 +270,38 @@ export function charCard(charKey: CharacterKey, gender: GenderKey) {
     default:
       return charCards[charKey]
   }
+}
+
+/**
+ * The full splash art (2048×1024, a transparent PNG converted to WebP), one file per character.
+ * Only the URLs are bundled: an image is downloaded when something draws it (the build card).
+ */
+const splashArt = import.meta.glob<string>('./splash/*.webp', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
+
+/** The character's splash art URL, or undefined when there is none (e.g. not released yet) */
+export function charSplash(
+  charKey: CharacterKey,
+  gender: GenderKey
+): string | undefined {
+  const key = charKey.startsWith('Traveler') ? `Traveler${gender}` : charKey
+  return splashArt[`./splash/${key}.webp`]
+}
+
+/**
+ * Official art (opaque, already cropped to the character) for characters with no splash art yet:
+ * the unreleased ones, from their reveal. Like the splash art, only the URLs are bundled.
+ */
+const illustrations = import.meta.glob<string>('./art/*.webp', {
+  query: '?url',
+  import: 'default',
+  eager: true,
+})
+
+/** The character's official art URL, if it has some (see `illustrations`) */
+export function charIllustration(charKey: CharacterKey): string | undefined {
+  return illustrations[`./art/${charKey}.webp`]
 }

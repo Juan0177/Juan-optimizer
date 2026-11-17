@@ -201,7 +201,6 @@
   "NocturnesCurtainCall": "Rappel de la nocturne",
   "AngelosHeptades": "Heptades des anges",
   "HymnOfTheMaelstrom": "Hymne dans le maelström",
-  "StarsealedEdict": "Édit d'astre secret",
   "HuntersBow": "Arc de chasse",
   "SeasonedHuntersBow": "Arc de chasse aguerri",
   "RavenBow": "Arc du corbeau",
@@ -252,5 +251,6 @@
   "AstralVulturesCrimsonPlumage": "Plumage cramoisi du vautour astral",
   "TheDaybreakChronicles": "Les chroniques de l'aube",
   "GoldenFrostboundOath": "Serment de gel doré",
-  "QuantumCatalyst": "Quantum Cat-alyst"
+  "QuantumCatalyst": "Quantum Cat-alyst",
+  "StarsealedEdict": "Édit d'astre secret"
 }

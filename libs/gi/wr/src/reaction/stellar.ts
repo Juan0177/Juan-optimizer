@@ -5,7 +5,7 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import { input } from '../formula'
 import type { Data, NumNode } from '../type'
-import { infoMut, one, sum } from '../utils'
+import { infoMut, one, prod, sum } from '../utils'
 import { transMulti1 } from './multi'
 import { specialReactionDmgNode } from './special'
 
@@ -28,7 +28,10 @@ export function stellarDmgNode<Variant extends StellarReactionKey>(
     additional,
     stellarDmgMultiplier(base, variant),
     specialMultiplier,
-    eleVariant
+    eleVariant,
+    base === 'reaction' && variant === 'stellarswirl'
+      ? prod(multiplier, sum(one, input.total.stellarswirl_mult_))
+      : one
   )
   if (eleVariant === 'cryo') {
     return infoMut(node, { subVariant: 'cryo' })
@@ -39,7 +42,12 @@ function stellarDmgMultiplier(
   base: 'reaction' | MainStatKey | SubstatKey,
   variant: StellarReactionKey
 ) {
-  if (base === 'reaction') return transMulti1
+  // Stellar Swirl's base reaction multiplier can be increased (e.g. Anastasya A4: +10%).
+  // `stellarswirl_mult_` is 0 unless a sheet sets it, so other reactions are unaffected.
+  if (base === 'reaction')
+    return variant === 'stellarswirl'
+      ? prod(transMulti1, sum(one, input.total.stellarswirl_mult_))
+      : transMulti1
   switch (variant) {
     case 'stellarconduct':
       return sum(one, input.total[`${variant}_mult_`])

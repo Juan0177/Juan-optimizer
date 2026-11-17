@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@emotion/react'
+import { clearAppStorage } from '@genshin-optimizer/common/database'
 import { ReadOnlyTextArea } from '@genshin-optimizer/common/react-util'
 import { CardThemed } from '@genshin-optimizer/common/ui'
 import { isDev } from '@genshin-optimizer/common/util'
@@ -21,7 +22,8 @@ import {
 import type { ErrorInfo, ReactNode } from 'react'
 import { Component, Suspense } from 'react'
 import type { WithTranslation } from 'react-i18next'
-import { Trans, withTranslation } from 'react-i18next'
+import { withTranslation } from 'react-i18next'
+import { newerBuild } from '../updateCheck'
 import SpaghettiCode from './SpaghettiCode.png'
 
 interface Props extends WithTranslation {
@@ -30,6 +32,8 @@ interface Props extends WithTranslation {
 
 interface State {
   error?: Error
+  /** Where in the component tree it happened (minified names with bundle positions in production) */
+  componentStack?: string
 }
 
 class ErrorBoundary extends Component<Props, State> {
@@ -45,6 +49,16 @@ class ErrorBoundary extends Component<Props, State> {
 
   public override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo)
+    // in the report: the components it happened in (the error's own stack is only React's internals
+    // for errors React throws, e.g. #185 "Maximum update depth exceeded")
+    if (errorInfo.componentStack)
+      this.setState({
+        componentStack: errorInfo.componentStack
+          .trim()
+          .split('\n')
+          .slice(0, 40)
+          .join('\n'),
+      })
   }
 
   public override render() {
@@ -53,11 +67,13 @@ class ErrorBoundary extends Component<Props, State> {
       const t = this.props.t
       const reproStr =
         'Please enter the steps to reproduce this error below:\n1. '
-      const errorStr = `Message: ${this.state.error.message}\nName: ${this.state.error.name}\nStack: ${this.state.error.stack}`
+      const errorStr = `Message: ${this.state.error.message}\nName: ${this.state.error.name}\nStack: ${this.state.error.stack}${this.state.componentStack ? `\nComponents: ${this.state.componentStack}` : ''}`
       const uploadStr = "**Don't forget to upload your JSON file!**"
       const textBoxVal = `${reproStr}\n\n${uploadStr}\n\n\`\`\`\n${errorStr}\n\`\`\``
-      const onNuke = () => {
+      const onNuke = async () => {
         if (!window.confirm(t`confirmNuke`)) return
+        // the data (IndexedDB, saved before going on) and this device's settings (localStorage)
+        await clearAppStorage().catch(console.error)
         localStorage.clear()
         window.alert(t`finishNuke`)
         document.location.reload()
@@ -69,22 +85,15 @@ class ErrorBoundary extends Component<Props, State> {
             <ThemeProvider theme={theme}>
               <CssBaseline enableColorScheme />
               <Box
-                sx={{
-                  display: 'flex',
-                  minWidth: '100vw',
-                  minHeight: '100vh',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  p: 2,
-                }}
+                display="flex"
+                minWidth="100vw"
+                minHeight="100vh"
+                justifyContent="center"
+                alignItems="center"
+                p={2}
               >
                 <CardThemed bgt="light">
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                    }}
-                  >
+                  <Box display="flex" flexDirection="column">
                     <CardContent
                       sx={{
                         display: 'flex',
@@ -97,11 +106,20 @@ class ErrorBoundary extends Component<Props, State> {
                       <ErrorIcon color="error" />
                     </CardContent>
                     <Divider />
-                    <Box
-                      sx={{
-                        display: 'flex',
-                      }}
-                    >
+                    {newerBuild() && (
+                      // an error from old code (served by the offline cache): the fix may be live
+                      <CardContent sx={{ pb: 0 }}>
+                        <Button
+                          variant="contained"
+                          color="success"
+                          onClick={() => window.location.reload()}
+                        >
+                          This page runs an older version: reload to get the
+                          latest
+                        </Button>
+                      </CardContent>
+                    )}
+                    <Box display="flex">
                       <CardContent sx={{ flexGrow: 1, maxWidth: 600 }}>
                         <Typography>{t`p1.1`}</Typography>
                         <Typography>{t`p1.2`}</Typography>
@@ -116,7 +134,7 @@ class ErrorBoundary extends Component<Props, State> {
                             <li>{t`fixes.3`}</li>
                           </Typography>
                         </ul>
-                        <Typography>{t`p2`}</Typography>
+                        <Typography>{t`p2Save`}</Typography>
                         <ul>
                           <Typography>
                             <li>{t`report.1`}</li>
@@ -124,53 +142,19 @@ class ErrorBoundary extends Component<Props, State> {
                           <Typography>
                             <li>{t`report.2`}</li>
                           </Typography>
-                          <Typography>
-                            <li>
-                              <Trans t={t} i18nKey="report.3">
-                                Click
-                                <a
-                                  // juanlab: le segnalazioni vanno al fork, mai al progetto originale
-                                  href="https://github.com/Juan0177/Juan-optimizer/issues/new?title=Unexpected%20Crash%20Occurred"
-                                  style={{ color: 'white' }}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  here
-                                </a>
-                                to report on GitHub. Paste the text in the
-                                description, and include your JSON files (you
-                                might need to rename them to end with '.txt')
-                              </Trans>
-                            </li>
-                          </Typography>
-                          {/* juanlab: tolta la segnalazione su Discord (era il Discord del progetto originale) */}
                         </ul>
                       </CardContent>
-                      <Stack
-                        sx={{
-                          p: 1,
-                        }}
-                      >
+                      <Stack p={1}>
                         <Box
                           component="img"
                           src={SpaghettiCode}
-                          sx={{
-                            maxWidth: 400,
-                          }}
+                          maxWidth={400}
                         />
-                        <Typography
-                          sx={{
-                            fontStyle: 'italic',
-                          }}
-                        >{t`caption`}</Typography>
+                        <Typography fontStyle="italic">{t`caption`}</Typography>
                       </Stack>
                     </Box>
                     <CardContent sx={{ gap: 2, p: 0 }}>
-                      <Box
-                        sx={{
-                          p: 2,
-                        }}
-                      >
+                      <Box p={2}>
                         <ReadOnlyTextArea value={textBoxVal} />
                       </Box>
                       <DatabaseCard readOnly />

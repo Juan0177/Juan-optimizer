@@ -6,12 +6,10 @@ import type {
   ElementKey,
   MainStatKey,
   SubstatKey,
+  TravelerKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
-import {
-  charKeyToLocCharKey,
-  travelerEleMap,
-} from '@genshin-optimizer/gi/consts'
+import { charKeyToLocCharKey } from '@genshin-optimizer/gi/consts'
 // Solo le tabelle ID -> chiave del datamine: sono oggetti TypeScript puri (l'index di gi/dm usa il filesystem).
 // biome-ignore lint/style/noRestrictedImports: juanlab, solo le tabelle ID del datamine (l'index di gi/dm usa il filesystem)
 import * as artifactMap from '../../../dm/src/mapping/artifact'
@@ -20,6 +18,16 @@ import { characterIdMap } from '../../../dm/src/mapping/character'
 // biome-ignore lint/style/noRestrictedImports: juanlab, solo le tabelle ID del datamine (l'index di gi/dm usa il filesystem)
 import { weaponIdMap } from '../../../dm/src/mapping/weapon'
 
+// Elemento della vetrina -> Viaggiatore di quell'elemento (nella base di Stellar Optimizer non e in gi/consts)
+const travelerEleMap: Partial<Record<ElementKey, TravelerKey>> = {
+  anemo: 'TravelerAnemo',
+  geo: 'TravelerGeo',
+  electro: 'TravelerElectro',
+  dendro: 'TravelerDendro',
+  hydro: 'TravelerHydro',
+  pyro: 'TravelerPyro',
+  cryo: 'TravelerCryo',
+}
 const { artifactIdMap, artifactSlotMap } = artifactMap
 
 // Worker di JuanLab (Cloudflare): inoltra la richiesta a Enka.network, che non permette chiamate dirette dal browser

@@ -132,7 +132,7 @@ export function UploadCard({
         <Trans t={t} i18nKey="settings:uploadCard.title" />
       </CardContent>
       <CardContent>
-        {/* juanlab: import dalla vetrina di Enka; i pezzi non in vetrina restano nel database */}
+        {/* juanlab: import dalla vetrina di Enka o da Akasha; i pezzi non importati restano nel database */}
         <EnkaUidImport
           initialUid={initialUid}
           onData={(json, label) => {
@@ -144,7 +144,7 @@ export function UploadCard({
         />
         <GcwebSettingsBox />
         <Grid container spacing={2} sx={{ mb: 1 }}>
-          <Grid>
+          <Grid item>
             <label htmlFor="icon-button-file">
               <InvisInput
                 accept=".json"
@@ -152,21 +152,12 @@ export function UploadCard({
                 type="file"
                 onChange={onUpload}
               />
-              <Button
-                component="span"
-                nativeButton={false}
-                color="info"
-                startIcon={<FileOpen />}
-              >
+              <Button component="span" color="info" startIcon={<FileOpen />}>
                 {t('uploadCard.buttons.open')}
               </Button>
             </label>
           </Grid>
-          <Grid
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Grid item flexGrow={1}>
             <CardThemed sx={{ px: 2, py: 1 }}>
               <Typography>
                 {filename ? (
@@ -325,34 +316,22 @@ function GOODUploadInfo({
       <Divider />
       <CardContent>
         <Grid container spacing={2}>
-          <Grid container spacing={2}>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+          <Grid container item spacing={2}>
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={artifacts}
                 dbTotal={importedDatabase.arts.values.length}
                 type="arts"
               />
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={weapons}
                 dbTotal={importedDatabase.weapons.values.length}
                 type="weapons"
               />
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={characters}
                 dbTotal={importedDatabase.chars.values.length}
@@ -360,45 +339,29 @@ function GOODUploadInfo({
               />
             </Grid>
           </Grid>
-          <Grid container spacing={2}>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+          <Grid container item spacing={2}>
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={teams}
                 dbTotal={importedDatabase.teams.values.length}
                 type="teams"
               />
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={teamChars}
                 dbTotal={importedDatabase.teamChars.values.length}
                 type="loadouts"
               />
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={builds}
                 dbTotal={importedDatabase.builds.entries.length}
                 type="builds"
               />
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               <MergeResult
                 result={buildTcs}
                 dbTotal={importedDatabase.buildTcs.entries.length}
@@ -451,11 +414,7 @@ function MergeResult({
         )}
         {/* <Typography><Trans t={t} i18nKey="count.updated" /> <strong>{result.update.length}</strong></Typography> */}
         {'remove' in result && !!result.remove.length && (
-          <Typography
-            sx={{
-              color: 'warning.main',
-            }}
-          >
+          <Typography color="warning.main">
             <Trans t={t} i18nKey="count.removed" />{' '}
             <strong>{result.remove.length}</strong>
           </Typography>
@@ -477,11 +436,7 @@ function MergeResult({
         </Typography>
         {'invalid' in result && !!result.invalid?.length && (
           <div>
-            <Typography
-              sx={{
-                color: 'error.main',
-              }}
-            >
+            <Typography color="error.main">
               <Trans t={t} i18nKey="count.invalid" />{' '}
               <strong>{result.invalid.length}</strong> / {total}
             </Typography>

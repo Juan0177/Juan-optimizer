@@ -1,0 +1,43 @@
+{
+  "_comment": "English text that the beta dump does not have yet. Applied by apply_en_overrides.py after gi-dm-localization:gen-file. Set and piece names are the official English ones from Lunaris (data 7.2.51, checked 2026-11-09): Epochal Advent (肇史之遗) and Empyrean Sojourn (遥天奉翠华引); the keys LegacyOfTheFirstChronicle and PreludeOfTheKingfisherCanopy still carry the provisional names chosen on 2026-11-05 (renaming them needs a database migration). Remove an entry once the dump has the official English text. Blazing Lionfang (12438): the dump has its passive only in CHS; the English below is a translation of it (2026-11-06), and the passive name fixes the dump's typo \"Convenant\".",
+  "artifact": {
+    "LegacyOfTheFirstChronicle": {
+      "setName": "Epochal Advent",
+      "pieces": {
+        "flower": "Flower of the Epochal Advent",
+        "plume": "Plume of the Epochal Advent",
+        "sands": "Sands of the Epochal Advent",
+        "goblet": "Goblet of the Epochal Advent",
+        "circlet": "Circlet of the Epochal Advent"
+      }
+    },
+    "PreludeOfTheKingfisherCanopy": {
+      "setName": "Empyrean Sojourn",
+      "pieces": {
+        "flower": "Flower of the Empyrean Sojourn",
+        "plume": "Plume of the Empyrean Sojourn",
+        "sands": "Sands of the Empyrean Sojourn",
+        "goblet": "Goblet of the Empyrean Sojourn",
+        "circlet": "Circlet of the Empyrean Sojourn"
+      }
+    }
+  },
+  "weapon": {
+    "TorrentsOfSpring": {},
+    "StarsealedEdict": {},
+    "Silverdawn": {},
+    "BlazingLionfang": {
+      "passiveName": "Song of Our Covenant",
+      "passiveDescription": {
+        "lines": [
+          "After the equipping character has been off-field for a total of 5s, they gain the Reforged Blade effect.",
+          "Reforged Blade: ATK is increased by {atk}. When the equipping character switches in during combat, they deal AoE DMG equal to {dmg} of their ATK to nearby opponents. This DMG can occur once every 14s. After the equipping character has been on-field for a total of 10s, they lose the Reforged Blade effect."
+        ],
+        "values": {
+          "atk": ["20%", "25%", "30%", "35%", "40%"],
+          "dmg": ["280%", "350%", "420%", "490%", "560%"]
+        }
+      }
+    }
+  }
+}

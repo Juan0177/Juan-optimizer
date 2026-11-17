@@ -42,6 +42,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import type { TooltipProps } from '@mui/material'
 import {
   Box,
+  Button,
   CardActionArea,
   CardContent,
   Divider,
@@ -60,7 +61,6 @@ import type { ChangeEvent } from 'react'
 import {
   memo,
   useCallback,
-  useContext,
   useDeferredValue,
   useEffect,
   useMemo,
@@ -68,7 +68,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DataContext, SillyContext } from '../../context'
+import { DataContext } from '../../context'
 import { commandSearchInputProps } from '../../util/commandPaletteSearch'
 import { iconAsset } from '../../util/iconAsset'
 import { ElementToggle, WeaponToggle } from '../toggles'
@@ -97,7 +97,6 @@ export function CharacterSingleSelectionModal({
   loadoutData?: (LoadoutDatum | undefined)[]
   newFirst?: boolean
 }) {
-  const { silly } = useContext(SillyContext)
   const database = useDatabase()
   const state = useDataEntryBase(database.displayCharacter)
 
@@ -116,18 +115,12 @@ export function CharacterSingleSelectionModal({
   }, [])
   const deferredState = useDeferredValue(state)
   const charMetaDirty = useDataManagerValues(database.charMeta)
-  const nameSearchFields = useCharacterNameSearchFieldsCache(
-    database.gender,
-    silly
-  )
+  const nameSearchFields = useCharacterNameSearchFieldsCache(database.gender)
   const filterConfigs = useMemo(
-    () => characterFilterConfigs(database, silly, nameSearchFields),
-    [database, silly, nameSearchFields]
+    () => characterFilterConfigs(database, nameSearchFields),
+    [database, nameSearchFields]
   )
-  const sortConfigs = useMemo(
-    () => characterSortConfigs(database, silly),
-    [database, silly]
-  )
+  const sortConfigs = useMemo(() => characterSortConfigs(database), [database])
   const teamSlotByKey = useMemo(() => {
     const map = new Map<CharacterKey, number>()
     teamCharKeys.forEach((key, index) => {
@@ -251,7 +244,6 @@ export function CharacterMultiSelectionModal({
   loadoutData: (LoadoutDatum | undefined)[]
   newFirst?: boolean
 }) {
-  const { silly } = useContext(SillyContext)
   const database = useDatabase()
   const state = useDataEntryBase(database.displayCharacter)
 
@@ -296,18 +288,12 @@ export function CharacterMultiSelectionModal({
   }, [])
   const deferredState = useDeferredValue(state)
   const charMetaDirty = useDataManagerValues(database.charMeta)
-  const nameSearchFields = useCharacterNameSearchFieldsCache(
-    database.gender,
-    silly
-  )
+  const nameSearchFields = useCharacterNameSearchFieldsCache(database.gender)
   const filterConfigs = useMemo(
-    () => characterFilterConfigs(database, silly, nameSearchFields),
-    [database, silly, nameSearchFields]
+    () => characterFilterConfigs(database, nameSearchFields),
+    [database, nameSearchFields]
   )
-  const sortConfigs = useMemo(
-    () => characterSortConfigs(database, silly),
-    [database, silly]
-  )
+  const sortConfigs = useMemo(() => characterSortConfigs(database), [database])
 
   const teamCharKeysRef = useRef(teamCharKeys)
   useEffect(() => {
@@ -443,7 +429,47 @@ export function CharacterMultiSelectionModal({
           ))}
         </Grid>
       </CardContent>
+      <MultiSelectFooter
+        count={teamCharKeys.filter((key) => key !== '').length}
+        onDone={onClose}
+      />
     </CharacterSelectionModalBase>
+  )
+}
+
+/** The selection is applied when the modal closes; this makes that step visible. */
+function MultiSelectFooter({
+  count,
+  onDone,
+}: {
+  count: number
+  onDone: () => void
+}) {
+  const { t } = useTranslation('page_character')
+  return (
+    <>
+      <Divider />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          px: 2,
+          py: 1.5,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{ mr: 'auto' }}>
+          <Typography sx={{ fontWeight: 600 }}>
+            {t('multiSelect.count', { count })}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {t('multiSelect.hint')}
+          </Typography>
+        </Box>
+        <Button onClick={onDone}>{t('multiSelect.done')}</Button>
+      </Box>
+    </>
   )
 }
 
@@ -475,7 +501,6 @@ function CharacterSelectionModalBase({
   const { t } = useTranslation([
     'page_character',
     // Always load these 2 so character names are loaded for searching/sorting
-    'sillyWisher_charNames',
     'charNames_gen',
   ])
   const database = useDatabase()
@@ -531,10 +556,7 @@ function CharacterSelectionModalBase({
 
   const { weaponType, element, sortType, ascending } = state
   const teamDataContextValue = useMemo(
-    () =>
-      ({
-        teamData: undefined,
-      }) as any,
+    () => ({ teamData: undefined }) as any,
     []
   )
 
@@ -586,12 +608,7 @@ function CharacterSelectionModalBase({
               <CloseIcon />
             </IconButton>
           </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1,
-            }}
-          >
+          <Box display="flex" gap={1}>
             <TextField
               inputRef={searchInputRef}
               value={searchTerm}
@@ -601,17 +618,14 @@ function CharacterSelectionModalBase({
               label={t('characterName')}
               size="small"
               sx={{ height: '100%', mr: 'auto' }}
-              slotProps={{
-                input: {
-                  sx: { height: '100%' },
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon fontSize="small" />
-                    </InputAdornment>
-                  ),
-                },
-
-                htmlInput: commandSearchInputProps,
+              inputProps={commandSearchInputProps}
+              InputProps={{
+                sx: { height: '100%' },
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
               }}
             />
             <SortByButton
@@ -659,23 +673,30 @@ const SingleSelectCardWrapper = memo(function SingleSelectCardWrapper({
 }) {
   const { favorite } = useCharMeta(characterKey)
   const database = useDatabase()
+  // the preview shows the character's equipment; for one not added yet it would only repeat
+  // the card at a larger size and cover its neighbours
+  const owned = !!useCharacter(characterKey)
 
   const [open, onOpen, onClose] = useBoolState()
 
   const isInTeam = teamSlotIndex !== -1
   return (
     <CustomTooltip
-      enterDelay={300}
-      enterNextDelay={300}
+      enterDelay={600}
+      enterNextDelay={600}
       arrow
       placement="bottom"
-      open={open}
+      open={owned && open}
       onClose={onClose}
       onOpen={onOpen}
       title={
-        <Box sx={{ width: 300 }}>
-          <CharacterCard hideStats characterKey={characterKey} />
-        </Box>
+        owned ? (
+          <Box sx={{ width: 300 }}>
+            <CharacterCard hideStats characterKey={characterKey} />
+          </Box>
+        ) : (
+          ''
+        )
       }
     >
       <CardThemed
@@ -731,23 +752,30 @@ const MultiSelectCardWrapper = memo(function MultiSelectCardWrapper({
 }) {
   const { favorite } = useCharMeta(characterKey)
   const database = useDatabase()
+  // the preview shows the character's equipment; for one not added yet it would only repeat
+  // the card at a larger size and cover its neighbours
+  const owned = !!useCharacter(characterKey)
 
   const [open, onOpen, onClose] = useBoolState()
 
   const isInTeam = teamSlotIndex !== -1
   return (
     <CustomTooltip
-      enterDelay={300}
-      enterNextDelay={300}
+      enterDelay={600}
+      enterNextDelay={600}
       arrow
       placement="bottom"
-      open={open}
+      open={owned && open}
       onClose={onClose}
       onOpen={onOpen}
       title={
-        <Box sx={{ width: 300 }}>
-          <CharacterCard hideStats characterKey={characterKey} />
-        </Box>
+        owned ? (
+          <Box sx={{ width: 300 }}>
+            <CharacterCard hideStats characterKey={characterKey} />
+          </Box>
+        ) : (
+          ''
+        )
       }
     >
       <CardThemed
@@ -800,21 +828,24 @@ const SelectionCard = memo(function SelectionCard({
 }) {
   const { gender } = useDBMeta()
   const character = useCharacter(characterKey)
-  const { silly } = useContext(SillyContext)
 
   const { level = 1, ascension = 0, constellation = 0 } = character ?? {}
   const banner = characterAsset(characterKey, 'banner', gender)
   const rarity = getCharStat(characterKey).rarity
 
   return (
-    <CardActionArea onClick={() => onSelect(characterKey)}>
+    <CardActionArea
+      onClick={() => onSelect(characterKey)}
+      // The picker shows every character at once: let the browser skip rendering (and the
+      // name-card download of) cards that are scrolled out of view. Set here, inside the
+      // wrapper that draws the selection outline, so the outline is never clipped.
+      sx={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 80px' }}
+    >
       <Box
+        display="flex"
+        position="relative"
         className={!banner ? `grad-${rarity}star` : undefined}
         sx={{
-          display: 'flex',
-          position: 'relative',
-          width: '100%',
-
           '&::before': {
             content: '""',
             display: 'block',
@@ -824,43 +855,38 @@ const SelectionCard = memo(function SelectionCard({
             width: '100%',
             height: '100%',
             opacity: 0.7,
-            backgroundImage: `url(${banner})`,
+            backgroundImage: banner ? `url(${banner})` : undefined,
             backgroundPosition: 'center',
             backgroundSize: 'cover',
           },
         }}
+        width="100%"
       >
         <Box
-          sx={{
-            flexShrink: 1,
-            alignSelf: 'flex-end',
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 1,
-            maxWidth: { xs: '33%', lg: '30%' },
-          }}
+          flexShrink={1}
+          sx={{ maxWidth: { xs: '33%', lg: '30%' } }}
+          alignSelf="flex-end"
+          display="flex"
+          flexDirection="column"
+          zIndex={1}
         >
           <Box
             component="img"
-            src={iconAsset(characterKey, gender, silly)}
-            sx={{
-              width: '100%',
-              height: 'auto',
-              maxWidth: 256,
-              mt: 'auto',
-            }}
+            loading="lazy"
+            src={iconAsset(characterKey, gender)}
+            width="100%"
+            height="auto"
+            maxWidth={256}
+            sx={{ mt: 'auto', aspectRatio: '1' }}
           />
         </Box>
         <Box
-          sx={{
-            flexGrow: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            zIndex: 1,
-            justifyContent: 'space-evenly',
-            pr: 1,
-            pt: 1,
-          }}
+          flexGrow={1}
+          sx={{ pr: 1, pt: 1 }}
+          display="flex"
+          flexDirection="column"
+          zIndex={1}
+          justifyContent="space-evenly"
         >
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
             <SqBadge
@@ -876,18 +902,14 @@ const SelectionCard = memo(function SelectionCard({
                 <Typography
                   variant="body2"
                   component="span"
-                  sx={{
-                    whiteSpace: 'nowrap',
-                  }}
+                  whiteSpace="nowrap"
                 >
                   Lv. {level}
                 </Typography>
                 <Typography
                   variant="body2"
                   component="span"
-                  sx={{
-                    color: 'text.secondary',
-                  }}
+                  color="text.secondary"
                 >
                   /{getCharMaxLevel(level, ascension)}
                 </Typography>
@@ -896,7 +918,7 @@ const SelectionCard = memo(function SelectionCard({
             </Box>
           ) : (
             <Typography component="span" variant="body2">
-              <SqBadge>NEW</SqBadge>
+              <SqBadge color="secondary">New</SqBadge>
             </Typography>
           )}
           <StarsDisplay stars={rarity} colored />
@@ -918,7 +940,7 @@ const SingleSelectGridRow = memo(function SingleSelectGridRow({
   onSelect: (ck: CharacterKey) => void
 }) {
   return (
-    <Grid size={1}>
+    <Grid item xs={1}>
       <SingleSelectCardWrapper
         characterKey={characterKey}
         selectedIndex={selectedIndex}
@@ -940,7 +962,7 @@ const MultiSelectGridRow = memo(function MultiSelectGridRow({
   onSelect: (ck: CharacterKey) => void
 }) {
   return (
-    <Grid size={1}>
+    <Grid item xs={1}>
       <MultiSelectCardWrapper
         characterKey={characterKey}
         teamSlotIndex={teamSlotIndex}

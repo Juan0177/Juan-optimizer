@@ -96,12 +96,7 @@ export function ArtifactCardNano({
     : alpha(theme.palette.secondary.main, 0.6)
   return (
     <ConditionalWrapper condition={!!onClick} wrapper={actionWrapperFunc}>
-      <Box
-        sx={{
-          display: 'flex',
-          height: '100%',
-        }}
-      >
+      <Box display="flex" height="100%">
         <Box
           className={`grad-${rarity}star`}
           sx={{
@@ -116,6 +111,7 @@ export function ArtifactCardNano({
           <ArtifactTooltip art={art}>
             <Box
               component="img"
+              loading="lazy"
               src={artifactAsset(art.setKey, slotKey)}
               sx={{ m: -1, maxHeight: '110%', maxWidth: '110%' }}
             />
@@ -181,11 +177,7 @@ export function ArtifactCardNano({
                 }
                 disableInteractive
               >
-                <Box
-                  sx={{
-                    lineHeight: 0,
-                  }}
-                >
+                <Box lineHeight={0}>
                   <StatIcon
                     statKey={mainStatKey}
                     iconProps={{ style: { padding: '4px' } }}
@@ -206,12 +198,10 @@ export function ArtifactCardNano({
         </Box>
         {/* substats */}
         <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            p: 1,
-          }}
+          display="flex"
+          flexDirection="column"
+          justifyContent="space-between"
+          sx={{ p: 1 }}
         >
           {substats.map((stat: ICachedSubstat, i: number) => (
             <SubstatDisplay key={i + stat.key} stat={stat} />
@@ -240,13 +230,7 @@ function SubstatDisplay({
   const rollColor = `roll${clamp(numRolls, 1, 6)}`
   const statUnit = getUnitStr(stat.key)
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-        alignContent: 'center',
-      }}
-    >
+    <Box display="flex" gap={1} alignContent="center">
       <Typography
         sx={{ flexGrow: 1, display: 'flex', gap: 0.5, alignItems: 'center' }}
         color={
@@ -267,11 +251,7 @@ function SubstatDisplay({
           }
           disableInteractive
         >
-          <Box
-            sx={{
-              lineHeight: 0,
-            }}
-          >
+          <Box lineHeight={0}>
             <StatIcon statKey={stat.key} iconProps={{ fontSize: 'inherit' }} />
           </Box>
         </BootstrapTooltip>

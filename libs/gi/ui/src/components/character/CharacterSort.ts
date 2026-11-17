@@ -1,16 +1,6 @@
 import type { FilterConfigs, SortConfigs } from '@genshin-optimizer/common/util'
-import type {
-  CharacterKey,
-  CharacterRarityKey,
-  ElementKey,
-  WeaponTypeKey,
-} from '@genshin-optimizer/gi/consts'
-import {
-  allCharacterRarityKeys,
-  allElementKeys,
-  allWeaponTypeKeys,
-  charKeyToLocGenderedCharKey,
-} from '@genshin-optimizer/gi/consts'
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import { i18n } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
@@ -26,18 +16,13 @@ export const characterSortKeys = [
 export type CharacterSortKey = (typeof characterSortKeys)[number]
 
 export function characterSortConfigs(
-  database: ArtCharDatabase,
-  silly: boolean
+  database: ArtCharDatabase
 ): SortConfigs<CharacterSortKey, CharacterKey> {
   return {
     new: (ck) => (database.chars.get(ck as CharacterKey) ? 0 : 1),
     name: (ck) =>
       i18n
-        .t(
-          `${
-            silly ? 'sillyWisher_charNames' : 'charNames_gen' // Should already be loaded by caller
-          }:${charKeyToLocGenderedCharKey(ck, database.gender)}`
-        )
+        .t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, database.gender)}`)
         .toString(),
     level: (ck) => {
       const char = database.chars.get(ck as CharacterKey)
@@ -63,7 +48,6 @@ export type CharacterFilterConfigs = FilterConfigs<
 >
 export function characterFilterConfigs(
   database: ArtCharDatabase,
-  silly: boolean,
   nameSearchFields?: CharacterNameSearchFieldsCache
 ): CharacterFilterConfigs {
   return {
@@ -80,18 +64,9 @@ export function characterFilterConfigs(
         filter === undefined ||
         filter === '' ||
         i18n
-          .t(
-            `${
-              silly ? 'sillyWisher_charNames' : 'charNames_gen' // Should already be loaded by caller
-            }:${locKey}`
-          )
+          .t(`charNames_gen:${locKey}`)
           .toLowerCase()
-          .includes(filterLower ?? '') ||
-        (silly &&
-          i18n
-            .t(`charNames_gen:${locKey}`)
-            .toLowerCase()
-            .includes(filterLower ?? ''))
+          .includes(filterLower ?? '')
       )
     },
     new: (ck, filter) =>
@@ -107,19 +82,3 @@ export const characterSortMap: Partial<
   level: ['favorite', 'level', 'rarity', 'name'],
   rarity: ['favorite', 'rarity', 'level', 'name'],
 }
-
-export const initialCharacterDisplayState = (): {
-  sortType: CharacterSortKey
-  ascending: boolean
-  weaponType: WeaponTypeKey[]
-  element: ElementKey[]
-  rarity: CharacterRarityKey[]
-  pageIndex: number
-} => ({
-  sortType: characterSortKeys[0],
-  ascending: false,
-  weaponType: [...allWeaponTypeKeys],
-  element: [...allElementKeys],
-  rarity: [...allCharacterRarityKeys],
-  pageIndex: 0,
-})

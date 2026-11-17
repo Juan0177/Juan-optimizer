@@ -15,8 +15,6 @@ import DesertPavilionChronicle from './DesertPavilionChronicle'
 import DisenchantmentInDeepShadow from './DisenchantmentInDeepShadow'
 import EchoesOfAnOffering from './EchoesOfAnOffering'
 import EmblemOfSeveredFate from './EmblemOfSeveredFate'
-import EmpyreanSojourn from './EmpyreanSojourn'
-import EpochalAdvent from './EpochalAdvent'
 import FinaleOfTheDeepGalleries from './FinaleOfTheDeepGalleries'
 import FlowerOfParadiseLost from './FlowerOfParadiseLost'
 import FragmentOfHarmonicWhimsy from './FragmentOfHarmonicWhimsy'
@@ -29,6 +27,7 @@ import HeartOfTheFurnace from './HeartOfTheFurnace'
 import HuskOfOpulentDreams from './HuskOfOpulentDreams'
 import Instructor from './Instructor'
 import Lavawalker from './Lavawalker'
+import LegacyOfTheFirstChronicle from './LegacyOfTheFirstChronicle'
 import LongNightsOath from './LongNightsOath'
 import LuckyDog from './LuckyDog'
 import MaidenBeloved from './MaidenBeloved'
@@ -45,6 +44,7 @@ import PrayersForDestiny from './PrayersForDestiny'
 import PrayersForIllumination from './PrayersForIllumination'
 import PrayersForWisdom from './PrayersForWisdom'
 import PrayersToSpringtime from './PrayersToSpringtime'
+import PreludeOfTheKingfisherCanopy from './PreludeOfTheKingfisherCanopy'
 import ResolutionOfSojourner from './ResolutionOfSojourner'
 import RetracingBolide from './RetracingBolide'
 import ScarletProof from './ScarletProof'
@@ -82,8 +82,6 @@ const data = {
   DisenchantmentInDeepShadow,
   EchoesOfAnOffering,
   EmblemOfSeveredFate,
-  EmpyreanSojourn,
-  EpochalAdvent,
   FinaleOfTheDeepGalleries,
   FlowerOfParadiseLost,
   FragmentOfHarmonicWhimsy,
@@ -96,6 +94,7 @@ const data = {
   HuskOfOpulentDreams,
   Instructor,
   Lavawalker,
+  LegacyOfTheFirstChronicle,
   LongNightsOath,
   LuckyDog,
   MaidenBeloved,
@@ -112,6 +111,7 @@ const data = {
   PrayersForIllumination,
   PrayersForWisdom,
   PrayersToSpringtime,
+  PreludeOfTheKingfisherCanopy,
   ResolutionOfSojourner,
   RetracingBolide,
   ScarletProof,

@@ -80,7 +80,7 @@ export default function BonusStatsModal({
 }
 const keys = [...allInputPremodKeys]
 const wrapperFunc = (e: JSX.Element, key?: string) => (
-  <Grid key={key} size={1}>
+  <Grid item key={key} xs={1}>
     {e}
   </Grid>
 )
@@ -98,12 +98,12 @@ function BonusStatsEditor() {
     <CardThemed bgt="light">
       <CardContent sx={{ display: 'flex' }}>
         <Grid container columns={cols} sx={{ pt: 1 }} spacing={1}>
-          <Grid size={12}>
+          <Grid item xs={12}>
             <Alert severity="info" variant="filled">
               <Trans i18nKey={'addStats.info'} t={t}>
                 You can use these fields to add buffs/debuffs not directly
-                supported in GO, such as food buffs, abyss cards, or
-                Superconduct. Please refer to the
+                supported in Juan-optimizer, such as food buffs, abyss cards,
+                or Superconduct. Please refer to the
                 <a href="https://genshin-impact.fandom.com/wiki/Genshin_Impact_Wiki">
                   Genshin Impact Wiki
                 </a>
@@ -216,7 +216,7 @@ function MainStatsCards() {
     <CardThemed bgt="light">
       <CardContent>
         <Grid container columns={cols} spacing={1}>
-          <Grid size={1}>
+          <Grid item xs={1}>
             <StatDisplayCard title={t('addStats.main')}>
               <StatDisplayContent
                 nodes={mainReadNodes}
@@ -246,13 +246,13 @@ function MainStatsCards() {
               />
             </StatDisplayCard>
           </Grid>
-          <Grid size={1}>
+          <Grid item xs={1}>
             <StatDisplayCard title={t('addStats.other')}>
               <StatDisplayContent nodes={otherStatReadNodes} />
             </StatDisplayCard>
           </Grid>
           {!!miscStatReadNodes.length && (
-            <Grid size={1}>
+            <Grid item xs={1}>
               <StatDisplayCard title={t('addStats.misc')}>
                 <StatDisplayContent nodes={miscStatReadNodes} />
               </StatDisplayCard>
@@ -273,12 +273,7 @@ function StatDisplayCard({
   return (
     <CardThemed>
       <CardContent sx={{ py: 1 }}>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-          }}
-        >
+        <Box display="flex" justifyContent="space-between">
           <Typography variant="subtitle1">{title}</Typography>
         </Box>
       </CardContent>

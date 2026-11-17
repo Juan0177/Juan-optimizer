@@ -160,7 +160,7 @@ export default function BuildReal({
             spacing={1}
             columns={{ xs: 2, sm: 2, md: 2, lg: 3, xl: 3 }}
           >
-            <Grid size={1}>
+            <Grid item xs={1}>
               <CardThemed
                 sx={{
                   height: '100%',
@@ -177,7 +177,7 @@ export default function BuildReal({
               </CardThemed>
             </Grid>
             {Object.entries(artifactIds).map(([slotKey, id]) => (
-              <Grid key={id || slotKey} size={1}>
+              <Grid item key={id || slotKey} xs={1}>
                 <CardThemed
                   sx={{
                     height: '100%',

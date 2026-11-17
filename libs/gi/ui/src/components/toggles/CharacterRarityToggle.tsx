@@ -38,11 +38,7 @@ export function CharacterRarityToggle({
           }}
           onClick={() => onChange(rarityHandler(value, star))}
         >
-          <Box
-            sx={{
-              display: 'flex',
-            }}
-          >
+          <Box display="flex">
             <strong>{star}</strong>
             <StarRoundedIcon />
             {!xs && <Chip label={totals[star]} size="small" />}

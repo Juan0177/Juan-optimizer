@@ -179,7 +179,6 @@ export function TeammateDisplay({
             >
               <CardActionArea
                 component={Link}
-                nativeButton={false}
                 to={`${characterKey}`}
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               >

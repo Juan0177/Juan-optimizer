@@ -73,6 +73,31 @@ import type {
   Team,
 } from './TeamDataManager'
 import { defLoadoutExportSetting } from './TeamDataManager'
+import type {
+  TeamOpt,
+  TeamOptAttack,
+  TeamOptBuffLimit,
+  TeamOptBuffOwner,
+  TeamOptEnergyCalculator,
+  TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
+  TeamOptKqm,
+} from './TeamOpt'
+import {
+  defaultTeamOptKqm,
+  initTeamOpt,
+  initTeamOptAttack,
+  TEAM_OPT_MAX_ATTACKS,
+  teamOptEnergyRotationFields,
+  validateTeamOpt,
+} from './TeamOpt'
+import type { TeamRotation } from './TeamRotation'
+import {
+  applyTeamRotation,
+  parseTeamRotation,
+  TEAM_ROTATION_TYPE,
+  teamRotationExport,
+} from './TeamRotation'
 import type { ICachedWeapon } from './WeaponDataManager'
 import {
   defaultInitialWeapon,
@@ -117,12 +142,23 @@ export type {
   StatFilters,
   Team,
   TeamCharacter,
+  TeamOpt,
+  TeamOptAttack,
+  TeamOptBuffLimit,
+  TeamOptBuffOwner,
+  TeamOptEnergyCalculator,
+  TeamOptEnergyMember,
+  TeamOptEnergyRotationField,
+  TeamOptKqm,
+  TeamRotation,
 }
 export {
   allArtifactSetExclusionKeys,
+  applyTeamRotation,
   cachedArtifact,
   defaultInitialWeapon,
   defaultInitialWeaponKey,
+  defaultTeamOptKqm,
   defLoadoutExportSetting,
   handleArtSetExclusion,
   initCharTC,
@@ -130,6 +166,8 @@ export {
   initCustomTarget,
   initialPandoTeam,
   initialWeapon,
+  initTeamOpt,
+  initTeamOptAttack,
   isPandoTeamCharacterKey,
   MAX_DESC_LENGTH,
   MAX_NAME_LENGTH,
@@ -143,7 +181,13 @@ export {
   pandoStatFilterStatQtKeys,
   pandoTeammateMembers,
   pandoTeamSrcKeys,
+  parseTeamRotation,
+  TEAM_OPT_MAX_ATTACKS,
+  TEAM_ROTATION_TYPE,
+  teamOptEnergyRotationFields,
+  teamRotationExport,
   toBuildTc,
   validateArtifact,
   validateCustomMultiTarget,
+  validateTeamOpt,
 }

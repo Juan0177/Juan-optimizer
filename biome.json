@@ -16,15 +16,11 @@
       "!!.yarn",
       "!!libs/gi/dm/GenshinData",
       "!!libs/gi/dm/HakushinData",
-      "!!libs/sr/dm/StarRailData",
-      "!!libs/zzz/dm/ZenlessData",
-      "!!libs/zzz/dm/HakushinData",
       "!!.nx/cache",
       "!!.nx/workspace-data",
       "!**/*_gen.json",
       "!libs/gi/stats/Data",
-      "!libs/**/*/localization/assets/locales/**/*/*.json",
-      "!libs/gi/silly-wisher-names/Translated/**/*.json"
+      "!libs/**/*/localization/assets/locales/**/*/*.json"
     ]
   },
   "formatter": {

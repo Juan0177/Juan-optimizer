@@ -15,6 +15,7 @@ import {
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
 import {
   CharacterContext,
+  TeamCharacterContext,
   useDatabase,
   useWeapon,
 } from '@genshin-optimizer/gi/db-ui'
@@ -42,7 +43,7 @@ import {
 } from '@mui/material'
 import { useCallback, useContext, useMemo } from 'react'
 import { DataContext } from '../../context'
-import { useTeamData } from '../../hooks'
+import { useTeamDataNoContext } from '../../hooks'
 import { LocationAutocomplete } from '../character'
 import { DocumentDisplay } from '../DocumentDisplay'
 import { FieldDisplayList, NodeFieldDisplay } from '../FieldDisplay'
@@ -113,7 +114,16 @@ export function WeaponEditor({
     [weaponSheet, weapon]
   )
 
-  const newTeamData = useTeamData(0, undefined, weapon)
+  // the team's stats with this weapon: only while it is open (the editor stays mounted, closed, in
+  // every build display, and the calculation is the team's whole)
+  const { teamId, teamCharId } = useContext(TeamCharacterContext)
+  const newTeamData = useTeamDataNoContext(
+    weapon ? teamId : '',
+    teamCharId,
+    0,
+    undefined,
+    weapon
+  )
   const newData = character && newTeamData?.[character.key]?.target
 
   return (
@@ -151,19 +161,9 @@ export function WeaponEditor({
           {weaponStat && weaponUIData && (
             <Grid container spacing={1.5}>
               {/* Left column */}
-              <Grid
-                size={{
-                  xs: 12,
-                  sm: 3,
-                }}
-              >
+              <Grid item xs={12} sm={3}>
                 <Grid container spacing={1.5}>
-                  <Grid
-                    size={{
-                      xs: 6,
-                      sm: 12,
-                    }}
-                  >
+                  <Grid item xs={6} sm={12}>
                     <Box sx={{ position: 'relative', display: 'flex' }}>
                       <Box
                         component="img"
@@ -192,13 +192,8 @@ export function WeaponEditor({
                       </IconButton>
                     </Box>
                   </Grid>
-                  <Grid
-                    size={{
-                      xs: 6,
-                      sm: 12,
-                    }}
-                  >
-                    <Typography>
+                  <Grid item xs={6} sm={12}>
+                    <Typography component="div">
                       <small>{key && <WeaponDesc weaponKey={key} />}</small>
                     </Typography>
                   </Grid>
@@ -206,19 +201,12 @@ export function WeaponEditor({
               </Grid>
               {/* right column */}
               <Grid
+                item
+                xs={12}
+                sm={9}
                 sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-                size={{
-                  xs: 12,
-                  sm: 9,
-                }}
               >
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 1,
-                    flexWrap: 'wrap',
-                  }}
-                >
+                <Box display="flex" gap={1} flexWrap="wrap">
                   <ButtonGroup>
                     <Button color="info" onClick={onShowModal}>
                       {(key && <WeaponName weaponKey={key} />) ||
@@ -238,13 +226,7 @@ export function WeaponEditor({
                     </IconButton>
                   )}
                 </Box>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 1,
-                    flexWrap: 'wrap',
-                  }}
-                >
+                <Box display="flex" gap={1} flexWrap="wrap">
                   {key && (
                     <WeaponLevelSelect
                       level={level}
@@ -260,7 +242,7 @@ export function WeaponEditor({
                     {key && <WeaponPassiveName weaponKey={key} />}
                   </strong>
                 </Typography>
-                <Typography gutterBottom>
+                <Typography gutterBottom component="div">
                   {key && (
                     <WeaponPassiveDesc
                       weaponKey={key}
@@ -271,19 +253,11 @@ export function WeaponEditor({
                     />
                   )}
                 </Typography>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: 1,
-                  }}
-                >
+                <Box display="flex" flexDirection="column" gap={1}>
                   <CardThemed>
                     <CardHeader
                       title={'Main Stats'}
-                      slotProps={{
-                        title: { variant: 'subtitle2' },
-                      }}
+                      titleTypographyProps={{ variant: 'subtitle2' }}
                     />
                     <Divider />
                     <FieldDisplayList>
@@ -317,11 +291,7 @@ export function WeaponEditor({
         {footer && id && (
           <CardContent sx={{ py: 1 }}>
             <Grid container spacing={1}>
-              <Grid
-                sx={{
-                  flexGrow: 1,
-                }}
-              >
+              <Grid item flexGrow={1}>
                 <LocationAutocomplete
                   location={location}
                   setLocation={setLocation}

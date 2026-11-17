@@ -19,6 +19,7 @@ const key: WeaponKey = 'GestOfTheMightyWolf'
 
 const dmg_arr = [-1, 0.075, 0.095, 0.115, 0.135, 0.155]
 const critDMG_arr = [-1, 0.075, 0.095, 0.115, 0.135, 0.155]
+const atkSPD_ = constant(0.1)
 
 const [condStacksPath, condStacks] = cond(key, 'stacks')
 const stacksArr = range(1, 4)
@@ -42,11 +43,16 @@ const data = dataObjForWeaponSheet(key, {
   premod: {
     all_dmg_: dmg_,
     critDMG_,
+    atkSPD_,
   },
 })
 
 const sheet: IWeaponSheet = {
   document: [
+    {
+      header: headerTemplate(key, st('base')),
+      fields: [{ node: atkSPD_ }],
+    },
     {
       value: condStacks,
       path: condStacksPath,

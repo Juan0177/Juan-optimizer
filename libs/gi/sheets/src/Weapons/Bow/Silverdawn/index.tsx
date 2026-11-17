@@ -1,37 +1,45 @@
-// juanlab-beta 7.3: Silverdawn (arma di Anastasya), dal testo della beta (Nanoka 7.2.52).
 import { objKeyValMap } from '@genshin-optimizer/common/util'
 import {
   allStellarReactionKeys,
   type WeaponKey,
 } from '@genshin-optimizer/gi/consts'
-import { equal, inferInfoMut, input, subscript } from '@genshin-optimizer/gi/wr'
-import { cond, st, stg } from '../../../SheetUtil'
+import { equal, input, subscript } from '@genshin-optimizer/gi/wr'
+import { cond, st, stg, trans } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
 import { headerTemplate, WeaponSheet } from '../../WeaponSheet'
 
+// 7.3 beta weapon
 const key: WeaponKey = 'Silverdawn'
+const [, trm] = trans('weapon', key)
 
-// White Crown's Bequest dopo abilita o tripudio: ATT e DAN da CRIT delle reazioni stellari (Stellar Glimmer)
-const bequest_arr = [-1, 0.4, 0.52, 0.64, 0.76, 0.88]
+const atk_arr = [-1, 0.4, 0.52, 0.64, 0.76, 0.88]
+const stellar_critDMG_arr = [-1, 0.4, 0.52, 0.64, 0.76, 0.88]
 
-const [condBequestPath, condBequest] = cond(key, 'bequest')
-const bequest_atk_ = equal(
+// "White Crown's Bequest": 6s after using an Elemental Skill or Burst, +3s per Stellar Glimmer
+// reaction (up to 8 times). The Energy regeneration has no stat effect and is not modelled.
+const [condBequestPath, condBequest] = cond(key, 'whiteCrownsBequest')
+const atk_ = equal(
   condBequest,
   'on',
-  subscript(input.weapon.refinement, bequest_arr)
+  subscript(input.weapon.refinement, atk_arr)
 )
-const bequest_critDMG_ = objKeyValMap(allStellarReactionKeys, (k) => [
+// Stellar Glimmer = Stellar-Conduct and Stellar Swirl
+const stellar_critDMG_obj = objKeyValMap(allStellarReactionKeys, (k) => [
   `${k}_critDMG_`,
-  equal(condBequest, 'on', subscript(input.weapon.refinement, bequest_arr)),
+  equal(
+    condBequest,
+    'on',
+    subscript(input.weapon.refinement, stellar_critDMG_arr, { unit: '%' })
+  ),
 ])
 
-const data = dataObjForWeaponSheet(
-  key,
-  inferInfoMut({
-    premod: { atk_: bequest_atk_, ...bequest_critDMG_ },
-  })
-)
+const data = dataObjForWeaponSheet(key, {
+  premod: {
+    atk_,
+    ...stellar_critDMG_obj,
+  },
+})
 
 const sheet: IWeaponSheet = {
   document: [
@@ -39,12 +47,12 @@ const sheet: IWeaponSheet = {
       value: condBequest,
       path: condBequestPath,
       header: headerTemplate(key, st('conditional')),
-      name: st('afterUse.skillOrBurst'),
+      name: trm('whiteCrownsBequest'),
       states: {
         on: {
           fields: [
-            { node: bequest_atk_ },
-            ...Object.values(bequest_critDMG_).map((node) => ({ node })),
+            { node: atk_ },
+            ...Object.values(stellar_critDMG_obj).map((node) => ({ node })),
             { text: stg('duration'), value: 6, unit: 's' },
           ],
         },

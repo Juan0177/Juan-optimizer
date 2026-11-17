@@ -232,9 +232,7 @@ export function EnkaUidImport({
             label={t('import.uidLabel')}
             value={uid}
             onChange={(e) => setUid(e.target.value)}
-            slotProps={{
-              htmlInput: { inputMode: 'numeric', maxLength: 10 },
-            }}
+            inputProps={{ inputMode: 'numeric', maxLength: 10 }}
             sx={{ flex: '1 1 12em' }}
           />
           <Button

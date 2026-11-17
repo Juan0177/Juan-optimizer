@@ -46,7 +46,7 @@
   "skill": {
     "name": "공세 방어·방패 돌격",
     "description": {
-      "0": "방패를 들고 전방을 향해 대시해 <electro>번개 원소 범위 피해</electro>를 주고, <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong> 40pt를 획득하며 번개 방패 보호막을 펼친다.",
+      "0": "방패를 들고 전방을 향해 대시해 <electro>번개 원소 범위 피해</electro>를 주고, <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong>를 40pt 획득하며 번개 방패 보호막을 펼친다.",
       "1": "번개 방패 보호막의 피해 흡수량은 발레리의 공격력에 기반하며, <electro>번개 원소 피해</electro>에 대해 250%의 흡수 효과가 있다"
     },
     "skillParams": {
@@ -109,7 +109,7 @@
   "passive2": {
     "name": "방어선 돌파",
     "description": {
-      "0": "<strong><tooltip ns=tooltips_gen baseKey18=11370002 values=[]>공격 지령</tooltip></strong>이 강화된다: 특수 강공격 <strong><tooltip ns=tooltips_gen baseKey18=11370001 values=[]>대포·근접 포격</tooltip></strong> 발동 시 소모한 <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong>에 따라, 소모한 <strong>대포 에너지</strong> 1pt마다 <strong>공격 지령</strong>의 피해 보너스 효과가 추가로 증가한다. 발레리가:",
+      "0": "<strong><tooltip ns=tooltips_gen baseKey18=11370002 values=[]>공격 지령</tooltip></strong>이 강화된다: 특수 강공격 <strong><tooltip ns=tooltips_gen baseKey18=11370001 values=[]>대포·근접 포격</tooltip></strong> 발동 시 소모한 <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong> 1pt마다 <strong>공격 지령</strong>의 피해 보너스 효과가 추가로 증가한다. 발레리가:",
       "1": [
         "<strong>섬광·별 초전도</strong> 상태인 경우: 소모한 <strong>대포 에너지</strong> 1pt마다 <strong>공격 지령</strong>의 피해 보너스 효과가 증가하며, 증가량은 발레리 공격력의 0.9%에 해당한다.",
         "<strong>섬광·별 초전도</strong> 상태가 아닌 경우: 소모한 <strong>대포 에너지</strong> 1pt마다 <strong>공격 지령</strong>의 피해 보너스 효과가 증가하며, 증가량은 발레리 공격력의 0.3%에 해당한다"
@@ -119,7 +119,7 @@
   "passive3": {
     "name": "극지 적응력",
     "description": {
-      "0": "<tooltip ns=tooltips_gen baseKey18=11330003 values=[]><strong>극지의 별영역</strong></tooltip> 내에 있을 때, 발레리가 <strong>섬광·별 초전도</strong>상태에 진입한다"
+      "0": "<tooltip ns=tooltips_gen baseKey18=11330003 values=[]><strong>극지의 별영역</strong></tooltip> 내에 있을 때, 발레리가 <strong>섬광·별 초전도</strong> 상태에 진입한다"
     }
   },
   "passive": {
@@ -131,7 +131,7 @@
   "constellation1": {
     "name": "연속 제압의 순서",
     "description": {
-      "0": "특수 강공격 <strong><tooltip ns=tooltips_gen baseKey18=11370001 values=[]>대포·근접 포격</tooltip></strong> 발동 후, 발레리의 원소 에너지가 6pt 회복된다. 특수 강공격 발동 시 소모한 <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong>에 따라, 40pt를 초과하면 초과해 소모한 수치 중 10pt 소모할 때마다 발레리의 원소 에너지가 추가로 1.5pt 회복된다. 특수 강공격 <strong>대포·근접 포격</strong>을 발동할 때마다 해당 방식을 통해 발레리의 원소 에너지가 최대 15pt 회복된다. 해당 효과는 15초마다 최대 1회 발동된다.",
+      "0": "특수 강공격 <strong><tooltip ns=tooltips_gen baseKey18=11370001 values=[]>대포·근접 포격</tooltip></strong> 발동 후, 발레리의 원소 에너지가 6pt 회복된다. 특수 강공격 발동 시 소모한 <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>대포 에너지</tooltip></strong>가 40pt를 초과할 경우, 초과량 10pt마다 발레리의 원소 에너지가 추가로 1.5pt 회복된다. 특수 강공격 <strong>대포·근접 포격</strong>을 발동할 때마다 해당 방식을 통해 발레리의 원소 에너지가 최대 15pt 회복된다. 해당 효과는 15초마다 최대 1회 발동된다.",
       "1": "또한, 전투 상태에 진입할 때마다 발레리가 최초로 원소전투 스킬 <strong><tooltip ns=char_Valeriy_gen baseKey18=skill>공세 방어·방패 돌격</tooltip></strong>을 발동하면 기존의 150%에 해당하는 <strong>대포 에너지</strong>를 추가로 획득한다"
     }
   },

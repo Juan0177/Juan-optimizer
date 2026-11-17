@@ -176,9 +176,6 @@ export const allNonModStats = [
     `${sr}_directDmgInc` as const,
     `${sr}_mult_` as const,
   ]),
-  'stellarconduct_electro_critDMG_' as const,
-  // juanlab-beta 7.3: A4 di Anastasya, moltiplicatore base della reazione Turbinio astrale
-  'stellarswirl_reactionMult_' as const,
   ...allEleEnemyResKeys,
   'enemyDefRed_' as const,
   'enemyDefIgn_' as const,

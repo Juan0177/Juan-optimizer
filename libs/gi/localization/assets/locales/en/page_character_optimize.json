@@ -6,8 +6,8 @@
       "desc": "Sets main stat value to at least that of the specified level. Does not change substats."
     },
     "assumptionLvl": {
-      "no": "No Main Stat Lv. Assumption",
-      "lvl": "Assume Main Stat at least Lv. {{lvl}}"
+      "no": "No assumption",
+      "lvl": "At least Lv. {{lvl}}"
     },
     "title": "Main Stat Filter/Configuration"
   },
@@ -15,15 +15,15 @@
     "vs": "Graph Optimization Target vs.",
     "notSel": "Not Selected",
     "showStatThr": "Show Stat Threshold Line",
-    "downloadData": "Download Data",
-    "generatedBuilds": "Generated Builds",
-    "statReqThr": "Stat Requirement Threshold Line",
+    "downloadData": "Download data",
+    "generatedBuilds": "Generated builds",
+    "statReqThr": "Stat threshold line",
     "desc": "Using data from the builder, this will generate a graph to visualize Optimization Target vs. the selected Graph Target. The graph will show the maximum Optimization Target value per 0.01 of the selected Graph Target. Enabling this is optional, and doing so will slow down build times",
-    "currentBuild": "Current Build",
-    "highlightedBuilds": "Highlighted Builds",
+    "currentBuild": "Current build",
+    "highlightedBuilds": "Highlighted builds",
     "buildAlreadyInList": "Build is already in the list"
   },
-  "levelFilter": "Artifact Level Filter",
+  "levelFilter": "Artifact level",
   "upOptLevelFilter": "Artifact Upgrader Level Filter",
   "upOptLevelFilterTooltip": "This level filter is not synced with Optimize config.",
   "upOptNoResults": "It looks like there aren't any artifacts available for upgrading that could enhance your setup. Your artifact filters might be too restrictive. Alternatively, try the main artifact optimizer to find a better build.",
@@ -83,7 +83,7 @@
     "includeBtn": "Include Artifacts"
   },
   "excludeChar": {
-    "title": "Use Equipped Artifacts",
+    "title": "Use equipped artifacts",
     "modal": {
       "allow_all": "Add all shown characters to the allow list",
       "disallow_All": "Remove all shown characters from the allow list"
@@ -91,8 +91,8 @@
     "allowEquip": "Allow using artifacts from",
     "usingNumTot_one": "Using <1>{{arts}}</1> artifacts from <3>{{count}}</3> character",
     "usingNumTot_other": "Using <1>{{arts}}</1> artifacts from <3>{{count}}</3> characters",
-    "chars": "Take from Characters",
-    "artis": "Equipped Artifacts",
+    "chars": "Take from characters",
+    "artis": "Equipped artifacts",
     "states": {
       "unequippedOnly": "Unequipped Only",
       "customList": "Custom List",
@@ -104,7 +104,7 @@
   "tcBadge": "TC build",
   "allowPartial": "Allow Partial Builds (<5 artifacts)",
   "constraintFilter": {
-    "title": "Minimum Build Constraints",
+    "title": "Minimum build constraints",
     "tooltip": "Set certain minimum requirements that generated builds must conform to; e.g., have at least 140% Energy Recharge."
   },
   "artSetConfig": {
@@ -135,14 +135,119 @@
         "2rain": "<0><0>Excluding<1></1> 3-Rainbow</0></0> would exclude 2-Set + 3-Rainbow builds: <2>AA<1>RRR</1></2> and <4>AAA<1>RR</1></4>.",
         "4rain": "<0><0>Excluding<1></1> 5-Rainbow</0></0> would exclude full 5-Rainbow builds: <2><0>RRRRR</0></2>."
       }
+    },
+    "heading": "Artifact sets",
+    "description": "Choose which set bonuses the optimizer may use, and turn on set effects that need a condition.",
+    "edit": "Edit",
+    "close": "Close",
+    "summary": {
+      "fourPc": "4-piece",
+      "twoPc": "2-piece",
+      "mixed": "Mixed pieces",
+      "effects": "Set effects",
+      "anySet": "Any set",
+      "noSet": "None",
+      "onlySet": "{{name}} only",
+      "someSets": "{{count}} of {{total}} sets",
+      "mixedBoth": "Allowed",
+      "mixedNone": "Not allowed",
+      "mixedOnly3": "2-piece + 3 mixed only",
+      "mixedOnly5": "5 mixed only",
+      "effectsOn_one": "{{count}} on",
+      "effectsOn_other": "{{count}} on",
+      "effectsNone": "None on"
+    },
+    "mixed": {
+      "title": "Mixed pieces",
+      "three": "One 2-piece bonus + 3 mixed pieces",
+      "five": "No set bonus, 5 mixed pieces",
+      "threeAlias": "Also called 3-rainbow",
+      "fiveAlias": "Also called 5-rainbow",
+      "legendSet": "same set",
+      "legendMixed": "any set"
+    },
+    "search": "Search sets",
+    "view": {
+      "label": "Which sets to show",
+      "owned": "Owned",
+      "all": "All",
+      "effects": "Effects on"
+    },
+    "bulk": {
+      "label2": "2-piece",
+      "label4": "4-piece",
+      "all": "All",
+      "none": "None"
+    },
+    "row": {
+      "twoPc": "2-pc",
+      "fourPc": "4-pc",
+      "allow": "Allow the {{num}}-piece bonus of {{name}}",
+      "pieces_one": "{{count}} piece",
+      "pieces_other": "{{count}} pieces",
+      "effects": "Effects",
+      "effectsOn_one": "Effects · {{count}} on",
+      "effectsOn_other": "Effects · {{count}} on",
+      "effectOf": "{{num}}-piece effect",
+      "excludedNote": "not used, the {{num}}-piece bonus is excluded",
+      "more": "More options for {{name}}",
+      "only4": "Use only this set for 4-piece"
+    },
+    "empty": "No sets match.",
+    "footer": {
+      "summary": "Allowed: 4-piece {{four}} of {{total}} sets, 2-piece {{two}} of {{total}}",
+      "resetEffects_one": "Turn off {{count}} set effect",
+      "resetEffects_other": "Turn off {{count}} set effects",
+      "done": "Done"
     }
   },
+  "settings": {
+    "ofAllowed": "{{cur}} of {{tot}} allowed",
+    "allAllowed": "All {{tot}} allowed",
+    "of": "{{cur}} of {{tot}}",
+    "pool": "Artifact pool",
+    "manage": "Manage",
+    "useExcluded": "Exclude artifacts",
+    "excludedSkip_one": "Skips {{count}} excluded artifact",
+    "excludedSkip_other": "Skips {{count}} excluded artifacts",
+    "excludedNone": "No artifacts excluded yet",
+    "teammates": "Use teammates' artifacts",
+    "teammatesHint": "Also use artifacts from teammates' active builds",
+    "partial": "Allow partial builds",
+    "partialHint": "Builds with fewer than 5 artifacts",
+    "addConstraint": "Add a constraint",
+    "constraintOn": "Use this constraint",
+    "deleteConstraint": "Delete this constraint",
+    "levelAssumption": "Main stat level",
+    "level": "Level",
+    "mainStats": "Main stats",
+    "multiTargets": "Multi-optimization targets",
+    "targets_one": "{{count}} target",
+    "targets_other": "{{count}} targets",
+    "noTargets": "None",
+    "moreTargets": "+{{count}} more",
+    "builds": "Builds",
+    "buildCount_one": "{{count}} build",
+    "buildCount_other": "{{count}} builds",
+    "generatedAt": "generated {{date}}",
+    "noBuilds": "None yet",
+    "clearBuilds": "Clear",
+    "scalesWith": "Target scales with",
+    "graph": "Graph",
+    "graphVs": "Target vs.",
+    "thresholdLine": "Stat threshold line",
+    "gpuUnsupported": "This browser has no WebGPU: the CPU is used.",
+    "gpuOnHint": "Searches use the GPU (WebGPU). Click to go back to the CPU (the default).",
+    "gpuOffHint": "Searches use the CPU. Click to let them use the GPU (WebGPU): faster for some searches, slower for others.",
+    "gpuShort": "GPU",
+    "cpuShort": "CPU"
+  },
   "bonusStats": {
-    "title": "Bonus Stats"
+    "title": "Bonus stats"
   },
   "buildDropdownDesc": "Decreasing the number of generated build will decrease build calculation time for large number of builds.",
   "threadDropdownDesc": "Increasing the number of threads will speed up build time, but will use more CPU power.",
-  "noArtis": "Oops! It looks like you haven't added any artifacts to GO yet! You should go to the <1>Artifacts</1> page and add some!",
+  "noArtis": "Oops! It looks like you haven't added any artifacts to Stellar Optimizer yet! You should go to the <1>Artifacts</1> page and add some!",
   "build_one": "<0>{{count}}</0> Build",
   "build_other": "<0>{{count}}</0> Builds",
   "thread_one": "<0>{{count}}</0> Thread",
@@ -157,7 +262,7 @@
     "invalidTarget": "INVALID TARGET"
   },
   "selectTargetFirst": "Select an Optimization Target first",
-  "emptyTarget": "This target is empty; ensure that you have any relevant talent conditionals set up correctly",
+  "emptyTarget": "This target adds up to nothing: check its talent conditionals",
   "generateButton": {
     "cancel": "Cancel",
     "generateBuilds": "Generate Builds"
@@ -179,5 +284,82 @@
     "newArt": "New Artifact",
     "oldArt": "Old Artifact",
     "tcArt": "TC Artifact"
+  },
+  "improve": {
+    "theorycraft": "Theorycraft this build",
+    "search": "Artifacts to level",
+    "moreOptions": "More options",
+    "fewerOptions": "Fewer options",
+    "addArtifact": "Add",
+    "crafting": "Reshape & Define",
+    "craftingInfo": "Also rank artifacts you could reshape (level 20, needs data imported from Irminsul) or create by defining.",
+    "reshapeHint": "Score level 20 artifacts as reshape candidates",
+    "defineHint": "Score artifacts you could create with two chosen substats",
+    "countOf": "{{cur}} of {{tot}} artifacts",
+    "countAll": "{{tot}} artifacts",
+    "showConstraints": "Show constraints",
+    "unmetTitle": "This build does not meet its minimum build constraints",
+    "unmetNeeds": "(needs {{min}})",
+    "unmetHint": "An upgrade only counts when the whole build meets them, and no single artifact gets this build there. Lower or switch off the constraint, or start from a build the Optimizer made.",
+    "unfillableTitle": "Nothing can fill the empty {{slots}}",
+    "unfillableHint": "No artifact for it is a 5★ within the level range that also passes the main stats and set rules, and nothing else beats the pieces equipped. Widen the level range or those options, or equip one first.",
+    "openOptimize": "Open Optimize",
+    "nothingBetterTitle_one": "The one artifact considered is unlikely to beat what is equipped",
+    "nothingBetterTitle_other": "None of the {{count}} artifacts considered is likely to beat what is equipped",
+    "nothingBetterHint": "These pieces already do well for this target. To go further, let the Optimizer find a better full build, or use Stat value above to see which stats to farm next.",
+    "noFiveStar_one": "The upgrader only levels 5★ artifacts, and the one in range is not 5★.",
+    "noFiveStar_other": "The upgrader only levels 5★ artifacts, and none of the {{count}} in range is 5★.",
+    "setRulesTitle": "Every candidate breaks the artifact set rules",
+    "setRulesHint": "Swapping any of the {{count}} 5★ artifacts in range into this build would break the set rules under Artifact sets. Loosen them in More options, or start from a build that already meets them.",
+    "mainStatsHint": "None of the {{count}} artifacts left has a main stat allowed under Main stats. Allow more in More options.",
+    "sharedNote": "These options are shared with the Optimize tab: changing them here changes them there too. Only the level range above is the Improve tab's own."
+  },
+  "substatValue": {
+    "title": "Substat value",
+    "info": "The exact gain of the optimization target if this build had extra rolls of each substat. Use it to pick the substats to look for when leveling, rolling or reshaping artifacts.",
+    "rolls": "Extra rolls",
+    "noTarget": "Choose an optimization target to see which substats raise it the most.",
+    "noScaling": "This target does not depend on any substat.",
+    "noGain": "No gain",
+    "unused": "Not used by this target:",
+    "size": {
+      "max": "max",
+      "mid": "average",
+      "min": "min"
+    },
+    "unavailable": "Substat value is not available for this target.",
+    "rollsAll": "Extra rolls, all substats",
+    "bestNext": "Best next roll",
+    "bestTotal": "Best total",
+    "capped": "capped",
+    "colStat": "Substat",
+    "colRolls": "Rolls",
+    "colTotal": "Total",
+    "colNext": "Next roll",
+    "colNextHint": "What one more roll adds after the rolls picked, as a share of the target at that point",
+    "perRoll": "+{{value}} total",
+    "captionRolls": "{{size}} {{rarity}}★ rolls on top of this build (target now {{base}}); set the rolls per substat with − and +.",
+    "fewer": "Fewer rolls",
+    "more": "More rolls"
+  },
+  "statValue": {
+    "title": "Stat value",
+    "info": "The exact gain of the optimization target from better stats on this build: a few more rolls of each substat, or another main stat on sands, goblet and circlet. Use it to pick what to farm, level, roll or reshape.",
+    "mode": "Stats to compare",
+    "substats": "Substats",
+    "mainStats": "Main stats",
+    "emptySlot": "(empty)",
+    "current": "current"
+  },
+  "farm": {
+    "title": "What to farm",
+    "noTarget": "Pick an optimization target to see which stats to farm.",
+    "substats": "Substats",
+    "sands": "Sands",
+    "goblet": "Goblet",
+    "circlet": "Circlet",
+    "keep": "keep {{stat}}",
+    "openImprove": "Open Improve",
+    "openOptimize": "Open Optimize"
   }
 }

@@ -33,11 +33,9 @@ export default function DupModal({
           title={
             <Typography
               variant="h6"
-              sx={{
-                flexGrow: 1,
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              flexGrow={1}
+              display="flex"
+              alignItems="center"
             >
               <DifferenceIcon sx={{ verticalAlign: 'text-top', mr: 1 }} />
               {t('showDup')}

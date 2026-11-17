@@ -1,5 +1,5 @@
 import type { WeaponKey } from '@genshin-optimizer/gi/consts'
-import { equal, input, subscript } from '@genshin-optimizer/gi/wr'
+import { equal, input, percent, subscript } from '@genshin-optimizer/gi/wr'
 import { cond, st, stg } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
@@ -14,10 +14,12 @@ const afterSkill_atk_ = equal(
   'on',
   subscript(input.weapon.refinement, atk_arr)
 )
+const afterSkill_moveSPD_ = equal(condAfterSkill, 'on', percent(0.1))
 
 const data = dataObjForWeaponSheet(key, {
   premod: {
     atk_: afterSkill_atk_,
+    moveSPD_: afterSkill_moveSPD_,
   },
 })
 
@@ -33,6 +35,9 @@ const sheet: IWeaponSheet = {
           fields: [
             {
               node: afterSkill_atk_,
+            },
+            {
+              node: afterSkill_moveSPD_,
             },
             {
               text: stg('duration'),

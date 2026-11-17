@@ -4,8 +4,8 @@ import {
   equal,
   infoMut,
   input,
-  percent,
   prod,
+  subscript,
 } from '@genshin-optimizer/gi/wr'
 import { customDmgNode } from '../../../Characters/dataUtil'
 import { st } from '../../../SheetUtil'
@@ -14,23 +14,31 @@ import { dataObjForWeaponSheet } from '../../util'
 import { headerTemplate, WeaponSheet } from '../../WeaponSheet'
 
 const key: WeaponKey = 'TheFlute'
+const dmgPerc = [-1, 1, 1.25, 1.5, 1.75, 2]
 
-const dmg_ = equal(
+const dmg = equal(
   input.weapon.key,
   key,
-  customDmgNode(prod(percent(2), input.premod.atk), 'elemental', {
-    hit: { ele: constant('physical') },
-  })
+  customDmgNode(
+    prod(
+      subscript(input.weapon.refinement, dmgPerc, { unit: '%' }),
+      input.total.atk
+    ),
+    'elemental',
+    {
+      hit: { ele: constant('physical') },
+    }
+  )
 )
 
 const data = dataObjForWeaponSheet(key, undefined, {
-  dmg_,
+  dmg,
 })
 const sheet: IWeaponSheet = {
   document: [
     {
       header: headerTemplate(key, st('base')),
-      fields: [{ node: infoMut(dmg_, { name: st('dmg') }) }],
+      fields: [{ node: infoMut(dmg, { name: st('dmg') }) }],
     },
   ],
 }

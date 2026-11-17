@@ -1,5 +1,5 @@
 // This is a generated index file.
-import burst from './Skill_E_Anastasya_01.png'
+import burst from './Skill_E_Anastasya_01_HD.png'
 import skill from './Skill_S_Anastasya_01.png'
 import icon from './UI_AvatarIcon_Anastasya.png'
 import iconSide from './UI_AvatarIcon_Side_Anastasya.png'

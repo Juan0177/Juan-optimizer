@@ -1,6 +1,7 @@
 import { objKeyMap, range } from '@genshin-optimizer/common/util'
 import { imgAssets } from '@genshin-optimizer/gi/assets'
 import { Translate } from '@genshin-optimizer/gi/i18n'
+import { markPartyWide } from '@genshin-optimizer/gi/uidata'
 import {
   compareEq,
   equal,
@@ -134,10 +135,8 @@ export const reactionConditionals: DocumentConditional[] = [
         <Box
           component="img"
           src={imgAssets.reaction.superconduct}
-          sx={{
-            width: '2em',
-            height: 'auto',
-          }}
+          width="2em"
+          height="auto"
         />
       ),
       description: tr('superconduct.desc'),
@@ -169,10 +168,8 @@ export const reactionConditionals: DocumentConditional[] = [
         <Box
           component="img"
           src={imgAssets.reaction.stellarconduct}
-          sx={{
-            width: '2em',
-            height: 'auto',
-          }}
+          width="2em"
+          height="auto"
         />
       ),
       description: tr('stellarconduct.desc'),
@@ -199,10 +196,8 @@ export const reactionConditionals: DocumentConditional[] = [
         <Box
           component="img"
           src={imgAssets.reaction.polestarField}
-          sx={{
-            width: '2em',
-            height: 'auto',
-          }}
+          width="2em"
+          height="auto"
         />
       ),
       description: tr('stellarconduct.fieldDesc'),
@@ -225,6 +220,11 @@ export const reactionConditionals: DocumentConditional[] = [
           node: polestarStacks_stellarconduct_mult_disp,
         },
         {
+          // Anastasya A4 (only source of stellarswirl_mult_) -> Polestar Field gains 2 stacks per release
+          canShow: (data) => data.get(input.total.stellarswirl_mult_).value > 0,
+          text: st('elementalReaction.polestar.anastasyaA4'),
+        },
+        {
           text: stg('duration'),
           value: 4,
           unit: 's',
@@ -234,22 +234,25 @@ export const reactionConditionals: DocumentConditional[] = [
   },
 ]
 
-export const reactionData = mergeData([
-  inferInfoMut({
-    teamBuff: {
-      premod: {
-        stellarconduct_mult_: polestarStacks_stellarconduct_mult_,
-        cryo_dmg_: polestarStacks_cryo_dmg_,
-        electro_dmg_: polestarStacks_electro_dmg_,
-        physical_enemyRes_: superconduct_physical_enemyRes_,
+export const reactionData = markPartyWide(
+  mergeData([
+    inferInfoMut({
+      teamBuff: {
+        premod: {
+          stellarconduct_mult_: polestarStacks_stellarconduct_mult_,
+          cryo_dmg_: polestarStacks_cryo_dmg_,
+          electro_dmg_: polestarStacks_electro_dmg_,
+          physical_enemyRes_: superconduct_physical_enemyRes_,
+        },
       },
-    },
-  }),
-  inferInfoMut({
-    teamBuff: {
-      premod: {
-        physical_enemyRes_: oppInsidePole_physical_enemyRes_,
+    }),
+    inferInfoMut({
+      teamBuff: {
+        premod: {
+          physical_enemyRes_: oppInsidePole_physical_enemyRes_,
+        },
       },
-    },
-  }),
-])
+    }),
+  ]),
+  'reaction'
+)

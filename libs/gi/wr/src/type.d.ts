@@ -46,7 +46,13 @@ export type Info = {
   path?: string
   unit?: Unit
   prefix?: KeyMapPrefix
-  source?: CharacterSheetKey | WeaponKey | ArtifactSetKey
+  /** Whose buff it is: a member, weapon or set, or the party's (elemental resonance, reactions) */
+  source?:
+    | CharacterSheetKey
+    | WeaponKey
+    | ArtifactSetKey
+    | 'resonance'
+    | 'reaction'
   variant?: InfoVariant
   subVariant?: InfoVariant
   asConst?: true

@@ -201,7 +201,6 @@
   "NocturnesCurtainCall": "Nocturno tras el Velo",
   "AngelosHeptades": "Heptadas de los Ángeles",
   "HymnOfTheMaelstrom": "Himno del Vórtice",
-  "StarsealedEdict": "Edicto Selloastral",
   "HuntersBow": "Arco del Cazador",
   "SeasonedHuntersBow": "Arco del Cazador Estacional",
   "RavenBow": "Arco de Cuervo",
@@ -252,5 +251,9 @@
   "AstralVulturesCrimsonPlumage": "Pluma Carmesí Buitreastral",
   "TheDaybreakChronicles": "Albores de la Historia",
   "GoldenFrostboundOath": "Rama del Juramento Escarchado",
-  "QuantumCatalyst": "Quantum Cat-alyst"
+  "QuantumCatalyst": "Quantum Cat-alyst",
+  "TorrentsOfSpring": "Marea de la Primavera",
+  "StarsealedEdict": "Edicto Selloastral",
+  "Silverdawn": "Sol Argénteo",
+  "BlazingLionfang": "Colmillo Leoardiente"
 }

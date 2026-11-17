@@ -1,5 +1,5 @@
 {
-  "pageTitle": "Genshin Optimizer",
+  "pageTitle": "Juan-optimizer",
   "sillyPageTitle": "Silly Optimizer",
   "tabs": {
     "weapons": "Armi",
@@ -30,7 +30,7 @@
   "descending": "Decrescente",
   "sortBy": "Ordina per: ",
   "loading": "Caricamento...",
-  "rightsDisclaimer": "Genshin Optimizer non è affiliato né approvato da HoYoverse.",
+  "rightsDisclaimer": "Juan-optimizer non è affiliato né approvato da HoYoverse.",
   "appVersion": "Versione di $t(pageTitle): <1>{{version}}</1>",
   "error": "Errore",
   "reset": "Reimposta",
@@ -74,5 +74,7 @@
     "stamina_buffs": "Buff al vigore",
     "misc": "Statistiche varie"
   },
-  "notActive": "(Non attivato)"
+  "notActive": "(Non attivato)",
+  "basedOnStellar": "Basato su Stellar Optimizer",
+  "homeTitle": "Juan-optimizer: ottimizzatore di manufatti e build per Genshin Impact"
 }

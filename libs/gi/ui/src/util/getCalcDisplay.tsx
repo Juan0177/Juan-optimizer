@@ -13,8 +13,7 @@ import {
 import { Translate } from '@genshin-optimizer/gi/i18n'
 import type { CalcResult } from '@genshin-optimizer/gi/uidata'
 import type { Info, InfoExtra, KeyMapPrefix } from '@genshin-optimizer/gi/wr'
-import { type ReactNode, useContext } from 'react'
-import { SillyContext } from '../context'
+import type { ReactNode } from 'react'
 import { resolveInfo } from './resolveInfo'
 
 type CalcDisplay = {
@@ -42,8 +41,15 @@ const subKeyMap: Record<KeyMapPrefix, string> = {
 const displayKey = Symbol()
 
 function SourceDisplay({ source }: { source: string | undefined }) {
-  const { silly } = useContext(SillyContext)
   if (!source) return null
+  // the party's own buffs (elemental resonance, reactions), not a member's
+  if (source === 'resonance' || source === 'reaction')
+    return (
+      <ColorText color="secondary">
+        {' '}
+        (<Translate ns="ui" key18={`buffSource.${source}`} />)
+      </ColorText>
+    )
   if (allArtifactSetKeys.includes(source as ArtifactSetKey))
     return (
       <ColorText color="secondary">
@@ -63,11 +69,7 @@ function SourceDisplay({ source }: { source: string | undefined }) {
       <ColorText color="secondary">
         {' '}
         (
-        <Translate
-          ns={silly ? 'sillyWisher_charNames' : 'charNames_gen'}
-          key18={source}
-        />
-        )
+        <Translate ns="charNames_gen" key18={source} />)
       </ColorText>
     )
   return null
@@ -177,11 +179,15 @@ function computeFormulaDisplay(
     case 'mul':
     case 'min':
     case 'max': {
-      if (ops.length === 1) result.prec = GetCalcDisplay(ops[0]).prec
+      // A sum's terms that add 0 (every artifact set's Energy Recharge when Team Optimize has them
+      // all loaded, "Custom DEF 0") say nothing: left out, one kept if all are
+      const shown = op === 'add' ? ops.filter((o) => o.value !== 0) : ops
+      const terms = shown.length ? shown : ops.slice(0, 1)
+      if (terms.length === 1) result.prec = GetCalcDisplay(terms[0]).prec
       else result.prec = details[op].prec
       const { head, sep, tail, prec } = details[op]
       components.push(head)
-      ops.forEach((op, i) => {
+      terms.forEach((op, i) => {
         if (i !== 0) components.push(sep)
         addComponents(op, prec)
       })

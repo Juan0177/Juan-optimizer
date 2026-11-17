@@ -21,12 +21,7 @@ export function BuildNameWithSource({
         {suffix}
       </Box>
       {source && (
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'text.secondary',
-          }}
-        >
+        <Typography variant="caption" color="text.secondary">
           {t('buildCard.source', { name: source })}
         </Typography>
       )}

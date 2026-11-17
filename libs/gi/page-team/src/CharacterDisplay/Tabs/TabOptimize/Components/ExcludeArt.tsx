@@ -26,14 +26,11 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import { artifactFilterConfigs } from '@genshin-optimizer/gi/util'
 import AddIcon from '@mui/icons-material/Add'
-import CheckBoxIcon from '@mui/icons-material/CheckBox'
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CloseIcon from '@mui/icons-material/Close'
 import SettingsIcon from '@mui/icons-material/Settings'
 import {
   Box,
   Button,
-  ButtonGroup,
   CardContent,
   CardHeader,
   Divider,
@@ -44,6 +41,7 @@ import {
 } from '@mui/material'
 import { Suspense, useCallback, useContext, useMemo, useReducer } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { SettingsCardButton, SwitchRow } from './SettingsCard'
 
 export default function ExcludeArt({
   disabled = false,
@@ -98,13 +96,7 @@ export default function ExcludeArt({
         <CardThemed>
           <CardHeader
             title={
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                }}
-              >
+              <Box display="flex" gap={1} alignItems="center">
                 <Typography variant="h6">
                   {t('excludeArt.title_exclude')}
                 </Typography>
@@ -142,11 +134,7 @@ export default function ExcludeArt({
             </Button>
             {!!numExcludedArt && (
               <CardThemed bgt="light" sx={{ mb: 1 }}>
-                <Typography
-                  sx={{
-                    textAlign: 'center',
-                  }}
-                >
+                <Typography textAlign="center">
                   {t('excludeArt.deSelectExc')}
                 </Typography>
               </CardThemed>
@@ -157,7 +145,7 @@ export default function ExcludeArt({
               spacing={1}
             >
               {artExclusion.map((id) => (
-                <Grid key={id} size={1}>
+                <Grid item key={id} xs={1}>
                   <CardThemed
                     bgt="light"
                     sx={{ height: '100%', maxHeight: '8em' }}
@@ -176,50 +164,33 @@ export default function ExcludeArt({
         </CardThemed>
       </ModalWrapper>
 
-      {/* Button to open modal */}
-      <ButtonGroup sx={{ display: 'flex', width: '100%' }}>
-        <Button
-          onClick={toggleArtExclusion}
-          disabled={disabled || !numExcludedArt}
-          startIcon={
-            useExcludedArts ? <CheckBoxOutlineBlankIcon /> : <CheckBoxIcon />
-          }
-          color={useExcludedArts ? 'secondary' : 'success'}
-          sx={{ flexGrow: 1 }}
-        >
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Box>{t('excludeArt.button_txt')}</Box>
-            <SqBadge
-              sx={{ whiteSpace: 'normal' }}
-              color={
-                !numExcludedArt
-                  ? 'secondary'
-                  : useExcludedArts
-                    ? 'warning'
-                    : 'primary'
-              }
-            >
-              {useExcludedArts ? (
-                <Trans t={t} i18nKey="excludeArt.usingNum">
-                  Using {{ totalStr: excludedTotal } as any} excluded artifacts
-                </Trans>
-              ) : (
-                <Trans t={t} i18nKey="excludeArt.excNum" count={numExcludedArt}>
-                  {{ count: numExcludedArt } as any} artifacts are excluded
-                </Trans>
-              )}
-            </SqBadge>
-          </Box>
-        </Button>
-        <Button
-          color="info"
-          onClick={onOpen}
-          disabled={disabled}
-          sx={{ flexShrink: 1 }}
-        >
-          <SettingsIcon />
-        </Button>
-      </ButtonGroup>
+      {/* "on" = the exclusion list is applied (useExcludedArts is the opposite) */}
+      <SwitchRow
+        label={t('settings.useExcluded')}
+        hint={
+          useExcludedArts ? (
+            <Trans t={t} i18nKey="excludeArt.usingNum">
+              Using {{ totalStr: excludedTotal } as any} excluded artifacts
+            </Trans>
+          ) : numExcludedArt ? (
+            t('settings.excludedSkip', { count: numExcludedArt })
+          ) : (
+            t('settings.excludedNone')
+          )
+        }
+        checked={!useExcludedArts}
+        onChange={toggleArtExclusion}
+        disabled={disabled || !numExcludedArt}
+        extra={
+          <SettingsCardButton
+            startIcon={<SettingsIcon />}
+            onClick={onOpen}
+            disabled={disabled}
+          >
+            {t('settings.manage')}
+          </SettingsCardButton>
+        }
+      />
     </>
   )
 }
@@ -253,20 +224,8 @@ function ExcludeArtRedButtons({
     onInclude(artifactIds)
 
   return (
-    <Grid
-      container
-      spacing={1}
-      sx={{
-        alignItems: 'center',
-      }}
-    >
-      <Grid
-        size={{
-          xs: 12,
-          sm: 6,
-          md: 6,
-        }}
-      >
+    <Grid container spacing={1} alignItems="center">
+      <Grid item xs={12} sm={6} md={6}>
         <Button
           fullWidth
           color="error"
@@ -280,13 +239,7 @@ function ExcludeArtRedButtons({
           </SqBadge>
         </Button>
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          sm: 6,
-          md: 6,
-        }}
-      >
+      <Grid item xs={12} sm={6} md={6}>
         <Button
           fullWidth
           color="error"
@@ -300,19 +253,8 @@ function ExcludeArtRedButtons({
           </SqBadge>
         </Button>
       </Grid>
-      <Grid
-        size={12}
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-around',
-        }}
-      >
-        <Typography
-          variant="caption"
-          sx={{
-            color: 'text.secondary',
-          }}
-        >
+      <Grid item xs={12} display="flex" justifyContent="space-around">
+        <Typography variant="caption" color="text.secondary">
           <Trans t={t} i18nKey="buttonHint">
             Note: the red buttons above only apply to
             <b>currently filtered artifacts</b>
@@ -395,11 +337,7 @@ function ArtifactSelectModal({
               excludedIds={artExclusion}
             />
           </Suspense>
-          <Box
-            sx={{
-              mt: 1,
-            }}
-          >
+          <Box mt={1}>
             <ExcludeArtRedButtons
               artifactIds={artifactIds}
               artExclusion={artExclusion}
@@ -407,11 +345,7 @@ function ArtifactSelectModal({
               onInclude={onInclude}
             />
           </Box>
-          <Box
-            sx={{
-              mt: 1,
-            }}
-          >
+          <Box mt={1}>
             <Suspense
               fallback={
                 <Skeleton variant="rectangular" width="100%" height={300} />
@@ -419,7 +353,7 @@ function ArtifactSelectModal({
             >
               <Grid container spacing={1} columns={{ xs: 2, md: 3, lg: 4 }}>
                 {artifactIdsToShow.map((id) => (
-                  <Grid key={id} size={1}>
+                  <Grid item key={id} xs={1}>
                     <ArtifactCard
                       artifactId={id}
                       excluded={artExclusion.includes(id)}

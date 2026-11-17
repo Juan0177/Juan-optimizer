@@ -1,5 +1,6 @@
-# JuanLab: aggiorna il ramo `juanlab` da upstream (frzyc/genshin-optimizer) e pubblica il sito su GitHub Pages.
-# - Solo a mano (Actions > "JuanLab - sync e Pages" > Run workflow): unisce upstream/master in `juanlab`, ricostruisce e pubblica.
+# JuanLab: aggiorna il ramo `juanlab` da Stellar Optimizer (s-naveen/stellar-optimizer, a sua volta basato su
+# frzyc/genshin-optimizer) e pubblica il sito su GitHub Pages.
+# - Solo a mano (Actions > "JuanLab - sync e Pages" > Run workflow): unisce stellar/main in `juanlab`, ricostruisce e pubblica.
 # - A ogni push su `juanlab`: ricostruisce e pubblica.
 # - Se l'unione fallisce non pubblica nulla: il sito resta all'ultima versione buona.
 name: JuanLab - sync e Pages
@@ -34,33 +35,32 @@ jobs:
           ref: juanlab
           fetch-depth: 0
           filter: blob:none
-          # Con il solo GITHUB_TOKEN il push fallisce quando upstream modifica i file in .github/workflows:
+          # Con il solo GITHUB_TOKEN il push fallisce quando Stellar modifica i file in .github/workflows:
           # un secret SYNC_TOKEN (token personale con permesso "workflow") lo evita.
           token: ${{ secrets.SYNC_TOKEN || github.token }}
-      - name: Unisci upstream/master
+      - name: Unisci stellar/main
         id: merge
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/frzyc/genshin-optimizer.git
-          git fetch --filter=blob:none upstream master
-          git merge --no-commit --no-ff upstream/master || true
+          git remote add stellar https://github.com/s-naveen/stellar-optimizer.git
+          git fetch --filter=blob:none stellar main
+          git merge --no-commit --no-ff stellar/main || true
           if ! git rev-parse -q --verify MERGE_HEAD > /dev/null; then
-            echo "Nessuna novità da upstream."
+            echo "Nessuna novità da Stellar Optimizer."
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Il fork tiene solo Genshin Optimizer: via di nuovo Star Rail, Zenless, Somnia, il frontend sperimentale
-          # e i workflow di upstream, anche quando upstream li ha modificati (cosi non diventano conflitti).
-          DROP="apps/somnia apps/somnia-e2e apps/sr-frontend apps/zzz-frontend apps/gi-frontend libs/sr libs/zzz"
-          git rm -r -q -f --ignore-unmatch $DROP
+          # I workflow di Stellar pubblicano i suoi siti: qui resta solo il nostro, anche se Stellar li modifica
+          # (cosi non diventano conflitti).
           git ls-files .github/workflows | grep -v '/juanlab-pages.yml$' | xargs -r git rm -q -f --ignore-unmatch
-          # file del fork riscritti da noi (README, home, index.html): si tiene sempre la nostra versione
-          git checkout HEAD -- README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html && git add README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html
+          # file del fork riscritti da noi (README, home, index.html, avvisi di licenza): si tiene sempre la nostra versione
+          KEEP="README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html NOTICE apps/frontend/public/LICENSE.txt"
+          git checkout HEAD -- $KEEP && git add $KEEP
           if git diff --name-only --diff-filter=U | grep -q .; then
             git diff --name-only --diff-filter=U
             git merge --abort || true
-            echo "::error::Conflitto di merge con upstream/master: va risolto a mano."
+            echo "::error::Conflitto di merge con stellar/main: va risolto a mano."
             exit 1
           fi
           git commit --no-edit
@@ -72,7 +72,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const title = 'Sync da upstream non riuscito';
+            const title = 'Sync da Stellar Optimizer non riuscito';
             const { owner, repo } = context.repo;
             const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', per_page: 100 });
             if (open.data.some((i) => i.title === title)) return;
@@ -81,8 +81,8 @@ jobs:
               `Il sync automatico è fallito: ${url}`,
               '',
               'Cause probabili:',
-              '- conflitto tra upstream e le modifiche di JuanLab (va risolto a mano);',
-              '- upstream ha modificato i workflow e manca il secret `SYNC_TOKEN` (in alternativa usa "Sync fork" e poi unisci `master` in `juanlab`).',
+              '- conflitto tra Stellar Optimizer e le modifiche di JuanLab (va risolto a mano);',
+              '- Stellar ha modificato i workflow e manca il secret `SYNC_TOKEN` (in quel caso si unisce a mano).',
               '',
               'Il sito resta all\'ultima versione pubblicata.',
             ].join('\n') });
@@ -112,7 +112,6 @@ jobs:
           NX_URL_GITHUB_VAN=https://github.com/nguyentvan7
           NX_URL_WEBSITE_KQM=https://keqingmains.com/
           NX_URL_KQM_MULTI_GUIDE=https://keqingmains.com/misc/multi-optimization/
-          NX_URL_GITHUB_API_GO_RELEASES=https://api.github.com/repos/frzyc/genshin-optimizer/releases/tags/
           ENV
           sed -i 's/^ *//' apps/frontend/.env.local
       - name: Build frontend

@@ -18,6 +18,7 @@ import {
   PyroIcon,
 } from '@genshin-optimizer/gi/svgicons'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
+import { markPartyWide } from '@genshin-optimizer/gi/uidata'
 import {
   equal,
   greaterEq,
@@ -468,10 +469,8 @@ export function getMoonsignSheet(uiData: UIData | undefined): IResonance {
       <Box
         component="img"
         src={imgAssets.resonance.moonsign}
-        sx={{
-          width: '2em',
-          height: 'auto',
-        }}
+        width="2em"
+        height="auto"
       />
     ),
     canShow: (data) => data.get(tally.moonsign).value >= 1,
@@ -484,10 +483,8 @@ export function getMoonsignSheet(uiData: UIData | undefined): IResonance {
             <Box
               component="img"
               src={imgAssets.resonance.moonsign}
-              sx={{
-                width: '2em',
-                height: 'auto',
-              }}
+              width="2em"
+              height="auto"
             />
           ),
         },
@@ -504,26 +501,18 @@ export function getMoonsignSheet(uiData: UIData | undefined): IResonance {
           title: tr('Moonsign.ascendantGleam.name'),
           description: tr('Moonsign.ascendantGleam.desc'),
           icon: (
-            <Box
-              sx={{
-                display: 'flex',
-              }}
-            >
+            <Box display="flex">
               <Box
                 component="img"
                 src={imgAssets.resonance.moonsign}
-                sx={{
-                  width: '2em',
-                  height: 'auto',
-                }}
+                width="2em"
+                height="auto"
               />
               <Box
                 component="img"
                 src={imgAssets.resonance.moonsign}
-                sx={{
-                  width: '2em',
-                  height: 'auto',
-                }}
+                width="2em"
+                height="auto"
               />
             </Box>
           ),
@@ -555,18 +544,14 @@ export const hexereiSheet: IResonance = {
       <Box
         component="img"
         src={imgAssets.resonance.hexerei}
-        sx={{
-          width: '2em',
-          height: 'auto',
-        }}
+        width="2em"
+        height="auto"
       />
       <Box
         component="img"
         src={imgAssets.resonance.hexerei}
-        sx={{
-          width: '2em',
-          height: 'auto',
-        }}
+        width="2em"
+        height="auto"
       />
     </>
   ),
@@ -581,18 +566,14 @@ export const hexereiSheet: IResonance = {
             <Box
               component="img"
               src={imgAssets.resonance.hexerei}
-              sx={{
-                width: '2em',
-                height: 'auto',
-              }}
+              width="2em"
+              height="auto"
             />
             <Box
               component="img"
               src={imgAssets.resonance.hexerei}
-              sx={{
-                width: '2em',
-                height: 'auto',
-              }}
+              width="2em"
+              height="auto"
             />
           </>
         ),
@@ -623,26 +604,18 @@ export function MoonsignConditionalSection(
       title: tr('Moonsign.ascendantGleam.name'),
       description: tr('Moonsign.ascendantGleam.desc'),
       icon: (
-        <Box
-          sx={{
-            display: 'flex',
-          }}
-        >
+        <Box display="flex">
           <Box
             component="img"
             src={imgAssets.resonance.moonsign}
-            sx={{
-              width: '2em',
-              height: 'auto',
-            }}
+            width="2em"
+            height="auto"
           />
           <Box
             component="img"
             src={imgAssets.resonance.moonsign}
-            sx={{
-              width: '2em',
-              height: 'auto',
-            }}
+            width="2em"
+            height="auto"
           />
         </Box>
       ),
@@ -682,25 +655,28 @@ export const resonanceSheets: IResonance[] = [
   sprawlingGreenery,
 ]
 
-export const resonanceData = inferInfoMut({
-  teamBuff: {
-    premod: {
-      ...objMap(pcNodes, ([_nodeDisp, node]) => node),
-      atk_: ffNode,
-      hp_: swNode,
-      staminaDec_: iwNodeStam,
-      moveSPD_: iwNodeMove,
-      cdRed_: iwNodeCD,
-      shield_: erNodeshield_,
-      geo_enemyRes_: erNodeRes_,
-      eleMas: infoMut(sum(sgBase_eleMas, sg2ele_eleMas, sg3ele_eleMas), {
-        pivot: true,
-      }),
-      all_dmg_: erNodeDMG_,
+export const resonanceData = markPartyWide(
+  inferInfoMut({
+    teamBuff: {
+      premod: {
+        ...objMap(pcNodes, ([_nodeDisp, node]) => node),
+        atk_: ffNode,
+        hp_: swNode,
+        staminaDec_: iwNodeStam,
+        moveSPD_: iwNodeMove,
+        cdRed_: iwNodeCD,
+        shield_: erNodeshield_,
+        geo_enemyRes_: erNodeRes_,
+        eleMas: infoMut(sum(sgBase_eleMas, sg2ele_eleMas, sg3ele_eleMas), {
+          pivot: true,
+        }),
+        all_dmg_: erNodeDMG_,
+      },
+      total: {
+        // TODO: this crit rate is on-hit. Might put it in a `hit.critRate_` namespace later.
+        critRate_: siNode,
+      },
     },
-    total: {
-      // TODO: this crit rate is on-hit. Might put it in a `hit.critRate_` namespace later.
-      critRate_: siNode,
-    },
-  },
-})
+  }),
+  'resonance'
+)

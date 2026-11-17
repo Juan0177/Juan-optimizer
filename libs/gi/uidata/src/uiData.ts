@@ -376,8 +376,16 @@ export class UIData {
       case 'min':
       case 'max': {
         if (process.env['NODE_ENV'] !== 'development') {
+          // (in production, terms that change nothing are left out, as a lighter display) but
+          // not a named stat: a CRIT Rate capped at 100% (×1) is still the hit's CRIT Rate, and
+          // what reads the hit's parts must find it, as it does in development
+          // (a named 0 in a sum stays out: it shows nothing and sums are many)
           const identity = allOperations[operation]([])
-          operands = operands.filter((operand) => operand.value !== identity)
+          operands = operands.filter(
+            (operand) =>
+              operand.value !== identity ||
+              (operation !== 'add' && !!operand.info?.path)
+          )
         }
       }
     }
@@ -497,6 +505,21 @@ function makeEmpty(
   }
 }
 
+/** Buffs of the whole party rather than of one member: elemental resonance, reactions */
+export type PartySource = 'resonance' | 'reaction'
+const partyWide = new WeakMap<object, PartySource>()
+/**
+ * Marks `data` (merged into every member's data, counted once through the active member's copy)
+ * as the party's: the team buffs only it gives are labelled `source` instead of that member
+ */
+export function markPartyWide<T extends object>(
+  data: T,
+  source: PartySource
+): T {
+  partyWide.set(data, source)
+  return data
+}
+
 export function uiDataForTeam(
   teamData: Partial<Record<CharacterKey, Data[]>>,
   gender: GenderKey,
@@ -533,14 +556,29 @@ export function uiDataForTeam(
   )
   Object.values(teamData).forEach((srcData, from) => {
     const buffed = {} // all entries in `srcData[i].teamBuff.*`
-    for (const data of srcData)
-      crawlObject(data.teamBuff, [], isNode, (_, path) =>
+    // the entries only party-wide data gives (resonance, reactions): labelled as theirs
+    const memberBuffed = {}
+    const partyOf = new Map<string, PartySource>()
+    for (const data of srcData) {
+      const party = partyWide.get(data)
+      crawlObject(data.teamBuff, [], isNode, (_, path) => {
         layeredAssignment(buffed, path, true)
-      )
+        if (!party) layeredAssignment(memberBuffed, path, true)
+        else if (!partyOf.has(path.join('.')))
+          partyOf.set(path.join('.'), party)
+      })
+    }
 
     crawlObject(buffed, [], found, (_, path) => {
       const r: ReadNode<number> = objPathValue(input, path)
-      const info: Info = { ...r.info, source: sources[from], asConst }
+      const party = objPathValue(memberBuffed, path)
+        ? undefined
+        : partyOf.get(path.join('.'))
+      const info: Info = {
+        ...r.info,
+        source: party ?? sources[from],
+        asConst,
+      }
       const read = { ...r, path: ['teamBuff', ...path], info }
       keys.forEach((_, to) => {
         const node = resetData(data(read, target[to]), own[from])
@@ -583,52 +621,4 @@ export function uiDataForTeam(
 
 export function computeUIData(data: Data[]): UIData {
   return new UIData(mergeData(data), undefined)
-}
-
-type ComparedNodeDisplay<V = number> = NodeDisplay<V> & { diff: V }
-export function compareTeamBuffUIData(uiData1: UIData, uiData2: UIData): any {
-  //Input<ComparedNodeDisplay, ComparedNodeDisplay<string>>
-  return compareInternal(uiData1.getTeamBuff(), uiData2.getTeamBuff())
-}
-export function compareDisplayUIData(
-  uiData1: UIData,
-  uiData2: UIData
-): { [key: string]: DisplaySub<ComparedNodeDisplay> } {
-  return compareInternal(uiData1.getDisplay(), uiData2.getDisplay())
-}
-function compareInternal(data1: any | undefined, data2: any | undefined): any {
-  if (data1?.operation || data2?.operation) {
-    const d1 = data1 as NodeDisplay | undefined
-    const d2 = data2 as NodeDisplay | undefined
-
-    if ((d1 && !d1.operation) || (d2 && !d2.operation))
-      throw new Error('Unmatched structure when comparing UIData')
-
-    const result: ComparedNodeDisplay = {
-      info: {},
-      operation: true,
-      value: 0,
-      valueString: '0',
-      isEmpty: true,
-      formulas: [],
-      ...d1,
-      diff: (d2?.value ?? 0) - (d1?.value ?? 0),
-    }
-    if (typeof d1?.value === 'string' || typeof d2?.value === 'string') {
-      // In case `string` got involved, just use the other value
-      result.value = d1?.value ?? ('' as any)
-      result.diff = d2?.value ?? ('' as any)
-    }
-    return result
-  }
-
-  if (data1 || data2) {
-    const keys = new Set([
-      ...Object.keys(data1 ?? {}),
-      ...Object.keys(data2 ?? {}),
-    ])
-    return Object.fromEntries(
-      [...keys].map((key) => [key, compareInternal(data1?.[key], data2?.[key])])
-    )
-  }
 }

@@ -119,17 +119,13 @@ export default function EXPCalc() {
   return (
     <CardThemed>
       <Grid container sx={{ px: 2, py: 1 }} spacing={2}>
-        <Grid>
+        <Grid item>
           <ImgIcon src={booksData.wit.img} size={2} />
         </Grid>
-        <Grid
-          sx={{
-            flexGrow: 1,
-          }}
-        >
+        <Grid item flexGrow={1}>
           <Typography variant="h6">Experience Calculator</Typography>
         </Grid>
-        <Grid>
+        <Grid item>
           <ButtonGroup>
             <Button
               color="primary"
@@ -152,7 +148,7 @@ export default function EXPCalc() {
 
       <CardContent>
         <Grid container spacing={1}>
-          <Grid>
+          <Grid item>
             <Typography>
               <span>
                 This calculator tries to calculate the amount of exp books
@@ -163,12 +159,7 @@ export default function EXPCalc() {
                 : 'It will try to calculate the amount of books needed to minimize as much exp loss as possible.'}
             </Typography>
           </Grid>
-          <Grid
-            size={{
-              xs: 6,
-              md: 3,
-            }}
-          >
+          <Grid item xs={6} md={3}>
             <ButtonGroup sx={{ display: 'flex' }}>
               <TextButton>Current Level</TextButton>
               <CustomNumberInputButtonGroupWrapper
@@ -184,12 +175,7 @@ export default function EXPCalc() {
               </CustomNumberInputButtonGroupWrapper>
             </ButtonGroup>
           </Grid>
-          <Grid
-            size={{
-              xs: 6,
-              md: 3,
-            }}
-          >
+          <Grid item xs={6} md={3}>
             <ButtonGroup sx={{ display: 'flex' }}>
               <TextButton>Current EXP.</TextButton>
               <CustomNumberInputButtonGroupWrapper
@@ -209,12 +195,7 @@ export default function EXPCalc() {
               </CustomNumberInputButtonGroupWrapper>
             </ButtonGroup>
           </Grid>
-          <Grid
-            size={{
-              xs: 6,
-              md: 3,
-            }}
-          >
+          <Grid item xs={6} md={3}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -226,12 +207,7 @@ export default function EXPCalc() {
               </Box>
             </CardThemed>
           </Grid>
-          <Grid
-            size={{
-              xs: 6,
-              md: 3,
-            }}
-          >
+          <Grid item xs={6} md={3}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -247,13 +223,7 @@ export default function EXPCalc() {
           </Grid>
           {Object.entries(books).map(([bookKey]) => {
             return (
-              <Grid
-                key={bookKey}
-                size={{
-                  xs: 12,
-                  md: 4,
-                }}
-              >
+              <Grid item xs={12} md={4} key={bookKey}>
                 <BookDisplay
                   bookKey={bookKey}
                   value={books[bookKey]}
@@ -265,12 +235,7 @@ export default function EXPCalc() {
               </Grid>
             )
           })}
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <ButtonGroup sx={{ display: 'flex' }}>
               <TextButton>Current Mora</TextButton>
               <CustomNumberInputButtonGroupWrapper
@@ -286,12 +251,7 @@ export default function EXPCalc() {
               </CustomNumberInputButtonGroupWrapper>
             </ButtonGroup>
           </Grid>
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -303,12 +263,7 @@ export default function EXPCalc() {
               </Box>
             </CardThemed>
           </Grid>
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -324,12 +279,7 @@ export default function EXPCalc() {
               </Box>
             </CardThemed>
           </Grid>
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -345,12 +295,7 @@ export default function EXPCalc() {
               </Box>
             </CardThemed>
           </Grid>
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -364,12 +309,7 @@ export default function EXPCalc() {
               </Box>
             </CardThemed>
           </Grid>
-          <Grid
-            size={{
-              xs: 12,
-              md: 4,
-            }}
-          >
+          <Grid item xs={12} md={4}>
             <CardThemed bgt="light">
               <Box
                 sx={{ p: 1, display: 'flex', justifyContent: 'space-between' }}
@@ -390,18 +330,14 @@ export default function EXPCalc() {
       <Divider />
       <CardContent sx={{ py: 1 }}>
         <Grid container spacing={2}>
-          <Grid
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Grid item flexGrow={1}>
             {!!invalidText && (
               <Alert variant="filled" severity="error">
                 {invalidText}
               </Alert>
             )}
           </Grid>
-          <Grid size="auto">
+          <Grid item xs="auto">
             <Button
               disabled={!!invalidText}
               onClick={() =>
@@ -437,11 +373,11 @@ function BookDisplay(props) {
       </CardContent>
       <Divider />
       <CardContent>
-        <Grid container spacing={0}>
-          <Grid size={3}>
+        <Grid container>
+          <Grid item xs={3}>
             <ImgFullwidth src={booksData[bookKey].img} />
           </Grid>
-          <Grid size={9}>
+          <Grid item xs={9}>
             <ButtonGroup sx={{ display: 'flex' }}>
               <TextButton>Amount</TextButton>
               <CustomNumberInputButtonGroupWrapper
@@ -454,13 +390,7 @@ function BookDisplay(props) {
                 />
               </CustomNumberInputButtonGroupWrapper>
             </ButtonGroup>
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                mt: 1,
-              }}
-            >
+            <Box display="flex" justifyContent="space-between" mt={1}>
               <Typography>Required:</Typography>
               <Typography>
                 <b>

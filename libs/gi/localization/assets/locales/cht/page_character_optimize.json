@@ -60,7 +60,7 @@
   },
   "buildDropdownDesc": "Decreasing the number of generated build will decrease build calculation time for large number of builds.",
   "threadDropdownDesc": "Increasing the number of threads will speed up build time, but will use more CPU power.",
-  "noArtis": "Oops! It looks like you haven't added any artifacts to GO yet! You should go to the <1>Artifacts</1> page and add some!",
+  "noArtis": "Oops! It looks like you haven't added any artifacts to Stellar Optimizer yet! You should go to the <1>Artifacts</1> page and add some!",
   "targetSelector": {
     "selectOptTarget": "Select an Optimization Target",
     "selectGraphTarget": "Select a Graph Target",
@@ -106,5 +106,6 @@
   "notifyTooltip": "Play a sound when builds finish generating. Will also show an alarm prompt when tabbed out.",
   "bonusStats": {
     "title": "Bonus Stats"
-  }
+  },
+  "emptyTarget": "此目標的數值為零：請檢查其天賦條件"
 }

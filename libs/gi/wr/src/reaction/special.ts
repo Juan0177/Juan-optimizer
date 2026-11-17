@@ -30,7 +30,9 @@ export function specialReactionDmgNode(
   additional: Data = {},
   reactionMultiplier: NumNode | number,
   specialMultiplier?: NumNode,
-  resist?: ElementWithPhyKey
+  resist?: ElementWithPhyKey,
+  /** Stellar Swirl's outer hit/vortex coefficient scales flat additions too. */
+  reactionFlatMultiplier: NumNode | number = 1
 ) {
   resist ??= transformativeReactions[variant].resist
   const transformative_dmg_ = sum(
@@ -63,10 +65,7 @@ export function specialReactionDmgNode(
     sum(
       input.total.critDMG_,
       input.total[`${variant}_critDMG_`],
-      input.total[`${resist}_critDMG_`],
-      ...(variant === 'stellarconduct' && resist === 'electro'
-        ? [input.total.stellarconduct_electro_critDMG_]
-        : [])
+      input.total[`${resist}_critDMG_`]
     ),
     {
       ...input.total.critDMG_.info,
@@ -102,7 +101,9 @@ export function specialReactionDmgNode(
             path: `${variant}_baseDmg_`,
           })
         ),
-        ...(base === 'reaction' ? [reactionDmgInc] : [directDmgInc])
+        ...(base === 'reaction'
+          ? [prod(reactionDmgInc, reactionFlatMultiplier)]
+          : [directDmgInc])
       ),
       lookup(
         input.hit.hitMode,

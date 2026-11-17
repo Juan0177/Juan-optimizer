@@ -178,7 +178,7 @@ export default function TeamExportModal({
             {loadoutData.map(
               (loadout, i) =>
                 !!loadout && (
-                  <Grid key={i} size={1}>
+                  <Grid item xs={1} key={i}>
                     <LoadoutSetting
                       loadout={loadout}
                       setting={loadoutDataExportSetting[i]}

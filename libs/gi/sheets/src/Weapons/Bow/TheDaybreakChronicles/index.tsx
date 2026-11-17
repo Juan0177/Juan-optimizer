@@ -18,19 +18,21 @@ const key: WeaponKey = 'TheDaybreakChronicles'
 const dmg_arr = [-1, 0.1, 0.125, 0.15, 0.175, 0.2]
 
 const passiveArr = range(1, 6)
-const [condPassivePath, condPassive] = cond(key, 'passive')
-const passiveMult = lookup(
-  condPassive,
-  objKeyMap(passiveArr, (v) => constant(v)),
-  naught
-)
-
-const normal_dmg_ = prod(
-  passiveMult,
-  subscript(input.weapon.refinement, dmg_arr)
-)
-const skill_dmg_ = { ...normal_dmg_ }
-const burst_dmg_ = { ...normal_dmg_ }
+const bonuses = (['normal', 'skill', 'burst'] as const).map((type) => {
+  const [path, value] = cond(key, `${type}Stacks`)
+  const node = prod(
+    lookup(
+      value,
+      objKeyMap(passiveArr, (v) => constant(v)),
+      naught
+    ),
+    subscript(input.weapon.refinement, dmg_arr)
+  )
+  // (translated names: "After hitting an opponent with a Normal Attack"…)
+  const name = st(`hitOp.${type}`)
+  return { path, value, node, name }
+})
+const [normal_dmg_, skill_dmg_, burst_dmg_] = bonuses.map(({ node }) => node)
 
 const data = dataObjForWeaponSheet(key, {
   premod: {
@@ -41,27 +43,15 @@ const data = dataObjForWeaponSheet(key, {
 })
 
 const sheet: IWeaponSheet = {
-  document: [
-    {
-      value: condPassive,
-      path: condPassivePath,
-      header: headerTemplate(key, st('stacks')),
-      name: st('stacks'),
-      states: objKeyMap(passiveArr, (v) => ({
-        name: `${v}`,
-        fields: [
-          {
-            node: normal_dmg_,
-          },
-          {
-            node: skill_dmg_,
-          },
-          {
-            node: burst_dmg_,
-          },
-        ],
-      })),
-    },
-  ],
+  document: bonuses.map(({ path, value, node, name }) => ({
+    value,
+    path,
+    header: headerTemplate(key, st('stacks')),
+    name,
+    states: objKeyMap(passiveArr, (v) => ({
+      name: st('stack', { count: v }),
+      fields: [{ node }],
+    })),
+  })),
 }
 export default new WeaponSheet(sheet, data)

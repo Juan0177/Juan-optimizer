@@ -14,7 +14,6 @@ import {
   getCharSheet,
   type TalentSheetElementKey,
 } from '@genshin-optimizer/gi/sheets'
-import { splash } from '@genshin-optimizer/gi/silly-wisher'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import { uiInput as input } from '@genshin-optimizer/gi/wr'
@@ -31,7 +30,7 @@ import {
 } from '@mui/material'
 import { grey, yellow } from '@mui/material/colors'
 import { useContext } from 'react'
-import { DataContext, SillyContext } from '../../context'
+import { DataContext } from '../../context'
 import { CharacterName } from './Trans'
 
 export function CharacterCompactTalent() {
@@ -57,7 +56,7 @@ export function CharacterCompactTalent() {
         {(['auto', 'skill', 'burst'] as const).map((tKey) => {
           const badgeContent = tlvl[tKey].toString()
           return (
-            <Grid key={tKey} size={4}>
+            <Grid item xs={4} key={tKey}>
               <Badge
                 badgeContent={badgeContent}
                 color={tBoost[tKey] ? 'info' : 'secondary'}
@@ -82,10 +81,8 @@ export function CharacterCompactTalent() {
                 <Box
                   component="img"
                   src={characterSheet.getTalentOfKey(tKey)?.img}
-                  sx={{
-                    width: '100%',
-                    height: 'auto',
-                  }}
+                  width="100%"
+                  height="auto"
                 />
               </Badge>
             </Grid>
@@ -112,7 +109,7 @@ export function CharacterCompactConstSelector({
   return (
     <Grid container spacing={1}>
       {range(1, 6).map((i) => (
-        <Grid key={i} size={4}>
+        <Grid item xs={4} key={i}>
           <CardActionArea
             onClick={() => setConstellation(i === constellation ? i - 1 : i)}
             style={{
@@ -129,10 +126,10 @@ export function CharacterCompactConstSelector({
                 )?.img
               }
               sx={{
-                width: '100%',
-                height: 'auto',
                 ...(constellation >= i ? {} : { filter: 'brightness(50%)' }),
               }}
+              width="100%"
+              height="auto"
             />
           </CardActionArea>
         </Grid>
@@ -142,7 +139,6 @@ export function CharacterCompactConstSelector({
 }
 
 export function CharacterCoverArea() {
-  const { silly } = useContext(SillyContext)
   const {
     character: { key: characterKey },
   } = useContext(CharacterContext)
@@ -150,75 +146,10 @@ export function CharacterCoverArea() {
   const { data } = useContext(DataContext)
   const level = data.get(input.lvl).value
   const ascension = data.get(input.asc).value as AscensionKey
-  const sillySplash = splash(characterKey, gender)
   const card = charCard(characterKey, gender)
 
-  return silly && sillySplash ? (
-    <SillyCoverArea src={sillySplash} level={level} ascension={ascension} />
-  ) : (
-    <CoverArea src={card} level={level} ascension={ascension} />
-  )
+  return <CoverArea src={card} level={level} ascension={ascension} />
 }
-function SillyCoverArea({
-  src,
-  level,
-  ascension,
-}: {
-  src: string
-  level: number
-  ascension: AscensionKey
-}) {
-  const {
-    character: { key: characterKey },
-  } = useContext(CharacterContext)
-
-  return (
-    <Box sx={{ display: 'flex', position: 'relative' }}>
-      <Box
-        src={src}
-        component="img"
-        sx={{
-          width: '100%',
-          height: 'auto',
-        }}
-      />
-      <Box sx={{ position: 'absolute', width: '100%', height: '100%' }}>
-        <Typography
-          variant="h6"
-          sx={{
-            position: 'absolute',
-            width: '100%',
-            left: '50%',
-            bottom: -20,
-            transform: 'translate(-50%, -50%)',
-            opacity: 0.75,
-            textAlign: 'center',
-          }}
-        >
-          <StarsDisplay stars={getCharStat(characterKey).rarity} colored />
-        </Typography>
-        <Box
-          sx={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 12,
-            transform: 'translate(-50%, -50%)',
-            opacity: 0.85,
-            width: '100%',
-            display: 'flex',
-            justifyContent: 'center',
-            px: 1,
-          }}
-        >
-          <CharChip />
-        </Box>
-        <FavoriteButton />
-        <LevelBadge level={level} ascension={ascension} />
-      </Box>
-    </Box>
-  )
-}
-
 function CoverArea({
   src,
   level,
@@ -267,14 +198,7 @@ function CoverArea({
         <FavoriteButton />
         <LevelBadge level={level} ascension={ascension} />
       </Box>
-      <Box
-        src={src}
-        component="img"
-        sx={{
-          width: '100%',
-          height: 'auto',
-        }}
-      />
+      <Box src={src} component="img" width="100%" height="auto" />
     </Box>
   )
 }

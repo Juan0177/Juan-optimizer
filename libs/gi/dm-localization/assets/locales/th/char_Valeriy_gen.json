@@ -103,7 +103,7 @@
   "passive1": {
     "name": "Advance With the Creeping Barrage",
     "description": {
-      "0": "ในระหว่างที่<strong>กระสุนลูกปรายใหญ่อสนี</strong> จากท่าไม้ตาย <strong><tooltip ns=char_Valeriy_gen baseKey18=burst>Focused Fire: Lightning Salvo</tooltip></strong> กำลังร่วงลงมา เมื่อการโจมตีของตัวละคร<electro>ธาตุไฟฟ้า</electro>ตัวอื่น ๆ ที่เข้าร่วมการต่อสู้ในขณะนั้นที่อยู่ใกล้เคียงของทีมโดนศัตรู Valeriy จะได้รับ <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>Impact Momentum</tooltip></strong> 5 หน่วย โดยหลังจากปล่อยท่าไม้ตายในแต่ละครั้ง จะสามารถรับ <strong>Impact Momentum</strong> ด้วยวิธีนี้ได้สูงสุด 80 หน่วย"
+      "0": "ในระหว่างที่<strong>กระสุนลูกปรายใหญ่อสนี</strong> จากท่าไม้ตาย <strong><tooltip ns=char_Valeriy_gen baseKey18=burst>Focused Fire: Lightning Salvo</tooltip></strong> กำลังร่วงลงมา เมื่อการโจมตี<electro>ธาตุไฟฟ้า</electro>ของตัวละครอื่น ๆ ที่เข้าร่วมการต่อสู้ในขณะนั้นที่อยู่ใกล้เคียงของทีมโดนศัตรู Valeriy จะได้รับ <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>Impact Momentum</tooltip></strong> 5 หน่วย โดยหลังจากปล่อยท่าไม้ตายในแต่ละครั้ง จะสามารถรับ <strong>Impact Momentum</strong> ด้วยวิธีนี้ได้สูงสุด 80 หน่วย"
     }
   },
   "passive2": {

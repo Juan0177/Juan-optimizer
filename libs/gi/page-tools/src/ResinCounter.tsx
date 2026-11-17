@@ -86,17 +86,17 @@ export default function ResinCounter() {
   return (
     <CardThemed>
       <Grid container sx={{ px: 2, py: 1 }} spacing={2}>
-        <Grid>
+        <Grid item>
           <ImgIcon src={imgAssets.resin.fragile} size={2} />
         </Grid>
-        <Grid>
+        <Grid item>
           <Typography variant="h6">Resin Counter</Typography>
         </Grid>
       </Grid>
       <Divider />
       <CardContent>
         <Grid container spacing={2}>
-          <Grid>
+          <Grid item>
             <Typography variant="h2">
               <ImgIcon src={imgAssets.resin.fragile} />
               <InputBase
@@ -109,11 +109,7 @@ export default function ResinCounter() {
               <span>/{RESIN_MAX}</span>
             </Typography>
           </Grid>
-          <Grid
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Grid item flexGrow={1}>
             <ButtonGroup fullWidth>
               {RESIN_COUNTER_VALUES.map((rcv) => {
                 if (rcv === 0) {
@@ -177,7 +173,7 @@ export default function ResinCounter() {
               )}
             </Typography>
           </Grid>
-          <Grid size={12}>
+          <Grid item xs={12}>
             <Typography variant="caption">
               Because we do not provide a mechanism to synchronize resin time,
               actual resin recharge time might be as much as 8 minutes earlier

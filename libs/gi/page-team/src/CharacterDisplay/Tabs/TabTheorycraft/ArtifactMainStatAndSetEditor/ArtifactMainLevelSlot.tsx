@@ -17,6 +17,7 @@ import {
   artifactLevelVariant,
   StatColoredWithUnit,
   StatWithUnit,
+  statName,
 } from '@genshin-optimizer/gi/ui'
 import {
   artDisplayValue,
@@ -63,12 +64,10 @@ export function ArtifactMainLevelSlot({
 
   return (
     <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}
+      display="flex"
+      gap={1}
+      justifyContent="space-between"
+      alignItems="center"
     >
       <SlotIcon slotKey={slotKey} />
       <CardThemed
@@ -76,17 +75,15 @@ export function ArtifactMainLevelSlot({
       >
         {keys.length === 1 ? (
           <Box
-            sx={{
-              p: 1,
-              justifyContent: 'center',
-              alignItems: 'center',
-              width: '100%',
-              display: 'flex',
-              gap: 1,
-            }}
+            p={1}
+            justifyContent="center"
+            alignItems="center"
+            width="100%"
+            display="flex"
+            gap={1}
           >
             <StatIcon statKey={keys[0]} iconProps={iconInlineProps} />{' '}
-            {KeyMap.getStr(keys[0])}
+            {statName(keys[0])}
           </Box>
         ) : (
           <DropdownButton
@@ -134,25 +131,18 @@ export function ArtifactMainLevelSlot({
         onChange={(l) => l !== undefined && setSlot({ level: l })}
         color={artifactLevelVariant(level)}
         size="small"
-        slotProps={{
-          htmlInput: {
-            sx: { width: '2ch' },
-            max: 20,
-            min: 0,
-          },
-          input: {
-            startAdornment: <InputAdornment position="start">+</InputAdornment>,
-          },
+        inputProps={{
+          sx: { width: '2ch' },
+          max: 20,
+          min: 0,
+        }}
+        InputProps={{
+          startAdornment: <InputAdornment position="start">+</InputAdornment>,
         }}
         focused
       />
       <CardThemed sx={{ height: '100%', minWidth: '4em' }}>
-        <Box
-          sx={{
-            p: 1,
-            textAlign: 'center',
-          }}
-        >{`${artDisplayValue(
+        <Box p={1} textAlign="center">{`${artDisplayValue(
           getMainStatDisplayValue(statKey, rarity, level),
           getUnitStr(statKey)
         )}${getUnitStr(statKey)}`}</Box>

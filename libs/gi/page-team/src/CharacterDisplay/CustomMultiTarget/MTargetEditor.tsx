@@ -53,7 +53,7 @@ import OptimizationTargetSelector from '../Tabs/TabOptimize/Components/Optimizat
 
 const keys = [...allInputPremodKeys]
 const wrapperFunc = (e: JSX.Element, key?: string) => (
-  <Grid key={key} size={1}>
+  <Grid item key={key} xs={1}>
     {e}
   </Grid>
 )
@@ -153,21 +153,19 @@ export default function MTargetEditor({
           {collapse ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
         </CardActionArea>
         <TextFieldLazy
-          slotProps={{
-            htmlInput: {
-              sx: { width: '2em' },
-              min: 1,
-              max: maxRank,
-            },
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  {isMobile
-                    ? t('loadout:mTargetEditor.rankMobile')
-                    : t('loadout:mTargetEditor.rank')}
-                </InputAdornment>
-              ),
-            },
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                {isMobile
+                  ? t('loadout:mTargetEditor.rankMobile')
+                  : t('loadout:mTargetEditor.rank')}
+              </InputAdornment>
+            ),
+          }}
+          inputProps={{
+            sx: { width: '2em' },
+            min: 1,
+            max: maxRank,
           }}
           type="number"
           value={rank.toString()}
@@ -185,23 +183,17 @@ export default function MTargetEditor({
       </Box>
       <Divider />
       <Collapse in={!collapse}>
-        <Box
-          sx={{
-            display: 'flex',
-          }}
-        >
+        <Box display="flex">
           <Box sx={{ p: 1, flexGrow: 1 }}>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <TextFieldLazy
-                slotProps={{
-                  htmlInput: {
-                    sx: { width: '2em' },
-                  },
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">x</InputAdornment>
-                    ),
-                  },
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">x</InputAdornment>
+                  ),
+                }}
+                inputProps={{
+                  sx: { width: '2em' },
                 }}
                 type="number"
                 value={weight.toString()}
@@ -256,7 +248,7 @@ export default function MTargetEditor({
               </DropdownButton>
             </Box>
             <Grid container columns={{ xs: 1, md: 2 }} spacing={1}>
-              <Grid size={1}>
+              <Grid item xs={1}>
                 <Box>
                   <Grid
                     container
@@ -265,7 +257,7 @@ export default function MTargetEditor({
                     spacing={1}
                   >
                     {(isMeleeAuto || isTransformativeReaction) && (
-                      <Grid size={1}>
+                      <Grid item xs={1}>
                         <DropdownButton
                           title={infusionVals[infusionAura ?? '']}
                           color={infusionAura || 'secondary'}
@@ -296,7 +288,7 @@ export default function MTargetEditor({
                   </Grid>
                 </Box>
               </Grid>
-              <Grid size={1}>
+              <Grid item xs={1}>
                 <TextFieldLazy
                   fullWidth
                   label={t('loadout:mTargetEditor.desc')}

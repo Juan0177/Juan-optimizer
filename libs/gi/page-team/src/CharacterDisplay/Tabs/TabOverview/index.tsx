@@ -9,17 +9,19 @@ import {
   WeaponCardNano,
 } from '@genshin-optimizer/gi/ui'
 import { uiInput as input } from '@genshin-optimizer/gi/wr'
-import { Box, Grid, Stack } from '@mui/material'
+import { Box, Grid, Stack, useMediaQuery } from '@mui/material'
 import { useContext, useMemo } from 'react'
 import CharacterProfileCard from '../../../CharProfileCard'
 import useCompareData from '../../../useCompareData'
 import BonusStatsModal from '../../BonusStatsModal'
 import CompareBtn from '../../CompareBtn'
 import { CustomMultiTargetModal } from '../../CustomMultiTarget/CustomMultiTargetModal'
+import { WhatToFarmStrip } from '../TabUpgradeOpt/WhatToFarmStrip'
 import EquipmentSection from './EquipmentSection'
 
 export default function TabOverview() {
   const [scrollRef, onScroll] = useScrollRef()
+  const isWide = useMediaQuery('(min-width: 1900px)')
 
   const data = useContext(DataContext)
   const compareData = useCompareData()
@@ -34,26 +36,19 @@ export default function TabOverview() {
     <Stack spacing={1}>
       <Box>
         <Grid container spacing={1} sx={{ justifyContent: 'center' }}>
-          <Grid
-            size={{
-              xs: 8,
-              sm: 8,
-              md: 3,
-              lg: 2.3,
-            }}
-          >
+          <Grid item xs={8} sm={8} md={3} lg={2.3}>
             <CharacterProfileCard />
           </Grid>
           <Grid
+            item
+            xs={12}
+            sm={12}
+            md={9}
+            lg={9.7}
             sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-            size={{
-              xs: 12,
-              sm: 12,
-              md: 9,
-              lg: 9.7,
-            }}
           >
             <EquipmentRow onClick={onScroll} />
+            <WhatToFarmStrip />
             <CardThemed
               bgt="light"
               sx={{
@@ -78,7 +73,8 @@ export default function TabOverview() {
               </Box>
               <DataContext.Provider value={dataContextObj}>
                 <StatDisplayComponent
-                  columns={{ xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
+                  // the team page is widest on large screens: a 4th column instead of wider ones
+                  columns={isWide ? 4 : { xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
                   BonusStatEditor={BonusStatsModal}
                   CustomMTargetEditor={CustomMultiTargetModal}
                 />
@@ -98,7 +94,7 @@ function EquipmentRow({ onClick }: { onClick: () => void }) {
 
   return (
     <Grid container spacing={1} columns={{ xs: 2, sm: 2, md: 3, lg: 6, xl: 6 }}>
-      <Grid size={1}>
+      <Grid item xs={1}>
         <CardThemed bgt="light" sx={{ height: '100%', maxHeight: '8em' }}>
           <WeaponCardNano
             weaponId={data.get(input.weapon.id).value}
@@ -107,7 +103,7 @@ function EquipmentRow({ onClick }: { onClick: () => void }) {
         </CardThemed>
       </Grid>
       {allArtifactSlotKeys.map((slotKey) => (
-        <Grid key={slotKey} size={1}>
+        <Grid item key={slotKey} xs={1}>
           <CardThemed bgt="light" sx={{ height: '100%', maxHeight: '8em' }}>
             <ArtifactCardNano
               artifactId={data.get(input.art[slotKey].id).value?.toString()}

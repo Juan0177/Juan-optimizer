@@ -4,18 +4,20 @@ import { allStats } from '@genshin-optimizer/gi/stats'
 import {
   constant,
   equal,
+  equalStr,
   greaterEq,
   infoMut,
   input,
   lookup,
   min,
   naught,
-  one,
   percent,
   prod,
   stellarDmgNode,
+  subscript,
   sum,
   target,
+  unequal,
 } from '@genshin-optimizer/gi/wr'
 import { cond, st, stg } from '../../SheetUtil'
 import { CharacterSheet } from '../CharacterSheet'
@@ -25,7 +27,6 @@ import {
   dmgNode,
   plungingDmgNodes,
   splitScaleDmgNode,
-  stellarTalentDmgNode,
 } from '../dataUtil'
 import type { TalentSheet } from '../ICharacterSheet'
 
@@ -47,41 +48,43 @@ const dm = {
   charged: {
     dmg: skillParam_gen.auto[a++],
     stam: skillParam_gen.auto[a++][0],
-    detonationDmg: skillParam_gen.auto[a + 3],
-    detonationStellarDmg: skillParam_gen.auto[a + 4],
   },
   plunging: {
     dmg: skillParam_gen.auto[a++],
     low: skillParam_gen.auto[a++],
     high: skillParam_gen.auto[a++],
   },
+  gradient: {
+    // Special Charged Attack: Gradient Detonation (ATK)
+    dmg: skillParam_gen.auto[a++],
+    // Per Gradient Beacon consumed, Stellar-Conduct DMG (EM)
+    stellarDmg: skillParam_gen.auto[a++],
+  },
   skill: {
     tapDmg: skillParam_gen.skill[s++],
     holdDmg: skillParam_gen.skill[s++],
-    steadyDmg: skillParam_gen.skill[s++],
-    steadyConsumptionDmg: skillParam_gen.skill[s++],
-    steadyDetonationDmg: skillParam_gen.skill[s++],
+    steadyCoreDmg: skillParam_gen.skill[s++], // ATK
+    steadyConsumeDmg: skillParam_gen.skill[s++], // EM, Stellar-Conduct
+    steadyDetonateDmg: skillParam_gen.skill[s++], // EM per beacon, Stellar-Conduct
     duration: skillParam_gen.skill[s++][0],
     cd: skillParam_gen.skill[s++][0],
   },
   burst: {
-    skillDmgAtk: skillParam_gen.burst[b++],
-    skillDmgEleMas: skillParam_gen.burst[b++],
-    beaconsCreated: skillParam_gen.burst[b++][0],
+    atkDmg: skillParam_gen.burst[b++],
+    emDmg: skillParam_gen.burst[b++],
+    beacons: skillParam_gen.burst[b++][0],
     cd: skillParam_gen.burst[b++][0],
     enerCost: skillParam_gen.burst[b++][0],
   },
   passive1: {
-    eleMas: skillParam_gen.passive1[0][0],
+    eleMasPerBeacon: skillParam_gen.passive1[0][0],
   },
   passive2: {
     critRate_: skillParam_gen.passive2[0][0],
-    maxStacks: 4,
-    duration: 15,
   },
   passive3: {
-    base_stellarconduct_dmg_: skillParam_gen.passive3![0][0],
-    maxBase_stellarconduct_dmg_: skillParam_gen.passive3![1][0],
+    baseDmgPerEm: skillParam_gen.passive3![0][0],
+    maxBaseDmg: skillParam_gen.passive3![1][0],
   },
   constellation1: {
     critDMG_: skillParam_gen.constellation1[0],
@@ -89,179 +92,194 @@ const dm = {
     cd: skillParam_gen.constellation1[2],
   },
   constellation2: {
-    cryoElectro_enemyRes_: skillParam_gen.constellation2[0],
-    steady_eleMas: skillParam_gen.constellation2[1],
-    overloaded_eleMas: skillParam_gen.constellation2[2],
+    enemyRes_: skillParam_gen.constellation2[0],
+    steadyEleMas: skillParam_gen.constellation2[1],
+    overloadEleMas: skillParam_gen.constellation2[2],
   },
   constellation4: {
     dmg: skillParam_gen.constellation4[0],
   },
   constellation6: {
-    chance: skillParam_gen.constellation6[0],
+    beaconChance: skillParam_gen.constellation6[0],
     stellarconduct_specialDmg_: skillParam_gen.constellation6[1],
-    steady_mult_: skillParam_gen.constellation6[2],
+    steadyDmgInc: skillParam_gen.constellation6[2],
   },
 } as const
 
-const a0_stellarconduct_baseDmg_ = min(
-  prod(percent(dm.passive3.base_stellarconduct_dmg_), input.total.eleMas),
-  percent(dm.passive3.maxBase_stellarconduct_dmg_)
-)
+// kqmsim 7bdf45f: four prisms at C0, five at C1.
+const BASE_MAX_BEACONS = 4
+const C1_MAX_BEACONS = 5
 
-const [condA0StellarRadianceScPath, condA0StellarRadianceSc] = cond(
-  key,
-  'a0StellarRadianceSc'
-)
+/* ---------- Conditionals ---------- */
 
-const [condSkillDetonationPath, condSkillDetonation] = cond(
-  key,
-  'skillDetonation'
-)
-const skillDetonationSmallArr = range(1, 4)
-const skillDetonationArr = range(1, 4 + 1)
-const skillDetonationMult = lookup(
-  condSkillDetonation,
-  objKeyMap(skillDetonationArr, (core) =>
-    core >= 5 ? greaterEq(input.constellation, 1, core) : constant(core)
-  ),
-  constant(1)
-)
+// Detection Core state. Undefined means no Detection Core is on the field.
+const [condCorePath, condCore] = cond(key, 'detectionCore')
+const coreActive = unequal(condCore, undefined, 1)
 
-const [condA1BeaconsPath, condA1Beacons] = cond(key, 'a1Beacons')
-const a1BeaconsSmallArr = range(1, 4)
-const a1BeaconsArr = range(1, 4 + 1)
-const a1Beacons = lookup(
-  condA1Beacons,
-  objKeyMap(a1BeaconsArr, (core) =>
-    core >= 5 ? greaterEq(input.constellation, 1, core) : constant(core)
-  ),
+// Number of Gradient Beacons Mitya currently has (A1 EM, C2/C1 context)
+const [condBeaconsPath, condBeacons] = cond(key, 'gradientBeacons')
+const beaconsArr = range(1, C1_MAX_BEACONS)
+const beaconCount = lookup(
+  condBeacons,
+  objKeyMap(beaconsArr, (n) => constant(n)),
   naught
 )
-const a1BeaconsEleMas = greaterEq(
-  input.asc,
-  1,
-  prod(a1Beacons, dm.passive1.eleMas)
-)
 
+// A4 CRIT Rate stacks
 const [condA4StacksPath, condA4Stacks] = cond(key, 'a4Stacks')
-const a4StacksArr = range(1, dm.passive2.maxStacks)
-const a4Stacks = lookup(
-  condA4Stacks,
-  objKeyMap(a4StacksArr, (core) => constant(core)),
-  naught
-)
-const a4Stacks_critRate_ = greaterEq(
-  input.asc,
-  4,
-  prod(a4Stacks, dm.passive2.critRate_)
-)
+const a4StacksArr = range(1, 4)
 
-const [condC1CorePath, condC1Core] = cond(key, 'c1Core')
-const c1Core_critDMG_disp = infoMut(
+// Inside Polestar Field: Radiance: Stellar-Conduct
+const [condA0RadiancePath, condA0Radiance] = cond(key, 'a0StellarRadianceSc')
+
+/* ---------- Buffs ---------- */
+
+// A1: Steady State core, all party members gain EM per Gradient Beacon
+const a1Steady_eleMasDisp = infoMut(
   greaterEq(
-    input.constellation,
+    input.asc,
     1,
-    equal(condC1Core, 'on', dm.constellation1.critDMG_)
-  ),
-  { path: 'critDMG_', isTeamBuff: true }
-)
-const c1Core_critDMG_ = equal(
-  input.activeCharKey,
-  target.charKey,
-  c1Core_critDMG_disp
-)
-
-const [condC2CoreFieldPath, condC2CoreField] = cond(key, 'c2CoreField')
-const c2CoreField_cryo_enemyRes_ = greaterEq(
-  input.constellation,
-  2,
-  equal(condC2CoreField, 'on', -dm.constellation2.cryoElectro_enemyRes_)
-)
-const c2CoreField_electro_enemyRes_ = { ...c2CoreField_cryo_enemyRes_ }
-
-const [condC2CoreTypePath, condC2CoreType] = cond(key, 'c2CoreType')
-const c2CoreType_steady_eleMas = greaterEq(
-  input.constellation,
-  2,
-  equal(condC2CoreType, 'steady', dm.constellation2.steady_eleMas)
-)
-const c2CoreType_overloaded_eleMasDisp = infoMut(
-  greaterEq(
-    input.constellation,
-    2,
-    equal(condC2CoreType, 'overloaded', dm.constellation2.overloaded_eleMas)
+    equal(condCore, 'steady', prod(dm.passive1.eleMasPerBeacon, beaconCount))
   ),
   { path: 'eleMas', isTeamBuff: true }
 )
-const c2CoreType_overloaded_eleMas = equal(
-  input.activeCharKey,
-  target.charKey,
-  c2CoreType_overloaded_eleMasDisp
+
+// A4: CRIT Rate per stack
+const a4_critRate_ = greaterEq(
+  input.asc,
+  4,
+  lookup(
+    condA4Stacks,
+    objKeyMap(a4StacksArr, (n) => percent(dm.passive2.critRate_ * n)),
+    naught
+  )
 )
 
-const c6Steady_mult_ = sum(
-  one,
-  greaterEq(input.constellation, 6, percent(dm.constellation6.steady_mult_))
+// A0 (Stellar Jubilee): Base Stellar-Conduct DMG increase from Mitya's EM
+const a0_stellarconduct_baseDmg_ = min(
+  prod(percent(dm.passive3.baseDmgPerEm), input.total.eleMas),
+  percent(dm.passive3.maxBaseDmg)
 )
+
+// C1: active character CRIT DMG while Detection Core is present
+const c1_critDMG_disp = greaterEq(
+  input.constellation,
+  1,
+  equal(coreActive, 1, percent(dm.constellation1.critDMG_)),
+  { path: 'critDMG_', isTeamBuff: true }
+)
+const c1_critDMG_ = equal(input.activeCharKey, target.charKey, c1_critDMG_disp)
+
+// C2: Cryo/Electro RES shred while Detection Core is present (opponents in Polestar Field)
+const c2_cryo_enemyRes_ = greaterEq(
+  input.constellation,
+  2,
+  equal(coreActive, 1, percent(-dm.constellation2.enemyRes_))
+)
+const c2_electro_enemyRes_ = { ...c2_cryo_enemyRes_ }
+
+// C2: Steady -> all party EM; Overloaded -> active character EM
+const c2Steady_eleMasDisp = greaterEq(
+  input.constellation,
+  2,
+  equal(condCore, 'steady', dm.constellation2.steadyEleMas),
+  { path: 'eleMas', isTeamBuff: true }
+)
+const c2Overload_eleMasDisp = greaterEq(
+  input.constellation,
+  2,
+  equal(condCore, 'overloaded', dm.constellation2.overloadEleMas),
+  { path: 'eleMas', isTeamBuff: true }
+)
+const c2Overload_eleMas = equal(
+  input.activeCharKey,
+  target.charKey,
+  c2Overload_eleMasDisp
+)
+const teamEleMas = sum(
+  a1Steady_eleMasDisp,
+  c2Steady_eleMasDisp,
+  c2Overload_eleMas
+)
+
+// C6: Stellar-Conduct DMG Elevated for all party members
 const c6_stellarconduct_specialDmg_ = greaterEq(
   input.constellation,
   6,
-  dm.constellation6.stellarconduct_specialDmg_
+  percent(dm.constellation6.stellarconduct_specialDmg_)
+)
+// C6: Steady State core deals 115% of its original DMG
+const c6SteadyMult = sum(
+  percent(1),
+  greaterEq(input.constellation, 6, percent(dm.constellation6.steadyDmgInc))
+)
+// C6's 115% on the C4 strike too, unless the core is Overloaded (the game's C4 formula reads
+// AS_Constellation_6_StableDamageUp with a Steady core or from a detonation)
+const c6C4Mult = sum(
+  percent(1),
+  greaterEq(
+    input.constellation,
+    6,
+    unequal(condCore, 'overloaded', percent(dm.constellation6.steadyDmgInc))
+  )
 )
 
+/* ---------- Damage ---------- */
+
+const stellarTalent = (
+  lvlMultiplier: number[],
+  talentType: 'auto' | 'skill',
+  specialMultiplier?: ReturnType<typeof sum>
+) =>
+  stellarDmgNode(
+    subscript(input.total[`${talentType}Index`], lvlMultiplier, { unit: '%' }),
+    'eleMas',
+    'stellarconduct',
+    'electro',
+    undefined,
+    specialMultiplier
+  )
+
 const dmgFormulas = {
-  normal: {
-    ...Object.fromEntries(
-      dm.normal.hitArr.map((arr, i) => [i, dmgNode('atk', arr, 'normal')])
-    ),
-  },
+  normal: Object.fromEntries(
+    dm.normal.hitArr.map((arr, i) => [i, dmgNode('atk', arr, 'normal')])
+  ),
   charged: {
     dmg: dmgNode('atk', dm.charged.dmg, 'charged'),
-    detonationDmg: dmgNode('atk', dm.charged.detonationDmg, 'charged'),
-    detonationStellarDmg: stellarTalentDmgNode(
-      'eleMas',
-      dm.charged.detonationStellarDmg,
-      'auto',
-      'stellarconduct',
-      'electro'
-    ),
+    gradientDmg: dmgNode('atk', dm.gradient.dmg, 'charged'),
+    gradientStellarDmg: stellarTalent(dm.gradient.stellarDmg, 'auto'),
   },
   plunging: plungingDmgNodes('atk', dm.plunging),
   skill: {
     tapDmg: dmgNode('atk', dm.skill.tapDmg, 'skill'),
     holdDmg: dmgNode('atk', dm.skill.holdDmg, 'skill'),
-    steadyDmg: dmgNode(
+    steadyCoreDmg: dmgNode(
       'atk',
-      dm.skill.steadyDmg,
+      dm.skill.steadyCoreDmg,
       'skill',
       undefined,
-      c6Steady_mult_
+      c6SteadyMult
     ),
-    steadyConsumptionDmg: stellarTalentDmgNode(
-      'eleMas',
-      dm.skill.steadyConsumptionDmg,
+    steadyConsumeDmg: stellarTalent(
+      dm.skill.steadyConsumeDmg,
       'skill',
-      'stellarconduct',
-      'electro',
-      undefined,
-      c6Steady_mult_
+      c6SteadyMult
     ),
-    steadyDetonationDmg: stellarTalentDmgNode(
-      'eleMas',
-      dm.skill.steadyDetonationDmg,
+    steadyDetonateDmg: stellarTalent(
+      dm.skill.steadyDetonateDmg,
       'skill',
-      'stellarconduct',
-      'electro',
-      undefined,
-      prod(skillDetonationMult, c6Steady_mult_)
+      c6SteadyMult
     ),
   },
   burst: {
-    skillDmg: splitScaleDmgNode(
+    dmg: splitScaleDmgNode(
       ['atk', 'eleMas'],
-      [dm.burst.skillDmgAtk, dm.burst.skillDmgEleMas],
+      [dm.burst.atkDmg, dm.burst.emDmg],
       'burst'
     ),
+  },
+  passive3: {
+    a0_stellarconduct_baseDmg_,
   },
   constellation4: {
     dmg: greaterEq(
@@ -271,7 +289,9 @@ const dmgFormulas = {
         percent(dm.constellation4.dmg),
         'eleMas',
         'stellarconduct',
-        'electro'
+        'electro',
+        undefined,
+        c6C4Mult
       )
     ),
   },
@@ -280,50 +300,30 @@ const dmgFormulas = {
 const skillC3 = greaterEq(input.constellation, 3, 3)
 const autoC5 = greaterEq(input.constellation, 5, 3)
 
-export const data = dataObjForCharacterSheet(
-  key,
-  dmgFormulas,
-  {
+export const data = dataObjForCharacterSheet(key, dmgFormulas, {
+  premod: {
+    skillBoost: skillC3,
+    autoBoost: autoC5,
+    critRate_: a4_critRate_,
+  },
+  teamBuff: {
     premod: {
-      autoBoost: autoC5,
-      skillBoost: skillC3,
-      critRate_: a4Stacks_critRate_,
-    },
-    teamBuff: {
-      premod: {
-        stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
-        eleMas: a1BeaconsEleMas,
-        critDMG_: c1Core_critDMG_,
-        cryo_enemyRes_: c2CoreField_cryo_enemyRes_,
-        electro_enemyRes_: c2CoreField_electro_enemyRes_,
-        stellarconduct_specialDmg_: c6_stellarconduct_specialDmg_,
-      },
-    },
-    flags: {
-      radiance: condA0StellarRadianceSc,
+      eleMas: teamEleMas,
+      critDMG_: c1_critDMG_,
+      stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
+      stellarconduct_specialDmg_: c6_stellarconduct_specialDmg_,
+      cryo_enemyRes_: c2_cryo_enemyRes_,
+      electro_enemyRes_: c2_electro_enemyRes_,
     },
   },
-  {
-    teamBuff: {
-      premod: {
-        eleMas: c2CoreType_steady_eleMas,
-      },
-    },
+  flags: {
+    radiance: equalStr(condA0Radiance, 'on', 'sc'),
   },
-  {
-    teamBuff: {
-      premod: {
-        eleMas: c2CoreType_overloaded_eleMas,
-      },
-    },
-  }
-)
+})
 
 const sheet: TalentSheet = {
   auto: ct.talentTem('auto', [
-    {
-      text: ct.chg('auto.fields.normal'),
-    },
+    { text: ct.chg('auto.fields.normal') },
     {
       fields: dm.normal.hitArr.map((_, i) => ({
         node: infoMut(dmgFormulas.normal[i], {
@@ -331,9 +331,7 @@ const sheet: TalentSheet = {
         }),
       })),
     },
-    {
-      text: ct.chg('auto.fields.charged'),
-    },
+    { text: ct.chg('auto.fields.charged') },
     {
       fields: [
         {
@@ -346,20 +344,19 @@ const sheet: TalentSheet = {
           value: dm.charged.stam,
         },
         {
-          node: infoMut(dmgFormulas.charged.detonationDmg, {
+          node: infoMut(dmgFormulas.charged.gradientDmg, {
             name: ct.chg('auto.skillParams.7'),
           }),
         },
         {
-          node: infoMut(dmgFormulas.charged.detonationStellarDmg, {
+          node: infoMut(dmgFormulas.charged.gradientStellarDmg, {
             name: ct.chg('auto.skillParams.8'),
+            textSuffix: ct.ch('perBeacon'),
           }),
         },
       ],
     },
-    {
-      text: ct.chg('auto.fields.plunging'),
-    },
+    { text: ct.chg('auto.fields.plunging') },
     {
       fields: [
         {
@@ -395,18 +392,19 @@ const sheet: TalentSheet = {
           }),
         },
         {
-          node: infoMut(dmgFormulas.skill.steadyDmg, {
+          node: infoMut(dmgFormulas.skill.steadyCoreDmg, {
             name: ct.chg('skill.skillParams.2'),
           }),
         },
         {
-          node: infoMut(dmgFormulas.skill.steadyConsumptionDmg, {
+          node: infoMut(dmgFormulas.skill.steadyConsumeDmg, {
             name: ct.chg('skill.skillParams.3'),
           }),
         },
         {
-          node: infoMut(dmgFormulas.skill.steadyDetonationDmg, {
+          node: infoMut(dmgFormulas.skill.steadyDetonateDmg, {
             name: ct.chg('skill.skillParams.4'),
+            textSuffix: ct.ch('perBeacon'),
           }),
         },
         {
@@ -422,24 +420,55 @@ const sheet: TalentSheet = {
       ],
     },
     ct.condTem('skill', {
-      path: condSkillDetonationPath,
-      value: condSkillDetonation,
-      name: ct.ch('skillDetonationCond'),
+      path: condCorePath,
+      value: condCore,
+      name: ct.ch('coreCond'),
+      teamBuff: true,
+      states: {
+        steady: {
+          name: ct.ch('steady'),
+          fields: [
+            { node: c1_critDMG_disp },
+            { node: infoMut(c2_cryo_enemyRes_, { path: 'cryo_enemyRes_' }) },
+            {
+              node: infoMut(c2_electro_enemyRes_, {
+                path: 'electro_enemyRes_',
+              }),
+            },
+            { node: c2Steady_eleMasDisp },
+          ],
+        },
+        overloaded: {
+          name: ct.ch('overloaded'),
+          fields: [
+            { node: c1_critDMG_disp },
+            { node: infoMut(c2_cryo_enemyRes_, { path: 'cryo_enemyRes_' }) },
+            {
+              node: infoMut(c2_electro_enemyRes_, {
+                path: 'electro_enemyRes_',
+              }),
+            },
+            { node: c2Overload_eleMasDisp },
+          ],
+        },
+      },
+    }),
+    ct.condTem('skill', {
+      path: condBeaconsPath,
+      value: condBeacons,
+      name: ct.ch('beaconsCond'),
+      teamBuff: true,
       states: (data) =>
         objKeyMap(
-          data.get(input.constellation).value >= 1
-            ? skillDetonationArr
-            : skillDetonationSmallArr,
-          (core) => ({
-            name: `${core}`,
-            fields: [
-              {
-                node: infoMut(skillDetonationMult, {
-                  name: ct.ch('detonationMult_'),
-                  unit: '%',
-                }),
-              },
-            ],
+          range(
+            1,
+            data.get(input.constellation).value >= 1
+              ? C1_MAX_BEACONS
+              : BASE_MAX_BEACONS
+          ),
+          (n) => ({
+            name: st('stack', { count: n }),
+            fields: [{ node: a1Steady_eleMasDisp }],
           })
         ),
     }),
@@ -449,13 +478,13 @@ const sheet: TalentSheet = {
     {
       fields: [
         {
-          node: infoMut(dmgFormulas.burst.skillDmg, {
+          node: infoMut(dmgFormulas.burst.dmg, {
             name: ct.chg('burst.skillParams.0'),
           }),
         },
         {
           text: ct.chg('burst.skillParams.1'),
-          value: dm.burst.beaconsCreated,
+          value: dm.burst.beacons,
         },
         {
           text: stg('cd'),
@@ -471,43 +500,22 @@ const sheet: TalentSheet = {
   ]),
 
   passive1: ct.talentTem('passive1', [
-    ct.condTem('passive1', {
-      path: condA1BeaconsPath,
-      value: condA1Beacons,
+    ct.headerTem('passive1', {
       teamBuff: true,
-      name: ct.ch('a1BeaconsCond'),
-      states: (data) =>
-        objKeyMap(
-          data.get(input.constellation).value >= 1
-            ? a1BeaconsArr
-            : a1BeaconsSmallArr,
-          (core) => ({
-            name: `${core}`,
-            fields: [
-              {
-                node: a1BeaconsEleMas,
-              },
-            ],
-          })
-        ),
+      canShow: equal(condCore, 'steady', 1),
+      fields: [{ node: a1Steady_eleMasDisp }],
     }),
   ]),
   passive2: ct.talentTem('passive2', [
     ct.condTem('passive2', {
       path: condA4StacksPath,
       value: condA4Stacks,
-      name: ct.ch('a4StacksCond'),
-      states: objKeyMap(a4StacksArr, (stack) => ({
-        name: `${stack}`,
+      name: ct.ch('a4Cond'),
+      states: objKeyMap(a4StacksArr, (n) => ({
+        name: st('stack', { count: n }),
         fields: [
-          {
-            node: a4Stacks_critRate_,
-          },
-          {
-            text: stg('duration'),
-            value: dm.passive2.duration,
-            unit: 's',
-          },
+          { node: a4_critRate_ },
+          { text: stg('duration'), value: 15, unit: 's' },
         ],
       })),
     }),
@@ -515,129 +523,78 @@ const sheet: TalentSheet = {
   passive3: ct.talentTem('passive3', [
     ct.headerTem('passive3', {
       teamBuff: true,
-      canShow: greaterEq(a0_stellarconduct_baseDmg_, 0.01, 1),
       fields: [
         {
-          node: a0_stellarconduct_baseDmg_,
+          node: infoMut(a0_stellarconduct_baseDmg_, {
+            path: 'stellarconduct_baseDmg_',
+            isTeamBuff: true,
+          }),
         },
       ],
     }),
     ct.condTem('passive3', {
-      path: condA0StellarRadianceScPath,
-      value: condA0StellarRadianceSc,
-      teamBuff: true,
+      path: condA0RadiancePath,
+      value: condA0Radiance,
       name: st('elementalReaction.polestar.inside'),
+      teamBuff: true,
       states: {
-        sc: {
-          fields: [
-            {
-              text: st('elementalReaction.stellar.gainRadianceSc'),
-            },
-          ],
+        on: {
+          fields: [{ text: st('elementalReaction.stellar.gainRadianceSc') }],
         },
       },
     }),
   ]),
+  passive: ct.talentTem('passive'),
   constellation1: ct.talentTem('constellation1', [
-    ct.fieldsTem('constellation1', {
-      fields: [
-        {
-          text: ct.ch('c1Text'),
-        },
-      ],
-    }),
-    ct.condTem('constellation1', {
-      path: condC1CorePath,
-      value: condC1Core,
+    ct.headerTem('constellation1', {
       teamBuff: true,
-      name: ct.ch('c1CoreCond'),
-      states: {
-        on: {
-          fields: [
-            {
-              node: c1Core_critDMG_disp,
-            },
-          ],
-        },
-      },
+      canShow: equal(coreActive, 1, 1),
+      fields: [{ node: c1_critDMG_disp }],
     }),
   ]),
   constellation2: ct.talentTem('constellation2', [
-    ct.condTem('constellation2', {
-      path: condC2CoreFieldPath,
-      value: condC2CoreField,
+    ct.headerTem('constellation2', {
       teamBuff: true,
-      name: ct.ch('c2CoreFieldCond'),
-      states: {
-        on: {
-          fields: [
-            {
-              node: c2CoreField_cryo_enemyRes_,
-            },
-            {
-              node: c2CoreField_electro_enemyRes_,
-            },
-          ],
+      canShow: equal(coreActive, 1, 1),
+      fields: [
+        { node: infoMut(c2_cryo_enemyRes_, { path: 'cryo_enemyRes_' }) },
+        {
+          node: infoMut(c2_electro_enemyRes_, { path: 'electro_enemyRes_' }),
         },
-      },
-    }),
-    ct.condTem('constellation2', {
-      path: condC2CoreTypePath,
-      value: condC2CoreType,
-      teamBuff: true,
-      name: ct.ch('c2CoreTypeCond'),
-      states: {
-        steady: {
-          name: ct.ch('c2CoreSteady'),
-          fields: [
-            {
-              node: c2CoreType_steady_eleMas,
-            },
-          ],
-        },
-        overloaded: {
-          name: ct.ch('c2CoreOverloaded'),
-          fields: [
-            {
-              node: c2CoreType_overloaded_eleMasDisp,
-            },
-          ],
-        },
-      },
+        { node: c2Steady_eleMasDisp },
+        { node: c2Overload_eleMasDisp },
+      ],
     }),
   ]),
   constellation3: ct.talentTem('constellation3', [
     { fields: [{ node: skillC3 }] },
   ]),
   constellation4: ct.talentTem('constellation4', [
-    ct.fieldsTem('constellation4', {
+    {
       fields: [
         {
           node: infoMut(dmgFormulas.constellation4.dmg, {
-            name: st('dmg'),
+            name: ct.ch('c4Dmg'),
           }),
         },
       ],
-    }),
+    },
   ]),
   constellation5: ct.talentTem('constellation5', [
     { fields: [{ node: autoC5 }] },
   ]),
   constellation6: ct.talentTem('constellation6', [
-    ct.fieldsTem('constellation6', {
+    {
       fields: [
         {
-          node: infoMut(c6Steady_mult_, {
-            name: ct.ch('detectionCoreMult_'),
-            unit: '%',
-            pivot: true,
+          node: infoMut(c6_stellarconduct_specialDmg_, {
+            path: 'stellarconduct_specialDmg_',
+            isTeamBuff: true,
           }),
         },
-        {
-          node: c6_stellarconduct_specialDmg_,
-        },
       ],
-    }),
+    },
   ]),
 }
+
 export default new CharacterSheet(sheet, data)

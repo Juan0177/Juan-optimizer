@@ -106,15 +106,7 @@ export default function UpgradeOptChartCard(props: Props) {
   return (
     <Box>
       <Grid container spacing={1}>
-        <Grid
-          size={{
-            xs: 12,
-            sm: 5,
-            md: 4,
-            lg: 3,
-            xl: 3,
-          }}
-        >
+        <Grid item xs={12} sm={5} md={4} lg={3} xl={3}>
           {info.type === 'definition' ? (
             <ArtifactCardObj
               artifact={defineDisplayArtifact(info)}
@@ -132,15 +124,7 @@ export default function UpgradeOptChartCard(props: Props) {
             />
           )}
         </Grid>
-        <Grid
-          size={{
-            xs: 12,
-            sm: 7,
-            md: 8,
-            lg: 9,
-            xl: 9,
-          }}
-        >
+        <Grid item xs={12} sm={7} md={8} lg={9} xl={9}>
           <UpgradeOptChartCardGraph {...props} />
         </Grid>
       </Grid>
@@ -333,24 +317,14 @@ function UpgradeOptChartCardGraph({
             py: 1,
           }}
         >
-          <Box
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Box flexGrow={1}>
             {isCurrentlyEquipped ? (
               <SqBadge color="secondary">{t('upOptChart.equipped')}</SqBadge>
             ) : (
               <Typography>{t('upOptChart.current')}</Typography>
             )}
           </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-            }}
-          >
+          <Box display="flex" alignItems="center" gap={1}>
             {isExactPending && <CircularProgress size={18} />}
             {upArt.info.type === 'reshape' && (
               <>

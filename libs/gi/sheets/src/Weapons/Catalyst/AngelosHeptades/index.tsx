@@ -3,6 +3,7 @@ import {
   active,
   equal,
   equalStr,
+  greaterEq,
   inferInfoMut,
   infoMut,
   input,
@@ -11,6 +12,7 @@ import {
   percent,
   prod,
   subscript,
+  tally,
   target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
@@ -50,10 +52,15 @@ const [offFieldHex_dmg_disp, offFieldHex_dmg_inactive] = nonStackBuff(
   'all_dmg_',
   prod(percent(0.5), dmg_node)
 )
+// (Hexerei: Secret Rite: with two or more Hexerei members in the party)
 const offFieldHex_dmg_ = equal(
   target.flags.isHexerei,
   1,
-  unequal(active.charKey, target.charKey, offFieldHex_dmg_disp)
+  greaterEq(
+    tally.hexerei,
+    2,
+    unequal(active.charKey, target.charKey, offFieldHex_dmg_disp)
+  )
 )
 
 const data = dataObjForWeaponSheet(
@@ -111,7 +118,7 @@ const sheet: IWeaponSheet = {
               node: shield_dmg_inactive,
             },
             {
-              node: infoMut(offFieldHex_dmg_disp, {
+              node: infoMut(greaterEq(tally.hexerei, 2, offFieldHex_dmg_disp), {
                 path: 'all_dmg_',
                 isTeamBuff: true,
               }),

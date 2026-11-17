@@ -1,10 +1,5 @@
 import { iconInlineProps } from '@genshin-optimizer/common/svgicons'
-import type { DropdownButtonProps } from '@genshin-optimizer/common/ui'
-import {
-  DropdownButton,
-  SolidToggleButtonGroup,
-  SqBadge,
-} from '@genshin-optimizer/common/ui'
+import { SolidToggleButtonGroup, SqBadge } from '@genshin-optimizer/common/ui'
 import type {
   AdditiveReactionKey,
   AmpReactionKey,
@@ -16,12 +11,7 @@ import {
   allowedAdditiveReactions,
   allowedAmpReactions,
 } from '@genshin-optimizer/gi/consts'
-import {
-  CharacterContext,
-  TeamCharacterContext,
-  useDatabase,
-} from '@genshin-optimizer/gi/db-ui'
-import { isCharMelee } from '@genshin-optimizer/gi/stats'
+import { TeamCharacterContext, useDatabase } from '@genshin-optimizer/gi/db-ui'
 import {
   CryoIcon,
   ElectroIcon,
@@ -30,7 +20,7 @@ import {
 } from '@genshin-optimizer/gi/svgicons'
 import { infusionNode, uiInput as input } from '@genshin-optimizer/gi/wr'
 import type { ToggleButtonGroupProps } from '@mui/material'
-import { MenuItem, ToggleButton } from '@mui/material'
+import { ToggleButton } from '@mui/material'
 import { useContext } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DataContext } from '../context'
@@ -64,47 +54,15 @@ export const infusionVals = {
     </span>
   ),
 }
-type InfusionAuraDropdownProps = Omit<
-  DropdownButtonProps,
-  'title' | 'onChange' | 'children'
->
-export function InfusionAuraDropdown(props: InfusionAuraDropdownProps) {
-  const {
-    teamCharId,
-    teamChar: { infusionAura },
-  } = useContext(TeamCharacterContext)
-  const {
-    character: { key: characterKey },
-  } = useContext(CharacterContext)
-  const database = useDatabase()
-  if (!isCharMelee(characterKey)) return null
-  return (
-    <DropdownButton
-      title={infusionVals[infusionAura || '']}
-      color={infusionAura || 'secondary'}
-      disableElevation
-      disabled={!teamCharId}
-      {...props}
-    >
-      {Object.entries(infusionVals).map(([key, text]) => (
-        <MenuItem
-          key={key}
-          sx={key ? { color: `${key}.main` } : undefined}
-          selected={key === infusionAura}
-          disabled={key === infusionAura}
-          onClick={() =>
-            database.teamChars.set(teamCharId, { infusionAura: key })
-          }
-        >
-          {text}
-        </MenuItem>
-      ))}
-    </DropdownButton>
-  )
-}
 
-type ReactionToggleProps = Omit<ToggleButtonGroupProps, 'color'>
-export function ReactionToggle(props: ReactionToggleProps) {
+type ReactionToggleProps = Omit<ToggleButtonGroupProps, 'color'> & {
+  /** The quiet toggle style (see `SolidToggleButtonGroup`) */
+  quiet?: boolean
+}
+export function ReactionToggle({
+  quiet = false,
+  ...props
+}: ReactionToggleProps) {
   const { t } = useTranslation('page_character')
   const {
     teamCharId,
@@ -126,18 +84,21 @@ export function ReactionToggle(props: ReactionToggleProps) {
     <SolidToggleButtonGroup
       exclusive
       baseColor="secondary"
+      quiet={quiet}
       value={reaction || ''}
+      // null: the selected one was clicked again; one of them stays selected
       onChange={(_, reaction) =>
-        database.teamChars.set(teamCharId, { reaction })
+        reaction !== null && database.teamChars.set(teamCharId, { reaction })
       }
       disabled={!teamCharId}
       {...props}
     >
-      <ToggleButton value="" disabled={!reaction}>
+      {/* the classic style disables the selected one; the quiet style keeps it looking selected */}
+      <ToggleButton value="" disabled={!quiet && !reaction}>
         {t('noReaction')}
       </ToggleButton>
       {reactions.map((rm) => (
-        <ToggleButton key={rm} value={rm} disabled={reaction === rm}>
+        <ToggleButton key={rm} value={rm} disabled={!quiet && reaction === rm}>
           {([...allAmpReactionKeys] as string[]).includes(rm) ? (
             <AmpReactionModeText reaction={rm as AmpReactionKey} />
           ) : (
@@ -148,8 +109,11 @@ export function ReactionToggle(props: ReactionToggleProps) {
     </SolidToggleButtonGroup>
   )
 }
-type HitModeToggleProps = Omit<ToggleButtonGroupProps, 'color'>
-export function HitModeToggle(props: HitModeToggleProps) {
+type HitModeToggleProps = Omit<ToggleButtonGroupProps, 'color'> & {
+  /** The quiet toggle style (see `SolidToggleButtonGroup`) */
+  quiet?: boolean
+}
+export function HitModeToggle({ quiet = false, ...props }: HitModeToggleProps) {
   const { t } = useTranslation('page_character')
   const {
     teamCharId,
@@ -160,13 +124,16 @@ export function HitModeToggle(props: HitModeToggleProps) {
     <SolidToggleButtonGroup
       exclusive
       baseColor="secondary"
+      quiet={quiet}
       value={hitMode}
-      onChange={(_, hitMode) => database.teamChars.set(teamCharId, { hitMode })}
+      onChange={(_, hitMode) =>
+        hitMode !== null && database.teamChars.set(teamCharId, { hitMode })
+      }
       disabled={!teamCharId}
       {...props}
     >
       {allHitModeKeys.map((hm) => (
-        <ToggleButton key={hm} value={hm} disabled={hitMode === hm}>
+        <ToggleButton key={hm} value={hm} disabled={!quiet && hitMode === hm}>
           {t(`hitmode.${hm}`)}
         </ToggleButton>
       ))}

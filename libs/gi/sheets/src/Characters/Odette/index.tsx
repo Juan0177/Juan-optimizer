@@ -5,6 +5,7 @@ import {
 } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
 import {
+  compareEq,
   constant,
   equal,
   greaterEq,
@@ -305,23 +306,37 @@ const c4Burst_stellar_dmg_obj = objKeyValMap(allStellarReactionKeys, (k) => [
   { ...c4Burst_stellar_dmg_ },
 ])
 
+// C6: "characters affected by Marvelous Splendor": Odette always holds hers at C6; the others
+// only once they have received at least one stack.
 const c6Team_stellar_specialDmg_ = greaterEq(
   input.constellation,
   6,
   unequal(
     condA1TeamSplendor,
     undefined,
-    dm.constellation6.team_stellar_specialDmg_
+    compareEq(
+      target.charKey,
+      key,
+      dm.constellation6.team_stellar_specialDmg_,
+      greaterEq(a1TeamSplendor, 1, dm.constellation6.team_stellar_specialDmg_)
+    )
   )
 )
 const c6Team_stellar_specialDmg_obj = objKeyValMap(
   allStellarReactionKeys,
   (k) => [`${k}_specialDmg_`, { ...c6Team_stellar_specialDmg_ }]
 )
+// C6's additional 20% for Odette sits in her own Marvelous Splendor modifiers (dump
+// Avatar_Odette_PermanentSkill_1, Talent1_HuaCai_OnSelf_1..6: EffectFactor = C6_DamagePerLayer_Self
+// + C6_DamagePerLayer_Other), so it needs her stacks: only while her Dance Double is out.
 const c6Self_stellar_specialDmg_ = greaterEq(
   input.constellation,
   6,
-  dm.constellation6.self_stellar_specialDmg_
+  unequal(
+    condA1TeamSplendor,
+    undefined,
+    dm.constellation6.self_stellar_specialDmg_
+  )
 )
 const c6Self_stellar_specialDmg_obj = objKeyValMap(
   allStellarReactionKeys,

@@ -19,6 +19,7 @@ export type {
 
 const allStats = allStat_gen as AllStats
 
+export * from './coreStats'
 export { allStats }
 
 export function getCharEle(ck: CharacterSheetKey | CharacterKey): ElementKey {
@@ -36,10 +37,6 @@ export function getCharEle(ck: CharacterSheetKey | CharacterKey): ElementKey {
 export function getCharStat(ck: CharacterKey): Omit<CharacterDataGen, 'ele'> {
   const locCharKey = charKeyToLocCharKey(ck)
   return allStats.char.data[locCharKey]
-}
-
-export function getCharParam(ck: CharacterSheetKey) {
-  return allStats.char.skillParam[ck]
 }
 
 export function isCharMelee(ck: CharacterKey) {

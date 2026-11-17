@@ -100,7 +100,7 @@ const InputInvis = styled('input')({
   display: 'none',
 })
 
-const LineBreak = styled('br')()
+const LineBreak = styled('br')({})
 
 function getDefaultSlotKey(
   artifactSet?: ArtifactSetKey
@@ -133,12 +133,20 @@ export function ArtifactEditor({
   )
   const queue = queueRef.current
   const { t } = useTranslation('artifact')
+  const [isUnactivatedSubstat, setIsUnactivatedSubstat] = useState(false)
 
   const database = useDatabase()
 
   const [show, setShow] = useState(false)
 
   const [artifact, artifactDispatch] = useReducer(artifactReducer, undefined)
+  // brief confirmation after "Add", since the form clears for the next artifact
+  const [justAdded, setJustAdded] = useState(0)
+  useEffect(() => {
+    if (!justAdded) return
+    const timer = setTimeout(() => setJustAdded(0), 2500)
+    return () => clearTimeout(timer)
+  }, [justAdded])
 
   const [modalShow, setModalShow] = useState(false)
 
@@ -207,6 +215,7 @@ export function ArtifactEditor({
   const artStat = artifact && getArtSetStat(artifact.setKey)
   const reset = useCallback(() => {
     cancelEdit?.()
+    setIsUnactivatedSubstat(false)
     artifactDispatch({ type: 'reset' })
     setScannedData(undefined)
   }, [cancelEdit, artifactDispatch])
@@ -240,7 +249,9 @@ export function ArtifactEditor({
           fixedSlotKey ??
           getDefaultSlotKey(newValue.setKey)
       }
-      if (newValue.rarity) newValue.level = artifact?.level ?? 0
+      // a new artifact starts fully levelled (+20 for 5★): that is what most entered artifacts are
+      if (newValue.rarity)
+        newValue.level = artifact?.level ?? 4 * newValue.rarity
       if (newValue.level)
         newValue.level = clamp(
           newValue.level,
@@ -398,8 +409,19 @@ export function ArtifactEditor({
     substat: ISubstat,
     isChecked: boolean
   ) => {
+    setIsUnactivatedSubstat(isChecked)
     setSubstat(index, substat, isChecked)
   }
+
+  useEffect(() => {
+    if (level >= 4) {
+      setIsUnactivatedSubstat(false)
+    }
+
+    if (artifactIdToEdit && artifact?.unactivatedSubstats?.[0]?.key) {
+      setIsUnactivatedSubstat(true)
+    }
+  }, [artifact?.unactivatedSubstats, artifactIdToEdit, level])
 
   const removeId = (artifactIdToEdit !== 'new' && artifactIdToEdit) || old?.id
   return (
@@ -424,14 +446,7 @@ export function ArtifactEditor({
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Grid container spacing={1} columns={{ xs: 1, md: 2 }}>
             {/* Left column */}
-            <Grid
-              size={1}
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-              }}
-            >
+            <Grid item xs={1} display="flex" flexDirection="column" gap={1}>
               {/* set & rarity */}
               <Box sx={{ display: 'flex', gap: 1 }}>
                 {/* Artifact Set */}
@@ -454,12 +469,7 @@ export function ArtifactEditor({
               </Box>
 
               {/* level */}
-              <Box
-                component="div"
-                sx={{
-                  display: 'flex',
-                }}
-              >
+              <Box component="div" display="flex">
                 <CustomNumberTextField
                   id="filled-basic"
                   label={t('editor.level')}
@@ -502,12 +512,7 @@ export function ArtifactEditor({
               </Box>
 
               {/* slot */}
-              <Box
-                component="div"
-                sx={{
-                  display: 'flex',
-                }}
-              >
+              <Box component="div" display="flex">
                 <ArtifactSlotDropdown
                   disabled={
                     disableEditSlot ||
@@ -521,11 +526,7 @@ export function ArtifactEditor({
                 />
                 <CardThemed bgt="light" sx={{ p: 1, ml: 1, flexGrow: 1 }}>
                   <Suspense fallback={<Skeleton width="60%" />}>
-                    <Typography
-                      sx={{
-                        color: 'text.secondary',
-                      }}
-                    >
+                    <Typography color="text.secondary">
                       {artifact ? (
                         <span>
                           <ImgIcon
@@ -551,11 +552,9 @@ export function ArtifactEditor({
               {/* main stat */}
               <Box
                 component="div"
+                display="flex"
+                gap={1}
                 data-testid="main-stat"
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                }}
               >
                 <DropdownButton
                   startIcon={
@@ -587,11 +586,7 @@ export function ArtifactEditor({
                   ))}
                 </DropdownButton>
                 <CardThemed bgt="light" sx={{ p: 1, flexGrow: 1 }}>
-                  <Typography
-                    sx={{
-                      color: 'text.secondary',
-                    }}
-                  >
+                  <Typography color="text.secondary">
                     {artifact
                       ? getMainStatDisplayStr(
                           artifact.mainStatKey,
@@ -637,18 +632,8 @@ export function ArtifactEditor({
                   >
                     {/* TODO: artifactDispatch not overwrite */}
                     <Suspense fallback={<Skeleton width="100%" height="100" />}>
-                      <Grid
-                        container
-                        spacing={1}
-                        sx={{
-                          alignItems: 'center',
-                        }}
-                      >
-                        <Grid
-                          sx={{
-                            flexGrow: 1,
-                          }}
-                        >
+                      <Grid container spacing={1} alignItems="center">
+                        <Grid item flexGrow={1}>
                           <label htmlFor="contained-button-file">
                             <InputInvis
                               accept="image/*"
@@ -659,7 +644,6 @@ export function ArtifactEditor({
                             />
                             <Button
                               component="span"
-                              nativeButton={false}
                               startIcon={<PhotoCamera />}
                             >
                               {t('editor.uploadBtn')}
@@ -669,11 +653,11 @@ export function ArtifactEditor({
                           </label>
                         </Grid>
                         {shouldShowDevComponents && debugImgs && (
-                          <Grid>
+                          <Grid item>
                             <DebugModal imgs={debugImgs} />
                           </Grid>
                         )}
-                        <Grid>
+                        <Grid item>
                           <Button
                             color="info"
                             sx={{ px: 2, minWidth: 0 }}
@@ -685,24 +669,17 @@ export function ArtifactEditor({
                       </Grid>
 
                       {imageURL && (
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                          }}
-                        >
+                        <Box display="flex" justifyContent="center">
                           <Box
                             component="img"
                             src={imageURL}
+                            width="100%"
+                            maxWidth={350}
+                            height="auto"
                             alt={
                               fileName ||
                               'Screenshot to parse for artifact values'
                             }
-                            sx={{
-                              width: '100%',
-                              maxWidth: 350,
-                              height: 'auto',
-                            }}
                           />
                         </Box>
                       )}
@@ -717,12 +694,7 @@ export function ArtifactEditor({
                       )}
                       {!!queueTotal && (
                         <CardThemed sx={{ pl: 2 }}>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                            }}
-                          >
+                          <Box display="flex" alignItems="center">
                             {!!scanningNum && <CircularProgress size="1em" />}
                             <Typography sx={{ flexGrow: 1, ml: 1 }}>
                               <span>
@@ -748,14 +720,7 @@ export function ArtifactEditor({
               )}
             </Grid>
             {/* Right column */}
-            <Grid
-              size={1}
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 1,
-              }}
-            >
+            <Grid item xs={1} display="flex" flexDirection="column" gap={1}>
               {/* substat selections */}
               {[0, 1, 2, 3].map((index) => (
                 <SubstatInput
@@ -765,6 +730,7 @@ export function ArtifactEditor({
                   setSubstat={setSubstat}
                   setInitialSubstatValue={setInitialSubstatValue}
                   onChange={handleChange}
+                  isUnactivatedSubstat={isUnactivatedSubstat}
                 />
               ))}
               {texts && (
@@ -789,21 +755,13 @@ export function ArtifactEditor({
           {/* Duplicate/Updated/Edit UI */}
           {old && (
             <Grid container sx={{ justifyContent: 'space-around' }} spacing={1}>
-              <Grid
-                size={{
-                  xs: 12,
-                  md: 5.5,
-                  lg: 4,
-                }}
-              >
+              <Grid item xs={12} md={5.5} lg={4}>
                 <CardThemed bgt="light">
                   <Typography
+                    sx={{ textAlign: 'center' }}
+                    py={1}
                     variant="h6"
-                    sx={{
-                      py: 1,
-                      color: 'text.secondary',
-                      textAlign: 'center',
-                    }}
+                    color="text.secondary"
                   >
                     {oldType !== 'edit'
                       ? oldType === 'duplicate'
@@ -816,35 +774,24 @@ export function ArtifactEditor({
               </Grid>
               {grmd && (
                 <Grid
-                  size={{
-                    md: 1,
-                  }}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
+                  item
+                  md={1}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
                 >
                   <CardThemed bgt="light" sx={{ display: 'flex' }}>
                     <ChevronRight sx={{ fontSize: 40 }} />
                   </CardThemed>
                 </Grid>
               )}
-              <Grid
-                size={{
-                  xs: 12,
-                  md: 5.5,
-                  lg: 4,
-                }}
-              >
+              <Grid item xs={12} md={5.5} lg={4}>
                 <CardThemed bgt="light">
                   <Typography
+                    sx={{ textAlign: 'center' }}
+                    py={1}
                     variant="h6"
-                    sx={{
-                      py: 1,
-                      color: 'text.secondary',
-                      textAlign: 'center',
-                    }}
+                    color="text.secondary"
                   >
                     {t('editor.preview')}
                   </Typography>
@@ -854,21 +801,29 @@ export function ArtifactEditor({
             </Grid>
           )}
 
-          {/* Error alert */}
+          {/* Error alert: only a hint until the first substat is entered (a fresh +20 artifact
+              "has 0 rolls" by definition, which is not a mistake yet) */}
           {!isValid && (
-            <Alert variant="filled" severity="error">
+            <Alert
+              variant={
+                artifact?.substats.some((s) => s.key) ? 'filled' : 'outlined'
+              }
+              severity={
+                artifact?.substats.some((s) => s.key) ? 'error' : 'info'
+              }
+            >
               {errors.map((e, i) => (
                 <div key={i}>{e}</div>
               ))}
             </Alert>
           )}
+          {!!justAdded && !artifact && (
+            <Alert severity="success" variant="outlined">
+              {t('editor.added')}
+            </Alert>
+          )}
           {/* Buttons */}
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-            }}
-          >
+          <Box display="flex" gap={2}>
             {oldType === 'edit' ? (
               <Button
                 startIcon={<Add />}
@@ -890,6 +845,7 @@ export function ArtifactEditor({
                 startIcon={<Add />}
                 onClick={() => {
                   database.arts.new(artifact!)
+                  setJustAdded(Date.now())
                   if (!allowEmpty) {
                     setShow(false)
                     cancelEdit()
@@ -979,13 +935,7 @@ function DebugModal({ imgs }: { imgs: Record<string, string> }) {
               {Object.entries(imgs).map(([key, url]) => (
                 <Box key={key}>
                   <Typography>{key}</Typography>
-                  <Box
-                    component="img"
-                    src={url}
-                    sx={{
-                      maxWidth: '100%',
-                    }}
-                  />
+                  <Box component="img" src={url} maxWidth="100%" />
                 </Box>
               ))}
             </Stack>

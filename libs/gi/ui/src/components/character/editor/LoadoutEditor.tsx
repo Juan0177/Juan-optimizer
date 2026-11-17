@@ -11,7 +11,6 @@ import {
   useOptConfig,
   useTeamChar,
 } from '@genshin-optimizer/gi/db-ui'
-import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import AddIcon from '@mui/icons-material/Add'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import CheckroomIcon from '@mui/icons-material/Checkroom'
@@ -38,6 +37,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { OptimizationIcon } from '../../../consts'
 import { useAddTeamForLoadout } from '../../../hooks'
+import { statName } from '../../../util/statName'
 import { DocumentDisplay } from '../../DocumentDisplay'
 import { LoadoutInfoAlert } from '../../loadout'
 import { TeamCard, TeamInfoAlert } from '../../team'
@@ -97,13 +97,7 @@ export function LoadoutEditor({
       <CardThemed>
         <CardHeader
           title={
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 1,
-                alignItems: 'center',
-              }}
-            >
+            <Box display="flex" gap={1} alignItems="center">
               <PersonIcon />
               <strong>{name}</strong>
             </Box>
@@ -136,7 +130,7 @@ export function LoadoutEditor({
           />
           <Box>
             <Grid container columns={{ xs: 1, md: 2 }} spacing={2}>
-              <Grid size={1}>
+              <Grid item xs={1}>
                 <Button
                   color="info"
                   onClick={() => onDup()}
@@ -146,7 +140,7 @@ export function LoadoutEditor({
                   {t('loadoutEditor.dupBtn')}
                 </Button>
               </Grid>
-              <Grid size={1}>
+              <Grid item xs={1}>
                 <RemoveLoadout
                   show={showRemoval}
                   onHide={onHideRemoval}
@@ -170,12 +164,12 @@ export function LoadoutEditor({
           <Box>
             <Grid container columns={{ xs: 1, md: 2 }} spacing={2}>
               {!!Object.keys(bonusStats).length && (
-                <Grid size={1}>
+                <Grid item xs={1}>
                   <BonusStatsCard bonusStats={bonusStats} />
                 </Grid>
               )}
               {!!optimizationTarget && (
-                <Grid size={1}>
+                <Grid item xs={1}>
                   <CardThemed bgt="light">
                     <CardHeader
                       title={
@@ -207,11 +201,11 @@ export function LoadoutEditor({
                 </Grid>
               )}
               {!!customMultiTargets.length && (
-                <Grid size={1}>
+                <Grid item xs={1}>
                   <MultiTargetCard customMultiTargets={customMultiTargets} />
                 </Grid>
               )}
-              <Grid size={1}>
+              <Grid item xs={1}>
                 <CardThemed bgt="light">
                   <CardContent>
                     <Typography variant="h6">
@@ -238,7 +232,7 @@ export function LoadoutEditor({
           <TeamInfoAlert />
           <Grid container columns={{ xs: 1, md: 2 }} spacing={2}>
             {teamIds.map((teamId) => (
-              <Grid key={teamId} size={1}>
+              <Grid item xs={1} key={teamId}>
                 <TeamCard
                   bgt="light"
                   teamId={teamId}
@@ -248,7 +242,7 @@ export function LoadoutEditor({
                 />
               </Grid>
             ))}
-            <Grid size={1}>
+            <Grid item xs={1}>
               <Button
                 fullWidth
                 sx={{ height: '100%', backgroundColor: 'contentLight.main' }}
@@ -288,9 +282,7 @@ function BonusStatsCard({
             <span>{t('loadoutEditor.bonusStats')}</span>
           </Box>
         }
-        slotProps={{
-          title: { variant: 'h6' },
-        }}
+        titleTypographyProps={{ variant: 'h6' }}
       />
 
       <DocumentDisplay
@@ -298,7 +290,7 @@ function BonusStatsCard({
         sections={[
           {
             fields: Object.entries(bonusStats).map(([key, value]) => ({
-              text: KeyMap.getStr(key) ?? key,
+              text: statName(key),
               value: value,
               unit: getUnitStr(key),
             })),
@@ -329,9 +321,7 @@ function MultiTargetCard({
             <span>{t('loadoutEditor.mltTargets')}</span>
           </Box>
         }
-        slotProps={{
-          title: { variant: 'h6' },
-        }}
+        titleTypographyProps={{ variant: 'h6' }}
       />
 
       <DocumentDisplay

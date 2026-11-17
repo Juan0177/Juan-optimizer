@@ -241,10 +241,6 @@ allStellarReactionKeys.forEach((sr) => {
     `${transformativeReactions[sr].name} Direct DMG Increase`
   statMap[`${sr}_mult_`] = `${transformativeReactions[sr].name} Multiplier`
 })
-// One-off for Valeriy C6
-statMap['stellarconduct_electro_critDMG_'] = 'Stellar-Conduct Electro CRIT DMG'
-// juanlab-beta 7.3: Anastasya A4
-statMap['stellarswirl_reactionMult_'] = 'Stellar Swirl Base Reaction Multiplier'
 
 type TransformativeReactionsCritRateKey =
   `${CrittableTransformativeReactionsKey}_critRate_`
@@ -300,13 +296,19 @@ export type StatKey =
   | StellarReactionsReactionDmgIncKey
   | StellarReactionsDirectDmgIncKey
   | StellarReactionsMultKey
-  | 'stellarconduct_electro_critDMG_'
-  | 'stellarswirl_reactionMult_'
   | CrystallizeKey
   | AmplifyingReactionsDmgKey
   | AmplifyingReactionsMultiKey
   | AdditiveReactionsDmgKey
   | AdditiveReactionsDmgIncKey
+
+/**
+ * Every stat key and its English name: the source of the `keymap` locale namespace, which holds
+ * these names in each language (the app shows them through `statName` in gi/ui).
+ */
+export function allKeyMapEntries(): [string, string][] {
+  return Object.entries(statMap)
+}
 
 /**
  * @deprecated This hosts a lot of key-> english string translations, but should not be used beyond Waverider.

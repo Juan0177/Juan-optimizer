@@ -1,0 +1,17 @@
+# Stellar Optimizer feedback: a Cloudflare Worker that only accepts posts and keeps them in Workers KV
+# (nothing is readable through it). Read them with `node tools/site/feedback.mjs`, which uses your own
+# wrangler login, or in the Cloudflare dashboard (Workers KV → stellar-feedback).
+# Local: `npx wrangler@4 dev` (a local KV); deploy: `npx wrangler@4 deploy` after creating the namespace
+# (done: `npx wrangler@4 kv namespace create FEEDBACK`, id below).
+name = "stellar-feedback"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+# (served on the site's own domain; no workers.dev address)
+workers_dev = false
+routes = [
+  { pattern = "stellaroptimizer.com/api/feedback", zone_name = "stellaroptimizer.com" },
+]
+
+[[kv_namespaces]]
+binding = "FEEDBACK"
+id = "86e547589c2e4532ae7295e5f9e46572"

@@ -37,46 +37,28 @@ export function UploadExplainationModal({
               <strong>ENGLISH</strong> artifacts.
             </Trans>
           </Alert>
-          <Grid
-            container
-            spacing={1}
-            sx={{
-              mt: 1,
-            }}
-          >
-            <Grid
-              size={{
-                xs: 8,
-                md: 6,
-              }}
-            >
+          <Grid container spacing={1} mt={1}>
+            <Grid item xs={8} md={6}>
               <Box
                 component="img"
                 alt="snippet of the screen to take"
                 src={Snippet}
-                sx={{
-                  width: '100%',
-                  height: 'auto',
-                }}
+                width="100%"
+                height="auto"
               />
             </Grid>
-            <Grid
-              size={{
-                xs: 12,
-                md: 6,
-              }}
-            >
+            <Grid item xs={12} md={6}>
               <Trans t={t} i18nKey="editor.uploadExp.section1">
                 <Typography gutterBottom>
                   Using screenshots can dramatically decrease the amount of time
-                  you manually input in stats on the Genshin Optimizer.
+                  you manually input in stats on Juan-optimizer.
                 </Typography>
                 <Typography variant="h5">
                   Where to snip the screenshot.
                 </Typography>
                 <Typography gutterBottom>
                   In game, Open your bag, and navigate to the artifacts tab.
-                  Select the artifact you want to scan with Genshin Optimizer.{' '}
+                  Select the artifact you want to scan with Juan-optimizer.{' '}
                   <b>Only artifact from this screen can be scanned.</b>
                 </Typography>
                 <Typography variant="h6">Single artifact</Typography>
@@ -107,15 +89,10 @@ export function UploadExplainationModal({
                 </Typography>
               </Trans>
             </Grid>
-            <Grid
-              size={{
-                xs: 12,
-                md: 7,
-              }}
-            >
+            <Grid item xs={12} md={7}>
               <Trans t={t} i18nKey="editor.uploadExp.section2">
                 <Typography variant="h5">
-                  Adding Screenshot to Genshin Optimizer
+                  Adding Screenshot to Juan-optimizer
                 </Typography>
                 <Typography>
                   At this point, you should have the artifact screenshot either
@@ -144,20 +121,13 @@ export function UploadExplainationModal({
                 </Typography>
               </Trans>
             </Grid>
-            <Grid
-              size={{
-                xs: 8,
-                md: 5,
-              }}
-            >
+            <Grid item xs={8} md={5}>
               <Box
                 component="img"
                 alt="main screen after importing stats"
                 src={scan_art_main}
-                sx={{
-                  width: '100%',
-                  height: 'auto',
-                }}
+                width="100%"
+                height="auto"
               />
             </Grid>
           </Grid>

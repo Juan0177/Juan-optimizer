@@ -11,15 +11,10 @@ import artifactcard from './artifactcard.png'
 import artifacteditor from './artifacteditor.png'
 import artifactfilter from './artifactfilter.png'
 
+// Renders block elements (progress bars): the Typography around it must be a div, not a <p>.
 function Colors() {
   return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        gap: 0.3,
-        height: '1.5em',
-      }}
-    >
+    <Box display="inline-flex" gap={0.3} sx={{ height: '1.5em' }}>
       {range(0, 5).map((s) => (
         <SmolProgress
           color={`roll${s + 1}.main`}
@@ -34,25 +29,13 @@ export default function ArtifactInfoDisplay() {
   const { t } = useTranslation('artifact')
   return (
     <Grid container spacing={1}>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 5,
-          xl: 4,
-        }}
-      >
+      <Grid item xs={12} lg={5} xl={4}>
         <ImgFullwidth src={artifactcard} />
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 7,
-          xl: 8,
-        }}
-      >
+      <Grid item xs={12} lg={7} xl={8}>
         <Trans t={t} i18nKey="info.section1">
           <Typography variant="h5">Substat rolls</Typography>
-          <Typography gutterBottom>
+          <Typography gutterBottom component="div">
             The <b>number of rolls</b> a substat has is shown to the left of the
             substat. As the number gets higher, the substat is more colorful:
             <Colors />.
@@ -80,13 +63,7 @@ export default function ArtifactInfoDisplay() {
           </Typography>
         </Trans>
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 6,
-          xl: 7,
-        }}
-      >
+      <Grid item xs={12} lg={6} xl={7}>
         <Trans t={t} i18nKey="info.section2">
           <Typography variant="h5">Artifact Editor</Typography>
           <Typography gutterBottom>
@@ -113,14 +90,15 @@ export default function ArtifactInfoDisplay() {
             <Link component={RouterLink} to="/scanner">
               Click here
             </Link>
-            for a list of scanners that are compatible with GO.
+            for a list of scanners that are compatible with Juan-optimizer.
           </Typography>
 
           <Typography variant="h5">
             Duplicate/Upgrade artifact detection
           </Typography>
           <Typography>
-            Did you know GO can detect if you are adding a <b>duplicate</b>
+            Did you know Juan-optimizer can detect if you are adding a{' '}
+            <b>duplicate</b>
             artifact that exists in the system? It can also detect if the
             current artifact in editor is an <b>upgrade</b> of an existing
             artifact as well. Once a duplicate/upgrade is detected, a preview
@@ -128,37 +106,19 @@ export default function ArtifactInfoDisplay() {
           </Typography>
         </Trans>
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 6,
-          xl: 5,
-        }}
-      >
+      <Grid item xs={12} lg={6} xl={5}>
         <ImgFullwidth src={artifacteditor} />
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 7,
-          xl: 6,
-        }}
-      >
+      <Grid item xs={12} lg={7} xl={6}>
         <ImgFullwidth src={artifactfilter} />
       </Grid>
-      <Grid
-        size={{
-          xs: 12,
-          lg: 5,
-          xl: 6,
-        }}
-      >
+      <Grid item xs={12} lg={5} xl={6}>
         <Trans t={t} i18nKey="info.section3">
           <Typography variant="h5">Artifact Inventory</Typography>
           <Typography gutterBottom>
-            All your artifacts that you've added to GO are displayed here. The
-            filters here allow you to further refine your view of your
-            artifacts.{' '}
+            All your artifacts that you've added to Juan-optimizer are
+            displayed here. The filters here allow you to further refine your
+            view of your artifacts.{' '}
           </Typography>
           <Typography variant="h5">
             Example: Finding Fodder Artifacts

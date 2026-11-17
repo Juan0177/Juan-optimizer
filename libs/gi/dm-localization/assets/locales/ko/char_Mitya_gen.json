@@ -52,7 +52,7 @@
     },
     "skillParams": {
       "0": "짧은 터치 스킬 피해",
-      "1": "차지 스킬 피해",
+      "1": "홀드 스킬 피해",
       "2": "안정 융합로 피해",
       "3": "안정 융합로의 융합 비콘 소모 피해",
       "4": "안정 융합로 폭발 피해",
@@ -132,7 +132,7 @@
     }
   },
   "constellation1": {
-    "name": "빈자리를 추적하는 관측자",
+    "name": "공백을 추적하는 관측자",
     "description": {
       "0": "<strong><tooltip ns=tooltips_gen baseKey18=11360001 values=[]>융합 비콘</tooltip></strong>의 보유 상한이 5개로 증가한다. 원소전투 스킬 <strong>법칙·변수 탐지</strong> 발동 시, 추가로 1개의 <strong>융합 비콘</strong>을 생성한다.",
       "1": "<strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>탐지 융합로</tooltip></strong> 존재 기간 동안, 현재 필드 위에 있는 파티 내 자신의 캐릭터의 치명타 피해가 40% 증가한다.",
@@ -176,7 +176,7 @@
       "0": "<strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>탐지 융합로</tooltip></strong>가 강화된다. 생성한 <strong>탐지 융합로</strong>가:",
       "1": [
         "안정: <strong>탐지 융합로</strong>가 기존의 115%에 해당하는 피해를 준다.",
-        "과열: <strong><tooltip ns=tooltips_gen baseKey18=11360001 values=[]>융합 비콘</tooltip></strong>을 소모할 때, 34%의 확률로 새로운 <strong>융합 비콘</strong>을 1개 생성한다."
+        "과열: <strong><tooltip ns=tooltips_gen baseKey18=11360001 values=[]>융합 비콘</tooltip></strong> 소모 시, 34%의 확률로 새로운 <strong>융합 비콘</strong>을 1개 생성한다."
       ],
       "2": "또한, 주변에 있는 파티 내 모든 캐릭터가 주는 별 초전도 반응 피해가 20% <strong><tooltip ns=tooltips_gen baseKey18=11190007 values=[]>승격</tooltip></strong>된다"
     }

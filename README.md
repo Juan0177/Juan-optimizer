@@ -1,35 +1,46 @@
 # Juan-optimizer
 
-Copia personale di [Genshin Optimizer](https://github.com/frzyc/genshin-optimizer) (licenza MIT) per [JuanLab](https://juan0177.github.io/JuanLab/).
+Copia di [Stellar Optimizer](https://github.com/s-naveen/stellar-optimizer) (licenza AGPL v3), a sua volta basato su
+[Genshin Optimizer](https://github.com/frzyc/genshin-optimizer) (licenza MIT), per [JuanLab](https://juan0177.github.io/JuanLab/).
+
+**Licenza: GNU AGPL v3 o successiva** (`LICENSE`; avvisi in `NOTICE` e `LICENSE-GENSHIN-OPTIMIZER`). Chi usa il sito deve
+poter avere il codice sorgente: è questo repository, ed è linkato nei crediti della home e in `LICENSE.txt` del sito.
 
 - **Sito:** https://juan0177.github.io/Juan-optimizer/
 - **Ramo di lavoro e predefinito:** `juanlab`. Il ramo `master` non si usa.
-- **Staccato dall'originale:** da qui non partono mai commit, pull request o issue verso `frzyc/genshin-optimizer`. Dall'originale si prendono solo gli aggiornamenti, quando li lanci tu.
+- **Staccato dagli originali:** da qui non partono mai commit, pull request o issue verso `frzyc/genshin-optimizer` o
+  `s-naveen/stellar-optimizer`. Da Stellar Optimizer si prendono solo gli aggiornamenti, quando li lanci tu.
 
 ## Cosa contiene
 
-Solo Genshin Optimizer: l'app `apps/frontend` e le librerie che usa (`libs/gi`, `libs/common`, `libs/pando`, `libs/game-opt`).
-Sono stati tolti Star Rail (`libs/sr`, `apps/sr-frontend`), Zenless (`libs/zzz`, `apps/zzz-frontend`), il bot Somnia, il frontend sperimentale `apps/gi-frontend` e i workflow dell'originale.
+La base è [Stellar Optimizer](https://github.com/s-naveen/stellar-optimizer) (solo Genshin): ottimizzatore riscritto,
+rotazioni simulate con la logica di gioco, KQM Theorycrafting (build KQM, calcolatore ER, confronto costellazioni) e i
+contenuti della beta presi dal dump del gioco (`apps/frontend/beta-content.json`, `tools/dump-import`).
+Sopra ci sono le aggiunte di JuanLab (marcatore `juanlab` nel codice, elenco sotto): import da UID con Enka o Akasha,
+collegamento a gc-web, home e crediti, italiano come lingua predefinita, nome e logo del fork.
 
-Le build si caricano dalla vetrina di Enka o da Akasha (import da UID tramite il Worker di JuanLab) o arrivano da gc-web con un link.
-I personaggi della beta verranno dopo: il piano è nel documento "Genshin Optimizer di JuanLab: specifica e piano".
+Del sito di Stellar sono stati tolti: le statistiche Cloudflare, il pulsante Feedback (mandava i messaggi al suo server),
+i link al suo sito pubblicato e alle donazioni, e i suoi workflow di pubblicazione.
 
-## Aggiornare dall'originale
+## Aggiornare da Stellar Optimizer
 
-Non parte da solo. Il 1° e il 15 di ogni mese c'è un promemoria nel calendario.
+Non parte da solo.
 
-1. Guarda se ci sono novità: https://github.com/frzyc/genshin-optimizer/commits/master
+1. Guarda se ci sono novità: https://github.com/s-naveen/stellar-optimizer/commits/main
 2. Lancia **Actions → "JuanLab - sync e Pages" → Run workflow** sul ramo `juanlab`.
 
 Il workflow (`.github/workflows/juanlab-pages.yml`):
 
-- unisce `frzyc/genshin-optimizer` (`master`) in `juanlab` e toglie di nuovo le parti che non servono, anche se l'originale le ha modificate, così non diventano conflitti;
+- unisce `s-naveen/stellar-optimizer` (`main`) in `juanlab`, tiene solo il nostro workflow e sempre la nostra versione di
+  README, home, `index.html` e avvisi di licenza (`NOTICE`, `apps/frontend/public/LICENSE.txt`);
 - costruisce il sito e lo pubblica su GitHub Pages;
 - a ogni push su `juanlab` ricostruisce e ripubblica;
-- se l'unione ha un conflitto vero (nelle parti di Genshin) non pubblica nulla e prova ad aprire una issue "Sync da upstream non riuscito": il sito resta all'ultima versione buona.
+- se l'unione ha un conflitto vero non pubblica nulla e prova ad aprire una issue "Sync da Stellar Optimizer non
+  riuscito": il sito resta all'ultima versione buona.
 
-Quando l'originale modifica i propri workflow, il token predefinito delle Actions non può fare il push dell'unione.
-Per evitarlo aggiungi un secret `SYNC_TOKEN` (token personale con permessi `contents` e `workflows` su questo repository); senza, in quei casi si unisce a mano.
+Gli aggiornamenti di Genshin Optimizer arrivano tramite Stellar Optimizer, che li unisce lui.
+Quando Stellar modifica i propri workflow, il token predefinito delle Actions non può fare il push dell'unione:
+serve un secret `SYNC_TOKEN` (token personale con permessi `contents` e `workflows`), altrimenti si unisce a mano.
 
 ## Impostazioni del repository
 
@@ -76,20 +87,19 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
     inventario) nella forma della vetrina di Enka: la home li importa con lo stesso convertitore dell'import da UID.
   - Il link porta un formato neutro con gli ID del gioco (`JuanLabBuild` versione 1: set, slot `EQUIP_…`, statistiche
     `FIGHT_PROP_…` con il valore mostrato in gioco), uguale a `public/juanlab.js` di gc-web.
-- **Contenuti della beta** (marcatore `juanlab-beta`, dettagli in `libs/gi/dm/juanlab-beta/README.md`): la 7.3 (Danica,
-  Anastasya, Torrents of Spring, Silverdawn, Blazing Lionfang, Epochal Advent, Empyrean Sojourn) dai dati di Nanoka,
-  generati con lo stesso percorso della pipeline beta di GO e controllati su gachabase. Le schede mostrano l'avviso
-  "dati provvisori".
-- **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, inventario, squadre e crediti;
-  tolti pubblicità, link a social e donazioni, video guida, note di versione e resina.
-- **Niente pubblicità** in tutto il sito (`ADS_ENABLED = false` in `libs/common/ad/src/consts.ts`).
-- **Correzione** in `libs/common/ui/src/components/GeneralAutocomplete.tsx`: le opzioni dei campi di ricerca (set, armi,
-  personaggi) usavano `MenuItem`, che con MUI 9 manda in crash l'editor dei manufatti ("MenuListContext is missing").
+- **Contenuti della beta**: vengono da Stellar Optimizer (kit dal dump della beta). Le schede dei personaggi beta mostrano
+  l'avviso "dati provvisori" (`libs/gi/ui/src/juanlab/beta.tsx`).
+- **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, i primi passi e
+  l'inventario di Stellar, crediti (GO, Stellar Optimizer, licenza AGPL e link al sorgente).
+- **Nome e logo** (`apps/frontend/src/app/Header.tsx`, `juan_logo.svg`, `public/favicon.svg`, `public/og-image.png`,
+  `index.html`, `ui.json`): Juan-optimizer al posto di Stellar Optimizer; il footer linka il sorgente del fork e Stellar.
+- **Italiano** come lingua predefinita (`libs/gi/i18n/src/i18n.ts`) e nomi delle statistiche in italiano
+  (`libs/gi/keymap/src/KeyMapIt.ts`).
 
-Durante il sync si tiene sempre la nostra versione di README e home; le altre modifiche sono piccole e, se upstream tocca
-le stesse righe, il sync si ferma e va unito a mano.
+Le altre modifiche sono piccole: se Stellar tocca le stesse righe, il sync si ferma e va unito a mano.
 
 ## Crediti
 
-Genshin Optimizer è di [frzyc](https://github.com/frzyc) e dei suoi contributori, con licenza MIT (vedi `LICENSE`).
-Genshin Impact è di HoYoverse; questo progetto non è affiliato a HoYoverse.
+Stellar Optimizer è di s-naveen e dei suoi contributori, con licenza GNU AGPL v3 (vedi `LICENSE` e `NOTICE`).
+Genshin Optimizer è di [frzyc](https://github.com/frzyc) e dei suoi contributori, con licenza MIT (vedi
+`LICENSE-GENSHIN-OPTIMIZER`). Genshin Impact è di HoYoverse; questo progetto non è affiliato a HoYoverse.

@@ -23,21 +23,14 @@ export default function NewTab() {
       <ThemeProvider theme={theme}>
         <CssBaseline enableColorScheme />
         <Box
-          sx={{
-            display: 'flex',
-            minWidth: '100vw',
-            minHeight: '100vh',
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}
+          display="flex"
+          minWidth="100vw"
+          minHeight="100vh"
+          justifyContent="center"
+          alignItems="center"
         >
           <CardThemed bgt="light">
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-              }}
-            >
+            <Box display="flex" flexDirection="column">
               <CardContent
                 sx={{
                   display: 'flex',
@@ -50,11 +43,7 @@ export default function NewTab() {
                 <DynamicFeed />
               </CardContent>
               <Divider />
-              <Box
-                sx={{
-                  display: 'flex',
-                }}
-              >
+              <Box display="flex">
                 <CardContent sx={{ flexGrow: 1, maxWidth: 600 }}>
                   <Typography>{t`p1`}</Typography>
                   <ul>
@@ -72,10 +61,8 @@ export default function NewTab() {
                 <Box
                   component="img"
                   src={derp}
-                  sx={{
-                    maxWidth: 400,
-                    maxHeight: 400,
-                  }}
+                  maxWidth={400}
+                  maxHeight={400}
                 />
               </Box>
               <Divider />
