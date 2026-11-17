@@ -14,7 +14,12 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
-import type { KqmBuild, KqmStep } from '@genshin-optimizer/gi/ui'
+import type {
+  KqmBuild,
+  KqmSets,
+  KqmStep,
+  TeamData,
+} from '@genshin-optimizer/gi/ui'
 import {
   ArtifactSetName,
   CharacterName,
@@ -36,7 +41,6 @@ import {
   Checkbox,
   FormControl,
   FormControlLabel,
-  InputAdornment,
   InputLabel,
   LinearProgress,
   MenuItem,
@@ -70,13 +74,15 @@ import {
   numSx,
   Panel,
   Segmented,
+  tokens,
   type,
 } from '../ui'
 import { Overview } from './CompareOverview'
 import type { Side, SwapIn } from './compareSwapKqm'
 import { compareSwapKqm } from './compareSwapKqm'
 import { srOnly, WarningLine } from './compareUi'
-import { EnteringEnergy } from './EnteringSettings'
+import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
+import { EnteringSettings } from './EnteringSettings'
 import { swapFragment } from './swapFragment'
 
 /*
@@ -141,7 +147,14 @@ type RunState =
 
 const PROGRESS_MS = 120
 
-export default function KqmCompare({ teamId }: { teamId: string }) {
+export default function KqmCompare({
+  teamId,
+  teamData,
+}: {
+  teamId: string
+  /** The team's data: where the entering member's effect states that depend on a character are read */
+  teamData?: TeamData
+}) {
   const { t, i18n } = useTranslation(['juanlab', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -178,6 +191,11 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
   const [weapon, setWeapon] = useState<WeaponKey | ''>('')
   const [refinement, setRefinement] = useState(1)
   const [setKey, setSetKey] = useState<ArtifactSetKey | ''>('')
+  /** 4 pieces of one set, or 2 + 2 */
+  const [setMode, setSetMode] = useState<'4' | '2+2'>('4')
+  const [setKey2, setSetKey2] = useState<ArtifactSetKey | ''>('')
+  const [passives, setPassives] = useState<EnteringPassives>({})
+  const [weaponEnergy, setWeaponEnergy] = useState<EnteringWeaponEnergy>({})
   const [erText, setErText] = useState('')
   const [calcOwn, setCalcOwn] = useState<TeamOptEnergyMember>()
   const [fragment, setFragment] = useState('')
@@ -189,8 +207,11 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
     setConstellation(key ? kqmMemberConstellation(key, undefined) : 0)
     setWeapon('')
     setSetKey('')
+    setSetKey2('')
     setErText('')
     setCalcOwn(undefined)
+    setPassives({})
+    setWeaponEnergy({})
   }
 
   const weapons = useMemo(
@@ -212,10 +233,29 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
   const erInvalid =
     erValue !== undefined && !(Number.isFinite(erValue) && erValue >= 100)
 
+  // the fixed sets: 4 pieces, or 2 + 2 of two different sets
+  const pickedSets: KqmSets | undefined = useMemo(
+    () =>
+      setMode === '4'
+        ? setKey
+          ? { [setKey]: 4 }
+          : undefined
+        : setKey && setKey2 && setKey !== setKey2
+          ? { [setKey]: 2, [setKey2]: 2 }
+          : undefined,
+    [setMode, setKey, setKey2]
+  )
   const swapIn: SwapIn | undefined = useMemo(() => {
     if (!inKey) return undefined
-    if (!auto && (!weapon || !setKey)) return undefined
+    if (!auto && (!weapon || !pickedSets)) return undefined
+    const energyEntries = Object.entries(weaponEnergy).filter(([, v]) => v)
     const own: Partial<TeamOptKqm> = {
+      ...(Object.keys(passives).length && { passives: { [inKey]: passives } }),
+      ...(energyEntries.length && {
+        weaponEnergy: Object.fromEntries(
+          energyEntries.map(([w, v]) => [w, { [inKey]: v }])
+        ),
+      }),
       ...(!calculator &&
         erValue !== undefined &&
         !erInvalid && { energyRecharge: { [inKey]: erValue } }),
@@ -232,7 +272,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
       key: inKey,
       constellation,
       weapon: auto ? 'auto' : { key: weapon as WeaponKey, refinement },
-      sets: auto ? 'auto' : { [setKey as ArtifactSetKey]: 4 },
+      sets: auto ? 'auto' : pickedSets!,
       build: 'kqm',
       kqm: own,
     }
@@ -240,7 +280,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
     inKey,
     auto,
     weapon,
-    setKey,
+    pickedSets,
     refinement,
     constellation,
     calculator,
@@ -248,6 +288,8 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
     erInvalid,
     calcOwn,
     teamKqm,
+    passives,
+    weaponEnergy,
   ])
 
   // B's rotation, as the comparison will play it
@@ -311,7 +353,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
         ? t('kqmCompare.need.out')
         : !inKey
           ? t('kqmCompare.need.in')
-          : !auto && (!weapon || !setKey)
+          : !auto && (!weapon || !pickedSets)
             ? t('kqmCompare.need.gear')
             : erInvalid
               ? t('kqmCompare.need.er')
@@ -403,6 +445,9 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
   const recorded = run?.teamOpt?.kqm?.energyRotation
   const rotationChanged =
     recorded !== undefined && recorded.trim() !== text.trim()
+  // (A's damage is for the attacks entered, not the written rotation played)
+  const notPlayed =
+    !!run && (run as { rotation?: string }).rotation !== 'played'
   const percent = Math.round((step?.progress ?? 0) * 100)
 
   return (
@@ -548,7 +593,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                     labelId={`${titleId}-cons`}
                     label={t('kqmCompare.constellation')}
                     value={constellation}
-                    disabled={!inKey}
+                    disabled={!inKey || running}
                     onChange={(e) => setConstellation(Number(e.target.value))}
                     sx={numSx}
                   >
@@ -596,7 +641,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                       labelId={`${titleId}-weapon`}
                       label={t('kqmCompare.weapon')}
                       value={auto ? '' : weapon}
-                      disabled={auto}
+                      disabled={auto || running}
                       onChange={(e) => {
                         const key = e.target.value as WeaponKey
                         setWeapon(key)
@@ -620,7 +665,7 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                       labelId={`${titleId}-ref`}
                       label={t('kqmCompare.refinement')}
                       value={refinement}
-                      disabled={auto}
+                      disabled={auto || running}
                       onChange={(e) => setRefinement(Number(e.target.value))}
                       sx={numSx}
                     >
@@ -631,29 +676,57 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                       ))}
                     </Select>
                   </FormControl>
-                  <FormControl
+                  <Segmented
                     size="small"
-                    sx={{ width: { xs: '100%', sm: 240 } }}
-                  >
-                    <InputLabel id={`${titleId}-sets`}>
-                      {t('kqmCompare.sets')}
-                    </InputLabel>
-                    <Select
-                      labelId={`${titleId}-sets`}
-                      label={t('kqmCompare.sets')}
-                      value={auto ? '' : setKey}
-                      disabled={auto}
-                      onChange={(e) =>
-                        setSetKey(e.target.value as ArtifactSetKey)
-                      }
+                    aria-label={t('kqmCompare.setMode')}
+                    value={setMode}
+                    onChange={setSetMode}
+                    options={[
+                      {
+                        value: '4',
+                        label: t('kqmCompare.sets4'),
+                        disabled: auto || running,
+                      },
+                      {
+                        value: '2+2',
+                        label: t('kqmCompare.sets22'),
+                        disabled: auto || running,
+                      },
+                    ]}
+                  />
+                  {(setMode === '4' ? [0] : [0, 1]).map((i) => (
+                    <FormControl
+                      key={i}
+                      size="small"
+                      sx={{ width: { xs: '100%', sm: 220 } }}
                     >
-                      {sets.map((s) => (
-                        <MenuItem key={s} value={s}>
-                          <ArtifactSetName setKey={s} />
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
+                      <InputLabel id={`${titleId}-sets${i}`}>
+                        {i ? t('kqmCompare.sets2') : t('kqmCompare.sets')}
+                      </InputLabel>
+                      <Select
+                        labelId={`${titleId}-sets${i}`}
+                        label={i ? t('kqmCompare.sets2') : t('kqmCompare.sets')}
+                        value={auto ? '' : i ? setKey2 : setKey}
+                        disabled={auto || running}
+                        onChange={(e) =>
+                          (i ? setSetKey2 : setSetKey)(
+                            e.target.value as ArtifactSetKey
+                          )
+                        }
+                      >
+                        {sets
+                          .filter(
+                            (s) =>
+                              setMode === '4' || s !== (i ? setKey : setKey2)
+                          )
+                          .map((s) => (
+                            <MenuItem key={s} value={s}>
+                              <ArtifactSetName setKey={s} />
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    </FormControl>
+                  ))}
                 </Box>
               </Row>
             )}
@@ -688,39 +761,45 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                 open={settingsOpen}
                 onToggle={() => setSettingsOpen((o) => !o)}
               >
-                {calculator ? (
-                  <EnteringEnergy
-                    teamId={teamId}
-                    saved={saved}
-                    out={out}
-                    swapIn={swapIn}
-                    text={text}
-                    opener={opener}
-                    fragment={fragment}
-                    ready={!!swapped?.ok}
-                    own={calcOwn}
-                    setOwn={setCalcOwn}
-                  />
-                ) : (
-                  <TextField
-                    size="small"
-                    label={t('kqmCompare.erTarget')}
-                    value={erText}
-                    placeholder="100"
-                    onChange={(e) => setErText(e.target.value)}
-                    error={erInvalid}
-                    InputProps={{
-                      endAdornment: (
-                        <InputAdornment position="end">%</InputAdornment>
-                      ),
-                    }}
-                    inputProps={{
-                      inputMode: 'decimal',
-                      style: { textAlign: 'right' },
-                    }}
-                    sx={{ width: 160, ...numSx }}
-                  />
-                )}
+                <EnteringSettings
+                  teamId={teamId}
+                  saved={saved}
+                  out={out}
+                  swapIn={swapIn}
+                  text={text}
+                  opener={opener}
+                  fragment={fragment}
+                  ready={!!swapped?.ok}
+                  calculator={calculator}
+                  erText={erText}
+                  setErText={setErText}
+                  erInvalid={erInvalid}
+                  calcOwn={calcOwn}
+                  setCalcOwn={setCalcOwn}
+                  passives={passives}
+                  setPassives={setPassives}
+                  weaponEnergy={weaponEnergy}
+                  setWeaponEnergy={setWeaponEnergy}
+                  data={
+                    out
+                      ? teamData?.[members.find((k) => k !== out) ?? out]
+                          ?.target
+                      : undefined
+                  }
+                  teammateWeapons={members
+                    .filter((k) => k !== out)
+                    .flatMap((k) => {
+                      const w = run?.result?.builds[k]?.weapon.key
+                      return w ? [w] : []
+                    })}
+                  teamKqm={teamKqm}
+                  pick={
+                    !auto && weapon && pickedSets
+                      ? { weapon, sets: pickedSets }
+                      : undefined
+                  }
+                  disabled={running}
+                />
               </Disclosure>
             )}
 
@@ -796,12 +875,26 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
                   onChange={(e) => setConfirmed(e.target.checked)}
                 />
               }
-              label={t('kqmCompare.confirm')}
+              label={t('kqmCompare.confirm', { date: savedAt })}
               sx={{ mr: 0 }}
             />
-            {rotationChanged && (
-              <Box role="status" sx={{ color: 'warning.main', fontSize: 13 }}>
-                <WarningLine>{t('kqmCompare.rotationChanged')}</WarningLine>
+            {(rotationChanged || notPlayed) && (
+              <Box
+                role="status"
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                  color: 'warning.main',
+                  fontSize: 13,
+                }}
+              >
+                {rotationChanged && (
+                  <WarningLine>{t('kqmCompare.rotationChanged')}</WarningLine>
+                )}
+                {notPlayed && (
+                  <WarningLine>{t('kqmCompare.notPlayed')}</WarningLine>
+                )}
               </Box>
             )}
             <Box
@@ -853,11 +946,17 @@ export default function KqmCompare({ teamId }: { teamId: string }) {
         )}
         {running && (
           <Box sx={{ mt: 1.5 }}>
+            {/* (the status line below announces it) */}
             <LinearProgress
               variant={step ? 'determinate' : 'indeterminate'}
               value={percent}
-              aria-label={t('kqmCompare.running', { percent })}
-              sx={{ height: 3, borderRadius: 1 }}
+              aria-hidden
+              sx={{
+                height: 3,
+                borderRadius: 1,
+                bgcolor: alpha(tokens.gold, 0.16),
+                '& .MuiLinearProgress-bar': { bgcolor: tokens.gold },
+              }}
             />
             <Typography role="status" sx={{ ...type.label, mt: 0.75 }}>
               {t('kqmCompare.running', { percent })}

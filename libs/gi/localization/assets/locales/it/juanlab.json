@@ -109,10 +109,10 @@
     "constellation": "Costellazione",
     "gear": "Arma e set",
     "auto": "Auto",
-    "autoTip": "Arma e set scelti dalla ricerca KQM, tra quelli ammessi nelle impostazioni di KQM Theorycrafting. Senza Auto, scegli un'arma e un set da 4 pezzi.",
+    "autoTip": "Arma e set scelti dalla ricerca KQM, tra quelli ammessi nelle impostazioni di KQM Theorycrafting. Senza Auto, scegli un'arma e 4 pezzi di un set o 2 + 2.",
     "weapon": "Arma",
     "refinement": "Raff.",
-    "sets": "Set (4 pezzi)",
+    "sets": "Set",
     "build": "Build",
     "buildKqm": "KQM",
     "buildExisting": "Esistente",
@@ -127,7 +127,7 @@
     "fragmentTip": "Solo le azioni di chi entra (per esempio E Q): prendono il posto del passo di chi esce nella rotazione di KQM Theorycrafting.",
     "preview": "Rotazione B",
     "opener": "Apertura",
-    "confirm": "I dati in KQM Theorycrafting sono definitivi",
+    "confirm": "I dati in KQM Theorycrafting (risultato del {{date}}) sono definitivi",
     "rotationChanged": "La rotazione è cambiata dopo il risultato di KQM Theorycrafting: A è stato calcolato su quella precedente.",
     "run": "Confronta",
     "cancel": "Annulla",
@@ -160,6 +160,19 @@
       "damage": "danno",
       "er": "ER",
       "erShort": "sotto l'obiettivo: {{value}}% su {{target}}%"
-    }
+    },
+    "notPlayed": "Il risultato di KQM Theorycrafting usa gli attacchi inseriti, non la rotazione scritta: A e B non sono calcolati allo stesso modo.",
+    "sets2": "Secondo set",
+    "setMode": "Pezzi",
+    "sets4": "4 pezzi",
+    "sets22": "2 + 2",
+    "erSection": "Ricarica energia",
+    "effects": "Effetti di armi e set",
+    "effectsTip": "Come in KQM Theorycrafting: gli effetti attivi per chi entra. Quelli che non tocchi seguono le regole di KQM (la rotazione B e gli elementi della squadra).",
+    "noEffects": "Nessun effetto da impostare",
+    "weaponEnergy": "Armi che danno energia",
+    "weaponEnergyTip": "Quanta ricarica energia in meno serve a chi entra mentre qualcuno in squadra B usa quest'arma, come nella lista armi di KQM Theorycrafting.",
+    "weaponEnergyField": "{{weapon}}: ER richiesta in meno",
+    "noEnergyWeapons": "Nessuna arma che dia energia"
   }
 }

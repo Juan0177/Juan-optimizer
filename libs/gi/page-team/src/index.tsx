@@ -276,7 +276,7 @@ function Page({ teamId }: { teamId: string }) {
           container, so sticky bars inside (the optimizer's generate bar) stick to the window */}
       {/* Team optimize and KQM: their sections are panels of their own, straight on the page */}
       {isKqmCompare ? (
-        <KqmCompare key={teamId} teamId={teamId} />
+        <KqmCompare key={teamId} teamId={teamId} teamData={teamData} />
       ) : isTeamBuild ? (
         <TeamBuildWorkspace
           key={teamId}

@@ -26,6 +26,7 @@ import {
   kqmExcludedWeapons,
   kqmGobletKeys,
   kqmMemberConstellation,
+  kqmRuleConditionals,
   kqmSandsKeys,
   kqmTalentLevel,
   optimizeTeamKqm,
@@ -437,18 +438,33 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
     teamOpt.kqm.energyCalculator
   ) {
     let energy: RotationEnergy | undefined
+    let seconds: number | undefined
     try {
-      energy = replayOf(teamOpt)?.({
+      const played = replayOf(teamOpt)?.({
         constellations: Object.fromEntries(
           keysB.map((k) => [k, kqmMemberConstellation(k, teamOpt.kqm)])
         ),
         gear: {},
         overrides: {},
-      })?.energy
+      })
+      energy = played?.energy
+      seconds = played?.rotationTime
     } catch {
       energy = undefined
     }
     teamOpt = withEnteringEnergy(teamOpt, key, energy)
+    // (its counts are per B's rotation as KQM plays it, as KQM Theorycrafting keeps them)
+    if (seconds && teamOpt.kqm?.energyCalculator)
+      teamOpt = {
+        ...teamOpt,
+        kqm: {
+          ...teamOpt.kqm,
+          energyCalculator: {
+            ...teamOpt.kqm.energyCalculator,
+            rotationTime: seconds,
+          },
+        },
+      }
     sandbox.teams.set(teamId, { teamOpt })
   }
   return { run, fixed, keysB, teamOpt, sandbox, replay: replayOf(teamOpt) }
@@ -458,13 +474,24 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
  * Team B's KQM settings as the comparison runs them (no run): for showing the entering member's
  * inputs. Writes nothing to `database` or the team's storage; throws as `compareSwapKqm` does.
  */
-export function swapSettings(
-  args: SwapArgs
-): { teamOpt: TeamOpt; keys: CharacterKey[] } | { error: CompareSwapError } {
+export function swapSettings(args: SwapArgs):
+  | {
+      teamOpt: TeamOpt
+      keys: CharacterKey[]
+      /**
+       * The entering member's weapon and set effects counted by rule where its settings do not
+       * set them (`kqmRuleConditionals`, in team B)
+       */
+      rules: Record<string, unknown>
+    }
+  | { error: CompareSwapError } {
   const checked = checkSwap(args)
   if ('error' in checked) return { error: checked.error }
-  const { teamOpt, keysB } = teamB(args, checked)
-  return { teamOpt, keys: keysB }
+  const { teamOpt, keysB, sandbox } = teamB(args, checked)
+  const rules =
+    kqmRuleConditionals(sandbox, args.teamId, teamOpt)[args.swapIn.key]
+      ?.conditional ?? {}
+  return { teamOpt, keys: keysB, rules: rules as Record<string, unknown> }
 }
 
 /**

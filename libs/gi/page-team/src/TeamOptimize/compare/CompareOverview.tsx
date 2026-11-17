@@ -8,7 +8,6 @@ import {
   TableCell,
   TableHead,
   TableRow,
-  Tooltip,
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -282,22 +281,24 @@ function MemberRows({
           {b?.er ? (
             <Box
               component="span"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end',
+                columnGap: 0.5,
+              }}
             >
               {short && (
-                <Tooltip
-                  arrow
-                  title={t('kqmCompare.table.erShort', {
-                    value: Math.round(b.erValue),
-                    target: Math.round(b.er),
-                  })}
-                >
-                  <WarningAmberRoundedIcon aria-hidden sx={{ fontSize: 15 }} />
-                </Tooltip>
+                <WarningAmberRoundedIcon aria-hidden sx={{ fontSize: 15 }} />
               )}
               {pct(b.er)}
+              {/* (in words, not only in colour: what its build reaches) */}
               {short && (
-                <Box component="span" sx={srOnly}>
+                <Box
+                  component="span"
+                  sx={{ fontSize: 12.5, width: '100%', textAlign: 'right' }}
+                >
                   {t('kqmCompare.table.erShort', {
                     value: Math.round(b.erValue),
                     target: Math.round(b.er),

@@ -109,10 +109,10 @@
     "constellation": "Constellation",
     "gear": "Weapon and sets",
     "auto": "Auto",
-    "autoTip": "Weapon and sets chosen by the KQM search, among those allowed in KQM Theorycrafting's settings. Without Auto, choose a weapon and a 4-piece set.",
+    "autoTip": "Weapon and sets chosen by the KQM search, among those allowed in KQM Theorycrafting's settings. Without Auto, choose a weapon and 4 pieces of one set or 2 + 2.",
     "weapon": "Weapon",
     "refinement": "Ref.",
-    "sets": "Set (4 pieces)",
+    "sets": "Set",
     "build": "Build",
     "buildKqm": "KQM",
     "buildExisting": "Existing",
@@ -127,7 +127,7 @@
     "fragmentTip": "Only the entering member's actions (e.g. E Q): they replace the leaving member's step in KQM Theorycrafting's rotation.",
     "preview": "Rotation B",
     "opener": "Opener",
-    "confirm": "The data in KQM Theorycrafting are final",
+    "confirm": "The data in KQM Theorycrafting (result of {{date}}) are final",
     "rotationChanged": "The rotation changed after KQM Theorycrafting's result: A was worked out on the previous one.",
     "run": "Compare",
     "cancel": "Cancel",
@@ -160,6 +160,19 @@
       "damage": "damage",
       "er": "ER",
       "erShort": "below target: {{value}}% of {{target}}%"
-    }
+    },
+    "notPlayed": "KQM Theorycrafting's result uses the entered attacks, not the written rotation: A and B are not worked out the same way.",
+    "sets2": "Second set",
+    "setMode": "Pieces",
+    "sets4": "4 pieces",
+    "sets22": "2 + 2",
+    "erSection": "Energy Recharge",
+    "effects": "Weapon and set effects",
+    "effectsTip": "As in KQM Theorycrafting: the effects on for the entering member. Those left alone follow KQM's rules (rotation B and the team's elements).",
+    "noEffects": "No effects to set",
+    "weaponEnergy": "Energy weapons",
+    "weaponEnergyTip": "How much less Energy Recharge the entering member needs while someone in team B wields this weapon, as in KQM Theorycrafting's weapon list.",
+    "weaponEnergyField": "{{weapon}}: ER needed, less",
+    "noEnergyWeapons": "No energy weapons"
   }
 }

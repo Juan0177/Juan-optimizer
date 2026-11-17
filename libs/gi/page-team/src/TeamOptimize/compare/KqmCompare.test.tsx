@@ -36,7 +36,7 @@ const mocks = vi.hoisted(() => {
   return {
     state,
     compare: vi.fn(),
-    settings: vi.fn(() => ({ error: 'unsupported' })),
+    settings: vi.fn((_args: unknown): unknown => ({ error: 'unsupported' })),
     database: {
       teamKqmResults: {
         getRun: () => state.saved && structuredClone(state.saved),
@@ -51,7 +51,7 @@ vi.mock('@genshin-optimizer/gi/db-ui', () => ({
 }))
 vi.mock('@genshin-optimizer/gi/db', () => ({
   defaultTeamOptKqm: { refinement4: 5, refinement5: 1 },
-  teamOptEnergyRotationFields: ['fieldTime', 'skillUses'],
+  teamOptEnergyRotationFields: ['fieldTime', 'skillUses', 'favoniusProcs'],
 }))
 vi.mock('@genshin-optimizer/gi/theme', () => ({
   giCtaSx: {},
@@ -120,12 +120,82 @@ vi.mock('@genshin-optimizer/gi/ui', async () => {
       kqm?: { constellations?: Record<string, number> }
     ) => kqm?.constellations?.[key] ?? 0,
     kqmEnergyRequirement: () => 100,
+    isEnergyWeapon: (key: string) => key === 'WintersHeavyHeart',
     TeamOptCancelled: class extends Error {},
   }
 })
 vi.mock('../KqmEnergyCalculator', () => ({
-  MemberEnergy: () => <div>Member ER calculator</div>,
+  // (what it is shown, and one input set by hand)
+  MemberEnergy: ({
+    characterKey,
+    member,
+    rotationTime,
+    updateMember,
+  }: {
+    characterKey: string
+    member: { skillUses: number; favoniusProcs: number }
+    rotationTime: number
+    updateMember: (key: string, values: object) => void
+  }) => (
+    <div>
+      <span data-testid="member-energy">
+        {`skillUses=${member.skillUses} favoniusProcs=${member.favoniusProcs} rotationTime=${rotationTime}`}
+      </span>
+      <button
+        type="button"
+        onClick={() => updateMember(characterKey, { favoniusProcs: 3 })}
+      >
+        Set Favonius procs
+      </button>
+    </div>
+  ),
   kqmEnergyEstimate: () => ({ targets: {}, members: {}, errors: [] }),
+}))
+vi.mock('../WeaponChooser', async () => {
+  const { createContext, useContext } = await import('react')
+  const PassiveStoreContext = createContext<
+    | {
+        get: (m: unknown, path: string[]) => string | undefined
+        set: (m: unknown, path: string[], next?: string) => void
+      }
+    | undefined
+  >(undefined)
+  return {
+    PassiveStoreContext,
+    isConditional: (s: unknown) =>
+      !!s && typeof s === 'object' && 'states' in s,
+    // (one effect per item: its state, and a switch)
+    PassiveLines: ({
+      weaponKey,
+      wielders,
+    }: {
+      weaponKey: string
+      wielders: { characterKey: string }[]
+    }) => {
+      const store = useContext(PassiveStoreContext)
+      const value = store?.get(wielders[0], [weaponKey, 'effect'])
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            store?.set(
+              wielders[0],
+              [weaponKey, 'effect'],
+              value ? undefined : 'on'
+            )
+          }
+        >
+          {`${weaponKey} effect=${value ?? 'off'}`}
+        </button>
+      )
+    },
+  }
+})
+vi.mock('@genshin-optimizer/gi/sheets', () => ({
+  getWeaponSheet: (key: string) => ({
+    document: key === 'WanderingEvenstar' ? [{ states: { on: {} } }] : [],
+  }),
+  getArtSheet: () => ({ setEffectDocument: () => [] }),
 }))
 vi.mock('../MemberAvatar', () => ({
   MemberAvatar: () => <span />,
@@ -416,5 +486,175 @@ describe('KqmCompare', () => {
     expect(alert.textContent).toContain('kqmCompare.error.failed')
     expect(runButton()).toBeTruthy()
     quiet.mockRestore()
+  })
+
+  it('keeps the ER calculator panel current when the fragment changes after an edit', async () => {
+    withRun()
+    const saved = mocks.state.saved as { run: { teamOpt: { kqm: object } } }
+    saved.run.teamOpt.kqm = {
+      energySource: 'calculator',
+      energyCalculator: { rotationTime: 20, members: {} },
+    }
+    // B's settings as the comparison would run them: the rotation's counts, the inputs set by
+    // hand kept, its calculator per B's played time
+    mocks.settings.mockImplementation((args) => {
+      const { fragment, swapIn } = args as {
+        fragment: string
+        swapIn: {
+          kqm?: {
+            energyCalculator?: {
+              members: Record<
+                string,
+                { favoniusProcs: number; edited?: string[] }
+              >
+            }
+          }
+        }
+      }
+      const own = swapIn.kqm?.energyCalculator?.members['Mitya']
+      const long = fragment === 'E E E Q'
+      return {
+        teamOpt: {
+          kqm: {
+            energySource: 'calculator',
+            energyCalculator: {
+              rotationTime: long ? 23 : 21,
+              members: {
+                Mitya: {
+                  fieldTime: 12,
+                  skillUses: long ? 3 : 1,
+                  favoniusProcs: own?.edited?.includes('favoniusProcs')
+                    ? own.favoniusProcs
+                    : long
+                      ? 2
+                      : 1,
+                },
+              },
+            },
+          },
+        },
+        keys: ['Anastasya', 'Mitya', 'Odette', 'Danica'],
+        rules: {},
+      }
+    })
+    show()
+    chooseSwap()
+    fireEvent.click(
+      screen.getByRole('button', { name: /kqmCompare\.settings/ })
+    )
+    const shown = () => screen.getByTestId('member-energy').textContent
+    await waitFor(() =>
+      expect(shown()).toBe('skillUses=1 favoniusProcs=1 rotationTime=21')
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Set Favonius procs' }))
+    // (at once, while B's settings are worked out again)
+    expect(shown()).toContain('favoniusProcs=3')
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /kqmCompare\.fragment/ }),
+      { target: { value: 'E E E Q' } }
+    )
+    // the rotation's counts and B's length follow the new fragment; the edit stays
+    await waitFor(() =>
+      expect(shown()).toBe('skillUses=3 favoniusProcs=3 rotationTime=23')
+    )
+    mocks.settings.mockReset()
+  })
+
+  it('passes the entering member’s effects, energy weapons and 2 + 2 sets to the comparison', async () => {
+    withRun()
+    // (a teammate holds the energy weapon)
+    ;(
+      mocks.state.saved as {
+        run: { result: { builds: Record<string, { weapon: { key: string } }> } }
+      }
+    ).run.result.builds['Odette'].weapon.key = 'WintersHeavyHeart'
+    mocks.settings.mockImplementation(() => ({
+      teamOpt: { kqm: {} },
+      keys: ['Anastasya', 'Mitya', 'Odette', 'Danica'],
+      // (counted by rule: on)
+      rules: { WanderingEvenstar: { effect: 'on' } },
+    }))
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    chooseSwap()
+    // weapon and 2 + 2 sets by hand
+    fireEvent.click(screen.getByRole('checkbox', { name: /kqmCompare\.auto/ }))
+    const pick = (name: RegExp, option: string) => {
+      fireEvent.mouseDown(screen.getByRole('combobox', { name }))
+      fireEvent.click(screen.getByRole('option', { name: option }))
+    }
+    pick(/kqmCompare\.weapon/, 'WanderingEvenstar')
+    fireEvent.click(screen.getByRole('radio', { name: 'kqmCompare.sets22' }))
+    pick(/^kqmCompare\.sets\b/, 'GildedDreams')
+    pick(/kqmCompare\.sets2/, 'NoblesseOblige')
+    fireEvent.click(
+      screen.getByRole('button', { name: /kqmCompare\.settings/ })
+    )
+    // its weapon's effect: the rule's state until switched here
+    const effect = await screen.findByRole('button', {
+      name: 'WanderingEvenstar effect=on',
+    })
+    fireEvent.click(effect)
+    expect(
+      screen.getByRole('button', { name: 'WanderingEvenstar effect=off' })
+    ).toBeTruthy()
+    // a teammate's or its own energy weapon: how much less ER it needs
+    fireEvent.change(
+      screen.getByRole('textbox', {
+        name: /kqmCompare\.weaponEnergyField/,
+      }),
+      { target: { value: '20' } }
+    )
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /kqmCompare\.confirm/ })
+    )
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(1))
+    const { swapIn } = mocks.compare.mock.calls[0][0]
+    expect(swapIn.weapon).toEqual({ key: 'WanderingEvenstar', refinement: 1 })
+    expect(swapIn.sets).toEqual({ GildedDreams: 2, NoblesseOblige: 2 })
+    expect(swapIn.kqm.passives).toEqual({
+      Mitya: { WanderingEvenstar: { effect: '' } },
+    })
+    // (Odette's Winter's Heavy Heart, the energy weapon here)
+    expect(swapIn.kqm.weaponEnergy).toEqual({
+      WintersHeavyHeart: { Mitya: 20 },
+    })
+    mocks.settings.mockReset()
+  })
+
+  it('while running: the form locked, the progress bar silent, A’s date in the confirmation', async () => {
+    withRun()
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    chooseSwap()
+    const confirm = screen.getByRole('checkbox', {
+      name: /kqmCompare\.confirm/,
+    })
+    expect(confirm.closest('label')?.textContent).toMatch(/date=\S/)
+    fireEvent.click(confirm)
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    expect(
+      screen
+        .getByRole('combobox', { name: /kqmCompare\.constellation/ })
+        .getAttribute('aria-disabled')
+    ).toBe('true')
+    expect(
+      screen
+        .getByRole('progressbar', { hidden: true })
+        .getAttribute('aria-hidden')
+    ).toBe('true')
+  })
+
+  it('warns when A was not played from the written rotation', () => {
+    withRun()
+    ;(mocks.state.saved as { run: { rotation: string } }).run.rotation =
+      'entered'
+    show()
+    expect(screen.getByText('kqmCompare.notPlayed')).toBeTruthy()
   })
 })
