@@ -25,6 +25,7 @@ import {
   stygianPresetKey,
 } from '@genshin-optimizer/gi/ui'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import RestartAltRoundedIcon from '@mui/icons-material/RestartAltRounded'
@@ -569,6 +570,22 @@ function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
         />
       </Box>
 
+      {/* (what its time to defeat counts: one boss's mechanics in full so far) */}
+      <Typography
+        sx={{
+          ...type.label,
+          fontWeight: 400,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+        }}
+      >
+        <InfoOutlinedIcon sx={{ fontSize: 16, flexShrink: 0 }} />
+        {t(
+          'enemy.mechanicsScope',
+          'Time to defeat: only Wavebinder’s mechanics are modelled in full for now. The Emperor’s horns and the Moongecko’s carapace are counted in part; other bosses are their HP ÷ the team’s DPS.'
+        )}
+      </Typography>
       {/* the boss set: its details */}
       {applied && (
         <BossDetail

@@ -16,7 +16,7 @@ describe('a played rotation’s hits, per second', () => {
     const hits: SimHit[] = [
       // Stellar Glimmer Electro DMG (Mitya's Prism Shatter, 2 prisms)
       hit(0, { tag: 'directStellarConduct', weight: 2 }),
-      // a 2U Electro hit with no ICD, and a 1.5U one
+      // a 2U Electro hit with no ICD, and a 1.5U one (2U: whole units)
       hit(10, { applies: true, durability: 50, icd: 'none' }),
       hit(20, { applies: true, durability: 37.5, icd: 'none' }),
       // an Electro hit applying nothing
@@ -28,7 +28,7 @@ describe('a played rotation’s hits, per second', () => {
     ]
     const { gauge, electroHits } = applicationsOf(hits, 120)
     // (over 2 s)
-    expect(electroHits).toEqual({ stellar: 1, hits: 1.5, units: 1.75 })
+    expect(electroHits).toEqual({ stellar: 1, units: 2, plain: 0.5 })
     expect(gauge.electro).toBeCloseTo((2 + 1.5) / 2, 9)
   })
   it('counts a hit its ICD keeps from applying as one without', () => {
@@ -37,8 +37,8 @@ describe('a played rotation’s hits, per second', () => {
       hit(t, { applies: true, durability: 25, icd: 'skill' })
     )
     const { electroHits } = applicationsOf(hits, 60)
-    expect(electroHits.hits).toBe(4)
     expect(electroHits.units).toBe(2)
+    expect(electroHits.plain).toBe(2)
   })
 })
 

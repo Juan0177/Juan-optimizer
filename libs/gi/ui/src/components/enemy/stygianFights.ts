@@ -37,10 +37,10 @@ export interface FightTeam {
 export interface ElectroHits {
   /** Stellar Glimmer (Stellar-Conduct) Electro DMG */
   stellar: number
-  /** The other Electro hits (applying their element or not) */
-  hits: number
-  /** The element units those apply (1U: 25 durability) */
+  /** The element units the other Electro hits apply, in whole units (1U: 25 durability) */
   units: number
+  /** The other Electro hits that apply no element (under ICD, or none to apply) */
+  plain: number
   /**
    * Estimated from the attacks entered (no written rotation): every 3rd of the other hits applies
    * 1U (the standard ICD)
@@ -49,26 +49,28 @@ export interface ElectroHits {
 }
 
 /**
- * Wavebinder's Courage (the game files' Stygian values, as measured): 600 at most; its
- * Valiant Assault drains 15/s (40 s on its own); each Electro hit takes 6 (Stellar Glimmer DMG),
- * else 0.6 and 0.06 per element unit it applies; 8 times that during the Valiant Assault (48, 4.8
- * and 5.28 for a 1U hit)
+ * Wavebinder's Courage (stygian.moe's mechanical guide, the game files' Stygian values): 600 at
+ * most; a drink gives 600 (540 under Radiance: Stellar Glimmer); outside its drinks, each Electro
+ * hit takes 1.5 per element unit it applies, at least 0.6, and Electro Stellar Glimmer DMG 6; its
+ * Valiant Assault drains 15/s (40 s on its own), the hits 8 times as much
  */
 export const COURAGE = {
   max: 600,
   decay: 15,
   stellar: 6,
-  hit: 0.6,
-  unit: 0.06,
+  unit: 1.5,
+  plain: 0.6,
   valiant: 8,
+  drink: 600,
+  stellarDrink: 540,
 } as const
 
-/** Courage the team's Electro hits take per second, outside the Valiant Assault */
+/** Courage the team's Electro hits take per second, outside its drinks and Valiant Assault */
 export const courageDrain = (hits: ElectroHits | undefined) =>
   hits
     ? COURAGE.stellar * hits.stellar +
-      COURAGE.hit * hits.hits +
-      COURAGE.unit * hits.units
+      COURAGE.unit * hits.units +
+      COURAGE.plain * hits.plain
     : 0
 
 /** A part of the estimate, for its breakdown */
@@ -84,15 +86,17 @@ export type FightPart =
       stellar?: number
     }
   | { key: 'backlash'; count: number; hp: number }
+  /** Wavebinder's drinks under Radiance: Stellar Glimmer (540 Courage, not enough on its own) */
+  | { key: 'radianceDrinks'; count: number }
   | { key: 'horns'; count: number; seconds: number; removal: number }
   | { key: 'hornsBreak'; count: number; hp: number }
   /** An enemy set by hand: its HP ÷ the team's DPS */
   | { key: 'custom'; dps: number; seconds: number }
 export type FightNote =
-  | 'stellarGlimmer'
   | 'noRotation'
   | 'electroEstimated'
   | 'electroStun'
+  | 'sip'
   | 'noHornRemoval'
   | 'crabs'
   | 'healedToFull'
@@ -204,12 +208,13 @@ function plain(
 }
 
 /**
- * Wavebinder: Stormfang (stygian.moe and the game files): ~10 s in, and
- * 20 s after each Valiant Assault (23 s after one left within 18 s), it drinks for 3 s and fills its
- * 600 Courage: Valiant Assault. A shield of its Max HP takes the damage at Valiant RES (+20%
- * Electro, +60% the rest); Courage drains 15/s, and each Electro hit takes 8 times its Courage
- * (`COURAGE`). Leaving it, it takes 60% of the damage its shield took and 90% more of the Stellar
- * Glimmer DMG in it, at most 15% of its Max HP.
+ * Wavebinder: Stormfang (stygian.moe's mechanical guide and the game files): ~10 s in, and every 20 s while it is not in its Valiant Assault, it drinks for 3 s:
+ * 600 Courage, or 540 under Radiance: Stellar Glimmer (a Stellar Glimmer team: its next drink
+ * fills it). Outside its drinks, the team's Electro hits lower its Courage. At 600: Valiant Assault,
+ * a shield of its Max HP at Valiant RES (+20% Electro, +60% the rest), Courage draining 15/s and 8
+ * times the hits'. Leaving it, it takes 60% of what its shield took and 150% of the Stellar Glimmer
+ * DMG in it, at most 15% of its Max HP; its next drink 20 s later (23 s after one left within 18 s
+ * without Radiance).
  */
 function wavebinder(
   boss: StygianBoss,
@@ -220,71 +225,104 @@ function wavebinder(
   const valiant = dpsAt(team, phaseRes(boss, 'shielded')!)
   const hits = team.electroHits
   // (its backlash: 60% of what its shield took, 150% of the Stellar Glimmer DMG in it)
-  const backlashRatio = 0.6 + 0.9 * (team.stellarShare ?? 0)
-  const courage = COURAGE.valiant * courageDrain(hits)
+  const stellarShare = team.stellarShare ?? 0
+  const backlashRatio = 0.6 + 0.9 * stellarShare
+  // a Stellar Glimmer team keeps Radiance on it as it drinks: 540 Courage a drink
+  const radiance = stellarShare > 0
+  const gain = radiance ? COURAGE.stellarDrink : COURAGE.drink
+  const outside = courageDrain(hits)
+  const courage = COURAGE.valiant * outside
   const drain = COURAGE.decay + courage
-  const notes: FightNote[] = ['stellarGlimmer', 'electroStun']
+  const notes: FightNote[] = ['electroStun']
+  if (radiance) notes.push('sip')
   if (!hits) notes.push('noRotation')
   else if (hits.estimated) notes.push('electroEstimated')
   const segments: FightSegment[] = []
   const events: FightEvent[] = []
   let t = 0
   let left = hp
+  let meter = 0
   let nextDrink = 10
   let valiants = 0
   let valiantTime = 0
   let regularTime = 0
   let backlash = 0
-  // at its regular RES until `until` (Courage from m0 to m1): whether it falls in it
+  let radianceDrinks = 0
+  // at its regular RES until `until`, its Courage moving at `rate` (kept within 0–600: a stretch
+  // ends where it stops): whether it falls in it
   const atRegular = (
     state: 'regular' | 'drinking',
     until: number,
-    m0: number,
-    m1: number
+    rate: number
   ) => {
-    if (until <= t) return false
-    const hpStart = left / hp
-    const span = until - t
-    if (regular > 0 && regular * span >= left) {
-      const dt = left / regular
+    while (t < until - 1e-9) {
+      const moving =
+        (rate < 0 && meter > 0) || (rate > 0 && meter < COURAGE.max)
+      const stopAt = !moving
+        ? Number.POSITIVE_INFINITY
+        : t + (rate < 0 ? meter / -rate : (COURAGE.max - meter) / rate)
+      const end = Math.min(until, stopAt)
+      const r = moving ? rate : 0
+      const span = end - t
+      const hpStart = left / hp
+      if (regular > 0 && regular * span >= left) {
+        const dt = left / regular
+        segments.push({
+          start: t,
+          end: t + dt,
+          state,
+          hpStart,
+          hpEnd: 0,
+          dps: regular,
+          meterStart: meter,
+          meterEnd: meter + r * dt,
+        })
+        t += dt
+        regularTime += dt
+        meter += r * dt
+        left = 0
+        return true
+      }
+      left -= regular * span
       segments.push({
         start: t,
-        end: t + dt,
+        end,
         state,
         hpStart,
-        hpEnd: 0,
+        hpEnd: left / hp,
         dps: regular,
-        meterStart: m0,
-        meterEnd: m0 + ((m1 - m0) * dt) / span,
+        meterStart: meter,
+        meterEnd: meter + r * span,
       })
-      t += dt
-      regularTime += dt
-      left = 0
-      return true
+      regularTime += span
+      meter = Math.min(COURAGE.max, Math.max(0, meter + r * span))
+      t = end
     }
-    left -= regular * span
-    segments.push({
-      start: t,
-      end: until,
-      state,
-      hpStart,
-      hpEnd: left / hp,
-      dps: regular,
-      meterStart: m0,
-      meterEnd: m1,
-    })
-    regularTime += span
-    t = until
     return false
   }
   while (left > 0 && t < FIGHT_LIMIT) {
-    // its regular RES until it drinks; its drink (3 s, still at regular RES) fills its Courage
-    if (atRegular('regular', Math.min(nextDrink, FIGHT_LIMIT), 0, 0)) break
+    // until it drinks: its regular RES, its Courage worn down by the team's Electro hits
+    if (atRegular('regular', Math.min(nextDrink, FIGHT_LIMIT), -outside)) break
     if (t >= FIGHT_LIMIT) break
-    const drinkEnd = Math.min(nextDrink + 3, FIGHT_LIMIT)
-    if (atRegular('drinking', drinkEnd, 0, (COURAGE.max * (drinkEnd - t)) / 3))
+    // its drink (3 s, its regular RES; Electro hits do not lower it then): full, its Valiant
+    // Assault begins at once
+    const drinkStart = t
+    const rate = gain / 3
+    const fillAt =
+      meter + gain >= COURAGE.max - 1e-9
+        ? t + (COURAGE.max - meter) / rate
+        : Number.POSITIVE_INFINITY
+    if (
+      atRegular('drinking', Math.min(drinkStart + 3, fillAt, FIGHT_LIMIT), rate)
+    )
       break
     if (t >= FIGHT_LIMIT) break
+    if (meter < COURAGE.max - 1e-6) {
+      // (Radiance cut its drink short: the next one, 20 s after this one began)
+      radianceDrinks++
+      nextDrink = drinkStart + 20
+      continue
+    }
     // Valiant Assault: until its Courage is drained, or its shield (its Max HP) is broken
     const length = Math.min(
       COURAGE.max / drain,
@@ -305,17 +343,21 @@ function wavebinder(
     t += length
     valiants++
     valiantTime += length
+    meter = 0
     const taken = Math.min(backlashRatio * valiant * length, 0.15 * hp, left)
     backlash += taken
     left -= taken
     if (t <= FIGHT_LIMIT) events.push({ t, kind: 'backlash', hp: taken / hp })
-    nextDrink = t + (length < 18 ? 23 : 20)
+    nextDrink = t + (length < 18 && !radiance ? 23 : 20)
   }
   const seconds = left <= 0 && t <= FIGHT_LIMIT ? t : undefined
   return {
     seconds,
     parts: [
       { key: 'phase', phase: 'regular', seconds: regularTime },
+      ...(radianceDrinks
+        ? [{ key: 'radianceDrinks' as const, count: radianceDrinks }]
+        : []),
       ...(valiants
         ? [
             {
