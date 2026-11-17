@@ -1,12 +1,20 @@
-import { artifactDefIcon, weaponAsset } from '@genshin-optimizer/gi/assets'
+import {
+  artifactDefIcon,
+  characterAsset,
+  weaponAsset,
+} from '@genshin-optimizer/gi/assets'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
+import {
+  allTravelerKeys,
+  charKeyToLocGenderedCharKey,
+} from '@genshin-optimizer/gi/consts'
 import type { TeamOpt } from '@genshin-optimizer/gi/db'
-import { useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
-import { getWeaponStat } from '@genshin-optimizer/gi/stats'
+import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
+import { getCharStat, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type {
   CompareChartData,
   CompareRow,
+  InvestmentChartData,
   KqmCardData,
   KqmResult,
   TeamOptMember,
@@ -15,25 +23,31 @@ import {
   BETA_KEYS,
   BETA_LABEL,
   CardImageDialog,
-  compareChartSplash,
-  currentRelease,
   COMPARE_CHART_HEIGHT,
   COMPARE_CHART_WIDTH,
+  compareChartSplash,
+  currentRelease,
   KQM_CARD_HEIGHT,
   KQM_CARD_WIDTH,
   kqmCardFace,
   kqmDefaultExcludedWeapons,
+  kqmRefinement,
   kqmSetsId,
   kqmTalentLevel,
   renderCompareChart,
+  renderInvestmentChart,
   renderKqmCard,
   safeName,
+  TeamOptCancelled,
 } from '@genshin-optimizer/gi/ui'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import {
   Box,
   Button,
+  ButtonBase,
   Divider,
+  LinearProgress,
   Menu,
   MenuItem,
   Tab,
@@ -42,12 +56,34 @@ import {
   Typography,
 } from '@mui/material'
 import type { TFunction } from 'i18next'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  CONSTELLATIONS,
+  type ComboRotation,
+  ComboRotations,
+  ConsRotations,
+  type ConsRotationTexts,
+  comboRotationOf,
+  consRotationOf,
+  readComboRotations,
+  readConsRotations,
+  writeComboRotations,
+  writeConsRotations,
+} from './ConsRotations'
+import {
+  bestInvestments,
+  type ConsPoint,
+  dpsOf,
+  type Investment,
+  refitConstellations,
+} from './consInvestment'
 import { formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
+import { useMemberNames } from './RotationWriter'
+import { Disclosure, hairline, insetSx, type } from './ui'
 
-type Picture = 'team' | 'weapons' | 'sets'
+type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
 
 /** The Share tip was seen on this device */
 const SHARE_TIP_KEY = 'kqm_share_tip_seen'
@@ -85,8 +121,16 @@ type ShareProps = {
  */
 export function KqmShareMenu({
   disabled,
+  shown,
   ...props
-}: ShareProps & { disabled?: boolean }) {
+}: ShareProps & {
+  disabled?: boolean
+  /**
+   * The team as shown: the run's, or with other equipment picked in the inspector or a top team
+   * picked. The team card shows it; the charts compare on the run's rankings.
+   */
+  shown?: KqmResult
+}) {
   const { t } = useTranslation(['page_team', 'charNames_gen'])
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const [open, setOpen] = useState<Picture>()
@@ -113,29 +157,34 @@ export function KqmShareMenu({
     const id = setTimeout(() => setTipReady(true), 900)
     return () => clearTimeout(id)
   }, [tipSeen, disabled])
+  const { gender } = useDBMeta()
   const { characterKey: ck, result, members } = props
   const build = result.builds[ck]
   const setKey = build && Object.keys(build.sets)[0]
-  // the members a chart can show (tabs in its dialog): the ranked ones; it opens on the one shown
-  // in the inspector
-  const ranked = members
-    .map((m) => m.characterKey)
-    .filter((k) => result.rankings[k])
+  // the members a chart can show (tabs in its dialog): the ranked ones (weapons, sets), the built
+  // ones (constellations); it opens on the one shown in the inspector
+  const chartable = (picture: Picture) =>
+    members
+      .map((m) => m.characterKey)
+      .filter((k) =>
+        picture === 'constellations' ? result.builds[k] : result.rankings[k]
+      )
   const [member, setMember] = useState<CharacterKey>(ck)
   const choose = (picture: Picture) => {
     setAnchor(null)
-    setMember(ranked.includes(ck) ? ck : (ranked[0] ?? ck))
+    const keys = chartable(picture)
+    setMember(keys.includes(ck) ? ck : (keys[0] ?? ck))
     setOpen(picture)
   }
   const tabs = open && open !== 'team' && (
-    <MemberTabs keys={ranked} value={member} onChange={setMember} />
+    <MemberTabs keys={chartable(open)} value={member} onChange={setMember} />
   )
   const tipOpen = tipReady && !tipSeen && !disabled && !anchor
   /** a picture to make: its thumbnail, its name */
   const item = (picture: Picture, thumb: ReactNode, label: string) => (
     <MenuItem
       onClick={() => choose(picture)}
-      disabled={picture !== 'team' && !ranked.length}
+      disabled={picture !== 'team' && !chartable(picture).length}
       sx={{ gap: 1.5, py: 1, px: 1.25, borderRadius: 2, minHeight: 0 }}
     >
       <Box
@@ -181,7 +230,7 @@ export function KqmShareMenu({
             <Typography sx={{ fontSize: 13, color: 'text.secondary', mb: 1 }}>
               {t(
                 'teamOpt.kqm.share.tipBody',
-                'A team card, and weapon and artifact set charts, as images for Discord, Reddit or X.'
+                'A team card, and weapon, artifact set and constellation charts, as images for Discord, Reddit or X.'
               )}
             </Typography>
             <Button size="small" variant="contained" onClick={seeTip}>
@@ -263,9 +312,18 @@ export function KqmShareMenu({
           setKey && icon(artifactDefIcon(setKey as never)),
           t('teamOpt.kqm.share.sets', 'Artifact sets')
         )}
+        {item(
+          'constellations',
+          icon(characterAsset(ck, 'constellation1', gender) ?? ''),
+          t('teamOpt.kqm.share.constellations', 'Constellations')
+        )}
       </Menu>
       {open === 'team' && (
-        <TeamPicture {...props} onClose={() => setOpen(undefined)} />
+        <TeamPicture
+          {...props}
+          result={shown ?? props.result}
+          onClose={() => setOpen(undefined)}
+        />
       )}
       {(open === 'weapons' || open === 'sets') && (
         <ComparePicture
@@ -276,30 +334,58 @@ export function KqmShareMenu({
           onClose={() => setOpen(undefined)}
         />
       )}
+      {open === 'constellations' && (
+        <ConstellationPicture
+          {...props}
+          characterKey={member}
+          onClose={() => setOpen(undefined)}
+        />
+      )}
     </>
   )
 }
 
-/** A chart's members, as tabs (face and name): which one it shows */
-function MemberTabs({
+/** A chart's members, as tabs (face and name): which one it shows; `team`: a Team tab first */
+function MemberTabs<V extends CharacterKey | 'team' = CharacterKey>({
   keys,
   value,
   onChange,
+  team,
 }: {
   keys: CharacterKey[]
-  value: CharacterKey
-  onChange: (ck: CharacterKey) => void
+  value: V
+  onChange: (value: V) => void
+  team?: string
 }) {
   const { t } = useTranslation('charNames_gen')
   const { gender } = useDBMeta()
+  const shown = (keys as string[]).includes(value) || (team && value === 'team')
   return (
     <Tabs
-      value={keys.includes(value) ? value : false}
-      onChange={(_, v: CharacterKey) => onChange(v)}
+      value={shown ? value : false}
+      onChange={(_, v: V) => onChange(v)}
       variant="scrollable"
       scrollButtons={false}
       sx={{ minHeight: 0 }}
     >
+      {team && (
+        <Tab
+          value="team"
+          sx={{ minHeight: 0, py: 1, px: 1.5, textTransform: 'none' }}
+          label={
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ display: 'flex' }}>
+                {keys.slice(0, 4).map((k, i) => (
+                  <Box key={k} sx={{ ml: i ? -1 : 0, display: 'flex' }}>
+                    <MemberAvatar characterKey={k} size={20} />
+                  </Box>
+                ))}
+              </Box>
+              {team}
+            </Box>
+          }
+        />
+      )}
       {keys.map((k) => (
         <Tab
           key={k}
@@ -541,15 +627,18 @@ function useCompareChart(
     if (!rows?.length) return undefined
     return {
       title,
-      subtitle: rotationTime
-        ? s.t('page_team:teamOpt.kqm.share.compareDps', {
-            defaultValue: 'Team DPS · {{standard}}',
-            standard: s.standard,
-          })
-        : s.t('page_team:teamOpt.kqm.share.compareDmg', {
-            defaultValue: 'Team damage · {{standard}}',
-            standard: s.standard,
-          }),
+      // (the team's and the member's own: the legend names them)
+      subtitle: rows.some((r) => r.personal !== undefined)
+        ? s.standard
+        : rotationTime
+          ? s.t('page_team:teamOpt.kqm.share.compareDps', {
+              defaultValue: 'Team DPS · {{standard}}',
+              standard: s.standard,
+            })
+          : s.t('page_team:teamOpt.kqm.share.compareDmg', {
+              defaultValue: 'Team damage · {{standard}}',
+              standard: s.standard,
+            }),
       rows,
       member: {
         ...kqmCardFace(ck, s.gender),
@@ -564,6 +653,19 @@ function useCompareChart(
       labels: {
         unmet: s.t('page_team:teamOpt.kqm.share.unmet', 'ER unmet'),
         siteName: shareStamp(),
+        // (the constellation chart's two bars)
+        team: rotationTime
+          ? s.t('page_team:teamOpt.kqm.share.teamDps', 'Team DPS')
+          : s.t('page_team:teamOpt.kqm.share.teamDmg', 'Team damage'),
+        personal: rotationTime
+          ? s.t('page_team:teamOpt.kqm.share.ownDps', {
+              defaultValue: '{{name}} DPS',
+              name: s.charName(ck),
+            })
+          : s.t('page_team:teamOpt.kqm.share.ownDmg', {
+              defaultValue: '{{name}} damage',
+              name: s.charName(ck),
+            }),
       },
     }
   }, [s, rows, title, ck, rotationTime, beta])
@@ -588,11 +690,14 @@ function ComparePicture({
     if (!ranking || !own) return undefined
     if (kind === 'weapons') {
       // the 100%: the best of KQM's default weapon list (forged, event, Battle Pass, fishing, quest
-      // and standard-wish 4★ weapons) at the refinement it is built at (not a compared one), one
-      // meeting the Energy Recharge target if any does; none in the ranking: the run's pick
+      // and standard-wish 4★ weapons) at its default refinement (Battle Pass R1, never an R5
+      // ticked too), one meeting the Energy Recharge target if any does; none in the ranking: the
+      // run's pick
       const off = new Set<string>(kqmDefaultExcludedWeapons())
       const listed = ranking.weapons.filter(
-        (o) => !o.compare && !off.has(o.weapon.key)
+        (o) =>
+          !off.has(o.weapon.key) &&
+          o.weapon.refinement === kqmRefinement(o.weapon.key)
       )
       const pool = listed.some((o) => !o.unmet)
         ? listed.filter((o) => !o.unmet)
@@ -675,5 +780,552 @@ function ComparePicture({
       header={tabs}
       onClose={onClose}
     />
+  )
+}
+
+const NO_KEYS: string[] = []
+/** 5★ members that cost nothing to have (the Traveler, Aloy) */
+const FREE_FIVE_STARS = new Set<string>([...allTravelerKeys, 'Aloy'])
+/**
+ * What a member at a constellation costs, in copies (the usual "cost": a 5★ is 1 at C0 and 1 more
+ * per constellation); a 4★ is had (KQM's standard), its constellations above the run's count as
+ * the investment adds them
+ */
+const copiesOf = (ck: CharacterKey, cons: number) =>
+  getCharStat(ck).rarity === 5 && !FREE_FIVE_STARS.has(ck) ? cons + 1 : 0
+
+/** A constellation played (`refitConstellations`), and the rotation text it played (absent: the team's) */
+type Played = { point: ConsPoint; text?: string }
+
+/**
+ * Constellations, for the whole team and each member: first the rotation each constellation
+ * plays (each member's tab: the team's, unless another is written for it); then one Generate for
+ * every chart. Each member at each constellation is refitted alone (`refitConstellations`: its
+ * main stats and rolls, its weapon and sets and the others' builds kept: about one ranking row's
+ * work); the Team tab then shows, for each cost (one constellation of any member), the team's
+ * best constellations (`bestInvestments`: from those alone, a few combinations played).
+ */
+function ConstellationPicture({
+  onClose,
+  ...props
+}: ShareProps & { onClose: () => void }) {
+  const s = useShareText(props)
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  const { i18n } = useTranslation()
+  const { result, setup, teamId, members } = props
+  const keys = s.keys
+  const names = useMemberNames(members)
+  const teamText =
+    globalThis.localStorage?.getItem(`teamOptRotationText_${teamId}`) ?? ''
+  const [view, setView] = useState<CharacterKey | 'team'>('team')
+  // each member's rotation at each constellation (kept per team and member)
+  const [rotationsOf, setRotationsOf] = useState<
+    Partial<Record<CharacterKey, ConsRotationTexts>>
+  >(() =>
+    Object.fromEntries(keys.map((k) => [k, readConsRotations(teamId, k)]))
+  )
+  const setRotations = (ck: CharacterKey, next: ConsRotationTexts) => {
+    setRotationsOf((r) => ({ ...r, [ck]: next }))
+    writeConsRotations(teamId, ck, next)
+  }
+  // (a constellation's own, else the nearest lower one's, else the team's: absent)
+  const textOf = (ck: CharacterKey, cons: number) =>
+    consRotationOf(rotationsOf[ck] ?? {}, cons, s.cons(ck)).text
+  // (advanced) rotations written for combinations of constellations, for the team's chart
+  const [combos, setCombosState] = useState<ComboRotation[]>(() =>
+    readComboRotations(teamId)
+  )
+  const setCombos = (next: ComboRotation[]) => {
+    setCombosState(next)
+    writeComboRotations(teamId, next)
+  }
+  const [advancedOpen, setAdvancedOpen] = useState(() => combos.length > 0)
+  const runCons = useMemo(
+    () => Object.fromEntries(keys.map((k) => [k, s.cons(k)])),
+    [keys, s]
+  )
+  const rotationsKey = JSON.stringify([
+    keys.map((k) => rotationsOf[k] ?? {}),
+    combos,
+  ])
+
+  const baseSeconds = result.played?.rotationTime ?? props.rotationTime
+  const basePoint = useMemo(
+    (): ConsPoint => ({
+      team: result.after.total,
+      members: result.after.members,
+      seconds: baseSeconds,
+      builds: result.builds,
+    }),
+    [result, baseSeconds]
+  )
+  // each member at each other constellation, as played (another rotation written since: again)
+  const [points, setPoints] = useState<
+    Partial<Record<CharacterKey, Partial<Record<number, Played>>>>
+  >({})
+  const pointsRef = useRef(points)
+  // the team's best for each cost, and the rotations it was found with
+  const [investment, setInvestment] = useState<{
+    rows: Investment[]
+    key: string
+  }>()
+  const investmentRef = useRef(investment)
+  // (combinations played, by constellations and rotation: kept while the dialog is open)
+  const playedCombos = useRef(new Map<string, number>())
+  const [generating, setGenerating] = useState(false)
+  const [progress, setProgress] = useState<
+    | {
+        phase: 'member'
+        ck: CharacterKey
+        cons: number
+        done: number
+        total: number
+      }
+    | { phase: 'team'; cost: number; costs: number }
+  >()
+  const [error, setError] = useState<string>()
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the rotations by their text
+  useEffect(() => {
+    if (!generating) return
+    let cancelled = false
+    const isCancelled = () => cancelled
+    setError(undefined)
+    ;(async () => {
+      try {
+        // every member alone at each constellation
+        const total = keys.length * (CONSTELLATIONS.length - 1)
+        let done = 0
+        for (const ck of keys) {
+          const ran = s.cons(ck)
+          for (const cons of CONSTELLATIONS) {
+            if (cons === ran) continue
+            const text = textOf(ck, cons)
+            const kept = pointsRef.current[ck]?.[cons]
+            if (kept && kept.text === text) {
+              done++
+              continue
+            }
+            setProgress({ phase: 'member', ck, cons, done, total })
+            const point = await refitConstellations({
+              database,
+              teamId,
+              gender,
+              i18n,
+              setup,
+              result,
+              cons: { [ck]: cons },
+              text,
+              isCancelled,
+            })
+            if (cancelled) return
+            done++
+            // (nothing to play: said, not waited for)
+            if (!point)
+              throw new Error(
+                `${s.charName(ck)} at C${cons} could not be played.`
+              )
+            pointsRef.current = {
+              ...pointsRef.current,
+              [ck]: { ...pointsRef.current[ck], [cons]: { point, text } },
+            }
+            setPoints(pointsRef.current)
+          }
+        }
+        // the team: each cost's best constellations
+        if (investmentRef.current?.key !== rotationsKey) {
+          const base = keys.map((k) => s.cons(k))
+          const pointAt = (i: number, cons: number) =>
+            pointsRef.current[keys[i]]?.[cons]?.point
+          const rows = await bestInvestments({
+            base,
+            baseDps: dpsOf(basePoint),
+            single: (i, cons) => {
+              const p = pointAt(i, cons)
+              return p && dpsOf(p)
+            },
+            evaluate: async (cons) => {
+              const raised = keys.flatMap((k, i) =>
+                cons[i] !== base[i] ? [[k, cons[i], i] as const] : []
+              )
+              // (the rotation written for this combination, or one it includes; else the one
+              // written for one of its constellations, the first member's; else the team's)
+              const text =
+                comboRotationOf(
+                  combos,
+                  Object.fromEntries(keys.map((k, i) => [k, cons[i]])),
+                  runCons
+                ) ??
+                raised
+                  .map(([k, c]) => textOf(k, c))
+                  .find((x) => x !== undefined)
+              const id = `${cons.join()}|${text ?? ''}`
+              if (playedCombos.current.has(id))
+                return playedCombos.current.get(id)
+              const point = await refitConstellations({
+                database,
+                teamId,
+                gender,
+                i18n,
+                setup,
+                result,
+                cons: Object.fromEntries(raised.map(([k, c]) => [k, c])),
+                start: Object.fromEntries(
+                  raised.flatMap(([k, c, i]) => {
+                    const b = pointAt(i, c)?.builds[k]
+                    return b ? [[k, b]] : []
+                  })
+                ),
+                text,
+                isCancelled,
+              })
+              const dps = point && dpsOf(point)
+              if (dps !== undefined) playedCombos.current.set(id, dps)
+              return dps
+            },
+            isCancelled,
+            onCost: (cost, costs) =>
+              setProgress({ phase: 'team', cost, costs }),
+          })
+          if (cancelled || !rows) return
+          investmentRef.current = { rows, key: rotationsKey }
+          setInvestment(investmentRef.current)
+        }
+        setProgress(undefined)
+      } catch (e) {
+        if (cancelled || e instanceof TeamOptCancelled) return
+        setError(String((e as Error)?.message ?? e))
+        setProgress(undefined)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    generating,
+    rotationsKey,
+    database,
+    gender,
+    i18n,
+    teamId,
+    setup,
+    result,
+    basePoint,
+    keys,
+  ])
+  // every chart's figures are in (for the rotations written now)
+  const complete =
+    investment?.key === rotationsKey &&
+    keys.every((ck) =>
+      CONSTELLATIONS.every(
+        (cons) =>
+          cons === s.cons(ck) ||
+          (points[ck]?.[cons] && points[ck]?.[cons]?.text === textOf(ck, cons))
+      )
+    )
+  const done = generating && complete
+
+  // ── a member's chart: the team's DPS and its own at each constellation
+  const ck = view === 'team' ? undefined : view
+  const memberRows = useMemo((): CompareRow[] | undefined => {
+    if (!done || !ck) return undefined
+    const ran = s.cons(ck)
+    const at = (cons: number) =>
+      cons === ran ? basePoint : points[ck]?.[cons]?.point
+    // (per second when every rotation's length is known: rotations of different lengths compare
+    // by DPS, not by damage per rotation)
+    const shown = CONSTELLATIONS.flatMap((cons) => at(cons) ?? [])
+    const perSecond = shown.every((p) => p.seconds)
+    return CONSTELLATIONS.flatMap((cons) => {
+      const p = at(cons)
+      if (!p) return []
+      const per = perSecond ? p.seconds! : 1
+      return [
+        {
+          label: `C${cons}`,
+          icons: [
+            {
+              src:
+                characterAsset(
+                  ck,
+                  cons ? (`constellation${cons}` as 'constellation1') : 'icon',
+                  gender
+                ) ?? '',
+            },
+          ],
+          value: p.team / per,
+          personal: (p.members[ck] ?? 0) / per,
+          base: cons === ran,
+        },
+      ]
+    })
+  }, [done, ck, s, basePoint, points, gender])
+  const memberTitle = ck
+    ? s.t('page_team:teamOpt.kqm.share.consTitle', {
+        defaultValue: 'Constellations · {{name}}',
+        name: s.charName(ck),
+      })
+    : ''
+  const compare = useCompareChart(
+    { ...props, characterKey: ck ?? props.characterKey },
+    memberTitle,
+    memberRows,
+    NO_KEYS
+  )
+
+  // ── the team's chart: the best constellations for each cost
+  const teamTitle = s.t(
+    'page_team:teamOpt.kqm.share.investTitle',
+    'Constellation investment'
+  )
+  // (the team as run already costs its 5★ copies: the rows count from there)
+  const baseCost = keys.reduce((n, k) => n + copiesOf(k, s.cons(k)), 0)
+  const teamData = useMemo((): InvestmentChartData | undefined => {
+    if (!done || !investment) return undefined
+    const perSecond = !!baseSeconds
+    return {
+      title: teamTitle,
+      subtitle: s.t('page_team:teamOpt.kqm.share.investSubtitle', {
+        defaultValue: 'The best team DPS at each cost · {{standard}}',
+        standard: s.standard,
+      }),
+      members: keys.map((k) => ({
+        ...kqmCardFace(k, s.gender),
+        name: s.charName(k),
+      })),
+      rows: investment.rows.map((row) => ({
+        cost: baseCost + row.cost,
+        cons: row.cons,
+        value: row.dps,
+        detail: formatRateFull(row.dps, undefined),
+      })),
+      beta: s.beta.length ? BETA_LABEL : undefined,
+      labels: {
+        cost: s.t('page_team:teamOpt.kqm.share.investCost', 'Cost'),
+        dps: perSecond
+          ? s.t('page_team:teamOpt.kqm.share.teamDps', 'Team DPS')
+          : s.t('page_team:teamOpt.kqm.share.teamDmg', 'Team damage'),
+        note: s.t(
+          'page_team:teamOpt.kqm.share.investNote',
+          'Cost counts copies: a 5★ is 1 at C0, and every constellation is 1 more. Each row is the best way to spend it.'
+        ),
+        siteName: shareStamp(),
+      },
+    }
+  }, [done, investment, baseSeconds, teamTitle, s, keys, baseCost])
+
+  const render = useMemo(() => {
+    if (view === 'team')
+      return teamData && (() => renderInvestmentChart(teamData))
+    return compare.data && (() => renderCompareChart(compare.data!))
+  }, [view, teamData, compare.data])
+  const watermark = () =>
+    shareRecord(
+      { ...props, characterKey: ck ?? props.characterKey },
+      s,
+      'constellations',
+      view === 'team' ? s.beta : compare.beta,
+      {
+        view,
+        constellations: points,
+        investment: investment?.rows,
+        investmentBaseCost: baseCost,
+        constellationRotations: rotationsOf,
+        combinationRotations: combos,
+      }
+    )
+
+  // ── before the charts: the rotations (a member's tab), the team at a glance (the Team tab)
+  const generate = (
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+      <Button variant="contained" onClick={() => setGenerating(true)}>
+        {s.t('page_team:teamOpt.kqm.share.consGenerateAll', 'Generate charts')}
+      </Button>
+    </Box>
+  )
+  const setupView =
+    view === 'team' ? (
+      <Box>
+        <Box sx={{ ...insetSx, overflow: 'hidden' }}>
+          {keys.map((k, i) => {
+            const written = Object.keys(rotationsOf[k] ?? {}).length
+            return (
+              <ButtonBase
+                key={k}
+                onClick={() => setView(k)}
+                sx={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  px: 1.75,
+                  py: 1.25,
+                  textAlign: 'left',
+                  borderTop: i ? hairline : 'none',
+                  '&:hover': { bgcolor: 'rgba(236, 229, 216, 0.035)' },
+                }}
+              >
+                <MemberAvatar characterKey={k} size={34} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 15, fontWeight: 650 }}>
+                    {s.charName(k)}
+                  </Typography>
+                  <Typography sx={type.label}>
+                    {s.t('page_team:teamOpt.kqm.share.consRunAt', {
+                      defaultValue: 'C{{cons}} in the run',
+                      cons: s.cons(k),
+                    })}
+                    {' · '}
+                    {written
+                      ? s.t('page_team:teamOpt.kqm.share.consOwnCount', {
+                          defaultValue: '{{count}} own rotations',
+                          count: written,
+                        })
+                      : s.t(
+                          'page_team:teamOpt.kqm.share.consTeamEvery',
+                          'Team rotation at every constellation'
+                        )}
+                  </Typography>
+                </Box>
+                <EditOutlinedIcon
+                  sx={{ fontSize: 18, color: 'text.secondary' }}
+                />
+              </ButtonBase>
+            )
+          })}
+        </Box>
+        <Disclosure
+          label={s.t(
+            'page_team:teamOpt.kqm.share.comboTitle',
+            'Advanced: rotations for combinations'
+          )}
+          count={combos.length || undefined}
+          info={s.t(
+            'page_team:teamOpt.kqm.share.comboTip',
+            'When several members’ constellations change the rotation together (Flins C2 with Danica C1), write the rotation for that combination. It is used for those constellations and any higher ones; otherwise a combination plays the first member’s rotation for its constellation, else the team’s.'
+          )}
+          open={advancedOpen}
+          onToggle={() => setAdvancedOpen((o) => !o)}
+          sx={{ mt: 1.5 }}
+        >
+          <Box sx={{ pt: 1 }}>
+            <ComboRotations
+              keys={keys}
+              base={runCons}
+              combos={combos}
+              teamText={teamText}
+              names={names}
+              onChange={setCombos}
+            />
+          </Box>
+        </Disclosure>
+        {generate}
+      </Box>
+    ) : (
+      <Box>
+        <ConsRotations
+          characterKey={view}
+          ran={s.cons(view)}
+          rotations={rotationsOf[view] ?? {}}
+          teamText={teamText}
+          names={names}
+          gender={gender}
+          onChange={(next) => setRotations(view, next)}
+        />
+        {generate}
+      </Box>
+    )
+  const progressView = (
+    <Box sx={{ display: 'grid', gap: 1, py: 6, px: { xs: 1, sm: 6 } }}>
+      {error ? (
+        <Typography color="error">{error}</Typography>
+      ) : (
+        <>
+          <Typography sx={{ fontSize: 14.5, fontWeight: 600 }}>
+            {progress?.phase === 'team'
+              ? s.t('page_team:teamOpt.kqm.share.investRunning', {
+                  defaultValue:
+                    'Finding the best constellations for cost {{cost}} of {{costs}}',
+                  cost: baseCost + progress.cost,
+                  costs: baseCost + progress.costs,
+                })
+              : progress?.phase === 'member'
+                ? s.t('page_team:teamOpt.kqm.share.consRunningAll', {
+                    defaultValue:
+                      '{{name}} at C{{cons}} ({{done}} of {{total}})',
+                    name: s.charName(progress.ck),
+                    cons: progress.cons,
+                    done: progress.done,
+                    total: progress.total,
+                  })
+                : s.t('page_team:teamOpt.kqm.share.consStarting', 'Starting…')}
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={
+              progress?.phase === 'team'
+                ? (progress.cost / Math.max(1, progress.costs)) * 100
+                : progress?.phase === 'member'
+                  ? (progress.done / Math.max(1, progress.total)) * 100
+                  : 0
+            }
+          />
+        </>
+      )}
+    </Box>
+  )
+  const tabs = (
+    <MemberTabs
+      keys={keys}
+      value={view}
+      onChange={setView}
+      team={s.t('page_team:teamOpt.kqm.share.consTeamTab', 'Team')}
+    />
+  )
+  const title = view === 'team' ? teamTitle : memberTitle
+  return (
+    <CardImageDialog
+      title={title}
+      alt={title}
+      fileName={
+        view === 'team'
+          ? `${safeName(s.teamName || 'team')}-constellation-investment`
+          : `${safeName(s.charName(view))}-constellations`
+      }
+      aspectRatio={`${COMPARE_CHART_WIDTH} / ${COMPARE_CHART_HEIGHT}`}
+      render={render}
+      watermark={watermark}
+      header={tabs}
+      placeholder={generating ? progressView : setupView}
+      onClose={onClose}
+    >
+      {done && (
+        <Box>
+          <Button
+            size="small"
+            variant="outlined"
+            color="inherit"
+            startIcon={<EditOutlinedIcon />}
+            onClick={() => setGenerating(false)}
+          >
+            {s.t(
+              'page_team:teamOpt.kqm.share.consEditRotations',
+              'Edit rotations'
+            )}
+          </Button>
+        </Box>
+      )}
+      {generating && !done && !error && (
+        <Box>
+          <Button
+            size="small"
+            color="inherit"
+            onClick={() => setGenerating(false)}
+          >
+            {s.t('page_team:teamOpt.kqm.share.consStop', 'Stop')}
+          </Button>
+        </Box>
+      )}
+    </CardImageDialog>
   )
 }

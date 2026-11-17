@@ -413,7 +413,7 @@ const actionCode = (a: RotationAction) => {
 }
 
 /** The rotation in use, read as its steps: who acts (in their element's colour), then what */
-function RotationReadout({
+export function RotationReadout({
   text,
   opener,
   first,
