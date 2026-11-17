@@ -78,7 +78,7 @@ export function EnemySetup({
           <InfoTooltipInline
             title={t(
               'enemy.setupTip',
-              'The builds are made for this enemy: its level and RES (a Stygian Onslaught boss sets them at once); its HP says how long they take to defeat it. It is the team’s, shared with Team optimize and the members’ own pages.'
+              'The builds are made for this enemy: its level and RES (a Stygian Onslaught boss sets them at once); its HP says how long they take to defeat it. It is the team’s, shared with Team optimize, KQM theorycrafting and the members’ own pages.'
             )}
           />
         </Typography>
@@ -92,37 +92,54 @@ export function EnemySetup({
           {stygian ? t('enemy.change', 'Change') : t('enemy.edit', 'Edit')}
         </Button>
       </Box>
-      <Box sx={{ display: 'grid', gap: 1.5, px: 1.5, py: 1.5 }}>
-        <EnemyHeadline team={team} large hideHp hideRes />
-        {stygian && (
-          /* its difficulty, at once */
-          <Segmented
-            size="small"
-            value={stygian.difficulty}
-            onChange={(key) =>
-              database.teams.set(teamId, (team) => {
-                team.enemyOverride.enemyLevel = levelOf(key)
-              })
-            }
-            aria-label={t('enemy.difficulty', 'Difficulty')}
-            options={stygianDifficulties.map((d) => ({
-              value: d.key,
-              label:
-                d.key === 'fearless'
-                  ? t('enemy.fearless', {
-                      defaultValue: 'Fearless · Lv. {{level}}',
-                      level: d.level,
-                    })
-                  : t('enemy.dire', {
-                      defaultValue: 'Dire · Lv. {{level}}',
-                      level: d.level,
-                    }),
-            }))}
-          />
-        )}
-        <EnemyFigures team={team} fight={fight} />
-        {/* its RES, all eight */}
-        <ResGrid team={team} />
+      {/* one column (KQM's setup, beside the members); a wide panel (Team optimize's): the enemy,
+          its figures and its RES side by side */}
+      <Box sx={{ px: 1.5, py: 1.5, containerType: 'inline-size' }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.5,
+            '@container (min-width: 860px)': {
+              gridTemplateColumns:
+                'minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr)',
+              columnGap: 3,
+              alignItems: 'start',
+            },
+          }}
+        >
+          <Box sx={{ display: 'grid', gap: 1.5, minWidth: 0 }}>
+            <EnemyHeadline team={team} large hideHp hideRes />
+            {stygian && (
+              /* its difficulty, at once */
+              <Segmented
+                size="small"
+                value={stygian.difficulty}
+                onChange={(key) =>
+                  database.teams.set(teamId, (team) => {
+                    team.enemyOverride.enemyLevel = levelOf(key)
+                  })
+                }
+                aria-label={t('enemy.difficulty', 'Difficulty')}
+                options={stygianDifficulties.map((d) => ({
+                  value: d.key,
+                  label:
+                    d.key === 'fearless'
+                      ? t('enemy.fearless', {
+                          defaultValue: 'Fearless · Lv. {{level}}',
+                          level: d.level,
+                        })
+                      : t('enemy.dire', {
+                          defaultValue: 'Dire · Lv. {{level}}',
+                          level: d.level,
+                        }),
+                }))}
+              />
+            )}
+          </Box>
+          <EnemyFigures team={team} fight={fight} />
+          {/* its RES, all eight */}
+          <ResGrid team={team} />
+        </Box>
       </Box>
       <EnemyDialog teamId={teamId} open={open} onClose={onClose} />
     </Box>

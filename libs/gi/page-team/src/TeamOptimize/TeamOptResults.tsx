@@ -106,6 +106,7 @@ export function TeamOptResults({
   teamData,
   stale,
   onRunAgain,
+  timeline,
   enemy,
   enemyNow,
   applications,
@@ -125,6 +126,8 @@ export function TeamOptResults({
   /** The rotation or the settings changed since the run: the result does not include it */
   stale?: boolean
   onRunAgain?: () => void
+  /** The written rotation as these builds play it (its timeline), under the members */
+  timeline?: ReactNode
   /** The settings the result was found with (its rotation) */
   runTeamOpt: TeamOpt
   /** How long one rotation takes (seconds): damage is then shown per second */
@@ -618,7 +621,9 @@ export function TeamOptResults({
             />
           ))}
         </Box>
-        {/* the enemy's HP over the fight (a Stygian boss: its states too) */}
+        {/* the rotation as these builds play it, then the enemy's HP over the fight (a Stygian
+            boss: its states too), as KQM theorycrafting's results show them */}
+        {timeline}
         {fightEnemy && <FightTimeline enemy={fightEnemy} team={fight} />}
       </Box>
       <Snackbar
