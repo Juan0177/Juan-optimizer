@@ -68,6 +68,8 @@ import {
   quickSx,
   Segmented,
   StatTile,
+  StepTitle,
+  stepSurfaceSx,
   tokens,
   type,
   VDivider,
@@ -289,8 +291,14 @@ export default function TeamBuildWorkspace({
   if (!members.length) return <EmptyTeam teamId={teamId} />
 
   return (
-    // each section is its own panel on the page, 16 px apart
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    // each section is its own panel on the page; KQM's are steps (rotation, setup, builds), further apart
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: mode === 'kqm' ? { xs: 2.5, sm: 3.5 } : 2,
+      }}
+    >
       {/* the rotation: what it is with its actions and figures, then its settings, then the team */}
       <Box
         component="section"
@@ -311,23 +319,38 @@ export default function TeamBuildWorkspace({
             rowGap: 1.25,
           }}
         >
-          <Box
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}
-          >
-            <Typography
-              id={rotationTitleId}
-              component="h2"
-              sx={{ ...type.section, whiteSpace: 'nowrap' }}
+          {mode === 'kqm' ? (
+            <Box sx={{ mr: 1 }}>
+              <StepTitle
+                step={1}
+                id={rotationTitleId}
+                info={t(
+                  'teamOpt.rotation.info',
+                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                )}
+              >
+                {t('teamOpt.rotation.title', 'Rotation')}
+              </StepTitle>
+            </Box>
+          ) : (
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}
             >
-              {t('teamOpt.rotation.title', 'Rotation')}
-            </Typography>
-            <InfoTooltipInline
-              title={t(
-                'teamOpt.rotation.info',
-                'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
-              )}
-            />
-          </Box>
+              <Typography
+                id={rotationTitleId}
+                component="h2"
+                sx={{ ...type.section, whiteSpace: 'nowrap' }}
+              >
+                {t('teamOpt.rotation.title', 'Rotation')}
+              </Typography>
+              <InfoTooltipInline
+                title={t(
+                  'teamOpt.rotation.info',
+                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                )}
+              />
+            </Box>
+          )}
           <Box
             sx={{
               display: 'flex',
@@ -560,7 +583,7 @@ export default function TeamBuildWorkspace({
         // (one run's early builds and its result: the same results, updated in place)
         <Box
           key={kqmResult.startTime ?? kqmResult.seconds}
-          sx={{ ...revealSx, ...sectionSx, p: 0 }}
+          sx={{ ...revealSx, ...stepSurfaceSx(true), p: 0 }}
         >
           <KqmResults
             teamId={teamId}
@@ -581,6 +604,7 @@ export default function TeamBuildWorkspace({
             stale={kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt)}
             now={teamOpt}
             onView={setKqmView}
+            teamData={teamData}
             onDiscard={() => {
               kqm.clear()
               setRotationExpanded(true)

@@ -77,7 +77,7 @@ export function KqmTopTeams({
     />
   )
   return (
-    <Box component="section" aria-label={title} sx={{ mt: 3 }}>
+    <Box component="section" aria-label={title} sx={{ minWidth: 0 }}>
       <FieldLabel
         tip={t(
           'teamOpt.kqm.topBuildsTip',
@@ -148,7 +148,12 @@ export function KqmTopTeams({
   )
 }
 
-/** The teams as rows: the changed member in full and outlined, the others faint */
+/**
+ * The teams as a table: the members head its columns (their portraits, once), each row their
+ * weapons and sets, the team's DPS and how far it is from the best. The member a team changes is in
+ * full and outlined; the others, as in the best team, faint. Rows share their columns (a subgrid),
+ * so every member's gear lines up down the table.
+ */
 function TeamRows({
   options,
   members,
@@ -167,23 +172,67 @@ function TeamRows({
 }) {
   const { t } = useTranslation('page_team')
   const theme = useTheme()
-  // (icons a size apart: the changed member's weapon and sets readable at a glance)
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
-  const icon = narrow ? 30 : 40
+  // (a phone: smaller icons and gaps, so the table and its DPS column fit without scrolling)
+  const icon = narrow ? 22 : 30
   const best = options[0]?.total ?? 0
   const unit = rotationTime
     ? t('teamOpt.kqm.teamDps', 'team DPS')
     : t('teamOpt.kqm.teamDmg', 'team DMG')
+  const columns = `24px repeat(${members.length}, max-content) minmax(0, 1fr) auto`
+  const rowSx = {
+    gridColumn: '1 / -1',
+    display: 'grid',
+    gridTemplateColumns: 'subgrid',
+    alignItems: 'center',
+    px: { xs: 0.75, sm: 1.5 },
+  } as const
   return (
     <Box
       sx={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'grid',
+        gridTemplateColumns: columns,
+        columnGap: { xs: 0.5, sm: 1.5 },
         border: `1px solid ${tokens.hairlineStrong}`,
         borderRadius: tokens.radius.inset,
-        overflow: 'hidden',
+        overflowX: 'auto',
+        overflowY: 'hidden',
       }}
     >
+      {/* the head: the members, once (a picture of the columns: each row's button names its team) */}
+      <Box
+        aria-hidden
+        sx={{
+          ...rowSx,
+          py: 0.75,
+          borderBottom: `1px solid ${tokens.hairline}`,
+          bgcolor: alpha(theme.palette.text.primary, 0.02),
+        }}
+      >
+        <Typography sx={{ fontSize: 11.5, color: 'text.secondary', ...numSx }}>
+          #
+        </Typography>
+        {members.map((ck) => (
+          <Box key={ck} sx={{ display: 'flex', justifyContent: 'center' }}>
+            <MemberAvatar characterKey={ck} size={icon - 2} />
+          </Box>
+        ))}
+        <span />
+        <Typography
+          sx={{
+            fontSize: 11.5,
+            color: 'text.secondary',
+            textAlign: 'right',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {narrow
+            ? rotationTime
+              ? t('teamOpt.kqm.dps', 'DPS')
+              : t('teamOpt.kqm.dmg', 'DMG')
+            : unit}
+        </Typography>
+      </Box>
       {options.map((option, i) => {
         const selected = i === current
         const value = formatRateFull(option.total, rotationTime)
@@ -204,17 +253,16 @@ function TeamRows({
             disabled={disabled}
             onClick={() => onPick(option)}
             sx={(theme) => ({
-              display: 'grid',
-              gridTemplateColumns: '32px minmax(0, 1fr) auto',
-              alignItems: 'center',
-              columnGap: 1.5,
-              px: 1.5,
-              py: 1,
+              ...rowSx,
+              py: 0.75,
               textAlign: 'left',
               borderTop: i ? `1px solid ${tokens.hairline}` : undefined,
               bgcolor: selected
                 ? alpha(theme.palette.primary.main, 0.1)
                 : 'transparent',
+              boxShadow: selected
+                ? `inset 2px 0 0 ${theme.palette.primary.main}`
+                : undefined,
               ...quickSx,
               ...focusSx,
               '&:hover': {
@@ -233,62 +281,56 @@ function TeamRows({
                 ...numSx,
               }}
             >
-              #{i + 1}
+              {i + 1}
             </Typography>
-            <Box
-              sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                columnGap: 1.5,
-                rowGap: 0.75,
-                minWidth: 0,
-              }}
-            >
-              {members.map((ck) => {
-                const build = option.builds[ck]
-                if (!build) return null
-                const changed = ck === option.changed
-                return (
-                  <Box
-                    key={ck}
-                    data-changed={changed || undefined}
-                    sx={(theme) => ({
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.75,
-                      p: 0.5,
-                      pr: 0.75,
-                      borderRadius: tokens.radius.inset,
-                      ...quickSx,
-                      // the member this team changes, against the best one: in full, outlined;
-                      // the others as in the best team, much fainter
-                      ...(changed && {
-                        bgcolor: alpha(theme.palette.primary.main, 0.14),
-                        boxShadow: `inset 0 0 0 1.5px ${alpha(theme.palette.primary.main, 0.7)}`,
+            {members.map((ck) => {
+              const build = option.builds[ck]
+              const changed = ck === option.changed
+              return (
+                <Box
+                  key={ck}
+                  data-changed={changed || undefined}
+                  sx={(theme) => ({
+                    display: 'flex',
+                    justifyContent: 'center',
+                    p: { xs: 0.25, sm: 0.375 },
+                    borderRadius: tokens.radius.inset,
+                    ...quickSx,
+                    // the member this team changes, against the best one: in full, outlined;
+                    // the others as in the best team, much fainter
+                    ...(changed && {
+                      bgcolor: alpha(theme.palette.primary.main, 0.14),
+                      boxShadow: `inset 0 0 0 1.5px ${alpha(theme.palette.primary.main, 0.7)}`,
+                    }),
+                    ...(option.changed &&
+                      !changed && {
+                        opacity: 0.3,
+                        filter: 'grayscale(0.6)',
                       }),
-                      ...(option.changed &&
-                        !changed && {
-                          opacity: 0.3,
-                          filter: 'grayscale(0.6)',
-                        }),
-                    })}
-                  >
-                    <MemberAvatar characterKey={ck} size={icon - 8} />
+                  })}
+                >
+                  {build && (
                     <KqmGearIcons characterKey={ck} build={build} size={icon} />
-                  </Box>
-                )
-              })}
-            </Box>
+                  )}
+                </Box>
+              )
+            })}
+            <span />
             <Box sx={{ textAlign: 'right', ...numSx }}>
               <Typography
-                sx={{ fontSize: 15, fontWeight: 650, lineHeight: 1.3 }}
+                sx={{
+                  fontSize: { xs: 13, sm: 14.5 },
+                  fontWeight: 650,
+                  lineHeight: 1.3,
+                  whiteSpace: 'nowrap',
+                }}
               >
                 {value}
               </Typography>
               {i > 0 && (
                 <Typography
                   sx={{
-                    fontSize: 12,
+                    fontSize: 11.5,
                     lineHeight: 1.3,
                     color: 'text.secondary',
                   }}

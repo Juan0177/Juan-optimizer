@@ -73,6 +73,13 @@ export const insetSx = {
 export const type = {
   /** A section of the page (Rotation, Team builds) */
   section: { fontSize: 17, fontWeight: 650, letterSpacing: '-0.01em' },
+  /** A step of the page (KQM: Rotation, Setup, Team builds): the largest heading */
+  step: {
+    fontSize: 20,
+    fontWeight: 650,
+    letterSpacing: '-0.015em',
+    lineHeight: 1.25,
+  },
   /** A panel's or dialog's title */
   title: { fontSize: 15, fontWeight: 650, letterSpacing: '-0.005em' },
   body: { fontSize: 14 },
@@ -95,6 +102,91 @@ export const type = {
     ...numSx,
   },
 } as const
+
+/* ---------- steps ---------- */
+
+/**
+ * A step's heading: its number in a ring, then the title (and its ⓘ). The page's steps read top
+ * to bottom (KQM: write the rotation, set it up, the builds); the result's step is gold.
+ */
+export function StepTitle({
+  step,
+  id,
+  info,
+  result,
+  children,
+}: {
+  step: number
+  id?: string
+  info?: ReactNode
+  /** The step that shows the outcome: a gold badge */
+  result?: boolean
+  children: ReactNode
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+      <Box
+        aria-hidden
+        sx={{
+          flex: '0 0 auto',
+          width: 28,
+          height: 28,
+          borderRadius: '50%',
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: 13.5,
+          fontWeight: 700,
+          ...numSx,
+          ...(result
+            ? {
+                bgcolor: giTokens.gold,
+                color: '#17181f',
+                boxShadow: `0 0 0 4px ${alpha(giTokens.gold, 0.14)}`,
+              }
+            : {
+                color: 'text.secondary',
+                boxShadow: `inset 0 0 0 1.5px ${giTokens.hairlineStrong}`,
+              }),
+        }}
+      >
+        {step}
+      </Box>
+      <Typography
+        id={id}
+        component="h2"
+        sx={{ ...type.step, display: 'flex', alignItems: 'center', gap: 0.5 }}
+      >
+        {children}
+        {info && <InfoTooltipInline title={info} />}
+      </Typography>
+    </Box>
+  )
+}
+
+/** A step's surface: inputs on the panel; the outcome raised, with a gold top edge */
+export const stepSurfaceSx = (result?: boolean) =>
+  ({
+    bgcolor: result ? giTokens.panelRaised : tokens.panel,
+    border: hairline,
+    borderRadius: tokens.radius.panel,
+    minWidth: 0,
+    position: 'relative',
+    ...(result && {
+      borderColor: alpha(giTokens.gold, 0.22),
+      boxShadow: `0 18px 48px ${alpha('#000', 0.35)}`,
+      // (a thin gold line along the top: the outcome)
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        top: -1,
+        left: 24,
+        right: 24,
+        height: 2,
+        borderRadius: 2,
+        background: `linear-gradient(90deg, transparent, ${alpha(giTokens.gold, 0.85)} 18%, ${alpha(giTokens.gold, 0.85)} 82%, transparent)`,
+      },
+    }),
+  }) as const
 
 /* ---------- surfaces ---------- */
 
