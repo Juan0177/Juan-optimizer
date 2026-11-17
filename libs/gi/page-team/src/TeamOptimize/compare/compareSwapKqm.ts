@@ -81,6 +81,8 @@ export interface SideMember {
   constellation: number
   /** Holds A's build (a teammate of the swap) */
   fixed: boolean
+  /** Its share of the rotation's field time (%), as the ER calculator has it */
+  fieldTime?: number
 }
 export interface Side {
   /** Damage per rotation */
@@ -90,6 +92,8 @@ export interface Side {
   rotationTime: number
   members: SideMember[]
   rotation: string
+  /** The KQM talent level its settings use */
+  talents?: number
 }
 export type CompareSwapError =
   | 'inTeam'
@@ -106,8 +110,11 @@ export function sideOf(
   rotation: string,
   fixed: CharacterKey[],
   /** Seconds per rotation when the result played none (the attacks were entered) */
-  fallbackTime?: number
+  fallbackTime?: number,
+  /** The settings it was set up with: its members' field time, its talents */
+  settings?: TeamOpt
 ): Side {
+  const calc = settings?.kqm?.energyCalculator
   const dpr = result.after.total
   const rotationTime = result.played?.rotationTime ?? fallbackTime ?? 0
   const keys = result.optimized?.length
@@ -118,6 +125,7 @@ export function sideOf(
     dps: rotationTime > 0 ? dpr / rotationTime : 0,
     rotationTime,
     rotation,
+    ...(settings && { talents: kqmTalentLevel(settings.kqm) }),
     members: keys.map((key) => {
       const damage = result.after.members[key] ?? 0
       const energy = result.energyRecharge[key]
@@ -130,6 +138,7 @@ export function sideOf(
         build: result.builds[key],
         constellation: result.constellations[key] ?? 0,
         fixed: fixed.includes(key),
+        fieldTime: calc?.members[key]?.fieldTime,
       }
     }),
   }
@@ -537,7 +546,8 @@ export async function compareSwapKqm({
     run.result,
     text,
     fixed,
-    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime
+    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime,
+    run.teamOpt ?? run.runTeamOpt
   )
   if (!replay)
     throw new CompareSwapFailure(
@@ -619,6 +629,6 @@ export async function compareSwapKqm({
       )
   return {
     a,
-    b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime),
+    b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime, teamOpt),
   }
 }

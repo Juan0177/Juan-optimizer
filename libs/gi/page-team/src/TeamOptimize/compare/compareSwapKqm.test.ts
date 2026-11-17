@@ -244,6 +244,7 @@ describe('sideOf', () => {
       played: { attacks: {}, rotationTime: 20 },
     } as KqmResult
     const side = sideOf(result, TEXT, ['Danica'])
+    expect(side.talents).toBeUndefined()
     expect(side.dpr).toBe(1000)
     expect(side.dps).toBe(50)
     expect(side.rotationTime).toBe(20)
@@ -270,6 +271,15 @@ describe('sideOf', () => {
         fixed: true,
       },
     ])
+    // (the settings: each member's field time, as the ER calculator has it, and the talents)
+    const set = sideOf(result, TEXT, ['Danica'], undefined, {
+      kqm: {
+        talents: 10,
+        energyCalculator: { members: { Anastasya: { fieldTime: 60 } } },
+      },
+    } as never)
+    expect(set.talents).toBe(10)
+    expect(set.members.map((m) => m.fieldTime)).toEqual([60, undefined])
   })
 })
 

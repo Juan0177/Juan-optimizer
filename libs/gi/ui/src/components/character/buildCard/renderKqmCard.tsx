@@ -122,6 +122,89 @@ function pastel(hex: string, amount = 0.2) {
   return `rgb(${mix((v >> 16) & 255)}, ${mix((v >> 8) & 255)}, ${mix(v & 255)})`
 }
 
+/** How a marked value reads: better (green), worse (red), a warning (amber), a plain change */
+export type KqmTone = 'better' | 'worse' | 'warn' | 'note'
+/** The share pictures' tones: legible on the sheet's pale cells (contrast ≥ 4.5:1) */
+export const KQM_TONE: Record<KqmTone, string> = {
+  better: '#17692f',
+  worse: '#a8231b',
+  warn: '#8a5300',
+  note: '#4a5568',
+}
+/** The mark for what changed (the swapped member's column and row, a rotation's step) */
+export const KQM_CHANGED = '#2557a7'
+
+/**
+ * A cell's marks (the comparison's): its value in a tone (`warn`: with a warning sign), and a
+ * smaller line under it (`note`) in its own tone
+ */
+export type KqmCardCell = {
+  tone?: KqmTone
+  warn?: boolean
+  note?: string
+  noteTone?: KqmTone
+}
+
+/** What the comparison marks on a sheet; nothing: the sheet as KQM Theorycrafting shares it */
+export type KqmCardMarks = {
+  /** "A", "B": before the sheet's name */
+  tag?: string
+  /** the member that changes: its column and row outlined, a badge on its face ("Out") */
+  changed?: { index: number; badge: string }
+  /** the rotation's step that changes (its index in `rotation`) */
+  rotationTurn?: number
+  /** a column after the damage: its header, each member's cell, the totals' (DPR, DPS) */
+  delta?: {
+    header: string
+    members: ({ text: string } & KqmCardCell)[]
+    total?: { text: string } & KqmCardCell
+    dps?: { text: string } & KqmCardCell
+  }
+  /** marks on the members' share, field time and Energy Recharge */
+  share?: (KqmCardCell | undefined)[]
+  field?: (KqmCardCell | undefined)[]
+  er?: (KqmCardCell | undefined)[]
+  /** a line under the rotation's length ("+0.8s") */
+  seconds?: { note: string; noteTone?: KqmTone }
+  /** the table's columns' widths (fractions), in place of the usual */
+  weights?: number[]
+  /** no site's name at the top right (the picture has it elsewhere) */
+  noStamp?: boolean
+}
+
+/** The sheet's images: the members' faces, weapons' and sets' icons */
+export type KqmCardImages = {
+  faces: (HTMLImageElement | undefined)[]
+  weaponIcons: (HTMLImageElement | undefined)[]
+  setIcons: (HTMLImageElement | undefined)[][]
+}
+
+/** The sheet's images, loaded */
+export async function loadKqmCardImages(
+  data: KqmCardData
+): Promise<KqmCardImages> {
+  const [faces, weaponIcons, setIcons] = await Promise.all([
+    Promise.all(data.members.map((m) => loadImage(m.face))),
+    Promise.all(data.members.map((m) => loadImage(m.weapon.icon ?? ''))),
+    Promise.all(
+      data.members.map((m) =>
+        Promise.all(m.sets.map((set) => loadImage(set.icon ?? '')))
+      )
+    ),
+  ])
+  return { faces, weaponIcons, setIcons }
+}
+
+// (the sheet's rows: the name's, the faces with weapon and sets, the rotation's, the notes')
+const TOP = M + 50
+const BLOCK_H = PORTRAIT + 2 * ITEM_ROW
+const ROT_H = 84
+
+/** The sheet's height (its margins included) */
+export function kqmCardHeight(_data?: KqmCardData) {
+  return TOP + BLOCK_H + GAP + ROT_H + ITEM_ROW + M
+}
+
 /**
  * A KQM result as a theorycrafting sheet to share: the members' faces with their weapon and sets
  * under them; beside them each one's damage per rotation, share, field time and Energy Recharge,
@@ -131,33 +214,41 @@ export async function renderKqmCard(
   data: KqmCardData,
   scale = 2
 ): Promise<HTMLCanvasElement> {
-  const [faces, weaponIcons, setIcons] = await Promise.all([
-    Promise.all(data.members.map((m) => loadImage(m.face))),
-    Promise.all(data.members.map((m) => loadImage(m.weapon.icon ?? ''))),
-    Promise.all(
-      data.members.map((m) =>
-        Promise.all(m.sets.map((set) => loadImage(set.icon ?? '')))
-      )
-    ),
-    loadShareFont(),
-  ])
+  const [images] = await Promise.all([loadKqmCardImages(data), loadShareFont()])
   await document.fonts?.ready
 
   const W = KQM_CARD_WIDTH
+  const H = kqmCardHeight(data)
+  const { canvas, ctx } = page(W, H, scale)
+  ctx.fillStyle = PAGE
+  ctx.fillRect(0, 0, W, H)
+  drawKqmCard(ctx, data, images)
+  if (data.beta) betaMark(ctx, W, H, data.beta)
+  return canvas
+}
+
+/**
+ * The sheet drawn on `ctx` (its page already filled), its top at `y` (`kqmCardHeight` tall,
+ * `KQM_CARD_WIDTH` wide), with the comparison's `marks`; no beta mark (the picture's own)
+ */
+export function drawKqmCard(
+  ctx: CanvasRenderingContext2D,
+  data: KqmCardData,
+  { faces, weaponIcons, setIcons }: KqmCardImages,
+  { y: y0 = 0, marks = {} }: { y?: number; marks?: KqmCardMarks } = {}
+) {
+  const W = KQM_CARD_WIDTH
   const n = data.members.length
   const field = data.members.some((m) => m.field)
-  const top = M + 50
-  const blockH = PORTRAIT + 2 * ITEM_ROW
+  const top = y0 + TOP
+  const blockH = BLOCK_H
   const leftW = n * COL
   const tableX = M + leftW + GAP
   const tableW = W - M - tableX
   const rotY = top + blockH + GAP
-  const rotH = 84
+  const rotH = ROT_H
   const notesY = rotY + rotH
-  const H = notesY + ITEM_ROW + M
-  const { canvas, ctx } = page(W, H, scale)
-  ctx.fillStyle = PAGE
-  ctx.fillRect(0, 0, W, H)
+  const changed = marks.changed
 
   const fillCell = (
     x: number,
@@ -174,6 +265,12 @@ export async function renderKqmCard(
     ctx.lineWidth = 1.5
     ctx.strokeRect(x, y, w, h)
   }
+  /** the changing member's outline (over the grid) */
+  const outline = (x: number, y: number, w: number, h: number) => {
+    ctx.strokeStyle = KQM_CHANGED
+    ctx.lineWidth = 4
+    ctx.strokeRect(x + 2, y + 2, w - 4, h - 4)
+  }
   const mid = (y: number, h: number, size: number) => y + h / 2 + size * 0.35
   const say = (
     value: string,
@@ -185,17 +282,77 @@ export async function renderKqmCard(
       weight?: number
       align?: CanvasTextAlign
       maxWidth?: number
+      color?: string
     } = {}
   ) => {
     const size = opts.size ?? 20
     ink(ctx, value, x, mid(y, h, size), {
       size,
       weight: opts.weight ?? 500,
-      color: TEXT,
+      color: opts.color ?? TEXT,
       align: opts.align ?? 'center',
       maxWidth: opts.maxWidth,
       minSize: Math.min(size, 13),
     })
+  }
+  /** a warning sign: an amber triangle with "!" (its left at `x`, centred on `cy`) */
+  const warnSign = (x: number, cy: number, size: number) => {
+    ctx.beginPath()
+    ctx.moveTo(x + size / 2, cy - size / 2)
+    ctx.lineTo(x + size, cy + size / 2)
+    ctx.lineTo(x, cy + size / 2)
+    ctx.closePath()
+    ctx.fillStyle = KQM_TONE.warn
+    ctx.fill()
+    ink(ctx, '!', x + size / 2, cy + size / 2 - 2, {
+      size: size * 0.75,
+      weight: 800,
+      color: '#ffffff',
+      align: 'center',
+    })
+  }
+  /**
+   * A marked cell's value (right or left aligned at `x`), in its tone, with a warning sign before
+   * it and its note on a smaller line under it
+   */
+  const markedCell = (
+    value: string,
+    cell: KqmCardCell,
+    x: number,
+    y: number,
+    h: number,
+    opts: { align: 'left' | 'right'; maxWidth: number; weight?: number }
+  ) => {
+    const size = cell.note ? 17 : 20
+    const base = cell.note ? y + h / 2 : mid(y, h, size)
+    const sign = cell.warn ? size * 0.9 + 6 : 0
+    const width = ink(
+      ctx,
+      value,
+      x + (opts.align === 'left' ? sign : 0),
+      base,
+      {
+        size,
+        weight: opts.weight ?? (cell.tone ? 700 : 500),
+        color: cell.tone ? KQM_TONE[cell.tone] : TEXT,
+        align: opts.align,
+        maxWidth: opts.maxWidth - sign,
+        minSize: 13,
+      }
+    )
+    if (cell.warn) {
+      const sx = opts.align === 'left' ? x : x - width - sign
+      warnSign(sx, base - size * 0.35, size * 0.9)
+    }
+    if (cell.note)
+      ink(ctx, cell.note, x, base + 15, {
+        size: 13,
+        weight: 600,
+        color: KQM_TONE[cell.noteTone ?? 'note'],
+        align: opts.align,
+        maxWidth: opts.maxWidth,
+        minSize: 11,
+      })
   }
   /**
    * A weapon's or sets' name in its cell: one line (a little smaller if needed), else two even
@@ -266,19 +423,34 @@ export async function renderKqmCard(
     itemText(value, x + used, y, COL - used)
   }
 
-  // ── the team's name, the site
-  ink(ctx, data.name, M, M + 28, {
+  // ── the team's name (after its tag), the site
+  let nameX = M
+  if (marks.tag) {
+    ctx.fillStyle = TEXT
+    ctx.beginPath()
+    ctx.roundRect(M, y0 + M + 2, 38, 36, 8)
+    ctx.fill()
+    ink(ctx, marks.tag, M + 19, y0 + M + 29, {
+      size: 24,
+      weight: 800,
+      color: '#ffffff',
+      align: 'center',
+    })
+    nameX = M + 52
+  }
+  ink(ctx, data.name, nameX, y0 + M + 28, {
     size: 26,
     weight: 700,
     color: TEXT,
-    maxWidth: W - 2 * M - 380,
+    maxWidth: W - M - nameX - 380,
     minSize: 18,
   })
-  ink(ctx, data.labels.siteName, W - M, M + 28, {
-    size: 15,
-    color: 'rgba(28, 35, 49, 0.45)',
-    align: 'right',
-  })
+  if (!marks.noStamp)
+    ink(ctx, data.labels.siteName, W - M, y0 + M + 28, {
+      size: 15,
+      color: 'rgba(28, 35, 49, 0.45)',
+      align: 'right',
+    })
 
   // ── the members: face, weapon, sets
   data.members.forEach((m, i) => {
@@ -316,11 +488,31 @@ export async function renderKqmCard(
     frame(x, wy, COL, ITEM_ROW)
     frame(x, wy + ITEM_ROW, COL, ITEM_ROW)
   })
+  if (changed) {
+    // (the changing member: its column outlined, a badge at the top of its face)
+    const x = M + changed.index * COL
+    outline(x, top, COL, blockH)
+    ctx.font = `700 15px ${FONT}`
+    const bw = Math.min(COL - 16, ctx.measureText(changed.badge).width + 20)
+    ctx.fillStyle = KQM_CHANGED
+    ctx.beginPath()
+    ctx.roundRect(x + (COL - bw) / 2, top + 10, bw, 26, 13)
+    ctx.fill()
+    ink(ctx, changed.badge, x + COL / 2, top + 28, {
+      size: 15,
+      weight: 700,
+      color: '#ffffff',
+      align: 'center',
+      maxWidth: bw - 12,
+      minSize: 11,
+    })
+  }
 
   // ── the table: each member's damage per rotation, share, field time, Energy Recharge
-  const weights = field
-    ? [0.33, 0.25, 0.14, 0.13, 0.15]
-    : [0.38, 0.28, 0.17, 0.17]
+  const delta = marks.delta
+  const weights =
+    marks.weights ??
+    (field ? [0.33, 0.25, 0.14, 0.13, 0.15] : [0.38, 0.28, 0.17, 0.17])
   const xs = weights.reduce<number[]>(
     (acc, f, i) => [...acc, acc[i] + f * tableW],
     [tableX]
@@ -331,13 +523,33 @@ export async function renderKqmCard(
   const headers = [
     data.labels.team,
     data.labels.damage,
+    ...(delta ? [delta.header] : []),
     data.labels.dist,
     ...(field ? [data.labels.field] : []),
     data.labels.er,
   ]
   headers.forEach((h, c) => {
     fillCell(xs[c], top, xs[c + 1] - xs[c], rowH, HEAD)
-    say(h, (xs[c] + xs[c + 1]) / 2, top, rowH, { weight: 700 })
+    // (two labels: on two smaller lines)
+    const lines = h.split('\n')
+    if (lines.length > 1)
+      lines.forEach((line, k) =>
+        ink(
+          ctx,
+          line,
+          (xs[c] + xs[c + 1]) / 2,
+          top + rowH / 2 + 5 + (k - (lines.length - 1) / 2) * 17,
+          {
+            size: 14,
+            weight: 700,
+            color: TEXT,
+            align: 'center',
+            maxWidth: xs[c + 1] - xs[c] - 10,
+            minSize: 11,
+          }
+        )
+      )
+    else say(h, (xs[c] + xs[c + 1]) / 2, top, rowH, { weight: 700 })
     frame(xs[c], top, xs[c + 1] - xs[c], rowH)
   })
   data.members.forEach((m, r) => {
@@ -346,37 +558,82 @@ export async function renderKqmCard(
     const values = [
       `C${m.constellation} ${m.name}`,
       m.damage,
+      ...(delta ? [delta.members[r]?.text ?? ''] : []),
       `${(m.share * 100).toFixed(1)}%`,
       ...(field ? [m.field ?? '–'] : []),
       m.er,
     ]
+    // (the comparison's marks, by column)
+    const cells: (KqmCardCell | undefined)[] = [
+      undefined,
+      undefined,
+      ...(delta ? [delta.members[r]] : []),
+      marks.share?.[r],
+      ...(field ? [marks.field?.[r]] : []),
+      marks.er?.[r],
+    ]
     values.forEach((v, c) => {
       const w = xs[c + 1] - xs[c]
       fillCell(xs[c], y, w, rowH, pale)
-      if (c === 0)
+      const cell = cells[c]
+      if (cell)
+        markedCell(v, cell, xs[c + 1] - 16, y, rowH, {
+          align: 'right',
+          maxWidth: w - 26,
+        })
+      else if (c === 0)
         say(v, xs[c] + 16, y, rowH, { align: 'left', maxWidth: w - 26 })
       else say(v, xs[c + 1] - 16, y, rowH, { align: 'right', maxWidth: w - 26 })
       frame(xs[c], y, w, rowH)
     })
+    if (changed?.index === r) outline(xs[0], y, end - xs[0], rowH)
   })
   // the team's damage per rotation (DPR), then per second (DPS)
-  const totals = (y: number, label: string, value: string, unit: string) => {
+  const unitX = delta ? xs[3] : xs[2]
+  const totals = (
+    y: number,
+    label: string,
+    value: string,
+    unit: string,
+    change?: { text: string } & KqmCardCell,
+    note?: { note: string; noteTone?: KqmTone }
+  ) => {
     fillCell(xs[0], y, end - xs[0], rowH, HEAD)
-    say(label, xs[0] + 16, y, rowH, {
-      weight: 700,
-      align: 'left',
-      maxWidth: xs[1] - xs[0] - 26,
-    })
+    if (note)
+      markedCell(label, { ...note, tone: undefined }, xs[0] + 16, y, rowH, {
+        align: 'left',
+        maxWidth: xs[1] - xs[0] - 26,
+        weight: 700,
+      })
+    else
+      say(label, xs[0] + 16, y, rowH, {
+        weight: 700,
+        align: 'left',
+        maxWidth: xs[1] - xs[0] - 26,
+      })
     say(value, xs[2] - 16, y, rowH, { weight: 600, align: 'right' })
-    say(unit, (xs[2] + end) / 2, y, rowH, { weight: 700 })
+    if (change)
+      markedCell(change.text, change, xs[3] - 16, y, rowH, {
+        align: 'right',
+        maxWidth: xs[3] - xs[2] - 26,
+      })
+    say(unit, (unitX + end) / 2, y, rowH, { weight: 700 })
     frame(xs[0], y, xs[1] - xs[0], rowH)
     frame(xs[1], y, xs[2] - xs[1], rowH)
-    frame(xs[2], y, end - xs[2], rowH)
+    if (delta) frame(xs[2], y, xs[3] - xs[2], rowH)
+    frame(unitX, y, end - unitX, rowH)
   }
   const totalY = top + (n + 1) * rowH
-  totals(totalY, data.labels.total, data.total, data.labels.dpr)
+  totals(totalY, data.labels.total, data.total, data.labels.dpr, delta?.total)
   if (data.dps)
-    totals(totalY + rowH, data.seconds ?? '', data.dps, data.labels.dps)
+    totals(
+      totalY + rowH,
+      data.seconds ?? '',
+      data.dps,
+      data.labels.dps,
+      delta?.dps,
+      marks.seconds
+    )
 
   // ── the rotation and the notes, centred in their rows
   const fullW = W - 2 * M
@@ -391,7 +648,8 @@ export async function renderKqmCard(
   labelled(rotY, rotH, data.labels.rotation)
   if (data.rotation?.length) {
     // (as large as the width allows, on one line)
-    const text = data.rotation.join('   >   ')
+    const SEP = '   >   '
+    const text = data.rotation.join(SEP)
     const avail = fullW - LABEL_W - 48
     let size = 28
     ctx.font = `700 ${size}px ${FONT}`
@@ -399,13 +657,34 @@ export async function renderKqmCard(
       size--
       ctx.font = `700 ${size}px ${FONT}`
     }
-    say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
+    const turn = marks.rotationTurn
+    if (turn === undefined || !data.rotation[turn])
+      say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
+    else {
+      // (the changing step on a tint, outlined, in the mark's color; the rest as usual)
+      const width = Math.min(avail, ctx.measureText(text).width)
+      const before = data.rotation.slice(0, turn).join(SEP)
+      const startX =
+        textX - width / 2 + (before ? ctx.measureText(before + SEP).width : 0)
+      const turnW = ctx.measureText(data.rotation[turn]).width
+      ctx.fillStyle = 'rgba(37, 87, 167, 0.14)'
+      ctx.beginPath()
+      ctx.roundRect(startX - 10, rotY + 14, turnW + 20, rotH - 28, 8)
+      ctx.fill()
+      ctx.strokeStyle = KQM_CHANGED
+      ctx.lineWidth = 2
+      ctx.stroke()
+      say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
+      ink(ctx, data.rotation[turn], startX, mid(rotY, rotH, size), {
+        size,
+        weight: 800,
+        color: KQM_CHANGED,
+      })
+    }
   }
   labelled(notesY, ITEM_ROW, data.labels.notes)
   say(data.notes, textX, notesY, ITEM_ROW, {
     size: 19,
     maxWidth: fullW - LABEL_W - 48,
   })
-  if (data.beta) betaMark(ctx, W, H, data.beta)
-  return canvas
 }

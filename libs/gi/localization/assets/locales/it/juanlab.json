@@ -186,14 +186,12 @@
       "create": "Crea card",
       "title": "Card KQM Compare",
       "alt": "KQM Compare di {{team}}: team A contro team B",
-      "team": "Team",
-      "damage": "Danno",
-      "share": "Quota",
-      "total": "Totale",
-      "rotation": "Rotazione",
       "delta": "Variazione (B su A)",
       "erBuild": "ER build",
-      "erTarget": "ER richiesta"
+      "erTarget": "ER richiesta",
+      "out": "Esce",
+      "rotationTime": "Durata rotazione",
+      "sharePoints": "{{value}} pt"
     },
     "kqmRunning": "KQM Theorycrafting è ancora in corso",
     "staleResult": "Risultato delle impostazioni precedenti",

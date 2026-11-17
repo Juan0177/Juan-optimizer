@@ -186,14 +186,12 @@
       "create": "Create card",
       "title": "KQM Compare card",
       "alt": "KQM Compare of {{team}}: team A against team B",
-      "team": "Team",
-      "damage": "Damage",
-      "share": "Share",
-      "total": "Total",
-      "rotation": "Rotation",
       "delta": "Change (B vs A)",
       "erBuild": "ER build",
-      "erTarget": "ER required"
+      "erTarget": "ER required",
+      "out": "Out",
+      "rotationTime": "Rotation length",
+      "sharePoints": "{{value}} pts"
     },
     "kqmRunning": "KQM Theorycrafting is still running",
     "staleResult": "Result of the previous settings",
