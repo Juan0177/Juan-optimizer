@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.14.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.14.2) (2026-11-17)
+
+### Improved
+
+- KQM Theorycrafting generates builds about 30% faster.
+
+### Fixed
+
+- Phones: the character picker's Done button no longer hides under Android Chrome's bottom bar, and it sits beside the pick count.
+
 ## [v1.14.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.14.1) (2026-11-17)
 
 ### Improved

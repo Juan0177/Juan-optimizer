@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.14.2",
+    "date": "2026-11-17",
+    "improved": [
+      "KQM Theorycrafting generates builds about 30% faster."
+    ],
+    "fixed": [
+      "Phones: the character picker's Done button no longer hides under Android Chrome's bottom bar, and it sits beside the pick count."
+    ]
+  },
+  {
     "version": "1.14.1",
     "date": "2026-11-17",
     "improved": [
