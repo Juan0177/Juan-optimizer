@@ -1278,7 +1278,12 @@ function WriterModal({
     <ModalWrapper open onClose={onClose} containerProps={{ maxWidth: 'xl' }}>
       {/* (phones and tablets: the window scrolls as one; its footer stays at the bottom of the
           screen, so the card must not clip it) */}
-      <CardThemed sx={{ overflow: { xs: 'visible', md: 'hidden' } }}>
+      <CardThemed
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rotation-writer-title"
+        sx={{ overflow: { xs: 'visible', md: 'hidden' } }}
+      >
         {/* title, the timing inspector's toggle, close */}
         <Box
           sx={{
@@ -1289,26 +1294,19 @@ function WriterModal({
             py: 1.5,
           }}
         >
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography
-              component="h2"
-              sx={{ ...type.section, lineHeight: 1.3 }}
-            >
-              {t('teamOpt.writer.title', 'Write rotation')}
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: 12.5,
-                color: 'text.secondary',
-                display: { xs: 'none', sm: 'block' },
-              }}
-            >
-              {t(
+          <Typography
+            id="rotation-writer-title"
+            component="h2"
+            sx={{ flexGrow: 1, ...type.section }}
+          >
+            {t('teamOpt.writer.title', 'Write rotation')}{' '}
+            <InfoTooltipInline
+              title={t(
                 'teamOpt.writer.subtitle',
                 'Who acts and what they do, step by step. The timeline and hits follow as you type.'
               )}
-            </Typography>
-          </Box>
+            />
+          </Typography>
           <Button
             size="small"
             color="inherit"
@@ -2115,64 +2113,67 @@ function EmptyTimeline() {
   )
 }
 
-/** Each member's hits in one rotation (what the team's attacks become), compact */
-/**
- * One attack of a member's hit card: its name in the hit's own colour (its element, or its Stellar
- * or Lunar reaction's hue, as in the rotation panel), what kind of hit it is, how many, and a
- * quiet bar of that colour for its share of the member's hits
- */
-function HitRow({
-  label,
-  n,
-  most,
-  path,
-  data,
-  characterKey,
-}: {
-  label: string
+/** One part of an attack in a hit card: what kind of hit it is ("Stellar-Conduct"), how many */
+interface HitPart {
+  tag?: string
   n: number
-  most: number
   path: string[]
+}
+/**
+ * One attack of a member's hit card, named once: its name in the hit's own colour (its element,
+ * or its Stellar or Lunar reaction's hue, as in the rotation panel) with its first part's kind
+ * and count, its other parts (a Stellar-Conduct hit, a DoT) as quiet rows under it
+ */
+function HitGroup({
+  name,
+  parts,
+  data,
+}: {
+  name: string
+  parts: HitPart[]
   data: UIData | undefined
-  characterKey: CharacterKey
 }) {
-  const info = useAttackInfo(data, path)
-  // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
-  const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
-  const name = tagged ? tagged[1] : label
-  const tag = tagged?.[2]
+  const [first, ...rest] = parts
+  const info = useAttackInfo(data, first.path)
   const color = variantColor(info?.element)
-  const share = `${(n / most) * 100}%`
-  return (
-    <Tooltip
-      title={label}
-      placement="top-start"
-      enterDelay={600}
-      disableInteractive
+  const count = (value: number, quiet?: boolean) => (
+    <Box
+      component="span"
+      sx={{
+        ...numSx,
+        fontWeight: quiet ? 500 : 650,
+        color: quiet ? 'text.secondary' : 'text.primary',
+        textAlign: 'right',
+      }}
     >
-      <Box
-        sx={(theme) => {
-          const palette = theme.palette as unknown as Record<
-            string,
-            { main: string } | undefined
-          >
-          const tint =
-            (info?.element && palette[info.element]?.main) ||
-            laneColor(theme, characterKey)
-          return {
-            position: 'relative',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-            alignItems: 'center',
-            gap: 1,
-            px: 0.75,
-            mx: -0.75,
-            minHeight: 26,
-            borderRadius: 1,
-            fontSize: 12.5,
-            background: `linear-gradient(90deg, ${alpha(tint, 0.14)} ${share}, transparent ${share})`,
-          }
-        }}
+      {Math.round(value * 100) / 100}
+    </Box>
+  )
+  const tagSx = {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: 11.5,
+    color: 'text.secondary',
+  } as const
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr) auto',
+        columnGap: 1.5,
+        py: 0.75,
+        fontSize: 12.5,
+        lineHeight: 1.45,
+        '& + &': { borderTop: `1px solid ${tokens.hairline}` },
+      }}
+    >
+      <Tooltip
+        title={first.tag ? `${name} (${first.tag})` : name}
+        placement="top-start"
+        enterDelay={600}
+        disableInteractive
       >
         <Box
           sx={{
@@ -2186,6 +2187,7 @@ function HitRow({
             component="span"
             sx={{
               color,
+              fontWeight: 550,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -2193,37 +2195,23 @@ function HitRow({
           >
             {name}
           </Box>
-          {tag && (
-            <Box
-              component="span"
-              sx={{
-                flexShrink: 1,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                fontSize: 11,
-                color: 'text.secondary',
-              }}
-            >
-              {tag}
+          {first.tag && (
+            <Box component="span" sx={tagSx}>
+              {first.tag}
             </Box>
           )}
         </Box>
-        <Box
-          component="span"
-          sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 650 }}
-        >
-          <Box
-            component="span"
-            sx={{ color: 'text.secondary', fontWeight: 500 }}
-          >
-            ×
+      </Tooltip>
+      {count(first.n)}
+      {rest.map((part) => (
+        <Fragment key={part.tag ?? part.path.join('.')}>
+          <Box component="span" sx={{ ...tagSx, pl: 1.5 }}>
+            {part.tag ?? name}
           </Box>
-          {Math.round(n * 100) / 100}
-        </Box>
-      </Box>
-    </Tooltip>
+          {count(part.n, true)}
+        </Fragment>
+      ))}
+    </Box>
   )
 }
 
@@ -2251,7 +2239,7 @@ function WriterSection({
         gap: 1,
         minWidth: 0,
         // (space between the parts, no rules: each is a panel or a titled group of its own)
-        ...(first ? {} : { mt: { xs: 2.5, sm: 3.5 } }),
+        ...(first ? {} : { mt: { xs: 2, sm: 3 } }),
       }}
     >
       {(title || aside) && <EditorHead label={title} aside={aside} />}
@@ -2292,63 +2280,61 @@ function HitsSummary({
         }}
       >
         {members.map(({ characterKey }) => {
-          const counts = new Map<string, { n: number; path: string[] }>()
+          // each attack once ("Palestar Crown"), its kinds of hit (Cryo, Stellar-Conduct) as its parts
+          const groups = new Map<string, HitPart[]>()
           for (const a of attacks?.[characterKey] ?? []) {
             const base = a.description ?? a.path.join('.')
             const label = a.reaction
               ? `${base} (${REACTION_NAMES[a.reaction] ?? a.reaction})`
               : base
-            const found = counts.get(label)
-            if (found) found.n += a.hits ?? 1
-            else counts.set(label, { n: a.hits ?? 1, path: a.path })
+            // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
+            const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
+            const name = tagged ? tagged[1] : label
+            const tag = tagged?.[2]
+            const parts = groups.get(name) ?? []
+            const part = parts.find((p) => p.tag === tag)
+            if (part) part.n += a.hits ?? 1
+            else parts.push({ tag, n: a.hits ?? 1, path: a.path })
+            groups.set(name, parts)
           }
-          const total = [...counts.values()].reduce((sum, c) => sum + c.n, 0)
-          const most = Math.max(1, ...[...counts.values()].map((c) => c.n))
+          const sums = [...groups.values()].map((parts) =>
+            parts.reduce((sum, p) => sum + p.n, 0)
+          )
+          const total = sums.reduce((a, b) => a + b, 0)
           return (
             <Box
               key={characterKey}
-              sx={(theme) => ({
-                position: 'relative',
-                overflow: 'hidden',
+              sx={{
                 px: 1.5,
-                pt: 1.5,
-                pb: 1.25,
-                borderRadius: 2.5,
+                pt: 1.25,
+                pb: 0.75,
+                borderRadius: tokens.radius.inset,
                 bgcolor: tokens.inset,
-                border: `1px solid ${alpha(theme.palette.text.primary, 0.07)}`,
+                border: tokensHairline,
                 minWidth: 0,
-                // the member's colour, as a soft light from the top edge
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  inset: '0 0 auto 0',
-                  height: 2,
-                  background: `linear-gradient(90deg, ${laneColor(theme, characterKey)}, ${alpha(laneColor(theme, characterKey), 0)})`,
-                },
-              })}
+              }}
             >
               <Box
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  pb: 0.75,
+                  borderBottom: tokensHairline,
+                }}
               >
-                <MemberAvatar characterKey={characterKey} size={26} />
+                <MemberAvatar characterKey={characterKey} size={24} />
                 <Typography noWrap sx={{ fontSize: 14, fontWeight: 650 }}>
                   <CharacterName characterKey={characterKey} gender={gender} />
                 </Typography>
-                <Box
+                <Typography
                   component="span"
-                  sx={(theme) => ({
+                  sx={{
+                    ...type.label,
+                    ...numSx,
                     ml: 'auto',
-                    flexShrink: 0,
-                    px: 0.875,
-                    borderRadius: 999,
-                    fontSize: 11.5,
-                    fontWeight: 600,
-                    lineHeight: '20px',
                     whiteSpace: 'nowrap',
-                    fontVariantNumeric: 'tabular-nums',
-                    color: 'text.secondary',
-                    bgcolor: alpha(theme.palette.text.primary, 0.06),
-                  })}
+                  }}
                 >
                   {!kitModels[characterKey]
                     ? t('teamOpt.writer.noKitShort', 'attacks kept')
@@ -2356,21 +2342,16 @@ function HitsSummary({
                         defaultValue: '{{count}} hits',
                         count: Math.round(total * 100) / 100,
                       })}
-                </Box>
+                </Typography>
               </Box>
-              {unsupported.includes(characterKey) ? null : counts.size ? (
-                <Box
-                  sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}
-                >
-                  {[...counts].map(([label, { n, path }]) => (
-                    <HitRow
-                      key={label}
-                      label={label}
-                      n={n}
-                      most={most}
-                      path={path}
+              {unsupported.includes(characterKey) ? null : groups.size ? (
+                <Box>
+                  {[...groups].map(([name, parts]) => (
+                    <HitGroup
+                      key={name}
+                      name={name}
+                      parts={parts}
                       data={teamData?.[characterKey]?.target}
-                      characterKey={characterKey}
                     />
                   ))}
                 </Box>
@@ -2544,7 +2525,7 @@ export function WriterQuickRow({
           }}
         >
           {t('teamOpt.writer.into', 'Into')}{' '}
-          <Box component="span" sx={{ color: 'primary.main', fontWeight: 600 }}>
+          <Box component="span" sx={{ color: 'text.primary', fontWeight: 600 }}>
             {into}
           </Box>
         </Typography>
@@ -2645,10 +2626,7 @@ function EditorHead({
         ...sx,
       }}
     >
-      <Typography
-        component="h3"
-        sx={{ fontSize: 13.5, fontWeight: 650, letterSpacing: '-0.005em' }}
-      >
+      <Typography component="h3" sx={type.title}>
         {label}
       </Typography>
       {info && <InfoTooltipInline title={info} />}
