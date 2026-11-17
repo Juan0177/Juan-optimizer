@@ -1011,6 +1011,86 @@ describe('KQM results on another database (KQM Compare’s team B)', () => {
     ).toHaveLength(1)
   })
 
+  it('is read only by default on another database', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-default')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+        onDiscard={vi.fn()}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull()
+  })
+
+  it('says on each held tile that it is locked, in words and not on hover only', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-held')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+        heldLabel="Locked: A’s build"
+      />,
+      { wrapper: wrap }
+    )
+    const tiles = within(
+      screen.getByRole('tablist', { name: 'Team builds' })
+    ).getAllByRole('tab')
+    const tile = (key: string) =>
+      tiles.find((t) => t.textContent?.includes(key))!
+    for (const key of ['Shenhe', 'KaedeharaKazuha', 'Bennett']) {
+      const described = tile(key).getAttribute('aria-describedby')
+      expect(described).toBeTruthy()
+      const label = document.getElementById(described!)
+      expect(label?.textContent).toBe('Locked: A’s build')
+      // (shown in the tile, with its lock)
+      expect(tile(key).contains(label)).toBe(true)
+      expect(
+        within(tile(key))
+          .getByTestId('LockOutlinedIcon')
+          .getAttribute('aria-hidden')
+      ).toBe('true')
+    }
+    // (the entering member is not locked)
+    expect(tile('KamisatoAyaka').getAttribute('aria-describedby')).toBeNull()
+    expect(
+      within(tile('KamisatoAyaka')).queryByText('Locked: A’s build')
+    ).toBeNull()
+  })
+
+  it('shows a note by the inspector when one is given', () => {
+    const { unmount } = render(
+      <KqmResults
+        {...props('ui-b-note')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+        inspectorNote={{
+          label: 'Picks can re-tune teammates',
+          tip: 'As in KQM Theorycrafting.',
+        }}
+      />,
+      { wrapper: wrap }
+    )
+    const note = screen.getByText('Picks can re-tune teammates')
+    const inspector = screen.getByRole('region', { name: 'Compare equipment' })
+    // (right before the inspector)
+    expect(
+      note.compareDocumentPosition(inspector) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    unmount()
+    render(
+      <KqmResults
+        {...props('ui-b-nonote')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+      />,
+      { wrapper: wrap }
+    )
+    expect(screen.queryByText('Picks can re-tune teammates')).toBeNull()
+  })
+
   it('shows its own run’s progress on its preliminary builds', () => {
     render(
       <KqmResults

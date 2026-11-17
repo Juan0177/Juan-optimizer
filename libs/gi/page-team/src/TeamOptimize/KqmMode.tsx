@@ -41,6 +41,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CloseIcon from '@mui/icons-material/Close'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -1823,9 +1824,11 @@ export function KqmResults({
   onDiscard,
   onView,
   database,
-  readOnly = false,
+  readOnly = !!database,
   replayRotation,
   progress,
+  heldLabel,
+  inspectorNote,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -1856,7 +1859,7 @@ export function KqmResults({
   database?: ArtCharDatabase
   /**
    * A result that is not the team's (KQM Compare's team B): nothing to discard, share as the
-   * team's, or keep; its picks are compared all the same
+   * team's, or keep; its picks are compared all the same (by default, with `database`)
    */
   readOnly?: boolean
   /**
@@ -1866,9 +1869,14 @@ export function KqmResults({
   replayRotation?: KqmRotation
   /** Its run's progress (0 to 1) while its builds are preliminary; absent: the team's KQM run's */
   progress?: number
+  /** Said on the tiles of members whose build is held (not optimized), with a lock */
+  heldLabel?: string
+  /** A line by the inspector, its explanation in ⓘ */
+  inspectorNote?: { label: string; tip: string }
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const uid = useId()
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
@@ -2114,12 +2122,14 @@ export function KqmResults({
           const selected = compared === characterKey
           // (a member not ranked: its build held, KQM Compare's teammates; nothing to inspect)
           const held = !!build && !result.optimized.includes(characterKey)
+          const heldId = `${uid}-held-${characterKey}`
           return (
             <ButtonBase
               key={characterKey}
               role="tab"
               aria-selected={selected}
               aria-label={characterKey}
+              aria-describedby={held && heldLabel ? heldId : undefined}
               disabled={!build || held || busy}
               onClick={() => setShown(characterKey)}
               sx={(theme) => ({
@@ -2194,6 +2204,24 @@ export function KqmResults({
                       value={result.constellations[characterKey] ?? 0}
                     />
                     {er && <ErTag er={er} />}
+                    {/* (why it cannot be picked: said in words, not on hover only) */}
+                    {held && heldLabel && (
+                      <Box
+                        component="span"
+                        id={heldId}
+                        sx={{
+                          ...type.label,
+                          fontSize: 12,
+                          lineHeight: 1.4,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.25,
+                        }}
+                      >
+                        <LockOutlinedIcon aria-hidden sx={{ fontSize: 13 }} />
+                        {heldLabel}
+                      </Box>
+                    )}
                     {!build && (
                       <Typography
                         sx={{ ...type.label, fontSize: 12, lineHeight: 1.4 }}
@@ -2250,6 +2278,20 @@ export function KqmResults({
           )
         })}
       </Box>
+      {compared && inspectorNote && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            mb: 1,
+            ...type.label,
+          }}
+        >
+          <span>{inspectorNote.label}</span>
+          <InfoTooltipInline title={inspectorNote.tip} />
+        </Box>
+      )}
       {compared && (
         <KqmCompare
           key={`${compared}-${seconds}-${picked}`}

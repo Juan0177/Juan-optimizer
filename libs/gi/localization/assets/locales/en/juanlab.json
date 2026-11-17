@@ -195,6 +195,16 @@
     },
     "kqmRunning": "KQM Theorycrafting is still running",
     "staleResult": "Result of the previous settings",
-    "staleResultTip": "The settings changed after the comparison: press Compare to update it. The card is available again with the new result."
+    "staleResultTip": "The settings changed after the comparison: press Compare to update it. The card is available again with the new result.",
+    "ranking": "Ranking B's weapons and sets: {{percent}}%",
+    "results": {
+      "title": "B's KQM results",
+      "titleTip": "KQM Theorycrafting's results screen for team B, worked out on a copy of your data: nothing is saved. Only {{name}} is searched and ranked; the teammates keep A's builds.",
+      "locked": "Locked: A's build",
+      "retune": "Picks can re-tune teammates",
+      "retuneTip": "As in KQM Theorycrafting: when a weapon or a set picked for {{name}} changes a teammate's ER requirement (energy it gives, or no longer gives), that teammate's main stats and substat rolls are searched again, so its figures can change too.",
+      "cancelled": "B's rankings cancelled: run the comparison again to see them.",
+      "rankingFailed": "B's rankings failed: {{message}}"
+    }
   }
 }

@@ -529,15 +529,15 @@ export function swapSettings(args: SwapArgs):
   return { teamOpt, keys: keysB, rules: rules as Record<string, unknown> }
 }
 
-/** B's headline: both sides, and B's KQM result (its rankings not yet: `rankings` has none) */
+/**
+ * B's headline: both sides, and B's KQM result (its rankings not yet: `rankings` has none), with
+ * B's sandbox for its results screen while the rankings are worked out
+ */
 export interface CompareSwapPreview {
   a: Side
   b: Side
   /** As KQM Theorycrafting's, for team B: only the entering member optimized (and ranked) */
   resultB: KqmResult
-}
-/** The comparison done: with the entering member's rankings, and B's sandbox for its inspector */
-export interface CompareSwapOutcome extends CompareSwapPreview {
   /** The throwaway copy of the database team B was computed on (never the user's) */
   sandbox: ArtCharDatabase
   /** Team B's KQM settings, as set on `sandbox` */
@@ -548,6 +548,8 @@ export interface CompareSwapOutcome extends CompareSwapPreview {
    */
   rotationB: KqmRotation
 }
+/** The comparison done: with the entering member's rankings */
+export type CompareSwapOutcome = CompareSwapPreview
 
 /**
  * KQM Theorycrafting's saved run (A) against the same team with `out` replaced by `swapIn` (B):
@@ -602,6 +604,9 @@ export async function compareSwapKqm({
     a,
     b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime, teamOpt),
     resultB: { ...result, optimized: [key] },
+    sandbox,
+    teamOptB: teamOpt,
+    rotationB: rotation,
   })
   // the headline, once (its builds are B's: the rankings that follow do not change them)
   let preview: KqmResult | undefined
@@ -680,10 +685,5 @@ export async function compareSwapKqm({
       `${changed}’s build changed in team B.`,
       changed
     )
-  return {
-    ...viewOf(result),
-    sandbox,
-    teamOptB: teamOpt,
-    rotationB: rotation,
-  }
+  return viewOf(result)
 }

@@ -258,6 +258,10 @@ function expectRankedB(
   expect(preview.resultB.builds).toEqual(resultB.builds)
   expect(preview.a).toEqual(out.a)
   expect(preview.b).toEqual(out.b)
+  // (B's sandbox, settings and rotation with the headline: its results screen while it ranks)
+  expect(preview.sandbox).toBe(out.sandbox)
+  expect(preview.teamOptB).toBe(out.teamOptB)
+  expect(preview.rotationB).toEqual(out.rotationB)
   // B's copy of the database, its team with the entering member, for the inspector
   expect(sandbox).not.toBe(s.database)
   expect(teamOptMembers(sandbox, s.teamId).map((m) => m.characterKey)).toEqual([
