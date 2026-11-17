@@ -396,12 +396,13 @@ function MemberTabs<V extends CharacterKey | 'team' = CharacterKey>({
 
 /** Names, icons and the standard's line, for every picture */
 function useShareText(props: ShareProps) {
-  const { t } = useTranslation([
+  const { t, i18n } = useTranslation([
     'page_team',
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
   ])
+  const locale = i18n.language
   const { gender } = useDBMeta()
   const team = useTeam(props.teamId)
   const { result, setup, members } = props
@@ -429,6 +430,7 @@ function useShareText(props: ShareProps) {
       t: t as unknown as TFunction,
       beta,
       gender,
+      locale,
       teamName: team?.name ?? '',
       keys,
       cons,
@@ -438,7 +440,7 @@ function useShareText(props: ShareProps) {
       standard: kqmStandardNote(t as unknown as TFunction, talents),
       teamLine: keys.map((ck) => `C${cons(ck)} ${charName(ck)}`).join('  ·  '),
     }
-  }, [t, gender, team?.name, setup, members, result])
+  }, [t, locale, gender, team?.name, setup, members, result])
 }
 
 /** The written rotation, its members' turns apart */
@@ -544,7 +546,8 @@ function TeamPicture({
       rotation: rotationTurns(teamId),
       notes: s.standard,
       beta: s.beta.length > 0,
-      siteName: shareStamp(),
+      siteName: shareStamp(s.locale),
+      locale: s.locale,
     })
   }, [s, result, rotationTime, teamId, setup])
   const render = useMemo(() => () => renderKqmCard(data), [data])
@@ -605,7 +608,7 @@ function useCompareChart(
       beta: beta.length ? BETA_LABEL : undefined,
       labels: {
         unmet: s.t('page_team:teamOpt.kqm.share.unmet', 'ER unmet'),
-        siteName: shareStamp(),
+        siteName: shareStamp(s.locale),
         // (the constellation chart's two bars)
         team: rotationTime
           ? s.t('page_team:teamOpt.kqm.share.teamDps', 'Team DPS')
@@ -1050,7 +1053,7 @@ function ConstellationPicture({
         cost: baseCost + row.cost,
         cons: row.cons,
         value: row.dps,
-        detail: formatRateFull(row.dps, undefined),
+        detail: formatRateFull(row.dps, undefined, s.locale),
       })),
       beta: s.beta.length ? BETA_LABEL : undefined,
       labels: {
@@ -1062,7 +1065,7 @@ function ConstellationPicture({
           'page_team:teamOpt.kqm.share.investNote',
           'Cost counts copies: a 5★ is 1 at C0, and every constellation is 1 more. Each row is the best way to spend it.'
         ),
-        siteName: shareStamp(),
+        siteName: shareStamp(s.locale),
       },
     }
   }, [done, investment, baseSeconds, teamTitle, s, keys, baseCost])

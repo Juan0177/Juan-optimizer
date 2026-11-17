@@ -34,9 +34,22 @@ export type KqmCardMember = {
   er: string
 }
 
+/** A number written with a point, in the language's decimal separator; English (or none): as is */
+const decimalIn = (text: string, locale?: string) =>
+  !locale || locale.toLowerCase().startsWith('en')
+    ? text
+    : text.replace(
+        '.',
+        new Intl.NumberFormat(locale)
+          .formatToParts(1.1)
+          .find((p) => p.type === 'decimal')?.value ?? '.'
+      )
+
 /** Everything the KQM sheet shows, as plain text and image URLs */
 export type KqmCardData = {
   name: string
+  /** the language the figures are written in (a decimal comma for Italian); absent: English */
+  locale?: string
   members: KqmCardMember[]
   /** the team's damage per rotation, and per second when the rotation's length is known */
   total: string
@@ -559,7 +572,7 @@ export function drawKqmCard(
       `C${m.constellation} ${m.name}`,
       m.damage,
       ...(delta ? [delta.members[r]?.text ?? ''] : []),
-      `${(m.share * 100).toFixed(1)}%`,
+      `${decimalIn((m.share * 100).toFixed(1), data.locale)}%`,
       ...(field ? [m.field ?? '–'] : []),
       m.er,
     ]

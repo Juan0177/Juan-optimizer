@@ -11,7 +11,7 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import { BETA_LABEL, currentRelease } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
-import { formatGain } from '../format'
+import { formatGain, localizeDecimal, secondsText } from '../format'
 import {
   betaOfBuilds,
   kqmStandardNote,
@@ -34,6 +34,8 @@ export interface CompareCardContext {
   t: TFunction
   /** The mark in the corner (default: the app, its version and the date) */
   siteName?: string
+  /** The language the figures and the date are written in (default: English) */
+  locale?: string
 }
 
 /**
@@ -59,14 +61,14 @@ const WEIGHTS_B = {
 const toneOf = (change: number, lowerIsBetter = false): KqmTone | undefined =>
   change === 0 ? undefined : change > 0 !== lowerIsBetter ? 'better' : 'worse'
 /** A relative change ("+21%") in its tone; from nothing: a dash */
-const gainOf = (from: number, to: number) => {
+const gainOf = (from: number, to: number, locale?: string) => {
   if (!(from > 0)) return { text: '–' }
-  const text = formatGain(to / from - 1)
+  const text = formatGain(to / from - 1, locale)
   return { text, tone: text === '±0%' ? undefined : toneOf(to - from) }
 }
 /** A change to show, with its sign: "+0.8", "−3" */
-const signed = (value: number, digits: number) =>
-  `${value > 0 ? '+' : '−'}${Math.abs(value).toFixed(digits)}`
+const signed = (value: number, digits: number, locale?: string) =>
+  `${value > 0 ? '+' : '−'}${localizeDecimal(Math.abs(value).toFixed(digits), locale)}`
 const fieldSeconds = (m: SideMember, side: Side) =>
   m.fieldTime !== undefined && side.rotationTime > 0
     ? (m.fieldTime / 100) * side.rotationTime
@@ -83,14 +85,14 @@ export function compareCardData(
   b: Side,
   ctx: CompareCardContext
 ): KqmCompareCardData {
-  const { t, gender } = ctx
+  const { t, gender, locale } = ctx
   const label = (key: string, opts?: Record<string, unknown>) =>
     t(`juanlab:kqmCompare.card.${key}`, opts ?? {})
   const nameOf = (key: CharacterKey) =>
     t(`charNames_gen:${charKeyToLocGenderedCharKey(key, gender)}`)
   const outName = nameOf(ctx.out)
   const inName = nameOf(ctx.in)
-  const siteName = ctx.siteName ?? shareStamp()
+  const siteName = ctx.siteName ?? shareStamp(locale)
   const beta = betaOfBuilds([...a.members, ...b.members]).length > 0
 
   const cardOf = (side: Side): KqmCardData => {
@@ -115,6 +117,7 @@ export function compareCardData(
       notes: kqmStandardNote(t, side.talents ?? 9),
       beta,
       siteName,
+      locale,
     })
     // (ER: what the build reaches, and what it must reach)
     return {
@@ -160,12 +163,14 @@ export function compareCardData(
 
   const changes = b.members.map((m) => {
     const was = matchOf(m)
-    const damage = was ? gainOf(was.damage, m.damage) : { text: '–' }
+    const damage = was ? gainOf(was.damage, m.damage, locale) : { text: '–' }
     const shareChange = was ? (m.share - was.share) * 100 : 0
     const share: KqmCardCell | undefined =
       Math.abs(shareChange) >= 0.05
         ? {
-            note: label('sharePoints', { value: signed(shareChange, 1) }),
+            note: label('sharePoints', {
+              value: signed(shareChange, 1, locale),
+            }),
             noteTone: 'note',
           }
         : undefined
@@ -175,7 +180,10 @@ export function compareCardData(
       fieldNow !== undefined && fieldWas !== undefined ? fieldNow - fieldWas : 0
     const fieldCell: KqmCardCell | undefined =
       Math.abs(fieldChange) >= 0.05
-        ? { note: `${signed(fieldChange, 1)}s`, noteTone: 'note' }
+        ? {
+            note: secondsText(signed(fieldChange, 1), locale),
+            noteTone: 'note',
+          }
         : undefined
     // (the requirement: from A's to B's, lower is better; the build below it: a warning)
     const reqNow = Math.round(m.er)
@@ -193,8 +201,8 @@ export function compareCardData(
     return { damage, share, field: fieldCell, er }
   })
   const inIndex = b.members.findIndex((m) => m.key === ctx.in)
-  const dpr = gainOf(a.dpr, b.dpr)
-  const dps = a.dps > 0 && b.dps > 0 ? gainOf(a.dps, b.dps) : undefined
+  const dpr = gainOf(a.dpr, b.dpr, locale)
+  const dps = a.dps > 0 && b.dps > 0 ? gainOf(a.dps, b.dps, locale) : undefined
   const timeChange =
     a.rotationTime > 0 && b.rotationTime > 0
       ? Math.round((b.rotationTime - a.rotationTime) * 10) / 10
@@ -218,7 +226,7 @@ export function compareCardData(
     ...(timeChange
       ? {
           seconds: {
-            note: `${signed(timeChange, 1)}s`,
+            note: secondsText(signed(timeChange, 1), locale),
             noteTone: toneOf(timeChange, true),
           },
         }
@@ -230,7 +238,8 @@ export function compareCardData(
     g.tone
       ? { text: `${g.tone === 'better' ? '↑' : '↓'} ${g.text}`, tone: g.tone }
       : g
-  const seconds = (s: number) => `${Math.round(s * 10) / 10}s`
+  const seconds = (s: number) =>
+    secondsText(`${Math.round(s * 10) / 10}`, locale)
   return {
     name: ctx.teamName || label('title'),
     swap: { out: outName, in: inName },

@@ -85,5 +85,54 @@
     "edit": "Modifica configurazione",
     "name": "Nome configurazione",
     "desc": "Descrizione configurazione"
+  },
+  "teamOpt": {
+    "kqm": {
+      "share": {
+        "button": "Condividi",
+        "team": "Card della squadra",
+        "weapons": "Armi",
+        "sets": "Set di artefatti",
+        "constellations": "Costellazioni",
+        "teamAlt": "Le build KQM di {{team}}",
+        "standard": "Standard KQM · Talenti {{talents}}",
+        "seconds": "rotazione da {{seconds}} s",
+        "colTeam": "Squadra",
+        "colDamage": "Danno",
+        "colShare": "Quota",
+        "colField": "In campo",
+        "total": "Totale",
+        "rotation": "Rotazione",
+        "notes": "Note",
+        "compareDps": "DPS della squadra · {{standard}}",
+        "compareDmg": "Danno della squadra · {{standard}}",
+        "unmet": "ER non raggiunta",
+        "teamDps": "DPS della squadra",
+        "teamDmg": "Danno della squadra",
+        "ownDps": "DPS di {{name}}",
+        "ownDmg": "Danno di {{name}}",
+        "weaponsTitle": "Armi · C{{cons}} {{name}}",
+        "setsTitle": "Set di artefatti · C{{cons}} {{name}}",
+        "consTitle": "Costellazioni · {{name}}",
+        "investTitle": "Investimento in costellazioni",
+        "investSubtitle": "Il miglior DPS della squadra a ogni costo · {{standard}}",
+        "investCost": "Costo",
+        "investNote": "Il costo conta le copie: un 5★ vale 1 a C0 e ogni costellazione ne aggiunge 1. Ogni riga è il modo migliore per spenderlo."
+      }
+    },
+    "card": {
+      "button": "Card della squadra",
+      "title": "Card della squadra",
+      "alt": "Le build di {{team}}",
+      "share": "del danno",
+      "memberDps": "{{value}} DPS",
+      "rotation": "Rotazione",
+      "seconds": "{{value}} s",
+      "rotationDamage": "Danno per rotazione"
+    },
+    "result": {
+      "dps": "DPS della squadra",
+      "total": "Danno per rotazione"
+    }
   }
 }

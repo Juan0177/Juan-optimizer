@@ -57,7 +57,7 @@ function CompareCardDialog({
   inKey,
   onClose,
 }: CardProps & { onClose: () => void }) {
-  const { t } = useTranslation([
+  const { t, i18n } = useTranslation([
     'juanlab',
     'page_team',
     'charNames_gen',
@@ -74,9 +74,10 @@ function CompareCardDialog({
         out,
         in: inKey,
         gender,
+        locale: i18n.language,
         t: t as unknown as TFunction,
       }),
-    [a, b, out, inKey, gender, t, teamName]
+    [a, b, out, inKey, gender, t, teamName, i18n.language]
   )
   const render = useMemo(() => () => renderKqmCompareCard(data), [data])
   // (the hidden record of how it was made, as KQM Theorycrafting's pictures carry theirs)

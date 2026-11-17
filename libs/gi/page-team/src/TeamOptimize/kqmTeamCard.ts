@@ -9,7 +9,7 @@ import {
   kqmCardFace,
 } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
-import { formatRateFull } from './format'
+import { formatRateFull, localizeDecimal, secondsText } from './format'
 
 /*
  * The KQM sheet's data (KQM Theorycrafting's Share → Team card), shared with KQM Compare's card:
@@ -20,9 +20,10 @@ import { formatRateFull } from './format'
  * What made the picture and when, small in its corner (to check a shared picture against later):
  * "Stellar Optimizer v1.11.2 · 16 Nov 2026"
  */
-export const shareStamp = () =>
+export const shareStamp = (locale?: string) =>
   `Juan-optimizer (Stellar v${currentRelease.version}) · ${new Date().toLocaleDateString(
-    undefined,
+    // (English: the browser's, as ever; another language: that language's)
+    locale && !locale.toLowerCase().startsWith('en') ? locale : undefined,
     { day: 'numeric', month: 'short', year: 'numeric' }
   )}`
 
@@ -74,6 +75,7 @@ export function kqmTeamCardData({
   notes,
   beta,
   siteName,
+  locale,
 }: {
   /** Loaded for `page_team`, `charNames_gen`, `weaponNames_gen` and `artifactNames_gen` */
   t: TFunction
@@ -90,11 +92,14 @@ export function kqmTeamCardData({
   /** It shows unreleased content */
   beta: boolean
   siteName: string
+  /** The language the numbers are written in (default: English) */
+  locale?: string
 }): KqmCardData {
   const charName = (ck: CharacterKey) =>
     t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, gender)}`)
   return {
     name,
+    locale,
     members: members.map((m) => ({
       ...kqmCardFace(m.key, gender),
       name: charName(m.key),
@@ -110,21 +115,21 @@ export function kqmTeamCardData({
         name: t(`artifactNames_gen:${key}`),
         icon: artifactDefIcon(key as never),
       })),
-      damage: formatRateFull(m.damage, undefined),
+      damage: formatRateFull(m.damage, undefined, locale),
       share: total > 0 ? m.damage / total : 0,
       // (field time: the ER calculator's, from the rotation or as typed)
       field:
         rotationTime && m.fieldTime !== undefined
-          ? `${((m.fieldTime / 100) * rotationTime).toFixed(1)}s`
+          ? secondsText(((m.fieldTime / 100) * rotationTime).toFixed(1), locale)
           : undefined,
       er: `${Math.round(m.er ?? 100)}%`,
     })),
-    total: formatRateFull(total, undefined),
-    dps: rotationTime ? formatRateFull(total, rotationTime) : undefined,
+    total: formatRateFull(total, undefined, locale),
+    dps: rotationTime ? formatRateFull(total, rotationTime, locale) : undefined,
     seconds: rotationTime
       ? t('page_team:teamOpt.kqm.share.seconds', {
           defaultValue: '{{seconds}}s rotation',
-          seconds: rotationTime,
+          seconds: localizeDecimal(`${rotationTime}`, locale),
         })
       : undefined,
     rotation,

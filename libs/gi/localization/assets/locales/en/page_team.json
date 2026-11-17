@@ -623,7 +623,38 @@
       "noWeaponsShort": "Select weapons",
       "erInvalidShort": "{{count}} ER targets below 100%",
       "erInvalidShort_one": "{{count}} ER target below 100%",
-      "erInvalidShort_other": "{{count}} ER targets below 100%"
+      "erInvalidShort_other": "{{count}} ER targets below 100%",
+      "share": {
+        "button": "Share",
+        "team": "Team card",
+        "weapons": "Weapons",
+        "sets": "Artifact sets",
+        "constellations": "Constellations",
+        "teamAlt": "The KQM builds of {{team}}",
+        "standard": "KQM Standards · Talents {{talents}}",
+        "seconds": "{{seconds}}s rotation",
+        "colTeam": "Team",
+        "colDamage": "Damage",
+        "colShare": "Share",
+        "colField": "Field",
+        "total": "Total",
+        "rotation": "Rotation",
+        "notes": "Notes",
+        "compareDps": "Team DPS · {{standard}}",
+        "compareDmg": "Team damage · {{standard}}",
+        "unmet": "ER unmet",
+        "teamDps": "Team DPS",
+        "teamDmg": "Team damage",
+        "ownDps": "{{name}} DPS",
+        "ownDmg": "{{name}} damage",
+        "weaponsTitle": "Weapons · C{{cons}} {{name}}",
+        "setsTitle": "Artifact sets · C{{cons}} {{name}}",
+        "consTitle": "Constellations · {{name}}",
+        "investTitle": "Constellation investment",
+        "investSubtitle": "The best team DPS at each cost · {{standard}}",
+        "investCost": "Cost",
+        "investNote": "Cost counts copies: a 5★ is 1 at C0, and every constellation is 1 more. Each row is the best way to spend it."
+      }
     }
   }
 }
