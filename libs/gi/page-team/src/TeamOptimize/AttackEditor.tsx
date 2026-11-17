@@ -118,6 +118,25 @@ export const AttackFiguresContext = createContext(true)
  * hits and limits are the rotation's)
  */
 const AttackReadOnlyContext = createContext(false)
+/** The stats the hit's formula uses (undefined: not known yet) */
+const HitUsesContext = createContext<ReadonlySet<string> | undefined>(undefined)
+
+/** Every stat in a hit's formula, by its key ("atk_", "electro_critRate_", "eleMas") */
+function statsUsed(
+  hit: CalcResult | undefined
+): ReadonlySet<string> | undefined {
+  if (!hit) return undefined
+  const out = new Set<string>()
+  const seen = new Set<CalcResult>()
+  const walk = (node: CalcResult) => {
+    if (seen.has(node)) return
+    seen.add(node)
+    if (node.info?.path) out.add(node.info.path)
+    for (const op of node.meta?.ops ?? []) walk(op)
+  }
+  walk(hit)
+  return out
+}
 
 /** A section's header in the editor: its title (with ⓘ), and on the right a meta line */
 const sectionHeaderSx = {
@@ -254,6 +273,7 @@ export function AttackEditor({
   readOnly = false,
   overrides,
   moment,
+  switcher,
 }: {
   open: boolean
   onClose: () => void
@@ -280,6 +300,8 @@ export function AttackEditor({
    * auras then
    */
   moment?: { seconds: number; auras: AuraKey[] }
+  /** The other hits of the same action, to switch to (opened from the timeline) */
+  switcher?: ReactNode
 }) {
   const { t } = useTranslation(['page_team', 'loadout'])
   const { gender } = useDBMeta()
@@ -322,6 +344,8 @@ export function AttackEditor({
   }, [hit])
 
   const currentOnField = attack.onField ?? onField
+  // the stats this hit's formula uses: a buff's effect on another stat is dimmed in its row
+  const uses = useMemo(() => statsUsed(hit?.hit), [hit])
 
   return (
     <ModalWrapper
@@ -339,402 +363,435 @@ export function AttackEditor({
       >
         {/* header and footer stay; the body scrolls (on wide screens, each column apart) */}
         <AttackReadOnlyContext.Provider value={readOnly}>
-          <CardThemed sx={dialogSx}>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                flexShrink: 0,
-                px: { xs: 2, sm: 2.5 },
-                py: 1.5,
-                borderBottom: hairline,
-              }}
-            >
-              <MemberAvatar characterKey={characterKey} size={36} />
-              <Box
-                sx={{
-                  flexGrow: 1,
-                  minWidth: 0,
-                  // the attack's name leads the dialog (two lines at most), its talent under it
-                  '& .MuiTypography-body2': {
-                    ...type.section,
-                    lineHeight: 1.3,
-                    whiteSpace: 'normal',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  },
-                  '& .MuiTypography-caption': {
-                    fontSize: 12.5,
-                    fontWeight: 500,
-                    mt: 0.25,
-                  },
-                }}
-              >
-                <AttackName data={data} path={attack.path} dense />
-              </Box>
-              {moment && (
-                <Tooltip
-                  arrow
-                  title={t(
-                    'teamOpt.editor.momentHint',
-                    'When this hit lands in the rotation'
-                  )}
-                >
-                  <Box
-                    component="span"
-                    sx={{
-                      flexShrink: 0,
-                      px: 1,
-                      borderRadius: 999,
-                      fontSize: 12.5,
-                      fontWeight: 650,
-                      lineHeight: '24px',
-                      color: 'text.secondary',
-                      border: hairline,
-                      ...numSx,
-                    }}
-                  >
-                    {moment.seconds.toFixed(2)} s
-                  </Box>
-                </Tooltip>
-              )}
-              <IconButton
-                onClick={onClose}
-                aria-label={t('teamOpt.editor.close', 'Close')}
-                sx={{ mr: -0.75 }}
-              >
-                <CloseIcon />
-              </IconButton>
-            </Box>
-            <Box
-              sx={{
-                flex: '1 1 auto',
-                minHeight: 0,
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: 'minmax(0, 1fr)',
-                  md: '340px minmax(0, 1fr)',
-                  lg: '370px minmax(0, 1fr)',
-                },
-                gridTemplateRows: { md: 'minmax(0, 1fr)' },
-                // phones: one scroll, the controls first (the hit's stats after the buffs)
-                overflowY: { xs: 'auto', md: 'hidden' },
-                p: { xs: 2, md: 0 },
-                rowGap: { xs: 3.5, md: 0 },
-                overscrollBehavior: 'contain',
-              }}
-            >
-              {/* the attack: how it hits, and what one hit uses */}
-              <Box sx={[columnSx, { borderRight: { md: hairline } }]}>
-                {readOnly ? (
-                  // as played: its settings as one quiet list, label and value a line
-                  <Box sx={{ order: { xs: 0, md: 0 }, ...insetSx, py: 0.25 }}>
-                    <SpecRow
-                      label={t('teamOpt.editor.hits', 'Hits per rotation')}
-                      tip={t(
-                        'teamOpt.editor.hitsPlayedHint',
-                        'Its hits in one rotation, as the rotation was played for these builds.'
-                      )}
-                    >
-                      {formatHits(attack.hits)}
-                    </SpecRow>
-                    <SpecRow label={t('teamOpt.editor.hitMode', 'Hit')}>
-                      {t(
-                        `teamOpt.hitMode.${hitMode}`,
-                        hitModeDefaults[hitMode]
-                      )}
-                    </SpecRow>
-                    {!!reactions.length && (
-                      <SpecRow label={t('teamOpt.editor.reaction', 'Reaction')}>
-                        {!attack.reaction ? (
-                          t('loadout:mTargetEditor.noReaction')
-                        ) : (allAmpReactionKeys as readonly string[]).includes(
-                            attack.reaction
-                          ) ? (
-                          <AmpReactionModeText
-                            reaction={attack.reaction as AmpReactionKey}
-                          />
-                        ) : (
-                          <AdditiveReactionModeText
-                            reaction={attack.reaction as AdditiveReactionKey}
-                          />
-                        )}
-                      </SpecRow>
-                    )}
-                    {members.length > 1 && (
-                      <SpecRow
-                        label={t('teamOpt.editor.onFieldShort', 'On the field')}
-                        tip={t(
-                          'teamOpt.editor.onFieldHint',
-                          'Buffs for the active character (e.g. Mitya’s C1) go to whoever is on the field. Pick another member for hits that land while they are, e.g. a skill that keeps hitting after a switch.'
-                        )}
-                      >
-                        <Box
-                          component="span"
-                          sx={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 0.75,
-                          }}
-                        >
-                          <MemberAvatar
-                            characterKey={currentOnField}
-                            size={20}
-                          />
-                          <CharacterName
-                            characterKey={currentOnField}
-                            gender={gender}
-                          />
-                        </Box>
-                      </SpecRow>
-                    )}
-                  </Box>
-                ) : (
-                  <Box
-                    sx={{
-                      order: { xs: 0, md: 0 },
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 2,
-                    }}
-                  >
-                    <Field
-                      label={t('teamOpt.editor.hits', 'Hits per rotation')}
-                      tip={t(
-                        'teamOpt.editor.hitsHint',
-                        'Casts or hits in one rotation; averages like 2.5 are fine.'
-                      )}
-                    >
-                      <HitsStepper
-                        hits={attack.hits}
-                        onChange={(hits) =>
-                          onChange(clampLimits({ ...attack, hits }))
-                        }
-                      />
-                    </Field>
-                    <Field label={t('teamOpt.editor.hitMode', 'Hit')}>
-                      <Segmented<HitModeKey>
-                        size="small"
-                        aria-label={t('teamOpt.editor.hitMode', 'Hit')}
-                        value={hitMode}
-                        onChange={(v) =>
-                          v !== hitMode && onChange({ ...attack, hitMode: v })
-                        }
-                        options={hitModes.map((mode) => ({
-                          value: mode,
-                          label: t(
-                            `teamOpt.hitMode.${mode}`,
-                            hitModeDefaults[mode]
-                          ),
-                        }))}
-                      />
-                    </Field>
-                    {!!reactions.length && (
-                      <Field label={t('teamOpt.editor.reaction', 'Reaction')}>
-                        {/* (scrolls rather than overflow on the narrowest phones) */}
-                        <Box sx={{ maxWidth: '100%', overflowX: 'auto' }}>
-                          <Segmented<AmpReactionKey | AdditiveReactionKey | ''>
-                            size="small"
-                            aria-label={t(
-                              'teamOpt.editor.reaction',
-                              'Reaction'
-                            )}
-                            value={attack.reaction ?? ''}
-                            onChange={(v) => {
-                              if (v === (attack.reaction ?? '')) return
-                              const { reaction: _r, ...rest } = attack
-                              onChange(v ? { ...rest, reaction: v } : rest)
-                            }}
-                            options={[
-                              {
-                                value: '' as const,
-                                label: t('loadout:mTargetEditor.noReaction'),
-                              },
-                              ...reactions.map((r) => ({
-                                value: r,
-                                label: (
-                                  allAmpReactionKeys as readonly string[]
-                                ).includes(r) ? (
-                                  <AmpReactionModeText
-                                    reaction={r as AmpReactionKey}
-                                  />
-                                ) : (
-                                  <AdditiveReactionModeText
-                                    reaction={r as AdditiveReactionKey}
-                                  />
-                                ),
-                              })),
-                            ]}
-                          />
-                        </Box>
-                      </Field>
-                    )}
-                    {members.length > 1 && (
-                      <Field
-                        label={t(
-                          'teamOpt.editor.onField',
-                          'On the field during these hits'
-                        )}
-                        tip={t(
-                          'teamOpt.editor.onFieldHint',
-                          'Buffs for the active character (e.g. Mitya’s C1) go to whoever is on the field. Pick another member for hits that land while they are, e.g. a skill that keeps hitting after a switch.'
-                        )}
-                      >
-                        <Box
-                          role="group"
-                          aria-label={t(
-                            'teamOpt.editor.onField',
-                            'On the field during these hits'
-                          )}
-                          sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}
-                        >
-                          {members.map((m) => (
-                            <Pill
-                              key={m.characterKey}
-                              selected={m.characterKey === currentOnField}
-                              onClick={() => {
-                                if (m.characterKey === currentOnField) return
-                                const { onField: _o, ...rest } = attack
-                                onChange(
-                                  m.characterKey === onField
-                                    ? rest
-                                    : { ...rest, onField: m.characterKey }
-                                )
-                              }}
-                              icon={
-                                <MemberAvatar
-                                  characterKey={m.characterKey}
-                                  size={22}
-                                />
-                              }
-                              sx={{ pl: 0.375, pr: 1.25, gap: 0.625 }}
-                            >
-                              <CharacterName
-                                characterKey={m.characterKey}
-                                gender={gender}
-                              />
-                            </Pill>
-                          ))}
-                        </Box>
-                      </Field>
-                    )}
-                  </Box>
-                )}
-                {figures && (
-                  <Box sx={{ order: { xs: 2, md: 0 } }}>
-                    <HitStats hit={hit} auras={moment?.auras} />
-                  </Box>
-                )}
-              </Box>
-              {/* what changes it: the buffs, and this attack's own extra stats */}
-              <Box sx={columnSx}>
-                <Box sx={{ order: { xs: 1, md: 0 }, minWidth: 0 }}>
-                  <BuffList
-                    teamId={teamId}
-                    characterKey={characterKey}
-                    attack={attack}
-                    buffs={buffs}
-                    inUse={inUse}
-                    gains={gains}
-                    critUncapped={critUncapped}
-                    impacts={impacts}
-                    settled={settled}
-                    mainStatAssumptionLevel={mainStatAssumptionLevel}
-                    onField={onField}
-                    onChange={onChange}
-                    active={open}
-                    overrides={overrides}
-                  />
-                </Box>
-                {!readOnly && (
-                  <Box sx={{ order: { xs: 3, md: 0 } }}>
-                    <PanelHeader
-                      title={t('teamOpt.editor.extra', 'Extra stats')}
-                      info={t(
-                        'teamOpt.editor.extraHint',
-                        'Bonus stats for this attack only: a buff the game data does not have, or your own numbers. For the whole rotation, use Extra buffs.'
-                      )}
-                      sx={sectionHeaderSx}
-                    />
-                    <Box
-                      sx={{
-                        display: 'grid',
-                        gap: 1,
-                        maxWidth: { md: 480 },
-                        // (the editor's type size, not the stat editor's larger one)
-                        '& .MuiInputBase-root, & .MuiInputBase-input': {
-                          fontSize: 14,
-                        },
-                      }}
-                    >
-                      <StatEditorList
-                        statKeys={extraStatKeys}
-                        statFilters={attack.bonusStats ?? {}}
-                        label={t('teamOpt.extra.add', 'Add a stat')}
-                        setStatFilters={(stats) => {
-                          const { bonusStats: _b, ...rest } = attack
-                          onChange(
-                            Object.keys(stats).length
-                              ? { ...rest, bonusStats: stats }
-                              : rest
-                          )
-                        }}
-                      />
-                    </Box>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-            {/* (as played, nothing to do: its close button is enough) */}
-            {!readOnly && (
+          <HitUsesContext.Provider value={uses}>
+            <CardThemed sx={dialogSx}>
               <Box
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 0.5,
+                  gap: 1.5,
                   flexShrink: 0,
-                  px: { xs: 1.5, sm: 2 },
-                  py: 1.25,
-                  borderTop: hairline,
+                  px: { xs: 2, sm: 2.5 },
+                  py: 1.5,
+                  borderBottom: hairline,
                 }}
               >
-                {!readOnly && (
-                  <>
-                    <Button
-                      size="small"
-                      color="error"
-                      startIcon={<DeleteOutlineIcon />}
-                      onClick={onRemove}
-                      sx={{ px: 1.25 }}
-                    >
-                      {t('teamOpt.editor.remove', 'Remove')}
-                    </Button>
-                    <Button
-                      size="small"
-                      color="inherit"
-                      startIcon={<ContentCopyIcon />}
-                      onClick={onDuplicate}
-                      sx={{ px: 1.25, color: 'text.secondary' }}
-                    >
-                      {t('teamOpt.editor.duplicate', 'Duplicate')}
-                    </Button>
-                  </>
-                )}
-                <Box sx={{ flexGrow: 1 }} />
-                <Button
-                  variant="contained"
-                  onClick={onClose}
-                  sx={{ ...giCtaSx, minWidth: 96, minHeight: 34 }}
+                <MemberAvatar characterKey={characterKey} size={36} />
+                <Box
+                  sx={{
+                    flexGrow: 1,
+                    minWidth: 0,
+                    // the attack's name leads the dialog (two lines at most), its talent under it
+                    '& .MuiTypography-body2': {
+                      ...type.section,
+                      lineHeight: 1.3,
+                      whiteSpace: 'normal',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                    },
+                    '& .MuiTypography-caption': {
+                      fontSize: 12.5,
+                      fontWeight: 500,
+                      mt: 0.25,
+                    },
+                  }}
                 >
-                  {readOnly
-                    ? t('teamOpt.editor.close', 'Close')
-                    : t('teamOpt.editor.done', 'Done')}
-                </Button>
+                  <AttackName data={data} path={attack.path} dense />
+                </Box>
+                {moment && (
+                  <Tooltip
+                    arrow
+                    title={t(
+                      'teamOpt.editor.momentHint',
+                      'When this hit lands in the rotation'
+                    )}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        flexShrink: 0,
+                        px: 1,
+                        borderRadius: 999,
+                        fontSize: 12.5,
+                        fontWeight: 650,
+                        lineHeight: '24px',
+                        color: 'text.secondary',
+                        border: hairline,
+                        ...numSx,
+                      }}
+                    >
+                      {moment.seconds.toFixed(2)} s
+                    </Box>
+                  </Tooltip>
+                )}
+                <IconButton
+                  onClick={onClose}
+                  aria-label={t('teamOpt.editor.close', 'Close')}
+                  sx={{ mr: -0.75 }}
+                >
+                  <CloseIcon />
+                </IconButton>
               </Box>
-            )}
-          </CardThemed>
+              {switcher && (
+                <Box
+                  role="tablist"
+                  aria-label={t(
+                    'teamOpt.editor.actionHits',
+                    'Hits of this action'
+                  )}
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 0.75,
+                    flexShrink: 0,
+                    px: { xs: 2, sm: 2.5 },
+                    py: 1,
+                    borderBottom: hairline,
+                  }}
+                >
+                  {switcher}
+                </Box>
+              )}
+              <Box
+                sx={{
+                  flex: '1 1 auto',
+                  minHeight: 0,
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'minmax(0, 1fr)',
+                    md: '340px minmax(0, 1fr)',
+                    lg: '370px minmax(0, 1fr)',
+                  },
+                  gridTemplateRows: { md: 'minmax(0, 1fr)' },
+                  // phones: one scroll, the controls first (the hit's stats after the buffs)
+                  overflowY: { xs: 'auto', md: 'hidden' },
+                  p: { xs: 2, md: 0 },
+                  rowGap: { xs: 3.5, md: 0 },
+                  overscrollBehavior: 'contain',
+                }}
+              >
+                {/* the attack: how it hits, and what one hit uses */}
+                <Box sx={[columnSx, { borderRight: { md: hairline } }]}>
+                  {readOnly ? (
+                    // as played: its settings as one quiet list, label and value a line
+                    <Box sx={{ order: { xs: 0, md: 0 }, ...insetSx, py: 0.25 }}>
+                      <SpecRow
+                        label={t('teamOpt.editor.hits', 'Hits per rotation')}
+                        tip={t(
+                          'teamOpt.editor.hitsPlayedHint',
+                          'Its hits in one rotation, as the rotation was played for these builds.'
+                        )}
+                      >
+                        {formatHits(attack.hits)}
+                      </SpecRow>
+                      <SpecRow label={t('teamOpt.editor.hitMode', 'Hit')}>
+                        {t(
+                          `teamOpt.hitMode.${hitMode}`,
+                          hitModeDefaults[hitMode]
+                        )}
+                      </SpecRow>
+                      {!!reactions.length && (
+                        <SpecRow
+                          label={t('teamOpt.editor.reaction', 'Reaction')}
+                        >
+                          {!attack.reaction ? (
+                            t('loadout:mTargetEditor.noReaction')
+                          ) : (
+                              allAmpReactionKeys as readonly string[]
+                            ).includes(attack.reaction) ? (
+                            <AmpReactionModeText
+                              reaction={attack.reaction as AmpReactionKey}
+                            />
+                          ) : (
+                            <AdditiveReactionModeText
+                              reaction={attack.reaction as AdditiveReactionKey}
+                            />
+                          )}
+                        </SpecRow>
+                      )}
+                      {members.length > 1 && (
+                        <SpecRow
+                          label={t(
+                            'teamOpt.editor.onFieldShort',
+                            'On the field'
+                          )}
+                          tip={t(
+                            'teamOpt.editor.onFieldHint',
+                            'Buffs for the active character (e.g. Mitya’s C1) go to whoever is on the field. Pick another member for hits that land while they are, e.g. a skill that keeps hitting after a switch.'
+                          )}
+                        >
+                          <Box
+                            component="span"
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 0.75,
+                            }}
+                          >
+                            <MemberAvatar
+                              characterKey={currentOnField}
+                              size={20}
+                            />
+                            <CharacterName
+                              characterKey={currentOnField}
+                              gender={gender}
+                            />
+                          </Box>
+                        </SpecRow>
+                      )}
+                    </Box>
+                  ) : (
+                    <Box
+                      sx={{
+                        order: { xs: 0, md: 0 },
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 2,
+                      }}
+                    >
+                      <Field
+                        label={t('teamOpt.editor.hits', 'Hits per rotation')}
+                        tip={t(
+                          'teamOpt.editor.hitsHint',
+                          'Casts or hits in one rotation; averages like 2.5 are fine.'
+                        )}
+                      >
+                        <HitsStepper
+                          hits={attack.hits}
+                          onChange={(hits) =>
+                            onChange(clampLimits({ ...attack, hits }))
+                          }
+                        />
+                      </Field>
+                      <Field label={t('teamOpt.editor.hitMode', 'Hit')}>
+                        <Segmented<HitModeKey>
+                          size="small"
+                          aria-label={t('teamOpt.editor.hitMode', 'Hit')}
+                          value={hitMode}
+                          onChange={(v) =>
+                            v !== hitMode && onChange({ ...attack, hitMode: v })
+                          }
+                          options={hitModes.map((mode) => ({
+                            value: mode,
+                            label: t(
+                              `teamOpt.hitMode.${mode}`,
+                              hitModeDefaults[mode]
+                            ),
+                          }))}
+                        />
+                      </Field>
+                      {!!reactions.length && (
+                        <Field label={t('teamOpt.editor.reaction', 'Reaction')}>
+                          {/* (scrolls rather than overflow on the narrowest phones) */}
+                          <Box sx={{ maxWidth: '100%', overflowX: 'auto' }}>
+                            <Segmented<
+                              AmpReactionKey | AdditiveReactionKey | ''
+                            >
+                              size="small"
+                              aria-label={t(
+                                'teamOpt.editor.reaction',
+                                'Reaction'
+                              )}
+                              value={attack.reaction ?? ''}
+                              onChange={(v) => {
+                                if (v === (attack.reaction ?? '')) return
+                                const { reaction: _r, ...rest } = attack
+                                onChange(v ? { ...rest, reaction: v } : rest)
+                              }}
+                              options={[
+                                {
+                                  value: '' as const,
+                                  label: t('loadout:mTargetEditor.noReaction'),
+                                },
+                                ...reactions.map((r) => ({
+                                  value: r,
+                                  label: (
+                                    allAmpReactionKeys as readonly string[]
+                                  ).includes(r) ? (
+                                    <AmpReactionModeText
+                                      reaction={r as AmpReactionKey}
+                                    />
+                                  ) : (
+                                    <AdditiveReactionModeText
+                                      reaction={r as AdditiveReactionKey}
+                                    />
+                                  ),
+                                })),
+                              ]}
+                            />
+                          </Box>
+                        </Field>
+                      )}
+                      {members.length > 1 && (
+                        <Field
+                          label={t(
+                            'teamOpt.editor.onField',
+                            'On the field during these hits'
+                          )}
+                          tip={t(
+                            'teamOpt.editor.onFieldHint',
+                            'Buffs for the active character (e.g. Mitya’s C1) go to whoever is on the field. Pick another member for hits that land while they are, e.g. a skill that keeps hitting after a switch.'
+                          )}
+                        >
+                          <Box
+                            role="group"
+                            aria-label={t(
+                              'teamOpt.editor.onField',
+                              'On the field during these hits'
+                            )}
+                            sx={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              gap: 0.75,
+                            }}
+                          >
+                            {members.map((m) => (
+                              <Pill
+                                key={m.characterKey}
+                                selected={m.characterKey === currentOnField}
+                                onClick={() => {
+                                  if (m.characterKey === currentOnField) return
+                                  const { onField: _o, ...rest } = attack
+                                  onChange(
+                                    m.characterKey === onField
+                                      ? rest
+                                      : { ...rest, onField: m.characterKey }
+                                  )
+                                }}
+                                icon={
+                                  <MemberAvatar
+                                    characterKey={m.characterKey}
+                                    size={22}
+                                  />
+                                }
+                                sx={{ pl: 0.375, pr: 1.25, gap: 0.625 }}
+                              >
+                                <CharacterName
+                                  characterKey={m.characterKey}
+                                  gender={gender}
+                                />
+                              </Pill>
+                            ))}
+                          </Box>
+                        </Field>
+                      )}
+                    </Box>
+                  )}
+                  {figures && (
+                    <Box sx={{ order: { xs: 2, md: 0 } }}>
+                      <HitStats hit={hit} auras={moment?.auras} />
+                    </Box>
+                  )}
+                </Box>
+                {/* what changes it: the buffs, and this attack's own extra stats */}
+                <Box sx={columnSx}>
+                  <Box sx={{ order: { xs: 1, md: 0 }, minWidth: 0 }}>
+                    <BuffList
+                      teamId={teamId}
+                      characterKey={characterKey}
+                      attack={attack}
+                      buffs={buffs}
+                      inUse={inUse}
+                      gains={gains}
+                      critUncapped={critUncapped}
+                      impacts={impacts}
+                      settled={settled}
+                      mainStatAssumptionLevel={mainStatAssumptionLevel}
+                      onField={onField}
+                      onChange={onChange}
+                      active={open}
+                      overrides={overrides}
+                    />
+                  </Box>
+                  {!readOnly && (
+                    <Box sx={{ order: { xs: 3, md: 0 } }}>
+                      <PanelHeader
+                        title={t('teamOpt.editor.extra', 'Extra stats')}
+                        info={t(
+                          'teamOpt.editor.extraHint',
+                          'Bonus stats for this attack only: a buff the game data does not have, or your own numbers. For the whole rotation, use Extra buffs.'
+                        )}
+                        sx={sectionHeaderSx}
+                      />
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gap: 1,
+                          maxWidth: { md: 480 },
+                          // (the editor's type size, not the stat editor's larger one)
+                          '& .MuiInputBase-root, & .MuiInputBase-input': {
+                            fontSize: 14,
+                          },
+                        }}
+                      >
+                        <StatEditorList
+                          statKeys={extraStatKeys}
+                          statFilters={attack.bonusStats ?? {}}
+                          label={t('teamOpt.extra.add', 'Add a stat')}
+                          setStatFilters={(stats) => {
+                            const { bonusStats: _b, ...rest } = attack
+                            onChange(
+                              Object.keys(stats).length
+                                ? { ...rest, bonusStats: stats }
+                                : rest
+                            )
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+              {/* (as played, nothing to do: its close button is enough) */}
+              {!readOnly && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    flexShrink: 0,
+                    px: { xs: 1.5, sm: 2 },
+                    py: 1.25,
+                    borderTop: hairline,
+                  }}
+                >
+                  {!readOnly && (
+                    <>
+                      <Button
+                        size="small"
+                        color="error"
+                        startIcon={<DeleteOutlineIcon />}
+                        onClick={onRemove}
+                        sx={{ px: 1.25 }}
+                      >
+                        {t('teamOpt.editor.remove', 'Remove')}
+                      </Button>
+                      <Button
+                        size="small"
+                        color="inherit"
+                        startIcon={<ContentCopyIcon />}
+                        onClick={onDuplicate}
+                        sx={{ px: 1.25, color: 'text.secondary' }}
+                      >
+                        {t('teamOpt.editor.duplicate', 'Duplicate')}
+                      </Button>
+                    </>
+                  )}
+                  <Box sx={{ flexGrow: 1 }} />
+                  <Button
+                    variant="contained"
+                    onClick={onClose}
+                    sx={{ ...giCtaSx, minWidth: 96, minHeight: 34 }}
+                  >
+                    {readOnly
+                      ? t('teamOpt.editor.close', 'Close')
+                      : t('teamOpt.editor.done', 'Done')}
+                  </Button>
+                </Box>
+              )}
+            </CardThemed>
+          </HitUsesContext.Provider>
         </AttackReadOnlyContext.Provider>
       </Suspense>
     </ModalWrapper>
@@ -1191,40 +1248,48 @@ function BuffList({
               )}
             </EmptyLine>
           )}
+          {/* one fold for what does not change this hit: the buffs that do nothing for it, then
+              the ones not in use now (gear not worn, an effect not unlocked) */}
           {(!!folded.length || !!unused.length) && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              {!!folded.length && (
-                <FoldedBuffs
-                  label={t('teamOpt.editor.idle', {
-                    count: folded.length,
-                    defaultValue: 'No effect on this attack ({{count}})',
-                  })}
-                >
-                  {groups(folded)}
-                </FoldedBuffs>
-              )}
+            <FoldedBuffs
+              label={t('teamOpt.editor.idle', {
+                count: folded.length + unused.length,
+                defaultValue: 'No effect on this attack ({{count}})',
+              })}
+            >
+              {groups(folded)}
               {!!unused.length && (
-                <FoldedBuffs
-                  label={t('teamOpt.editor.unused', {
-                    count: unused.length,
-                    defaultValue: 'Not in use now ({{count}})',
-                  })}
-                  info={
-                    unused.some((b) => b.inactive === 'gear')
-                      ? t(
-                          'teamOpt.editor.unusedHint',
-                          'Passives of weapons and artifact sets the member does not have on now, and effects that are not unlocked. A weapon’s or set’s passive counts once Team Optimize picks it for the member.'
-                        )
-                      : t(
-                          'teamOpt.editor.unusedLockedHint',
-                          'Effects that are not unlocked: a constellation the member does not have, or a resonance the team does not have.'
-                        )
-                  }
-                >
+                <>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      pt: folded.length ? 1 : 0,
+                      borderTop: folded.length ? hairline : undefined,
+                    }}
+                  >
+                    <FieldLabel>
+                      {t('teamOpt.editor.unusedShort', 'Not in use now')}
+                    </FieldLabel>
+                    <InfoTooltipInline
+                      title={
+                        unused.some((b) => b.inactive === 'gear')
+                          ? t(
+                              'teamOpt.editor.unusedHint',
+                              'Passives of weapons and artifact sets the member does not have on now, and effects that are not unlocked. A weapon’s or set’s passive counts once Team Optimize picks it for the member.'
+                            )
+                          : t(
+                              'teamOpt.editor.unusedLockedHint',
+                              'Effects that are not unlocked: a constellation the member does not have, or a resonance the team does not have.'
+                            )
+                      }
+                    />
+                  </Box>
                   {groups(unused)}
-                </FoldedBuffs>
+                </>
               )}
-            </Box>
+            </FoldedBuffs>
           )}
         </Box>
       )}
@@ -1437,6 +1502,7 @@ function BuffRow({
   )
   const id = useId()
   const source = useBuffSource()
+  const uses = useContext(HitUsesContext)
   return (
     <Box
       sx={{
@@ -1540,7 +1606,12 @@ function BuffRow({
           <Skeleton variant="rounded" width={120} height={18} />
         ) : (
           effects.map((effect) => (
-            <EffectText key={effect.key} effect={effect} dim={!on} />
+            <EffectText
+              key={effect.key}
+              effect={effect}
+              dim={!on}
+              unused={!!uses && !!effect.stat && !uses.has(effect.stat)}
+            />
           ))
         )}
       </Box>

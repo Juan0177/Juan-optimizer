@@ -9,10 +9,12 @@ import type {
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import { rotationAttacks } from '@genshin-optimizer/gi/ui'
-import { Box, Typography } from '@mui/material'
+import { alpha, Box, ButtonBase, Typography } from '@mui/material'
+import type { ReactNode } from 'react'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AttackEditor } from './AttackEditor'
+import { AttackName } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { buffsForAttacker } from './buffs'
 import type { TimelineMoment } from './RotationTimeline'
@@ -28,7 +30,14 @@ import {
 import { useMomentFigures } from './TimelineFigures'
 import type { AuraKey } from './timelineModel'
 import { aurasAt } from './timelineModel'
-import { numSx, SubsectionTitle, subsectionSx, type } from './ui'
+import {
+  focusSx,
+  numSx,
+  SubsectionTitle,
+  subsectionSx,
+  tokens,
+  type,
+} from './ui'
 
 /** No step of the written rotation is edited here (the timeline only shows it) */
 const NONE: ReadonlySet<number> = new Set()
@@ -155,10 +164,15 @@ export function KqmTimeline({
     return { attacks, hitAttacks }
   }, [result])
   // the attack a bar opened: among the run's, the one it is (else the first of its talent)
-  const [opened, setOpened] = useState<{
-    characterKey: CharacterKey
+  // the action a bar opened: its hits' attacks (among the run's, else the play's own), one shown
+  type Part = {
     attack: TeamOptAttack
     moment: { seconds: number; auras: AuraKey[] }
+  }
+  const [opened, setOpened] = useState<{
+    characterKey: CharacterKey
+    parts: Part[]
+    index: number
   }>()
   const openAction = ({
     characterKey,
@@ -173,14 +187,15 @@ export function KqmTimeline({
     const sim = result?.sim
     if (!sim || !mapping) return
     // its hits: the member's from the action's start until its next action (damage lands after
-    // the action itself: projectiles, pulses, a summon's hits), the action's own talent first
+    // the action itself: projectiles, pulses, a summon's hits); of its own talent when it has any
+    // (Mitya's Gradient Detonation: its ATK hit and its Stellar-Conduct one)
     const nextStart = Math.min(
       sim.start + sim.frames,
       ...sim.actions
         .filter((x) => x.characterKey === characterKey && x.start > start)
         .map((x) => x.start)
     )
-    const hits = sim.hits.filter(
+    const all = sim.hits.filter(
       (h) =>
         h.characterKey === characterKey &&
         h.t >= start &&
@@ -188,21 +203,31 @@ export function KqmTimeline({
         mapping.hitAttacks.has(h)
     )
     const talent = talentOf(text)
-    const hit = (talent && hits.find((h) => h.path[0] === talent)) ?? hits[0]
-    // (a swap, an entry or a buff with no hit of its own: nothing to open)
-    const at = hit && mapping.hitAttacks.get(hit)
-    const mine = at && mapping.attacks[at.characterKey]?.[at.index]
-    if (!mine) return
+    const own = talent ? all.filter((h) => h.path[0] === talent) : []
+    const hits = own.length ? own : all
     const listed = kqmAttacks?.[characterKey] ?? []
-    const samePath = listed.filter(
-      (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
-    )
-    const attack = samePath.find((x) => sameAttack(x, mine)) ?? samePath[0]
-    setOpened({
-      characterKey,
-      attack: attack ?? mine,
-      moment: { seconds: (hit.t - sim.start) / 60, auras: aurasAt(sim, hit.t) },
-    })
+    const parts: Part[] = []
+    for (const hit of hits) {
+      const at = mapping.hitAttacks.get(hit)
+      const mine = at && mapping.attacks[at.characterKey]?.[at.index]
+      if (!mine) continue
+      const samePath = listed.filter(
+        (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
+      )
+      const attack =
+        samePath.find((x) => sameAttack(x, mine)) ?? samePath[0] ?? mine
+      // (one part an attack: at its first hit here)
+      if (parts.some((p) => p.attack === attack)) continue
+      parts.push({
+        attack,
+        moment: {
+          seconds: (hit.t - sim.start) / 60,
+          auras: aurasAt(sim, hit.t),
+        },
+      })
+    }
+    // (a swap, an entry or a buff with no hit of its own: nothing to open)
+    if (parts.length) setOpened({ characterKey, parts, index: 0 })
   }
   // the members' stats at the moment shown and what each buff up then gives, with these builds
   const [moment, setMoment] = useState<TimelineMoment>()
@@ -258,6 +283,7 @@ export function KqmTimeline({
       {/* the attack a bar opened: its damage and the buffs during it, as the KQM builds have them */}
       {opened && (
         <AttackEditor
+          key={opened.index}
           open
           readOnly
           overrides={overrides}
@@ -265,8 +291,24 @@ export function KqmTimeline({
           teamId={teamId}
           characterKey={opened.characterKey}
           data={teamData?.[opened.characterKey]?.target}
-          attack={opened.attack}
-          moment={opened.moment}
+          attack={opened.parts[opened.index].attack}
+          moment={opened.parts[opened.index].moment}
+          switcher={
+            opened.parts.length > 1 &&
+            opened.parts.map((part, i) => (
+              <PartTab
+                key={part.attack.path.join('.')}
+                selected={i === opened.index}
+                onClick={() => setOpened({ ...opened, index: i })}
+              >
+                <AttackName
+                  data={teamData?.[opened.characterKey]?.target}
+                  path={part.attack.path}
+                  oneLine
+                />
+              </PartTab>
+            ))
+          }
           buffs={buffsForAttacker(kqmBuffs ?? [], opened.characterKey)}
           mainStatAssumptionLevel={mainStatAssumptionLevel}
           members={members}
@@ -277,5 +319,42 @@ export function KqmTimeline({
         />
       )}
     </Box>
+  )
+}
+
+/** One of an action's hits, in its window's switcher */
+function PartTab({
+  selected,
+  onClick,
+  children,
+}: {
+  selected: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <ButtonBase
+      role="tab"
+      aria-selected={selected}
+      onClick={onClick}
+      sx={(theme) => ({
+        minWidth: 0,
+        maxWidth: '100%',
+        px: 1.25,
+        py: 0.5,
+        borderRadius: 999,
+        border: `1px solid ${selected ? alpha(tokens.gold, 0.55) : theme.palette.divider}`,
+        bgcolor: selected ? alpha(tokens.gold, 0.1) : 'transparent',
+        opacity: selected ? 1 : 0.8,
+        transition: 'background-color .12s, border-color .12s, opacity .12s',
+        '&:hover': {
+          opacity: 1,
+          bgcolor: alpha(theme.palette.text.primary, 0.05),
+        },
+        ...focusSx,
+      })}
+    >
+      {children}
+    </ButtonBase>
   )
 }
