@@ -1026,14 +1026,27 @@ function RunBar({
   const { gender } = useDBMeta()
   const kqmRunning = kqmState.type === 'running'
   const running = state.type === 'running' || kqmRunning
+  // (members on a TC build are kept as they are: Team optimize picks real artifacts)
+  const tcCount = members.filter((m) => m.isTc).length
   const blocked = !attackCount
     ? t('teamOpt.run.noAttacks', 'Add the rotation’s attacks first.')
-    : !optimizable.length
-      ? t(
-          'teamOpt.run.allKept',
-          'Every member’s build is kept: nothing to optimize.'
-        )
-      : undefined
+    : optimizable.length
+      ? undefined
+      : tcCount === members.length
+        ? t(
+            'teamOpt.run.allTc',
+            'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
+          )
+        : tcCount
+          ? t('teamOpt.run.allKeptTc', {
+              defaultValue:
+                'Every member’s build is kept ({{count}} on TC builds, the others switched off in Optimize team): nothing to optimize.',
+              count: tcCount,
+            })
+          : t(
+              'teamOpt.run.allKept',
+              'Every member’s build is kept: nothing to optimize.'
+            )
 
   return (
     <Box
