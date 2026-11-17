@@ -43,10 +43,28 @@ export type FightNote =
   | 'ward'
   | 'mechanics'
 
+/** A stretch of the fight in one state: its HP (fractions of its Max HP) from start to end */
+export interface FightSegment {
+  start: number
+  end: number
+  /** Its state: one of its phases, or its horns on (the Emperor) */
+  state: StygianPhaseKey | 'horns'
+  hpStart: number
+  hpEnd: number
+}
+/** A moment that takes HP off at once (fractions of its Max HP) */
+export interface FightEvent {
+  t: number
+  kind: 'backlash' | 'hornsBreak'
+  hp: number
+}
+
 export interface FightEstimate {
   /** Seconds to defeat it; undefined: not within `FIGHT_LIMIT` */
   seconds: number | undefined
   parts: FightPart[]
+  /** The fight over time (as far as `FIGHT_LIMIT`) */
+  timeline: { segments: FightSegment[]; events: FightEvent[] }
   /** What it does not count */
   notes: FightNote[]
   /** Whether the boss's mechanics are modelled (else: HP ÷ DPS) */
@@ -95,10 +113,23 @@ function plain(
   const res = phaseRes(boss, phase)
   const dps = res ? dpsAt(team, res) : 0
   const seconds = dps > 0 ? hp / dps : undefined
+  const end = Math.min(seconds ?? FIGHT_LIMIT, FIGHT_LIMIT)
   return {
     seconds:
       seconds !== undefined && seconds <= FIGHT_LIMIT ? seconds : undefined,
     parts: seconds ? [{ key: 'phase', phase, seconds }] : [],
+    timeline: {
+      segments: [
+        {
+          start: 0,
+          end,
+          state: phase,
+          hpStart: 1,
+          hpEnd: Math.max(0, 1 - (dps * end) / hp),
+        },
+      ],
+      events: [],
+    },
     notes: [],
     modelled: false,
   }
@@ -121,6 +152,8 @@ function wavebinder(
   const drain = 15 + 8 * 1.5 * electro
   const notes: FightNote[] = ['stellarGlimmer']
   if (!team.gauge) notes.push('noRotation')
+  const segments: FightSegment[] = []
+  const events: FightEvent[] = []
   let t = 0
   let left = hp
   let nextDrink = 10
@@ -130,9 +163,17 @@ function wavebinder(
   let backlash = 0
   while (left > 0 && t < FIGHT_LIMIT) {
     // the regular RES until its drink ends (the drink: 3 s, still at regular RES)
-    const until = nextDrink + 3
+    const until = Math.min(nextDrink + 3, FIGHT_LIMIT)
+    const hpStart = left / hp
     if (regular * (until - t) >= left) {
       const dt = left / regular
+      segments.push({
+        start: t,
+        end: t + dt,
+        state: 'regular',
+        hpStart,
+        hpEnd: 0,
+      })
       t += dt
       regularTime += dt
       left = 0
@@ -140,18 +181,34 @@ function wavebinder(
     }
     left -= regular * (until - t)
     regularTime += until - t
+    segments.push({
+      start: t,
+      end: until,
+      state: 'regular',
+      hpStart,
+      hpEnd: left / hp,
+    })
     t = until
+    if (t >= FIGHT_LIMIT) break
     // Valiant State: until its Courage is drained, or its shield (its Max HP) is broken
     const length = Math.min(
       600 / drain,
       valiant > 0 ? hp / valiant : Number.POSITIVE_INFINITY
     )
+    segments.push({
+      start: t,
+      end: Math.min(t + length, FIGHT_LIMIT),
+      state: 'shielded',
+      hpStart: left / hp,
+      hpEnd: left / hp,
+    })
     t += length
     valiants++
     valiantTime += length
-    const taken = Math.min(0.6 * valiant * length, 0.15 * hp)
+    const taken = Math.min(0.6 * valiant * length, 0.15 * hp, left)
     backlash += taken
     left -= taken
+    if (t <= FIGHT_LIMIT) events.push({ t, kind: 'backlash', hp: taken / hp })
     nextDrink = t + (length < 18 ? 23 : 20)
   }
   const seconds = left <= 0 && t <= FIGHT_LIMIT ? t : undefined
@@ -171,6 +228,7 @@ function wavebinder(
           ]
         : []),
     ],
+    timeline: { segments, events },
     notes,
     modelled: true,
   }
@@ -206,6 +264,8 @@ function emperor(
   if (!team.gauge) notes.push('noRotation')
   else if (removal <= 0) notes.push('noHornRemoval')
   const hornTime = removal > 0 ? 64 / removal : Number.POSITIVE_INFINITY
+  const segments: FightSegment[] = []
+  const events: FightEvent[] = []
   let t = 0
   let left = hp
   let breaks = 0
@@ -213,28 +273,61 @@ function emperor(
   let regularTime = 0
   while (left > 0 && t < FIGHT_LIMIT) {
     // horns on: until they break (or it falls)
+    const hpStart = left / hp
     if (withHorns * hornTime >= left || !Number.isFinite(hornTime)) {
       const dt = withHorns > 0 ? left / withHorns : Number.POSITIVE_INFINITY
+      const end = Math.min(t + dt, FIGHT_LIMIT)
+      segments.push({
+        start: t,
+        end,
+        state: 'horns',
+        hpStart,
+        hpEnd: Math.max(0, hpStart - (withHorns * (end - t)) / hp),
+      })
       t += dt
       hornsTime += dt
       left = 0
       break
     }
     left -= withHorns * hornTime
+    segments.push({
+      start: t,
+      end: Math.min(t + hornTime, FIGHT_LIMIT),
+      state: 'horns',
+      hpStart,
+      hpEnd: left / hp,
+    })
     t += hornTime
     hornsTime += hornTime
     breaks++
-    left -= 0.1 * hp
+    const taken = Math.min(0.1 * hp, left)
+    left -= taken
+    if (t <= FIGHT_LIMIT) events.push({ t, kind: 'hornsBreak', hp: taken / hp })
     if (left <= 0) break
     // 10 s without them
+    const hpAfter = left / hp
     if (without * 10 >= left) {
       const dt = left / without
+      segments.push({
+        start: t,
+        end: t + dt,
+        state: 'regular',
+        hpStart: hpAfter,
+        hpEnd: 0,
+      })
       t += dt
       regularTime += dt
       left = 0
       break
     }
     left -= without * 10
+    segments.push({
+      start: t,
+      end: Math.min(t + 10, FIGHT_LIMIT),
+      state: 'regular',
+      hpStart: hpAfter,
+      hpEnd: left / hp,
+    })
     t += 10
     regularTime += 10
   }
@@ -262,6 +355,7 @@ function emperor(
           ]
         : []),
     ],
+    timeline: { segments, events },
     notes,
     modelled: true,
   }

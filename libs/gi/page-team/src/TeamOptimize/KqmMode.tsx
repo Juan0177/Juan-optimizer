@@ -75,6 +75,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EnemySetup } from '../Enemy/EnemySetup'
+import { FightTimeline } from '../Enemy/FightTimeline'
 import { DamageShare } from './DamageShare'
 import { fightTeamOf } from './fightTeam'
 import { formatRateFull } from './format'
@@ -2068,6 +2069,29 @@ export function KqmResults({
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
+  // the builds in the fight against the enemy they were found for (a Stygian boss)
+  const fight = useMemo(
+    () =>
+      enemy &&
+      fightTeamOf({
+        members: members.map((m) => m.characterKey),
+        evaluation: result.after,
+        attacks: runSettings.attacks,
+        teamData,
+        rotationTime,
+        enemyOverride: enemy.enemyOverride,
+        gauge,
+      }),
+    [
+      enemy,
+      members,
+      result.after,
+      runSettings.attacks,
+      teamData,
+      rotationTime,
+      gauge,
+    ]
+  )
   useEffect(() => onView?.(view), [onView, view])
   // a top team picked: its member's equipment, as picked in the inspector (the others the run's)
   const [picked, setPicked] = useState(0)
@@ -2268,18 +2292,7 @@ export function KqmResults({
           rotation={rotation}
           enemy={enemy}
           enemyNow={enemyNow}
-          fight={
-            enemy &&
-            fightTeamOf({
-              members: members.map((m) => m.characterKey),
-              evaluation: result.after,
-              attacks: runSettings.attacks,
-              teamData,
-              rotationTime,
-              enemyOverride: enemy.enemyOverride,
-              gauge,
-            })
-          }
+          fight={fight}
         />
       </Box>
       {/* one tile per member: pick whose build to inspect */}
@@ -2481,6 +2494,8 @@ export function KqmResults({
         />
       </Box>
       {timeline}
+      {/* a Stygian boss: its states and HP over the fight */}
+      {enemy && <FightTimeline enemy={enemy} team={fight} />}
     </Box>
   )
 }
