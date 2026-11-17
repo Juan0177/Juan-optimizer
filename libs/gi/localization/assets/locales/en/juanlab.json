@@ -173,6 +173,17 @@
     "weaponEnergy": "Energy weapons",
     "weaponEnergyTip": "How much less Energy Recharge the entering member needs while someone in team B wields this weapon, as in KQM Theorycrafting's weapon list.",
     "weaponEnergyField": "{{weapon}}: ER needed, less",
-    "noEnergyWeapons": "No energy weapons"
+    "noEnergyWeapons": "No energy weapons",
+    "card": {
+      "create": "Create card",
+      "title": "KQM Compare card",
+      "alt": "KQM Compare of {{team}}: team A against team B",
+      "team": "Team",
+      "damage": "Damage",
+      "share": "Share",
+      "total": "Total",
+      "rotation": "Rotation",
+      "delta": "Change (B vs A)"
+    }
   }
 }

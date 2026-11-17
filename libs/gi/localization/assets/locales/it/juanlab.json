@@ -173,6 +173,17 @@
     "weaponEnergy": "Armi che danno energia",
     "weaponEnergyTip": "Quanta ricarica energia in meno serve a chi entra mentre qualcuno in squadra B usa quest'arma, come nella lista armi di KQM Theorycrafting.",
     "weaponEnergyField": "{{weapon}}: ER richiesta in meno",
-    "noEnergyWeapons": "Nessuna arma che dia energia"
+    "noEnergyWeapons": "Nessuna arma che dia energia",
+    "card": {
+      "create": "Crea card",
+      "title": "Card KQM Compare",
+      "alt": "KQM Compare di {{team}}: team A contro team B",
+      "team": "Team",
+      "damage": "Danno",
+      "share": "Quota",
+      "total": "Totale",
+      "rotation": "Rotazione",
+      "delta": "Variazione (B su A)"
+    }
   }
 }

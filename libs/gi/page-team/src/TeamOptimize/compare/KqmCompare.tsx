@@ -77,6 +77,7 @@ import {
   tokens,
   type,
 } from '../ui'
+import { CompareCardButton } from './CompareCardButton'
 import { Overview } from './CompareOverview'
 import type { Side, SwapIn } from './compareSwapKqm'
 import { compareSwapKqm } from './compareSwapKqm'
@@ -980,6 +981,15 @@ export default function KqmCompare({
             nameOf={nameOf}
             language={i18n.language}
           />
+          <Box sx={{ mt: 1.5 }}>
+            <CompareCardButton
+              teamId={teamId}
+              a={state.a}
+              b={state.b}
+              out={state.out}
+              inKey={state.in}
+            />
+          </Box>
         </Panel>
       )}
     </Box>
