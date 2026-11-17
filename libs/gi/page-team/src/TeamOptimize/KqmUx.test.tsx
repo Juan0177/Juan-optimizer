@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => {
       weapons: { get: () => ({ key: 'AmenomaKageuchi', refinement: 5 }) },
       chars: { get: () => ({ constellation: 0 }) },
       buildTcs: { get: () => undefined },
+      // (no team: a run keeps no enemy)
+      teams: { get: () => undefined },
       teamKqmResults: {
         get: () => saved,
         getRun: (teamId: string) =>
@@ -54,6 +56,8 @@ const mocks = vi.hoisted(() => {
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mocks.database,
   useDBMeta: () => ({ gender: 'F' }),
+  // (no team: the setup's enemy shows nothing)
+  useTeam: () => undefined,
 }))
 vi.mock('@genshin-optimizer/gi/db', () => ({
   defaultTeamOptKqm: { refinement4: 5, refinement5: 1 },

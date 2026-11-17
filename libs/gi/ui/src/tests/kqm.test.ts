@@ -622,6 +622,24 @@ describe('KQM Standards builds', () => {
       expect(passives[path[0]]?.[path[path.length - 1]]).toBeUndefined()
   }, 300_000)
 
+  it("builds for the team's enemy: its level and RES", async () => {
+    const { database, teamId, teamOpt } = setup()
+    const base = (await run(database, teamId, teamOpt))!.after.total
+    // Cryo RES 10% -> 70% (the team deals Cryo DMG; Shenhe's burst shreds 15% at KQM's talent
+    // 10): from -5% (halved: x1.025) to 55% (x0.45), the same builds
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.cryo_enemyRes_ = 70
+    })
+    const resisted = (await run(database, teamId, teamOpt))!.after.total
+    expect(resisted / base).toBeCloseTo(0.45 / 1.025, 6)
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.enemyLevel = 110
+    })
+    expect((await run(database, teamId, teamOpt))!.after.total).toBeLessThan(
+      resisted
+    )
+  }, 300_000)
+
   it('builds at 10/10/10 talents by default (KQM Standards), 9/9/9 when chosen', async () => {
     const { database, teamId, teamOpt } = setup()
     const { talents: _, ...standard } = teamOpt.kqm!

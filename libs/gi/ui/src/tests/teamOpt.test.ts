@@ -729,6 +729,41 @@ describe('team optimize', () => {
     return best
   }
 
+  it("computes for the team's enemy: its level and RES", async () => {
+    const { database, teamId } = setup()
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      attacks: {
+        [ayaka]: [
+          attack(['burst', 'cutting'], 19),
+          attack(['skill', 'press'], 2),
+        ],
+        [shenhe]: [attack(['skill', 'press'], 2)],
+      },
+    }
+    const total = async () =>
+      (await optimizeTeam({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt,
+        solve: bruteForce,
+      }))!.after.total
+    const base = await total()
+    // Cryo RES 10% -> 70% (every hit is Cryo; Shenhe's burst shreds 14% at talent 9): from
+    // -4% (halved: x1.02) to 56% (x0.44)
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.cryo_enemyRes_ = 70
+    })
+    expect((await total()) / base).toBeCloseTo(0.44 / 1.02, 6)
+    // and a higher level: a little less again (more DEF)
+    const at70 = await total()
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.enemyLevel = 110
+    })
+    expect(await total()).toBeLessThan(at70)
+  })
+
   it('finds builds no member can improve alone, without sharing artifacts', async () => {
     const { database, teamId } = setup()
     const teamOpt: TeamOpt = {

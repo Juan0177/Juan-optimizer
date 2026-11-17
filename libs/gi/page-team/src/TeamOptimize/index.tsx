@@ -6,15 +6,19 @@ import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
+  RunEnemy,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import {
+  appliedStygianPreset,
   CharacterName,
   evaluateTeamRotation,
   kqmTeamOverrides,
+  sameEnemy,
+  stygianFightModelled,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
@@ -48,7 +52,9 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
 import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
+import { EnemyRow } from './EnemyRow'
 import { ExtraBuffs } from './ExtraBuffs'
+import { fightTeamOf, useRotationGauge } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { KqmTimeline } from './KqmTimeline'
@@ -118,6 +124,10 @@ export default function TeamBuildWorkspace({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
+  // a result found for another enemy than the team's now (one found before enemies were kept with
+  // results: not known, not flagged)
+  const enemyChanged = (enemy?: RunEnemy) =>
+    !!enemy && !!team && !sameEnemy(enemy.enemyOverride, team.enemyOverride)
   const [teamOpt, setTeamOpt] = useTeamOpt(teamId)
   // `teamData` is recomputed whenever a member, a build or a conditional changes
   const members = useMemo(
@@ -214,7 +224,8 @@ export default function TeamBuildWorkspace({
   const kqmRotation =
     mode === 'kqm' &&
     kqmResult &&
-    kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt)
+    kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt) &&
+    !enemyChanged(kqmResult.enemy)
       ? kqmResult
       : undefined
   // the builds shown in the KQM results (the run's, or other equipment picked there): the rotation
@@ -252,6 +263,46 @@ export default function TeamBuildWorkspace({
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
     kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
   })
+  // against a Stygian Onslaught boss: how long the team takes, its fight's mechanics counted where
+  // they are known (with the written rotation's element applications)
+  const stygian = team && appliedStygianPreset(team)
+  const gauge = useRotationGauge(
+    teamId,
+    members,
+    !!stygian && stygianFightModelled(stygian.boss.id),
+    mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
+    mode === 'kqm' ? kqmShown?.builds : undefined
+  )
+  const fightNow = useMemo(
+    () =>
+      team && stygian
+        ? fightTeamOf({
+            members: members.map((m) => m.characterKey),
+            // (the damage shown: the equipped builds', or the KQM builds' played)
+            evaluation: mode === 'kqm' ? kqmShown?.after : evaluation,
+            attacks: (mode === 'kqm' ? kqmAttacks : teamOpt.attacks) ?? {},
+            teamData,
+            rotationTime:
+              mode === 'kqm' ? (kqmRotationTime ?? rotationTime) : rotationTime,
+            enemyOverride: team.enemyOverride,
+            gauge,
+          })
+        : undefined,
+    [
+      team,
+      stygian,
+      members,
+      mode,
+      kqmShown,
+      evaluation,
+      kqmAttacks,
+      teamOpt.attacks,
+      teamData,
+      kqmRotationTime,
+      rotationTime,
+      gauge,
+    ]
+  )
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
@@ -571,6 +622,13 @@ export default function TeamBuildWorkspace({
                 ))}
               </Box>
             </Box>
+            {/* the enemy the damage is for (the team's): above the extra buffs, in the footer
+                (KQM: in its setup, beside the members) */}
+            {mode !== 'kqm' && (
+              <Box sx={{ pt: 1.25, mt: 0.25, borderTop: hairline }}>
+                <EnemyRow teamId={teamId} fight={fightNow} disabled={running} />
+              </Box>
+            )}
             {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
             <Disclosure
               label={t(
@@ -618,6 +676,7 @@ export default function TeamBuildWorkspace({
             teamData={teamData}
             teamOpt={teamOpt}
             setTeamOpt={setTeamOpt}
+            fight={fightNow}
           />
         </Box>
       )}
@@ -663,8 +722,14 @@ export default function TeamBuildWorkspace({
               (kqmResult.runTeamOpt ?? kqmResult.teamOpt).rotationTime ??
               rotationTime
             }
-            stale={kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt)}
+            stale={
+              kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+              enemyChanged(kqmResult.enemy)
+            }
             now={teamOpt}
+            enemy={kqmResult.enemy}
+            enemyNow={enemyChanged(kqmResult.enemy) ? team : undefined}
+            gauge={gauge}
             onView={setKqmView}
             teamData={teamData}
             timeline={
@@ -724,7 +789,13 @@ export default function TeamBuildWorkspace({
             rotationTime={rotationTime}
             onDiscard={clear}
             teamData={teamData}
-            stale={teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt)}
+            stale={
+              teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt) ||
+              enemyChanged(result.enemy)
+            }
+            enemy={result.enemy}
+            enemyNow={enemyChanged(result.enemy) ? team : undefined}
+            gauge={gauge}
             onRunAgain={() => setRunDialog(true)}
           />
         </Box>

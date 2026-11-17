@@ -55,6 +55,11 @@ export interface Team {
   lastEdit: number
   /** Team Optimize settings: only stored once the user sets something there */
   teamOpt?: TeamOpt
+  /**
+   * The enemy preset last applied (a Stygian Onslaught boss: `stygian:<boss>:<phase>`): shown by
+   * name while `enemyOverride` still has its RES
+   */
+  enemyPreset?: string
 }
 export type LoadoutExportSetting = {
   convertEquipped: boolean
@@ -209,6 +214,7 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
+    const { enemyPreset } = obj as Team
 
     return {
       name,
@@ -218,6 +224,11 @@ export class TeamDataManager extends DataManager<
       loadoutData,
       lastEdit,
       ...(teamOpt ? { teamOpt } : {}),
+      ...(typeof enemyPreset === 'string' &&
+      enemyPreset.length > 0 &&
+      enemyPreset.length <= 64
+        ? { enemyPreset }
+        : {}),
     }
   }
   new(value: Partial<Team> = {}): string {

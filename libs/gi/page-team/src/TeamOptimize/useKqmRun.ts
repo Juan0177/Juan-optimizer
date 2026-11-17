@@ -3,9 +3,10 @@ import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { nextPaint } from '@genshin-optimizer/gi/solver'
-import type { KqmResult, KqmStep } from '@genshin-optimizer/gi/ui'
+import type { KqmResult, KqmStep, RunEnemy } from '@genshin-optimizer/gi/ui'
 import {
   optimizeTeamKqm,
+  runEnemyOf,
   TeamOptCancelled,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
@@ -37,6 +38,8 @@ export interface KqmDoneRun {
   seconds: number
   /** The settings it was run with, as set (what "changed since" compares with) */
   teamOpt: TeamOpt
+  /** The enemy it was found for (the team's then); absent: found before this was kept */
+  enemy?: RunEnemy
   /**
    * The settings its damage is for: the written rotation as KQM played it for these builds
    * (`played`: at the KQM constellations, with their weapons and sets, the last 2 of 4
@@ -235,6 +238,9 @@ async function startKqmRun(
     jobs.delete(teamId)
     notifyRun(teamId)
   }
+  // (the enemy its damage is for, as it is now)
+  const team = database.teams.get(teamId)
+  const enemy = team && runEnemyOf(team)
   const doneOf = (result: KqmResult): KqmDoneRun => {
     const { played } = result
     return {
@@ -242,6 +248,7 @@ async function startKqmRun(
       result,
       seconds: (performance.now() - job.state.startTime) / 1000,
       teamOpt,
+      ...(enemy ? { enemy } : {}),
       runTeamOpt: played
         ? {
             ...teamOpt,
