@@ -76,5 +76,10 @@
   },
   "beta": {
     "notice": "Beta {{label}} content (kits from {{source}}, from the beta dump): provisional numbers that can change before release."
+  },
+  "nav": {
+    "title": "Navigation bar",
+    "top": "Top",
+    "side": "Side"
   }
 }

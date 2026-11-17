@@ -205,21 +205,23 @@ declare module '@mui/material/SvgIcon' {
  * #211d33); warm charcoal, deep teal, a #0f0f11 graphite page and pure #000 were tried. Near-black
  * beats #000: same look, but no OLED smear when scrolling and shadows still read.
  */
+// juanlab: palette "Notte JuanLab" (i colori di juan0177.github.io/JuanLab): blu notte piatto, pannelli blu scuro,
+// oro per le azioni, azzurro per le informazioni. Niente gradienti: glow e uguale a ink.
 const surface = {
-  inkDeep: '#050506',
-  ink: '#08080a',
-  panelDark: '#141416',
-  panel: '#19191c',
-  panelRaised: '#212124',
-  panelHover: '#2a2a2e',
-  glow: '#08080a',
-  line: '#27272b',
-  muted: '#3f3f45',
+  inkDeep: '#04060c',
+  ink: '#060810',
+  panelDark: '#0b101b',
+  panel: '#0f1626',
+  panelRaised: '#151e31',
+  panelHover: '#1b263d',
+  glow: '#060810',
+  line: '#1f2a3d',
+  muted: '#3a4660',
 } as const
 
 const ink = surface.ink
-const parchment = '#ece5d8'
-const gold = '#d3bc8e'
+const parchment = '#edf5ff'
+const gold = '#f5d787'
 export const giTokens = {
   ink,
   inkDeep: surface.inkDeep,
@@ -228,14 +230,14 @@ export const giTokens = {
   panelRaised: surface.panelRaised,
   panelHover: surface.panelHover,
   parchment,
-  parchmentMuted: 'rgba(236, 229, 216, 0.64)',
+  parchmentMuted: 'rgba(237, 245, 255, 0.66)',
   gold,
-  goldLight: '#e6d5b1',
-  goldDark: '#a99260',
+  goldLight: '#f9e4a8',
+  goldDark: '#c9aa5a',
   /** kept for components written against the first token set */
   starlight: gold,
-  hairline: 'rgba(236, 229, 216, 0.08)',
-  hairlineStrong: 'rgba(236, 229, 216, 0.16)',
+  hairline: 'rgba(237, 245, 255, 0.08)',
+  hairlineStrong: 'rgba(237, 245, 255, 0.16)',
   fontFamily: [
     'system-ui',
     '-apple-system',
@@ -254,7 +256,7 @@ export const giTokens = {
 /** The one solid button per screen (the page's main action); every other button is tonal. */
 export const giCtaSx = {
   backgroundColor: gold,
-  color: '#17181f',
+  color: '#0b101b',
   boxShadow: 'none',
   '&:hover': { backgroundColor: giTokens.goldLight, boxShadow: 'none' },
 } as const
@@ -269,18 +271,18 @@ const elementTheme = createTheme({
     background: { default: ink, paper: giTokens.panel },
     text: {
       primary: parchment,
-      secondary: 'rgba(236, 229, 216, 0.64)',
-      disabled: 'rgba(236, 229, 216, 0.38)',
+      secondary: 'rgba(237, 245, 255, 0.66)',
+      disabled: 'rgba(237, 245, 255, 0.38)',
     },
     divider: giTokens.hairline,
     primary: augment(gold, 'primary', {
       light: giTokens.goldLight,
       dark: giTokens.goldDark,
-      contrastText: '#17181f',
+      contrastText: '#0b101b',
     }),
     secondary: augment(surface.muted, 'secondary', { contrastText: parchment }),
     success: augment('#5aae8b', 'success'),
-    info: augment('#7aa7d9', 'info'),
+    info: augment('#85cbff', 'info'),
     warning: augment('#e4b25c', 'warning'),
     error: augment('#df6f62', 'error'),
     contentNormal: augment(giTokens.panel, 'contentNormal'),
@@ -288,9 +290,9 @@ const elementTheme = createTheme({
     contentLight: augment(giTokens.panelRaised, 'contentLight'),
     brand500: augment(gold, 'brand500'),
     neutral100: augment(parchment, 'neutral100'),
-    neutral200: augment('#d6cfc2', 'neutral200'),
-    neutral300: augment('#a9a397', 'neutral300'),
-    neutral400: augment('#7d7a74', 'neutral400'),
+    neutral200: augment('#d3dceb', 'neutral200'),
+    neutral300: augment('#a3aec2', 'neutral300'),
+    neutral400: augment('#76829a', 'neutral400'),
     neutral500: augment(surface.muted, 'neutral500'),
     neutral600: augment(surface.line, 'neutral600'),
     // the page background is a radial gradient from neutral700 (top) to neutral800
@@ -500,7 +502,7 @@ const components: ThemeOptions['components'] = {
   MuiCard: {
     styleOverrides: {
       root: {
-        borderRadius: 12,
+        borderRadius: 6, // juanlab: angoli contenuti, come Genshin Optimizer
         // hairline drawn inside the box: no layout shift, and not covered by full-bleed children
         outline: `1px solid ${hairline}`,
         outlineOffset: -1,
@@ -516,7 +518,7 @@ const components: ThemeOptions['components'] = {
     defaultProps: { disableElevation: true },
     styleOverrides: {
       root: ({ ownerState, theme }) => ({
-        borderRadius: 8,
+        borderRadius: 4,
         transition:
           'background-color 150ms ease, box-shadow 150ms ease, border-color 150ms ease, color 150ms ease',
         ...(ownerState.variant === 'contained' &&
@@ -567,7 +569,7 @@ const components: ThemeOptions['components'] = {
         backgroundColor: giTokens.inkDeep,
         color: parchment,
         border: `1px solid ${hairlineStrong}`,
-        borderRadius: 10,
+        borderRadius: 4,
         fontSize: '0.8125rem',
         fontWeight: 400,
         lineHeight: 1.5,
@@ -582,14 +584,14 @@ const components: ThemeOptions['components'] = {
   },
   MuiBackdrop: {
     styleOverrides: {
-      root: { backgroundColor: 'rgba(6, 7, 10, 0.72)' },
+      root: { backgroundColor: 'rgba(4, 6, 12, 0.72)' },
       invisible: { backgroundColor: 'transparent' },
     },
   },
   MuiDialog: {
     styleOverrides: {
       paper: {
-        borderRadius: 16,
+        borderRadius: 6,
         outline: `1px solid ${hairlineStrong}`,
         outlineOffset: -1,
       },
@@ -598,7 +600,7 @@ const components: ThemeOptions['components'] = {
   MuiPopover: {
     styleOverrides: {
       paper: {
-        borderRadius: 10,
+        borderRadius: 4,
         backgroundColor: giTokens.panelRaised,
         outline: `1px solid ${hairlineStrong}`,
         outlineOffset: -1,
@@ -618,7 +620,7 @@ const components: ThemeOptions['components'] = {
   MuiMenuItem: {
     styleOverrides: {
       root: {
-        borderRadius: 6,
+        borderRadius: 4,
         marginInline: 4,
         '&.Mui-selected': { backgroundColor: alpha(gold, 0.14) },
         '&.Mui-selected:hover': { backgroundColor: alpha(gold, 0.2) },
@@ -628,7 +630,7 @@ const components: ThemeOptions['components'] = {
   MuiOutlinedInput: {
     styleOverrides: {
       root: {
-        borderRadius: 8,
+        borderRadius: 4,
         '&:hover .MuiOutlinedInput-notchedOutline': {
           borderColor: alpha(parchment, 0.3),
         },
@@ -643,7 +645,7 @@ const components: ThemeOptions['components'] = {
   },
   MuiAlert: {
     styleOverrides: {
-      root: { borderRadius: 10 },
+      root: { borderRadius: 4 },
     },
   },
   MuiAccordion: {
@@ -667,7 +669,7 @@ const components: ThemeOptions['components'] = {
 }
 
 export const theme = createTheme(elementTheme, {
-  shape: { borderRadius: 8 },
+  shape: { borderRadius: 4 }, // juanlab: come Genshin Optimizer (era 8)
   typography: {
     fontFamily: giTokens.fontFamily,
     ...Object.fromEntries(

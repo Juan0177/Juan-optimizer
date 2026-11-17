@@ -91,8 +91,13 @@ Ogni modifica propria del fork porta il commento `juanlab`, così si ritrova con
   l'avviso "dati provvisori" (`libs/gi/ui/src/juanlab/beta.tsx`).
 - **Home** (`libs/gi/page-home/src/index.tsx`, `JuanlabCards.tsx`): introduzione, import da UID, i primi passi e
   l'inventario di Stellar, crediti (GO, Stellar Optimizer, licenza AGPL e link al sorgente).
-- **Nome e logo** (`apps/frontend/src/app/Header.tsx`, `juan_logo.svg`, `public/favicon.svg`, `public/og-image.png`,
-  `index.html`, `ui.json`): Juan-optimizer al posto di Stellar Optimizer; il footer linka il sorgente del fork e Stellar.
+- **Nome e logo** (`apps/frontend/src/app/Header.tsx`, `juan_logo.png`, icone in `apps/frontend/public/`, `og-image.png`,
+  `index.html`, `ui.json`): Juan-optimizer con il logo di JuanLab al posto di Stellar Optimizer; il footer linka il
+  sorgente del fork e Stellar.
+- **Design** (`libs/gi/theme/src/Theme.tsx`): palette "Notte JuanLab" (blu notte, oro per le azioni, azzurro per le
+  informazioni), superfici piatte senza gradienti decorativi e angoli contenuti come in Genshin Optimizer.
+- **Barra di navigazione in alto o laterale** (`libs/gi/ui/src/juanlab/navLayout.tsx`, scelta in Impostazioni e
+  salvata nel browser): la laterale vale sugli schermi larghi, sul telefono resta il menu a scomparsa.
 - **Italiano** come lingua predefinita (`libs/gi/i18n/src/i18n.ts`) e nomi delle statistiche in italiano
   (`libs/gi/keymap/src/KeyMapIt.ts`).
 

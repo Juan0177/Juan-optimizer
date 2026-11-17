@@ -76,5 +76,10 @@
   },
   "beta": {
     "notice": "Contenuti della beta {{label}} (kit di {{source}}, dal dump della beta): numeri provvisori, possono cambiare prima dell'uscita."
+  },
+  "nav": {
+    "title": "Barra di navigazione",
+    "top": "In alto",
+    "side": "Laterale"
   }
 }

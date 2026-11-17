@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Juan-optimizer">
-<rect width="512" height="512" rx="112" fill="#08080a"/>
-<circle cx="256" cy="256" r="176" fill="none" stroke="#d3bc8e" stroke-width="28"/>
-<path fill="#ece5d8" d="M300 150h-56v-34h112v34h-22v132c0 62-36 98-96 98-28 0-52-7-70-20l16-32c14 10 32 16 52 16 40 0 64-22 64-66z"/>
-</svg>
