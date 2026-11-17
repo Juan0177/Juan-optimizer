@@ -51,6 +51,7 @@ import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
+import { KqmTimeline } from './KqmTimeline'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
@@ -605,6 +606,17 @@ export default function TeamBuildWorkspace({
             now={teamOpt}
             onView={setKqmView}
             teamData={teamData}
+            timeline={
+              <KqmTimeline
+                teamId={teamId}
+                members={members}
+                teamData={teamData}
+                kqm={teamOpt.kqm ?? defaultTeamOptKqm}
+                kqmBuilds={kqmShown?.builds}
+                kqmBuffs={kqmBuffs}
+                onEdit={writer.openWriter}
+              />
+            }
             onDiscard={() => {
               kqm.clear()
               setRotationExpanded(true)

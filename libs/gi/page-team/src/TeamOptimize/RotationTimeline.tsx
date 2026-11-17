@@ -911,9 +911,16 @@ export function RotationTimeline({
                               aria-disabled={index === undefined}
                               tabIndex={index === undefined ? -1 : 0}
                               disableRipple={index === undefined}
-                              onClick={() =>
-                                index !== undefined && onSelect(index)
-                              }
+                              onClick={() => {
+                                // (in the detailed view: the moment it starts, pinned, so the panel
+                                // shows it; the view stays open)
+                                if (detail)
+                                  setPin({
+                                    frame: a.start,
+                                    hit: hits.find((h) => h.t === a.start),
+                                  })
+                                if (index !== undefined) onSelect(index)
+                              }}
                               aria-label={`${name} ${seconds(a.start - start)} s`}
                               aria-pressed={isSelected}
                               sx={(theme) => {

@@ -1,6 +1,10 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt, TeamOptEnergyCalculator } from '@genshin-optimizer/gi/db'
+import type {
+  TeamOpt,
+  TeamOptEnergyCalculator,
+  TeamOptKqm,
+} from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
@@ -20,7 +24,9 @@ import {
   kqmBuildThreadsAuto,
   kqmBuildThreadsMax,
   kqmConstellation,
+  kqmDefaultExcludedWeapons,
   kqmEnergyRequirement,
+  kqmExcludedWeapons,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
   kqmTalentLevel,
@@ -993,12 +999,33 @@ function KqmAssumptions({
  * the weapons and sets it compares, where its ER comes from. With `now`, what has changed since
  * is shown as it is now (→).
  */
+/**
+ * Whether the weapons a run compares were changed from KQM mode's own: the list (ticked or left
+ * out) or a refinement
+ */
+function kqmWeaponsCustom(kqm: TeamOptKqm) {
+  const excluded = kqmExcludedWeapons(kqm)
+  const standard = new Set(kqmDefaultExcludedWeapons())
+  const list =
+    excluded.size !== standard.size ||
+    [...excluded].some((key) => !standard.has(key))
+  const refinements =
+    (kqm.refinement5 ?? 1) !== 1 ||
+    (kqm.refinement4 ?? 5) !== 5 ||
+    (kqm.refinementStandard5 ?? 1) !== 1 ||
+    (kqm.refinementBp ?? 1) !== 1 ||
+    (kqm.refinementStandard4 ?? 5) !== 5 ||
+    Object.keys(kqm.refinements ?? {}).length > 0
+  return list || refinements
+}
+/** Whether any artifact set was left out of a run's choice */
+const kqmSetsCustom = (kqm: TeamOptKqm) => !!kqm.excludedSets?.length
+
 export function KqmSetupSummary({
   members,
   settings,
   now,
   rotation,
-  stalls,
   sx,
 }: {
   members: TeamOptMember[]
@@ -1007,19 +1034,13 @@ export function KqmSetupSummary({
   now?: TeamOpt
   /** Its rotation's attacks: the written rotation as KQM played it, or the attacks entered */
   rotation?: 'played' | 'entered'
-  /** What each rotation waited for to be ready (seconds) */
-  stalls?: { label: string; seconds: number }[]
   sx?: SxProps<Theme>
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
   const kqm = settings.kqm ?? defaultTeamOptKqm
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
-  const counts = kqmChooserCounts(members, settings)
-  const nowCounts = now ? kqmChooserCounts(members, now) : undefined
   const fromCalculator = kqm.energySource === 'calculator'
-  const rotationChanged =
-    !!now && JSON.stringify(now.attacks) !== JSON.stringify(settings.attacks)
   /** What it is now, if that changed */
   const nowIs = (value: ReactNode) => (
     <Box component="span" sx={{ color: tokens.gold, fontWeight: 600 }}>
@@ -1028,6 +1049,16 @@ export function KqmSetupSummary({
     </Box>
   )
   const item = { display: 'inline-flex', alignItems: 'center', gap: 0.75 }
+  /** The weapons or sets: as KQM mode picks them, or changed by hand */
+  const choiceLabel = (custom: boolean) =>
+    custom
+      ? t('teamOpt.kqm.custom', 'Custom')
+      : t('teamOpt.kqm.default', 'Default')
+  /** The ER targets: from the ER calculator, or typed in */
+  const erLabel = (calculated: boolean) =>
+    calculated
+      ? t('teamOpt.kqm.erAuto', 'Auto-calculated')
+      : t('teamOpt.kqm.custom', 'Custom')
   return (
     <Box
       sx={[
@@ -1035,116 +1066,215 @@ export function KqmSetupSummary({
           display: 'flex',
           alignItems: 'center',
           flexWrap: 'wrap',
-          columnGap: 2,
-          rowGap: 0.75,
-          fontSize: 13,
-          color: 'text.secondary',
+          columnGap: 2.5,
+          rowGap: 1.25,
           ...numSx,
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
-      {members.map(({ characterKey }) => {
-        const cons = kqmMemberConstellation(characterKey, kqm)
-        const nowCons = nowKqm && kqmMemberConstellation(characterKey, nowKqm)
-        const er = kqmEnergyRequirement(kqm, characterKey)
-        const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
-        return (
-          <Tooltip
-            key={characterKey}
-            arrow
-            title={
-              <>
-                <CharacterName characterKey={characterKey} gender={gender} />
-                {`: C${cons}, ${t('teamOpt.kqm.minEr', 'Min ER')} ${er}%`}
-              </>
-            }
+      {/* the members: each a pill, its constellation and the ER it was built to */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        {members.map(({ characterKey }) => {
+          const cons = kqmMemberConstellation(characterKey, kqm)
+          const nowCons = nowKqm && kqmMemberConstellation(characterKey, nowKqm)
+          const er = kqmEnergyRequirement(kqm, characterKey)
+          const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
+          return (
+            <Tooltip
+              key={characterKey}
+              arrow
+              title={
+                <>
+                  <CharacterName characterKey={characterKey} gender={gender} />
+                  {`: C${cons}, ${t('teamOpt.kqm.minEr', 'Min ER')} ${er}%`}
+                </>
+              }
+            >
+              <Box
+                component="span"
+                sx={{
+                  ...item,
+                  gap: 0.75,
+                  height: 32,
+                  pl: 0.375,
+                  pr: 1.25,
+                  borderRadius: 999,
+                  bgcolor: alpha(giTokens.parchment, 0.035),
+                  boxShadow: `inset 0 0 0 1px ${tokens.hairline}`,
+                  fontSize: 13,
+                }}
+              >
+                <MemberAvatar characterKey={characterKey} size={24} />
+                <Box
+                  component="span"
+                  sx={{ color: 'text.primary', fontWeight: 650 }}
+                >
+                  C{cons}
+                </Box>
+                {nowCons !== undefined &&
+                  nowCons !== cons &&
+                  nowIs(`C${nowCons}`)}
+                <Box component="span" sx={{ color: 'text.secondary' }}>
+                  {er}% {t('teamOpt.kqm.erShort', 'ER')}
+                </Box>
+                {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
+              </Box>
+            </Tooltip>
+          )
+        })}
+      </Box>
+      {/* the run's settings: small labelled figures, hairlines between them */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'stretch',
+          rowGap: 1,
+          '& > *': { px: 1.75, borderLeft: `1px solid ${tokens.hairline}` },
+          '& > *:first-of-type': { pl: { xs: 0, md: 1.75 } },
+          '@media (max-width: 899.95px)': {
+            '& > *:first-of-type': { borderLeft: 0 },
+          },
+        }}
+      >
+        <SpecStat label={t('teamOpt.kqm.talents', 'Talents')}>
+          {`${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}`}
+          {nowKqm &&
+            kqmTalentLevel(nowKqm) !== kqmTalentLevel(kqm) &&
+            nowIs(
+              `${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}`
+            )}
+        </SpecStat>
+        <SpecStat label={t('teamOpt.kqm.artifactsLabel', 'Artifacts')}>
+          {kqmStandardName(t, kqmStandardRolls(kqm))}
+          <Box
+            component="span"
+            sx={{ color: 'text.secondary', fontWeight: 500 }}
           >
-            <Box component="span" sx={item}>
-              <MemberAvatar characterKey={characterKey} size={22} />
-              <Box component="span" sx={{ color: 'text.primary' }}>
-                C{cons}
-              </Box>
-              {nowCons !== undefined &&
-                nowCons !== cons &&
-                nowIs(`C${nowCons}`)}
-              <Box component="span">
-                {t('teamOpt.kqm.erShort', 'ER')} {er}%
-              </Box>
-              {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
-            </Box>
-          </Tooltip>
-        )
-      })}
-      <Box component="span" sx={item}>
-        {t('teamOpt.kqm.ruleTalentsLevel', {
-          defaultValue: 'Talents {{level}}/{{level}}/{{level}}',
-          level: kqmTalentLevel(kqm),
-        })}
-        {nowKqm &&
-          kqmTalentLevel(nowKqm) !== kqmTalentLevel(kqm) &&
-          nowIs(
-            `${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}/${kqmTalentLevel(nowKqm)}`
-          )}
-      </Box>
-      <Box component="span" sx={item}>
-        {t('teamOpt.kqm.standardRun', {
-          defaultValue: '{{name}} artifacts ({{rolls}} rolls)',
-          name: kqmStandardName(t, kqmStandardRolls(kqm)),
-          rolls: kqmStandardRolls(kqm),
-        })}
-        {nowKqm &&
-          kqmStandardRolls(nowKqm) !== kqmStandardRolls(kqm) &&
-          nowIs(`${kqmStandardRolls(nowKqm)}`)}
-      </Box>
-      <Box component="span" sx={item}>
-        {t('teamOpt.kqm.weaponsCount', {
-          defaultValue: '{{count}} weapons',
-          count: counts.weapons.allowed,
-        })}
-        {nowCounts &&
-          JSON.stringify(nowKqm?.excludedWeapons) !==
-            JSON.stringify(kqm.excludedWeapons) &&
-          nowIs(nowCounts.weapons.allowed)}
-      </Box>
-      <Box component="span" sx={item}>
-        {t('teamOpt.kqm.setsCount', {
-          defaultValue: '{{count}} artifact sets',
-          count: counts.sets.allowed,
-        })}
-        {nowCounts &&
-          JSON.stringify(nowKqm?.excludedSets) !==
-            JSON.stringify(kqm.excludedSets) &&
-          nowIs(nowCounts.sets.allowed)}
-      </Box>
-      {(fromCalculator ||
-        (nowKqm && nowKqm.energySource !== kqm.energySource)) && (
-        <Box component="span" sx={item}>
-          {fromCalculator
-            ? t('teamOpt.kqm.erFromCalc', 'ER from the calculator')
-            : t('teamOpt.kqm.erManual', 'ER entered')}
+            {t('teamOpt.kqm.rollsShort', {
+              defaultValue: '{{rolls}} rolls',
+              rolls: kqmStandardRolls(kqm),
+            })}
+          </Box>
+          {nowKqm &&
+            kqmStandardRolls(nowKqm) !== kqmStandardRolls(kqm) &&
+            nowIs(`${kqmStandardRolls(nowKqm)}`)}
+        </SpecStat>
+        <SpecStat label={t('teamOpt.kqm.weaponsLabel', 'Weapons')}>
+          {choiceLabel(kqmWeaponsCustom(kqm))}
+          {nowKqm &&
+            kqmWeaponsCustom(nowKqm) !== kqmWeaponsCustom(kqm) &&
+            nowIs(choiceLabel(kqmWeaponsCustom(nowKqm)))}
+        </SpecStat>
+        <SpecStat label={t('teamOpt.kqm.setsLabel', 'Artifact sets')}>
+          {choiceLabel(kqmSetsCustom(kqm))}
+          {nowKqm &&
+            kqmSetsCustom(nowKqm) !== kqmSetsCustom(kqm) &&
+            nowIs(choiceLabel(kqmSetsCustom(nowKqm)))}
+        </SpecStat>
+        <SpecStat label={t('teamOpt.kqm.erLabel', 'ER target')}>
+          {erLabel(fromCalculator)}
           {nowKqm &&
             nowKqm.energySource !== kqm.energySource &&
-            nowIs(
-              nowKqm.energySource === 'calculator'
-                ? t('teamOpt.kqm.erCalcShort', 'calculator')
-                : t('teamOpt.kqm.erManualShort', 'entered')
+            nowIs(erLabel(nowKqm.energySource === 'calculator'))}
+        </SpecStat>
+        {rotation === 'played' && (
+          <Tooltip
+            arrow
+            title={t(
+              'teamOpt.kqm.rotationPlayedTip',
+              'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, 4 rotations in a row with the last 2 averaged, at the pace it can keep.'
             )}
-        </Box>
-      )}
-      {rotation === 'played' && (
-        <Tooltip
-          arrow
-          title={t(
-            'teamOpt.kqm.rotationPlayedTip',
-            'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, 4 rotations in a row with the last 2 averaged, at the pace it can keep.'
-          )}
-        >
-          <Box component="span" sx={item}>
-            {t('teamOpt.kqm.rotationAtKqm', 'Rotation played for these builds')}
-          </Box>
-        </Tooltip>
-      )}
+          >
+            <Box sx={{ cursor: 'help' }}>
+              <SpecStat label={t('teamOpt.kqm.rotationLabel', 'Rotation')}>
+                {t(
+                  'teamOpt.kqm.rotationPlayedValue',
+                  'Played for these builds'
+                )}
+              </SpecStat>
+            </Box>
+          </Tooltip>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+/** One of the run's settings: a small label over its value */
+function SpecStat({
+  label,
+  children,
+}: {
+  label: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Box
+      sx={{ display: 'grid', alignContent: 'center', gap: 0.25, minWidth: 0 }}
+    >
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 11.5,
+          fontWeight: 500,
+          color: 'text.secondary',
+          lineHeight: 1.2,
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 13.5,
+          fontWeight: 650,
+          lineHeight: 1.3,
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 0.75,
+          whiteSpace: 'nowrap',
+          ...numSx,
+        }}
+      >
+        {children}
+      </Typography>
+    </Box>
+  )
+}
+
+/**
+ * What to know about the run, as chips at the bar's right: the waits a rotation keeps hitting, the
+ * rotation or the setup changed since
+ */
+function KqmRunNotes({
+  stalls,
+  rotationChanged,
+  stale,
+}: {
+  stalls?: { label: string; seconds: number }[]
+  rotationChanged?: boolean
+  stale?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const warn = useTheme().palette.warning.main
+  const chip = (tone: string) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 0.625,
+    height: 28,
+    px: 1.25,
+    borderRadius: 999,
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: tone,
+    bgcolor: alpha(tone, 0.1),
+    boxShadow: `inset 0 0 0 1px ${alpha(tone, 0.28)}`,
+    whiteSpace: 'nowrap',
+  })
+  return (
+    <>
       {!!stalls?.length && (
         <Tooltip
           arrow
@@ -1164,27 +1294,30 @@ export function KqmSetupSummary({
         >
           <Box
             component="span"
-            sx={{ ...item, color: 'warning.main', cursor: 'help' }}
+            sx={{ ...chip(warn), cursor: 'help', ...numSx }}
           >
             <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />
             {t('teamOpt.kqm.stalls', {
               defaultValue: 'Waits {{seconds}} s per rotation',
               seconds: stalls.reduce((n, s) => n + s.seconds, 0).toFixed(1),
             })}
-            {' · '}
-            {stallLabel(stalls[0].label)}
           </Box>
         </Tooltip>
       )}
       {rotationChanged && (
-        <Box component="span" sx={{ ...item, color: tokens.gold }}>
+        <Box component="span" sx={chip(giTokens.gold)}>
           {t('teamOpt.kqm.rotationChanged', 'Rotation changed')}
         </Box>
       )}
-    </Box>
+      {stale && (
+        <Box component="span" role="status" sx={chip(warn)}>
+          <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />
+          {t('teamOpt.kqm.staleShort', 'Setup changed. Run again to refresh.')}
+        </Box>
+      )}
+    </>
   )
 }
-
 /** A wait's label: `<member> <action>` (the member's name, then the action) or `swap <member>` */
 function StallLabel({ label }: { label: string }) {
   const { t } = useTranslation('page_team')
@@ -1789,9 +1922,12 @@ export function KqmResults({
   onDiscard,
   onView,
   teamData,
+  timeline,
 }: {
   teamId: string
   runSettings: TeamOpt
+  /** Under the results: the written rotation's timeline as these builds play it */
+  timeline?: ReactNode
   /** The members' data: only which element each attack deals (the damage share by element) */
   teamData?: TeamData
   /** The setup as it is now (what changed since the run is shown) */
@@ -1977,56 +2113,64 @@ export function KqmResults({
       {(improving || finished) && (
         <KqmPreliminary teamId={teamId} final={!improving} />
       )}
-      {/* what these builds were run with; what has changed since (→ now) */}
+      {/* what these builds were run with (what has changed since: → now), and what to know about the
+          run, as chips at its right */}
       <Box
         sx={{
           ...insetSx,
-          display: 'flex',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          columnGap: 1.5,
-          rowGap: 0.75,
-          px: 1.5,
-          py: 1,
+          display: 'grid',
+          gap: 1.25,
+          px: { xs: 1.5, sm: 2 },
+          py: 1.5,
           mt: -0.5,
-          mb: 2,
+          mb: 2.5,
         }}
       >
-        <FieldLabel
-          tip={t(
-            'teamOpt.kqm.runWithTip',
-            'The setup these builds were made with. A value after → is what it is now: run again to use it.'
-          )}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            columnGap: 1,
+            rowGap: 0.75,
+            minHeight: 28,
+          }}
         >
-          {t('teamOpt.kqm.runWith', 'Run with')}
-        </FieldLabel>
+          <FieldLabel
+            tip={t(
+              'teamOpt.kqm.runWithTip',
+              'The setup these builds were made with. A value after → is what it is now: run again to use it.'
+            )}
+          >
+            {t('teamOpt.kqm.runWith', 'Run with')}
+          </FieldLabel>
+          <Box
+            sx={{
+              ml: 'auto',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'flex-end',
+              gap: 0.75,
+            }}
+          >
+            <KqmRunNotes
+              stalls={stalls}
+              stale={stale}
+              rotationChanged={
+                !!stale &&
+                !!now &&
+                JSON.stringify(now.attacks) !==
+                  JSON.stringify((setup ?? runSettings).attacks)
+              }
+            />
+          </Box>
+        </Box>
         <KqmSetupSummary
           members={members}
           settings={setup ?? runSettings}
           now={stale ? now : undefined}
           rotation={rotation}
-          stalls={stalls}
-          sx={{ flex: '1 1 auto' }}
         />
-        {stale && (
-          <Box
-            role="status"
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.75,
-              fontSize: 13,
-              color: 'warning.main',
-              ml: 'auto',
-            }}
-          >
-            <WarningAmberRoundedIcon sx={{ fontSize: 16 }} />
-            {t(
-              'teamOpt.kqm.staleShort',
-              'Setup changed. Run again to refresh.'
-            )}
-          </Box>
-        )}
       </Box>
       {/* one tile per member: pick whose build to inspect */}
       <Box
@@ -2225,6 +2369,7 @@ export function KqmResults({
           rotationTime={rotationTime}
         />
       </Box>
+      {timeline}
     </Box>
   )
 }
