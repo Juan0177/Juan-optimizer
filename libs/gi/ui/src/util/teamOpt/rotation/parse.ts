@@ -336,6 +336,115 @@ export function parseRotation(
   return { steps, loopsTo, warnings }
 }
 
+/** What a piece of rotation text is, as the writer colours it */
+export type RotationSpanKind =
+  /** `->`, `→`, `>`, `,`, `;` or a new line */
+  | 'separator'
+  /** A member's name (its `characterKey`) */
+  | 'member'
+  | 'action'
+  /** W1.5, W90f */
+  | 'wait'
+  /** (a note in parentheses), or an alternative after "/" */
+  | 'note'
+  /** Skipped by the parser: not an action, or a step naming no member */
+  | 'unknown'
+export interface RotationSpan {
+  from: number
+  to: number
+  kind: RotationSpanKind
+  characterKey?: CharacterKey
+}
+
+/**
+ * The rotation text in pieces, read as `parseRotation` reads it: separators, each step's member
+ * name, its actions (an unknown one marked), waits and notes. The spaces between are left out.
+ */
+export function rotationSpans(
+  text: string,
+  members: readonly RotationMember[]
+): RotationSpan[] {
+  const spans: RotationSpan[] = []
+  const part = (from: number, to: number) => {
+    const words = [...text.slice(from, to).matchAll(/\S+/g)].map((m) => ({
+      word: m[0],
+      from: from + (m.index ?? 0),
+      to: from + (m.index ?? 0) + m[0].length,
+    }))
+    let depth = 0
+    let key: CharacterKey | undefined
+    /** Whether the step being read named a member */
+    let named = false
+    /** Words left of the name just matched */
+    let inName = 0
+    const nameAt = (i: number, exact: boolean) => {
+      for (let n = Math.min(3, words.length - i); n >= 1; n--) {
+        const slice = words.slice(i, i + n)
+        if (slice.some((w) => /[()]/.test(w.word))) continue
+        const candidate = slice.map((w) => w.word).join(' ')
+        const found = exact
+          ? exactMember(candidate, members)
+          : matchMember(candidate, members)
+        if (found) return { n, found }
+      }
+      return undefined
+    }
+    words.forEach((w, i) => {
+      const opens = w.word.match(/\(/g)?.length ?? 0
+      const closes = w.word.match(/\)/g)?.length ?? 0
+      if (depth === 0 && inName <= 0 && !/^\(/.test(w.word)) {
+        // the part's first words name its member; a later exact name starts a new step
+        const name = nameAt(i, i > 0)
+        if (name) {
+          key = name.found
+          named = true
+          inName = name.n
+        } else if (i === 0) named = false
+      }
+      if (inName > 0) {
+        spans.push({
+          from: w.from,
+          to: w.to,
+          kind: 'member',
+          characterKey: key,
+        })
+        inName--
+      } else if (depth > 0 || opens) {
+        spans.push({ from: w.from, to: w.to, kind: 'note' })
+      } else if (!named) {
+        spans.push({ from: w.from, to: w.to, kind: 'unknown' })
+      } else {
+        // (an alternative: the first one is played, the rest is a note)
+        const slash = w.word.indexOf('/')
+        const played = slash > 0 ? w.word.slice(0, slash) : w.word
+        const problems: string[] = []
+        parseActions(played, problems, '', key)
+        spans.push({
+          from: w.from,
+          to: w.from + played.length,
+          kind: problems.length
+            ? 'unknown'
+            : /^w\s*[\d.]+f?$/i.test(played)
+              ? 'wait'
+              : 'action',
+        })
+        if (slash > 0)
+          spans.push({ from: w.from + slash, to: w.to, kind: 'note' })
+      }
+      depth = Math.max(0, depth + opens - closes)
+    })
+  }
+  let at = 0
+  for (const m of text.matchAll(/->|→|=>|>|,|;|\n/g)) {
+    const index = m.index ?? 0
+    part(at, index)
+    spans.push({ from: index, to: index + m[0].length, kind: 'separator' })
+    at = index + m[0].length
+  }
+  part(at, text.length)
+  return spans
+}
+
 /** At most this many written rotations are played as one (members bursting every 2nd and 3rd: 6) */
 const MAX_LOOPS = 6
 const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a)
