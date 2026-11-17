@@ -1,14 +1,17 @@
+import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import { currentRelease } from '@genshin-optimizer/gi/ui'
 import AddPhotoAlternateOutlinedIcon from '@mui/icons-material/AddPhotoAlternateOutlined'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import {
   alpha,
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   IconButton,
   InputBase,
   Popover,
@@ -20,6 +23,10 @@ import {
 import { useEffect, useId, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
+import { feedbackContext, installErrorLog } from './feedbackContext'
+
+// (from the start: the details a message carries include the last errors the page hit)
+installErrorLog()
 
 declare const __GO_BUILD_ID__: string
 
@@ -76,8 +83,10 @@ async function shrink(file: Blob): Promise<string | undefined> {
  * Discord name for a reply. The page and the app's version go with it. Drafts survive closing it.
  */
 export function FeedbackButton() {
-  const { t } = useTranslation('ui')
+  const { t, i18n } = useTranslation('ui')
   const { pathname } = useLocation()
+  const database = useDatabase()
+  const { gender } = useDBMeta()
   const anchor = useRef<HTMLButtonElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const messageInput = useRef<HTMLTextAreaElement>(null)
@@ -86,6 +95,8 @@ export function FeedbackButton() {
   const [kind, setKind] = useState<Kind>('bug')
   const [message, setMessage] = useState('')
   const [contact, setContact] = useState('')
+  const [details, setDetails] = useState(true)
+  const onTeam = /^\/teams\/[^/]+/.test(pathname)
   const [shots, setShots] = useState<Shot[]>([])
   const [dragging, setDragging] = useState(false)
   const [status, setStatus] = useState<
@@ -155,6 +166,13 @@ export function FeedbackButton() {
           build: typeof __GO_BUILD_ID__ === 'string' ? __GO_BUILD_ID__ : 'dev',
           site: globalThis.location?.host,
           images: shots.map((s) => s.url),
+          // (what the page shows and how it is set up, for finding the problem)
+          context: details
+            ? feedbackContext(database, pathname, {
+                language: i18n.language,
+                gender,
+              })
+            : undefined,
           // (left empty: a field only bots fill in)
           website: '',
         }),
@@ -527,18 +545,78 @@ export function FeedbackButton() {
               )}
 
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                <Typography
+                <Box
+                  component="label"
                   sx={{
-                    fontSize: 11.5,
-                    color: giTokens.parchmentMuted,
                     flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    cursor: 'pointer',
+                    color: details
+                      ? giTokens.parchment
+                      : giTokens.parchmentMuted,
                   }}
                 >
-                  {t(
-                    'feedback.includes',
-                    'The page and app version are included.'
-                  )}
-                </Typography>
+                  <Checkbox
+                    size="small"
+                    checked={details}
+                    onChange={(e) => setDetails(e.target.checked)}
+                    sx={{
+                      p: 0.25,
+                      ml: -0.25,
+                      color: giTokens.parchmentMuted,
+                      '&.Mui-checked': { color: giTokens.gold },
+                      '& .MuiSvgIcon-root': { fontSize: 18 },
+                    }}
+                  />
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 550 }}>
+                    {onTeam
+                      ? t(
+                          'feedback.detailsTeam',
+                          'Include page and team details'
+                        )
+                      : t('feedback.details', 'Include page details')}
+                  </Typography>
+                  <Tooltip
+                    placement="top"
+                    title={
+                      <Box sx={{ fontSize: 12.5, lineHeight: 1.5, p: 0.25 }}>
+                        {t(
+                          'feedback.detailsHelp',
+                          'Helps find the problem: the page, window size, language, app version and any recent errors.'
+                        )}
+                        {onTeam && (
+                          <>
+                            {' '}
+                            {t(
+                              'feedback.detailsHelpTeam',
+                              'On a team: each member’s level, constellation, talents, weapon and artifact sets, the team’s optimizer and KQM settings, and its written rotations.'
+                            )}
+                          </>
+                        )}{' '}
+                        {t(
+                          'feedback.detailsHelpPrivate',
+                          'No other teams, no artifact stats.'
+                        )}
+                      </Box>
+                    }
+                  >
+                    <InfoOutlinedIcon
+                      tabIndex={0}
+                      aria-label={t('feedback.detailsWhat', 'What is included')}
+                      sx={{
+                        fontSize: 15,
+                        color: giTokens.parchmentMuted,
+                        '&:hover, &:focus-visible': {
+                          color: giTokens.parchment,
+                        },
+                        outline: 'none',
+                      }}
+                    />
+                  </Tooltip>
+                </Box>
                 <Button
                   variant="contained"
                   disabled={!ready}
