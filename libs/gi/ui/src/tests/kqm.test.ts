@@ -622,15 +622,15 @@ describe('KQM Standards builds', () => {
       expect(passives[path[0]]?.[path[path.length - 1]]).toBeUndefined()
   }, 300_000)
 
-  it('builds at 9/9/9 talents by default (KQM’s guides), 10/10/10 when chosen', async () => {
+  it('builds at 10/10/10 talents by default (KQM Standards), 9/9/9 when chosen', async () => {
     const { database, teamId, teamOpt } = setup()
     const { talents: _, ...standard } = teamOpt.kqm!
-    const nine = (await run(database, teamId, { ...teamOpt, kqm: standard }))!
-    const ten = (await run(database, teamId, {
+    const nine = (await run(database, teamId, {
       ...teamOpt,
-      kqm: { ...standard, talents: 10 },
+      kqm: { ...standard, talents: 9 },
     }))!
-    expect(kqmTalentLevel(standard)).toBe(9)
+    const ten = (await run(database, teamId, { ...teamOpt, kqm: standard }))!
+    expect(kqmTalentLevel(standard)).toBe(10)
     expect(ten.after.total).toBeGreaterThan(nine.after.total * 1.03)
     // per member too: talents are every member's
     for (const k of [ayaka, shenhe])
