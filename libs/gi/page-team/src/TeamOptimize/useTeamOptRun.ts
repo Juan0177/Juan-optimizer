@@ -11,12 +11,14 @@ import {
 } from '@genshin-optimizer/gi/solver'
 import { compactArtifacts } from '@genshin-optimizer/gi/solver-tc'
 import type {
+  RunEnemy,
   TeamOptResult,
   TeamOptSolver,
   TeamOptStep,
 } from '@genshin-optimizer/gi/ui'
 import {
   optimizeTeam,
+  runEnemyOf,
   TeamOptCancelled,
   TeamOptSetRulesUnmet,
   teamOptMembers,
@@ -33,6 +35,8 @@ export type TeamOptRunState =
       seconds: number
       /** The settings it was found with (the rotation its damage is for) */
       teamOpt: TeamOpt
+      /** The enemy it was found for (the team's then); absent: found before this was kept */
+      enemy?: RunEnemy
       /** When it was found: which saved result it is (`database.teamOptResults`) */
       savedAt?: number
     }
@@ -97,12 +101,13 @@ function savedRun(
     return undefined
   }
   // (the database keeps its copy frozen)
-  const { result, seconds, teamOpt, savedAt } = structuredClone(saved)
+  const { result, seconds, teamOpt, enemy, savedAt } = structuredClone(saved)
   return {
     type: 'done',
     result: result as unknown as TeamOptResult,
     seconds,
     teamOpt,
+    ...(enemy ? { enemy } : {}),
     savedAt,
   }
 }
@@ -143,6 +148,7 @@ export function useTeamOptRun(teamId: string) {
           savedAt: next.savedAt!,
           seconds: next.seconds,
           teamOpt: next.teamOpt,
+          ...(next.enemy ? { enemy: next.enemy } : {}),
           result: structuredClone(next.result) as never,
         })
       setStateRaw(next)
@@ -170,6 +176,9 @@ export function useTeamOptRun(teamId: string) {
     try {
       await nextPaint()
       const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
+      // (the enemy its damage is for, as it is now)
+      const team = database.teams.get(teamId)
+      const enemy = team && runEnemyOf(team)
       const solve: TeamOptSolver = async ({
         arts,
         objective,
@@ -259,6 +268,7 @@ export function useTeamOptRun(teamId: string) {
               result,
               seconds: (performance.now() - startTime) / 1000,
               teamOpt,
+              ...(enemy ? { enemy } : {}),
             }
           : { type: 'error', message: 'The team could not be computed.' }
       )

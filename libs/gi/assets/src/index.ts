@@ -11,6 +11,7 @@ import chars from './gen/chars'
 import weapons from './gen/weapons'
 
 export * from './assets'
+export * from './stygian'
 
 type characterAssetKey =
   | 'icon'

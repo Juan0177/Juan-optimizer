@@ -10,14 +10,17 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  FightTeam,
   KqmResult,
   KqmTeamOption,
   RotationEnergy,
+  RunEnemy,
   TeamData,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
+  EnemySummary,
   KQM_ER_DEFAULT,
   KQM_TALENT_DEFAULT,
   kqmBuildThreads,
@@ -31,6 +34,7 @@ import {
   kqmMemberConstellation,
   kqmTalentLevel,
   kqmWeapons,
+  StygianDefeatTime,
   setKqmBuildThreads,
   syncEnergyCalculator,
   withRotationEnergy,
@@ -70,7 +74,9 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { EnemySetup } from '../Enemy/EnemySetup'
 import { DamageShare } from './DamageShare'
+import { fightTeamOf } from './fightTeam'
 import { formatRateFull } from './format'
 import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import {
@@ -280,7 +286,10 @@ export function KqmSettings({
   teamData,
   teamOpt,
   setTeamOpt,
+  fight,
 }: {
+  /** The builds shown, in their fight (a Stygian boss: how long they take to defeat it) */
+  fight?: FightTeam
   disabled?: boolean
   active?: boolean
   /** There are results: its action runs again */
@@ -621,231 +630,254 @@ export function KqmSettings({
         </Box>
       </Box>
 
-      {/* one row per member: its build, constellation and the Energy Recharge it needs */}
-      <Box sx={{ ...insetSx, overflow: 'hidden' }}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 1,
-            pl: 1.5,
-            pr: 1,
-            py: 0.75,
-            minHeight: 48,
-            borderBottom: hairline,
-          }}
-        >
-          <Typography
-            component="h3"
+      {/* the members (their constellation and the Energy Recharge each needs) and, beside them on
+          wide screens, the enemy the builds are made for */}
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 1.5,
+          alignItems: 'stretch',
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            lg: 'minmax(0, 1.4fr) minmax(340px, 1fr)',
+          },
+        }}
+      >
+        {/* one row per member: its build, constellation and the Energy Recharge it needs */}
+        <Box sx={{ ...insetSx, overflow: 'hidden' }}>
+          <Box
             sx={{
-              ...type.title,
               display: 'flex',
               alignItems: 'center',
-              gap: 0.5,
-              flexGrow: 1,
+              flexWrap: 'wrap',
+              gap: 1,
+              pl: 1.5,
+              pr: 1,
+              py: 0.75,
+              minHeight: 48,
+              borderBottom: hairline,
             }}
           >
-            {t('teamOpt.kqm.membersAll', 'Members')}
-            <InfoTooltipInline
-              title={t('teamOpt.kqm.membersAllHelp', {
-                defaultValue:
-                  'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
-                rolls: kqmStandardRolls(kqm),
-              })}
-            />
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 0.5 }}>
-            <FieldLabel
-              tip={t(
-                'teamOpt.kqm.talentsTipStandard',
-                'Every member’s talent levels (normal attack, skill, burst; constellations add theirs on top). KQM Standards use 10/10/10. Your last pick is used for new teams.'
-              )}
-            >
-              {t('teamOpt.kqm.talents', 'Talents')}
-            </FieldLabel>
-            <Segmented
-              size="small"
-              value={kqmTalentLevel(kqm)}
-              aria-label={t('teamOpt.kqm.talents', 'Talents')}
-              options={[9, 10].map((level) => ({
-                value: level as 9 | 10,
-                label: `${level}/${level}/${level}`,
-              }))}
-              onChange={(level) => {
-                // (saved on the team, and remembered for teams not set yet)
-                rememberKqmTalents(level)
-                setTeamOpt((o) => {
-                  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-                  settings.talents = level
-                })
-              }}
-            />
-          </Box>
-          <KqmArtifactStandard kqm={kqm} setTeamOpt={setTeamOpt} />
-          {calculated && (
-            <FieldLabel
-              tip={t(
-                'teamOpt.kqm.calc.active',
-                'Calculator targets applied. ER is recalculated for each weapon choice during optimization. Editing a target switches back to manual ER requirements.'
-              )}
-            >
-              {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
-            </FieldLabel>
-          )}
-          <Button
-            size="small"
-            variant="outlined"
-            color="inherit"
-            startIcon={<CalculateOutlinedIcon />}
-            onClick={() => setTab(3)}
-          >
-            {t('teamOpt.kqm.calc.open', 'Calculate ER')}
-          </Button>
-        </Box>
-        {/* column labels (phones: each field says what it is) */}
-        <Box
-          sx={{
-            ...memberGrid,
-            display: { xs: 'none', sm: 'grid' },
-            px: 1.5,
-            pt: 1,
-          }}
-        >
-          <FieldLabel
-            sx={{ gridArea: 'cons' }}
-            tip={t(
-              'teamOpt.kqm.consTip',
-              'Constellation of this KQM build. KQM standard: C6 for 4★, C0 for 5★.'
-            )}
-          >
-            {t('teamOpt.kqm.consColumn', 'Constellation')}
-          </FieldLabel>
-          <FieldLabel
-            sx={{ gridArea: 'er', justifySelf: 'end' }}
-            tip={t(
-              'teamOpt.kqm.erHelp',
-              'Total ER% each member needs, or calculate it for this rotation. 100% (the default) means no extra ER. The optimizer meets ER first, then uses the remaining rolls for damage.'
-            )}
-          >
-            {t('teamOpt.kqm.minEr', 'Min ER')}
-          </FieldLabel>
-        </Box>
-        {members.map(({ characterKey }, index) => {
-          const text = erText[characterKey] ?? ''
-          const invalid = erTextInvalid(text)
-          // (marked only when the invalid targets are what blocks Generate)
-          const missing =
-            problemIsEr &&
-            missingEr.some((m) => m.characterKey === characterKey)
-          const cons = kqmMemberConstellation(characterKey, kqm)
-          const standard = kqmConstellation(characterKey)
-          return (
-            <Box
-              key={characterKey}
+            <Typography
+              component="h3"
               sx={{
-                ...memberGrid,
-                px: 1.5,
-                py: 1,
-                borderTop: index > 0 ? hairline : undefined,
+                ...type.title,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                flexGrow: 1,
               }}
             >
+              {t('teamOpt.kqm.membersAll', 'Members')}
+              <InfoTooltipInline
+                title={t('teamOpt.kqm.membersAllHelp', {
+                  defaultValue:
+                    'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
+                  rolls: kqmStandardRolls(kqm),
+                })}
+              />
+            </Typography>
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 0.5 }}
+            >
+              <FieldLabel
+                tip={t(
+                  'teamOpt.kqm.talentsTipStandard',
+                  'Every member’s talent levels (normal attack, skill, burst; constellations add theirs on top). KQM Standards use 10/10/10. Your last pick is used for new teams.'
+                )}
+              >
+                {t('teamOpt.kqm.talents', 'Talents')}
+              </FieldLabel>
+              <Segmented
+                size="small"
+                value={kqmTalentLevel(kqm)}
+                aria-label={t('teamOpt.kqm.talents', 'Talents')}
+                options={[9, 10].map((level) => ({
+                  value: level as 9 | 10,
+                  label: `${level}/${level}/${level}`,
+                }))}
+                onChange={(level) => {
+                  // (saved on the team, and remembered for teams not set yet)
+                  rememberKqmTalents(level)
+                  setTeamOpt((o) => {
+                    const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+                    settings.talents = level
+                  })
+                }}
+              />
+            </Box>
+            <KqmArtifactStandard kqm={kqm} setTeamOpt={setTeamOpt} />
+            {calculated && (
+              <FieldLabel
+                tip={t(
+                  'teamOpt.kqm.calc.active',
+                  'Calculator targets applied. ER is recalculated for each weapon choice during optimization. Editing a target switches back to manual ER requirements.'
+                )}
+              >
+                {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
+              </FieldLabel>
+            )}
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={<CalculateOutlinedIcon />}
+              onClick={() => setTab(3)}
+            >
+              {t('teamOpt.kqm.calc.open', 'Calculate ER')}
+            </Button>
+          </Box>
+          {/* column labels (phones: each field says what it is) */}
+          <Box
+            sx={{
+              ...memberGrid,
+              display: { xs: 'none', sm: 'grid' },
+              px: 1.5,
+              pt: 1,
+            }}
+          >
+            <FieldLabel
+              sx={{ gridArea: 'cons' }}
+              tip={t(
+                'teamOpt.kqm.consTip',
+                'Constellation of this KQM build. KQM standard: C6 for 4★, C0 for 5★.'
+              )}
+            >
+              {t('teamOpt.kqm.consColumn', 'Constellation')}
+            </FieldLabel>
+            <FieldLabel
+              sx={{ gridArea: 'er', justifySelf: 'end' }}
+              tip={t(
+                'teamOpt.kqm.erHelp',
+                'Total ER% each member needs, or calculate it for this rotation. 100% (the default) means no extra ER. The optimizer meets ER first, then uses the remaining rolls for damage.'
+              )}
+            >
+              {t('teamOpt.kqm.minEr', 'Min ER')}
+            </FieldLabel>
+          </Box>
+          {members.map(({ characterKey }, index) => {
+            const text = erText[characterKey] ?? ''
+            const invalid = erTextInvalid(text)
+            // (marked only when the invalid targets are what blocks Generate)
+            const missing =
+              problemIsEr &&
+              missingEr.some((m) => m.characterKey === characterKey)
+            const cons = kqmMemberConstellation(characterKey, kqm)
+            const standard = kqmConstellation(characterKey)
+            return (
               <Box
+                key={characterKey}
                 sx={{
-                  gridArea: 'name',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1.25,
-                  minWidth: 0,
+                  ...memberGrid,
+                  px: 1.5,
+                  py: 1,
+                  borderTop: index > 0 ? hairline : undefined,
                 }}
               >
-                <MemberAvatar characterKey={characterKey} size={32} />
-                <Typography sx={{ fontSize: 14, fontWeight: 600 }} noWrap>
-                  <CharacterName characterKey={characterKey} gender={gender} />
-                </Typography>
-              </Box>
-              <Box sx={{ gridArea: 'cons', minWidth: 0 }}>
-                <KqmConstellationSelect
-                  value={cons}
-                  standard={standard}
-                  characterKey={characterKey}
-                  onChange={(value) =>
-                    setTeamOpt((o) => {
-                      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-                      const next = { ...(settings.constellations ?? {}) }
-                      if (value === standard) delete next[characterKey]
-                      else next[characterKey] = value
-                      settings.constellations = Object.keys(next).length
-                        ? next
-                        : undefined
-                    })
-                  }
-                />
-              </Box>
-              <Box sx={{ gridArea: 'er', minWidth: 0 }}>
-                <Tooltip
-                  arrow
-                  title={
-                    invalid
-                      ? t('teamOpt.kqm.erInvalid', 'Enter 100 or more')
-                      : ''
-                  }
+                <Box
+                  sx={{
+                    gridArea: 'name',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.25,
+                    minWidth: 0,
+                  }}
                 >
-                  <TextField
-                    size="small"
-                    fullWidth
-                    value={text}
-                    error={invalid}
-                    placeholder={`${KQM_ER_DEFAULT}`}
-                    onChange={(e) => setEr(characterKey, e.target.value)}
-                    inputProps={{
-                      inputMode: 'decimal',
-                      'aria-label': t('teamOpt.kqm.erInput', {
-                        defaultValue: '{{character}} minimum ER (%)',
-                        character: characterKey,
-                      }),
-                    }}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment
-                          position="start"
-                          sx={{ display: { sm: 'none' } }}
-                        >
-                          <Box component="span" sx={type.label}>
-                            {t('teamOpt.kqm.erShort', 'ER')}
-                          </Box>
-                        </InputAdornment>
-                      ),
-                      endAdornment: (
-                        <InputAdornment position="end">%</InputAdornment>
-                      ),
-                    }}
-                    sx={(theme) => ({
-                      ...compactFieldSx,
-                      '& .MuiInputBase-root': {
-                        fontSize: 14,
-                        px: { xs: 1, sm: 1.25 },
-                      },
-                      '& .MuiInputAdornment-positionStart': {
-                        mr: { xs: 0.5, sm: 1 },
-                      },
-                      '& .MuiInputBase-input': {
-                        py: 0.875,
-                        textAlign: 'right',
-                        ...numSx,
-                      },
-                      ...(missing && {
-                        '& .MuiOutlinedInput-notchedOutline': {
-                          borderColor: alpha(theme.palette.warning.main, 0.55),
-                        },
-                      }),
-                    })}
+                  <MemberAvatar characterKey={characterKey} size={32} />
+                  <Typography sx={{ fontSize: 14, fontWeight: 600 }} noWrap>
+                    <CharacterName
+                      characterKey={characterKey}
+                      gender={gender}
+                    />
+                  </Typography>
+                </Box>
+                <Box sx={{ gridArea: 'cons', minWidth: 0 }}>
+                  <KqmConstellationSelect
+                    value={cons}
+                    standard={standard}
+                    characterKey={characterKey}
+                    onChange={(value) =>
+                      setTeamOpt((o) => {
+                        const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+                        const next = { ...(settings.constellations ?? {}) }
+                        if (value === standard) delete next[characterKey]
+                        else next[characterKey] = value
+                        settings.constellations = Object.keys(next).length
+                          ? next
+                          : undefined
+                      })
+                    }
                   />
-                </Tooltip>
+                </Box>
+                <Box sx={{ gridArea: 'er', minWidth: 0 }}>
+                  <Tooltip
+                    arrow
+                    title={
+                      invalid
+                        ? t('teamOpt.kqm.erInvalid', 'Enter 100 or more')
+                        : ''
+                    }
+                  >
+                    <TextField
+                      size="small"
+                      fullWidth
+                      value={text}
+                      error={invalid}
+                      placeholder={`${KQM_ER_DEFAULT}`}
+                      onChange={(e) => setEr(characterKey, e.target.value)}
+                      inputProps={{
+                        inputMode: 'decimal',
+                        'aria-label': t('teamOpt.kqm.erInput', {
+                          defaultValue: '{{character}} minimum ER (%)',
+                          character: characterKey,
+                        }),
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment
+                            position="start"
+                            sx={{ display: { sm: 'none' } }}
+                          >
+                            <Box component="span" sx={type.label}>
+                              {t('teamOpt.kqm.erShort', 'ER')}
+                            </Box>
+                          </InputAdornment>
+                        ),
+                        endAdornment: (
+                          <InputAdornment position="end">%</InputAdornment>
+                        ),
+                      }}
+                      sx={(theme) => ({
+                        ...compactFieldSx,
+                        '& .MuiInputBase-root': {
+                          fontSize: 14,
+                          px: { xs: 1, sm: 1.25 },
+                        },
+                        '& .MuiInputAdornment-positionStart': {
+                          mr: { xs: 0.5, sm: 1 },
+                        },
+                        '& .MuiInputBase-input': {
+                          py: 0.875,
+                          textAlign: 'right',
+                          ...numSx,
+                        },
+                        ...(missing && {
+                          '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor: alpha(
+                              theme.palette.warning.main,
+                              0.55
+                            ),
+                          },
+                        }),
+                      })}
+                    />
+                  </Tooltip>
+                </Box>
               </Box>
-            </Box>
-          )
-        })}
+            )
+          })}
+        </Box>
+        <EnemySetup teamId={teamId} fight={fight} disabled={disabled} />
       </Box>
       {/* what the builds may use: the weapon groups, and the drawers that choose one by one */}
       <KqmPool
@@ -1065,12 +1097,21 @@ export function KqmSetupSummary({
   settings,
   now,
   rotation,
+  enemy,
+  enemyNow,
+  fight,
   sx,
 }: {
   members: TeamOptMember[]
   settings: TeamOpt
+  /** The builds in the fight (a Stygian boss: how long they take to defeat it) */
+  fight?: FightTeam
   /** The setup as it is now */
   now?: TeamOpt
+  /** The enemy the run was for (absent: run before this was kept) */
+  enemy?: RunEnemy
+  /** The team's enemy now, when it is not the same */
+  enemyNow?: RunEnemy
   /** Its rotation's attacks: the written rotation as KQM played it, or the attacks entered */
   rotation?: 'played' | 'entered'
   sx?: SxProps<Theme>
@@ -1218,6 +1259,13 @@ export function KqmSetupSummary({
             nowKqm.energySource !== kqm.energySource &&
             nowIs(erLabel(nowKqm.energySource === 'calculator'))}
         </SpecStat>
+        {enemy && (
+          <SpecStat label={t('teamOpt.enemy.label', 'Enemy')}>
+            <EnemySummary enemy={enemy} />
+            <StygianDefeatTime enemy={enemy} team={fight} />
+            {enemyNow && nowIs(<EnemySummary enemy={enemyNow} />)}
+          </SpecStat>
+        )}
         {rotation === 'played' && (
           <Tooltip
             arrow
@@ -1962,9 +2010,18 @@ export function KqmResults({
   onView,
   teamData,
   timeline,
+  enemy,
+  enemyNow,
+  gauge,
 }: {
   teamId: string
   runSettings: TeamOpt
+  /** The written rotation's element applications per second (a Stygian boss's mechanics) */
+  gauge?: FightTeam['gauge']
+  /** The enemy it was found for (absent: found before this was kept) */
+  enemy?: RunEnemy
+  /** The team's enemy now, when it is not the same */
+  enemyNow?: RunEnemy
   /** Under the results: the written rotation's timeline as these builds play it */
   timeline?: ReactNode
   /** The members' data: only which element each attack deals (the damage share by element) */
@@ -2209,6 +2266,20 @@ export function KqmResults({
           settings={setup ?? runSettings}
           now={stale ? now : undefined}
           rotation={rotation}
+          enemy={enemy}
+          enemyNow={enemyNow}
+          fight={
+            enemy &&
+            fightTeamOf({
+              members: members.map((m) => m.characterKey),
+              evaluation: result.after,
+              attacks: runSettings.attacks,
+              teamData,
+              rotationTime,
+              enemyOverride: enemy.enemyOverride,
+              gauge,
+            })
+          }
         />
       </Box>
       {/* one tile per member: pick whose build to inspect */}

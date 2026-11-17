@@ -54,7 +54,7 @@ const ELEMENTS = [
 ] as const
 
 /** An attack's element, from its member's data (its talent's own, an infusion, or its reaction's) */
-function attackElement(
+export function attackElement(
   teamData: TeamData | undefined,
   characterKey: CharacterKey,
   attack: TeamOptAttack

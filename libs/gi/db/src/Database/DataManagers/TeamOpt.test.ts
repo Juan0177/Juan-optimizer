@@ -19,6 +19,21 @@ const teamKeys = [
 const good = () => structuredClone(van) as unknown as IGOOD & IGO
 
 describe('team.teamOpt (Team Optimize settings)', () => {
+  it('keeps the characters left out of "Other characters’ artifacts", valid ones only', () => {
+    const result = validateTeamOpt({
+      ...initTeamOpt(),
+      useOtherChars: true,
+      excludedLocations: ['Bennett', 'NotACharacter', 'Bennett', 7, 'Traveler'],
+    })!
+    expect(result.excludedLocations).toEqual(['Bennett', 'Traveler'])
+    // (absent when none are left out: an earlier result is not "found with other settings")
+    expect(
+      'excludedLocations' in
+        validateTeamOpt({ ...initTeamOpt(), excludedLocations: [] })!
+    ).toBe(false)
+    expect('excludedLocations' in validateTeamOpt(initTeamOpt())!).toBe(false)
+  })
+
   it('is not added to teams without it (GOOD import)', () => {
     const database = new ArtCharDatabase(1, new SandboxStorage())
     database.importGOOD(good(), false, false, false)
@@ -435,6 +450,7 @@ describe('team.teamOpt (Team Optimize settings)', () => {
       },
       keep: ['Shenhe'],
       useOtherChars: true,
+      excludedLocations: ['Bennett', 'Traveler'],
       useExcludedArts: true,
       levelLow: 16,
       levelHigh: 20,
@@ -521,5 +537,17 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     // and none of the newer settings is made up
     for (const key of ['onField', 'bonusStats', 'rotationTime'] as const)
       expect(key in loaded).toBe(false)
+  })
+})
+
+describe('team.enemyPreset (the enemy preset last applied)', () => {
+  it('is kept as a string, and left out otherwise', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({ enemyPreset: 'stygian:1013061:regular' })
+    expect(database.teams.get(id)!.enemyPreset).toBe('stygian:1013061:regular')
+    for (const enemyPreset of [3, '', 'x'.repeat(65), null, {}]) {
+      const other = database.teams.new({ enemyPreset } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
   })
 })

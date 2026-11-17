@@ -19,6 +19,8 @@ import {
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  FightTeam,
+  RunEnemy,
   TeamData,
   TeamOptMember,
   TeamOptResult,
@@ -29,8 +31,10 @@ import {
   ArtifactSetName,
   ArtifactSetTooltip,
   CharacterName,
+  EnemySummary,
   ExcludeIcon,
   resolveInfo,
+  StygianDefeatTime,
   statName,
   WeaponDetails,
   WeaponName,
@@ -66,6 +70,7 @@ import type { ReactNode } from 'react'
 import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
+import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import type { ResultDetailsData } from './ResultDetails'
@@ -99,11 +104,20 @@ export function TeamOptResults({
   teamData,
   stale,
   onRunAgain,
+  enemy,
+  enemyNow,
+  gauge,
 }: {
   teamId: string
+  /** The written rotation's element applications per second (a Stygian boss's mechanics) */
+  gauge?: FightTeam['gauge']
   members: TeamOptMember[]
   result: TeamOptResult
   seconds: number
+  /** The enemy it was found for (absent: found before this was kept) */
+  enemy?: RunEnemy
+  /** The team's enemy now, when it is not the same: shown after the run's */
+  enemyNow?: RunEnemy
   /** The team's data now: what names the members' requirements */
   teamData: TeamData | undefined
   /** The rotation or the settings changed since the run: the result does not include it */
@@ -227,6 +241,51 @@ export function TeamOptResults({
               count: result.rounds,
             })}
           </Typography>
+          {/* the enemy the damage is for (and the team's now, if it changed since) */}
+          {enemy && (
+            <Typography
+              component="div"
+              sx={{
+                ...type.label,
+                ...numSx,
+                fontWeight: 400,
+                mt: 0.25,
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                columnGap: 0.75,
+              }}
+            >
+              <span>{t('teamOpt.result.enemy', 'For')}</span>
+              <EnemySummary enemy={enemy} />
+              <StygianDefeatTime
+                enemy={enemy}
+                team={fightTeamOf({
+                  members: members.map((m) => m.characterKey),
+                  evaluation: after,
+                  attacks: runTeamOpt.attacks,
+                  teamData,
+                  rotationTime,
+                  enemyOverride: enemy.enemyOverride,
+                  gauge,
+                })}
+              />
+              {enemyNow && (
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    columnGap: 0.75,
+                    color: 'warning.main',
+                  }}
+                >
+                  {t('teamOpt.result.enemyNow', '→ now')}
+                  <EnemySummary enemy={enemyNow} />
+                </Box>
+              )}
+            </Typography>
+          )}
         </Box>
 
         <Box
