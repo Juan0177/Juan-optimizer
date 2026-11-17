@@ -24,9 +24,14 @@ and generates a comparison card (an image, to share).
   its **existing builds** (equipped, saved builds, TC builds), chosen from a list; the weapon is the
   build's.
 - Rotation:
-  - **main rotation**: the team's full rotation, prefilled from the team's rotation text;
+  - **main rotation**: the team's full rotation, prefilled from the team's rotation text and
+    editable **the same way as in KQM Theorycrafting** (same rotation editor and controls). Edits
+    stay in KQM Compare: they never change the team's own rotation;
   - **fragment**: only the entering member's actions (e.g. `E Q`), replacing the leaving member's
-    single step (e.g. `Yae Miko E E E` → `Mitya E Q`).
+    single step (e.g. `Yae Miko E E E` → `Mitya E Q`);
+  - **confirmation**: before anything runs, the user confirms both: the main rotation (A) and the
+    entering fragment, shown as B's resulting rotation with the replaced step highlighted.
+    "Confronta" is enabled only after this confirmation; editing either one asks for it again.
   - Works only when the leaving member appears **once** in the rotation (one step, one place,
     opener included). Otherwise: a clear message, nothing runs.
 - Computation: the KQM run done **twice**, A and B, same settings, each searching every member's
@@ -81,13 +86,17 @@ team page; its route is its own (e.g. `.../kqm-compare`).
 Esce  [Anastasya] [Yae Miko●] [Odette] [Danica]
 Entra [Mitya ▾]  C[0▾]  Arma [Astro del vespro errante ▾] R[1▾]
 Build (•) KQM  ( ) esistente [— ▾]
-Rotazione principale
+Rotazione principale          (editor as in KQM Theorycrafting)
 ┌──────────────────────────────────────────────────────────┐
 │Danica E -> Odette E E -> Yae Miko E E E -> Danica Q -> ..│
 └──────────────────────────────────────────────────────────┘
 Frammento di Mitya  [E Q            ]   (replaces "Yae Miko E E E")
 ⚠ messages (leaving member found 0 or 2+ times, parse warnings)
-                                                  [Confronta]
+
+Conferma
+ A  Danica E -> Odette E E -> [Yae Miko E E E] -> Danica Q -> …
+ B  Danica E -> Odette E E -> [Mitya E Q]      -> Danica Q -> …
+                                [Conferma rotazioni] [Confronta]
 ────────────────────────────────────────────────────────────
                      A: Yae Miko      B: Mitya       Δ
 DPR                  …                …            −x%
@@ -136,6 +145,9 @@ rotation time, each member's damage/share and ER, both rotations, "Juan-optimize
   Anastasya hE N2 Q N5 E E E N2`, fragment `E Q`: the overview shows A and B with DPR, DPS,
   shares and ER; the card downloads.
 - A rotation where the leaving member appears twice is refused with a message.
+- "Confronta" stays disabled until both rotations are confirmed, and again after an edit; editing
+  the main rotation in KQM Compare leaves the team's rotation (Team optimize, KQM Theorycrafting)
+  unchanged.
 - The database, `teamOpt` and the team's localStorage are identical before and after; KQM
   Theorycrafting shows the same results as before.
 - Unit tests: fragment substitution (once / zero / twice / nickname / opener), no writes;
