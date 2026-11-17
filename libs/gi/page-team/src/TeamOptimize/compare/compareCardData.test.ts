@@ -61,6 +61,31 @@ describe('compareCardData', () => {
     expect(d.a.rotation).toEqual(['Danica E', 'Yae Miko E E', 'Danica Q'])
     expect(d.b.rotation).toEqual(['Danica E', 'Mitya E Q'])
   })
+  it('cuts turns at every separator the parser reads, and at bare names', () => {
+    const named = {
+      ...ctx,
+      t: ((k: string) =>
+        k === 'charNames_gen:YaeMiko'
+          ? 'Yae Miko'
+          : (k.split(':').pop() ?? k)) as never,
+    }
+    const r = compareCardData(
+      {
+        ...a,
+        rotation: 'Danica E > Yae Miko E E => Danica Q, Yae Miko E; Danica E',
+      },
+      { ...b, rotation: 'Danica E Mitya E Q\nDanica Q' },
+      named
+    )
+    expect(r.a.rotation).toEqual([
+      'Danica E',
+      'Yae Miko E E',
+      'Danica Q',
+      'Yae Miko E',
+      'Danica E',
+    ])
+    expect(r.b.rotation).toEqual(['Danica E', 'Mitya E Q', 'Danica Q'])
+  })
   it('names the swap and the team', () => {
     expect(d.swap).toEqual({ out: 'Yae Miko', in: 'Mitya' })
     expect(d.name).toBe('Team X')

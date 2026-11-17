@@ -22,6 +22,7 @@ import {
 import type { i18n } from 'i18next'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { kqmReplayOf } from '../useKqmRun'
+import { CompareSwapFailure } from './compareError'
 import type { SwapIn } from './compareSwapKqm'
 import { compareSwapKqm, sideOf, swapSettings } from './compareSwapKqm'
 
@@ -346,7 +347,7 @@ describe('compareSwapKqm', () => {
     const s = await setup()
     expect(
       await compareSwapKqm({ ...argsOf(s), text: `${TEXT} -> Yae Miko E` })
-    ).toEqual({ error: 'repeated' })
+    ).toEqual({ error: 'repeated', count: 2 })
     expect(await compareSwapKqm({ ...argsOf(s), fragment: ' ' })).toEqual({
       error: 'emptyFragment',
     })
@@ -458,4 +459,42 @@ describe('compareSwapKqm', () => {
     expect(typeof settings.rules).toBe('object')
     expect(snapshot(s)).toEqual(before)
   }, 300_000)
+
+  it('plays the team’s frame-timing edits on the same actions in B', async () => {
+    const calculator = defaultEnergyCalculator(MEMBERS, 20, 'Anastasya')
+    const s = await setup({
+      energySource: 'calculator',
+      energyCalculator: calculator,
+    })
+    const seconds = () => {
+      const out = swapSettings(argsOf(s))
+      if ('error' in out) throw new Error(out.error)
+      return out.teamOpt.kqm!.energyCalculator!.rotationTime
+    }
+    const plain = seconds()
+    // (Danica's Q, the 7th action of A's rotation and the 6th of B's: 10 s longer)
+    stored.set(
+      `teamOptRotationTiming_${s.teamId}`,
+      JSON.stringify({
+        edits: { 6: { characterKey: 'Danica', text: 'Q', frames: 600 } },
+      })
+    )
+    const before = snapshot(s)
+    expect(seconds()).toBeGreaterThan(plain + 5)
+    // (the team's timing is read, not changed)
+    expect(snapshot(s)).toEqual(before)
+  }, 300_000)
+
+  it('fails with a code the page can say in the user’s language', async () => {
+    const s = await setup()
+    const failure = await compareSwapKqm({
+      ...argsOf(s),
+      saved: {
+        ...s.saved,
+        members: ['Anastasya', 'Furina', 'Odette', 'Danica'],
+      },
+    }).catch((e: unknown) => e)
+    expect(failure).toBeInstanceOf(CompareSwapFailure)
+    expect((failure as CompareSwapFailure).code).toBe('otherMembers')
+  }, 60_000)
 })

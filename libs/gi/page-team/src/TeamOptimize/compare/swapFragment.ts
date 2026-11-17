@@ -1,6 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { parseRotation, splitOnNames } from '@genshin-optimizer/gi/ui'
+import type { RotationTimingSettings } from '../RotationTiming'
 
 export type SwapFragmentError = 'notFound' | 'repeated' | 'emptyFragment'
 
@@ -14,6 +15,12 @@ export type SwapFragmentResult =
       replaced: string
       /** The step put in its place */
       inserted: string
+      /** The replaced step's first action: its position among the actions of `where` */
+      firstAction: number
+      /** The replaced step's actions */
+      replacedActions: number
+      /** The actions put in its place, less the replaced ones */
+      delta: number
     }
   | { ok: false; error: SwapFragmentError; count: number }
 
@@ -24,7 +31,7 @@ const SEPARATORS = /(->|→|=>|>|,|;|\n)/
  * A rotation cut exactly as the parser cuts it: at its separators, then at each bare member name.
  * `parts` joins back to the input; `steps` are the indexes of the parts that are one parser step
  */
-function cut(
+export function cut(
   s: string,
   names: RotationMember[]
 ): { parts: string[]; steps: number[] } {
@@ -102,6 +109,17 @@ export function swapFragment({
   const target = where === 'text' ? t : o
   const i = (where === 'text' ? ft : fo).acts[0]
   const replaced = target.parts[i].trim()
+  // (where its actions are: the actions before it, its own; the entering member's, named as the
+  // leaving member was, for counting)
+  const actions = (s: string, members = names) =>
+    parseRotation(s, members).steps.reduce((n, st) => n + st.actions.length, 0)
+  const firstAction = actions(target.parts.slice(0, i).join(''))
+  const replacedActions = actions(target.parts[i])
+  const delta =
+    actions(
+      inserted,
+      names.map((m) => (m.characterKey === out ? { ...m, name } : m))
+    ) - replacedActions
   target.parts[i] = inserted
   if (ft.loop !== undefined) t.parts[ft.loop] = name
   if (fo.loop !== undefined) o.parts[fo.loop] = name
@@ -112,5 +130,28 @@ export function swapFragment({
     where,
     replaced,
     inserted,
+    firstAction,
+    replacedActions,
+    delta,
   }
+}
+
+/**
+ * The team's frame-timing edits for team B's rotation. They are kept by the action's position in
+ * the written rotation (the opener has none): after the replaced step they move by the change in
+ * actions, so each stays on its own action; the replaced step's own are dropped.
+ */
+export function timingForSwap(
+  timing: RotationTimingSettings,
+  swapped: Extract<SwapFragmentResult, { ok: true }>
+): RotationTimingSettings {
+  if (swapped.where !== 'text') return timing
+  const { firstAction: first, replacedActions, delta } = swapped
+  const edits: RotationTimingSettings['edits'] = {}
+  for (const [k, edit] of Object.entries(timing.edits)) {
+    const i = Number(k)
+    if (i < first) edits[i] = edit
+    else if (i >= first + replacedActions) edits[i + delta] = edit
+  }
+  return { ...timing, edits }
 }

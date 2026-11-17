@@ -12,6 +12,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { CompareSwapFailure } from './compareError'
 import { srOnly } from './compareUi'
 import KqmCompare, { savedRunFor } from './KqmCompare'
 
@@ -33,19 +34,61 @@ const mocks = vi.hoisted(() => {
   const state: {
     saved: Record<string, unknown> | undefined
     members: string[]
-  } = { saved: undefined, members: [] }
+    /** A KQM Theorycrafting run of the team in progress */
+    kqmRunning: boolean
+    /** The saved results as the database entry gives them (a new object on each save) */
+    results: object
+  } = { saved: undefined, members: [], kqmRunning: false, results: {} }
+  const listeners = new Set<() => void>()
+  const resultListeners = new Set<(reason: string) => void>()
   return {
     state,
     compare: vi.fn(),
     settings: vi.fn((_args: unknown): unknown => ({ error: 'unsupported' })),
+    replay: vi.fn((..._args: unknown[]): unknown => undefined),
+    listeners,
+    /** KQM Theorycrafting's run starts or ends */
+    setKqmRunning(running: boolean) {
+      state.kqmRunning = running
+      for (const l of listeners) l()
+    },
+    /** KQM Theorycrafting saves a result */
+    saveResult(saved: Record<string, unknown> | undefined) {
+      state.saved = saved
+      state.results = {}
+      for (const l of resultListeners) l('update')
+    },
     database: {
       teamKqmResults: {
         getRun: () => state.saved && structuredClone(state.saved),
+        get: () => state.results,
+        follow: (callback: (reason: string) => void) => {
+          resultListeners.add(callback)
+          return () => resultListeners.delete(callback)
+        },
       },
       teams: { get: () => ({ name: 'Tsaritsa' }) },
     },
   }
 })
+vi.mock('../useKqmRun', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useKqmRunning: () =>
+      useSyncExternalStore(
+        (onChange: () => void) => {
+          mocks.listeners.add(onChange)
+          return () => mocks.listeners.delete(onChange)
+        },
+        () => mocks.state.kqmRunning
+      ),
+    kqmReplayOf: mocks.replay,
+  }
+})
+vi.mock('../RotationWriter', () => ({
+  storageKey: (teamId: string) => `teamOptRotationText_${teamId}`,
+  openerKey: (teamId: string) => `teamOptRotationOpener_${teamId}`,
+}))
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mocks.database,
   useDBMeta: () => ({ gender: 'F' }),
@@ -121,6 +164,7 @@ vi.mock('@genshin-optimizer/gi/ui', async () => {
       kqm?: { constellations?: Record<string, number> }
     ) => kqm?.constellations?.[key] ?? 0,
     kqmEnergyRequirement: () => 100,
+    kqmSimGear: (build: unknown) => build,
     isEnergyWeapon: (key: string) => key === 'WintersHeavyHeart',
     TeamOptCancelled: class extends Error {},
   }
@@ -243,8 +287,10 @@ afterEach(() => {
   cleanup()
   stored.clear()
   mocks.compare.mockReset()
+  mocks.replay.mockReset()
   mocks.state.saved = undefined
   mocks.state.members = []
+  mocks.state.kqmRunning = false
 })
 
 const theme = createTheme({ palette: { mode: 'dark' } })
@@ -263,6 +309,10 @@ function withRun() {
   stored.set('teamOptRotationText_t1', TEXT)
   stored.set('teamOptRotationOpener_t1', '')
 }
+const confirmBox = () =>
+  screen.getByRole('checkbox', {
+    name: /kqmCompare\.confirm/,
+  }) as HTMLInputElement
 const runButton = () =>
   screen.getByRole('button', { name: /^kqmCompare\.run$/ })
 
@@ -686,6 +736,156 @@ describe('KqmCompare', () => {
     expect(document.getElementById(describedBy!)?.textContent).toContain(
       'kqmCompare.error.repeated'
     )
+  })
+})
+
+describe('KqmCompare: A kept current', () => {
+  it('blocks Confronta while KQM Theorycrafting runs, and reads A again when it ends', async () => {
+    withRun()
+    mocks.state.kqmRunning = true
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('kqmCompare.kqmRunning')).toBeTruthy()
+    const first = screen.getByText(/kqmCompare\.resultOf/).textContent
+    // (the run ends and saves its result a moment later)
+    act(() => mocks.setKqmRunning(false))
+    act(() =>
+      mocks.saveResult({
+        ...savedRun(),
+        savedAt: Date.UTC(2026, 10, 17, 15, 5),
+      })
+    )
+    expect(screen.queryByText('kqmCompare.kqmRunning')).toBeNull()
+    expect(screen.getByText(/kqmCompare\.resultOf/).textContent).not.toBe(first)
+    // (the confirmation was for the result before)
+    expect(confirmBox().checked).toBe(false)
+    expect(screen.getByText('kqmCompare.error.resultChanged')).toBeTruthy()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(confirmBox())
+    expect((runButton() as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('refuses to start when A changed after it was confirmed', async () => {
+    withRun()
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    // (saved meanwhile, not announced yet)
+    mocks.state.saved = {
+      ...savedRun(),
+      savedAt: Date.UTC(2026, 10, 17, 15, 5),
+    }
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    expect(mocks.compare).not.toHaveBeenCalled()
+    expect(confirmBox().checked).toBe(false)
+    expect(screen.getByText('kqmCompare.error.resultChanged')).toBeTruthy()
+  })
+})
+
+describe('KqmCompare: the result', () => {
+  const side = (dpr: number) => ({
+    dpr,
+    dps: dpr / 20,
+    rotationTime: 20,
+    rotation: TEXT,
+    members: [],
+  })
+  async function runOnce() {
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+  }
+
+  it('says when it is for settings changed since, and holds the card until run again', async () => {
+    withRun()
+    mocks.compare.mockResolvedValue({ a: side(1000), b: side(900) })
+    await runOnce()
+    await screen.findByRole('table')
+    const card = () =>
+      screen.getByRole('button', {
+        name: 'kqmCompare.card.create',
+      }) as HTMLButtonElement
+    expect(screen.queryByText('kqmCompare.staleResult')).toBeNull()
+    expect(card().disabled).toBe(false)
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /kqmCompare\.fragment/ }),
+      { target: { value: 'E E Q' } }
+    )
+    expect(screen.getByText('kqmCompare.staleResult')).toBeTruthy()
+    expect(card().disabled).toBe(true)
+    // (back to the settings it was run with: current again)
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /kqmCompare\.fragment/ }),
+      { target: { value: 'E Q' } }
+    )
+    expect(screen.queryByText('kqmCompare.staleResult')).toBeNull()
+    expect(card().disabled).toBe(false)
+  })
+
+  it('says a known failure in the user’s language', async () => {
+    withRun()
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.compare.mockRejectedValue(
+      new CompareSwapFailure(
+        'otherMembers',
+        'The saved KQM result is for other team members.'
+      )
+    )
+    await runOnce()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('kqmCompare.error.otherMembers')
+    expect(alert.textContent).not.toContain('other team members')
+    quiet.mockRestore()
+  })
+
+  it('says how many times the leaving member appears', async () => {
+    withRun()
+    mocks.compare.mockResolvedValue({ error: 'repeated', count: 3 })
+    await runOnce()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('count=3')
+  })
+})
+
+describe('KqmCompare: rotation changed since A', () => {
+  const played = {
+    attacks: {
+      Danica: [{ path: ['skill', 'dmg'], hits: 2, hitMode: 'avgHit' }],
+    },
+    rotationTime: 19.4,
+  }
+  const withPlayed = () => {
+    withRun()
+    const run = (
+      mocks.state.saved as { run: { result: Record<string, unknown> } }
+    ).run
+    run.result['played'] = played
+  }
+
+  it('does not warn when the written rotation plays as A played it', async () => {
+    withPlayed()
+    mocks.replay.mockReturnValue(() => structuredClone(played))
+    show()
+    await waitFor(() => expect(mocks.replay).toHaveBeenCalled())
+    expect(screen.queryByText('kqmCompare.rotationChanged')).toBeNull()
+  })
+
+  it('warns when the written rotation plays differently from A', async () => {
+    withPlayed()
+    mocks.replay.mockReturnValue(() => ({
+      ...structuredClone(played),
+      rotationTime: 21.2,
+    }))
+    show()
+    expect(await screen.findByText('kqmCompare.rotationChanged')).toBeTruthy()
   })
 })
 

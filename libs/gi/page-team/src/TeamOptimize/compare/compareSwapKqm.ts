@@ -35,9 +35,13 @@ import {
   withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
+import type { RotationTimingSettings } from '../RotationTiming'
+import { readRotationTiming } from '../RotationWriter'
 import { kqmReplayOf } from '../useKqmRun'
+import { CompareSwapFailure } from './compareError'
+import { savedRunOf } from './savedRun'
 import type { SwapFragmentError, SwapFragmentResult } from './swapFragment'
-import { swapFragment } from './swapFragment'
+import { swapFragment, timingForSwap } from './swapFragment'
 
 /*
  * KQM Compare's computation: team A is KQM Theorycrafting's saved run (read only); team B is the
@@ -93,14 +97,8 @@ export type CompareSwapError =
   | 'cancelled'
   | 'unsupported'
 
-/** A saved KQM Theorycrafting run, as `useKqmRun` keeps it */
-interface SavedRun {
-  result: KqmResult
-  /** The settings it ran with */
-  teamOpt?: TeamOpt
-  /** The settings its damage is for (the rotation as played) */
-  runTeamOpt?: TeamOpt
-}
+/** A refused swap: why, and for a member found more than once, how many times */
+export type CompareSwapRefusal = { error: CompareSwapError; count?: number }
 
 /** One side of the comparison, from a KQM result */
 export function sideOf(
@@ -328,7 +326,8 @@ function sandboxOf(
       talent: { auto: talent, skill: talent, burst: talent },
     })
   const team = sandbox.teams.get(teamId)
-  if (!team) throw new Error('The team is not in the database.')
+  if (!team)
+    throw new CompareSwapFailure('noTeam', 'The team is not in the database.')
   const teamCharId = sandbox.teamChars.new(key, {})
   sandbox.teams.set(teamId, {
     loadoutData: team.loadoutData.map((d) =>
@@ -359,6 +358,8 @@ interface SwapArgs {
   opener: string
   /** The entering member's actions, in place of the leaving member's step */
   fragment: string
+  /** KQM Theorycrafting's rotation timing (frame edits, swap time); absent: the team's saved one */
+  timing?: RotationTimingSettings
 }
 
 /** A swap that passed its checks: the team's keys, B's rotation, how the entering member is found */
@@ -379,7 +380,7 @@ function checkSwap({
   text,
   opener,
   fragment,
-}: SwapArgs): CheckedSwap | { error: CompareSwapError } {
+}: SwapArgs): CheckedSwap | CompareSwapRefusal {
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const key = swapIn.key
   if (keys.includes(key)) return { error: 'inTeam' }
@@ -393,7 +394,10 @@ function checkSwap({
     inName: nameOf(key),
     fragment,
   })
-  if (!swapped.ok) return { error: swapped.error }
+  if (!swapped.ok)
+    return swapped.error === 'repeated'
+      ? { error: swapped.error, count: swapped.count }
+      : { error: swapped.error }
   const search = searchOf(swapIn)
   if (!search) return { error: 'unsupported' }
   return { keys, swapped, search }
@@ -407,15 +411,19 @@ function checkSwap({
 function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
   const { database, teamId, gender, i18n, saved, out, swapIn } = args
   const key = swapIn.key
-  const run = saved.run as unknown as SavedRun
+  const run = savedRunOf(saved)
   if (
     saved.members.length !== keys.length ||
     !keys.every((k) => saved.members.includes(k))
   )
-    throw new Error('The saved KQM result is for other team members.')
+    throw new CompareSwapFailure(
+      'otherMembers',
+      'The saved KQM result is for other team members.'
+    )
   const fixed = keys.filter((k) => k !== out)
   const base = run.teamOpt ?? database.teams.get(teamId)?.teamOpt
-  if (!base) throw new Error('The team has no KQM settings.')
+  if (!base)
+    throw new CompareSwapFailure('noSettings', 'The team has no KQM settings.')
   const keysB = keys.map((k) => (k === out ? key : k))
   let teamOpt = swappedTeamOpt(
     base,
@@ -425,6 +433,11 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
     search.kind === 'pick' ? search : undefined
   )
   const sandbox = sandboxOf(database, teamId, out, swapIn, teamOpt)
+  // (the team's frame edits, each on its own action of B's rotation)
+  const timing = timingForSwap(
+    args.timing ?? readRotationTiming(teamId),
+    swapped
+  )
   const replayOf = (settings: TeamOpt) =>
     kqmReplayOf(
       sandbox,
@@ -433,7 +446,8 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
       teamId,
       settings,
       swapped.text,
-      swapped.opener
+      swapped.opener,
+      timing
     )
   // (the ER calculator's inputs for the entering member: as B's rotation plays them)
   if (
@@ -487,9 +501,9 @@ export function swapSettings(args: SwapArgs):
        */
       rules: Record<string, unknown>
     }
-  | { error: CompareSwapError } {
+  | CompareSwapRefusal {
   const checked = checkSwap(args)
-  if ('error' in checked) return { error: checked.error }
+  if ('error' in checked) return checked
   const { teamOpt, keysB, sandbox } = teamB(args, checked)
   const rules =
     kqmRuleConditionals(sandbox, args.teamId, teamOpt)[args.swapIn.key]
@@ -510,11 +524,11 @@ export async function compareSwapKqm({
 }: SwapArgs & {
   onStep?: (s: KqmStep) => void
   isCancelled?: () => boolean
-}): Promise<{ a: Side; b: Side } | { error: CompareSwapError }> {
+}): Promise<{ a: Side; b: Side } | CompareSwapRefusal> {
   const { gender, teamId, text, swapIn } = args
   const key = swapIn.key
   const checked = checkSwap(args)
-  if ('error' in checked) return { error: checked.error }
+  if ('error' in checked) return checked
   const { swapped, search } = checked
   if (isCancelled()) return { error: 'cancelled' }
 
@@ -525,7 +539,11 @@ export async function compareSwapKqm({
     fixed,
     run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime
   )
-  if (!replay) throw new Error('Team B’s rotation could not be played.')
+  if (!replay)
+    throw new CompareSwapFailure(
+      'notPlayable',
+      'Team B’s rotation could not be played.'
+    )
   const teammates = Object.fromEntries(
     fixed.map((k) => [k, run.result.builds[k]])
   ) as Partial<Record<CharacterKey, KqmBuild>>
@@ -589,11 +607,16 @@ export async function compareSwapKqm({
     throw e
   }
   if (isCancelled()) return { error: 'cancelled' }
-  if (!result) throw new Error('KQM could not evaluate team B.')
+  if (!result)
+    throw new CompareSwapFailure('noResult', 'KQM could not evaluate team B.')
   // (A's builds held: a fixed member's build differing between A and B is a failure)
   for (const k of fixed)
     if (!sameBuild(result.builds[k], run.result.builds[k]))
-      throw new Error(`${k}’s build changed in team B.`)
+      throw new CompareSwapFailure(
+        'buildChanged',
+        `${k}’s build changed in team B.`,
+        k
+      )
   return {
     a,
     b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime),

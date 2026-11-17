@@ -293,8 +293,14 @@ export async function renderKqmCompareCard(
       weight: 600,
       color: SLATE,
     })
+    // (a turn wider than the column, alone on its line: smaller, else cut short, never past it)
     rotLines[s].forEach((line, k) =>
-      ink(ctx, line, px, y + 62 + k * ROT_LINE, { size: ROT_SIZE, weight: 600 })
+      ink(ctx, line, px, y + 62 + k * ROT_LINE, {
+        size: ROT_SIZE,
+        weight: 600,
+        maxWidth: rotWidth,
+        minSize: 13,
+      })
     )
   })
   return canvas

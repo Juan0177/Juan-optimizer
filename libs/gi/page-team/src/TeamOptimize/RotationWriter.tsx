@@ -103,11 +103,11 @@ import {
 import { Disclosure, focusSx, quickSx, tokens, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
-const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
+export const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
 /** What was typed but not used yet (kept when the writer closes) */
 const draftKey = (teamId: string) => `teamOptRotationDraft_${teamId}`
-const openerKey = (teamId: string) => `teamOptRotationOpener_${teamId}`
-const timingKey = (teamId: string) => `teamOptRotationTiming_${teamId}`
+export const openerKey = (teamId: string) => `teamOptRotationOpener_${teamId}`
+export const timingKey = (teamId: string) => `teamOptRotationTiming_${teamId}`
 const timingOpenKey = 'teamOpt.timingOpen'
 /**
  * Character frame data: the player's own, for every team. (Ping, once its own setting that
@@ -174,6 +174,9 @@ const parseTiming = (raw: string | null): RotationTimingSettings => {
   }
   return { edits: {} }
 }
+/** A team's rotation timing settings as saved (none: no edits) */
+export const readRotationTiming = (teamId: string) =>
+  parseTiming(localStorage.getItem(timingKey(teamId)))
 const parseFrameData = (raw: string | null): FrameData => {
   try {
     const v = JSON.parse(raw ?? '')
@@ -537,6 +540,7 @@ export function kqmRotationReplay({
   teamOpt,
   text: given,
   opener: givenOpener,
+  timing: givenTiming,
 }: {
   database: Database
   teamId: string
@@ -548,6 +552,8 @@ export function kqmRotationReplay({
   text?: string
   /** Another opener to play before it; absent: the team's written one */
   opener?: string
+  /** Other timing settings (frame edits, swap time); absent: the team's own */
+  timing?: RotationTimingSettings
 }):
   | ((input: KqmReplayInput) => KqmPlayed & { energy?: RotationEnergy })
   | undefined {
@@ -556,7 +562,7 @@ export function kqmRotationReplay({
   const common = {
     text,
     opener: givenOpener ?? localStorage.getItem(openerKey(teamId)) ?? '',
-    timing: parseTiming(localStorage.getItem(timingKey(teamId))),
+    timing: givenTiming ?? readRotationTiming(teamId),
     frameData: parseFrameData(localStorage.getItem(frameDataKey)),
     names,
     members,

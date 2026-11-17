@@ -1,6 +1,6 @@
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
-import { swapFragment } from './swapFragment'
+import { swapFragment, timingForSwap } from './swapFragment'
 
 const names: RotationMember[] = [
   { characterKey: 'Anastasya', name: 'Anastasya' },
@@ -143,5 +143,72 @@ describe('swapFragment', () => {
     expect(
       swapFragment({ ...base, text: 'Danica E -> Odette E -> Yae' })
     ).toEqual({ ok: false, error: 'notFound', count: 0 })
+  })
+})
+
+describe('swapFragment: where the replaced step’s actions are', () => {
+  it('gives its first action, its actions and the change in actions', () => {
+    // (Danica E, Odette E E, then Yae Miko's E E E from the 4th action: E Q is one fewer)
+    expect(swapFragment(base)).toMatchObject({
+      ok: true,
+      firstAction: 3,
+      replacedActions: 3,
+      delta: -1,
+    })
+    expect(swapFragment({ ...base, fragment: 'E N2 E Q W1' })).toMatchObject({
+      firstAction: 3,
+      replacedActions: 3,
+      delta: 2,
+    })
+  })
+  it('counts in the opener when the step is there', () => {
+    expect(
+      swapFragment({
+        ...base,
+        text: 'Danica E -> Odette E E -> Danica Q',
+        opener: 'Danica E -> Yae Miko E E',
+      })
+    ).toMatchObject({
+      ok: true,
+      where: 'opener',
+      firstAction: 1,
+      replacedActions: 2,
+      delta: 0,
+    })
+  })
+})
+
+describe('timingForSwap', () => {
+  const edit = (characterKey: string, text: string, frames: number) => ({
+    characterKey: characterKey as never,
+    text,
+    frames,
+  })
+  const timing = {
+    edits: {
+      1: edit('Odette', 'E', 40),
+      4: edit('YaeMiko', 'E', 30),
+      6: edit('Danica', 'Q', 600),
+    },
+    swapFrames: 10,
+  }
+  it('moves the edits after the replaced step by the change, drops those inside it', () => {
+    const swapped = swapFragment(base)
+    if (!swapped.ok) throw new Error(swapped.error)
+    expect(timingForSwap(timing, swapped)).toEqual({
+      edits: { 1: edit('Odette', 'E', 40), 5: edit('Danica', 'Q', 600) },
+      swapFrames: 10,
+    })
+    // (the timing itself is left as it is)
+    expect(Object.keys(timing.edits)).toEqual(['1', '4', '6'])
+  })
+  it('keeps the rotation’s edits when the opener’s step is replaced', () => {
+    const swapped = swapFragment({
+      ...base,
+      text: 'Danica E -> Odette E E -> Danica Q',
+      opener: 'Yae Miko E -> Danica E',
+    })
+    if (!swapped.ok) throw new Error(swapped.error)
+    expect(timingForSwap(timing, swapped)).toEqual(timing)
   })
 })

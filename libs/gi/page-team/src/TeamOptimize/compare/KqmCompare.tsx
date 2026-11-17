@@ -1,3 +1,4 @@
+import { useDataEntryBase } from '@genshin-optimizer/common/database-ui'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type {
   ArtifactSetKey,
@@ -8,14 +9,13 @@ import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   TeamKqmSavedRun,
-  TeamOpt,
   TeamOptEnergyMember,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type {
-  KqmBuild,
+  KqmPlayed,
   KqmSets,
   KqmStep,
   TeamData,
@@ -26,6 +26,7 @@ import {
   kitModels,
   kqmMemberConstellation,
   kqmSets,
+  kqmSimGear,
   kqmWeapons,
   parseRotation,
   teamOptMembers,
@@ -50,7 +51,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import type { i18n as I18n } from 'i18next'
+import type { i18n as I18n, TFunction } from 'i18next'
 import {
   type ReactNode,
   useCallback,
@@ -63,6 +64,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { MemberAvatar } from '../MemberAvatar'
+import { openerKey, storageKey } from '../RotationWriter'
 import {
   BetaBadge,
   Disclosure,
@@ -77,13 +79,17 @@ import {
   tokens,
   type,
 } from '../ui'
+import { kqmReplayOf, useKqmRunning } from '../useKqmRun'
 import { CompareCardButton } from './CompareCardButton'
 import { Overview } from './CompareOverview'
+import { compareFailureText } from './compareError'
 import type { Side, SwapIn } from './compareSwapKqm'
 import { compareSwapKqm } from './compareSwapKqm'
 import { srOnly, WarningLine } from './compareUi'
 import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
 import { EnteringSettings } from './EnteringSettings'
+import type { SavedKqmRun } from './savedRun'
+import { savedRunOf } from './savedRun'
 import { swapFragment } from './swapFragment'
 
 /*
@@ -91,16 +97,6 @@ import { swapFragment } from './swapFragment'
  * swapped (B). Everything here is read only or kept in this screen's state: nothing is written to
  * the database, the team's settings, its saved KQM result or its rotation.
  */
-
-/** A saved KQM run as KQM Theorycrafting keeps it (`useKqmRun`) */
-interface SavedRunData {
-  type?: string
-  result?: {
-    builds: Partial<Record<CharacterKey, KqmBuild>>
-    constellations?: Partial<Record<CharacterKey, number>>
-  }
-  teamOpt?: TeamOpt
-}
 
 /**
  * KQM Theorycrafting's saved run for the team, as that tab shows it: a finished run, for the
@@ -112,7 +108,7 @@ export function savedRunFor(
 ): TeamKqmSavedRun | undefined {
   const saved = database.teamKqmResults.getRun(teamId)
   if (!saved) return undefined
-  const run = saved.run as SavedRunData
+  const run = savedRunOf(saved)
   if (run.type !== 'done' || !run.result || !run.teamOpt) return undefined
   const members = teamOptMembers(database, teamId).map(
     (m) => m.characterKey as string
@@ -143,10 +139,38 @@ type RunState =
       b: Side
       out: CharacterKey
       in: CharacterKey
+      /** The settings it was worked out with (`inputs`) */
+      for: string
     }
   | { type: 'error'; message: string }
 
 const PROGRESS_MS = 120
+
+/**
+ * Two plays of a rotation alike: the same time, each member's hits of each attack (however its buff
+ * windows are split), within rounding
+ */
+function samePlay(x: KqmPlayed, y: KqmPlayed) {
+  if (Math.abs((x.rotationTime ?? 0) - (y.rotationTime ?? 0)) > 0.15)
+    return false
+  const hits = (p: KqmPlayed) => {
+    const out = new Map<string, number>()
+    for (const [k, attacks] of Object.entries(p.attacks ?? {}))
+      for (const a of attacks ?? []) {
+        const id = `${k}|${a.path.join('.')}|${a.hitMode}|${a.reaction ?? ''}`
+        out.set(id, (out.get(id) ?? 0) + a.hits)
+      }
+    return out
+  }
+  const hx = hits(x)
+  const hy = hits(y)
+  for (const id of new Set([...hx.keys(), ...hy.keys()])) {
+    const a = hx.get(id) ?? 0
+    const b = hy.get(id) ?? 0
+    if (Math.abs(a - b) > Math.max(0.05, 0.02 * Math.max(a, b))) return false
+  }
+  return true
+}
 
 export default function KqmCompare({
   teamId,
@@ -162,21 +186,23 @@ export default function KqmCompare({
   const navigate = useNavigate()
   const titleId = useId()
 
-  const saved = useMemo(() => savedRunFor(database, teamId), [database, teamId])
-  const run = saved?.run as SavedRunData | undefined
+  // KQM Theorycrafting's result, read again when one of its runs ends (or saves a result) and
+  // when Confronta finds it changed; Confronta waits while a run goes on (in any tab)
+  const kqmRunning = useKqmRunning(teamId)
+  const results = useDataEntryBase(database.teamKqmResults)
+  const [reread, setReread] = useState(0)
+  const saved = useMemo(
+    () => savedRunFor(database, teamId),
+    [database, teamId, kqmRunning, results, reread]
+  )
+  const run: SavedKqmRun | undefined = saved && savedRunOf(saved)
   const teamKqm: TeamOptKqm | undefined = run?.teamOpt?.kqm
   const members = useMemo(
     () => teamOptMembers(database, teamId).map((m) => m.characterKey),
     [database, teamId]
   )
-  const text = useMemo(
-    () => readStored(`teamOptRotationText_${teamId}`),
-    [teamId]
-  )
-  const opener = useMemo(
-    () => readStored(`teamOptRotationOpener_${teamId}`),
-    [teamId]
-  )
+  const text = useMemo(() => readStored(storageKey(teamId)), [teamId])
+  const opener = useMemo(() => readStored(openerKey(teamId)), [teamId])
   // (as KQM plays the rotation: the names in the user's language)
   const nameOf = useCallback(
     (ck: CharacterKey) =>
@@ -200,7 +226,11 @@ export default function KqmCompare({
   const [erText, setErText] = useState('')
   const [calcOwn, setCalcOwn] = useState<TeamOptEnergyMember>()
   const [fragment, setFragment] = useState('')
-  const [confirmed, setConfirmed] = useState(false)
+  /** The result confirmed final (its `savedAt`): a confirmation is for that result only */
+  const [confirmedAt, setConfirmedAt] = useState<number>()
+  const confirmed = !!saved && confirmedAt === saved.savedAt
+  /** Confirmed, then KQM Theorycrafting's result changed */
+  const resultChanged = confirmedAt !== undefined && !confirmed
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const chooseIn = (key: CharacterKey | null) => {
@@ -348,28 +378,52 @@ export default function KqmCompare({
       : undefined
   const problem = !saved
     ? t('kqmCompare.noResult')
-    : !text.trim()
-      ? t('kqmCompare.error.noRotation')
-      : !out
-        ? t('kqmCompare.need.out')
-        : !inKey
-          ? t('kqmCompare.need.in')
-          : !auto && (!weapon || !pickedSets)
-            ? t('kqmCompare.need.gear')
-            : erInvalid
-              ? t('kqmCompare.need.er')
-              : !fragment.trim()
-                ? t('kqmCompare.need.fragment', { name: inName })
-                : fragmentError
-                  ? fragmentError
-                  : !confirmed
-                    ? t('kqmCompare.need.confirm')
-                    : ''
+    : kqmRunning
+      ? t('kqmCompare.kqmRunning')
+      : !text.trim()
+        ? t('kqmCompare.error.noRotation')
+        : !out
+          ? t('kqmCompare.need.out')
+          : !inKey
+            ? t('kqmCompare.need.in')
+            : !auto && (!weapon || !pickedSets)
+              ? t('kqmCompare.need.gear')
+              : erInvalid
+                ? t('kqmCompare.need.er')
+                : !fragment.trim()
+                  ? t('kqmCompare.need.fragment', { name: inName })
+                  : fragmentError
+                    ? fragmentError
+                    : !confirmed
+                      ? t('kqmCompare.need.confirm')
+                      : ''
   const canRun =
-    !problem && !running && !!saved && !!out && !!swapIn && !!swapped?.ok
+    !problem &&
+    !running &&
+    !kqmRunning &&
+    !!saved &&
+    !!out &&
+    !!swapIn &&
+    !!swapped?.ok
+  /** What a result is for: when these change, it is the previous settings' */
+  const inputs = JSON.stringify([
+    saved?.savedAt,
+    out,
+    swapIn,
+    text,
+    opener,
+    fragment,
+  ])
 
   const start = async () => {
     if (!canRun || !saved || !out || !swapIn) return
+    // (KQM Theorycrafting may have saved another result meanwhile, in another tab: A is read
+    // again, and confirmed again)
+    if (savedRunFor(database, teamId)?.savedAt !== saved.savedAt) {
+      setReread((n) => n + 1)
+      return
+    }
+    const runFor = inputs
     if (job.current) job.current.cancelled = true
     const mine = { cancelled: false }
     job.current = mine
@@ -391,6 +445,8 @@ export default function KqmCompare({
     }
     // (the running state paints first)
     await new Promise((resolve) => setTimeout(resolve, 0))
+    // (cancelled or the tab left meanwhile: nothing starts)
+    if (mine.cancelled) return
     try {
       const result = await compareSwapKqm({
         database,
@@ -413,42 +469,87 @@ export default function KqmCompare({
             ? { type: 'idle' }
             : {
                 type: 'error',
-                message: errorText(result.error),
+                message: errorText(result.error, result.count),
               }
         )
-      else setState({ type: 'done', ...result, out, in: swapIn.key })
+      else
+        setState({ type: 'done', ...result, out, in: swapIn.key, for: runFor })
     } catch (e) {
       if (mine.cancelled) return
       console.error(e)
       setState({
         type: 'error',
-        message: t('kqmCompare.error.failed', {
-          message: String((e as Error)?.message ?? e),
-        }),
+        // (a known failure in the user's language)
+        message: compareFailureText(e, t as unknown as TFunction, nameOf),
       })
     } finally {
       if (pending) clearTimeout(pending)
       if (job.current === mine) job.current = undefined
     }
   }
-  const errorText = (error: string) =>
+  const errorText = (error: string, count?: number) =>
     error === 'inTeam'
       ? t('kqmCompare.error.inTeam', { name: inName })
       : error === 'notFound'
         ? t('kqmCompare.error.notFound', { name: outName })
         : error === 'repeated'
-          ? t('kqmCompare.error.repeated', { name: outName, count: 2 })
+          ? t('kqmCompare.error.repeated', { name: outName, count })
           : error === 'emptyFragment'
             ? t('kqmCompare.need.fragment', { name: inName })
             : t('kqmCompare.error.unsupported')
 
   const savedAt = saved ? formatWhen(saved.savedAt, i18n.language) : ''
+  // the written rotation changed since A: it plays differently now from how A played it (with
+  // A's settings, constellations, weapons and sets), or the ER was worked out for another one
+  const [playsDifferently, setPlaysDifferently] = useState(false)
+  useEffect(() => {
+    setPlaysDifferently(false)
+    const result = run?.result
+    const played = result?.played
+    const settings = run?.teamOpt
+    if (run?.rotation !== 'played' || !result || !played || !settings) return
+    if (!text.trim()) return
+    let cancelled = false
+    // (a play takes tens of ms: after the page shows)
+    const id = setTimeout(() => {
+      let changed = false
+      try {
+        const now = kqmReplayOf(
+          database,
+          gender,
+          i18n as I18n,
+          teamId,
+          settings,
+          text,
+          opener
+        )?.({
+          constellations: result.constellations ?? {},
+          gear: Object.fromEntries(
+            Object.entries(result.builds).flatMap(([k, b]) =>
+              b ? [[k, kqmSimGear(b)]] : []
+            )
+          ),
+          overrides: {},
+        })
+        changed = !!now && !samePlay(now, played)
+      } catch {
+        changed = false
+      }
+      if (!cancelled) setPlaysDifferently(changed)
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(id)
+    }
+  }, [run, database, gender, i18n, teamId, text, opener])
   const recorded = run?.teamOpt?.kqm?.energyRotation
   const rotationChanged =
-    recorded !== undefined && recorded.trim() !== text.trim()
+    playsDifferently ||
+    (recorded !== undefined && recorded.trim() !== text.trim())
   // (A's damage is for the attacks entered, not the written rotation played)
-  const notPlayed =
-    !!run && (run as { rotation?: string }).rotation !== 'played'
+  const notPlayed = !!run && run.rotation !== 'played'
+  /** The result shown is for settings changed since */
+  const stale = state.type === 'done' && state.for !== inputs
   const percent = Math.round((step?.progress ?? 0) * 100)
 
   return (
@@ -517,6 +618,7 @@ export default function KqmCompare({
                 aria-label={t('kqmCompare.out')}
                 value={out}
                 onChange={setOut}
+                wrap
                 options={members.map((key) => ({
                   value: key,
                   label: (
@@ -739,15 +841,16 @@ export default function KqmCompare({
                   value="kqm"
                   sx={{ alignItems: 'center' }}
                 >
+                  {/* (one choice for now: shown, not changed) */}
                   <FormControlLabel
                     value="kqm"
-                    control={<Radio size="small" />}
+                    control={<Radio size="small" readOnly />}
                     label={t('kqmCompare.buildKqm')}
                   />
                   <FormControlLabel
                     value="existing"
                     disabled
-                    control={<Radio size="small" />}
+                    control={<Radio size="small" readOnly />}
                     label={t('kqmCompare.buildExisting')}
                     sx={{ mr: 0 }}
                   />
@@ -877,13 +980,15 @@ export default function KqmCompare({
               control={
                 <Checkbox
                   checked={confirmed}
-                  onChange={(e) => setConfirmed(e.target.checked)}
+                  onChange={(e) =>
+                    setConfirmedAt(e.target.checked ? saved.savedAt : undefined)
+                  }
                 />
               }
               label={t('kqmCompare.confirm', { date: savedAt })}
               sx={{ mr: 0 }}
             />
-            {(rotationChanged || notPlayed) && (
+            {(rotationChanged || notPlayed || resultChanged) && (
               <Box
                 role="status"
                 sx={{
@@ -894,6 +999,11 @@ export default function KqmCompare({
                   fontSize: 13,
                 }}
               >
+                {resultChanged && (
+                  <WarningLine>
+                    {t('kqmCompare.error.resultChanged')}
+                  </WarningLine>
+                )}
                 {rotationChanged && (
                   <WarningLine>{t('kqmCompare.rotationChanged')}</WarningLine>
                 )}
@@ -986,6 +1096,22 @@ export default function KqmCompare({
 
       {state.type === 'done' && (
         <Panel title={t('kqmCompare.table.title')}>
+          {stale && (
+            <Box
+              role="status"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mb: 1,
+                color: 'warning.main',
+                fontSize: 13,
+              }}
+            >
+              <WarningLine>{t('kqmCompare.staleResult')}</WarningLine>
+              <InfoTooltipInline title={t('kqmCompare.staleResultTip')} />
+            </Box>
+          )}
           <Overview
             a={state.a}
             b={state.b}
@@ -1001,6 +1127,7 @@ export default function KqmCompare({
               b={state.b}
               out={state.out}
               inKey={state.in}
+              disabled={stale}
             />
           </Box>
         </Panel>
@@ -1053,7 +1180,7 @@ function FixedMembers({
 }: {
   label: string
   keys: CharacterKey[]
-  run: SavedRunData | undefined
+  run: SavedKqmRun | undefined
   locked: string
 }) {
   const { gender } = useDBMeta()
@@ -1154,15 +1281,17 @@ function Preview({
     return (
       <>
         {s.slice(0, i)}
+        {/* (raised and bold, not gold: gold marks only the main action and selections) */}
         <Box
           component="mark"
-          sx={(theme) => ({
-            color: 'primary.main',
-            bgcolor: alpha(theme.palette.primary.main, 0.14),
+          sx={{
+            color: 'text.primary',
+            bgcolor: tokens.raised,
+            boxShadow: `inset 0 0 0 1px ${tokens.hairlineStrong}`,
             borderRadius: 0.5,
-            px: 0.25,
-            fontWeight: 600,
-          })}
+            px: 0.5,
+            fontWeight: 700,
+          }}
         >
           {swapped!.inserted}
         </Box>

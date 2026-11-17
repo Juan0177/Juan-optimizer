@@ -146,7 +146,14 @@
       "repeated": "{{name}} appears {{count}} times in the rotation: the comparison needs a single step.",
       "inTeam": "{{name}} is already in the team.",
       "unsupported": "This choice is not available yet.",
-      "failed": "Comparison failed: {{message}}"
+      "failed": "Comparison failed: {{message}}",
+      "resultChanged": "KQM Theorycrafting's result changed: check A and confirm again.",
+      "noTeam": "The team is no longer in the database.",
+      "otherMembers": "KQM Theorycrafting's result is for a team with other members.",
+      "noSettings": "The team has no KQM settings.",
+      "notPlayable": "Rotation B could not be played.",
+      "noResult": "KQM could not evaluate team B.",
+      "buildChanged": "{{name}}'s build changed in B: the comparison is not valid."
     },
     "table": {
       "title": "A/B overview",
@@ -187,6 +194,9 @@
       "delta": "Change (B vs A)",
       "erBuild": "ER build",
       "erTarget": "ER required"
-    }
+    },
+    "kqmRunning": "KQM Theorycrafting is still running",
+    "staleResult": "Result of the previous settings",
+    "staleResultTip": "The settings changed after the comparison: press Compare to update it. The card is available again with the new result."
   }
 }

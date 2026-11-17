@@ -4,6 +4,7 @@ import type {
   CharacterKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
+import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type {
   TeamKqmSavedRun,
   TeamOpt,
@@ -24,7 +25,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import { Box, InputAdornment, TextField, Typography } from '@mui/material'
-import type { i18n as I18n } from 'i18next'
+import type { i18n as I18n, TFunction } from 'i18next'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { kqmEnergyEstimate, MemberEnergy } from '../KqmEnergyCalculator'
@@ -35,6 +36,7 @@ import {
   PassiveLines,
   PassiveStoreContext,
 } from '../WeaponChooser'
+import { compareFailureText } from './compareError'
 import type { SwapIn } from './compareSwapKqm'
 import { swapSettings } from './compareSwapKqm'
 import { WarningLine } from './compareUi'
@@ -113,7 +115,12 @@ function useSwapSettings({
             ? { message: t('kqmCompare.error.unsupported') }
             : { ...result, for: id, swapIn }
       } catch (e) {
-        next = { message: String((e as Error)?.message ?? e) }
+        // (a known failure in the user's language)
+        next = {
+          message: compareFailureText(e, t as unknown as TFunction, (ck) =>
+            t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, gender)}`)
+          ),
+        }
       }
       if (!cancelled) setSettings(next)
     }, 250)

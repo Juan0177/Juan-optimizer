@@ -146,7 +146,14 @@
       "repeated": "{{name}} compare {{count}} volte nella rotazione: il confronto funziona solo con un unico passo.",
       "inTeam": "{{name}} è già nella squadra.",
       "unsupported": "Questa scelta non è ancora disponibile.",
-      "failed": "Confronto non riuscito: {{message}}"
+      "failed": "Confronto non riuscito: {{message}}",
+      "resultChanged": "Il risultato di KQM Theorycrafting è cambiato: controlla A e conferma di nuovo.",
+      "noTeam": "La squadra non è più nel database.",
+      "otherMembers": "Il risultato di KQM Theorycrafting è di una squadra con altri membri.",
+      "noSettings": "La squadra non ha impostazioni KQM.",
+      "notPlayable": "Non è stato possibile giocare la rotazione B.",
+      "noResult": "KQM non è riuscito a valutare la squadra B.",
+      "buildChanged": "In B la build di {{name}} è cambiata: il confronto non è valido."
     },
     "table": {
       "title": "Riepilogo A/B",
@@ -187,6 +194,9 @@
       "delta": "Variazione (B su A)",
       "erBuild": "ER build",
       "erTarget": "ER richiesta"
-    }
+    },
+    "kqmRunning": "KQM Theorycrafting è ancora in corso",
+    "staleResult": "Risultato delle impostazioni precedenti",
+    "staleResultTip": "Hai cambiato le impostazioni dopo il confronto: premi Confronta per aggiornarlo. La card torna disponibile con il nuovo risultato."
   }
 }

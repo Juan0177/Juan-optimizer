@@ -349,6 +349,7 @@ export function Segmented<T extends string | number>({
   onChange,
   size = 'medium',
   fullWidth,
+  wrap,
   'aria-label': ariaLabel,
 }: {
   value: T | undefined
@@ -356,6 +357,8 @@ export function Segmented<T extends string | number>({
   onChange: (value: T) => void
   size?: 'small' | 'medium'
   fullWidth?: boolean
+  /** Options go on as many rows as the width needs (wide labels on phones); default: one row */
+  wrap?: boolean
   'aria-label'?: string
 }) {
   return (
@@ -363,9 +366,13 @@ export function Segmented<T extends string | number>({
       role="radiogroup"
       aria-label={ariaLabel}
       sx={{
-        display: fullWidth ? 'grid' : 'inline-grid',
-        gridAutoFlow: 'column',
-        gridAutoColumns: fullWidth ? 'minmax(0, 1fr)' : 'auto',
+        ...(wrap
+          ? { display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%' }
+          : {
+              display: fullWidth ? 'grid' : 'inline-grid',
+              gridAutoFlow: 'column',
+              gridAutoColumns: fullWidth ? 'minmax(0, 1fr)' : 'auto',
+            }),
         p: 0.375,
         gap: 0.25,
         borderRadius: tokens.radius.control,

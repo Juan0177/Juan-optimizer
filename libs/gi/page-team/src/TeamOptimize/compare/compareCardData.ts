@@ -4,11 +4,13 @@ import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type {
   KqmCompareCardData,
   KqmCompareCardSide,
+  RotationMember,
 } from '@genshin-optimizer/gi/ui'
 import { kqmCardFace } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
 import { formatDamage, formatGain } from '../format'
 import type { Side } from './compareSwapKqm'
+import { cut } from './swapFragment'
 
 export interface CompareCardContext {
   teamName: string
@@ -20,12 +22,13 @@ export interface CompareCardContext {
   t: TFunction
 }
 
-/** The written rotation, its members' turns apart (as the KQM sheet does) */
-function turns(text: string) {
-  return text
-    .split(/\s*(?:->|→|\n)+\s*/)
-    .map((turn) => turn.replace(/^>\s*/, '').trim())
-    .filter(Boolean)
+/**
+ * The written rotation, its members' turns apart (as the KQM sheet does): cut where the parser cuts
+ * it, at every separator and at each bare member name
+ */
+function turns(text: string, names: RotationMember[]) {
+  const { parts, steps } = cut(text, names)
+  return steps.map((i) => parts[i].trim()).filter(Boolean)
 }
 
 /** The comparison as the card shows it: both sides as KQM sheets, the swap and the change */
@@ -84,7 +87,10 @@ export function compareCardData(
       side.rotationTime > 0
         ? `${Math.round(side.rotationTime * 10) / 10}s`
         : undefined,
-    rotation: turns(side.rotation),
+    rotation: turns(
+      side.rotation,
+      side.members.map((m) => ({ characterKey: m.key, name: nameOf(m.key) }))
+    ),
     notes: '',
     labels,
   })

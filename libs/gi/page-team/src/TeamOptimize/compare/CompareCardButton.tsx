@@ -25,7 +25,13 @@ type CardProps = {
 }
 
 /** "Create card": the comparison as a picture to copy or download (writes nothing) */
-export function CompareCardButton(props: CardProps) {
+export function CompareCardButton({
+  disabled,
+  ...props
+}: CardProps & {
+  /** Off while the result is for settings changed since */
+  disabled?: boolean
+}) {
   const { t } = useTranslation('juanlab')
   const [open, setOpen] = useState(false)
   return (
@@ -34,6 +40,7 @@ export function CompareCardButton(props: CardProps) {
         size="small"
         variant="outlined"
         startIcon={<ImageOutlinedIcon />}
+        disabled={disabled}
         onClick={() => setOpen(true)}
       >
         {t('kqmCompare.card.create')}
