@@ -64,6 +64,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { DamageShare } from './DamageShare'
 import { formatRateFull } from './format'
 import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import {
@@ -91,6 +92,7 @@ import {
   numSx,
   quickSx,
   Segmented,
+  StepTitle,
   selectedSx,
   tokens,
   type,
@@ -519,11 +521,9 @@ export function KqmSettings({
         }}
       >
         <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-          <Typography id={titleId} component="h2" sx={type.section}>
-            {hasResult
-              ? t('teamOpt.kqm.setup', 'KQM setup')
-              : t('teamOpt.kqm.tab', 'KQM Theorycrafting')}
-          </Typography>
+          <StepTitle step={2} id={titleId}>
+            {t('teamOpt.kqm.setupStep', 'Setup')}
+          </StepTitle>
           <KqmAssumptions
             talents={kqmTalentLevel(kqm)}
             rolls={kqmStandardRolls(kqm)}
@@ -975,7 +975,8 @@ function KqmAssumptions({
   ]
   return (
     <FieldLabel
-      sx={{ mt: 0.5, lineHeight: 1.5 }}
+      // (under the step's title, aligned with its text)
+      sx={{ mt: 0.75, pl: '38px', lineHeight: 1.5 }}
       tip={t('teamOpt.kqm.subtitle', {
         defaultValue:
           'Standard KQM builds for this rotation: level 90, 4★ C6 / 5★ C0, the talent levels set below, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
@@ -1787,9 +1788,12 @@ export function KqmResults({
   improving,
   onDiscard,
   onView,
+  teamData,
 }: {
   teamId: string
   runSettings: TeamOpt
+  /** The members' data: only which element each attack deals (the damage share by element) */
+  teamData?: TeamData
   /** The setup as it is now (what changed since the run is shown) */
   now?: TeamOpt
   /** The setup as it was set for the run (`runSettings` has the rotation it played) */
@@ -1868,10 +1872,6 @@ export function KqmResults({
         containerType: 'inline-size',
       }}
     >
-      {/* while the run improves on them: these are not final; then, a moment, that they are */}
-      {(improving || finished) && (
-        <KqmPreliminary teamId={teamId} final={!improving} />
-      )}
       {/* the team's result, and what to do with it */}
       <Box
         sx={{
@@ -1884,20 +1884,22 @@ export function KqmResults({
         }}
       >
         <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
-          <Typography component="h2" sx={type.section}>
+          <StepTitle step={3} result>
             {t('teamOpt.kqm.teamBuilds', 'Team builds')}
-          </Typography>
+          </StepTitle>
+          {/* the headline figure, under the step's title and aligned with its text */}
           <Box
             sx={{
               display: 'flex',
               alignItems: 'baseline',
               columnGap: 1,
               rowGap: 0.25,
-              mt: 0.5,
+              mt: 1,
+              pl: '38px',
               flexWrap: 'wrap',
             }}
           >
-            <Typography sx={type.figure}>
+            <Typography sx={{ ...type.figure, fontSize: { xs: 28, sm: 34 } }}>
               {formatRateFull(view.after.total, rotationTime)}
             </Typography>
             <Typography sx={type.label}>
@@ -1970,6 +1972,11 @@ export function KqmResults({
           </Tooltip>
         </Box>
       </Box>
+      {/* while the run improves on them: these are not final; then, a moment, that they are (under
+          the step's title, which leads the step as the others do) */}
+      {(improving || finished) && (
+        <KqmPreliminary teamId={teamId} final={!improving} />
+      )}
       {/* what these builds were run with; what has changed since (→ now) */}
       <Box
         sx={{
@@ -2191,14 +2198,33 @@ export function KqmResults({
           onView={showView}
         />
       )}
-      {/* (supplemental: the best teams that change one member, below the inspector) */}
-      <KqmTopTeams
-        result={result}
-        view={view}
-        rotationTime={rotationTime}
-        disabled={stale || running}
-        onPick={pickTeam}
-      />
+      {/* (supplemental, below the inspector: the best teams that change one member, and how the
+          shown team's damage splits; side by side where there is room, else one under the other) */}
+      <Box
+        sx={{
+          mt: 3,
+          display: 'grid',
+          gap: 2.5,
+          alignItems: 'start',
+          gridTemplateColumns:
+            'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
+        }}
+      >
+        <KqmTopTeams
+          result={result}
+          view={view}
+          rotationTime={rotationTime}
+          disabled={stale || running}
+          onPick={pickTeam}
+        />
+        <DamageShare
+          members={members.map((m) => m.characterKey)}
+          evaluation={view.after}
+          attacks={runSettings.attacks}
+          teamData={teamData}
+          rotationTime={rotationTime}
+        />
+      </Box>
     </Box>
   )
 }
