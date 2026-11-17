@@ -168,6 +168,8 @@ type RunState =
        */
       rankings: 'pending' | 'done' | 'cancelled' | 'failed'
       rankingError?: string
+      /** The run's progress (0 to 1) when the headline came: where its rankings start */
+      rankingFrom: number
     }
   | { type: 'error'; message: string }
 
@@ -528,6 +530,7 @@ export default function KqmCompare({
             for: runFor,
             resultsB: resultsOf(preview),
             rankings: 'pending',
+            rankingFrom: latest?.progress ?? 0,
           })
         },
       })
@@ -554,6 +557,7 @@ export default function KqmCompare({
             s.type === 'done' ? s.resultsB : undefined
           ),
           rankings: 'done',
+          rankingFrom: s.type === 'done' ? s.rankingFrom : 0,
         }))
     } catch (e) {
       if (mine.cancelled) return
@@ -634,7 +638,14 @@ export default function KqmCompare({
   const notPlayed = !!run && run.rotation !== 'played'
   /** The result shown is for settings changed since */
   const stale = state.type === 'done' && state.for !== inputs
-  const percent = Math.round((step?.progress ?? 0) * 100)
+  // (while ranking: the rankings' own progress, from the headline to the end)
+  const from = state.type === 'done' ? state.rankingFrom : 0
+  const progress = ranking
+    ? from < 1
+      ? Math.max(0, ((step?.progress ?? 0) - from) / (1 - from))
+      : 0
+    : (step?.progress ?? 0)
+  const percent = Math.round(progress * 100)
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -1264,7 +1275,15 @@ export default function KqmCompare({
             stale={stale}
             running={ranking}
             improving={ranking}
-            progress={ranking ? (step?.progress ?? 0) : undefined}
+            progress={ranking ? progress : undefined}
+            // (its progress said by the status line above; its banner's words its own)
+            preliminary="quiet"
+            preliminaryLabel={t('kqmCompare.results.rankingLabel')}
+            unfinished={
+              state.rankings === 'cancelled' || state.rankings === 'failed'
+            }
+            // (below this section's h3)
+            headingLevel={4}
             heldLabel={t('kqmCompare.results.locked')}
             inspectorNote={{
               label: t('kqmCompare.results.retune'),

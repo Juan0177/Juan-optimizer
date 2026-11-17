@@ -135,13 +135,11 @@ export function compareCardData(
   const cardA = cardOf(a)
   const cardB = cardOf(b)
   const field = (card: KqmCardData) => card.members.some((m) => m.field)
-  /** The turn of the rotation that is `name`'s */
-  const turnOf = (card: KqmCardData, name: string) => {
-    const i = (card.rotation ?? []).findIndex(
-      (turn) => turn === name || turn.startsWith(`${name} `)
-    )
-    return i < 0 ? undefined : i
-  }
+  /** The swapped step's turn, as the comparison found it (by position, not by name) */
+  const turnOf = (card: KqmCardData, side: Side) =>
+    side.turn !== undefined && card.rotation?.[side.turn] !== undefined
+      ? side.turn
+      : undefined
   /** ER below what it must reach: a warning */
   const erCell = (m: SideMember): KqmCardCell | undefined =>
     Math.round(m.erValue) < Math.round(m.er)
@@ -159,7 +157,7 @@ export function compareCardData(
   }
   const outIndex = a.members.findIndex((m) => m.key === ctx.out)
   if (outIndex >= 0) marksA.changed = { index: outIndex, badge: label('out') }
-  marksA.rotationTurn = turnOf(cardA, outName)
+  marksA.rotationTurn = turnOf(cardA, a)
 
   const changes = b.members.map((m) => {
     const was = matchOf(m)
@@ -213,7 +211,7 @@ export function compareCardData(
     ...(inIndex >= 0 && {
       changed: { index: inIndex, badge: `${outName} → ${inName}` },
     }),
-    rotationTurn: turnOf(cardB, inName),
+    rotationTurn: turnOf(cardB, b),
     delta: {
       header: 'Δ',
       members: changes.map((c) => c.damage),

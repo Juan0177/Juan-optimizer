@@ -212,3 +212,43 @@ describe('timingForSwap', () => {
     expect(timingForSwap(timing, swapped)).toEqual(timing)
   })
 })
+
+describe('swapFragment: the replaced step’s turn', () => {
+  it('gives its turn in A’s rotation and the entering member’s in B’s, by position', () => {
+    // (Danica E, Odette E E, then Yae Miko's: the third turn on both sides)
+    expect(swapFragment(base)).toMatchObject({ turn: 2, insertedTurn: 2 })
+  })
+  it('finds it written with a nickname, or in another language', () => {
+    expect(
+      swapFragment({ ...base, text: text.replace('Yae Miko', 'Yae') })
+    ).toMatchObject({ ok: true, turn: 2, insertedTurn: 2 })
+    const it: RotationMember[] = names.map((m) =>
+      m.characterKey === 'YaeMiko' ? { ...m, name: 'Miko Yae' } : m
+    )
+    expect(
+      swapFragment({
+        ...base,
+        names: it,
+        text: 'Danica E -> Miko Yae E E E -> Danica Q',
+      })
+    ).toMatchObject({ ok: true, turn: 1, insertedTurn: 1 })
+  })
+  it('counts the turns cut at bare names', () => {
+    expect(
+      swapFragment({
+        ...base,
+        text: 'Danica E Odette E Yae Miko E E -> Danica Q',
+      })
+    ).toMatchObject({ ok: true, turn: 2, insertedTurn: 2 })
+  })
+  it('has none when the step is in the opener (the card shows the rotation)', () => {
+    const r = swapFragment({
+      ...base,
+      text: 'Danica E -> Odette E E -> Danica Q',
+      opener: 'Danica E -> Yae Miko E E',
+    })
+    expect(r).toMatchObject({ ok: true, where: 'opener' })
+    expect(r.ok && r.turn).toBeUndefined()
+    expect(r.ok && r.insertedTurn).toBeUndefined()
+  })
+})

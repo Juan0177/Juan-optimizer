@@ -1713,11 +1713,20 @@ function KqmPreliminary({
   teamId,
   final,
   progress,
+  quiet = false,
+  label,
 }: {
   teamId: string
   final: boolean
   /** Another run's progress (0 to 1); absent: the team's KQM run's */
   progress?: number
+  /**
+   * Its host says the progress (KQM Compare's status line): no live region, and no "still
+   * improving" (its builds are not what changes)
+   */
+  quiet?: boolean
+  /** In place of "Preliminary builds" (with `quiet`: what is still worked out) */
+  label?: string
 }) {
   const { t } = useTranslation('page_team')
   const step = useKqmProgress(teamId)
@@ -1725,8 +1734,7 @@ function KqmPreliminary({
   const tone = final ? 'success.main' : tokens.gold
   return (
     <Box
-      role="status"
-      aria-live="polite"
+      {...(!quiet && { role: 'status', 'aria-live': 'polite' as const })}
       sx={{
         position: 'relative',
         overflow: 'hidden',
@@ -1754,19 +1762,23 @@ function KqmPreliminary({
       <Typography sx={{ ...type.body, fontWeight: 600, color: tone }}>
         {final
           ? t('teamOpt.kqm.finalBuilds', 'Final builds')
-          : t('teamOpt.kqm.preliminary', 'Preliminary builds')}
+          : (label ?? t('teamOpt.kqm.preliminary', 'Preliminary builds'))}
       </Typography>
       {!final && (
         <>
-          <Typography sx={type.label}>
-            {t('teamOpt.kqm.stillImproving', 'still improving')}
-          </Typography>
-          <InfoTooltipInline
-            title={t(
-              'teamOpt.kqm.preliminaryTip',
-              'The best builds found so far. The run is still trying better weapons, sets and teammates’ builds: the figures, builds and rankings here can still change, and update when it finds better ones.'
-            )}
-          />
+          {!quiet && (
+            <>
+              <Typography sx={type.label}>
+                {t('teamOpt.kqm.stillImproving', 'still improving')}
+              </Typography>
+              <InfoTooltipInline
+                title={t(
+                  'teamOpt.kqm.preliminaryTip',
+                  'The best builds found so far. The run is still trying better weapons, sets and teammates’ builds: the figures, builds and rankings here can still change, and update when it finds better ones.'
+                )}
+              />
+            </>
+          )}
           <Typography sx={{ ...type.label, ...numSx, ml: 'auto' }}>
             {percent}%
           </Typography>
@@ -1829,6 +1841,10 @@ export function KqmResults({
   progress,
   heldLabel,
   inspectorNote,
+  preliminary = 'default',
+  preliminaryLabel,
+  unfinished = false,
+  headingLevel = 2,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -1873,6 +1889,17 @@ export function KqmResults({
   heldLabel?: string
   /** A line by the inspector, its explanation in ⓘ */
   inspectorNote?: { label: string; tip: string }
+  /**
+   * The banner over builds still improving: `'quiet'` when the host says the progress itself
+   * (KQM Compare's team B): no live region, no "still improving"
+   */
+  preliminary?: 'default' | 'quiet'
+  /** The banner's words in place of "Preliminary builds" (what is still worked out) */
+  preliminaryLabel?: string
+  /** The run stopped before it finished (cancelled, failed): no "Final builds" when it ends */
+  unfinished?: boolean
+  /** The level of its title ("Team builds"), the inspector's a level below (default: 2) */
+  headingLevel?: 2 | 3 | 4 | 5
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -1916,10 +1943,14 @@ export function KqmResults({
   // the run's result replacing its preliminary builds: said for a moment
   const [finished, setFinished] = useState(false)
   const wasImproving = useRef(improving)
+  // (read when it ends, not followed: the moment's timer is not cut short by it)
+  const stoppedEarly = useRef(unfinished)
+  stoppedEarly.current = unfinished
   useEffect(() => {
     const was = wasImproving.current
     wasImproving.current = improving
-    if (!was || improving) return
+    // (stopped before the end: its builds are not said final)
+    if (!was || improving || stoppedEarly.current) return
     setFinished(true)
     const id = setTimeout(() => setFinished(false), 4000)
     return () => clearTimeout(id)
@@ -1942,6 +1973,8 @@ export function KqmResults({
           teamId={teamId}
           final={!improving}
           progress={progress}
+          quiet={preliminary === 'quiet'}
+          label={preliminaryLabel}
         />
       )}
       {/* the team's result, and what to do with it */}
@@ -1956,7 +1989,7 @@ export function KqmResults({
         }}
       >
         <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
-          <Typography component="h2" sx={type.section}>
+          <Typography component={`h${headingLevel}`} sx={type.section}>
             {t('teamOpt.kqm.teamBuilds', 'Team builds')}
           </Typography>
           <Box
@@ -2304,6 +2337,7 @@ export function KqmResults({
           base={fromRun ? undefined : comparing}
           onView={showView}
           rotation={replayRotation}
+          headingLevel={(headingLevel + 1) as 3 | 4 | 5 | 6}
         />
       )}
       {/* (supplemental: the best teams that change one member, below the inspector) */}

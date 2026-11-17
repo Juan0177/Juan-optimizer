@@ -201,8 +201,9 @@
       "title": "Risultati KQM di B",
       "titleTip": "La schermata dei risultati di KQM Theorycrafting per la squadra B, calcolata su una copia dei tuoi dati: non viene salvato nulla. Solo {{name}} viene cercato e classificato; i compagni tengono le build di A.",
       "locked": "Bloccato: build di A",
-      "retune": "Le scelte possono ritoccare i compagni",
-      "retuneTip": "Come in KQM Theorycrafting: se un'arma o un set scelti per {{name}} cambiano la ER richiesta a un compagno (energia che danno o non danno più), main stat e roll dei substat di quel compagno vengono ricercati, quindi anche i suoi valori possono cambiare.",
+      "rankingLabel": "Classifiche di armi e set in corso",
+      "retune": "Una scelta può differire dalla sua riga",
+      "retuneTip": "Un'arma o un set scelti per {{name}} rieseguono la rotazione con i propri effetti di arma e di set (e ritoccano i compagni di cui cambiano la ER richiesta), quindi i loro valori possono differire da quelli della riga, calcolati sulla rotazione eseguita con la build attuale.",
       "cancelled": "Classifiche di B annullate: esegui di nuovo il confronto per vederle.",
       "rankingFailed": "Classifiche di B non riuscite: {{message}}"
     }

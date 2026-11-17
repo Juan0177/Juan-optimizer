@@ -33,7 +33,7 @@ const side = (
   })),
   ...over,
 })
-const a = side({}, [
+const a = side({ turn: 1 }, [
   ['Danica', 60000],
   ['YaeMiko', 40000],
 ])
@@ -43,6 +43,7 @@ const b = side(
     dps: 5000,
     rotationTime: 22,
     rotation: 'Danica E -> Mitya E Q',
+    turn: 1,
   },
   [
     ['Danica', 50000, { er: 130, erValue: 125, share: 50000 / 110000 }],
@@ -147,6 +148,25 @@ describe('compareCardData', () => {
       tone: 'worse',
     })
     expect(d.b.marks.seconds).toEqual({ note: '+2.0s', noteTone: 'worse' })
+  })
+  it('marks the swapped step by its position, however it is written (a nickname, another language)', () => {
+    // (the turn as the comparison found it: not looked up by the member's name)
+    const r = compareCardData(
+      { ...a, rotation: 'Danica E -> Yae E E E -> Danica Q', turn: 1 },
+      { ...b, rotation: 'Danica E -> Mitya E Q', turn: 1 },
+      ctx
+    )
+    expect(r.a.card.rotation).toEqual(['Danica E', 'Yae E E E', 'Danica Q'])
+    expect(r.a.marks.rotationTurn).toBe(1)
+    expect(r.b.marks.rotationTurn).toBe(1)
+    // (none known: none marked, even where a turn starts with the member's name)
+    const none = compareCardData(
+      { ...a, turn: undefined },
+      { ...b, turn: undefined },
+      ctx
+    )
+    expect(none.a.marks.rotationTurn).toBeUndefined()
+    expect(none.b.marks.rotationTurn).toBeUndefined()
   })
   it('cuts turns at every separator the parser reads, and at bare names', () => {
     const r = compareCardData(

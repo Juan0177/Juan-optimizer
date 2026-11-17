@@ -93,6 +93,11 @@ export interface Side {
   rotationTime: number
   members: SideMember[]
   rotation: string
+  /**
+   * The swapped member's turn of `rotation` (its index among the turns the parser cuts it into),
+   * marked on the card; absent: none (its step was in the opener)
+   */
+  turn?: number
   /** The KQM talent level its settings use */
   talents?: number
 }
@@ -581,13 +586,16 @@ export async function compareSwapKqm({
     args,
     checked
   )
-  const a = sideOf(
-    run.result,
-    text,
-    fixed,
-    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime,
-    run.teamOpt ?? run.runTeamOpt
-  )
+  const a: Side = {
+    ...sideOf(
+      run.result,
+      text,
+      fixed,
+      run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime,
+      run.teamOpt ?? run.runTeamOpt
+    ),
+    turn: swapped.turn,
+  }
   if (!replay)
     throw new CompareSwapFailure(
       'notPlayable',
@@ -602,7 +610,10 @@ export async function compareSwapKqm({
   /** B's side and result as KQM Theorycrafting shows a result: the entering member optimized */
   const viewOf = (result: KqmResult): CompareSwapPreview => ({
     a,
-    b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime, teamOpt),
+    b: {
+      ...sideOf(result, swapped.text, fixed, teamOpt.rotationTime, teamOpt),
+      turn: swapped.insertedTurn,
+    },
     resultB: { ...result, optimized: [key] },
     sandbox,
     teamOptB: teamOpt,

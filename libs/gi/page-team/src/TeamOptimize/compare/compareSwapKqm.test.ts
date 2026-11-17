@@ -371,6 +371,9 @@ describe('compareSwapKqm', () => {
     expect(b.rotation).toBe(
       'Danica E -> Odette E E -> Mitya E Q -> Danica Q -> Anastasya hE N2 Q N5 E E E N2'
     )
+    // (the swapped step's turn on both sides, for the card: by position, not by name)
+    expect(a.turn).toBe(2)
+    expect(b.turn).toBe(2)
     const savedBuilds = (s.saved.run.result as unknown as KqmResult).builds
     for (const m of b.members.filter((m) => FIXED.includes(m.key))) {
       expect(m.fixed).toBe(true)

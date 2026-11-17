@@ -1106,6 +1106,85 @@ describe('KQM results on another database (KQM Compare’s team B)', () => {
     )
     expect(screen.getByText('Preliminary builds')).toBeTruthy()
     expect(screen.getByText('42%')).toBeTruthy()
+    // (by default the banner announces itself)
+    expect(
+      screen.getByText('Preliminary builds').closest('[role="status"]')
+    ).toBeTruthy()
+  })
+
+  it('a quiet banner: its host’s words, no “still improving”, no live region (the host announces)', () => {
+    render(
+      <KqmResults
+        {...props('ui-b-quiet')}
+        database={sandbox() as never}
+        readOnly
+        replayRotation={rotationB}
+        running
+        improving
+        progress={0.42}
+        preliminary="quiet"
+        preliminaryLabel="Ranking weapons and sets"
+      />,
+      { wrapper: wrap }
+    )
+    const label = screen.getByText('Ranking weapons and sets')
+    expect(screen.queryByText('Preliminary builds')).toBeNull()
+    expect(screen.queryByText('still improving')).toBeNull()
+    expect(screen.getByText('42%')).toBeTruthy()
+    expect(label.closest('[role="status"]')).toBeNull()
+    expect(label.closest('[aria-live]')).toBeNull()
+  })
+
+  it('puts its headings at the level it is given, below its host’s', () => {
+    const { unmount } = render(
+      <KqmResults
+        {...props('ui-b-headings')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+        headingLevel={4}
+      />,
+      { wrapper: wrap }
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Team builds', level: 4 })
+    ).toBeTruthy()
+    // (the inspector's member, a level below)
+    expect(
+      screen.getByRole('heading', { name: 'KamisatoAyaka', level: 5 })
+    ).toBeTruthy()
+    expect(screen.queryAllByRole('heading', { level: 2 })).toHaveLength(0)
+    expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0)
+    unmount()
+    // (by default: as on KQM Theorycrafting)
+    render(
+      <KqmResults
+        {...props('ui-b-headings-default')}
+        database={sandbox() as never}
+        replayRotation={rotationB}
+      />,
+      { wrapper: wrap }
+    )
+    expect(
+      screen.getByRole('heading', { name: 'Team builds', level: 2 })
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('heading', { name: 'KamisatoAyaka', level: 3 })
+    ).toBeTruthy()
+  })
+
+  it('does not say “Final builds” when its host says the run did not finish', () => {
+    const base = {
+      ...props('ui-b-unfinished'),
+      database: sandbox() as never,
+      replayRotation: rotationB,
+    }
+    const view = render(<KqmResults {...base} running improving />, {
+      wrapper: wrap,
+    })
+    expect(screen.getByText('Preliminary builds')).toBeTruthy()
+    view.rerender(<KqmResults {...base} unfinished />)
+    expect(screen.queryByText('Preliminary builds')).toBeNull()
+    expect(screen.queryByText('Final builds')).toBeNull()
   })
 
   it('without them: the page’s database, discard and share, as before', async () => {

@@ -674,24 +674,91 @@ export function drawKqmCard(
     if (turn === undefined || !data.rotation[turn])
       say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
     else {
-      // (the changing step on a tint, outlined, in the mark's color; the rest as usual)
-      const width = Math.min(avail, ctx.measureText(text).width)
-      const before = data.rotation.slice(0, turn).join(SEP)
-      const startX =
-        textX - width / 2 + (before ? ctx.measureText(before + SEP).width : 0)
-      const turnW = ctx.measureText(data.rotation[turn]).width
-      ctx.fillStyle = 'rgba(37, 87, 167, 0.14)'
-      ctx.beginPath()
-      ctx.roundRect(startX - 10, rotY + 14, turnW + 20, rotH - 28, 8)
-      ctx.fill()
-      ctx.strokeStyle = KQM_CHANGED
-      ctx.lineWidth = 2
-      ctx.stroke()
-      say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
-      ink(ctx, data.rotation[turn], startX, mid(rotY, rotH, size), {
-        size,
-        weight: 800,
-        color: KQM_CHANGED,
+      // (the changing step on a tint, outlined, in the mark's color; the rest as usual). Too long
+      // for one line: on two, cut between turns where they are most even, so the whole rotation
+      // shows and the mark is measured at the size each line is drawn at
+      const rotation = data.rotation
+      const widthAt = (s: string, px: number) => {
+        ctx.font = `700 ${px}px ${FONT}`
+        return ctx.measureText(s).width
+      }
+      let lines = [rotation]
+      let px = size
+      if (widthAt(text, px) > avail && rotation.length > 1) {
+        let cutAt = 1
+        let widest = Number.POSITIVE_INFINITY
+        for (let k = 1; k < rotation.length; k++) {
+          const w = Math.max(
+            widthAt(rotation.slice(0, k).join(SEP), 28),
+            widthAt(rotation.slice(k).join(SEP), 28)
+          )
+          if (w < widest) {
+            widest = w
+            cutAt = k
+          }
+        }
+        lines = [rotation.slice(0, cutAt), rotation.slice(cutAt)]
+        // (two lines in the row: at most 24px)
+        px = 24
+        while (
+          px > 13 &&
+          lines.some((line) => widthAt(line.join(SEP), px) > avail)
+        )
+          px--
+      } else while (px > 13 && widthAt(text, px) > avail) px--
+      const lineH = Math.round(px * 1.45)
+      let first = 0
+      lines.forEach((line, j) => {
+        const lineText = line.join(SEP)
+        // (one line: centred in the row, as it always was; two: each on its half)
+        const cy =
+          lines.length === 1
+            ? rotY + rotH / 2
+            : rotY + rotH / 2 + (j - (lines.length - 1) / 2) * lineH
+        const baseline = cy + px * 0.35
+        const k = turn - first
+        first += line.length
+        const marked = k >= 0 && k < line.length
+        let startX = 0
+        if (marked) {
+          const width = Math.min(avail, widthAt(lineText, px))
+          const before = line.slice(0, k).join(SEP)
+          startX = textX - width / 2 + (before ? widthAt(before + SEP, px) : 0)
+          const turnW = Math.min(
+            widthAt(line[k], px),
+            textX + width / 2 - startX
+          )
+          ctx.fillStyle = 'rgba(37, 87, 167, 0.14)'
+          ctx.beginPath()
+          if (lines.length === 1)
+            ctx.roundRect(startX - 10, rotY + 14, turnW + 20, rotH - 28, 8)
+          else
+            ctx.roundRect(
+              startX - 10,
+              cy - lineH / 2 + 2,
+              turnW + 20,
+              lineH - 4,
+              6
+            )
+          ctx.fill()
+          ctx.strokeStyle = KQM_CHANGED
+          ctx.lineWidth = 2
+          ctx.stroke()
+        }
+        ink(ctx, lineText, textX, baseline, {
+          size: px,
+          weight: 700,
+          color: TEXT,
+          align: 'center',
+          maxWidth: avail,
+          minSize: px,
+        })
+        if (marked)
+          ink(ctx, line[k], startX, baseline, {
+            size: px,
+            weight: 800,
+            color: KQM_CHANGED,
+          })
       })
     }
   }

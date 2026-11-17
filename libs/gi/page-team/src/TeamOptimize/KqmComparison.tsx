@@ -95,6 +95,7 @@ export function KqmCompare({
   base: baseProp,
   onView,
   rotation,
+  headingLevel = 3,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -114,6 +115,8 @@ export function KqmCompare({
    * shown; absent: the team's written one
    */
   rotation?: KqmRotation
+  /** The level of its member's heading (default: 3) */
+  headingLevel?: 3 | 4 | 5 | 6
 }) {
   const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
@@ -387,7 +390,7 @@ export function KqmCompare({
           >
             <MemberAvatar characterKey={characterKey} size={40} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography component="h3" noWrap sx={type.title}>
+              <Typography component={`h${headingLevel}`} noWrap sx={type.title}>
                 <CharacterName characterKey={characterKey} gender={gender} />
               </Typography>
               <Box

@@ -968,6 +968,11 @@ describe('KqmCompare: B’s KQM results', () => {
       label: 'kqmCompare.results.retune',
       tip: 'kqmCompare.results.retuneTip name=Mitya',
     })
+    // (its progress said once, by the page's status line; its headings below the section's h3)
+    expect(props['preliminary']).toBe('quiet')
+    expect(props['preliminaryLabel']).toBe('kqmCompare.results.rankingLabel')
+    expect(props['headingLevel']).toBe(4)
+    expect(props['unfinished']).toBe(false)
   })
 
   it('keeps B’s rotation the same object while shown (the inspector follows it)', async () => {
@@ -1003,6 +1008,8 @@ describe('KqmCompare: B’s KQM results', () => {
     expect(screen.getByRole('table')).toBeTruthy()
     expect(shown()!['improving']).toBe(false)
     expect(shown()!['running']).toBe(false)
+    // (not said final: its rankings did not finish)
+    expect(shown()!['unfinished']).toBe(true)
     expect(screen.getByText('kqmCompare.results.cancelled')).toBeTruthy()
     expect(
       screen.queryByRole('button', { name: 'kqmCompare.cancel' })
@@ -1010,6 +1017,26 @@ describe('KqmCompare: B’s KQM results', () => {
     // (the run ends with its headline: nothing changes)
     await act(async () => run.resolve!(outcome(false)))
     expect(screen.getByText('kqmCompare.results.cancelled')).toBeTruthy()
+  })
+
+  it('gives the rankings’ own progress: from the summary (0%) to their end (100%)', async () => {
+    withRun()
+    const run: { args?: Args } = {}
+    mocks.compare.mockImplementation((args: Args) => {
+      run.args = args
+      // (the run is 60% done when B's summary is known)
+      args.onStep({ progress: 0.6 })
+      const { sandbox, ...preview } = outcome(false)
+      args.onPreview({ ...preview, sandbox })
+      return new Promise(() => {})
+    })
+    await runOnce()
+    await screen.findByRole('table')
+    act(() => run.args!.onStep({ progress: 0.8 }))
+    await waitFor(() =>
+      expect(screen.getByText('kqmCompare.ranking percent=50')).toBeTruthy()
+    )
+    expect(shown()!['progress']).toBeCloseTo(0.5, 6)
   })
 
   it('shows the rankings once worked out: no longer improving', async () => {
@@ -1020,6 +1047,7 @@ describe('KqmCompare: B’s KQM results', () => {
     const done = outcome()
     await act(async () => run.resolve!(done))
     expect(shown()!['improving']).toBe(false)
+    expect(shown()!['unfinished']).toBe(false)
     expect(shown()!['result']).toBe(done.resultB)
     expect(
       screen.queryByRole('button', { name: 'kqmCompare.cancel' })
@@ -1040,6 +1068,7 @@ describe('KqmCompare: B’s KQM results', () => {
     expect(alert.textContent).toContain('kqmCompare.results.rankingFailed')
     expect(alert.textContent).toContain('kqmCompare.error.noResult')
     expect(shown()!['improving']).toBe(false)
+    expect(shown()!['unfinished']).toBe(true)
     quiet.mockRestore()
   })
 
