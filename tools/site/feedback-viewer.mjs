@@ -7,7 +7,9 @@
 //   node tools/site/feedback-viewer.mjs --local    the local `wrangler dev` store instead
 //
 // It refreshes every 2 minutes (and on the Refresh button). Triage (new / seen / done) is kept on this
-// machine in ~/.config/stellar-feedback/state.json; Delete removes a message and its screenshots for good.
+// machine in ~/.config/stellar-feedback/state.json; Delete removes a message, its screenshots and its
+// page details for good. A message's page details (the page, the team as it was set up, the written
+// rotation, recent errors) show under it, loaded when it is opened.
 import { execFile } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -60,6 +62,7 @@ let updatedAt = 0
 let loading
 let lastError
 const shots = new Map()
+const contexts = new Map()
 
 async function load() {
   if (loading) return loading
@@ -119,13 +122,26 @@ async function screenshots(key) {
   return urls
 }
 
+/** The page's details sent with a message (the page, the team and its setup, recent errors) */
+async function details(key) {
+  const item = items.find((x) => x.key === key)
+  if (!item?.context) return undefined
+  if (contexts.has(key)) return contexts.get(key)
+  const value = json(await kv('key', 'get', `ctx:${key.slice(3)}`))
+  contexts.set(key, value)
+  return value
+}
+
 async function remove(key) {
   const item = items.find((x) => x.key === key)
   await kv('key', 'delete', key)
   for (let n = 0; n < (item?.images ?? 0); n++)
     await kv('key', 'delete', `img:${key.slice(3)}:${n}`).catch(() => {})
+  if (item?.context)
+    await kv('key', 'delete', `ctx:${key.slice(3)}`).catch(() => {})
   items = items.filter((x) => x.key !== key)
   shots.delete(key)
+  contexts.delete(key)
   const state = readState()
   delete state[key]
   writeState(state)
@@ -172,6 +188,10 @@ createServer(async (req, res) => {
     if (url.pathname === '/api/shots')
       return send(res, 200, {
         urls: await screenshots(url.searchParams.get('key') ?? ''),
+      })
+    if (url.pathname === '/api/context')
+      return send(res, 200, {
+        context: (await details(url.searchParams.get('key') ?? '')) ?? null,
       })
     if (url.pathname === '/api/state' && req.method === 'POST') {
       const { key, status } = await body(req)
@@ -265,6 +285,25 @@ background:var(--panel)}
 .facts dt{color:var(--faint)}.facts dd{margin:0;color:var(--muted);word-break:break-word}
 .facts a{color:var(--gold)}
 .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.ctx{margin-top:26px;display:grid;gap:14px}
+.ctx h3{margin:0;font-size:13px;font-weight:650;color:var(--gold);letter-spacing:.01em;display:flex;align-items:center;gap:10px}
+.ctx h3 .btn{margin-left:auto;height:26px;font-size:12px}
+.box{background:var(--panel);border-radius:var(--r);box-shadow:inset 0 0 0 1px var(--line);padding:14px 16px;min-width:0}
+.box h4{margin:0 0 10px;font-size:12px;font-weight:650;color:var(--muted)}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 16px;font-size:13px}
+.kv div{min-width:0}.kv b{display:block;font-size:11px;font-weight:600;color:var(--faint);margin-bottom:1px}
+.kv span{color:var(--text);word-break:break-word}.kv .wide{grid-column:1/-1}
+.kv details summary{cursor:pointer;color:var(--muted)}.kv details span{display:block;margin-top:4px;color:var(--muted)}
+table.mem{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.mem th{text-align:left;font-size:11px;font-weight:600;color:var(--faint);padding:0 10px 8px 0;white-space:nowrap}
+table.mem td{padding:7px 10px 7px 0;border-top:1px solid var(--line);vertical-align:top;color:var(--muted)}
+table.mem td:first-child{color:var(--text);font-weight:600;white-space:nowrap}
+.sub{font-size:11.5px;color:var(--faint);margin-top:2px}
+pre.rot{margin:0;font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;color:var(--text)}
+.errs{display:grid;gap:6px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--bug)}
+.errs .sub{font-family:inherit}
+details.raw summary{cursor:pointer;font-size:12.5px;color:var(--muted)}
+details.raw pre{max-height:420px;overflow:auto;margin:10px 0 0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
 .lightbox{position:fixed;inset:0;background:rgba(8,8,12,.88);display:none;place-items:center;padding:32px;cursor:zoom-out;z-index:9}
 .lightbox.on{display:grid}.lightbox img{max-width:100%;max-height:100%;border-radius:10px}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--raised);padding:10px 16px;border-radius:10px;
@@ -324,7 +363,7 @@ function render(){
  $('cards').innerHTML=list.length?list.map((x)=>{const k=KINDS[x.kind]??KINDS.other,st=statusOf(x.key)
   return '<button class="card'+(x.key===sel?' sel':'')+(st==='done'?' done':'')+'" role="option" data-key="'+esc(x.key)+'">'+
   '<div class="top"><span class="kind" style="color:'+k.color+'">'+(st==='new'?'<span class="new"></span>':'')+k.label+'</span>'+
-  '<span>'+ago(x.at)+'</span>'+(x.images?'<span class="chip">▣ '+x.images+'</span>':'')+(x.contact?'<span class="chip">@'+esc(x.contact)+'</span>':'')+
+  '<span>'+ago(x.at)+'</span>'+(x.images?'<span class="chip">▣ '+x.images+'</span>':'')+(x.context?'<span class="chip" title="Page details">ⓘ</span>':'')+(x.contact?'<span class="chip">@'+esc(x.contact)+'</span>':'')+
   '<span class="right">'+esc(siteName(x.site))+'</span></div><div class="msg">'+esc(x.message)+'</div></button>'}).join('')
   :'<div class="empty" style="padding:60px 0">'+(all.length?'Nothing matches these filters':'No feedback yet')+'</div>'
  $('foot').innerHTML=(data.updatedAt?'Updated '+ago(new Date(data.updatedAt).toISOString()):'Loading…')+'<br>'+all.length+' message'+(all.length===1?'':'s')+
@@ -344,13 +383,63 @@ async function renderDetail(){const x=data.items.find((i)=>i.key===sel);const d=
   '<dl class="facts">'+(page?'<dt>Page</dt><dd><a href="'+esc(page)+'" target="_blank" rel="noreferrer">'+esc(page)+'</a></dd>':'')+
   (x.build?'<dt>Build</dt><dd>'+esc(x.build)+'</dd>':'')+(x.browser?'<dt>Browser</dt><dd>'+esc(x.browser)+'</dd>':'')+
   '<dt>Key</dt><dd>'+esc(x.key)+'</dd></dl>'+
+  (x.context?'<div class="ctx" id="ctx">'+(x.key in ctxOf?renderContext(ctxOf[x.key]):'<h3>Page details</h3><div class="box" style="color:var(--faint)">Loading…</div>')+'</div>':'')+
   '<div class="actions">'+(st!=='done'?'<button class="btn gold" data-act="done">✓ Mark done</button>':'<button class="btn" data-act="new">Reopen</button>')+
   (st==='new'?'<button class="btn" data-act="seen">Mark seen</button>':'')+
   (x.contact?'<button class="btn" data-act="copy">Copy Discord name</button>':'')+'<button class="btn" data-act="copymsg">Copy message</button>'+
   '<button class="btn danger" data-act="delete" style="margin-left:auto">Delete</button></div>'
  if(st==='new')setStatus(x.key,'seen',true)
  if(x.images){const r=await fetch('/api/shots?key='+encodeURIComponent(x.key)).then((r)=>r.json());if(sel!==x.key)return
-  $('shots').innerHTML=(r.urls??[]).map((u)=>'<img alt="Screenshot" src="'+u+'">').join('')}}
+  $('shots').innerHTML=(r.urls??[]).map((u)=>'<img alt="Screenshot" src="'+u+'">').join('')}
+ if(x.context&&!(x.key in ctxOf)){const r=await fetch('/api/context?key='+encodeURIComponent(x.key)).then((r)=>r.json()).catch(()=>({}));if(sel!==x.key)return
+  ctxOf[x.key]=r.context;$('ctx').innerHTML=renderContext(r.context)}}
+// the page details: readable parts first (the team, its setup and rotation, errors), then all of it as JSON
+const ctxOf={}
+const words=(k)=>String(k??'').replace(/([a-z])([A-Z0-9])/g,'$1 $2').replace(/([A-Z])([A-Z][a-z])/g,'$1 $2')
+const key=(k)=>words(k).replace(/_?enemy ?/gi,'').replace(/_$/,'%').trim()||k
+const val=(v)=>v===true?'yes':v===false?'no':Array.isArray(v)?v.map((x)=>typeof x==='object'?val(x):words(x)).join(', '):typeof v==='object'&&v?
+ Object.entries(v).map(([k,x])=>key(k)+(x&&typeof x==='object'&&!Array.isArray(x)?': '+val(x):' '+val(x))).join(Object.values(v).some((x)=>x&&typeof x==='object')?'; ':', '):String(v)
+// (short values side by side; long ones, lists and groups across the row; long lists folded)
+function kvs(o,skip=[]){const rows=Object.entries(o??{}).filter(([k,v])=>!skip.includes(k)&&v!==undefined&&v!==null&&v!==''&&!(typeof v==='object'&&!Object.keys(v).length))
+ return rows.length?'<div class="kv">'+rows.map(([k,v])=>{const text=val(v),wide=text.length>48||(typeof v==='object'&&Object.keys(v).length>3)
+  const body=Array.isArray(v)&&v.length>8?'<details><summary>'+v.length+' items</summary><span>'+esc(text)+'</span></details>':'<span>'+esc(text)+'</span>'
+  return '<div'+(wide?' class="wide"':'')+'><b>'+esc(key(k))+'</b>'+body+'</div>'}).join('')+'</div>':''}
+function renderContext(c){if(!c)return '<h3>Page details</h3><div class="box" style="color:var(--faint)">Could not read them</div>'
+ const p=c.page??{},a=c.app??{},t=c.team,out=['<h3>Page details<button class="btn" data-act="copyctx">Copy JSON</button></h3>']
+ out.push('<div class="box"><h4>Page</h4>'+kvs({route:p.route,window:p.window,language:p.language,title:p.title,online:p.online===false?false:undefined,
+  traveler:a.gender,...Object.fromEntries(Object.entries(a.data??{}).map(([k,v])=>[k,v]))})+'</div>')
+ if(c.errors?.length)out.push('<div class="box"><h4>Recent errors</h4><div class="errs">'+c.errors.map((e)=>'<div>'+esc(e.message)+
+  '<div class="sub">'+esc(new Date(e.at).toLocaleTimeString())+'</div></div>').join('')+'</div></div>')
+ if(t?.missing)out.push('<div class="box"><h4>Team</h4><span style="color:var(--faint)">Not found ('+esc(t.id)+')</span></div>')
+ else if(t){const m=t.members??[]
+  out.push('<div class="box"><h4>Team · '+esc(t.name||t.id)+'</h4><table class="mem"><thead><tr><th>Member</th><th>Lv</th><th>C</th><th>Talents</th><th>Weapon</th><th>Artifacts</th></tr></thead><tbody>'+
+   m.map((x)=>{const tal=x.talent?[x.talent.auto,x.talent.skill,x.talent.burst].join('/'):'';const w=x.weapon
+    const sets=Object.entries(x.sets??{}).map(([k,n])=>words(k)+' ×'+n).join(', ')
+    const own=[x.hitMode&&x.hitMode!=='avgHit'?words(x.hitMode):'',x.reaction?words(x.reaction):'',x.infusionAura?words(x.infusionAura)+' infusion':'',
+     x.bonusStats?'bonus '+val(x.bonusStats):'',x.conditional?Object.keys(x.conditional).length+' buff states':'',x.customTargets?x.customTargets+' custom targets':''].filter(Boolean).join(' · ')
+    return '<tr><td>'+esc(words(x.key))+(x.build==='tc'?'<div class="sub">TC build</div>':x.build&&x.build!=='equipped'?'<div class="sub">'+esc(x.build)+' build</div>':'')+'</td>'+
+     '<td>'+esc(x.level??'')+'</td><td>'+esc(x.constellation??'')+'</td><td>'+esc(tal)+'</td>'+
+     '<td>'+(w?esc(words(w.key))+'<div class="sub">Lv '+esc(w.level)+' · R'+esc(w.refinement)+'</div>':'<span style="color:var(--faint)">–</span>')+'</td>'+
+     '<td>'+(sets?esc(sets):'<span style="color:var(--faint)">–</span>')+(own?'<div class="sub">'+esc(own)+'</div>':'')+'</td></tr>'}).join('')+'</tbody></table>'+
+   ((t.enemy||t.conditional)?'<div style="margin-top:12px">'+kvs({enemy:t.enemy,teamBuffs:t.conditional})+'</div>':'')+'</div>')
+  const o=t.teamOpt??{},q=o.kqm
+  const setup=kvs(o,['kqm','attacks','bonusStats','weaponEnergy'])
+  const attacks=Object.entries(o.attacks??{}).filter(([,n])=>n).map(([k,n])=>words(k)+' '+n).join(', ')
+  out.push('<div class="box"><h4>Team Optimize</h4>'+(setup||attacks?setup+(attacks?'<div class="kv" style="margin-top:8px"><div><b>Attacks</b><span>'+esc(attacks)+'</span></div></div>':''):'<span style="color:var(--faint)">Not set up</span>')+
+   (o.bonusStats?'<div class="kv" style="margin-top:8px"><div><b>Bonus stats</b><span>'+esc(JSON.stringify(o.bonusStats))+'</span></div></div>':'')+'</div>')
+  if(q){const {energyCalculator,...rest}=q
+   out.push('<div class="box"><h4>KQM</h4>'+kvs(rest)+(energyCalculator?'<details class="raw" style="margin-top:10px"><summary>ER calculator</summary><pre>'+esc(JSON.stringify(energyCalculator,null,1))+'</pre></details>':'')+'</div>')}
+  const r=t.rotation??{}
+  if(r.text||r.draft){out.push('<div class="box"><h4>Rotation</h4><pre class="rot">'+esc(r.text||'')+'</pre>'+
+   (r.opener?'<div class="sub" style="margin-top:8px">Opener</div><pre class="rot">'+esc(r.opener)+'</pre>':'')+
+   (r.draft&&r.draft!==r.text?'<div class="sub" style="margin-top:8px">Being edited (not saved)</div><pre class="rot">'+esc(r.draft)+'</pre>':'')+'</div>')}
+  for(const [label,v] of [['Constellation rotations',r.constellations],['Combination rotations',r.combinations],['Rotation timing',r.timing]])
+   if(v)out.push('<details class="raw box"><summary>'+label+'</summary><pre>'+esc(typeof v==='string'?v:JSON.stringify(v,null,1))+'</pre></details>')}
+ if(c.character)out.push('<div class="box"><h4>Character · '+esc(words(c.character.key))+'</h4>'+kvs(c.character,['key'])+'</div>')
+ if(c.leftOut)out.push('<div class="sub">Left out (too large): '+esc(c.leftOut.join(', '))+'</div>')
+ if(c.contextError)out.push('<div class="err" style="margin:0">'+esc(c.contextError)+'</div>')
+ out.push('<details class="raw box"><summary>All details (JSON)</summary><pre>'+esc(JSON.stringify(c,null,1))+'</pre></details>')
+ return out.join('')}
 async function setStatus(key,status,quiet){data.state[key]={status};if(status==='new')delete data.state[key]
  await fetch('/api/state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key,status})});if(!quiet)render();else renderList()}
 function renderList(){const keep=sel;render();sel=keep}
@@ -365,7 +454,8 @@ document.addEventListener('click',async(e)=>{const f=e.target.closest('.f');if(f
  if(a.dataset.act==='done'||a.dataset.act==='seen'||a.dataset.act==='new')return setStatus(x.key,a.dataset.act)
  if(a.dataset.act==='copy'){navigator.clipboard.writeText(x.contact);return toast('Copied '+x.contact)}
  if(a.dataset.act==='copymsg'){navigator.clipboard.writeText(x.message);return toast('Message copied')}
- if(a.dataset.act==='delete'){if(!confirm('Delete this message and its screenshots from Cloudflare for good?'))return
+ if(a.dataset.act==='copyctx'){navigator.clipboard.writeText(JSON.stringify(ctxOf[x.key],null,1));return toast('Details copied')}
+ if(a.dataset.act==='delete'){if(!confirm('Delete this message, its screenshots and details from Cloudflare for good?'))return
   a.textContent='Deleting…';const r=await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:x.key})}).then((r)=>r.json())
   if(r.error)return toast('Could not delete: '+r.error);data.items=data.items.filter((i)=>i.key!==x.key);const v=visible();sel=v[0]?.key;toast('Deleted');render()}})
 $('refresh').onclick=()=>load(true)
