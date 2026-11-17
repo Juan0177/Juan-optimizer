@@ -69,6 +69,11 @@ export interface TeamBuff {
   inactive?: 'gear' | 'hidden'
   /** Buffs the team (not only its owner) */
   teamBuff: boolean
+  /**
+   * The member's talent it comes from (`skill`, `burst`, `passive1`, `constellation2`…, or
+   * `moonsign`): a character's buff is named by it ("Elemental Skill", "A1", "C2")
+   */
+  talent?: string
 }
 
 const samePath = (a: readonly string[], b: readonly string[]) =>
@@ -84,12 +89,15 @@ function isConditional(
 interface SectionEntry {
   section: DocumentSection
   inUse?: { reason: 'gear' | 'hidden'; test: (data: UIData) => boolean }
+  /** A character's: the talent it is in */
+  talent?: string
 }
 
 const entries = (
   sections: readonly DocumentSection[],
-  inUse?: SectionEntry['inUse']
-): SectionEntry[] => sections.map((section) => ({ section, inUse }))
+  inUse?: SectionEntry['inUse'],
+  talent?: string
+): SectionEntry[] => sections.map((section) => ({ section, inUse, talent }))
 
 /** The sections that may define the conditional at `ref` */
 function sectionsFor(
@@ -139,13 +147,19 @@ function sectionsFor(
   const characterSheet = bundle.characterSheet as CharacterSheet
   const characterKey = ref.owner as CharacterKey
   return {
-    sections: entries([
+    sections: [
       // as in Team settings: Nod-Krai characters have no such section
       ...(getCharStat(characterKey).region === 'nodKrai'
         ? []
-        : [MoonsignConditionalSection(characterKey, characterSheet)]),
-      ...Object.values(characterSheet.talent).flatMap((t) => t.sections),
-    ]),
+        : entries(
+            [MoonsignConditionalSection(characterKey, characterSheet)],
+            undefined,
+            'moonsign'
+          )),
+      ...Object.entries(characterSheet.talent).flatMap(([talent, t]) =>
+        entries(t?.sections ?? [], undefined, talent)
+      ),
+    ],
     uiData,
   }
 }
@@ -200,6 +214,7 @@ function describeFromSheets(
       icon: uiData ? evalIfFunc(section.header?.icon, uiData) : undefined,
       teamBuff: !!section.teamBuff,
       ...(inactive ? { inactive } : {}),
+      ...(entry.talent ? { talent: entry.talent } : {}),
     }
     if ('path' in section && section.path) {
       if (!samePath(section.path, ref.path)) continue
@@ -282,6 +297,8 @@ export interface BuffEffect {
   value?: ReactNode
   /** The stat's colour (an element, a reaction) */
   variant?: string
+  /** The stat's key ("atk", "electro_enemyRes_"): its short name */
+  stat?: string
 }
 
 /** "90.0%" → "90%", "12.50" → "12.5": the value as the sheet gives it, without trailing zeros */
@@ -328,6 +345,7 @@ export function buffEffects(
           ),
           value: `${multi ? `${multi}×` : ''}${tidy(valueString(calc.value, unit, fixed))}`,
           variant: variant && variant !== 'invalid' ? variant : undefined,
+          stat: calc.info.path,
         })
       } else if (field.text) {
         const value = evalIfFunc(field.value, data)

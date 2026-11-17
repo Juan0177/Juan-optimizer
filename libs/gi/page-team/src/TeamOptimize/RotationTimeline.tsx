@@ -23,6 +23,8 @@ import {
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
+import GroupsRoundedIcon from '@mui/icons-material/GroupsRounded'
 import OpenInFullIcon from '@mui/icons-material/OpenInFull'
 import PushPinOutlinedIcon from '@mui/icons-material/PushPinOutlined'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
@@ -31,6 +33,7 @@ import {
   Box,
   ButtonBase,
   IconButton,
+  Skeleton,
   Tooltip,
   Typography,
   useMediaQuery,
@@ -49,8 +52,10 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AURA_NAME, AuraChips, auraColor } from './auras'
 import type { TeamBuff } from './buffs'
 import { describe } from './buffs'
+import { EffectText, talentLabel } from './buffText'
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import {
@@ -59,11 +64,12 @@ import {
   openerActions,
   seconds,
 } from './RotationTiming'
-import type { AuraKey, TimelineTrack } from './timelineModel'
+import type { MomentEffects, TimelineTrack } from './timelineModel'
 import {
   auraLanes,
   aurasAt,
   damagingHits,
+  momentBuffKey,
   onFieldAt,
   timelineTracks,
   trackValueAt,
@@ -121,31 +127,6 @@ export const laneColor = (theme: Theme, characterKey: CharacterKey) => {
   return palette?.main ?? theme.palette.primary.main
 }
 
-const AURA_ELEMENT: Record<AuraKey, string> = {
-  pyro: 'pyro',
-  hydro: 'hydro',
-  electro: 'electro',
-  cryo: 'cryo',
-  dendro: 'dendro',
-  quicken: 'dendro',
-  frozen: 'cryo',
-  burning: 'pyro',
-}
-const AURA_NAME: Record<AuraKey, string> = {
-  pyro: 'Pyro',
-  hydro: 'Hydro',
-  electro: 'Electro',
-  cryo: 'Cryo',
-  dendro: 'Dendro',
-  quicken: 'Quicken',
-  frozen: 'Frozen',
-  burning: 'Burning',
-}
-const auraColor = (theme: Theme, aura: AuraKey) => {
-  const palette = theme.palette as unknown as Record<string, { main: string }>
-  return (palette[aura] ?? palette[AURA_ELEMENT[aura]])?.main ?? '#999'
-}
-
 /* ---------- the moment under the pointer ---------- */
 
 /** The moment pointed at: its frame, and the member whose lane the pointer is on */
@@ -182,6 +163,8 @@ export interface TimelineMoment {
   onField: CharacterKey | undefined
   states: { owner: SimBuffOwner; path: string[]; value: string }[]
   excluded: { owner: SimBuffOwner; path: string[] }[]
+  /** The buffs on all rotation (not timed): only what they give is read */
+  always?: { owner: SimBuffOwner; path: string[]; value: string }[]
 }
 
 /** What is pinned: a moment, and the hit picked there (if one is near) */
@@ -211,6 +194,7 @@ export function RotationTimeline({
   renderHit,
   stats,
   onMoment,
+  effects,
   detail = false,
   onOpenDetail,
   pinned,
@@ -260,6 +244,8 @@ export function RotationTimeline({
   stats?: Partial<Record<CharacterKey, MomentStat[]>>
   /** The moment the panel shows, with the buff states up and off then (undefined: none) */
   onMoment?: (moment: TimelineMoment | undefined) => void
+  /** What each buff up at the moment last given to `onMoment` gives (absent: only their names) */
+  effects?: MomentEffects
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -547,6 +533,10 @@ export function RotationTimeline({
       excluded: timed
         .filter((x) => !trackValueAt(x, shownFrame))
         .map((x) => ({ owner: x.owner, path: x.path })),
+      always: tracks.flatMap((x) => {
+        const value = x.constant ? trackValueAt(x, shownFrame) : ''
+        return value ? [{ owner: x.owner, path: x.path, value }] : []
+      }),
     })
   }, [onMoment, shownFrame, tracks, sim])
 
@@ -1182,6 +1172,7 @@ export function RotationTimeline({
             tracks={tracks}
             teamData={teamData}
             stats={stats}
+            effects={effects}
             damage={figures ? damage : undefined}
             onUnpin={() => setPin(undefined)}
           >
@@ -1297,6 +1288,18 @@ function trackInfo(track: TimelineTrack, teamData: TeamData | undefined) {
         : (info.label ?? info.name)
       : info.title,
     states: info.states,
+    /** It buffs the whole team, not only its owner */
+    teamBuff: info.teamBuff,
+    /** The member's talent it is in (`skill`, `passive1`…): its short name */
+    talent: info.talent,
+    /** Its condition ("Character inside a Polestar Field"): the short name's tooltip */
+    condition: item
+      ? unlisted
+        ? undefined
+        : (info.label ?? info.name)
+      : (info.label ?? info.name),
+    /** The talent or team effect it is in, by its name ("Scouring Anchor") */
+    source: item ? undefined : info.title,
     // (an unlisted conditional is the simulation's own bookkeeping, except a weapon's or set's
     // effect: a KQM build's item that the member's own build does not have, still shown)
     internal:
@@ -1607,33 +1610,6 @@ function TrackValue({
   )
 }
 
-function AuraChips({ auras }: { auras: AuraKey[] }) {
-  const { t } = useTranslation('page_team')
-  return (
-    <>
-      {auras.map((aura) => (
-        <Box
-          key={aura}
-          component="span"
-          sx={(theme) => ({
-            px: 0.75,
-            borderRadius: 999,
-            fontSize: 11.5,
-            fontWeight: 650,
-            lineHeight: '18px',
-            whiteSpace: 'nowrap',
-            color: auraColor(theme, aura),
-            bgcolor: alpha(auraColor(theme, aura), 0.14),
-            boxShadow: `inset 0 0 0 1px ${alpha(auraColor(theme, aura), 0.4)}`,
-          })}
-        >
-          {t(`teamOpt.timeline.aura.${aura}`, AURA_NAME[aura])}
-        </Box>
-      ))}
-    </>
-  )
-}
-
 function AuraValue({
   store,
   pin,
@@ -1929,13 +1905,14 @@ function ReadoutTrack({
   frame: number
 }) {
   const info = useTrackInfo(track, teamData)
+  const shortName = useShortName()
   const value = trackValueAt(track, frame)
   return (
     <Box
       sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, minWidth: 0 }}
     >
       <Typography noWrap component="span" sx={readoutLabelSx}>
-        <Suspense fallback="…">{info.label}</Suspense>
+        <Suspense fallback="…">{shortName(track, info)}</Suspense>
       </Typography>
       <Box
         component="span"
@@ -1978,6 +1955,7 @@ function MomentPanel({
   tracks,
   teamData,
   stats,
+  effects,
   damage,
   onUnpin,
   children,
@@ -1992,6 +1970,7 @@ function MomentPanel({
   tracks: TimelineTrack[]
   teamData: TeamData | undefined
   stats?: Partial<Record<CharacterKey, MomentStat[]>>
+  effects?: MomentEffects
   damage?: (hit: SimHit) => number | undefined
   onUnpin: () => void
   children?: ReactNode
@@ -2001,7 +1980,11 @@ function MomentPanel({
   const onField = hit?.onField ?? onFieldAt(sim, frame)
   const auras = aurasAt(sim, frame)
   const team = tracks.filter((x) => x.owner === 'team')
+  const teamSteps = team.filter((x) => x.kind === 'steps')
+  const teamBuffs = team.filter((x) => x.kind === 'ribbon')
+  const teamUp = teamBuffs.filter((x) => trackValueAt(x, frame)).length
   const d = hit && damage?.(hit)
+  const pad = roomy ? 2 : 1.5
   return (
     <Box
       sx={(theme) => ({
@@ -2012,7 +1995,7 @@ function MomentPanel({
         transition: 'border-color .16s',
       })}
     >
-      {/* the moment: its time, the hit there, the enemy and the team's stacks */}
+      {/* the moment: its time, the hit there, the enemy */}
       <Box
         sx={{
           display: 'flex',
@@ -2020,7 +2003,7 @@ function MomentPanel({
           flexWrap: 'wrap',
           columnGap: 2,
           rowGap: 0.75,
-          px: 1.5,
+          px: pad,
           py: 1,
           borderBottom: `1px solid ${tokens.hairline}`,
         }}
@@ -2091,44 +2074,48 @@ function MomentPanel({
           </Tooltip>
         )}
       </Box>
-      {/* the team's own stacks and buffs (a resonance, the Polestar Field…): a row of its own */}
-      {(team.some((x) => x.kind === 'steps') ||
-        team.some((x) => x.kind === 'ribbon' && trackValueAt(x, frame))) && (
+      {/* the team's own stacks and buffs (a resonance, the Polestar Field…): a section of its own */}
+      {(teamSteps.length > 0 || teamUp > 0) && (
         <Box
           sx={{
+            px: pad,
+            py: 1.25,
             display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            columnGap: 2,
-            rowGap: 0.75,
-            px: 1.5,
-            py: 1,
+            flexDirection: 'column',
+            gap: 0.75,
             borderBottom: `1px solid ${tokens.hairline}`,
           }}
         >
           <MomentLabel>{t('teamOpt.timeline.team', 'Team')}</MomentLabel>
-          {team
-            .filter((x) => x.kind === 'steps')
-            .map((track) => (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns:
+                'repeat(auto-fill, minmax(min(100%, 240px), 1fr))',
+              columnGap: 3,
+              rowGap: 0.75,
+              alignItems: 'start',
+            }}
+          >
+            {teamSteps.map((track) => (
               <Meter
                 key={track.key}
                 track={track}
                 frame={frame}
                 teamData={teamData}
+                effects={effects}
               />
             ))}
-          <Box
-            sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, minWidth: 0 }}
-          >
-            <BuffChips
-              tracks={team.filter((x) => x.kind === 'ribbon')}
+            <BuffList
+              tracks={teamBuffs}
               frame={frame}
               teamData={teamData}
+              effects={effects}
             />
           </Box>
         </Box>
       )}
-      {/* a card a member */}
+      {/* a card a member: who they are, their stats then, their stacks, the buffs they give then */}
       <Box
         sx={{
           display: 'grid',
@@ -2141,26 +2128,33 @@ function MomentPanel({
       >
         {members.map((characterKey, i) => {
           const own = tracks.filter((x) => x.owner === characterKey)
+          const steps = own.filter((x) => x.kind === 'steps')
+          const buffs = own.filter((x) => x.kind === 'ribbon')
+          const up = buffs.filter((x) => trackValueAt(x, frame)).length
           const memberStats = stats?.[characterKey]
           return (
             <Box
               key={characterKey}
               sx={{
-                p: roomy ? 2 : 1.5,
+                p: pad,
                 minWidth: 0,
                 display: 'flex',
                 flexDirection: 'column',
-                gap: roomy ? 1.25 : 1,
-                borderLeft: { lg: i ? `1px solid ${tokens.hairline}` : 'none' },
+                gap: roomy ? 1.5 : 1.25,
+                borderLeft: {
+                  sm: i % 2 ? `1px solid ${tokens.hairline}` : 'none',
+                  lg: i ? `1px solid ${tokens.hairline}` : 'none',
+                },
                 borderTop: {
                   xs: i ? `1px solid ${tokens.hairline}` : 'none',
+                  sm: i > 1 ? `1px solid ${tokens.hairline}` : 'none',
                   lg: 'none',
                 },
               }}
             >
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <MemberAvatar characterKey={characterKey} size={24} />
-                <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 650 }}>
+                <MemberAvatar characterKey={characterKey} size={26} />
+                <Typography noWrap sx={{ fontSize: 14, fontWeight: 650 }}>
                   <CharacterName characterKey={characterKey} gender={gender} />
                 </Typography>
                 {onField === characterKey && (
@@ -2222,37 +2216,43 @@ function MomentPanel({
                   ))}
                 </Box>
               )}
-              {own.some((x) => x.kind === 'steps') && (
-                <Box
-                  sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}
-                >
-                  {own
-                    .filter((x) => x.kind === 'steps')
-                    .map((track) => (
-                      <Meter
-                        key={track.key}
-                        track={track}
-                        frame={frame}
-                        teamData={teamData}
-                        characterKey={characterKey}
-                      />
-                    ))}
+              {steps.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {steps.map((track) => (
+                    <Meter
+                      key={track.key}
+                      track={track}
+                      frame={frame}
+                      teamData={teamData}
+                      effects={effects}
+                      characterKey={characterKey}
+                    />
+                  ))}
                 </Box>
               )}
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.75,
+                  // (a hairline from the stats above: what the member has, then what it gives)
+                  ...((memberStats || steps.length > 0) && {
+                    pt: roomy ? 1.5 : 1.25,
+                    borderTop: `1px solid ${tokens.hairline}`,
+                  }),
+                }}
+              >
                 <MomentLabel>
                   {t('teamOpt.timeline.buffsNow', 'Buffs')}
                 </MomentLabel>
-                {own.some(
-                  (x) => x.kind === 'ribbon' && trackValueAt(x, frame)
-                ) ? (
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    <BuffChips
-                      tracks={own.filter((x) => x.kind === 'ribbon')}
-                      frame={frame}
-                      teamData={teamData}
-                    />
-                  </Box>
+                {up ? (
+                  <BuffList
+                    tracks={buffs}
+                    frame={frame}
+                    teamData={teamData}
+                    effects={effects}
+                    characterKey={characterKey}
+                  />
                 ) : (
                   <Typography
                     sx={{ fontSize: 12, color: 'text.secondary', opacity: 0.7 }}
@@ -2266,9 +2266,7 @@ function MomentPanel({
         })}
       </Box>
       {children && (
-        <Box
-          sx={{ p: roomy ? 2 : 1.5, borderTop: `1px solid ${tokens.hairline}` }}
-        >
+        <Box sx={{ p: pad, borderTop: `1px solid ${tokens.hairline}` }}>
           {/* (a readable measure: its rows are a name and a number) */}
           <Box sx={{ maxWidth: 680 }}>{children}</Box>
         </Box>
@@ -2277,260 +2275,390 @@ function MomentPanel({
   )
 }
 
-/** A stack count or resource at a moment: its name, its value, and a bar of how full it is */
+/**
+ * A buff's short name (its talent: "Elemental Skill", "A1", "C2"; its weapon or set; the team
+ * effect it is), and for its tooltip its condition and the talent's own name
+ */
+function useShortName() {
+  const { t } = useTranslation('page_team')
+  return (track: TimelineTrack, info: TrackInfo): ReactNode =>
+    track.group === 'gear'
+      ? info.label
+      : (talentLabel(t, info.talent) ??
+        (track.owner === 'team' ? info.source : undefined) ??
+        info.label)
+}
+function ShortNameTip({ info }: { info: TrackInfo }) {
+  return (
+    <Suspense fallback="">
+      {info.condition && <Box sx={{ fontWeight: 600 }}>{info.condition}</Box>}
+      {info.source && <Box sx={{ opacity: 0.75 }}>{info.source}</Box>}
+    </Suspense>
+  )
+}
+
+/**
+ * A stack count or resource at a moment: its short name, its value and a bar of how full it is,
+ * then what it gives at that count
+ */
 function Meter({
   track,
   frame,
   teamData,
+  effects,
   characterKey,
 }: {
   track: TimelineTrack
   frame: number
   teamData: TeamData | undefined
+  effects?: MomentEffects
   characterKey?: CharacterKey
 }) {
   const info = useTrackInfo(track, teamData)
-  const value = +trackValueAt(track, frame) || 0
+  const shortName = useShortName()
+  const now = trackValueAt(track, frame)
+  const value = +now || 0
   return (
-    <Tooltip
-      arrow
-      placement="top-start"
-      enterDelay={500}
-      title={<Suspense fallback="">{info.label}</Suspense>}
+    <Box
+      sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 0.375 }}
     >
       <Box
         sx={{
-          minWidth: 120,
-          maxWidth: 280,
-          flex: characterKey ? undefined : '0 1 200px',
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 1,
+          fontSize: 12.5,
+          lineHeight: '18px',
         }}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'baseline',
-            justifyContent: 'space-between',
-            gap: 1,
-            fontSize: 12,
-            lineHeight: '18px',
-          }}
+        <Tooltip
+          arrow
+          placement="top-start"
+          enterDelay={300}
+          title={<ShortNameTip info={info} />}
         >
           <Box
             component="span"
             sx={{
-              color: 'text.secondary',
+              fontWeight: 600,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
             }}
           >
-            <Suspense fallback="…">{info.label}</Suspense>
-          </Box>
-          <Box component="span" sx={{ fontWeight: 650, ...numSx }}>
-            {value}
-            <Box
-              component="span"
-              sx={{ color: 'text.disabled', fontWeight: 500 }}
-            >
-              /{track.max}
-            </Box>
-          </Box>
-        </Box>
-        <Box
-          sx={(theme) => ({
-            height: 4,
-            borderRadius: 999,
-            bgcolor: alpha(theme.palette.text.primary, 0.08),
-            overflow: 'hidden',
-          })}
-        >
-          <Box
-            sx={(theme) => ({
-              height: '100%',
-              width: `${(value / track.max) * 100}%`,
-              borderRadius: 999,
-              bgcolor: characterKey
-                ? laneColor(theme, characterKey)
-                : tokens.gold,
-              transition: `width .18s ${tokens.ease}`,
-              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-            })}
-          />
-        </Box>
-      </Box>
-    </Tooltip>
-  )
-}
-
-/**
- * The buffs up at a moment as chips (the timed ones with the time they have left), then the ones
- * that are on all rotation folded into one chip that lists them
- */
-function BuffChips({
-  tracks,
-  frame,
-  teamData,
-}: {
-  tracks: TimelineTrack[]
-  frame: number
-  teamData: TeamData | undefined
-}) {
-  const { t } = useTranslation('page_team')
-  const up = tracks.filter((x) => trackValueAt(x, frame))
-  // (a weapon's or set's effect is named like a timed one even when it is on all rotation)
-  const named = (x: TimelineTrack) => !x.constant || x.group === 'gear'
-  const timed = up.filter(named)
-  const always = up.filter((x) => !named(x))
-  // (a weapon's or set's effects are named by the item: one chip for the item, not one each)
-  const chips: TimelineTrack[][] = []
-  const byItem = new Map<string, TimelineTrack[]>()
-  for (const track of timed) {
-    const item = track.group === 'gear' ? `${track.owner}|${track.path[0]}` : ''
-    const group = item && byItem.get(item)
-    if (group) group.push(track)
-    else {
-      const next = [track]
-      if (item) byItem.set(item, next)
-      chips.push(next)
-    }
-  }
-  return (
-    <>
-      {chips.map((group) => (
-        <BuffChip
-          key={group[0].key}
-          track={group[0]}
-          more={group.slice(1)}
-          frame={frame}
-          teamData={teamData}
-        />
-      ))}
-      {!!always.length && (
-        <Tooltip
-          arrow
-          title={
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-              {always.map((track) => (
-                <AlwaysLine key={track.key} track={track} teamData={teamData} />
-              ))}
-            </Box>
-          }
-        >
-          <Box
-            component="span"
-            tabIndex={0}
-            sx={[chipSx, { color: 'text.secondary', borderStyle: 'dashed' }]}
-          >
-            {t('teamOpt.timeline.alwaysOnMore', {
-              defaultValue: '+{{count}} always on',
-              count: always.length,
-            })}
+            <Suspense fallback="…">{shortName(track, info)}</Suspense>
           </Box>
         </Tooltip>
-      )}
-    </>
-  )
-}
-
-const chipSx = (theme: Theme) => ({
-  display: 'inline-flex',
-  alignItems: 'baseline',
-  gap: 0.5,
-  maxWidth: '100%',
-  px: 0.875,
-  borderRadius: 999,
-  fontSize: 11.5,
-  lineHeight: '20px',
-  whiteSpace: 'nowrap' as const,
-  border: `1px solid ${alpha(theme.palette.text.primary, 0.12)}`,
-  bgcolor: alpha(theme.palette.text.primary, 0.04),
-})
-
-function AlwaysLine({
-  track,
-  teamData,
-}: {
-  track: TimelineTrack
-  teamData: TeamData | undefined
-}) {
-  const info = useTrackInfo(track, teamData)
-  const value = track.segments[0].value
-  return (
-    <Box component="span">
-      <Suspense fallback="…">{info.label}</Suspense>
-      {value !== 'on' && (
-        <Box component="span" sx={{ opacity: 0.7 }}>
-          {' · '}
-          <Suspense fallback={value}>{stateName(info, value)}</Suspense>
+        <Box component="span" sx={{ fontWeight: 650, flexShrink: 0, ...numSx }}>
+          {value}
+          <Box
+            component="span"
+            sx={{ color: 'text.disabled', fontWeight: 500 }}
+          >
+            /{track.max}
+          </Box>
+        </Box>
+      </Box>
+      <Box
+        sx={(theme) => ({
+          height: 4,
+          borderRadius: 999,
+          bgcolor: alpha(theme.palette.text.primary, 0.08),
+          overflow: 'hidden',
+        })}
+      >
+        <Box
+          sx={(theme) => ({
+            height: '100%',
+            width: `${(value / track.max) * 100}%`,
+            borderRadius: 999,
+            bgcolor: characterKey
+              ? laneColor(theme, characterKey)
+              : tokens.gold,
+            transition: `width .18s ${tokens.ease}`,
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+          })}
+        />
+      </Box>
+      {value > 0 && (
+        <Box sx={effectsSx}>
+          <EffectsOf parts={[{ track, value: now }]} effects={effects} />
         </Box>
       )}
     </Box>
   )
 }
 
-function BuffChip({
-  track,
-  more = [],
+/**
+ * The buffs up at a moment, a row each, by where they come from: a member's talent ("Elemental
+ * Skill" with all it gives then), a weapon, an artifact set; then the ones on all rotation, folded
+ */
+function BuffList({
+  tracks,
   frame,
   teamData,
+  effects,
+  characterKey,
 }: {
-  track: TimelineTrack
-  /** The item's other effects up now (its tooltip lists them) */
-  more?: TimelineTrack[]
+  tracks: TimelineTrack[]
   frame: number
   teamData: TeamData | undefined
+  effects?: MomentEffects
+  /** Whose buffs (their colour) */
+  characterKey?: CharacterKey
 }) {
-  const info = useTrackInfo(track, teamData)
-  const seg = track.segments.find((x) => x.start <= frame && frame < x.end)
-  if (!seg) return null
-  return (
-    <Tooltip
-      arrow
-      enterDelay={500}
-      title={
-        <Suspense fallback="">
-          {info.label}
-          {info.title && <Box sx={{ opacity: 0.7 }}>{info.title}</Box>}
-          {more.map((other) => (
-            <MoreEffect key={other.key} track={other} teamData={teamData} />
-          ))}
-        </Suspense>
+  const { t } = useTranslation('page_team')
+  const [open, setOpen] = useState(false)
+  // (each track's talent: the buffs of one talent are one row)
+  const talents = useMemo(
+    () => new Map(tracks.map((x) => [x.key, trackInfo(x, teamData).talent])),
+    [tracks, teamData]
+  )
+  const up = tracks.filter((x) => trackValueAt(x, frame))
+  // (a weapon's or set's effect is listed like a timed one even when it is on all rotation)
+  const named = (x: TimelineTrack) => !x.constant || x.group === 'gear'
+  const group = (list: TimelineTrack[]) => {
+    const rows: TimelineTrack[][] = []
+    const bySource = new Map<string, TimelineTrack[]>()
+    for (const track of list) {
+      const talent = talents.get(track.key)
+      const source =
+        track.group === 'gear'
+          ? `${track.owner}|${track.path[0]}`
+          : talent
+            ? `${track.owner}|${talent}`
+            : ''
+      const row = source && bySource.get(source)
+      if (row) row.push(track)
+      else {
+        const next = [track]
+        if (source) bySource.set(source, next)
+        rows.push(next)
       }
-    >
-      <Box
-        component="span"
-        sx={[
-          chipSx,
-          track.group === 'gear' && {
-            borderColor: alpha(tokens.gold, 0.45),
-          },
-        ]}
-      >
-        <Box
-          component="span"
-          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 190 }}
-        >
-          <Suspense fallback="…">{info.label}</Suspense>
+    }
+    return rows
+  }
+  const rows = group(up.filter(named))
+  const always = group(up.filter((x) => !named(x)))
+  const alwaysCount = always.length
+  return (
+    <>
+      {rows.map((row) => (
+        <BuffRow
+          key={row[0].key}
+          tracks={row}
+          frame={frame}
+          teamData={teamData}
+          effects={effects}
+          characterKey={characterKey}
+        />
+      ))}
+      {!!alwaysCount && (
+        <Box sx={{ minWidth: 0 }}>
+          <ButtonBase
+            onClick={() => setOpen((x) => !x)}
+            aria-expanded={open}
+            sx={{
+              gap: 0.5,
+              px: 0.5,
+              ml: -0.5,
+              py: 0.25,
+              borderRadius: 1,
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' },
+              ...quickSx,
+              ...focusSx,
+            }}
+          >
+            <ExpandMoreRoundedIcon
+              sx={{
+                fontSize: 16,
+                transform: open ? 'rotate(180deg)' : 'none',
+                transition: `transform .16s ${tokens.ease}`,
+              }}
+            />
+            {t('teamOpt.timeline.alwaysOnCount', {
+              defaultValue: 'Always on ({{count}})',
+              count: alwaysCount,
+            })}
+          </ButtonBase>
+          {open && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.75,
+                pt: 0.75,
+              }}
+            >
+              {always.map((row) => (
+                <BuffRow
+                  key={row[0].key}
+                  tracks={row}
+                  frame={frame}
+                  teamData={teamData}
+                  effects={effects}
+                  characterKey={characterKey}
+                  quiet
+                />
+              ))}
+            </Box>
+          )}
         </Box>
-        {seg.value !== 'on' && (
-          <Box component="span" sx={{ fontWeight: 650 }}>
-            <Suspense fallback={seg.value}>
-              {stateName(info, seg.value)}
-            </Suspense>
-          </Box>
-        )}
-        {!track.constant && (
-          <Box component="span" sx={{ color: 'text.secondary', ...numSx }}>
-            {seconds(seg.end - frame)}s
-          </Box>
-        )}
-      </Box>
-    </Tooltip>
+      )}
+    </>
   )
 }
 
-/** Another effect of the same weapon or set, in its chip's tooltip */
-function MoreEffect({
+/**
+ * One source's buffs up at a moment, on one line: a mark in its owner's colour (gold: a weapon's
+ * or set's), its short name, what they give then ("+400 ATK  −30% Electro RES"), and the time
+ * they have left. Their conditions are in the name's tooltip.
+ */
+function BuffRow({
+  tracks,
+  frame,
+  teamData,
+  effects,
+  characterKey,
+  quiet = false,
+}: {
+  tracks: TimelineTrack[]
+  frame: number
+  teamData: TeamData | undefined
+  effects?: MomentEffects
+  characterKey?: CharacterKey
+  /** On all rotation (folded under its toggle): a fainter mark */
+  quiet?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const [track] = tracks
+  const info = useTrackInfo(track, teamData)
+  const shortName = useShortName()
+  const parts = tracks.flatMap((x) => {
+    const seg = x.segments.find((s) => s.start <= frame && frame < s.end)
+    return seg ? [{ track: x, value: seg.value, end: seg.end }] : []
+  })
+  if (!parts.length) return null
+  // (the time left: the soonest and the latest to end when they differ)
+  const ends = parts.filter((p) => !p.track.constant).map((p) => p.end)
+  const soonest = ends.length ? Math.min(...ends) : undefined
+  const latest = ends.length ? Math.max(...ends) : undefined
+  const state =
+    parts.length === 1 && parts[0].value !== 'on' ? parts[0].value : undefined
+  return (
+    <Box sx={{ display: 'flex', gap: 1, minWidth: 0 }}>
+      <Box
+        aria-hidden
+        sx={(theme) => ({
+          width: 3,
+          flexShrink: 0,
+          alignSelf: 'stretch',
+          borderRadius: 999,
+          bgcolor:
+            track.group === 'gear'
+              ? alpha(tokens.gold, quiet ? 0.35 : 0.8)
+              : characterKey
+                ? alpha(laneColor(theme, characterKey), quiet ? 0.35 : 0.85)
+                : alpha(theme.palette.text.primary, quiet ? 0.18 : 0.35),
+        })}
+      />
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 1,
+        }}
+      >
+        <Box sx={[effectsSx, { flex: 1 }]}>
+          <Tooltip
+            arrow
+            placement="top-start"
+            enterDelay={300}
+            title={
+              parts.length === 1 ? (
+                <ShortNameTip info={info} />
+              ) : (
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                >
+                  {parts.map((p) => (
+                    <PartTip
+                      key={p.track.key}
+                      track={p.track}
+                      teamData={teamData}
+                    />
+                  ))}
+                </Box>
+              )
+            }
+          >
+            <Box
+              component="span"
+              sx={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: 'text.primary',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Suspense fallback="…">{shortName(track, info)}</Suspense>
+            </Box>
+          </Tooltip>
+          {state && (
+            <Box component="span" sx={stateSx}>
+              <Suspense fallback={state}>{stateName(info, state)}</Suspense>
+            </Box>
+          )}
+          {info.teamBuff && (
+            <Tooltip
+              arrow
+              title={t('teamOpt.timeline.wholeTeam', 'Buffs the whole team')}
+            >
+              <GroupsRoundedIcon
+                aria-label={t(
+                  'teamOpt.timeline.wholeTeam',
+                  'Buffs the whole team'
+                )}
+                sx={{
+                  alignSelf: 'center',
+                  fontSize: 15,
+                  color: 'text.secondary',
+                  flexShrink: 0,
+                }}
+              />
+            </Tooltip>
+          )}
+          <EffectsOf parts={parts} effects={effects} />
+        </Box>
+        {soonest !== undefined && latest !== undefined && (
+          <Box
+            component="span"
+            sx={{
+              flexShrink: 0,
+              fontSize: 11.5,
+              whiteSpace: 'nowrap',
+              color: 'text.secondary',
+              ...numSx,
+            }}
+          >
+            {soonest === latest
+              ? `${seconds(soonest - frame)} s`
+              : `${seconds(soonest - frame)}–${seconds(latest - frame)} s`}
+          </Box>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+/** One of a row's buffs in its tooltip: its condition, then its talent's name */
+function PartTip({
   track,
   teamData,
 }: {
@@ -2538,16 +2666,89 @@ function MoreEffect({
   teamData: TeamData | undefined
 }) {
   const info = useTrackInfo(track, teamData)
-  return info.title ? <Box sx={{ opacity: 0.7 }}>{info.title}</Box> : null
+  return (
+    <Box>
+      <ShortNameTip info={{ ...info, source: undefined }} />
+    </Box>
+  )
 }
 
-/** A small label over a part of the moment's panel (Team, Stacks, Buffs) */
+/** A row's name and what it gives, flowing onto more lines when narrow */
+const effectsSx = {
+  minWidth: 0,
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'baseline',
+  columnGap: 1.25,
+  rowGap: 0.125,
+  fontSize: 12,
+  lineHeight: '18px',
+} as const
+
+/** A buff's state when it has several (an element, a mode) */
+const stateSx = (theme: Theme) => ({
+  flexShrink: 0,
+  px: 0.625,
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 600,
+  lineHeight: '16px',
+  whiteSpace: 'nowrap' as const,
+  color: 'text.secondary',
+  border: `1px solid ${alpha(theme.palette.text.primary, 0.14)}`,
+})
+
+/**
+ * What buffs give in their states now ("+400 ATK", "−30% Electro RES"; else a line of what they
+ * do), the same effect once; a placeholder while the moment is worked out, nothing without figures
+ */
+function EffectsOf({
+  parts,
+  effects,
+}: {
+  parts: { track: TimelineTrack; value: string }[]
+  effects?: MomentEffects
+}) {
+  if (!effects) return null
+  const lists = parts.map((p) =>
+    effects.get(
+      momentBuffKey({
+        owner: p.track.owner,
+        path: p.track.path,
+        value: p.value,
+      })
+    )
+  )
+  if (lists.some((x) => !x))
+    return <Skeleton variant="text" width={110} sx={{ fontSize: 12, my: 0 }} />
+  const seen = new Set<string>()
+  const all = lists.flatMap((list) =>
+    (list ?? []).filter((effect) => {
+      const key = `${effect.stat ?? effect.key}|${effect.value}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  )
+  // (without values, what it does in words: one line is enough)
+  const valued = all.filter((effect) => effect.value !== undefined)
+  const shown = valued.length ? valued : all.slice(0, 1)
+  return (
+    <>
+      {shown.map((effect) => (
+        <EffectText key={`${effect.stat ?? ''}${effect.key}`} effect={effect} />
+      ))}
+    </>
+  )
+}
+
+/** A small label over a part of the moment's panel (Team, Buffs) */
 function MomentLabel({ children }: { children: ReactNode }) {
   return (
     <Typography
       component="span"
       sx={{
-        fontSize: 11,
+        fontSize: 11.5,
         fontWeight: 600,
         letterSpacing: '0.01em',
         color: 'text.secondary',

@@ -99,7 +99,7 @@ import {
 } from './RotationTiming'
 import {
   TimelineHitStats,
-  useMomentStats,
+  useMomentFigures,
   useTimelineFigures,
 } from './TimelineFigures'
 import { Disclosure, focusSx, quickSx, tokens, type } from './ui'
@@ -803,6 +803,7 @@ export function useRotationWriter({
   kqm,
   kqmBuilds,
   kqmBuffs,
+  kqmOverrides,
 }: {
   teamId: string
   members: TeamOptMember[]
@@ -822,6 +823,8 @@ export function useRotationWriter({
    * the timeline lists those it does not time (Disenchantment's, on by rule) as on all rotation
    */
   kqmBuffs?: TeamBuff[]
+  /** With KQM: the shown result's builds as team data (what each buff gives on the timeline) */
+  kqmOverrides?: TeamDataOverrides
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -847,6 +850,7 @@ export function useRotationWriter({
           kqm={kqm}
           kqmBuilds={kqmBuilds}
           kqmBuffs={kqmBuffs}
+          kqmOverrides={kqmOverrides}
           setTeamOpt={setTeamOpt}
           onClose={() => setOpen(false)}
           onApplied={setUndo}
@@ -999,6 +1003,7 @@ function WriterModal({
   kqm,
   kqmBuilds,
   kqmBuffs,
+  kqmOverrides,
   setTeamOpt,
   onClose,
   onApplied,
@@ -1009,6 +1014,7 @@ function WriterModal({
   kqm: TeamOptKqm | undefined
   kqmBuilds: Partial<Record<CharacterKey, KqmBuild>> | undefined
   kqmBuffs: TeamBuff[] | undefined
+  kqmOverrides: TeamDataOverrides | undefined
   setTeamOpt: (update: TeamOptUpdate) => void
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
@@ -1162,9 +1168,19 @@ function WriterModal({
       toggleTiming(true)
     },
   })
-  // the members' stats at the timeline's moment (their own builds: never on the KQM tab)
+  // the members' stats at the timeline's moment and what each buff up then gives: their own
+  // builds; on the KQM tab the shown result's (none before a result)
   const [moment, setMoment] = useState<TimelineMoment>()
-  const momentStats = useMomentStats(teamId, moment, figures)
+  const momentOn = figures || !!kqmOverrides
+  const { stats: momentStats, effects: momentEffects } = useMomentFigures(
+    teamId,
+    moment,
+    {
+      enabled: momentOn,
+      teamData,
+      overrides: figures ? undefined : kqmOverrides,
+    }
+  )
   // (the members' own weapon and set effects: listed on the timeline, never on the KQM tab)
   const teamBuffs = useTeamBuffs(teamId, teamData)
   // the timeline's damage and stats, with the members' own builds
@@ -1598,7 +1614,8 @@ function WriterModal({
                   <RotationTimeline
                     {...timelineProps(result.rotation, result.sim)}
                     stats={detailOpen ? undefined : momentStats}
-                    onMoment={figures && !detailOpen ? setMoment : undefined}
+                    effects={detailOpen ? undefined : momentEffects}
+                    onMoment={momentOn && !detailOpen ? setMoment : undefined}
                     onOpenDetail={() => setDetailOpen(true)}
                     pinned={timelinePin}
                     onPin={setTimelinePin}
@@ -1724,7 +1741,8 @@ function WriterModal({
                           // where the simple timeline's bar opens the step's timing)
                           onSelect={setSelectedStep}
                           stats={momentStats}
-                          onMoment={figures ? setMoment : undefined}
+                          effects={momentEffects}
+                          onMoment={momentOn ? setMoment : undefined}
                           pinned={timelinePin}
                           onPin={setTimelinePin}
                         />

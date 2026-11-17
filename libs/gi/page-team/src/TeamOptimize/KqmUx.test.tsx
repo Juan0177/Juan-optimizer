@@ -224,7 +224,7 @@ vi.mock('./buffs', () => ({
 // (the writer's timeline figures bring the attack editor's whole module graph)
 vi.mock('./TimelineFigures', () => ({
   useTimelineFigures: () => ({}),
-  useMomentStats: () => undefined,
+  useMomentFigures: () => ({}),
   TimelineHitStats: () => null,
 }))
 vi.mock('./KqmChoosers', () => ({
