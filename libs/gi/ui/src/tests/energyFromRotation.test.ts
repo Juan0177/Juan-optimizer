@@ -13,10 +13,53 @@ import {
   defaultEnergyCalculator,
   energyCalcData,
   energyFromRotation,
+  type RotationEnergy,
   withRotationEnergy,
 } from '../util/teamOpt/energyCalc'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import { simulateRotation } from '../util/teamOpt/rotation/simulate'
+
+/** A team's rotation, played 4 times (the last 2 kept: 2 rotations) */
+const playTeam = (
+  team: CharacterKey[],
+  rotation: string,
+  constellations: Partial<Record<CharacterKey, number>> = {}
+) =>
+  simulateRotation({
+    rotation: parseRotation(
+      rotation,
+      team.map((characterKey) => ({ characterKey, name: characterKey }))
+    ),
+    members: team,
+    elements: Object.fromEntries(team.map((m) => [m, getCharEle(m)])) as never,
+    constellations,
+    repeats: 4,
+    keep: 'last2',
+  })
+/** A member's filled-in skill uses a rotation, by the sheet option (its two options) */
+const usesByOption = (energy: RotationEnergy, key: CharacterKey) => {
+  const member = energy.members[key]!
+  const skills = energyCalcData[key]!.skills
+  const out: Record<string, number> = {}
+  if (member.skillUses) out[skills[member.skillMode!].label] = member.skillUses
+  if (member.secondaryUses)
+    out[skills[member.secondaryMode!].label] =
+      (out[skills[member.secondaryMode!].label] ?? 0) + member.secondaryUses
+  return out
+}
+/** A member's particle markers in the kept span */
+const particleMarkers = (
+  sim: ReturnType<typeof simulateRotation>,
+  key: CharacterKey
+) =>
+  sim.hits.filter(
+    (h) =>
+      h.characterKey === key &&
+      h.path[0] === '_marker' &&
+      h.path[1] === 'particles' &&
+      h.t >= sim.start &&
+      h.t < sim.start + sim.frames
+  )
 
 const members: CharacterKey[] = ['Emilie', 'Nicole', 'Durin', 'Kinich']
 // (a Discord report's team and rotation: the in-game ER need for Durin was about 130%)
@@ -266,6 +309,26 @@ describe('energy inputs: Flins (two Bursts)', () => {
     // (C0: none from C1)
     expect(energy.members.Flins!.flatEnergy ?? 0).toBeCloseTo(attack, 1)
   })
+  it('Ineffa C4: 5 Energy on the party’s Lunar-Charged, once per 4 s, as bonus energy', () => {
+    let last = Number.NEGATIVE_INFINITY
+    let procs = 0
+    for (const h of sim.hits)
+      if (
+        h.path.join('.') === '_reaction.lunarCharged' &&
+        h.t >= sim.start &&
+        h.t < sim.start + sim.frames &&
+        h.t > last + 240
+      ) {
+        procs++
+        last = h.t
+      }
+    expect(procs).toBeGreaterThan(0)
+    const at = (cons: number) =>
+      energyFromRotation(sim, team, 2, { Ineffa: cons }).members.Ineffa!
+        .flatEnergy ?? 0
+    expect(at(4) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
+    expect(at(6) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
+  })
 })
 
 describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
@@ -372,6 +435,50 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
     expect(
       at(4).members.Mitya!.flatEnergy! - (at(3).members.Mitya!.flatEnergy ?? 0)
     ).toBeCloseTo(3, 2)
+    // (her particles: the Entry's hit drops them, the Anchor Skill 2 s later is inside their 14 s)
+    expect(at(6).members.Danica!.skillUses).toBe(1)
+  })
+  it('particles: her Anchor Skill’s and her Entry Skill’s hits drop 5, once per 14 s (dump DropBall)', () => {
+    const played = simulateRotation({
+      rotation: parseRotation(
+        'Danica E Q -> Odette E Q -> Mitya hE Q CA -> Tsaritsa hE Q N5 E E E -> Danica N1 -> Odette N3 N3 N3 -> Tsaritsa N5 N5 N5 N5 N5',
+        team.map((characterKey) => ({
+          characterKey,
+          name: characterKey === 'Anastasya' ? 'Tsaritsa' : characterKey,
+        }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: { Danica: 6, Mitya: 6, Odette: 6, Anastasya: 6 },
+      repeats: 4,
+      keep: 'last2',
+    })
+    const drops = played.hits
+      .filter(
+        (h) =>
+          h.characterKey === 'Danica' &&
+          ['skill.dmg', 'skill.entryDmg'].includes(h.path.join('.')) &&
+          h.t >= played.start &&
+          h.t < played.start + played.frames
+      )
+      .sort((a, b) => a.t - b.t)
+    // (an Anchor Skill and an Entry a rotation, 14 s apart at least: both drop)
+    expect(drops.map((h) => h.path[1])).toEqual([
+      'dmg',
+      'entryDmg',
+      'dmg',
+      'entryDmg',
+    ])
+    for (let i = 1; i < drops.length; i++)
+      expect(drops[i].t - drops[i - 1].t).toBeGreaterThanOrEqual(840)
+    expect(particleMarkers(played, 'Danica').map((m) => m.t)).toEqual(
+      drops.map((h) => h.t)
+    )
+    expect(energyFromRotation(played, team, 2).members.Danica!.skillUses).toBe(
+      2
+    )
   })
 })
 
@@ -597,5 +704,318 @@ describe('Frostbreath from the rotation', () => {
     for (const w of on) expect(w.end - w.start).toBe(900)
     for (let i = 1; i < on.length; i++)
       expect(on[i].start - on[i - 1].start).toBeGreaterThanOrEqual(960)
+  })
+})
+
+describe('energy inputs: Skill uses whose cooldown has its own key or starts late', () => {
+  it('Kazuha’s and Arlecchino’s Skill cooldowns (skill<n>, a new one after a Burst resets it) are uses', () => {
+    const team: CharacterKey[] = [
+      'KaedeharaKazuha',
+      'Arlecchino',
+      'Bennett',
+      'Xingqiu',
+    ]
+    const energy = energyFromRotation(
+      playTeam(
+        team,
+        'Xingqiu E Q -> Bennett E Q -> KaedeharaKazuha hE P -> Arlecchino E N4 Q N4 N4'
+      ),
+      team,
+      2
+    )
+    expect(usesByOption(energy, 'KaedeharaKazuha')).toEqual({ Hold: 1 })
+    expect(usesByOption(energy, 'Arlecchino')).toEqual({ Press: 1 })
+    // (C1: his Burst resets the cooldown, a new key: E Q E is two uses)
+    const duo: CharacterKey[] = ['KaedeharaKazuha', 'Bennett']
+    const c1 = energyFromRotation(
+      playTeam(duo, 'KaedeharaKazuha E Q E -> Bennett E Q', {
+        KaedeharaKazuha: 1,
+      }),
+      duo,
+      2,
+      { KaedeharaKazuha: 1 }
+    )
+    expect(usesByOption(c1, 'KaedeharaKazuha')).toEqual({ Press: 2 })
+  })
+  it('Cyno, Jahoda, Xilonen and Wanderer (cooldowns their kits set when a mode ends): a use per cast, where its particles are made', () => {
+    const team: CharacterKey[] = ['Cyno', 'Jahoda', 'Xilonen', 'Wanderer']
+    const sim = playTeam(
+      team,
+      'Xilonen E N2 E -> Jahoda E E -> Wanderer E N3 N3 E -> Cyno E Q E N2 E N2'
+    )
+    const energy = energyFromRotation(sim, team, 2)
+    // (Cyno: Secret Rite 3 particles, each Mortuary Rite in Pactsworn 1.33)
+    expect(usesByOption(energy, 'Cyno')).toEqual({
+      'Press (no burst)': 1,
+      'Press (in burst)': 2,
+    })
+    expect(usesByOption(energy, 'Jahoda')).toEqual({ Press: 1 })
+    expect(usesByOption(energy, 'Xilonen')).toEqual({ Press: 1 })
+    expect(
+      energy.members.Wanderer!.skillUses +
+        energy.members.Wanderer!.secondaryUses!
+    ).toBe(1)
+    // (Jahoda's particles come with the flask, at the drain: E E drains it early)
+    const flask = sim.hits.find(
+      (h) =>
+        h.characterKey === 'Jahoda' &&
+        ['skill.filledDmg', 'skill.unfilledDmg'].includes(h.path.join('.')) &&
+        h.t >= sim.start
+    )
+    expect(flask).toBeDefined()
+    expect(particleMarkers(sim, 'Jahoda').map((m) => m.t)).toContain(flask!.t)
+  })
+  it('Skirk’s flash (its cooldown starts when it ends): her Cryo DMG’s particles, once per 15 s', () => {
+    const team: CharacterKey[] = ['Skirk', 'Furina', 'Escoffier', 'Shenhe']
+    const energy = energyFromRotation(
+      playTeam(
+        team,
+        'Furina E Q -> Escoffier E Q -> Shenhe E -> Skirk E N5 N5 N5 Q N5'
+      ),
+      team,
+      2
+    )
+    expect(usesByOption(energy, 'Skirk')).toEqual({ Attack: 1 })
+  })
+  it('Wanderer: Windfavored’s option by its Kuugo hits’ particles (once per 2 s)', () => {
+    const duo: CharacterKey[] = ['Wanderer', 'Bennett']
+    const long = energyFromRotation(
+      playTeam(duo, 'Bennett E Q -> Wanderer E N3 N3 N3 N3 N3 N3 N3'),
+      duo,
+      2
+    )
+    expect(usesByOption(long, 'Wanderer')).toEqual({ '8-10s uptime': 1 })
+    const short = energyFromRotation(
+      playTeam(duo, 'Bennett E Q -> Wanderer E N3 N3 E'),
+      duo,
+      2
+    )
+    expect(usesByOption(short, 'Wanderer')).toEqual({ '6-8s uptime': 1 })
+  })
+})
+
+describe('energy inputs: Tartaglia’s stance', () => {
+  const team: CharacterKey[] = [
+    'Tartaglia',
+    'Bennett',
+    'Xiangling',
+    'KaedeharaKazuha',
+  ]
+  it('entering and leaving the Melee Stance is one use; its option by the stance’s Riptide Slash particles (once per 3 s)', () => {
+    const left = energyFromRotation(
+      playTeam(
+        team,
+        'Bennett E Q -> KaedeharaKazuha E -> Tartaglia Q E N3 N3 N3 N3 E -> Xiangling Q E'
+      ),
+      team,
+      2
+    )
+    expect(usesByOption(left, 'Tartaglia')).toEqual({ '7-9s melee': 1 })
+    // (a longer stance, left by the swap: 4 particles)
+    const sim = playTeam(
+      team,
+      'Bennett E Q -> KaedeharaKazuha E -> Tartaglia Q E N3 N3 N3 N3 N3 N3 N3 -> Xiangling Q E'
+    )
+    const slashes = sim.hits
+      .filter((h) => h.path.join('.') === 'skill.riptideSlash')
+      .map((h) => h.t)
+    let ready = Number.NEGATIVE_INFINITY
+    let particles = 0
+    for (const t of slashes)
+      if (t >= ready) {
+        particles++
+        ready = t + 180
+      }
+    expect(particles).toBeGreaterThanOrEqual(8)
+    expect(usesByOption(energyFromRotation(sim, team, 2), 'Tartaglia')).toEqual(
+      { '11s melee': 1 }
+    )
+  })
+})
+
+describe('energy inputs: Amber C4+ (two charges)', () => {
+  it('every cast is a use, its particles at the Baron Bunny’s explosion', () => {
+    const team: CharacterKey[] = ['Amber', 'Bennett']
+    const sim = playTeam(team, 'Amber E N1 E Q -> Bennett E Q', { Amber: 6 })
+    const energy = energyFromRotation(sim, team, 2, { Amber: 6 })
+    expect(usesByOption(energy, 'Amber')).toEqual({ Press: 2 })
+    const explosions = sim.hits
+      .filter(
+        (h) =>
+          h.characterKey === 'Amber' &&
+          h.path.join('.') === 'skill.dmg' &&
+          h.t >= sim.start &&
+          h.t < sim.start + sim.frames
+      )
+      .map((h) => h.t)
+    expect(particleMarkers(sim, 'Amber').map((m) => m.t)).toEqual(explosions)
+  })
+})
+
+describe('energy inputs: particles made per hit (Alhaitham, Wriothesley, Traveler Pyro)', () => {
+  const team: CharacterKey[] = [
+    'Alhaitham',
+    'Wriothesley',
+    'TravelerPyro',
+    'Bennett',
+  ]
+  const sim = playTeam(
+    team,
+    'Bennett E Q -> Alhaitham E N4 N4 Q -> Wriothesley E N5 N5 N5 -> TravelerPyro E N5 N5'
+  )
+  const energy = energyFromRotation(sim, team, 2)
+  it.each([
+    ['Alhaitham', 91],
+    ['Wriothesley', 121],
+    ['TravelerPyro', 175],
+  ] as const)('%s: a use per particle, once per its ICD', (key, icd) => {
+    const markers = particleMarkers(sim, key)
+    // (more than one a cast: 2 casts in the span)
+    expect(markers.length).toBeGreaterThan(2)
+    for (let i = 1; i < markers.length; i++)
+      expect(markers[i].t - markers[i - 1].t).toBeGreaterThanOrEqual(icd)
+    const uses = usesByOption(energy, key)
+    expect(Object.values(uses).reduce((n, u) => n + u, 0)).toBe(
+      markers.length / 2
+    )
+  })
+  it('the uses are the sheet’s per-particle options', () => {
+    expect(Object.keys(usesByOption(energy, 'Alhaitham'))).toEqual([
+      'Projection Attack',
+    ])
+    expect(Object.keys(usesByOption(energy, 'Wriothesley'))).toEqual([
+      'NA during skill',
+    ])
+    expect(Object.keys(usesByOption(energy, 'TravelerPyro'))).toEqual([
+      'Blazing Threshold',
+    ])
+  })
+})
+
+describe('energy inputs: the option the rotation played', () => {
+  it('Beidou’s hold (2 hits absorbed), Kaeya’s Frostgnaw freezing, Yun Jin’s Charge Level 1', () => {
+    const team: CharacterKey[] = ['Beidou', 'Kaeya', 'Xingqiu', 'YunJin']
+    const energy = energyFromRotation(
+      playTeam(team, 'Xingqiu E Q -> Kaeya E -> Beidou hE Q -> YunJin hE Q'),
+      team,
+      2
+    )
+    expect(usesByOption(energy, 'Beidou')).toEqual({ Perfect: 1 })
+    // (Frostgnaw on Xingqiu's Hydro: Frozen, A4's extra particle)
+    expect(usesByOption(energy, 'Kaeya')).toEqual({ '1 freeze': 1 })
+    expect(usesByOption(energy, 'YunJin')).toEqual({ 'Level 1': 1 })
+    const plain: CharacterKey[] = ['Kaeya', 'Beidou', 'ShikanoinHeizou']
+    const taps = energyFromRotation(
+      playTeam(plain, 'Kaeya E -> Beidou E Q -> ShikanoinHeizou E'),
+      plain,
+      2
+    )
+    expect(usesByOption(taps, 'Kaeya')).toEqual({ '0 freezes': 1 })
+    expect(usesByOption(taps, 'Beidou')).toEqual({ '0 stacks': 1 })
+    expect(usesByOption(taps, 'ShikanoinHeizou')).toEqual({ '0-1 stacks': 1 })
+  })
+  it('Heizou’s stacks, Layla’s volleys, Freminet’s Burst and Level 4, Kirara’s collisions', () => {
+    const team: CharacterKey[] = [
+      'ShikanoinHeizou',
+      'Layla',
+      'Freminet',
+      'Kirara',
+    ]
+    const sim = playTeam(
+      team,
+      'Layla E Q -> Kirara hE -> ShikanoinHeizou hE -> Freminet Q E N3 N3'
+    )
+    const energy = energyFromRotation(sim, team, 2)
+    expect(usesByOption(energy, 'ShikanoinHeizou')).toEqual({
+      'Full stacks': 1,
+    })
+    // (her Burst's stars make a second volley in the Curtain)
+    expect(usesByOption(energy, 'Layla')).toEqual({ '2 volleys': 1 })
+    // (the Upward Thrust in Stalking, then the Level 4 Shattering Pressure)
+    expect(usesByOption(energy, 'Freminet')).toEqual({
+      'Level 0 (burst)': 1,
+      'Level 4': 1,
+    })
+    // (the hold's rolling parcel: a particle per 4 s, then the Flipclaw Strike's 3)
+    expect(usesByOption(energy, 'Kirara')).toEqual({
+      Collision: 3,
+      'Final Kick': 1,
+    })
+  })
+})
+
+describe('energy inputs: Mona', () => {
+  it('her particles come with her Phantom’s explosion, not its first tick: their catcher is who is on the field then', () => {
+    const team: CharacterKey[] = ['Mona', 'Bennett', 'Xiangling', 'Xingqiu']
+    const sim = playTeam(
+      team,
+      'Mona E -> Bennett E Q N4 -> Xiangling N4 N4 N4 N4 -> Xingqiu E'
+    )
+    const onFieldAt = (t: number) =>
+      (sim.swaps ?? [])
+        .filter((w) => w.start + w.frames <= t)
+        .sort((a, b) => a.start - b.start)
+        .pop()?.to
+    const monaHit = (node: string) =>
+      sim.hits.find(
+        (h) =>
+          h.characterKey === 'Mona' &&
+          h.path.join('.') === node &&
+          h.t >= sim.start
+      )!.t
+    // (100 frames of travel)
+    expect(onFieldAt(monaHit('skill.dot') + 100)).toBe('Bennett')
+    expect(onFieldAt(monaHit('skill.dmg') + 100)).toBe('Xiangling')
+    expect(energyFromRotation(sim, team, 2).members.Mona!.catchBy).toBe(
+      'Xiangling'
+    )
+  })
+})
+
+describe('energy inputs: the Traveler’s Exaiphanes Blade', () => {
+  it('fills the energy weapon triggers field with the triggers the calculator counts', () => {
+    const team: CharacterKey[] = ['TravelerAnemo', 'Bennett']
+    const sim = playTeam(team, 'TravelerAnemo E N5 N5 Q -> Bennett E Q')
+    const energy = energyFromRotation(sim, team, 2)
+    const counted =
+      energy.members.TravelerAnemo!.weaponTriggers!.ExaiphanesBlade!
+    expect(counted).toBeGreaterThan(0)
+    const settings = withRotationEnergy(
+      defaultEnergyCalculator(team, sim.frames / 120),
+      team,
+      energy
+    )
+    expect(settings.members.TravelerAnemo!.weaponEnergyTriggers).toBe(counted)
+    // (the energy it gives at R1, 3 a trigger: the field's triggers)
+    const held = calculateEnergyRecharge(team, settings, {
+      TravelerAnemo: 'ExaiphanesBlade',
+    })
+    const none = calculateEnergyRecharge(team, settings, {})
+    expect(
+      held.members.TravelerAnemo!.flatEnergy -
+        none.members.TravelerAnemo!.flatEnergy
+    ).toBeCloseTo(3 * Math.min(counted, settings.rotationTime / 5), 5)
+    // (a member who would trigger none, or several energy weapons of its type, keeps 0)
+    expect(settings.members.Bennett!.weaponEnergyTriggers).toBe(0)
+    // (a count set by hand is kept; the rotation's own count is refilled)
+    const typed = withRotationEnergy(
+      {
+        ...settings,
+        members: {
+          ...settings.members,
+          TravelerAnemo: {
+            ...settings.members.TravelerAnemo!,
+            weaponEnergyTriggers: counted + 1,
+          },
+        },
+      },
+      team,
+      energy
+    )
+    expect(typed.members.TravelerAnemo!.weaponEnergyTriggers).toBe(counted + 1)
+    expect(
+      withRotationEnergy(settings, team, energy).members.TravelerAnemo!
+        .weaponEnergyTriggers
+    ).toBe(counted)
   })
 })

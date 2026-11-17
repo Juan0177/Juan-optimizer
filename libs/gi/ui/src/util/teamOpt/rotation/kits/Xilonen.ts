@@ -2,7 +2,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import type { RotationAction } from '../parse'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { GCSIM, type NormalHit, normalString, particleMarker } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/xilonen, main as of 2026-11-10. */
 
@@ -444,6 +444,8 @@ export const kit: KitModel = {
           label: "Yohual's Scratch",
           snapshotDelay: 6,
         })
+        // its 4 particles (gcsim's particleCB on this hit)
+        particleMarker(ctx, 6, "Yohual's Scratch particles")
         return {
           frames: 20,
           framesInto: { normal: 19, dash: 15, jump: 15, swap: 19 },

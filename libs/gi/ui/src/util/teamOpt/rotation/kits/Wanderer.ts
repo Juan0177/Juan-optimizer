@@ -1,6 +1,12 @@
 import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
-import { atkSpdAdjust, GCSIM, type NormalHit, normalString } from './common'
+import {
+  atkSpdAdjust,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/wanderer, main as of 2026-11-10. */
 
@@ -398,6 +404,9 @@ export const kit: KitModel = {
           applies: true,
           label: 'Hanega: Song of the Wind',
         })
+        // a use of the Skill for the ER calculator (its cooldown starts only when Windfavored
+        // ends): its particles come from the Kuugo hits while it lasts (the calculator's option)
+        particleMarker(ctx, 2, 'Windfavored')
         // (the cooldown starts when Windfavored ends: endWf)
         return { frames: 28 }
       }

@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   shieldMarker,
   templateJump,
   withHitlag,
@@ -61,6 +62,8 @@ interface KiraraState {
   shieldUntil: number
   /** C4's shared ICD runs until this frame of Kirara's clock (a status: hitlag extends it) */
   c4Until: number
+  /** The rolling parcel's particle ICD (4 s) runs until this frame of Kirara's clock */
+  rollUntil: number
 }
 
 /** Skill and burst: C6 (+12% All Elemental DMG for the party) for 15 s */
@@ -83,7 +86,7 @@ export const kit: KitModel = {
   characterKey: 'Kirara',
   element: 'dendro',
   source: `${GCSIM}/kirara`,
-  init: (): KiraraState => ({ shieldUntil: -1, c4Until: -1 }),
+  init: (): KiraraState => ({ shieldUntil: -1, c4Until: -1, rollUntil: -1 }),
   act(ctx, s: KiraraState, action, previous) {
     switch (action.kind) {
       case 'normal':
@@ -151,6 +154,8 @@ export const kit: KitModel = {
             icd: 'none',
             label: 'Tail-Flicking Flying Kick',
           })
+          // the kick's 3 particles (gcsim's kickParticleCB): the ER sheet's "Final Kick"
+          particleMarker(ctx, 14, 'Kick particles', 'Final Kick')
           // (the kick's defense halt pauses her)
           ctx.hit(14, {
             path: ['_marker', 'hitlag'],
@@ -178,7 +183,7 @@ export const kit: KitModel = {
         }
         // Urgent Neko Parcel (hold): a hit every 30 frames from 16 (up to the hold's end)
         const duration = HOLD_DURATION
-        for (let t = 16; t <= duration + 12; t += 30)
+        for (let t = 16; t <= duration + 12; t += 30) {
           ctx.hit(t, {
             path: ['skill', 'parcelDmg'],
             tag: 'skill',
@@ -187,6 +192,15 @@ export const kit: KitModel = {
             icd: 'skillHold',
             label: 'Urgent Neko Parcel',
           })
+          // its collisions make a particle, once per 4 s (gcsim's rollParticleCB: a status on
+          // her clock, still active on its expiry frame): the ER sheet's "Collision"
+          ctx.at(t, (c2) => {
+            const own = c2.characterFrame('Kirara')
+            if (own < s.rollUntil) return
+            s.rollUntil = own + 241
+            particleMarker(c2, 0, 'Collision particle', 'Collision')
+          })
+        }
         // Flipclaw Strike, the kick at the end of the hold
         ctx.hit(duration + 36, {
           path: ['skill', 'strikeDmg'],
@@ -196,6 +210,8 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Flipclaw Strike',
         })
+        // the kick's 3 particles (gcsim's kickParticleCB): the ER sheet's "Final Kick"
+        particleMarker(ctx, duration + 36, 'Kick particles', 'Final Kick')
         skillShield(ctx, s)
         // A1: the parcel's impacts give Reinforced Packaging; when the hold ends they make more
         // Shields of Safe Transport, which reset the shield's duration (gcsim's a1, 614 frames in)

@@ -1,5 +1,11 @@
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/jahoda, main as of 2026-11-10. */
 
@@ -129,6 +135,8 @@ function fullDrain(c: SimContext, s: JahodaState, src: number) {
     icd: 'skill',
     label: full ? 'Filled Treasure Flask' : 'Unfilled Treasure Flask',
   })
+  // the flask's 4 particles (gcsim's ParticleCB on either flask hit)
+  particleMarker(c, full ? 2 : 4, 'Treasure Flask particles', undefined, 'Jahoda')
   if (full && c.moonsign >= 2 && s.flaskEle) {
     if (c.constellation('Jahoda') >= 6)
       c.buff('Jahoda', ['Jahoda', 'c6FlaskFull'], 'on', 0, 20 * 60, {
