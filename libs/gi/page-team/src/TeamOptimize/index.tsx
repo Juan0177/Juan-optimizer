@@ -616,6 +616,7 @@ export default function TeamBuildWorkspace({
                 kqmBuilds={kqmShown?.builds}
                 kqmBuffs={kqmBuffs}
                 kqmAttacks={kqmAttacks}
+                kqmDamage={kqmShown?.after.attacks}
                 overrides={kqmOverrides}
                 onField={onField}
                 mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
