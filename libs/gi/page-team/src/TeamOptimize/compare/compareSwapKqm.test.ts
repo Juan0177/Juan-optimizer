@@ -6,10 +6,15 @@ import {
   allWeaponKeys,
   charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
-import type { LoadoutDatum, TeamOpt } from '@genshin-optimizer/gi/db'
+import type {
+  LoadoutDatum,
+  TeamOpt,
+  TeamOptKqm,
+} from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import type { KqmBuild, KqmResult } from '@genshin-optimizer/gi/ui'
 import {
+  defaultEnergyCalculator,
   kqmWeapons,
   optimizeTeamKqm,
   teamOptMembers,
@@ -18,7 +23,7 @@ import type { i18n } from 'i18next'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { kqmReplayOf } from '../useKqmRun'
 import type { SwapIn } from './compareSwapKqm'
-import { compareSwapKqm, sideOf } from './compareSwapKqm'
+import { compareSwapKqm, sideOf, swapSettings } from './compareSwapKqm'
 
 const MEMBERS: CharacterKey[] = ['Anastasya', 'YaeMiko', 'Odette', 'Danica']
 const FIXED: CharacterKey[] = ['Anastasya', 'Odette', 'Danica']
@@ -112,7 +117,7 @@ const storageKeys = (teamId: string) => [
 ]
 
 /** A 4-member team with a KQM run saved in `teamKqmResults` (its builds given, not searched) */
-async function setup() {
+async function setup(kqm: Partial<TeamOptKqm> = {}) {
   const database = new ArtCharDatabase(1, new SandboxStorage({}))
   for (const key of MEMBERS)
     database.chars.set(key, {
@@ -144,6 +149,7 @@ async function setup() {
       ),
       weaponList: 2,
       excludedSets: allArtifactSetKeys.filter((k) => !SETS.includes(k)),
+      ...kqm,
     },
   }
   const teamId = database.teams.new({
@@ -378,4 +384,68 @@ describe('compareSwapKqm', () => {
       await compareSwapKqm({ ...argsOf(s), swapIn: { ...MITYA, sets: 'auto' } })
     ).toEqual({ error: 'unsupported' })
   }, 60_000)
+
+  it('fills the entering member’s ER calculator inputs from B’s rotation, its own winning', async () => {
+    const calculator = defaultEnergyCalculator(MEMBERS, 20, 'Anastasya')
+    calculator.members.YaeMiko!.fieldTime = 12
+    calculator.members.Anastasya!.fieldTime = 52
+    calculator.members.Odette!.fieldTime = 18
+    calculator.members.Danica!.fieldTime = 18
+    const s = await setup({
+      energySource: 'calculator',
+      energyCalculator: calculator,
+    })
+    const before = snapshot(s)
+    const settingsOf = (fragment: string, swapIn: SwapIn = MITYA) => {
+      const out = swapSettings({ ...argsOf(s), fragment, swapIn })
+      if ('error' in out) throw new Error(out.error)
+      return out.teamOpt.kqm!.energyCalculator!
+    }
+    const once = settingsOf('E Q')
+    const twice = settingsOf('E E E Q')
+    const start = defaultEnergyCalculator(['Mitya']).members.Mitya!
+    // (the rotation's, not the starting assumptions: its Favonius procs, its energy weapon
+    // triggers, more with more casts)
+    expect(start.favoniusProcs).toBe(0)
+    expect(once.members.Mitya!.favoniusProcs).toBeGreaterThan(0)
+    expect(start.weaponTriggers).toBeUndefined()
+    expect(once.members.Mitya!.weaponTriggers).toBeDefined()
+    expect(twice.members.Mitya!.weaponTriggers).not.toEqual(
+      once.members.Mitya!.weaponTriggers
+    )
+    // the leaving member's field time; the teammates' inputs as they were
+    expect(once.members.Mitya!.fieldTime).toBe(12)
+    expect(twice.members.Mitya!.fieldTime).toBe(12)
+    for (const k of FIXED)
+      expect(once.members[k]).toEqual(calculator.members[k])
+    expect(once.members.YaeMiko).toBeUndefined()
+    // values set in its own KQM settings (marked `edited`) win over the rotation's
+    const own = settingsOf('E E E Q', {
+      ...MITYA,
+      kqm: {
+        energyCalculator: {
+          ...calculator,
+          members: {
+            Mitya: {
+              ...twice.members.Mitya!,
+              favoniusProcs: 0,
+              skillUses: 7,
+              fieldTime: 40,
+              edited: ['favoniusProcs', 'fieldTime'],
+            },
+          },
+        },
+      },
+    })
+    expect(own.members.Mitya!.favoniusProcs).toBe(0)
+    // (not marked: the rotation's)
+    expect(own.members.Mitya!.skillUses).toBe(twice.members.Mitya!.skillUses)
+    expect(own.members.Mitya!.fieldTime).toBe(12)
+    expect(snapshot(s)).toEqual(before)
+    // and the run plays with them
+    const out = await compareSwapKqm({ ...argsOf(s), fragment: 'E E E Q' })
+    if ('error' in out) throw new Error(out.error)
+    expect(out.b.members.find((m) => m.key === 'Mitya')!.er).toBeGreaterThan(0)
+    expect(snapshot(s)).toEqual(before)
+  }, 300_000)
 })

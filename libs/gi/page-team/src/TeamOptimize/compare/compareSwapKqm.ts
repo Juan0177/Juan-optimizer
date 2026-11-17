@@ -16,6 +16,7 @@ import type {
   KqmSets,
   KqmStep,
   KqmWeapon,
+  RotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import {
   compareTeamKqm,
@@ -24,15 +25,17 @@ import {
   kqmCircletKeys,
   kqmExcludedWeapons,
   kqmGobletKeys,
+  kqmMemberConstellation,
   kqmSandsKeys,
   kqmTalentLevel,
   optimizeTeamKqm,
   TeamOptCancelled,
   teamOptMembers,
+  withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import { kqmReplayOf } from '../useKqmRun'
-import type { SwapFragmentError } from './swapFragment'
+import type { SwapFragmentError, SwapFragmentResult } from './swapFragment'
 import { swapFragment } from './swapFragment'
 
 /*
@@ -54,7 +57,8 @@ export interface SwapIn {
   build: 'kqm' | { kind: 'existing'; buildId: string }
   /**
    * The entering member's own KQM settings: only its per-member entries are read (its ER target,
-   * passives, weapon energy, ER calculator inputs); its field time is the leaving member's
+   * passives, weapon energy, ER calculator inputs); its field time is the leaving member's. In
+   * the ER calculator, team B's rotation fills in its inputs, except the ones marked `edited`.
    */
   kqm?: Partial<TeamOptKqm>
 }
@@ -261,6 +265,40 @@ function swappedTeamOpt(
 }
 
 /**
+ * Team B's settings with the entering member's ER calculator inputs filled in from team B's
+ * rotation as KQM plays it (as KQM Theorycrafting fills a member's, `withRotationEnergy`): the
+ * inputs its own settings mark `edited` stay, its field time stays the leaving member's, and its
+ * teammates' inputs are left as they are.
+ */
+function withEnteringEnergy(
+  teamOpt: TeamOpt,
+  key: CharacterKey,
+  energy: RotationEnergy | undefined
+): TeamOpt {
+  const calc = teamOpt.kqm?.energyCalculator
+  const member = calc?.members[key]
+  if (!teamOpt.kqm || !calc || !member || !energy?.members[key]) return teamOpt
+  const filled = withRotationEnergy(
+    { ...calc, members: { [key]: member } },
+    [key],
+    energy
+  ).members[key]!
+  return {
+    ...teamOpt,
+    kqm: {
+      ...teamOpt.kqm,
+      energyCalculator: {
+        ...calc,
+        members: {
+          ...calc.members,
+          [key]: { ...filled, fieldTime: member.fieldTime },
+        },
+      },
+    },
+  }
+}
+
+/**
  * A throwaway copy of the database with team B: the entering member added if missing (level 90,
  * the KQM talents), a new team character in the leaving member's slot, team B's settings
  */
@@ -302,26 +340,8 @@ function sandboxOf(
 const sameBuild = (a: KqmBuild | undefined, b: KqmBuild | undefined) =>
   JSON.stringify(a) === JSON.stringify(b)
 
-/**
- * KQM Theorycrafting's saved run (A) against the same team with `out` replaced by `swapIn` (B):
- * the leaving member's single step of the rotation becomes the entering member's `fragment`, and
- * one KQM run on a copy of the database searches the entering member only, its teammates holding
- * A's builds. Writes nothing to `database` or the team's storage.
- */
-export async function compareSwapKqm({
-  database,
-  teamId,
-  gender,
-  i18n,
-  saved,
-  out,
-  swapIn,
-  text,
-  opener,
-  fragment,
-  onStep,
-  isCancelled = () => false,
-}: {
+/** What both the comparison and its settings preview are given */
+interface SwapArgs {
   database: ArtCharDatabase
   teamId: string
   gender: GenderKey
@@ -335,9 +355,27 @@ export async function compareSwapKqm({
   opener: string
   /** The entering member's actions, in place of the leaving member's step */
   fragment: string
-  onStep?: (s: KqmStep) => void
-  isCancelled?: () => boolean
-}): Promise<{ a: Side; b: Side } | { error: CompareSwapError }> {
+}
+
+/** A swap that passed its checks: the team's keys, B's rotation, how the entering member is found */
+interface CheckedSwap {
+  keys: CharacterKey[]
+  swapped: Extract<SwapFragmentResult, { ok: true }>
+  search: NonNullable<ReturnType<typeof searchOf>>
+}
+
+/** The swap's checks (nothing built yet): the error, else the team's keys and B's rotation */
+function checkSwap({
+  database,
+  teamId,
+  gender,
+  i18n,
+  out,
+  swapIn,
+  text,
+  opener,
+  fragment,
+}: SwapArgs): CheckedSwap | { error: CompareSwapError } {
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const key = swapIn.key
   if (keys.includes(key)) return { error: 'inTeam' }
@@ -354,8 +392,17 @@ export async function compareSwapKqm({
   if (!swapped.ok) return { error: swapped.error }
   const search = searchOf(swapIn)
   if (!search) return { error: 'unsupported' }
-  if (isCancelled()) return { error: 'cancelled' }
+  return { keys, swapped, search }
+}
 
+/**
+ * Team B on a copy of the database: its settings (the entering member's ER calculator inputs
+ * filled in from B's rotation) and its rotation, ready to play. Throws when the saved run does
+ * not fit the team.
+ */
+function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
+  const { database, teamId, gender, i18n, saved, out, swapIn } = args
+  const key = swapIn.key
   const run = saved.run as unknown as SavedRun
   if (
     saved.members.length !== keys.length ||
@@ -363,16 +410,10 @@ export async function compareSwapKqm({
   )
     throw new Error('The saved KQM result is for other team members.')
   const fixed = keys.filter((k) => k !== out)
-  const a = sideOf(
-    run.result,
-    text,
-    fixed,
-    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime
-  )
   const base = run.teamOpt ?? database.teams.get(teamId)?.teamOpt
   if (!base) throw new Error('The team has no KQM settings.')
   const keysB = keys.map((k) => (k === out ? key : k))
-  const teamOpt = swappedTeamOpt(
+  let teamOpt = swappedTeamOpt(
     base,
     keysB,
     out,
@@ -380,14 +421,79 @@ export async function compareSwapKqm({
     search.kind === 'pick' ? search : undefined
   )
   const sandbox = sandboxOf(database, teamId, out, swapIn, teamOpt)
-  const replay = kqmReplayOf(
-    sandbox,
-    gender,
-    i18n,
-    teamId,
-    teamOpt,
-    swapped.text,
-    swapped.opener
+  const replayOf = (settings: TeamOpt) =>
+    kqmReplayOf(
+      sandbox,
+      gender,
+      i18n,
+      teamId,
+      settings,
+      swapped.text,
+      swapped.opener
+    )
+  // (the ER calculator's inputs for the entering member: as B's rotation plays them)
+  if (
+    teamOpt.kqm?.energySource === 'calculator' &&
+    teamOpt.kqm.energyCalculator
+  ) {
+    let energy: RotationEnergy | undefined
+    try {
+      energy = replayOf(teamOpt)?.({
+        constellations: Object.fromEntries(
+          keysB.map((k) => [k, kqmMemberConstellation(k, teamOpt.kqm)])
+        ),
+        gear: {},
+        overrides: {},
+      })?.energy
+    } catch {
+      energy = undefined
+    }
+    teamOpt = withEnteringEnergy(teamOpt, key, energy)
+    sandbox.teams.set(teamId, { teamOpt })
+  }
+  return { run, fixed, keysB, teamOpt, sandbox, replay: replayOf(teamOpt) }
+}
+
+/**
+ * Team B's KQM settings as the comparison runs them (no run): for showing the entering member's
+ * inputs. Writes nothing to `database` or the team's storage; throws as `compareSwapKqm` does.
+ */
+export function swapSettings(
+  args: SwapArgs
+): { teamOpt: TeamOpt; keys: CharacterKey[] } | { error: CompareSwapError } {
+  const checked = checkSwap(args)
+  if ('error' in checked) return { error: checked.error }
+  const { teamOpt, keysB } = teamB(args, checked)
+  return { teamOpt, keys: keysB }
+}
+
+/**
+ * KQM Theorycrafting's saved run (A) against the same team with `out` replaced by `swapIn` (B):
+ * the leaving member's single step of the rotation becomes the entering member's `fragment`, and
+ * one KQM run on a copy of the database searches the entering member only, its teammates holding
+ * A's builds. Writes nothing to `database` or the team's storage.
+ */
+export async function compareSwapKqm({
+  onStep,
+  isCancelled = () => false,
+  ...args
+}: SwapArgs & {
+  onStep?: (s: KqmStep) => void
+  isCancelled?: () => boolean
+}): Promise<{ a: Side; b: Side } | { error: CompareSwapError }> {
+  const { gender, teamId, text, swapIn } = args
+  const key = swapIn.key
+  const checked = checkSwap(args)
+  if ('error' in checked) return { error: checked.error }
+  const { swapped, search } = checked
+  if (isCancelled()) return { error: 'cancelled' }
+
+  const { run, fixed, keysB, teamOpt, sandbox, replay } = teamB(args, checked)
+  const a = sideOf(
+    run.result,
+    text,
+    fixed,
+    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime
   )
   if (!replay) throw new Error('Team B’s rotation could not be played.')
   const teammates = Object.fromEntries(
