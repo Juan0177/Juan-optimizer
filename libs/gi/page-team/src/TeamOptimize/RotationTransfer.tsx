@@ -52,11 +52,14 @@ export function RotationTransfer({
   teamOpt,
   setTeamOpt,
   disabled,
+  importOnly,
 }: {
   members: TeamOptMember[]
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
   disabled?: boolean
+  /** Only the import, as a quiet text link (the empty rotation's start screen) */
+  importOnly?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const keys = members.map((m) => m.characterKey)
@@ -82,6 +85,51 @@ export function RotationTransfer({
         )
       )
 
+  const importModal = show && (
+    <ImportModal
+      members={members}
+      onClose={onHide}
+      onImport={(rotation) =>
+        setTeamOpt((o) => {
+          applyTeamRotation(o, rotation, keys)
+        })
+      }
+    />
+  )
+  if (importOnly)
+    return (
+      <>
+        <Button
+          size="small"
+          variant="text"
+          color="inherit"
+          disableElevation
+          startIcon={<FileDownloadIcon />}
+          onClick={onShow}
+          disabled={disabled}
+          sx={{
+            ...quickSx,
+            ...focusSx,
+            color: 'text.secondary',
+            bgcolor: 'transparent',
+            border: 'none',
+            boxShadow: 'none',
+            fontWeight: 500,
+            px: 1,
+            '& .MuiButton-startIcon': { mr: 0.5 },
+            '& .MuiButton-startIcon svg': { fontSize: 16 },
+            '&:hover': {
+              color: 'text.primary',
+              bgcolor: 'transparent',
+              boxShadow: 'none',
+            },
+          }}
+        >
+          {t('teamOpt.start.import', 'Import a rotation')}
+        </Button>
+        {importModal}
+      </>
+    )
   return (
     <Box sx={{ display: 'flex', gap: 0.75 }}>
       <Tooltip
@@ -117,17 +165,7 @@ export function RotationTransfer({
       >
         {t('teamOpt.transfer.import', 'Import')}
       </Button>
-      {show && (
-        <ImportModal
-          members={members}
-          onClose={onHide}
-          onImport={(rotation) =>
-            setTeamOpt((o) => {
-              applyTeamRotation(o, rotation, keys)
-            })
-          }
-        />
-      )}
+      {importModal}
     </Box>
   )
 }
