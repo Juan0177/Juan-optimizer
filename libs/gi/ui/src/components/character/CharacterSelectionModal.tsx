@@ -34,6 +34,7 @@ import {
   useDatabase,
   useDBMeta,
 } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import CloseIcon from '@mui/icons-material/Close'
 import FavoriteIcon from '@mui/icons-material/Favorite'
@@ -905,7 +906,7 @@ const SelectionCard = memo(function SelectionCard({
                   component="span"
                   whiteSpace="nowrap"
                 >
-                  Lv. {level}
+                  <Translate ns="ui" key18="levelShort" /> {level}
                 </Typography>
                 <Typography
                   variant="body2"

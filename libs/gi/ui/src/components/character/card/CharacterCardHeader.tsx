@@ -12,6 +12,7 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import { getCharMaxLevel } from '@genshin-optimizer/gi/consts'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import { input } from '@genshin-optimizer/gi/wr'
@@ -163,7 +164,7 @@ export function CharacterCardHeaderContent({
             color: tcColor ?? 'text.primary',
           }}
         >
-          Lv. {characterLevel}
+          <Translate ns="ui" key18="levelShort" /> {characterLevel}
           <Box
             component="span"
             sx={{ fontWeight: 500, color: tcColor ?? 'text.secondary' }}

@@ -13,6 +13,7 @@ import type {
 import { ascensionMaxLevel } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
 import { useDatabase, useWeapon } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import { getCharStat, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import { computeUIData } from '@genshin-optimizer/gi/uidata'
@@ -161,7 +162,7 @@ export function WeaponCardObj({
                 </Typography>
               </Box>
               <Typography component="span" variant="h5">
-                Lv. {level}
+                <Translate ns="ui" key18="levelShort" /> {level}
               </Typography>
               <Typography component="span" variant="h5" color="text.secondary">
                 /{ascensionMaxLevel[ascension]}

@@ -80,7 +80,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useAttackInfo, variantColor } from './AttackName'
+import { HitLabel, useAttackInfo, variantColor } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
@@ -95,6 +95,7 @@ import {
   type RotationTimingSettings,
   timingPing,
 } from './RotationTiming'
+import { useSimText } from './simText'
 import {
   TimelineHitStats,
   useMomentStats,
@@ -1020,6 +1021,7 @@ function WriterModal({
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
 }) {
+  const simText = useSimText()
   const { t } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -1499,7 +1501,7 @@ function WriterModal({
                 >
                   {warnings.map((w) => (
                     <Typography key={w} variant="body2" color="warning.main">
-                      {w}
+                      {simText(w)}
                     </Typography>
                   ))}
                 </Box>
@@ -1917,6 +1919,9 @@ function HitRow({
   characterKey: CharacterKey
 }) {
   const info = useAttackInfo(data, path)
+  // in another language, the attack's name from the sheet (`HitLabel`): the label is English
+  const { i18n } = useTranslation()
+  const english = (i18n.language ?? 'en').startsWith('en') || !info?.name
   // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
   const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
   const name = tagged ? tagged[1] : label
@@ -1925,7 +1930,9 @@ function HitRow({
   const share = `${(n / most) * 100}%`
   return (
     <Tooltip
-      title={label}
+      title={
+        english ? label : <HitLabel label={label} data={data} path={path} />
+      }
       placement="top-start"
       enterDelay={600}
       disableInteractive
@@ -1971,9 +1978,13 @@ function HitRow({
               whiteSpace: 'nowrap',
             }}
           >
-            {name}
+            {english ? (
+              name
+            ) : (
+              <HitLabel label={label} data={data} path={path} />
+            )}
           </Box>
-          {tag && (
+          {english && tag && (
             <Box
               component="span"
               sx={{
@@ -2171,6 +2182,7 @@ function HitsSummary({
  */
 function RotationNotes({ notes }: { notes: string[] }) {
   const { t } = useTranslation('page_team')
+  const simText = useSimText()
   const [open, setOpen] = useState(false)
   const waits = notes.filter((n) => n.startsWith('Waited '))
   const rest = notes.filter((n) => !n.startsWith('Waited '))
@@ -2197,8 +2209,9 @@ function RotationNotes({ notes }: { notes: string[] }) {
         }}
       >
         {rest.map((note) => {
-          const at = note.indexOf(': ')
-          const subject = at > 0 && at < 28 ? note.slice(0, at) : ''
+          const text = simText(note)
+          const at = text.indexOf(': ')
+          const subject = at > 0 && at < 28 ? text.slice(0, at) : ''
           return (
             <Fragment key={note}>
               <Box
@@ -2208,7 +2221,7 @@ function RotationNotes({ notes }: { notes: string[] }) {
                 {subject}
               </Box>
               <Box component="span" sx={{ color: 'text.secondary' }}>
-                {subject ? note.slice(at + 2) : note}
+                {subject ? text.slice(at + 2) : text}
               </Box>
             </Fragment>
           )
@@ -2235,7 +2248,10 @@ function RotationNotes({ notes }: { notes: string[] }) {
                     bgcolor: alpha(theme.palette.text.primary, 0.05),
                   })}
                 >
-                  {note.replace(/^Waited /, '').replace(/\.$/, '')}
+                  {simText(note)
+                    .replace(/^Waited /, '')
+                    .replace(/^(Attesi|Atteso) /, '')
+                    .replace(/\.$/, '')}
                 </Box>
               ))}
             </Box>

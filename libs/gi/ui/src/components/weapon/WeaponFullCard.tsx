@@ -4,6 +4,7 @@ import { weaponAsset } from '@genshin-optimizer/gi/assets'
 import { getLevelString as getWeaponLevelString } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
 import type { IWeapon } from '@genshin-optimizer/gi/good'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import { getWeaponStat, weaponHasRefinement } from '@genshin-optimizer/gi/stats'
 import type { CalcResult } from '@genshin-optimizer/gi/uidata'
@@ -63,7 +64,8 @@ export function WeaponFullCardObj({
             gutterBottom
           >
             <SqBadge color="primary">
-              Lv. {getWeaponLevelString(weapon.level, weapon.ascension)}
+              <Translate ns="ui" key18="levelShort" />{' '}
+              {getWeaponLevelString(weapon.level, weapon.ascension)}
             </SqBadge>
             {weaponHasRefinement(weapon.key) && (
               <SqBadge color="info">R{weapon.refinement}</SqBadge>

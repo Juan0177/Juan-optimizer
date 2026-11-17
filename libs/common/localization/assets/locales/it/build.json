@@ -84,5 +84,6 @@
     "oldWeapon": "Arma precedente",
     "tcWeapon": "Arma TC",
     "newWeapon": "Nuova arma"
-  }
+  },
+  "charOverridden": "Dati del personaggio sovrascritti"
 }

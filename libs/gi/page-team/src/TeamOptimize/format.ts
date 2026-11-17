@@ -1,4 +1,5 @@
 import { statName } from '@genshin-optimizer/gi/ui'
+import i18next from 'i18next'
 
 const compact = new Intl.NumberFormat('en', {
   notation: 'compact',
@@ -9,10 +10,13 @@ const compactPrecise = new Intl.NumberFormat('en', {
   maximumFractionDigits: 3,
 })
 
-/** Damage per rotation, short: 12.4K, 3.45M */
+/** Damage per rotation, short: 12.4K, 3.45M (12,4K and 3,45M in Italian: the site's decimal separator) */
 export function formatDamage(value: number | undefined, precise = false) {
   if (value === undefined || !Number.isFinite(value)) return '–'
-  return (precise ? compactPrecise : compact).format(value)
+  return localizeDecimal(
+    (precise ? compactPrecise : compact).format(value),
+    i18next.isInitialized ? i18next.language : undefined
+  )
 }
 
 /** Damage per rotation, or per second (DPS) when the rotation's length is known */

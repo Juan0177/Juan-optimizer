@@ -4,6 +4,7 @@ import { getDisplayHeader, resolveInfo } from '@genshin-optimizer/gi/ui'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import { Box, Tooltip, Typography } from '@mui/material'
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 /** The attack at `path` of a member's display, and what it is called */
 export function useAttackInfo(data: UIData | undefined, path: string[]) {
@@ -165,5 +166,51 @@ export function AttackName({
         )}
       </Box>
     </Box>
+  )
+}
+
+/** The simulation's reaction words in a hit's label ("Mizuki E (Vaporize)") and their keys */
+const reactionWords: Record<string, string> = {
+  Vaporize: 'vaporize',
+  Melt: 'melt',
+  Aggravate: 'aggravate',
+  Spread: 'spread',
+}
+
+/**
+ * A simulated hit's name. The simulation labels hits in English ("Musecatcher (stage 1)"); in
+ * another language the hit shows its attack's name from the character's sheet (the game's own
+ * term, as in the attack list), keeping a constellation or reaction tag. English: the label.
+ */
+export function HitLabel({
+  label,
+  data,
+  path,
+}: {
+  label: string
+  data: UIData | undefined
+  path: string[]
+}) {
+  const { t, i18n } = useTranslation('page_team')
+  const info = useAttackInfo(data, path)
+  if ((i18n.language ?? 'en').startsWith('en') || !info?.name) return label
+  const tags = [...label.matchAll(/\(([^()]*)\)/g)].map((m) => m[1])
+  const kept = tags.flatMap((tag) =>
+    /^C\d$/.test(tag)
+      ? [tag]
+      : reactionWords[tag]
+        ? [
+            t(`teamOpt.sim.reaction.${reactionWords[tag]}`, {
+              defaultValue: tag,
+            }) as string,
+          ]
+        : []
+  )
+  return (
+    <>
+      {info.name}
+      {info.textSuffix && <> {info.textSuffix}</>}
+      {kept.map((tag) => ` (${tag})`).join('')}
+    </>
   )
 }

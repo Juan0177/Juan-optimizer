@@ -55,6 +55,7 @@ import {
   writtenHits,
   writtenSeconds,
 } from './RotationWriter'
+import { useSimText } from './simText'
 import {
   FieldLabel,
   focusSx,
@@ -102,6 +103,7 @@ export function RotationInline({
   replaces: boolean
   disabled?: boolean
 }) {
+  const simText = useSimText()
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -375,7 +377,7 @@ export function RotationInline({
         >
           {warnings.map((w) => (
             <Typography key={w} variant="body2" color="warning.main">
-              {w}
+              {simText(w)}
             </Typography>
           ))}
         </Box>

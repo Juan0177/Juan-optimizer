@@ -235,5 +235,6 @@
     "generated": "Generated and tested",
     "generatedFor": "Build configurations against the criteria for",
     "total": "Total duration:"
-  }
+  },
+  "levelShort": "Lv."
 }

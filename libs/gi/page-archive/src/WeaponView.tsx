@@ -6,6 +6,7 @@ import {
 import { weaponAsset } from '@genshin-optimizer/gi/assets'
 import { getLevelString as getWeaponLevelString } from '@genshin-optimizer/gi/consts'
 import type { IWeapon } from '@genshin-optimizer/gi/good'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getWeaponStat } from '@genshin-optimizer/gi/stats'
 import {
   FieldDisplayList,
@@ -96,7 +97,8 @@ export function WeaponView({
                   )}
                 </Box>
                 <Typography>
-                  Lv. {getWeaponLevelString(level, ascension)} R{refinement}
+                  <Translate ns="ui" key18="levelShort" />{' '}
+                  {getWeaponLevelString(level, ascension)} R{refinement}
                 </Typography>
                 <StarsDisplay stars={weaponStat.rarity} />
                 <Typography variant="subtitle1">

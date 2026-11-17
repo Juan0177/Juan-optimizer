@@ -49,6 +49,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { HitLabel } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { describe } from './buffs'
 import { formatDamage } from './format'
@@ -1868,7 +1869,11 @@ function Readout({
             })}
           />
           <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600 }}>
-            {hit.label}
+            <HitLabel
+              label={hit.label}
+              data={teamData?.[hit.characterKey]?.target}
+              path={hit.path}
+            />
           </Typography>
           {d !== undefined && (
             <Typography sx={{ fontSize: 12.5, fontWeight: 650, ...numSx }}>
@@ -2019,7 +2024,11 @@ function MomentPanel({
           >
             <MemberAvatar characterKey={hit.characterKey} size={22} />
             <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 650 }}>
-              {hit.label}
+              <HitLabel
+                label={hit.label}
+                data={teamData?.[hit.characterKey]?.target}
+                path={hit.path}
+              />
             </Typography>
             {d !== undefined && (
               <Typography sx={{ fontSize: 13.5, fontWeight: 650, ...numSx }}>

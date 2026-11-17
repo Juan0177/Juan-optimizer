@@ -69,6 +69,7 @@ import { useNavigate } from 'react-router-dom'
 import { KqmResults } from '../KqmMode'
 import { MemberAvatar } from '../MemberAvatar'
 import { openerKey, storageKey } from '../RotationWriter'
+import { useSimText } from '../simText'
 import {
   BetaBadge,
   Disclosure,
@@ -209,6 +210,7 @@ export default function KqmCompare({
   /** The team's data: where the entering member's effect states that depend on a character are read */
   teamData?: TeamData
 }) {
+  const simText = useSimText()
   const { t, i18n } = useTranslation(['juanlab', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -1074,7 +1076,7 @@ export default function KqmCompare({
                   </span>
                 )}
                 {warnings.map((w) => (
-                  <WarningLine key={w}>{w}</WarningLine>
+                  <WarningLine key={w}>{simText(w)}</WarningLine>
                 ))}
               </Box>
             )}

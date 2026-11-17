@@ -2,6 +2,7 @@ import { ImgIcon, StarsDisplay } from '@genshin-optimizer/common/ui'
 import { imgAssets, weaponAsset } from '@genshin-optimizer/gi/assets'
 import { getLevelString } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import { getWeaponStat, weaponHasRefinement } from '@genshin-optimizer/gi/stats'
 import { giTokens } from '@genshin-optimizer/gi/theme'
@@ -81,7 +82,8 @@ export function WeaponDetails({ weapon }: { weapon: ICachedWeapon }) {
             <StarsDisplay stars={rarity} colored />
             <ImgIcon src={imgAssets.weaponTypes[weaponType]} size={1.1} />
             <span>
-              Lv. {getLevelString(weapon.level, weapon.ascension)}
+              <Translate ns="ui" key18="levelShort" />{' '}
+              {getLevelString(weapon.level, weapon.ascension)}
               {weaponHasRefinement(weapon.key) && ` · R${weapon.refinement}`}
             </span>
           </Box>

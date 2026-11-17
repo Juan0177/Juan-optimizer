@@ -1099,6 +1099,26 @@
       "avgHit": "Medio",
       "critHit": "Critico",
       "hit": "Non critico"
+    },
+    "sim": {
+      "notAction": "{{who}}: \"{{word}}\" non è un'azione (saltata)",
+      "spinsOnlyMavuika": "{{who}}: \"{{raw}}\": giri e colpo finale esistono solo per l'Attacco caricato in Pyromoto di Mavuika (giocato come Attacco caricato)",
+      "spinsRange": "{{who}}: \"{{raw}}\": da 1 a {{most}} giri (giocato come Attacco caricato)",
+      "beamsOnlySandrone": "{{who}}: \"{{raw}}\": solo l'Attacco caricato di Sandrone ha raggi (giocato come Attacco caricato semplice)",
+      "beamsRange": "{{who}}: \"{{raw}}\": da 1 a {{most}} raggi (giocato come Attacco caricato semplice)",
+      "noMember": "\"{{word}}\": nessun membro della squadra con questo nome (passo saltato)",
+      "noActions": "{{who}}: nessuna azione (passo saltato)",
+      "noKit": "{{who}}: kit non ancora simulato (le sue azioni sono state saltate)",
+      "leftOut": "{{action}} di {{who}} è stata saltata quando non era pronta.",
+      "neverReady": "{{who}}: {{action}} non è tornata pronta entro 30 secondi.",
+      "waitedSwap": "Attesi {{seconds}} s prima del cambio da {{from}} a {{to}}.",
+      "waitedFor": "Attesi {{seconds}} s per {{action}} di {{who}}.",
+      "reaction": {
+        "vaporize": "Vaporizzazione",
+        "melt": "Fusione",
+        "aggravate": "Accentuazione",
+        "spread": "Propagazione"
+      }
     }
   },
   "tcNoOptimize": {
