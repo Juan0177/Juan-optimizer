@@ -29,35 +29,37 @@ export interface FightTeam {
   gauge?: Partial<Record<ElementWithPhyKey, number>>
   /** Its Electro hits per second, by kind (Wavebinder's Courage); absent: not known */
   electroHits?: ElectroHits
+  /** The share of its damage that is Stellar Glimmer DMG (Stellar-Conduct or -Swirl) */
+  stellarShare?: number
 }
 
 /** Electro hits per second, by what each takes off Wavebinder's Courage */
 export interface ElectroHits {
   /** Stellar Glimmer (Stellar-Conduct) Electro DMG */
   stellar: number
-  /** The element units of the Electro hits that apply it (1U: 25 durability, rounded up) */
+  /** The other Electro hits (applying their element or not) */
+  hits: number
+  /** The element units those apply (1U: 25 durability) */
   units: number
-  /** Electro hits that apply no element (under ICD, or none to apply) */
-  plain: number
   /**
-   * Estimated from the attacks entered (no written rotation): every 3rd hit applies 1U (the
-   * standard ICD), none is Stellar Glimmer DMG
+   * Estimated from the attacks entered (no written rotation): every 3rd of the other hits applies
+   * 1U (the standard ICD)
    */
   estimated?: boolean
 }
 
 /**
- * Wavebinder's Courage (the game files, its Stygian Onslaught values): 600 at most; its Valiant
- * Assault drains 15/s (40 s on its own, as players measure it); each Electro hit takes 6 (Stellar
- * Glimmer DMG), 0.06 per point of its element's durability (1.5 for 1U) or 0.6 (no element
- * applied), 8 times that during the Valiant Assault
+ * Wavebinder's Courage (the game files' Stygian values, as measured): 600 at most; its
+ * Valiant Assault drains 15/s (40 s on its own); each Electro hit takes 6 (Stellar Glimmer DMG),
+ * else 0.6 and 0.06 per element unit it applies; 8 times that during the Valiant Assault (48, 4.8
+ * and 5.28 for a 1U hit)
  */
 export const COURAGE = {
   max: 600,
   decay: 15,
   stellar: 6,
-  unit: 1.5,
-  plain: 0.6,
+  hit: 0.6,
+  unit: 0.06,
   valiant: 8,
 } as const
 
@@ -65,8 +67,8 @@ export const COURAGE = {
 export const courageDrain = (hits: ElectroHits | undefined) =>
   hits
     ? COURAGE.stellar * hits.stellar +
-      COURAGE.unit * hits.units +
-      COURAGE.plain * hits.plain
+      COURAGE.hit * hits.hits +
+      COURAGE.unit * hits.units
     : 0
 
 /** A part of the estimate, for its breakdown */
@@ -190,11 +192,12 @@ function plain(
 }
 
 /**
- * Wavebinder: Stormfang (stygian.moe and the game files): ~10 s in, and 20 s after
- * each Valiant Assault (23 s after one left within 18 s), it drinks for 3 s and fills its 600
- * Courage: Valiant Assault. A shield of its Max HP takes the damage at Valiant RES (+20% Electro,
- * +60% the rest); Courage drains 15/s, and each Electro hit takes 8 times its Courage
- * (`COURAGE`). Leaving it, it takes 60% of the damage its shield took, at most 15% of its Max HP.
+ * Wavebinder: Stormfang (stygian.moe and the game files): ~10 s in, and
+ * 20 s after each Valiant Assault (23 s after one left within 18 s), it drinks for 3 s and fills its
+ * 600 Courage: Valiant Assault. A shield of its Max HP takes the damage at Valiant RES (+20%
+ * Electro, +60% the rest); Courage drains 15/s, and each Electro hit takes 8 times its Courage
+ * (`COURAGE`). Leaving it, it takes 60% of the damage its shield took and 90% more of the Stellar
+ * Glimmer DMG in it, at most 15% of its Max HP.
  */
 function wavebinder(
   boss: StygianBoss,
@@ -203,12 +206,9 @@ function wavebinder(
 ): FightEstimate {
   const regular = dpsAt(team, phaseRes(boss, 'regular')!)
   const valiant = dpsAt(team, phaseRes(boss, 'shielded')!)
-  // (a gauge alone: its Electro units, the only hits it knows of)
-  const hits: ElectroHits | undefined =
-    team.electroHits ??
-    (team.gauge
-      ? { stellar: 0, units: team.gauge.electro ?? 0, plain: 0 }
-      : undefined)
+  const hits = team.electroHits
+  // (its backlash: 60% of what its shield took, 150% of the Stellar Glimmer DMG in it)
+  const backlashRatio = 0.6 + 0.9 * (team.stellarShare ?? 0)
   const courage = COURAGE.valiant * courageDrain(hits)
   const drain = COURAGE.decay + courage
   const notes: FightNote[] = ['stellarGlimmer', 'electroStun']
@@ -267,7 +267,7 @@ function wavebinder(
     t += length
     valiants++
     valiantTime += length
-    const taken = Math.min(0.6 * valiant * length, 0.15 * hp, left)
+    const taken = Math.min(backlashRatio * valiant * length, 0.15 * hp, left)
     backlash += taken
     left -= taken
     if (t <= FIGHT_LIMIT) events.push({ t, kind: 'backlash', hp: taken / hp })
