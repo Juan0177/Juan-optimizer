@@ -33,7 +33,7 @@ const base: Record<string, string> = {
   all_dmg_: 'Bonus DAN comune',
   all_dmgInc: 'Aumento DAN comune',
   weakspotDMG_: 'DAN ai punti deboli',
-  incHeal_: 'Bonus cure ricevute',
+  incHeal_: 'Bonus di guarigione ricevuta',
   shield_: 'Efficacia dello scudo',
   cdRed_: 'Riduzione tempo di recupero',
   skillCDRed_: 'Riduz. TdR abilità elem.',
@@ -109,8 +109,8 @@ const MOVE: Record<string, string> = {
 }
 const REACTION: Record<string, string> = {
   overloaded: 'Sovraccarico',
-  shattered: 'Frantumazione',
-  electrocharged: 'Elettrocarica',
+  shattered: 'Rompigelo',
+  electrocharged: 'Electrocarica',
   lunarcharged: 'Carica lunare',
   superconduct: 'Superconduzione',
   swirl: 'Turbinio',
@@ -135,7 +135,12 @@ allElementWithPhyKeys.forEach((e) => {
   const name = ELEMENT[e]
   statMapIt[`${e}_dmg_`] =
     e === 'physical' ? 'Bonus DAN fisici' : `Bonus DAN da ${name}`
-  statMapIt[`${e}_res_`] = e === 'physical' ? 'RES fisica' : `RES a ${name}`
+  statMapIt[`${e}_res_`] =
+    e === 'physical'
+      ? 'RES fisica'
+      : e === 'anemo'
+        ? 'RES ad Anemo'
+        : `RES a ${name}`
   statMapIt[`${e}_enemyRes_`] = `RES del nemico (${name})`
   statMapIt[`${e}_dmgInc`] = `Aumento DAN (${name})`
   statMapIt[`${e}_critRate_`] = `Bonus Tasso di CRIT (${name})`

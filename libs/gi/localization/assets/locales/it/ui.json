@@ -105,8 +105,8 @@
     "allChanges": "Tutte le modifiche",
     "allReleases": "Tutte le versioni su GitHub",
     "close": "Chiudi",
-    "fixed": "Corretto",
-    "improved": "Migliorato",
+    "fixed": "Correzioni",
+    "improved": "Miglioramenti",
     "new": "Novità",
     "onGitHub": "Versione su GitHub",
     "open": "Novità della versione",
@@ -186,7 +186,7 @@
     }
   },
   "infusion": {
-    "none": "Nessuna infusione di squadra in mischia",
+    "none": "Nessuna infusione di squadra per armi da mischia",
     "skill": "Abilità",
     "burst": "Tripudio"
   },

@@ -254,9 +254,9 @@
     "goblet": "Calice",
     "keep": "tieni {{stat}}",
     "noTarget": "Scegli un obiettivo di ottimizzazione per vedere quali statistiche farmare.",
-    "openImprove": "Apri Potenziamento manufatti",
+    "openImprove": "Apri Potenziamento",
     "openOptimize": "Apri Ottimizza",
-    "sands": "Clessidra",
+    "sands": "Sabbie",
     "substats": "Statistiche secondarie",
     "title": "Cosa farmare"
   },
@@ -270,8 +270,8 @@
     "fewerOptions": "Meno opzioni",
     "mainStatsHint": "Nessuno dei {{count}} manufatti rimasti ha una statistica principale ammessa in Statistiche principali. Ammettine altre in Altre opzioni.",
     "moreOptions": "Altre opzioni",
-    "noFiveStar_one": "Il potenziatore porta di livello solo i manufatti 5★, e quello nell'intervallo non è 5★.",
-    "noFiveStar_other": "Il potenziatore porta di livello solo i manufatti 5★, e nessuno dei {{count}} nell'intervallo è 5★.",
+    "noFiveStar_one": "Il potenziatore fa salire di livello solo i manufatti 5★, e quello nell'intervallo non è 5★.",
+    "noFiveStar_other": "Il potenziatore fa salire di livello solo i manufatti 5★, e nessuno dei {{count}} nell'intervallo è 5★.",
     "nothingBetterHint": "Questi pezzi vanno già bene per questo obiettivo. Per andare oltre, lascia che l'ottimizzatore trovi una build completa migliore oppure usa Valore delle statistiche qui sopra per vedere quali statistiche farmare.",
     "nothingBetterTitle_one": "È improbabile che l'unico manufatto considerato superi quello equipaggiato",
     "nothingBetterTitle_other": "Nessuno dei {{count}} manufatti considerati sembra in grado di superare quelli equipaggiati",
@@ -284,7 +284,7 @@
     "showConstraints": "Mostra i requisiti",
     "theorycraft": "Fai theorycraft su questa build",
     "unfillableHint": "Per questo slot nessun manufatto è un 5★ nell'intervallo di livello che rispetti anche le statistiche principali e le regole dei set, e nient'altro supera i pezzi equipaggiati. Allarga l'intervallo di livello o quelle opzioni, oppure equipaggiane prima uno.",
-    "unfillableTitle": "Niente può riempire lo slot vuoto: {{slots}}",
+    "unfillableTitle": "Nessun manufatto può riempire gli slot vuoti: {{slots}}",
     "unmetHint": "Un potenziamento conta solo se l'intera build li rispetta, e nessun singolo manufatto porta lì questa build. Abbassa o disattiva il requisito, oppure parti da una build creata dall'ottimizzatore.",
     "unmetNeeds": "(servono {{min}})",
     "unmetTitle": "Questa build non rispetta i suoi requisiti minimi"
@@ -333,7 +333,7 @@
   "statValue": {
     "current": "attuale",
     "emptySlot": "(vuoto)",
-    "info": "Il guadagno esatto dell'obiettivo di ottimizzazione con statistiche migliori su questa build: qualche roll in più di ogni statistica secondaria o un'altra statistica principale su clessidra, calice e corona. Usalo per scegliere cosa farmare, potenziare o rimodellare.",
+    "info": "Il guadagno esatto dell'obiettivo di ottimizzazione con statistiche migliori su questa build: qualche roll in più di ogni statistica secondaria o un'altra statistica principale su sabbie, calice e corona. Usalo per scegliere cosa farmare, potenziare o rimodellare.",
     "mainStats": "Statistiche principali",
     "mode": "Statistiche da confrontare",
     "substats": "Statistiche secondarie",
@@ -343,7 +343,7 @@
     "bestNext": "Miglior roll successivo",
     "bestTotal": "Miglior totale",
     "capped": "al limite",
-    "captionRolls": "Roll {{size}} da {{rarity}}★ in aggiunta a questa build (obiettivo attuale {{base}}); imposta i roll per statistica secondaria con − e +.",
+    "captionRolls": "Roll da {{rarity}}★ ({{size}}) in aggiunta a questa build (obiettivo attuale {{base}}); imposta i roll per statistica secondaria con − e +.",
     "colNext": "Roll successivo",
     "colNextHint": "Quanto aggiunge un altro roll dopo quelli scelti, come quota dell'obiettivo a quel punto",
     "colRolls": "Roll",
@@ -360,7 +360,7 @@
     "rollsAll": "Roll extra, tutte le statistiche secondarie",
     "size": {
       "max": "max",
-      "mid": "medio",
+      "mid": "medi",
       "min": "min"
     },
     "title": "Valore delle statistiche secondarie",

@@ -32,8 +32,8 @@
   "inventoryCard": {
     "title": "Inventario GO",
     "allTeams": "Tutte le squadre",
-    "loadouts_one": "{{count}} configurazione dei personaggi",
-    "loadouts_other": "{{count}} configurazioni dei personaggi",
+    "loadouts_one": "{{count}} configurazione di personaggio",
+    "loadouts_other": "{{count}} configurazioni di personaggi",
     "recentTeams": "Squadre recenti"
   },
   "vidGuideCard": {

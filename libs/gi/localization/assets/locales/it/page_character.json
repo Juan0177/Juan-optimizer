@@ -110,7 +110,7 @@
     "distRolls": "roll extra",
     "distTitle": "Miglior distribuzione dei roll",
     "distUsed": "Usati circa {{used}} dei {{max}} roll che questi manufatti contengono",
-    "equipped": "Equipaggiata",
+    "equipped": "Build equipaggiata",
     "fineTune": "Cursori e limiti",
     "fineTuneHint": "I cursori, la riga di tutte le statistiche secondarie e il limite di roll di ogni statistica secondaria (quanto può aggiungere «Miglior distribuzione dei roll»)",
     "noDistributionTip": "Abbassa i filtri delle statistiche o distribuisci più roll",
