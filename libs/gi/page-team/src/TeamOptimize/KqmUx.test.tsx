@@ -150,6 +150,9 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
       : 100
   },
   kqmWeapons: () => [{ key: 'AmenomaKageuchi', refinement: 5 }],
+  // (the run's weapons as KQM mode picks them: the default list, nothing left out by hand)
+  kqmExcludedWeapons: () => new Set<string>(),
+  kqmDefaultExcludedWeapons: () => [],
   kqmSetsId: (sets: object) =>
     Object.entries(sets)
       .map(([key, n]) => `${key}:${n}`)

@@ -50,6 +50,8 @@ import {
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
+import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded'
+import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
   alpha,
@@ -1122,6 +1124,9 @@ function WriterModal({
   )
   // the detailed timeline's window
   const [detailOpen, setDetailOpen] = useState(false)
+  // (the detailed window over the whole screen: always on a small one, else when asked)
+  const [detailFull, setDetailFull] = useState(false)
+  const detailFullScreen = fullScreen || detailFull
   // (the moment pinned: the same in the timeline here and in the detailed window)
   const [timelinePin, setTimelinePin] = useState<TimelinePin>()
   // (what both timelines, the writer's and the detailed window's, are given)
@@ -1603,25 +1608,31 @@ function WriterModal({
                     open={detailOpen}
                     onClose={() => setDetailOpen(false)}
                     maxWidth={false}
-                    fullScreen={fullScreen}
+                    fullScreen={detailFullScreen}
                     PaperProps={{
                       sx: {
-                        width: fullScreen
+                        width: detailFullScreen
                           ? '100vw'
                           : 'min(1760px, calc(100vw - 32px))',
                         // (as tall as the screen allows, always: what the moment's panel shows
                         // changes its height, which would move the window while pointing)
-                        height: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
-                        maxHeight: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
+                        height: detailFullScreen
+                          ? '100dvh'
+                          : 'calc(100vh - 32px)',
+                        maxHeight: detailFullScreen
+                          ? '100dvh'
+                          : 'calc(100vh - 32px)',
                         m: 0,
                         display: 'flex',
                         flexDirection: 'column',
                         bgcolor: tokens.panel,
                         backgroundImage: 'none',
-                        border: fullScreen
+                        border: detailFullScreen
                           ? 'none'
                           : `1px solid ${tokens.hairline}`,
-                        borderRadius: fullScreen ? 0 : tokens.radius.panel,
+                        borderRadius: detailFullScreen
+                          ? 0
+                          : tokens.radius.panel,
                       },
                     }}
                   >
@@ -1661,6 +1672,35 @@ function WriterModal({
                       >
                         {text}
                       </Typography>
+                      {/* (a small screen has it full already) */}
+                      {!fullScreen && (
+                        <Tooltip
+                          title={
+                            detailFull
+                              ? t(
+                                  'teamOpt.timeline.exitFull',
+                                  'Exit full screen'
+                                )
+                              : t('teamOpt.timeline.full', 'Full screen')
+                          }
+                        >
+                          <IconButton
+                            onClick={() => setDetailFull((on) => !on)}
+                            aria-pressed={detailFull}
+                            aria-label={t(
+                              'teamOpt.timeline.full',
+                              'Full screen'
+                            )}
+                            sx={{ alignSelf: 'center', ...quickSx, ...focusSx }}
+                          >
+                            {detailFull ? (
+                              <FullscreenExitRoundedIcon />
+                            ) : (
+                              <FullscreenRoundedIcon />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <IconButton
                         onClick={() => setDetailOpen(false)}
                         aria-label={t('teamOpt.editor.close', 'Close')}
@@ -1680,6 +1720,9 @@ function WriterModal({
                         <RotationTimeline
                           {...timelineProps(result.rotation, result.sim)}
                           detail
+                          // (a bar here: its step selected and its moment pinned; the window stays,
+                          // where the simple timeline's bar opens the step's timing)
+                          onSelect={setSelectedStep}
                           stats={momentStats}
                           onMoment={figures ? setMoment : undefined}
                           pinned={timelinePin}

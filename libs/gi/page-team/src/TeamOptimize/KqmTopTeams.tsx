@@ -1,5 +1,6 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { KqmResult, KqmTeamOption } from '@genshin-optimizer/gi/ui'
 import { kqmSetsId, kqmTopTeams } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
@@ -10,6 +11,7 @@ import {
   ButtonBase,
   Divider,
   IconButton,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -174,12 +176,14 @@ function TeamRows({
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   // (a phone: smaller icons and gaps, so the table and its DPS column fit without scrolling)
-  const icon = narrow ? 22 : 30
+  const icon = narrow ? 22 : 34
   const best = options[0]?.total ?? 0
   const unit = rotationTime
     ? t('teamOpt.kqm.teamDps', 'team DPS')
     : t('teamOpt.kqm.teamDmg', 'team DMG')
-  const columns = `24px repeat(${members.length}, max-content) minmax(0, 1fr) auto`
+  // (the members share the width: each column at least its gear, the rest spread evenly, so the
+  // gear sits under its member's portrait across the table, not bunched at the left)
+  const columns = `24px repeat(${members.length}, minmax(max-content, 1fr)) auto`
   const rowSx = {
     gridColumn: '1 / -1',
     display: 'grid',
@@ -204,7 +208,7 @@ function TeamRows({
         aria-hidden
         sx={{
           ...rowSx,
-          py: 0.75,
+          py: { xs: 0.75, sm: 1 },
           borderBottom: `1px solid ${tokens.hairline}`,
           bgcolor: alpha(theme.palette.text.primary, 0.02),
         }}
@@ -214,10 +218,9 @@ function TeamRows({
         </Typography>
         {members.map((ck) => (
           <Box key={ck} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <MemberAvatar characterKey={ck} size={icon - 2} />
+            <MemberAvatar characterKey={ck} size={narrow ? icon - 2 : icon} />
           </Box>
         ))}
-        <span />
         <Typography
           sx={{
             fontSize: 11.5,
@@ -254,7 +257,7 @@ function TeamRows({
             onClick={() => onPick(option)}
             sx={(theme) => ({
               ...rowSx,
-              py: 0.75,
+              py: { xs: 0.75, sm: 1 },
               textAlign: 'left',
               borderTop: i ? `1px solid ${tokens.hairline}` : undefined,
               bgcolor: selected
@@ -287,35 +290,58 @@ function TeamRows({
               const build = option.builds[ck]
               const changed = ck === option.changed
               return (
+                // (the column spreads; the highlight hugs the member's gear)
                 <Box
                   key={ck}
-                  data-changed={changed || undefined}
-                  sx={(theme) => ({
+                  sx={{
                     display: 'flex',
                     justifyContent: 'center',
-                    p: { xs: 0.25, sm: 0.375 },
-                    borderRadius: tokens.radius.inset,
-                    ...quickSx,
-                    // the member this team changes, against the best one: in full, outlined;
-                    // the others as in the best team, much fainter
-                    ...(changed && {
-                      bgcolor: alpha(theme.palette.primary.main, 0.14),
-                      boxShadow: `inset 0 0 0 1.5px ${alpha(theme.palette.primary.main, 0.7)}`,
-                    }),
-                    ...(option.changed &&
-                      !changed && {
-                        opacity: 0.3,
-                        filter: 'grayscale(0.6)',
-                      }),
-                  })}
+                    alignItems: 'center',
+                  }}
                 >
-                  {build && (
-                    <KqmGearIcons characterKey={ck} build={build} size={icon} />
+                  {option.changed && !changed ? (
+                    // a member as in the best team (#1, above): a quiet dash, so the change stands out
+                    <Tooltip
+                      arrow
+                      title={t('teamOpt.kqm.sameAsBest', 'Same as #1')}
+                    >
+                      <Box
+                        sx={(theme) => ({
+                          width: 18,
+                          height: 2,
+                          my: 1.5,
+                          borderRadius: 1,
+                          bgcolor: alpha(theme.palette.text.primary, 0.2),
+                        })}
+                      />
+                    </Tooltip>
+                  ) : (
+                    <Box
+                      data-changed={changed || undefined}
+                      sx={{
+                        display: 'inline-flex',
+                        p: { xs: 0.375, sm: 0.625 },
+                        borderRadius: tokens.radius.inset,
+                        ...quickSx,
+                        // the member this team changes, against the best one: lit in gold
+                        ...(changed && {
+                          bgcolor: alpha(giTokens.gold, 0.16),
+                          boxShadow: `inset 0 0 0 1.5px ${alpha(giTokens.gold, 0.9)}, 0 0 0 3px ${alpha(giTokens.gold, 0.1)}, 0 6px 18px ${alpha(giTokens.gold, 0.14)}`,
+                        }),
+                      }}
+                    >
+                      {build && (
+                        <KqmGearIcons
+                          characterKey={ck}
+                          build={build}
+                          size={icon}
+                        />
+                      )}
+                    </Box>
                   )}
                 </Box>
               )
             })}
-            <span />
             <Box sx={{ textAlign: 'right', ...numSx }}>
               <Typography
                 sx={{
