@@ -64,6 +64,9 @@ const ENTRY_CD = 960
 /** C2 Toast: 10 stacks per member; Danica consumes up to 2 of hers in Battle Maid */
 const TOAST_STACKS = 10
 const TOAST_SELF_MAX = 2
+/** Noted when her E ends Royal Guard: the in-game behaviour players don't expect */
+const E_ENDS_ROYAL_GUARD =
+  'Danica: her E ended Maid: Royal Guard and with it her Burst\'s party ATK bonus, as in the game (her E re-summons the Anchor, which ends either Maid form and the Burst\'s form effects). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so "Danica Q" is enough.'
 
 type Maid = '' | 'defense' | 'battle'
 interface State {
@@ -331,6 +334,7 @@ export const kit: KitModel = {
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
         // (kqmsim keeps the forms)
         ctx.at(22, (c) => {
+          if (s.maid === 'defense') c.note(E_ENDS_ROYAL_GUARD)
           endMaid(c, s)
           s.excite = 0
           s.entryReady = -1
