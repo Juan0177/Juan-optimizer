@@ -125,13 +125,13 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   quickTooltipProps: {},
   weaponSheetNs: (key: string) => `weapon_${key}_gen`,
   kqmConstellation: (key: string) => (key === 'Bennett' ? 6 : 0),
-  KQM_TALENT_DEFAULT: 9,
+  KQM_TALENT_DEFAULT: 10,
   kqmBuildThreads: () => undefined,
   kqmBuildThreadsAuto: () => 4,
   kqmBuildThreadsMax: () => 7,
   setKqmBuildThreads: () => undefined,
   teamOptMembers: () => [],
-  kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 9,
+  kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 10,
   kqmMemberConstellation: (
     key: string,
     kqm?: { constellations?: Record<string, number> }

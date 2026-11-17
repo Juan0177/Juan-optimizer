@@ -250,6 +250,25 @@ function useRotationEnergy(
 }
 
 /** KQM assumptions and equipment, saved with the team as they change. */
+/** The talent level last picked on any team (localStorage): new teams start with it */
+const TALENTS_KEY = 'kqm_talents_last'
+function lastKqmTalents(): 9 | 10 | undefined {
+  try {
+    const value = globalThis.localStorage?.getItem(TALENTS_KEY)
+    return value === '9' ? 9 : value === '10' ? 10 : undefined
+  } catch {
+    // (no storage: nothing remembered)
+    return undefined
+  }
+}
+function rememberKqmTalents(level: 9 | 10) {
+  try {
+    globalThis.localStorage?.setItem(TALENTS_KEY, `${level}`)
+  } catch {
+    // (no storage: the team keeps its own setting all the same)
+  }
+}
+
 export function KqmSettings({
   disabled = false,
   active = true,
@@ -279,6 +298,17 @@ export function KqmSettings({
   const titleId = useId()
   const [tab, setTab] = useState(0)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+  // a team never set to a talent level takes the one last picked on any team (else KQM's 10)
+  const unsetTalents = teamOpt.kqm?.talents === undefined
+  useEffect(() => {
+    if (!unsetTalents || disabled) return
+    const last = lastKqmTalents()
+    if (!last || last === KQM_TALENT_DEFAULT) return
+    setTeamOpt((o) => {
+      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+      if (settings.talents === undefined) settings.talents = last
+    })
+  }, [unsetTalents, disabled, setTeamOpt])
   const counts = kqmChooserCounts(members, teamOpt)
   // every member gets a KQM build (the KQM standard is for the whole team)
   const optimized = members
@@ -628,8 +658,8 @@ export function KqmSettings({
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 0.5 }}>
             <FieldLabel
               tip={t(
-                'teamOpt.kqm.talentsTip',
-                'Every member’s talent levels (normal attack, skill, burst; constellations add theirs on top). KQM’s guides compare at 9/9/9; 10/10/10 is with Crowns.'
+                'teamOpt.kqm.talentsTipStandard',
+                'Every member’s talent levels (normal attack, skill, burst; constellations add theirs on top). KQM Standards use 10/10/10. Your last pick is used for new teams.'
               )}
             >
               {t('teamOpt.kqm.talents', 'Talents')}
@@ -642,13 +672,14 @@ export function KqmSettings({
                 value: level as 9 | 10,
                 label: `${level}/${level}/${level}`,
               }))}
-              onChange={(level) =>
+              onChange={(level) => {
+                // (saved on the team, and remembered for teams not set yet)
+                rememberKqmTalents(level)
                 setTeamOpt((o) => {
                   const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-                  settings.talents =
-                    level === KQM_TALENT_DEFAULT ? undefined : level
+                  settings.talents = level
                 })
-              }
+              }}
             />
           </Box>
           <KqmArtifactStandard kqm={kqm} setTeamOpt={setTeamOpt} />

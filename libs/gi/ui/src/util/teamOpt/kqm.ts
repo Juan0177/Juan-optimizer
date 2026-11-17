@@ -168,8 +168,8 @@ export const kqmMemberConstellation = (
   kqm: Pick<TeamOptKqm, 'constellations'> | undefined
 ): number => kqm?.constellations?.[key] ?? kqmConstellation(key)
 
-/** The members' talent levels: as set, else 9/9/9 (KQM's guides; 10 is the other choice) */
-export const KQM_TALENT_DEFAULT = 9
+/** The members' talent levels: as set, else 10/10/10 (KQM Standards since 2026-11; 9 is the other choice) */
+export const KQM_TALENT_DEFAULT = 10
 export const kqmTalentLevel = (
   kqm: Pick<TeamOptKqm, 'talents'> | undefined
 ): 9 | 10 => kqm?.talents ?? KQM_TALENT_DEFAULT
