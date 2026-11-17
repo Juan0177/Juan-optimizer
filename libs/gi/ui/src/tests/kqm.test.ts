@@ -23,12 +23,13 @@ import {
   KQM_THREE_STARS,
   kqmArtData,
   kqmBuildRarity,
+  kqmBuiltRefinement,
+  kqmCompareRefinements,
   kqmConstellation,
   kqmDefaultExcludedWeapons,
   kqmExcludedWeapons,
-  kqmMemberConstellation,
-  kqmCompareRefinements,
   kqmGroupRefinements,
+  kqmMemberConstellation,
   kqmRefinement,
   kqmRollCaps,
   kqmSets,
@@ -349,8 +350,39 @@ describe('KQM Standards builds', () => {
     expect(result.rankings[shenhe]).toBeDefined()
   }, 300_000)
 
-  it('ranks a group’s weapons at every refinement ticked, building at the highest only', async () => {
-    // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too)
+  it('refits one member at another constellation from a run’s builds: its weapon and sets kept, the others’ builds as they were', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const first = (await run(database, teamId, teamOpt))!
+    const at = (constellation: number) => ({
+      ...teamOpt,
+      kqm: {
+        ...teamOpt.kqm!,
+        constellations: {
+          ...teamOpt.kqm!.constellations,
+          [ayaka]: constellation,
+        },
+      },
+    })
+    const refit = (await optimizeTeamKqm({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: at(6),
+      from: first.builds,
+      only: ayaka,
+      maxRounds: 1,
+    }))!
+    expect(refit.builds[ayaka]!.weapon).toEqual(first.builds[ayaka]!.weapon)
+    expect(refit.builds[ayaka]!.sets).toEqual(first.builds[ayaka]!.sets)
+    expect(refit.builds[shenhe]).toEqual(first.builds[shenhe])
+    // (no rankings: a quick neighbour of the run) and more damage at C6
+    expect(refit.rankings).toEqual({})
+    expect(refit.after.total).toBeGreaterThan(first.after.total)
+  })
+
+  it('ranks a group’s weapons at every refinement ticked, building at the group’s default one (else the highest)', async () => {
+    // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too. The
+    // Battle Pass's R1 + R5, saved with the highest as the setting, as before: still built at R1)
     const kqm = {
       refinement5: 1,
       refinement4: 5,
@@ -361,7 +393,15 @@ describe('KQM Standards builds', () => {
     expect(kqmRefinement('FavoniusSword', kqm)).toBe(5)
     expect(kqmGroupRefinements('standard4', kqm)).toEqual([1, 5])
     expect(kqmCompareRefinements('FavoniusSword', kqm)).toEqual([1])
-    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([1])
+    expect(kqmWeaponGroup('TheBlackSword')).toBe('bp')
+    expect(kqmRefinement('TheBlackSword', kqm)).toBe(1)
+    expect(kqmGroupRefinements('bp', kqm)).toEqual([1, 5])
+    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([5])
+    // (the default one when ticked: Battle Pass R1, 4★ standard wish R5; else the highest)
+    expect(kqmBuiltRefinement('bp', [1, 5])).toBe(1)
+    expect(kqmBuiltRefinement('bp', [3, 5])).toBe(5)
+    expect(kqmBuiltRefinement('standard4', [1, 5])).toBe(5)
+    expect(kqmBuiltRefinement('standard4', [1, 3])).toBe(3)
     // (a weapon with its own refinement is not compared; a group with one ticked neither)
     expect(
       kqmCompareRefinements('FavoniusSword', {
@@ -382,6 +422,14 @@ describe('KQM Standards builds', () => {
     expect(favonius.find((o) => o.weapon.refinement === 1)?.compare).toBe(true)
     expect(favonius.find((o) => o.weapon.refinement === 5)?.compare).toBe(
       undefined
+    )
+    const blackSword = weapons.filter((o) => o.weapon.key === 'TheBlackSword')
+    expect(blackSword.map((o) => o.weapon.refinement).sort()).toEqual([1, 5])
+    expect(blackSword.find((o) => o.weapon.refinement === 1)?.compare).toBe(
+      undefined
+    )
+    expect(blackSword.find((o) => o.weapon.refinement === 5)?.compare).toBe(
+      true
     )
     for (const ck of [ayaka, shenhe]) {
       const built = result.builds[ck]!.weapon
