@@ -163,7 +163,13 @@ export function FightTimeline({
     <Box
       component="section"
       aria-label={t('enemy.fight.title', 'Fight timeline')}
-      sx={{ ...insetSx, p: { xs: 1.5, sm: 2 }, display: 'grid', gap: 1.5 }}
+      sx={{
+        ...insetSx,
+        p: { xs: 1.5, sm: 2 },
+        mt: { xs: 2, sm: 2.5 },
+        display: 'grid',
+        gap: 1.5,
+      }}
     >
       {/* the boss, and how long */}
       <Box
@@ -722,11 +728,11 @@ function FightScrub({
         {moment && (
           <Box
             aria-hidden
+            // (its place in `style`: an `sx` value would add a CSS class for every position)
+            style={{ left: `${(moment.t / end) * 100}%`, height: lanes }}
             sx={{
               position: 'absolute',
               top: 0,
-              height: lanes,
-              left: `${(moment.t / end) * 100}%`,
               width: 0,
               borderLeft: `1px ${cursor?.pinned ? 'solid' : 'dashed'} ${alpha(giTokens.parchment, cursor?.pinned ? 0.85 : 0.55)}`,
               pointerEvents: 'none',
@@ -798,13 +804,13 @@ function FightScrub({
   )
 }
 
-/** A marker on a line, at the cursor */
+/** A marker on a line, at the cursor (its place in `style`, as the cursor's) */
 function Dot({ top, color }: { top: number; color: string }) {
   return (
     <Box
+      style={{ top }}
       sx={{
         position: 'absolute',
-        top,
         left: -4,
         width: 8,
         height: 8,

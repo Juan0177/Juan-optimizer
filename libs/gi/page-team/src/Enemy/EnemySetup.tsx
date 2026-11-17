@@ -2,6 +2,7 @@ import { useBoolState } from '@genshin-optimizer/common/react-util'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { Team } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { FightEstimate, FightTeam } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
@@ -15,10 +16,26 @@ import {
   stygianPhaseName,
   teamDps,
 } from '@genshin-optimizer/gi/ui'
-import { Box, Button, Tooltip, Typography } from '@mui/material'
+import {
+  alpha,
+  Box,
+  Button,
+  ButtonBase,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { hairline, insetSx, numSx, Segmented, type } from '../TeamOptimize/ui'
+import {
+  focusSx,
+  hairline,
+  insetSx,
+  numSx,
+  quickSx,
+  Segmented,
+  tokens,
+  type,
+} from '../TeamOptimize/ui'
 import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
 import { formatHp } from './hp'
@@ -136,7 +153,11 @@ export function EnemySetup({
               />
             )}
           </Box>
-          <EnemyFigures team={team} fight={fight} />
+          <EnemyFigures
+            team={team}
+            fight={fight}
+            onEdit={disabled ? undefined : onOpen}
+          />
           {/* its RES, all eight */}
           <ResGrid team={team} />
         </Box>
@@ -176,7 +197,16 @@ function mechanicsLine(t: TFunction, estimate: FightEstimate) {
  * The setup's two figures: the enemy's HP, and about how long the builds take to defeat it (its
  * breakdown in the tooltip)
  */
-function EnemyFigures({ team, fight }: { team: Team; fight?: FightTeam }) {
+function EnemyFigures({
+  team,
+  fight,
+  onEdit,
+}: {
+  team: Team
+  fight?: FightTeam
+  /** Opens its editor (no HP yet: "Set its HP" does) */
+  onEdit?: () => void
+}) {
   const { t } = useTranslation('page_team')
   const preset = appliedStygianPreset(team)
   const hp = enemyHpOf(team)
@@ -210,9 +240,29 @@ function EnemyFigures({ team, fight }: { team: Team; fight?: FightTeam }) {
         <Typography sx={hp === undefined ? none : type.figure}>
           {hp === undefined ? '–' : compact(3).format(hp)}
         </Typography>
-        <Typography noWrap sx={meta}>
-          {hp === undefined ? t('enemy.hpNotSet', 'Not set') : formatHp(hp)}
-        </Typography>
+        {hp === undefined && onEdit ? (
+          <ButtonBase
+            onClick={onEdit}
+            sx={{
+              ...meta,
+              color: 'text.primary',
+              fontWeight: 600,
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
+              textDecorationColor: alpha(giTokens.parchment, 0.4),
+              borderRadius: tokens.radius.control,
+              ...quickSx,
+              ...focusSx,
+              '&:hover': { textDecorationColor: 'currentColor' },
+            }}
+          >
+            {t('enemy.setHp', 'Set its HP')}
+          </ButtonBase>
+        ) : (
+          <Typography noWrap sx={meta}>
+            {hp === undefined ? t('enemy.hpNotSet', 'Not set') : formatHp(hp)}
+          </Typography>
+        )}
       </Box>
       <Box sx={{ minWidth: 0, pl: 1.5, borderLeft: hairline }}>
         <Typography sx={type.label}>
