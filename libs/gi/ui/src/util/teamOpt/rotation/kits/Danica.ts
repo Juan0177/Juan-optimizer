@@ -459,6 +459,16 @@ export const kit: KitModel = {
   onSwapOut(ctx, s: State) {
     if (s.maid === 'battle') aegisOff(ctx, s)
   },
+  noEntryReason: (s: State, now) =>
+    now >= s.anchorEnd
+      ? 'her Anchor was not out (her E summons it for 25 s)'
+      : s.maid === 'battle'
+        ? 'she was still in Maid: Cleaner'
+        : s.excite < 100
+          ? "Will to Cleanse was not full (the on-field member's Electro or Cryo hits fill it while her Anchor is out, 50 each)"
+          : now < s.entryReady
+            ? `Will to Protect was on its 16 s cooldown (${((s.entryReady - now) / 60).toFixed(1)} s left)`
+            : undefined,
   onSwapIn(ctx, s: State) {
     if (
       ctx.now >= s.anchorEnd ||

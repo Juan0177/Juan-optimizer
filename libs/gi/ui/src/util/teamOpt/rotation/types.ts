@@ -536,6 +536,11 @@ export interface KitModel {
   ) => void
   /** An automatic entry action, before the requested action (Danica's entry / Triumph). */
   onSwapIn?: (ctx: SimContext, state: any) => ActionResult | undefined
+  /**
+   * Why a swap-in played no entry action (`onSwapIn` gave none): noted when the step only swaps
+   * in ("Danica", "Danica entry", "Danica W1")
+   */
+  noEntryReason?: (state: any, now: number) => string | undefined
   /** Earliest frame this member can be swapped in; rechecked as queued events run. */
   swapReadyAt?: (state: any, now: number) => number
   /**

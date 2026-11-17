@@ -1330,10 +1330,21 @@ export function simulateRotation({
         states.get(characterKey)
       )
       if (entry) {
-        const frames = kitFramesInto(entry, action.kind)
+        const frames = kitFramesInto(
+          entry,
+          action.kind === 'swap' ? 'swap' : action.kind
+        )
         actions.push({ characterKey, text: 'Entry', start: now, frames })
         now += frames
         runUntil(now, true)
+      }
+      else if (
+        (action.kind === 'swap' || action.kind === 'wait') &&
+        r === Math.min(1, repeats - 1)
+      ) {
+        const why = kit?.noEntryReason?.(states.get(characterKey), now)
+        if (why)
+          notes.add(`${characterKey}: no entry action on this swap-in: ${why}.`)
       }
       // Zero-delay swap/entry tasks resolve before the new member's first
       // action. Otherwise a queued passive can observe a buff that the
@@ -1341,6 +1352,11 @@ export function simulateRotation({
       runUntil(now, true)
     }
     if (!kit) return
+    // a swap-only step: the swap (and any swap-in effect) was all of it
+    if (action.kind === 'swap') {
+      lastNormalActor = undefined
+      return
+    }
     if (action.kind === 'wait') {
       lastNormalActor = undefined
       const defaultFrames = Math.round((action.count ?? 0) * FPS)

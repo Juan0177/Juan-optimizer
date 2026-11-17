@@ -15,6 +15,8 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   D       dash                             J    jump
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
+ *   entry / swap  swap in and straight out again (a name alone mid-rotation is the same): her
+ *                swap-in effects only, e.g. Danica's Entry Skill once Will to Cleanse is full
  * A trailing step with no actions ("-> bina") marks the swap back to that member: where the
  * rotation loops. "A/B" alternatives take the first one; "(…)" comments are ignored.
  */
@@ -28,6 +30,8 @@ export type RotationActionKind =
   | 'dash'
   | 'jump'
   | 'wait'
+  /** Swap in and do nothing else ("Danica" alone, or "Danica entry"): her swap-in effects only */
+  | 'swap'
 
 export interface RotationAction {
   kind: RotationActionKind
@@ -205,6 +209,15 @@ function parseActions(
   let i = 0
   const s = cleaned.trim()
   while (i < s.length) {
+    // "entry" / "swap": swap in for the member's swap-in effects only (Danica's Entry Skill)
+    const swapWord = /\s*(entry|swap)(?![a-z])/iy
+    swapWord.lastIndex = i
+    const sw = swapWord.exec(s)
+    if (sw) {
+      actions.push({ kind: 'swap', text: sw[1] })
+      i = swapWord.lastIndex
+      continue
+    }
     token.lastIndex = i
     const m = token.exec(s)
     if (!m || m[0].length === 0) {
@@ -311,9 +324,12 @@ export function parseRotation(
     }
     const actions = parseActions(rest, warnings, words[0], characterKey)
     if (!actions.length) {
-      if (index === parts.length - 1) loopsTo = characterKey
-      else warnings.push(`${words[0]}: no actions (step skipped)`)
-      return
+      if (index === parts.length - 1) {
+        loopsTo = characterKey
+        return
+      }
+      // a name alone mid-rotation: swap in and out (Danica's Entry Skill once Will to Cleanse is full)
+      actions.push({ kind: 'swap', text: 'swap' })
     }
     steps.push({ characterKey, actions })
   })

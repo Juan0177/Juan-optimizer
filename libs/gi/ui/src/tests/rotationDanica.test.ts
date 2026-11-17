@@ -364,4 +364,38 @@ describe('Danica', () => {
       c2Lit['skill']['decreeDmg'].value / c2Lit['skill']['onFieldDmg'].value
     ).toBeCloseTo(1.5, 4)
   })
+
+  it('a swap-only step plays the Entry Skill and swaps out ("Danica", "Danica entry", "Danica W1")', () => {
+    const members: CharacterKey[] = ['Danica', 'Fischl', 'Kaeya', 'Bennett']
+    for (const step of ['Danica', 'Danica entry', 'Danica swap', 'Danica W1']) {
+      const sim = run(
+        `Danica E -> Fischl E N2 -> Kaeya E N2 -> ${step} -> Bennett E N2 -> Danica`,
+        members
+      )
+      expect(sim.warnings).toEqual([])
+      const entry = sim.actions.findIndex(
+        (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+      )
+      expect(entry).toBeGreaterThan(0)
+      // straight out to Bennett after it: no other Danica action between
+      expect(sim.actions[entry + 1].characterKey).toBe('Bennett')
+    }
+  })
+
+  it('says why a swap-only step played no Entry Skill', () => {
+    const noAnchor = run('Fischl E -> Danica entry -> Fischl N2 -> Danica', [
+      'Danica',
+      'Fischl',
+    ])
+    expect(noAnchor.actions.some((a) => a.text === 'Entry')).toBe(false)
+    expect(noAnchor.notes.join(' ')).toContain('her Anchor was not out')
+    const notFull = run('Danica E -> Bennett E N2 -> Danica -> Bennett N2 -> Danica', [
+      'Danica',
+      'Bennett',
+    ])
+    expect(notFull.notes.join(' ')).toContain('Will to Cleanse was not full')
+    // an ordinary step is not noted
+    const plain = run('Danica E -> Bennett E -> Danica E W1', ['Danica', 'Bennett'])
+    expect(plain.notes.join(' ')).not.toContain('no entry action')
+  })
 })
