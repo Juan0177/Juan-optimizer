@@ -33,20 +33,24 @@ const mains: KqmMains = {
 /** Damage from ATK% and CRIT (capped at 100% CRIT Rate), no requirements */
 const problem = (rolls?: number): KqmProblem => {
   const out = new Float64Array(1)
-  const values = (v: Record<string, number>) => {
-    out[0] =
-      (1 + (v['atk_'] ?? 0)) *
-      (1 +
-        Math.min(1, 0.05 + (v['critRate_'] ?? 0)) *
-          (0.5 + (v['critDMG_'] ?? 0)))
+  const columns = ['atk_', 'critRate_', 'critDMG_']
+  const valuesAt = (V: Float64Array) => {
+    out[0] = (1 + V[0]) * (1 + Math.min(1, 0.05 + V[1]) * (0.5 + V[2]))
     return out
   }
+  const statsOf = (v: Record<string, number>) =>
+    new Float64Array(columns.map((k) => v[k] ?? 0))
+  const values = (v: Record<string, number>) => valuesAt(statsOf(v))
   return {
     run: (v) => ({ total: values(v)[0], cons: [] }),
     values,
+    valuesAt,
+    columns,
+    columnOf: (key) => columns.indexOf(key),
+    statsOf,
     nTerms: 1,
     mins: [],
-    scales: new Set(['atk_', 'critRate_', 'critDMG_']),
+    scales: new Set(columns),
     rolls,
   }
 }
