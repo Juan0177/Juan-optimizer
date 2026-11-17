@@ -316,6 +316,7 @@
     },
     "run": {
       "allKept": "Every member’s build is kept: nothing to optimize.",
+      "allMembersKept": "Every member is kept: nothing to optimize.",
       "builds": "{{done}} of {{total}} builds",
       "button": "Optimize team",
       "cancel": "Cancel",

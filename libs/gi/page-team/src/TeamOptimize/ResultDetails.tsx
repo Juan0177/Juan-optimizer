@@ -144,7 +144,7 @@ export const MemberDetails = memo(function MemberDetails({
   /** Changes against the equipped build are shown */
   compare?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const data = details?.data[characterKey]
   const stats = details?.after[characterKey]
   const now = compare ? details?.now[characterKey] : undefined
@@ -290,7 +290,7 @@ export const MemberDetails = memo(function MemberDetails({
                               color: change > 0 ? 'success.main' : 'error.main',
                             }}
                           >
-                            {formatGain(change)}
+                            {formatGain(change, i18n?.language)}
                           </Box>
                         )}
                       </Typography>

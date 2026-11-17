@@ -115,7 +115,7 @@ export function TeamOptResults({
   rotationTime?: number
   onDiscard: () => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
   const { before, after } = result
@@ -207,7 +207,7 @@ export function TeamOptResults({
                     color: gain > 0.0005 ? 'success.main' : 'text.secondary',
                   }}
                 >
-                  {formatGain(gain)}
+                  {formatGain(gain, i18n?.language)}
                 </Typography>
                 <Typography component="span" sx={{ ...type.label, ...numSx }}>
                   {t('teamOpt.result.from', {
@@ -834,7 +834,7 @@ function MemberResult({
     isTc,
     loadoutDatum,
   } = member
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
   const constellation = isTc
@@ -942,7 +942,7 @@ function MemberResult({
                     color: after > before ? 'success.main' : 'warning.main',
                   }}
                 >
-                  {formatGain(ownChange)}
+                  {formatGain(ownChange, i18n?.language)}
                 </Typography>
               )}
               <Typography component="span" sx={type.label}>

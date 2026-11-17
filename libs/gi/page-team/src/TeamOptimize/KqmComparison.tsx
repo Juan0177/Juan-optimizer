@@ -430,7 +430,10 @@ export function KqmCompare({
                           : 'text.secondary',
                     }}
                   >
-                    {formatGain(view.after.total / result.after.total - 1)}
+                    {formatGain(
+                      view.after.total / result.after.total - 1,
+                      i18n?.language
+                    )}
                   </Typography>
                 )}
               </Box>

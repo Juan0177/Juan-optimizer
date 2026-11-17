@@ -527,7 +527,7 @@ describe('KqmCompare', () => {
     expect(
       within(table).getAllByText(/Yae Miko → Mitya/).length
     ).toBeGreaterThan(0)
-    expect(within(table).getAllByText(/^−10(\.0)?%$/).length).toBeGreaterThan(0)
+    expect(within(table).getAllByText(/^−10(,0)?%$/).length).toBeGreaterThan(0)
     // both ER figures, each with its own label: the target and what the build reaches
     expect(
       within(table).getAllByText('kqmCompare.table.erTarget')
