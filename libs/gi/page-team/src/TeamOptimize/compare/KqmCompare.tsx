@@ -10,10 +10,8 @@ import type {
   TeamKqmSavedRun,
   TeamOpt,
   TeamOptEnergyMember,
-  TeamOptEnergyRotationField,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
-import { teamOptEnergyRotationFields } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { KqmBuild, KqmStep } from '@genshin-optimizer/gi/ui'
@@ -30,7 +28,6 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   Autocomplete,
   alpha,
@@ -46,13 +43,7 @@ import {
   Radio,
   RadioGroup,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import type { i18n as I18n } from 'i18next'
@@ -67,8 +58,6 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { formatDamage, formatGain } from '../format'
-import { kqmEnergyEstimate, MemberEnergy } from '../KqmEnergyCalculator'
 import { MemberAvatar } from '../MemberAvatar'
 import {
   BetaBadge,
@@ -83,8 +72,11 @@ import {
   Segmented,
   type,
 } from '../ui'
-import type { Side, SideMember, SwapIn } from './compareSwapKqm'
-import { compareSwapKqm, swapSettings } from './compareSwapKqm'
+import { Overview } from './CompareOverview'
+import type { Side, SwapIn } from './compareSwapKqm'
+import { compareSwapKqm } from './compareSwapKqm'
+import { srOnly, WarningLine } from './compareUi'
+import { EnteringEnergy } from './EnteringSettings'
 import { swapFragment } from './swapFragment'
 
 /*
@@ -134,19 +126,6 @@ function readStored(key: string) {
     return ''
   }
 }
-
-/** Read by screen readers only */
-const srOnly = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  p: 0,
-  m: -1,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-} as const
 
 type RunState =
   | { type: 'idle' }
@@ -943,21 +922,6 @@ function Row({ label, children }: { label: ReactNode; children: ReactNode }) {
   )
 }
 
-function WarningLine({ children }: { children: ReactNode }) {
-  return (
-    <Box
-      component="span"
-      sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75 }}
-    >
-      <WarningAmberRoundedIcon
-        aria-hidden
-        sx={{ fontSize: 16, mt: '1px', flexShrink: 0 }}
-      />
-      <span>{children}</span>
-    </Box>
-  )
-}
-
 /** The members who stay: A's builds, shown and locked */
 function FixedMembers({
   label,
@@ -1127,449 +1091,5 @@ function Preview({
         </Box>
       )}
     </Box>
-  )
-}
-
-/**
- * The entering member's ER calculator inputs: as team B's rotation fills them in (the same
- * settings the comparison runs with), the ones changed here kept over the rotation's. Its field
- * time is the leaving member's.
- */
-function EnteringEnergy({
-  teamId,
-  saved,
-  out,
-  swapIn,
-  text,
-  opener,
-  fragment,
-  ready,
-  own,
-  setOwn,
-}: {
-  teamId: string
-  saved: TeamKqmSavedRun
-  out: CharacterKey | undefined
-  swapIn: SwapIn | undefined
-  text: string
-  opener: string
-  fragment: string
-  ready: boolean
-  own: TeamOptEnergyMember | undefined
-  setOwn: (
-    update: (
-      previous: TeamOptEnergyMember | undefined
-    ) => TeamOptEnergyMember | undefined
-  ) => void
-}) {
-  const { t, i18n } = useTranslation(['juanlab', 'charNames_gen'])
-  const database = useDatabase()
-  const { gender } = useDBMeta()
-  const [settings, setSettings] = useState<
-    { teamOpt: TeamOpt; keys: CharacterKey[] } | { message: string } | undefined
-  >()
-  // (a copy of the database and a replay: after the panel shows, again when the swap changes)
-  useEffect(() => {
-    if (!ready || !out || !swapIn) {
-      setSettings(undefined)
-      return
-    }
-    let cancelled = false
-    const id = setTimeout(() => {
-      let next: typeof settings
-      try {
-        const result = swapSettings({
-          database,
-          teamId,
-          gender,
-          i18n: i18n as I18n,
-          saved,
-          out,
-          swapIn,
-          text,
-          opener,
-          fragment,
-        })
-        next =
-          'error' in result
-            ? { message: t('kqmCompare.error.unsupported') }
-            : result
-      } catch (e) {
-        next = { message: String((e as Error)?.message ?? e) }
-      }
-      if (!cancelled) setSettings(next)
-    }, 250)
-    return () => {
-      cancelled = true
-      clearTimeout(id)
-    }
-  }, [
-    database,
-    teamId,
-    gender,
-    i18n,
-    saved,
-    out,
-    swapIn,
-    text,
-    opener,
-    fragment,
-    ready,
-    t,
-  ])
-  const key = swapIn?.key
-  const calc =
-    settings && 'teamOpt' in settings
-      ? settings.teamOpt.kqm?.energyCalculator
-      : undefined
-  const filled = key ? calc?.members[key] : undefined
-  const member = useMemo(
-    () => filled && own && { ...filled, ...own, fieldTime: filled.fieldTime },
-    [filled, own]
-  )
-  const estimate = useMemo(
-    () =>
-      settings && 'teamOpt' in settings && calc
-        ? kqmEnergyEstimate(settings.keys, calc, settings.teamOpt.kqm)
-        : undefined,
-    [settings, calc]
-  )
-  if (!ready || !key)
-    return <EmptyLine>{t('kqmCompare.settingsNeedSwap')}</EmptyLine>
-  if (settings && 'message' in settings)
-    return (
-      <Box sx={{ color: 'warning.main', fontSize: 13 }}>
-        <WarningLine>{settings.message}</WarningLine>
-      </Box>
-    )
-  if (!settings || !calc || !estimate)
-    return <EmptyLine>{t('kqmCompare.settingsLoading')}</EmptyLine>
-  return (
-    <MemberEnergy
-      characterKey={key}
-      keys={settings.keys}
-      kqm={settings.teamOpt.kqm}
-      member={member ?? filled}
-      rotationTime={calc.rotationTime}
-      estimate={estimate}
-      fromRotation
-      lockFieldTime
-      onUseRotation={() => setOwn(() => undefined)}
-      updateMember={(_key, values) =>
-        setOwn((previous) => {
-          const base = previous ?? filled
-          if (!base) return previous
-          const { fieldTime: _fieldTime, ...rest } = values
-          // (set here: the rotation no longer fills these in)
-          const edited = [
-            ...new Set([
-              ...(base.edited ?? []),
-              ...(Object.keys(rest) as TeamOptEnergyRotationField[]).filter(
-                (field) => teamOptEnergyRotationFields.includes(field)
-              ),
-            ]),
-          ]
-          return { ...base, ...rest, ...(edited.length && { edited }) }
-        })
-      }
-    />
-  )
-}
-
-/** A against B, with the change */
-function Overview({
-  a,
-  b,
-  out,
-  inKey,
-  nameOf,
-  language,
-}: {
-  a: Side
-  b: Side
-  out: CharacterKey
-  inKey: CharacterKey
-  nameOf: (key: CharacterKey) => string
-  language: string
-}) {
-  const { t } = useTranslation('juanlab')
-  const fmt = (digits: number) => {
-    try {
-      return new Intl.NumberFormat(language, {
-        minimumFractionDigits: digits,
-        maximumFractionDigits: digits,
-      })
-    } catch {
-      return new Intl.NumberFormat('en', {
-        minimumFractionDigits: digits,
-        maximumFractionDigits: digits,
-      })
-    }
-  }
-  const oneDigit = fmt(1)
-  const whole = fmt(0)
-  const seconds = (s: number) => (s > 0 ? `${oneDigit.format(s)} s` : '–')
-  const pct = (v: number) => `${whole.format(v)}%`
-  const gain = (from: number, to: number) =>
-    from > 0 ? to / from - 1 : Number.NaN
-  const pairs = a.members.map((m) => ({
-    a: m,
-    b: b.members.find((x) => x.key === (m.key === out ? inKey : m.key)),
-  }))
-  const head = {
-    ...type.label,
-    fontWeight: 600,
-    borderBottom: hairline,
-    whiteSpace: 'nowrap',
-  } as const
-  const cell = {
-    borderBottom: hairline,
-    py: 0.75,
-    px: 1.25,
-    fontSize: 13.5,
-  } as const
-  const num = { ...cell, ...numSx, textAlign: 'right' } as const
-  return (
-    <Box sx={{ ...insetSx, overflowX: 'auto' }}>
-      <Table size="small" sx={{ minWidth: 520 }}>
-        <Box component="caption" sx={srOnly}>
-          {t('kqmCompare.table.title')}
-        </Box>
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ ...cell, ...head }}>
-              <Box component="span" sx={srOnly}>
-                {t('kqmCompare.table.figure')}
-              </Box>
-            </TableCell>
-            <TableCell sx={{ ...num, ...head }}>
-              {t('kqmCompare.table.a', { name: nameOf(out) })}
-            </TableCell>
-            <TableCell sx={{ ...num, ...head }}>
-              {t('kqmCompare.table.b', { name: nameOf(inKey) })}
-            </TableCell>
-            <TableCell sx={{ ...num, ...head }}>
-              {t('kqmCompare.table.delta')}
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          <FigureRow
-            label={t('kqmCompare.table.dpr')}
-            a={formatDamage(a.dpr)}
-            b={formatDamage(b.dpr)}
-            delta={gain(a.dpr, b.dpr)}
-            cell={cell}
-            num={num}
-          />
-          <FigureRow
-            label={t('kqmCompare.table.dps')}
-            a={formatDamage(a.dps)}
-            b={formatDamage(b.dps)}
-            delta={gain(a.dps, b.dps)}
-            cell={cell}
-            num={num}
-          />
-          <FigureRow
-            label={t('kqmCompare.table.time')}
-            a={seconds(a.rotationTime)}
-            b={seconds(b.rotationTime)}
-            cell={cell}
-            num={num}
-          />
-          {pairs.map(({ a: ma, b: mb }) => {
-            const swapped = ma.key === out
-            const name = swapped
-              ? `${nameOf(ma.key)} → ${nameOf(inKey)}`
-              : nameOf(ma.key)
-            return (
-              <MemberRows
-                key={ma.key}
-                name={name}
-                fixed={!swapped}
-                lockedLabel={t('kqmCompare.locked')}
-                a={ma}
-                b={mb}
-                pct={pct}
-                delta={mb ? gain(ma.damage, mb.damage) : Number.NaN}
-                cell={cell}
-                num={num}
-              />
-            )
-          })}
-        </TableBody>
-      </Table>
-    </Box>
-  )
-}
-
-type CellSx = Record<string, unknown>
-
-function Delta({ value }: { value: number | undefined }) {
-  if (value === undefined) return null
-  const color = !Number.isFinite(value)
-    ? 'text.secondary'
-    : value > 0.0005
-      ? 'success.main'
-      : value < -0.0005
-        ? 'error.main'
-        : 'text.secondary'
-  return (
-    <Box component="span" sx={{ color, fontWeight: 600 }}>
-      {formatGain(value)}
-    </Box>
-  )
-}
-
-function FigureRow({
-  label,
-  a,
-  b,
-  delta,
-  cell,
-  num,
-}: {
-  label: string
-  a: ReactNode
-  b: ReactNode
-  delta?: number
-  cell: CellSx
-  num: CellSx
-}) {
-  return (
-    <TableRow>
-      <TableCell component="th" scope="row" sx={{ ...cell, fontWeight: 600 }}>
-        {label}
-      </TableCell>
-      <TableCell sx={num}>{a}</TableCell>
-      <TableCell sx={num}>{b}</TableCell>
-      <TableCell sx={num}>
-        <Delta value={delta} />
-      </TableCell>
-    </TableRow>
-  )
-}
-
-function MemberRows({
-  name,
-  fixed,
-  lockedLabel,
-  a,
-  b,
-  pct,
-  delta,
-  cell,
-  num,
-}: {
-  name: string
-  fixed: boolean
-  lockedLabel: string
-  a: SideMember
-  b: SideMember | undefined
-  pct: (v: number) => string
-  delta: number
-  cell: CellSx
-  num: CellSx
-}) {
-  const { t } = useTranslation('juanlab')
-  const short = !!b && fixed && b.erValue < b.er - 0.05
-  const label = (
-    <Box
-      component="span"
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
-    >
-      {name}
-      {fixed && (
-        <>
-          <LockOutlinedIcon
-            aria-hidden
-            sx={{ fontSize: 14, color: 'text.secondary' }}
-          />
-          <Box component="span" sx={srOnly}>
-            {lockedLabel}
-          </Box>
-        </>
-      )}
-    </Box>
-  )
-  return (
-    <>
-      <TableRow>
-        <TableCell
-          component="th"
-          scope="row"
-          sx={{ ...cell, fontWeight: 600, borderBottom: 0 }}
-        >
-          {label}
-          <Box component="span" sx={{ ...type.label, ml: 0.75 }}>
-            {t('kqmCompare.table.damage')}
-          </Box>
-        </TableCell>
-        <TableCell sx={{ ...num, borderBottom: 0 }}>
-          {formatDamage(a.damage)}{' '}
-          <Box component="span" sx={{ color: 'text.secondary' }}>
-            {pct(a.share * 100)}
-          </Box>
-        </TableCell>
-        <TableCell sx={{ ...num, borderBottom: 0 }}>
-          {b ? (
-            <>
-              {formatDamage(b.damage)}{' '}
-              <Box component="span" sx={{ color: 'text.secondary' }}>
-                {pct(b.share * 100)}
-              </Box>
-            </>
-          ) : (
-            '–'
-          )}
-        </TableCell>
-        <TableCell sx={{ ...num, borderBottom: 0 }}>
-          <Delta value={delta} />
-        </TableCell>
-      </TableRow>
-      <TableRow>
-        <TableCell component="th" scope="row" sx={cell}>
-          <Box component="span" sx={srOnly}>
-            {name}{' '}
-          </Box>
-          <Box component="span" sx={{ ...type.label, pl: 0.25 }}>
-            {t('kqmCompare.table.er')}
-          </Box>
-        </TableCell>
-        <TableCell sx={num}>{a.er ? pct(a.er) : '–'}</TableCell>
-        <TableCell sx={{ ...num, ...(short && { color: 'warning.main' }) }}>
-          {b?.er ? (
-            <Box
-              component="span"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
-            >
-              {short && (
-                <Tooltip
-                  arrow
-                  title={t('kqmCompare.table.erShort', {
-                    value: Math.round(b.erValue),
-                    target: Math.round(b.er),
-                  })}
-                >
-                  <WarningAmberRoundedIcon aria-hidden sx={{ fontSize: 15 }} />
-                </Tooltip>
-              )}
-              {pct(b.er)}
-              {short && (
-                <Box component="span" sx={srOnly}>
-                  {t('kqmCompare.table.erShort', {
-                    value: Math.round(b.erValue),
-                    target: Math.round(b.er),
-                  })}
-                </Box>
-              )}
-            </Box>
-          ) : (
-            '–'
-          )}
-        </TableCell>
-        <TableCell sx={num} />
-      </TableRow>
-    </>
   )
 }
