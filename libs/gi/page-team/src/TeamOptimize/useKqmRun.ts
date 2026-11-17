@@ -188,12 +188,15 @@ export function kqmReplayOf(
   teamId: string,
   teamOpt: TeamOpt,
   /** Another rotation to play (one constellation's own); absent: the team's written one */
-  text?: string
+  text?: string,
+  /** Another opener to play before it; absent: the team's written one */
+  opener?: string
 ) {
   try {
     const members = teamOptMembers(database, teamId)
     return kqmRotationReplay({
       text,
+      opener,
       database,
       teamId,
       members,

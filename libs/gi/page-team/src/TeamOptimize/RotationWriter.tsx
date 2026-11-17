@@ -536,6 +536,7 @@ export function kqmRotationReplay({
   names,
   teamOpt,
   text: given,
+  opener: givenOpener,
 }: {
   database: Database
   teamId: string
@@ -545,6 +546,8 @@ export function kqmRotationReplay({
   teamOpt: TeamOpt
   /** Another rotation to play (one constellation's own); absent: the team's written one */
   text?: string
+  /** Another opener to play before it; absent: the team's written one */
+  opener?: string
 }):
   | ((input: KqmReplayInput) => KqmPlayed & { energy?: RotationEnergy })
   | undefined {
@@ -552,7 +555,7 @@ export function kqmRotationReplay({
   if (!text.trim()) return undefined
   const common = {
     text,
-    opener: localStorage.getItem(openerKey(teamId)) ?? '',
+    opener: givenOpener ?? localStorage.getItem(openerKey(teamId)) ?? '',
     timing: parseTiming(localStorage.getItem(timingKey(teamId))),
     frameData: parseFrameData(localStorage.getItem(frameDataKey)),
     names,
