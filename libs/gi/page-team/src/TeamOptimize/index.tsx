@@ -56,7 +56,12 @@ import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { RotationTransfer } from './RotationTransfer'
-import { RotationConfigureButton, useRotationWriter } from './RotationWriter'
+import {
+  RotationConfigureButton,
+  useRotationText,
+  useRotationWriter,
+} from './RotationWriter'
+import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { RunDialog } from './RunDialog'
 import { TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
@@ -146,6 +151,11 @@ export default function TeamBuildWorkspace({
     (n, m) => n + (teamOpt.attacks[m.characterKey]?.length ?? 0),
     0
   )
+  // the first visit (no attacks, no written rotation, no choice made yet): the start screen
+  const { applied: writtenRotation } = useRotationText(teamId)
+  const { manual, chooseManual } = useManualStart(teamId)
+  // (both tabs: the rotation is shared by Team Optimize and KQM Theorycrafting)
+  const showStart = !attackCount && !writtenRotation && !manual
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
   )
@@ -353,26 +363,29 @@ export default function TeamBuildWorkspace({
               />
             </Box>
           )}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 0.75,
-            }}
-          >
-            <RotationConfigureButton
-              teamId={teamId}
-              writer={writer}
-              disabled={running}
-            />
-            <RotationTransfer
-              members={members}
-              teamOpt={teamOpt}
-              setTeamOpt={setTeamOpt}
-              disabled={running}
-            />
-          </Box>
+          {/* (the start screen has its own ways in: write, add attacks, import) */}
+          {!showStart && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 0.75,
+              }}
+            >
+              <RotationConfigureButton
+                teamId={teamId}
+                writer={writer}
+                disabled={running}
+              />
+              <RotationTransfer
+                members={members}
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
+                disabled={running}
+              />
+            </Box>
+          )}
           <Box sx={{ flexGrow: 1 }} />
           {!!attackCount && mode === 'inventory' && (
             <HeaderStats
@@ -382,166 +395,199 @@ export default function TeamBuildWorkspace({
             />
           )}
         </Box>
-        {/* the rotation as text: read as its steps, edited in place */}
-        <RotationInline
-          teamId={teamId}
-          members={members}
-          setTeamOpt={setTeamOpt}
-          writer={writer}
-          replaces={!!attackCount}
-          disabled={running}
-          kqm={mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined}
-          kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
-        />
         {writer.element}
-        {/* the rotation's settings, in one row of labelled controls */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            columnGap: 2,
-            rowGap: 1,
-            minHeight: 34,
-          }}
-        >
-          <RotationTimeInput
-            // (KQM's: the time of the rotation it played, which it counts)
-            value={
-              kqmRotation?.rotation === 'played'
-                ? (kqmRotationTime ?? rotationTime)
-                : rotationTime
-            }
-            disabled={running || kqmRotation?.rotation === 'played'}
-            onChange={(seconds) =>
-              setTeamOpt((o) => {
-                if (seconds && seconds !== defaultRotationTime)
-                  o.rotationTime = seconds
-                else delete o.rotationTime
-              })
-            }
-          />
-          <RotationsSetting
-            teamId={teamId}
-            members={members}
-            setTeamOpt={setTeamOpt}
-            writer={writer}
+        {showStart ? (
+          // the first visit: how to start (write the rotation, or enter attacks by hand)
+          <TeamOptimizeStart
+            members={members.map((m) => m.characterKey)}
+            onWrite={writer.openWriter}
+            onManual={chooseManual}
             disabled={running}
-          />
-          {onField && members.length > 1 && (
-            <OnFieldPicker
-              members={members}
-              value={onField}
-              disabled={running}
-              onChange={(characterKey) =>
-                setTeamOpt((o) => {
-                  if (characterKey === members[0]?.characterKey)
-                    delete o.onField
-                  else o.onField = characterKey
-                })
-              }
-            />
-          )}
-          <Box sx={{ flexGrow: 1 }} />
-          {rotationExpanded && !!attackCount && (
-            <FormControlLabel
-              sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
-              control={
-                <Switch
-                  size="small"
-                  checked={showConditions}
-                  onChange={toggleConditions}
-                />
-              }
-              label={
-                <Typography component="span" sx={type.label}>
-                  {t('teamOpt.rotation.showConditions', 'Show buff conditions')}
-                </Typography>
-              }
-            />
-          )}
-        </Box>
-        {/* one panel for the team: folded, a line per member; open, a column per member with
-            hairlines between them */}
-        <Box
-          sx={{
-            ...insetSx,
-            overflow: 'hidden',
-            containerType: 'inline-size',
-          }}
-        >
-          <Box
-            id={rotationBodyId}
-            sx={{
-              minWidth: 0,
-              display: 'grid',
-              gap: '1px',
-              // (the hairlines between the members: the grid's gaps over this colour)
-              bgcolor: tokens.hairline,
-              gridTemplateColumns: 'minmax(0, 1fr)',
-              '@container (min-width: 520px)': {
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              },
-              '@container (min-width: 1040px)': {
-                gridTemplateColumns: `repeat(${Math.min(4, members.length)}, minmax(0, 1fr))`,
-              },
-            }}
-          >
-            {members.map((member) => (
-              <MemberRotation
-                key={member.characterKey}
-                teamId={teamId}
-                member={member}
-                teamData={teamData}
-                attacks={
-                  (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
-                }
-                setAttacks={setAttacks(member.characterKey)}
-                evaluation={mode === 'inventory' ? evaluation : kqmShown?.after}
-                figures={mode === 'inventory'}
-                played={kqmPlayed}
-                overrides={kqmOverrides}
-                buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
-                mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
+            footer={
+              <RotationTransfer
+                importOnly
                 members={members}
-                onField={onField ?? member.characterKey}
-                rotationTime={kqmRotationTime ?? rotationTime}
-                showConditions={showConditions}
-                expanded={rotationExpanded}
-                onToggle={
-                  attackCount ? () => setRotationExpanded((o) => !o) : undefined
-                }
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
                 disabled={running}
               />
-            ))}
-          </Box>
-        </Box>
-        {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
-        <Disclosure
-          label={t('teamOpt.bonus.advanced', 'Extra buffs (food, blessings…)')}
-          count={
-            extraCount > 0
-              ? t('teamOpt.extra.count', {
-                  defaultValue: '{{count}} buffs',
-                  count: extraCount,
-                })
-              : undefined
-          }
-          info={t(
-            'teamOpt.extra.info',
-            'Buffs the game data does not have, like food, an Abyss blessing or your own numbers. For the whole team or one member: they count on its hits and in its stats and requirements.'
-          )}
-          open={extraOpen}
-          onToggle={() => setExtraOpen((open) => !open)}
-          sx={{ ml: -0.25, pt: 1.25, mt: 0.25, borderTop: hairline }}
-        >
-          <ExtraBuffs
-            members={members}
-            teamOpt={teamOpt}
-            setTeamOpt={setTeamOpt}
-            disabled={running}
+            }
           />
-        </Disclosure>
+        ) : (
+          <>
+            {/* the rotation as text: read as its steps, edited in place */}
+            <RotationInline
+              teamId={teamId}
+              members={members}
+              setTeamOpt={setTeamOpt}
+              writer={writer}
+              replaces={!!attackCount}
+              disabled={running}
+              kqm={
+                mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined
+              }
+              kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
+            />
+            {/* the rotation's settings, in one row of labelled controls */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                columnGap: 2,
+                rowGap: 1,
+                minHeight: 34,
+              }}
+            >
+              <RotationTimeInput
+                // (KQM's: the time of the rotation it played, which it counts)
+                value={
+                  kqmRotation?.rotation === 'played'
+                    ? (kqmRotationTime ?? rotationTime)
+                    : rotationTime
+                }
+                disabled={running || kqmRotation?.rotation === 'played'}
+                onChange={(seconds) =>
+                  setTeamOpt((o) => {
+                    if (seconds && seconds !== defaultRotationTime)
+                      o.rotationTime = seconds
+                    else delete o.rotationTime
+                  })
+                }
+              />
+              <RotationsSetting
+                teamId={teamId}
+                members={members}
+                setTeamOpt={setTeamOpt}
+                writer={writer}
+                disabled={running}
+              />
+              {onField && members.length > 1 && (
+                <OnFieldPicker
+                  members={members}
+                  value={onField}
+                  disabled={running}
+                  onChange={(characterKey) =>
+                    setTeamOpt((o) => {
+                      if (characterKey === members[0]?.characterKey)
+                        delete o.onField
+                      else o.onField = characterKey
+                    })
+                  }
+                />
+              )}
+              <Box sx={{ flexGrow: 1 }} />
+              {rotationExpanded && !!attackCount && (
+                <FormControlLabel
+                  sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={showConditions}
+                      onChange={toggleConditions}
+                    />
+                  }
+                  label={
+                    <Typography component="span" sx={type.label}>
+                      {t(
+                        'teamOpt.rotation.showConditions',
+                        'Show buff conditions'
+                      )}
+                    </Typography>
+                  }
+                />
+              )}
+            </Box>
+            {/* one panel for the team: folded, a line per member; open, a column per member with
+              hairlines between them */}
+            <Box
+              sx={{
+                ...insetSx,
+                overflow: 'hidden',
+                containerType: 'inline-size',
+              }}
+            >
+              <Box
+                id={rotationBodyId}
+                sx={{
+                  minWidth: 0,
+                  display: 'grid',
+                  gap: '1px',
+                  // (the hairlines between the members: the grid's gaps over this colour)
+                  bgcolor: tokens.hairline,
+                  gridTemplateColumns: 'minmax(0, 1fr)',
+                  '@container (min-width: 520px)': {
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  },
+                  '@container (min-width: 1040px)': {
+                    gridTemplateColumns: `repeat(${Math.min(4, members.length)}, minmax(0, 1fr))`,
+                  },
+                }}
+              >
+                {members.map((member) => (
+                  <MemberRotation
+                    key={member.characterKey}
+                    teamId={teamId}
+                    member={member}
+                    teamData={teamData}
+                    attacks={
+                      (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
+                    }
+                    setAttacks={setAttacks(member.characterKey)}
+                    evaluation={
+                      mode === 'inventory' ? evaluation : kqmShown?.after
+                    }
+                    figures={mode === 'inventory'}
+                    played={kqmPlayed}
+                    overrides={kqmOverrides}
+                    buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
+                    mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
+                    members={members}
+                    onField={onField ?? member.characterKey}
+                    rotationTime={kqmRotationTime ?? rotationTime}
+                    showConditions={showConditions}
+                    expanded={rotationExpanded}
+                    onToggle={
+                      attackCount
+                        ? () => setRotationExpanded((o) => !o)
+                        : undefined
+                    }
+                    disabled={running}
+                  />
+                ))}
+              </Box>
+            </Box>
+            {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
+            <Disclosure
+              label={t(
+                'teamOpt.bonus.advanced',
+                'Extra buffs (food, blessings…)'
+              )}
+              count={
+                extraCount > 0
+                  ? t('teamOpt.extra.count', {
+                      defaultValue: '{{count}} buffs',
+                      count: extraCount,
+                    })
+                  : undefined
+              }
+              info={t(
+                'teamOpt.extra.info',
+                'Buffs the game data does not have, like food, an Abyss blessing or your own numbers. For the whole team or one member: they count on its hits and in its stats and requirements.'
+              )}
+              open={extraOpen}
+              onToggle={() => setExtraOpen((open) => !open)}
+              sx={{ ml: -0.25, pt: 1.25, mt: 0.25, borderTop: hairline }}
+            >
+              <ExtraBuffs
+                members={members}
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
+                disabled={running}
+              />
+            </Disclosure>
+          </>
+        )}
       </Box>
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
@@ -682,7 +728,7 @@ export default function TeamBuildWorkspace({
         />
       )}
       {/* last on the page: it stays pinned to the window's foot while anything above scrolls */}
-      {(mode === 'inventory' || running) && (
+      {((mode === 'inventory' && !showStart) || running) && (
         <RunBar
           teamId={teamId}
           state={state}
