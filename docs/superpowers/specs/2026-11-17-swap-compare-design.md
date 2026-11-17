@@ -139,8 +139,8 @@ rotation time, each member's damage/share and ER, both rotations, "Juan-optimize
 
 ## Done when
 - With the user's save (`Tsaritsa - Yae - Odette - Danica`), out Yae Miko, in Mitya (C0, Wandering
-  Evenstar R1, KQM), main rotation `Danica E -> Odette E E -> Yae Miko E E E -> Danica Q ->
-  Anastasya hE N2 Q N5 E E E N2`, fragment `E Q`: the overview shows A and B with DPR, DPS,
+  Evenstar R1, KQM), after a KQM Theorycrafting run with `Danica E -> Odette E E -> Yae Miko E E E
+  -> Danica Q -> Anastasya hE N2 Q N5 E E E N2`, fragment `E Q`: the overview shows A and B with DPR, DPS,
   shares and ER; the card downloads.
 - A rotation where the leaving member appears twice is refused with a message.
 - "Confronta" stays disabled until the user confirms KQM Theorycrafting's data are final, and
