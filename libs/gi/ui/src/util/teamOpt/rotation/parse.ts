@@ -124,7 +124,7 @@ function exactMember(
  * A part written without arrows ("Ineffa Q E Columbina E Q"): a new step starts at every later
  * word (or two or three) that names a member exactly; words in parentheses (notes) never do
  */
-function splitOnNames(
+export function splitOnNames(
   part: string,
   members: readonly RotationMember[]
 ): string[] {
