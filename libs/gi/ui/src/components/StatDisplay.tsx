@@ -5,6 +5,7 @@ import type { StatKey } from '@genshin-optimizer/gi/keymap'
 import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { Box } from '@mui/material'
+import { statName } from '../util/statName'
 
 export function StatWithUnit({
   statKey,
@@ -14,19 +15,12 @@ export function StatWithUnit({
   disableIcon?: boolean
 }) {
   return (
-    <Box
-      component="span"
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-      }}
-    >
+    <Box component="span" display="flex" alignItems="center" gap={1}>
       {!disableIcon && (
         <StatIcon statKey={statKey} iconProps={iconInlineProps} />
       )}
       <span>
-        {KeyMap.get(statKey)}
+        {statName(statKey)}
         {getUnitStr(statKey)}
       </span>
     </Box>

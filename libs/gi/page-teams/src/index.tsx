@@ -8,8 +8,11 @@ import {
 } from '@genshin-optimizer/common/react-util'
 import {
   CardThemed,
+  EmptyState,
   ModalWrapper,
-  ShowingAndSortOptionSelect,
+  notePendingNavigation,
+  PageHeader,
+  SortByButton,
   useInfScroll,
   useTitle,
 } from '@genshin-optimizer/common/ui'
@@ -20,35 +23,47 @@ import {
   validateCustomMultiTarget,
 } from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
+import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
+import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import { CharacterMultiAutocomplete, TeamCard } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
+import GroupsIcon from '@mui/icons-material/Groups'
+import SearchIcon from '@mui/icons-material/Search'
 import UploadIcon from '@mui/icons-material/Upload'
 import {
+  Alert,
   Box,
   Button,
   CardContent,
   CardHeader,
   Divider,
-  Grid,
+  InputAdornment,
   Skeleton,
   TextField,
   Typography,
 } from '@mui/material'
 import type { ChangeEvent } from 'react'
-import { Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { teamFilterConfigs, teamSortConfigs, teamSortMap } from './TeamSort'
 
-const columns = { xs: 1, sm: 2, md: 2, lg: 3, xl: 3 }
 const numToShowMap = { xs: 6, sm: 12, md: 18, lg: 24, xl: 24 }
 
 export default function PageTeams() {
+  // The team cards also use 'statKey_gen'; fetch it together with the page's namespaces.
+  preloadNamespaces(['statKey_gen', 'elementalResonance_gen'])
   const { t } = useTranslation([
     'page_team',
     'page_teams',
     // Always load these 2 so character names are loaded for searching/sorting
-    'sillyWisher_charNames',
     'charNames_gen',
   ])
   const database = useDatabase()
@@ -60,10 +75,17 @@ export default function PageTeams() {
 
   const onAdd = () => {
     const newid = database.teams.new()
-    navigate(newid)
+    // the new team page opens its member picker straight away
+    navigate(newid, { state: { openQuickSetup: true } })
   }
-  const [showImport, onShowImport, onHideImport] = useBoolState()
+  const [showImport, onShowImport, onHideImportModal] = useBoolState()
   const [data, setData] = useState('')
+  // why the pasted data could not be imported (shown in the dialog, which stays open)
+  const [importError, setImportError] = useState<string>()
+  const onHideImport = useCallback(() => {
+    setImportError(undefined)
+    onHideImportModal()
+  }, [onHideImportModal])
   // Automatically open the import modal if the state indicates to do so
   useEffect(() => {
     if (location.state?.openImportModal) {
@@ -72,20 +94,27 @@ export default function PageTeams() {
     }
   }, [location.state, onShowImport, setData])
   const importData = () => {
+    let dataObj: unknown
     try {
-      const dataObj = JSON.parse(data)
-      if (validateCustomMultiTarget(dataObj)) {
-        window.alert(t('importForm.error.multiOpt'))
-        return
-      }
-      if (!database.teams.import(dataObj))
-        window.alert(t('importForm.error.verifi'))
-      onHideImport()
+      dataObj = JSON.parse(data)
     } catch (e) {
-      window.alert(`${t('importForm.error.import')}\n${e}`)
-
+      setImportError(`${t('importForm.error.import')} ${e}`)
       return
     }
+    try {
+      if (database.teams.import(dataObj as never)) {
+        onHideImport()
+        return
+      }
+    } catch (e) {
+      console.error(e)
+    }
+    // (a character's multi-target setup, copied from its Optimize tab: imported there, not here)
+    setImportError(
+      validateCustomMultiTarget(dataObj)
+        ? t('importForm.error.multiOpt')
+        : t('importForm.error.verifi')
+    )
   }
   const displayTeam = useDataEntryBase(database.displayTeam)
   const { sortType, ascending, charKeys } = displayTeam
@@ -129,122 +158,151 @@ export default function PageTeams() {
     [filteredTeamIds, numShow]
   )
 
-  const totalShowing =
-    filteredTeamIds.length !== totalTeamNum
-      ? `${filteredTeamIds.length}/${totalTeamNum}`
-      : `${totalTeamNum}`
-
-  const showingTextProps = {
-    numShowing: TeamIdsToShow.length,
-    total: totalShowing,
-    t: t,
-    namespace: 'page_teams',
-  }
-
-  const sortByButtonProps = {
-    sortKeys: [...teamSortKeys],
-    value: sortType,
-    onChange: (sortType: TeamSortKey) => database.displayTeam.set({ sortType }),
-    ascending: ascending,
-    onChangeAsc: (ascending: boolean) =>
-      database.displayTeam.set({ ascending }),
-  }
+  const filtered = filteredTeamIds.length !== totalTeamNum
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1,
-      }}
-    >
-      <CardThemed>
-        <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1,
-              alignItems: 'stretch',
-            }}
-          >
-            <CharacterMultiAutocomplete
-              teamIds={filteredTeamIds}
-              charKeys={charKeys}
-              setCharKey={(charKeys) => database.displayTeam.set({ charKeys })}
-              acProps={{ sx: { flexGrow: 1 } }}
-            />
-            <TextField
-              autoFocus
-              value={searchTerm}
-              onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
-                setSearchTerm(e.target.value)
-              }
-              label={t('searchLabel.team')}
-              // size="small"
-              sx={{ height: '100%', flexGrow: 1 }}
-              slotProps={{
-                input: {
-                  sx: { height: '100%' },
-                },
-              }}
-            />
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <ShowingAndSortOptionSelect
-              showingTextProps={showingTextProps}
-              sortByButtonProps={sortByButtonProps}
-            />
-          </Box>
-        </CardContent>
-      </CardThemed>
-
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button fullWidth onClick={onAdd} color="info" startIcon={<AddIcon />}>
-          {t('addTeamBtn')}
-        </Button>
-        <ModalWrapper open={showImport} onClose={onHideImport}>
-          <CardThemed>
-            <CardHeader title={t('importForm.title')} />
-            <Divider />
-            <CardContent
-              sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+    <Box display="flex" flexDirection="column" gap={2}>
+      <PageHeader
+        title={t('ui:tabs.teams')}
+        count={totalTeamNum}
+        actions={
+          <>
+            <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<UploadIcon />}
+              onClick={onShowImport}
             >
-              <Typography>{t('importForm.desc')}</Typography>
-              <TextField
-                fullWidth
-                label={t('importForm.label')}
-                placeholder={t('importForm.placeholder')}
-                value={data}
-                onChange={(e) => setData(e.target.value)}
-                multiline
-                rows={4}
-              />
-              <Button
-                startIcon={<UploadIcon />}
-                disabled={!data}
-                onClick={importData}
-              >
-                {t('importForm.importBtn')}
-              </Button>
-            </CardContent>
-          </CardThemed>
-        </ModalWrapper>
-        <Button
-          fullWidth
-          onClick={onShowImport}
-          color="info"
-          startIcon={<UploadIcon />}
+              {t('page_teams:header.import')}
+            </Button>
+            <Button sx={giCtaSx} startIcon={<AddIcon />} onClick={onAdd}>
+              {t('page_teams:header.create')}
+            </Button>
+          </>
+        }
+      />
+      {/* one quiet row: find a team by name or by who is in it, then order the list */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: 1,
+        }}
+      >
+        <TextField
+          autoFocus={brPt !== 'xs' && brPt !== 'sm'}
+          size="small"
+          value={searchTerm}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+            setSearchTerm(e.target.value)
+          }
+          placeholder={t('page_teams:toolbar.search', 'Search teams')}
+          inputProps={{ 'aria-label': t('searchLabel.team') }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ width: { xs: '100%', sm: 280 } }}
+        />
+        <CharacterMultiAutocomplete
+          teamIds={filteredTeamIds}
+          charKeys={charKeys}
+          setCharKey={(charKeys) => database.displayTeam.set({ charKeys })}
+          acProps={{
+            size: 'small',
+            sx: { flexGrow: 1, minWidth: 240, maxWidth: { lg: 560 } },
+          }}
+        />
+        <Box
+          sx={{
+            ml: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
         >
-          {t('importTeamBtn')}
-        </Button>
+          {filtered && (
+            <Typography color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+              {t('page_teams:toolbar.filtered', {
+                defaultValue: '{{count}} of {{total}} teams',
+                count: filteredTeamIds.length,
+                total: totalTeamNum,
+              })}
+            </Typography>
+          )}
+          <SortByButton
+            size="small"
+            sortKeys={[...teamSortKeys]}
+            value={sortType}
+            onChange={(sortType: TeamSortKey) =>
+              database.displayTeam.set({ sortType })
+            }
+            ascending={ascending}
+            onChangeAsc={(ascending: boolean) =>
+              database.displayTeam.set({ ascending })
+            }
+          />
+        </Box>
       </Box>
+
+      <ModalWrapper open={showImport} onClose={onHideImport}>
+        <CardThemed>
+          <CardHeader title={t('importForm.title')} />
+          <Divider />
+          <CardContent
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+          >
+            <Typography>{t('importForm.desc')}</Typography>
+            <TextField
+              fullWidth
+              label={t('importForm.label')}
+              placeholder={t('importForm.placeholder')}
+              value={data}
+              onChange={(e) => {
+                setData(e.target.value)
+                setImportError(undefined)
+              }}
+              multiline
+              rows={4}
+            />
+            {importError && <Alert severity="error">{importError}</Alert>}
+            <Button
+              startIcon={<UploadIcon />}
+              disabled={!data}
+              onClick={importData}
+            >
+              {t('importForm.importBtn')}
+            </Button>
+          </CardContent>
+        </CardThemed>
+      </ModalWrapper>
+      {totalTeamNum === 0 && (
+        <EmptyState
+          icon={<GroupsIcon />}
+          title={t('page_teams:empty.title')}
+          description={t('page_teams:empty.description')}
+          actions={
+            <>
+              <Button onClick={onAdd} startIcon={<AddIcon />}>
+                {t('page_teams:empty.create')}
+              </Button>
+              <Button
+                variant="outlined"
+                color="inherit"
+                onClick={onShowImport}
+                startIcon={<UploadIcon />}
+              >
+                {t('page_teams:empty.import')}
+              </Button>
+            </>
+          }
+        />
+      )}
       <Suspense
         fallback={
           <Skeleton
@@ -253,9 +311,17 @@ export default function PageTeams() {
           />
         }
       >
-        <Grid container spacing={2} columns={columns}>
+        {/* auto-fill: a wider page gets more cards per row, not wider cards */}
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 2,
+            gridTemplateColumns:
+              'repeat(auto-fill, minmax(min(520px, 100%), 1fr))',
+          }}
+        >
           {TeamIdsToShow.map((tid) => (
-            <Grid key={tid} size={1}>
+            <Box key={tid} sx={{ minWidth: 0 }}>
               <Suspense
                 fallback={
                   <Skeleton variant="rectangular" width="100%" height={150} />
@@ -264,12 +330,16 @@ export default function PageTeams() {
                 <TeamCard
                   teamId={tid}
                   bgt="light"
-                  onClick={(cid) => navigate(`${tid}${cid ? `/${cid}` : ''}`)}
+                  onClick={(cid) => {
+                    // the team page takes a moment to render: show the progress bar meanwhile
+                    notePendingNavigation()
+                    navigate(`${tid}${cid ? `/${cid}` : ''}`)
+                  }}
                 />
               </Suspense>
-            </Grid>
+            </Box>
           ))}
-        </Grid>
+        </Box>
       </Suspense>
       {filteredTeamIds.length !== TeamIdsToShow.length && (
         <Skeleton

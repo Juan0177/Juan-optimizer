@@ -122,8 +122,6 @@
   "10000133": "Sandrone",
   "10000134": "Traveler",
   "10000135": "Traveler",
-  "10000136": "Mitya",
-  "10000137": "Valeriy",
   "10000140": "Vodyanitsa",
   "10000143": "Vesna",
   "10000148": "Alyosha",
@@ -167,5 +165,9 @@
   "11000134": "TPSMaleDiscarded",
   "11000135": "TPSFemaleDiscarded",
   "11000998": "UGCTestCharacterPrototypeMale",
-  "11000999": "UGCTestCharacterPrototypeFemale"
+  "11000999": "UGCTestCharacterPrototypeFemale",
+  "10000136": "Mitya",
+  "10000147": "Danica",
+  "10000149": "Anastasya",
+  "10000137": "Valeriy"
 }

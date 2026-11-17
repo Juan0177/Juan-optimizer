@@ -104,12 +104,11 @@ export function CharacterView({
             {/* constellations for 4column */}
             {grlg && (
               <Grid
+                item
+                xs={12}
+                md={12}
+                lg={3}
                 sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-                size={{
-                  xs: 12,
-                  md: 12,
-                  lg: 3,
-                }}
               >
                 {/* <ConstellationDropdown /> */}
                 {constellationCards.map((c, i) => (
@@ -122,18 +121,10 @@ export function CharacterView({
                 ))}
               </Grid>
             )}
-            <Grid
-              container
-              spacing={1}
-              size={{
-                xs: 12,
-                md: 12,
-                lg: 9,
-              }}
-            >
+            <Grid item xs={12} md={12} lg={9} container spacing={1}>
               {/* auto, skill, burst */}
               {skillBurstList.map(([tKey, tText]) => (
-                <Grid key={tKey}>
+                <Grid item key={tKey} {...talentSpacing}>
                   <SkillDisplayCard
                     characterKey={characterKey}
                     talentKey={tKey}
@@ -142,7 +133,7 @@ export function CharacterView({
                 </Grid>
               ))}
               {!!characterSheet.getTalentOfKey('sprint') && (
-                <Grid>
+                <Grid item {...talentSpacing}>
                   <SkillDisplayCard
                     characterKey={characterKey}
                     talentKey="sprint"
@@ -151,7 +142,7 @@ export function CharacterView({
                 </Grid>
               )}
               {!!characterSheet.getTalentOfKey('passive') && (
-                <Grid>
+                <Grid item {...talentSpacing}>
                   <SkillDisplayCard
                     characterKey={characterKey}
                     talentKey="passive"
@@ -164,7 +155,12 @@ export function CharacterView({
                 const enabled = ascension >= asc
                 if (!characterSheet.getTalentOfKey(tKey)) return null
                 return (
-                  <Grid key={tKey} style={{ opacity: enabled ? 1 : 0.5 }}>
+                  <Grid
+                    item
+                    key={tKey}
+                    style={{ opacity: enabled ? 1 : 0.5 }}
+                    {...talentSpacing}
+                  >
                     <SkillDisplayCard
                       characterKey={characterKey}
                       talentKey={tKey}
@@ -176,22 +172,16 @@ export function CharacterView({
             </Grid>
             {/* constellations for < 4 columns */}
             {!grlg && (
-              <Grid
-                container
-                spacing={1}
-                size={{
-                  xs: 12,
-                  md: 12,
-                  lg: 3,
-                }}
-              >
+              <Grid item xs={12} md={12} lg={3} container spacing={1}>
                 {/* <Grid item xs={12}>
                   <ConstellationDropdown />
                 </Grid> */}
                 {constellationCards.map((c, i) => (
                   <Grid
+                    item
                     key={i}
                     sx={{ opacity: constellation >= i + 1 ? 1 : 0.5 }}
+                    {...talentSpacing}
                   >
                     {c}
                   </Grid>
@@ -222,19 +212,14 @@ function SkillDisplayCard({
     <CardThemed bgt="light" sx={{ height: '100%' }}>
       <CardContent>
         <Grid container sx={{ flexWrap: 'nowrap' }}>
-          <Grid>
+          <Grid item>
             <Box
               component="img"
               src={talentSheet?.img}
               sx={{ width: 60, height: 'auto' }}
             />
           </Grid>
-          <Grid
-            sx={{
-              flexGrow: 1,
-              pl: 1,
-            }}
-          >
+          <Grid item flexGrow={1} sx={{ pl: 1 }}>
             <Typography variant="h6">{talentSheet?.name}</Typography>
             <Typography variant="subtitle1">{subtitle}</Typography>
           </Grid>

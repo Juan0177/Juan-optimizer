@@ -1,5 +1,5 @@
 import { AnvilIcon, DiscordIcon } from '@genshin-optimizer/common/svgicons'
-import { CardThemed, SqBadge } from '@genshin-optimizer/common/ui'
+import { CardThemed, PageHeader, SqBadge } from '@genshin-optimizer/common/ui'
 import { FlowerIcon } from '@genshin-optimizer/gi/svgicons'
 import {
   Backpack,
@@ -24,53 +24,20 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import ReactGA from 'react-ga4'
 import { Trans, useTranslation } from 'react-i18next'
-import { Link as RouterLink } from 'react-router-dom'
 import AdScanner from './AdeptiScanner.png'
 import Artiscan from './artiscan.png'
 import GIScanner from './GIScanner.png'
 import Irminsul from './Irminsul.webp'
 
 export default function PageScanner() {
-  const { t } = useTranslation('page_scanner')
-  ReactGA.send({ hitType: 'pageview', page: '/scanner' })
+  const { t } = useTranslation(['page_scanner', 'ui'])
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-      }}
-    >
-      <CardThemed>
-        <CardContent>
-          <Trans t={t} i18nKey="intro">
-            <Typography gutterBottom variant="h5">
-              Scanners
-            </Typography>
-            <Typography>
-              Scanners are Genshin tools that can automatically scan game data
-              from screenshots or directly from the game.
-            </Typography>
-            <Typography gutterBottom>
-              Below are several scanners that have been tested with GO.
-            </Typography>
-            <Typography variant="subtitle2">
-              To upload the exported file, go to the
-              <Link component={RouterLink} to="/setting">
-                Settings
-              </Link>
-              page, and upload your file in the
-              {'<strong>Database Upload</strong>'}
-              section.
-            </Typography>
-          </Trans>
-        </CardContent>
-      </CardThemed>
+    <Box display="flex" flexDirection="column" gap={2}>
+      <PageHeader title={t('ui:tabs.scanner')} />
 
       <Grid container columns={{ xs: 1, md: 2, lg: 4 }} spacing={2}>
-        <Grid size={1}>
+        <Grid item xs={1}>
           <CardThemed sx={{ height: '100%' }}>
             <CardActionArea
               href="https://artiscan.ninjabay.org/"
@@ -79,19 +46,8 @@ export default function PageScanner() {
               <CardMedia component="img" image={Artiscan} />
             </CardActionArea>
             <CardContent>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                }}
-              >
-                <Typography
-                  variant="h5"
-                  sx={{
-                    flexGrow: 1,
-                  }}
-                >
+              <Box display="flex" gap={1} alignItems="center">
+                <Typography variant="h5" flexGrow={1}>
                   <Trans t={t} i18nKey="nb.title">
                     Artiscan
                   </Trans>
@@ -137,7 +93,7 @@ export default function PageScanner() {
             </CardContent>
           </CardThemed>
         </Grid>
-        <Grid size={1}>
+        <Grid item xs={1}>
           <CardThemed sx={{ height: '100%' }}>
             <CardActionArea
               href="https://github.com/taiwenlee/Inventory_Kamera/blob/master/README.md"
@@ -146,19 +102,8 @@ export default function PageScanner() {
               <CardMedia component="img" image={GIScanner} />
             </CardActionArea>
             <CardContent>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                }}
-              >
-                <Typography
-                  variant="h5"
-                  sx={{
-                    flexGrow: 1,
-                  }}
-                >
+              <Box display="flex" gap={1} alignItems="center">
+                <Typography variant="h5" flexGrow={1}>
                   <Trans t={t} i18nKey="ik.title">
                     Inventory Kamera
                   </Trans>
@@ -243,7 +188,7 @@ export default function PageScanner() {
             </CardContent>
           </CardThemed>
         </Grid>
-        <Grid size={1}>
+        <Grid item xs={1}>
           <CardThemed sx={{ height: '100%' }}>
             <CardActionArea
               href="https://github.com/D1firehail/AdeptiScanner-GI/blob/master/README.md"
@@ -252,19 +197,8 @@ export default function PageScanner() {
               <CardMedia component="img" image={AdScanner} />
             </CardActionArea>
             <CardContent>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                }}
-              >
-                <Typography
-                  variant="h5"
-                  sx={{
-                    flexGrow: 1,
-                  }}
-                >
+              <Box display="flex" gap={1} alignItems="center">
+                <Typography variant="h5" flexGrow={1}>
                   <Trans t={t} i18nKey="as.title">
                     AdeptiScanner
                   </Trans>
@@ -338,7 +272,7 @@ export default function PageScanner() {
             </CardContent>
           </CardThemed>
         </Grid>
-        <Grid size={1}>
+        <Grid item xs={1}>
           <CardThemed sx={{ height: '100%' }}>
             <CardActionArea
               href="https://konkers.github.io/irminsul/02-quickstart.html"
@@ -347,19 +281,8 @@ export default function PageScanner() {
               <CardMedia component="img" image={Irminsul} />
             </CardActionArea>
             <CardContent>
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  alignItems: 'center',
-                }}
-              >
-                <Typography
-                  variant="h5"
-                  sx={{
-                    flexGrow: 1,
-                  }}
-                >
+              <Box display="flex" gap={1} alignItems="center">
+                <Typography variant="h5" flexGrow={1}>
                   <Trans t={t} i18nKey="is.title">
                     Irminsul
                   </Trans>

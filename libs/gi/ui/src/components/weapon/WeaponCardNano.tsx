@@ -95,13 +95,7 @@ export function WeaponCardNanoObj({
   )
   return (
     <ConditionalWrapper condition={!!onClick} wrapper={actionWrapperFunc}>
-      <Box
-        sx={{
-          display: 'flex',
-          height: '100%',
-          alignItems: 'stretch',
-        }}
-      >
+      <Box display="flex" height="100%" alignItems="stretch">
         <Box
           className={`grad-${getWeaponStat(weapon.key).rarity}star`}
           sx={{
@@ -117,6 +111,7 @@ export function WeaponCardNanoObj({
           <WeaponNameTooltip weaponKey={weapon.key}>
             <Box
               component="img"
+              loading="lazy"
               src={weaponAsset(weapon.key, weapon.ascension >= 2)}
               sx={{ mx: -1, maxHeight: '100%', maxWidth: '100%' }}
             />
@@ -176,6 +171,8 @@ export function WeaponCardNanoObj({
               display: 'flex',
               justifyContent: 'flex-end',
               alignItems: 'flex-end',
+              // covers the whole icon: let the hover through to the weapon's tooltip
+              pointerEvents: 'none',
             }}
           >
             {weaponHasRefinement(weapon.key) && (
@@ -187,13 +184,7 @@ export function WeaponCardNanoObj({
             )}
           </Box>
         </Box>
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            p: 1,
-          }}
-        >
+        <Box display="flex" flexDirection="column" sx={{ p: 1 }}>
           <WeaponStat node={UIData.get(input.weapon.main)} />
           <WeaponStat node={UIData.get(input.weapon.sub)} />
         </Box>
@@ -205,13 +196,7 @@ function WeaponStat({ node }: { node: CalcResult }) {
   const { name, icon } = resolveInfo(node.info)
   if (!name) return null
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-        alignContent: 'center',
-      }}
-    >
+    <Box display="flex" gap={1} alignContent="center">
       <Typography
         sx={{ flexGrow: 1, display: 'flex', gap: 1 }}
         component="span"

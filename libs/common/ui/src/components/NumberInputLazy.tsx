@@ -5,13 +5,12 @@ import { useEffect, useState } from 'react'
 
 /**
  * A textfield for numeric inputs that only triggers `onChange` when it is blurred (unfocused) or if not multi-line, the enter key.
- * Allows parsing of numbers as both intergers and float, respects `slotProps.htmlInput` `min` and `max`.
+ * Allows parsing of numbers as both intergers and float, respects `inputProps.min` and `inputProps.max`.
  */
 export function NumberInputLazy({
   value: valueProp,
   onChange,
   float = false,
-  slotProps,
   ...props
 }: {
   value: number
@@ -19,11 +18,7 @@ export function NumberInputLazy({
   onChange: (value: number) => void
 } & Omit<TextFieldProps, 'value' | 'onChange' | 'onBlur' | 'onKeyDown'>) {
   const [value, setValue] = useState(valueProp?.toString())
-  const htmlInput =
-    slotProps?.htmlInput && typeof slotProps.htmlInput !== 'function'
-      ? slotProps.htmlInput
-      : undefined
-  const { min, max } = (htmlInput ?? {}) as { min?: number; max?: number }
+  const { min, max } = props?.inputProps ?? {}
   useEffect(() => {
     setValue(valueProp?.toString())
   }, [valueProp])
@@ -76,12 +71,9 @@ export function NumberInputLazy({
       onFocus={onFocus}
       onKeyDown={(e) => e.key === 'Enter' && !props.multiline && saveValue()}
       {...props}
-      slotProps={{
-        ...slotProps,
-        htmlInput: {
-          inputMode: 'numeric',
-          ...htmlInput,
-        },
+      inputProps={{
+        inputMode: 'numeric',
+        ...(props.inputProps ?? {}),
       }}
     />
   )

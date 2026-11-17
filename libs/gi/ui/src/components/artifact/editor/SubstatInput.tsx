@@ -40,19 +40,17 @@ import { PercentBadge } from '../../PercentBadge'
 import { ArtifactStatWithUnit } from '../ArtifactStatKeyDisplay'
 import type { RollColorKey } from '../util'
 
-function isSubstatUnactivated(
-  artifact: ICachedArtifact | undefined,
-  substatIndex: number
-) {
-  return !!artifact?.unactivatedSubstats?.length && substatIndex === 3
-}
-
 function getCorrectSubstats(
   artifact: ICachedArtifact | undefined,
+  isUnactivatedSubstat: boolean,
   substatIndex: number
 ) {
-  if (isSubstatUnactivated(artifact, substatIndex)) {
-    return artifact!.unactivatedSubstats![0]
+  if (
+    artifact?.unactivatedSubstats &&
+    substatIndex === 3 &&
+    isUnactivatedSubstat
+  ) {
+    return artifact.unactivatedSubstats[0]
   } else {
     return artifact?.substats[substatIndex]
   }
@@ -64,6 +62,7 @@ export function SubstatInput({
   setSubstat,
   setInitialSubstatValue,
   onChange,
+  isUnactivatedSubstat,
 }: {
   index: number
   artifact: ICachedArtifact | undefined
@@ -74,6 +73,7 @@ export function SubstatInput({
   ) => void
   setInitialSubstatValue: (index: number, value: number | undefined) => void
   onChange: (index: number, substat: ISubstat, isChecked: boolean) => void
+  isUnactivatedSubstat: boolean
 }) {
   const { t } = useTranslation('artifact')
   const { mainStatKey = '', rarity = 5, level = 0 } = artifact ?? {}
@@ -83,8 +83,7 @@ export function SubstatInput({
     rolls = [],
     efficiency = 0,
     initialValue,
-  } = getCorrectSubstats(artifact, index) ?? {}
-  const isUnactivatedSubstat = isSubstatUnactivated(artifact, index)
+  } = getCorrectSubstats(artifact, isUnactivatedSubstat, index) ?? {}
 
   const accurateValue = rolls.reduce((a, b) => a + b, 0)
   const unit = getUnitStr(key),
@@ -248,10 +247,8 @@ export function SubstatInput({
             }
             disabled={!key || (isUnactivatedSubstat && index === 3)}
             error={!!error}
-            slotProps={{
-              htmlInput: {
-                sx: { textAlign: 'right' },
-              },
+            inputProps={{
+              sx: { textAlign: 'right' },
             }}
           />
           {!!rollData.length && (
@@ -285,11 +282,7 @@ export function SubstatInput({
           })}
         </ButtonGroup>
       </Box>
-      <Box
-        sx={{
-          px: 2,
-        }}
-      >
+      <Box px={2}>
         <SliderWrapper
           value={value}
           marks={marks}
@@ -312,7 +305,7 @@ export function SubstatInput({
           <SqBadge color="error">{t('ui:error')}</SqBadge>
         ) : (
           <Grid container>
-            <Grid>
+            <Grid item>
               <SqBadge
                 color={
                   rollNum === 0
@@ -325,7 +318,7 @@ export function SubstatInput({
                   : t('editor.substat.noRoll')}
               </SqBadge>
             </Grid>
-            <Grid>
+            <Grid item>
               {!!rolls.length &&
                 sortedSubstatRolls(rolls, initialValue !== undefined).map(
                   (val, i) => (
@@ -344,11 +337,7 @@ export function SubstatInput({
                   )
                 )}
             </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-              }}
-            >
+            <Grid item flexGrow={1}>
               {index === 3 ? (
                 <FormControlLabel
                   label={t('editor.unactivated')}
@@ -372,12 +361,7 @@ export function SubstatInput({
                 ''
               )}
             </Grid>
-            <Grid
-              size="auto"
-              sx={{
-                flexShrink: 1,
-              }}
-            >
+            <Grid item xs="auto" flexShrink={1}>
               <Typography>
                 <Trans
                   t={t}

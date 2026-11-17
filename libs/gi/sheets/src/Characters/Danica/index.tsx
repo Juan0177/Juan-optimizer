@@ -1,19 +1,21 @@
-// juanlab-beta 7.3: Danica, dai dati della beta (Nanoka 7.2.52, numeri dei talenti verificati su gachabase).
-// Quando l'originale aggiunge Danica, questo file si cancella e si tiene il suo.
 import { objKeyMap, range } from '@genshin-optimizer/common/util'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
+import type { NumNode } from '@genshin-optimizer/gi/wr'
 import {
+  compareEq,
+  constant,
   equal,
+  equalStr,
   greaterEq,
   infoMut,
   input,
   lookup,
   min,
   naught,
-  one,
   percent,
   prod,
+  stellarDmgNode,
   subscript,
   sum,
   target,
@@ -28,7 +30,6 @@ import {
   plungingDmgNodes,
   shieldElement,
   shieldNodeTalent,
-  stellarTalentDmgNode,
 } from '../dataUtil'
 import type { TalentSheet } from '../ICharacterSheet'
 
@@ -49,7 +50,7 @@ const dm = {
     ],
   },
   charged: {
-    cyclicDmg: skillParam_gen.auto[a++],
+    spinningDmg: skillParam_gen.auto[a++],
     finalDmg: skillParam_gen.auto[a++],
     stam: skillParam_gen.auto[a++][0],
     duration: skillParam_gen.auto[a++][0],
@@ -60,9 +61,9 @@ const dm = {
     high: skillParam_gen.auto[a++],
   },
   skill: {
-    skillDmg: skillParam_gen.skill[s++],
-    protectDmg: skillParam_gen.skill[s++],
-    purgeDmg: skillParam_gen.skill[s++],
+    dmg: skillParam_gen.skill[s++],
+    entryDmg: skillParam_gen.skill[s++], // Entry Skill E2, Stellar-Conduct (ATK)
+    onFieldDmg: skillParam_gen.skill[s++], // On-Field Skill E2, Stellar-Conduct (ATK)
     coordDmg: skillParam_gen.skill[s++],
     shieldAtk_: skillParam_gen.skill[s++],
     shieldFlat: skillParam_gen.skill[s++],
@@ -73,88 +74,94 @@ const dm = {
       skillParam_gen.skill[s++], // 4
     ],
     anchorDuration: skillParam_gen.skill[s++][0],
-    protectCd: skillParam_gen.skill[s++][0],
+    entryCd: skillParam_gen.skill[s++][0],
     cd: skillParam_gen.skill[s++][0],
   },
   burst: {
     hit1Dmg: skillParam_gen.burst[b++],
-    hit1StellarDmg: skillParam_gen.burst[b++],
+    hit1ScDmg: skillParam_gen.burst[b++],
     hit234Dmg: skillParam_gen.burst[b++],
     hit5Dmg: skillParam_gen.burst[b++],
-    hit5StellarDmg: skillParam_gen.burst[b++],
+    hit5ScDmg: skillParam_gen.burst[b++],
     atkRatio: skillParam_gen.burst[b++],
     maxAtk: skillParam_gen.burst[b++],
-    purge_dmg_: skillParam_gen.burst[b++],
+    onFieldDmg_: skillParam_gen.burst[b++],
     duration: skillParam_gen.burst[b++][0],
     cd: skillParam_gen.burst[b++][0],
     enerCost: skillParam_gen.burst[b++][0],
   },
   passive1: {
     electro_enemyRes_: skillParam_gen.passive1[0][0],
-    radiance_electro_enemyRes_: skillParam_gen.passive1[1][0],
-    radiance_cryo_enemyRes_: skillParam_gen.passive1[2][0],
+    radElectro_enemyRes_: skillParam_gen.passive1[1][0],
+    radCryo_enemyRes_: skillParam_gen.passive1[2][0],
   },
   passive2: {
-    atkSPD_: skillParam_gen.passive2[0][0],
-    maxStacks: 3,
-    atk_: 0.2, // dal testo: "Danica gains 20% ATK after using Will to Protect"
+    atk_: skillParam_gen.passive2[0][0],
+    atkSPD_: 0.2, // A4 ATK SPD is only in the description text (20%)
   },
   passive3: {
     baseDmgPer100Atk: skillParam_gen.passive3![0][0],
     maxBaseDmg: skillParam_gen.passive3![1][0],
   },
-  // I parametri delle costellazioni della beta non corrispondono al testo in C1, C2 e C6: si usano i numeri del testo,
-  // che sono gli stessi su Nanoka e su gachabase.
   constellation1: {
-    cleanerMult_: 1.2,
-    royalGuardMult_: 0.8,
+    energy: skillParam_gen.constellation1[0],
+    cd: skillParam_gen.constellation1[1],
+    defenseInc: skillParam_gen.constellation1[2],
+    battleInc: skillParam_gen.constellation1[3],
   },
   constellation2: {
-    stacks: 7,
-    toastAtk_: 1,
-    cleanerToastAtk_: 1.5,
+    decreeMult: skillParam_gen.constellation2[0], // Cleaning Decree Will to Purge: 150% DMG
+    stacks: skillParam_gen.constellation2[1],
+    allyAtkMult: skillParam_gen.constellation2[2],
+    selfMaxStacks: skillParam_gen.constellation2[3],
+    selfAtkMult: skillParam_gen.constellation2[4],
   },
   constellation6: {
-    stellarconduct_specialDmg_: 0.2,
-    royalGuardAtkStep: 1000,
-    royalGuard_dmg_perStep: 0.1,
-    royalGuardMax_dmg_: 0.4,
-    cleanerAtkStep: 500,
-    cleanerCritRate_perStep: 0.025,
-    cleanerCritDMG_perStep: 0.25,
-    cleanerMaxCritRate_: 0.1,
-    cleanerMaxCritDMG_: 1,
+    stellarconduct_specialDmg_: skillParam_gen.constellation6[0],
+    defenseAtkStep: skillParam_gen.constellation6[1],
+    defenseDmg_: skillParam_gen.constellation6[2],
+    defenseMaxDmg_: skillParam_gen.constellation6[3],
+    battleAtkStep: skillParam_gen.constellation6[4],
+    battleCritRate_: skillParam_gen.constellation6[5],
+    battleCritDMG_: skillParam_gen.constellation6[6],
+    battleMaxCritRate_: skillParam_gen.constellation6[7],
+    battleMaxCritDMG_: skillParam_gen.constellation6[8],
   },
 } as const
 
-// Radiance: Stellar-Conduct (dentro un Campo stellare), come per Valeriy e Mitya
-const [condA0StellarRadianceScPath, condA0StellarRadianceSc] = cond(
-  key,
-  'a0StellarRadianceSc'
-)
-
-// Stellar Jubilee: +0.7% DAN base dell'Astroconduzione ogni 100 ATT di Danica, al massimo 14%, per tutto il gruppo
-const a0_stellarconduct_baseDmg_ = min(
-  prod(percent(dm.passive3.baseDmgPer100Atk / 100), input.total.atk),
-  percent(dm.passive3.maxBaseDmg)
-)
-
-// Ancora della tempesta sul campo: RES Electro ridotta (A1); con Radiance anche Electro e Cryo ancora di piu.
-// C6: DAN dell'Astroconduzione del gruppo elevati del 20% mentre l'Ancora e presente.
+/* ---------- Conditionals ---------- */
 const [condAnchorPath, condAnchor] = cond(key, 'anchor')
+const anchorOn = equal(condAnchor, 'on', 1)
+const [condMaidPath, condMaid] = cond(key, 'maidForm') // defense | battle
+const [condBurstEnhPath, condBurstEnh] = cond(key, 'burstEnhanced')
+const [condA4StacksPath, condA4Stacks] = cond(key, 'a4Stacks')
+const a4StacksArr = range(1, 3)
+const a4Stacks = lookup(
+  condA4Stacks,
+  objKeyMap(a4StacksArr, (n) => constant(n)),
+  naught
+)
+const [condRadiancePath, condRadiance] = cond(key, 'a0StellarRadianceSc')
+const radianceOn = equal(condRadiance, 'on', 1)
+const [condC2ToastPath, condC2Toast] = cond(key, 'c2Toast')
+const [condC2SelfToastPath, condC2SelfToast] = cond(key, 'c2SelfToast')
+const c2SelfToastArr = range(1, dm.constellation2.selfMaxStacks)
+
+const inDefense = equal(condMaid, 'defense', 1)
+const inBattle = equal(condMaid, 'battle', 1)
+const burstEnhanced = equal(condBurstEnh, 'on', 1)
+
+/* ---------- Buffs ---------- */
+// A1: Anchor shreds Electro RES; in Radiance additionally Electro + Cryo
 const a1_electro_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condAnchor,
-    'on',
+    anchorOn,
+    1,
     sum(
       percent(-dm.passive1.electro_enemyRes_),
-      equal(
-        condA0StellarRadianceSc,
-        'sc',
-        percent(-dm.passive1.radiance_electro_enemyRes_)
-      )
+      equal(radianceOn, 1, percent(-dm.passive1.radElectro_enemyRes_))
     )
   )
 )
@@ -162,228 +169,293 @@ const a1_cryo_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condAnchor,
-    'on',
-    equal(
-      condA0StellarRadianceSc,
-      'sc',
-      percent(-dm.passive1.radiance_cryo_enemyRes_)
-    )
-  )
-)
-const c6Anchor_stellarconduct_specialDmg_ = greaterEq(
-  input.constellation,
-  6,
-  equal(condAnchor, 'on', percent(dm.constellation6.stellarconduct_specialDmg_))
-)
-
-// Forma da cameriera: Guardia reale (dopo Will to Protect) o Pulizie (dopo Will to Purge)
-const [condFormPath, condForm] = cond(key, 'form')
-// Tripudio usato nei 20s precedenti: potenzia la forma attuale
-const [condBurstPath, condBurst] = cond(key, 'burst')
-const burstInForm = (
-  form: 'royalGuard' | 'cleaner',
-  node: Parameters<typeof equal>[2]
-) => equal(condForm, form, equal(condBurst, 'on', node))
-const c1Mult = (extra: number) =>
-  sum(one, greaterEq(input.constellation, 1, percent(extra)))
-
-// Guardia reale + Tripudio: ATT di tutto il gruppo + 10% dell'ATT di Danica (al massimo 400), +80% con C1
-const royalGuardAtkDisp = burstInForm(
-  'royalGuard',
-  prod(
-    min(
-      prod(
-        subscript(input.total.burstIndex, dm.burst.atkRatio, { unit: '%' }),
-        input.premod.atk
-      ),
-      subscript(input.total.burstIndex, dm.burst.maxAtk)
-    ),
-    c1Mult(dm.constellation1.royalGuardMult_)
-  )
-)
-const royalGuardAtk = infoMut(
-  { ...royalGuardAtkDisp },
-  { path: 'atk', isTeamBuff: true }
-)
-
-// Pulizie + Tripudio: DAN di Will to Purge aumentati (+120% del potenziamento con C1)
-const cleanerPurge_dmg_ = burstInForm(
-  'cleaner',
-  prod(
-    subscript(input.total.burstIndex, dm.burst.purge_dmg_, { unit: '%' }),
-    c1Mult(dm.constellation1.cleanerMult_)
+    anchorOn,
+    1,
+    equal(radianceOn, 1, percent(-dm.passive1.radCryo_enemyRes_))
   )
 )
 
-// A4: Pulizie -> VEL d'attacco +20% per carica (max 3); Guardia reale -> ATT +20%
-const [condA4StacksPath, condA4Stacks] = cond(key, 'a4Stacks')
-const a4StacksArr = range(1, dm.passive2.maxStacks)
-const a4_atkSPD_ = greaterEq(
-  input.asc,
-  4,
-  equal(
-    condForm,
-    'cleaner',
-    lookup(
-      condA4Stacks,
-      objKeyMap(a4StacksArr, (n) => percent(n * dm.passive2.atkSPD_)),
-      naught
-    )
-  )
-)
+// A4: Defense Maid -> ATK per Entry Skill E2; Battle Maid -> ATK SPD per On-Field Skill E2
 const a4_atk_ = greaterEq(
   input.asc,
   4,
-  equal(condForm, 'royalGuard', percent(dm.passive2.atk_))
+  // One-time +20% ATK in Defense Maid (community datamine: does not stack)
+  equal(inDefense, 1, percent(dm.passive2.atk_))
+)
+const a4_atkSPD_ = greaterEq(
+  input.asc,
+  4,
+  equal(inBattle, 1, prod(a4Stacks, percent(dm.passive2.atkSPD_)))
 )
 
-// C2: Let Us Toast. Chi consuma una carica aggiunge il 100% dell'ATT di Danica ai suoi DAN di Astroconduzione;
-// Danica in forma Pulizie aggiunge il 150% del suo ATT.
-const [condC2ToastPath, condC2Toast] = cond(key, 'c2Toast')
-const c2Toast_stellarconduct_dmgIncDisp = infoMut(
-  greaterEq(
-    input.constellation,
-    2,
+// A0 (Stellar passive): Base Stellar-Conduct DMG from Danica's ATK
+const a0_stellarconduct_baseDmg_ = min(
+  prod(percent(dm.passive3.baseDmgPer100Atk), input.total.atk, 1 / 100),
+  percent(dm.passive3.maxBaseDmg)
+)
+
+// Burst enhancement (cast in Radiance: Stellar-Conduct while in a Maid Form)
+const c1DefenseMult = sum(
+  percent(1),
+  greaterEq(input.constellation, 1, percent(dm.constellation1.defenseInc))
+)
+const c1BattleMult = sum(
+  percent(1),
+  greaterEq(input.constellation, 1, percent(dm.constellation1.battleInc))
+)
+// Defense Maid: party ATK = ratio x Danica's ATK (pre-team-buff), capped. Applied at `total`
+// to avoid a feedback loop with Danica's own ATK.
+const burstDefense_atkDisp = infoMut(
+  equal(
+    inDefense,
+    1,
     equal(
-      condC2Toast,
-      'on',
-      prod(percent(dm.constellation2.toastAtk_), input.total.atk)
+      burstEnhanced,
+      1,
+      prod(
+        c1DefenseMult,
+        min(
+          prod(
+            subscript(input.total.burstIndex, dm.burst.atkRatio, { unit: '%' }),
+            input.premod.atk
+          ),
+          subscript(input.total.burstIndex, dm.burst.maxAtk)
+        )
+      )
     )
   ),
-  { path: 'stellarconduct_dmgInc', isTeamBuff: true }
+  { path: 'atk', isTeamBuff: true }
 )
-const c2Toast_stellarconduct_dmgInc = equal(
-  input.activeCharKey,
-  target.charKey,
-  c2Toast_stellarconduct_dmgIncDisp
+// Battle Maid: Will to Purge's own multiplier grows (dump Avatar_Danica_E2_Field_Attack:
+// E2_Field_StarSC_Dmg × ATK × (1 + FormalDress_Combat_E2DmgUp × FormalDress_EffectMultiplier_Combat)),
+// not a DMG Bonus added to the EM bonus
+const burstBattle_onField_dmg_ = infoMut(
+  equal(
+    inBattle,
+    1,
+    equal(
+      burstEnhanced,
+      1,
+      prod(
+        c1BattleMult,
+        subscript(input.total.burstIndex, dm.burst.onFieldDmg_, {
+          unit: '%',
+        })
+      )
+    )
+  ),
+  { name: ct.chg('burst.skillParams.5'), unit: '%' }
 )
-const c2Cleaner_stellarconduct_dmgInc = greaterEq(
+const onFieldMult = sum(percent(1), burstBattle_onField_dmg_)
+
+// C2 "Toast" (10 stacks per member when the Anchor is summoned): party Stellar-Conduct DMG
+// +80% of Danica's ATK per stack consumed
+const c2Toast_dmgIncDisp = greaterEq(
   input.constellation,
   2,
   equal(
-    condForm,
-    'cleaner',
-    equal(
-      condC2Toast,
-      'on',
-      prod(percent(dm.constellation2.cleanerToastAtk_), input.total.atk)
+    condC2Toast,
+    'on',
+    prod(percent(dm.constellation2.allyAtkMult), input.total.atk)
+  ),
+  { path: 'stellarconduct_dmgInc', isTeamBuff: true }
+)
+// C2: Battle Maid, Danica consumes up to 2 of her stacks on her Stellar-Conduct hit for one +350%
+// ATK addition (the dump's DamageExtra adds ATK × ratio once per hit, whatever count it consumes)
+const c2SelfToast_dmgInc = greaterEq(
+  input.constellation,
+  2,
+  equal(
+    inBattle,
+    1,
+    lookup(
+      condC2SelfToast,
+      objKeyMap(c2SelfToastArr, () =>
+        prod(percent(dm.constellation2.selfAtkMult), input.total.atk)
+      ),
+      naught
     )
+  ),
+  { path: 'stellarconduct_dmgInc' }
+)
+const c2SelfToastOn = equal(
+  inBattle,
+  1,
+  lookup(
+    condC2SelfToast,
+    objKeyMap(c2SelfToastArr, () => constant(1)),
+    naught
   )
 )
+const c2Toast_dmgInc = compareEq(
+  target.charKey,
+  key,
+  equal(c2SelfToastOn, 0, c2Toast_dmgIncDisp),
+  c2Toast_dmgIncDisp
+)
 
-// C6, Guardia reale: DAN dell'Astroconduzione del personaggio attivo +10% ogni 1000 ATT di Danica, al massimo 40%
-const c6RoyalGuard_stellarconduct_dmg_Disp = greaterEq(
+// C6: Anchor -> party Stellar-Conduct DMG Elevated (擢升) 15%
+const c6_stellarconduct_specialDmg_ = greaterEq(
+  input.constellation,
+  6,
+  equal(anchorOn, 1, percent(dm.constellation6.stellarconduct_specialDmg_)),
+  { path: 'stellarconduct_specialDmg_', isTeamBuff: true }
+)
+// C6: Defense Maid -> active character Stellar-Conduct DMG +10% per 1000 ATK (max 40%)
+const c6Defense_dmg_Disp = greaterEq(
   input.constellation,
   6,
   equal(
-    condForm,
-    'royalGuard',
+    inDefense,
+    1,
     min(
       prod(
-        percent(
-          dm.constellation6.royalGuard_dmg_perStep /
-            dm.constellation6.royalGuardAtkStep
-        ),
-        input.total.atk
+        percent(dm.constellation6.defenseDmg_),
+        input.total.atk,
+        1 / dm.constellation6.defenseAtkStep
       ),
-      percent(dm.constellation6.royalGuardMax_dmg_)
+      percent(dm.constellation6.defenseMaxDmg_)
     )
   ),
   { path: 'stellarconduct_dmg_', isTeamBuff: true }
 )
-const c6RoyalGuard_stellarconduct_dmg_ = equal(
+const c6Defense_dmg_ = equal(
   input.activeCharKey,
   target.charKey,
-  c6RoyalGuard_stellarconduct_dmg_Disp
+  c6Defense_dmg_Disp
 )
-// C6, Pulizie: Will to Purge +2,5% Tasso di CRIT e +25% DAN da CRIT ogni 500 ATT (al massimo 10% e 100%)
-const c6Cleaner_critRate_ = greaterEq(
+// C6: Battle Maid -> On-Field Skill E2 CRIT Rate / CRIT DMG per 500 ATK
+const c6Battle_critRate_ = greaterEq(
   input.constellation,
   6,
   equal(
-    condForm,
-    'cleaner',
+    inBattle,
+    1,
     min(
       prod(
-        percent(
-          dm.constellation6.cleanerCritRate_perStep /
-            dm.constellation6.cleanerAtkStep
-        ),
-        input.total.atk
+        percent(dm.constellation6.battleCritRate_),
+        input.total.atk,
+        1 / dm.constellation6.battleAtkStep
       ),
-      percent(dm.constellation6.cleanerMaxCritRate_)
+      percent(dm.constellation6.battleMaxCritRate_)
     )
-  )
+  ),
+  { path: 'critRate_' }
 )
-const c6Cleaner_critDMG_ = greaterEq(
+const c6Battle_critDMG_ = greaterEq(
   input.constellation,
   6,
   equal(
-    condForm,
-    'cleaner',
+    inBattle,
+    1,
     min(
       prod(
-        percent(
-          dm.constellation6.cleanerCritDMG_perStep /
-            dm.constellation6.cleanerAtkStep
-        ),
-        input.total.atk
+        percent(dm.constellation6.battleCritDMG_),
+        input.total.atk,
+        1 / dm.constellation6.battleAtkStep
       ),
-      percent(dm.constellation6.cleanerMaxCritDMG_)
+      percent(dm.constellation6.battleMaxCritDMG_)
     )
-  )
+  ),
+  { path: 'critDMG_' }
 )
 
-const skillShield = shieldNodeTalent(
-  'atk',
-  dm.skill.shieldAtk_,
-  dm.skill.shieldFlat,
-  'skill'
-)
-const stellarBurst = (arr: number[]) =>
-  stellarTalentDmgNode('atk', arr, 'burst', 'stellarconduct', 'electro', {
-    premod: { stellarconduct_dmgInc: c2Cleaner_stellarconduct_dmgInc },
-  })
+/* ---------- Damage ---------- */
+const scTalent = (
+  lvlMultiplier: number[],
+  talentType: 'skill' | 'burst',
+  additional = {},
+  specialMultiplier?: NumNode
+) =>
+  stellarDmgNode(
+    subscript(input.total[`${talentType}Index`], lvlMultiplier, { unit: '%' }),
+    'atk',
+    'stellarconduct',
+    'electro',
+    additional,
+    specialMultiplier
+  )
+
+const onFieldAddl = {
+  premod: {
+    stellarconduct_dmgInc: c2SelfToast_dmgInc,
+    critRate_: c6Battle_critRate_,
+    critDMG_: c6Battle_critDMG_,
+  },
+}
 
 const dmgFormulas = {
   normal: Object.fromEntries(
     dm.normal.hitArr.map((arr, i) => [i, dmgNode('atk', arr, 'normal')])
   ),
   charged: {
-    cyclicDmg: dmgNode('atk', dm.charged.cyclicDmg, 'charged'),
+    spinningDmg: dmgNode('atk', dm.charged.spinningDmg, 'charged'),
     finalDmg: dmgNode('atk', dm.charged.finalDmg, 'charged'),
   },
   plunging: plungingDmgNodes('atk', dm.plunging),
   skill: {
-    skillDmg: dmgNode('atk', dm.skill.skillDmg, 'skill'),
-    protectDmg: dmgNode('atk', dm.skill.protectDmg, 'skill'),
-    purgeDmg: dmgNode('atk', dm.skill.purgeDmg, 'skill', {
-      premod: {
-        skill_dmg_: cleanerPurge_dmg_,
-        critRate_: c6Cleaner_critRate_,
-        critDMG_: c6Cleaner_critDMG_,
-      },
-    }),
+    dmg: dmgNode('atk', dm.skill.dmg, 'skill'),
     coordDmg: dmgNode('atk', dm.skill.coordDmg, 'skill'),
-    skillShield,
-    skillShield_electro: shieldElement('electro', skillShield),
-    // Attacchi normali con l'Ancora: DAN Electro che non si possono cambiare, con i moltiplicatori dell'abilita
     ...Object.fromEntries(
       dm.skill.anchorHitArr.map((arr, i) => [
         `anchor${i}`,
         dmgNode('atk', arr, 'normal', hitEle.electro, undefined, 'skill'),
       ])
     ),
+    entryDmg: scTalent(dm.skill.entryDmg, 'skill'),
+    onFieldDmg: scTalent(
+      dm.skill.onFieldDmg,
+      'skill',
+      onFieldAddl,
+      onFieldMult
+    ),
+    // C2: once per combat, the Will to Purge cast with Cleaning Decree (hold Normal Attack within
+    // 6s of the combat-entry Will to Protect) deals 150% of its original DMG
+    decreeDmg: greaterEq(
+      input.constellation,
+      2,
+      scTalent(
+        dm.skill.onFieldDmg,
+        'skill',
+        onFieldAddl,
+        prod(constant(dm.constellation2.decreeMult), onFieldMult)
+      )
+    ),
+    shield: shieldNodeTalent(
+      'atk',
+      dm.skill.shieldAtk_,
+      dm.skill.shieldFlat,
+      'skill'
+    ),
+    electroShield: shieldElement(
+      'electro',
+      shieldNodeTalent('atk', dm.skill.shieldAtk_, dm.skill.shieldFlat, 'skill')
+    ),
   },
   burst: {
     hit1Dmg: dmgNode('atk', dm.burst.hit1Dmg, 'burst'),
-    hit1StellarDmg: stellarBurst(dm.burst.hit1StellarDmg),
+    hit1ScDmg: equal(
+      radianceOn,
+      1,
+      scTalent(dm.burst.hit1ScDmg, 'burst', {
+        premod: { stellarconduct_dmgInc: c2SelfToast_dmgInc },
+      })
+    ),
     hit234Dmg: dmgNode('atk', dm.burst.hit234Dmg, 'burst'),
     hit5Dmg: dmgNode('atk', dm.burst.hit5Dmg, 'burst'),
-    hit5StellarDmg: stellarBurst(dm.burst.hit5StellarDmg),
+    hit5ScDmg: equal(
+      radianceOn,
+      1,
+      scTalent(dm.burst.hit5ScDmg, 'burst', {
+        premod: { stellarconduct_dmgInc: c2SelfToast_dmgInc },
+      })
+    ),
+  },
+  passive3: {
+    a0_stellarconduct_baseDmg_,
   },
 }
+
 const burstC3 = greaterEq(input.constellation, 3, 3)
 const skillC5 = greaterEq(input.constellation, 5, 3)
 
@@ -391,50 +463,30 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
   premod: {
     burstBoost: burstC3,
     skillBoost: skillC5,
-    atkSPD_: a4_atkSPD_,
     atk_: a4_atk_,
+    atkSPD_: a4_atkSPD_,
   },
   teamBuff: {
     premod: {
-      stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
       electro_enemyRes_: a1_electro_enemyRes_,
       cryo_enemyRes_: a1_cryo_enemyRes_,
-      stellarconduct_specialDmg_: c6Anchor_stellarconduct_specialDmg_,
-      stellarconduct_dmgInc: c2Toast_stellarconduct_dmgInc,
-      stellarconduct_dmg_: c6RoyalGuard_stellarconduct_dmg_,
+      stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
+      stellarconduct_dmgInc: c2Toast_dmgInc,
+      stellarconduct_specialDmg_: c6_stellarconduct_specialDmg_,
+      stellarconduct_dmg_: c6Defense_dmg_,
     },
     total: {
-      atk: royalGuardAtk,
+      atk: burstDefense_atkDisp,
     },
   },
   flags: {
-    radiance: condA0StellarRadianceSc,
+    radiance: equalStr(condRadiance, 'on', 'sc'),
   },
-})
-
-const purgeDmgDisp = infoMut(
-  { ...cleanerPurge_dmg_ },
-  { name: ct.ch('purge_dmg_'), unit: '%' }
-)
-const purgeCritRateDisp = infoMut(
-  { ...c6Cleaner_critRate_ },
-  { name: ct.ch('purgeCritRate_'), unit: '%' }
-)
-const purgeCritDMGDisp = infoMut(
-  { ...c6Cleaner_critDMG_ },
-  { name: ct.ch('purgeCritDMG_'), unit: '%' }
-)
-
-const formStates = (fields: { royalGuard: any[]; cleaner: any[] }) => ({
-  royalGuard: { name: ct.ch('royalGuard'), fields: fields.royalGuard },
-  cleaner: { name: ct.ch('cleaner'), fields: fields.cleaner },
 })
 
 const sheet: TalentSheet = {
   auto: ct.talentTem('auto', [
-    {
-      text: ct.chg('auto.fields.normal'),
-    },
+    { text: ct.chg('auto.fields.normal') },
     {
       fields: dm.normal.hitArr.map((_, i) => ({
         node: infoMut(dmgFormulas.normal[i], {
@@ -443,13 +495,11 @@ const sheet: TalentSheet = {
         }),
       })),
     },
-    {
-      text: ct.chg('auto.fields.charged'),
-    },
+    { text: ct.chg('auto.fields.charged') },
     {
       fields: [
         {
-          node: infoMut(dmgFormulas.charged.cyclicDmg, {
+          node: infoMut(dmgFormulas.charged.spinningDmg, {
             name: ct.chg('auto.skillParams.4'),
           }),
         },
@@ -470,9 +520,7 @@ const sheet: TalentSheet = {
         },
       ],
     },
-    {
-      text: ct.chg('auto.fields.plunging'),
-    },
+    { text: ct.chg('auto.fields.plunging') },
     {
       fields: [
         {
@@ -498,33 +546,13 @@ const sheet: TalentSheet = {
     {
       fields: [
         {
-          node: infoMut(dmgFormulas.skill.skillDmg, {
+          node: infoMut(dmgFormulas.skill.dmg, {
             name: ct.chg('skill.skillParams.0'),
-          }),
-        },
-        {
-          node: infoMut(dmgFormulas.skill.protectDmg, {
-            name: ct.chg('skill.skillParams.1'),
-          }),
-        },
-        {
-          node: infoMut(dmgFormulas.skill.purgeDmg, {
-            name: ct.chg('skill.skillParams.2'),
           }),
         },
         {
           node: infoMut(dmgFormulas.skill.coordDmg, {
             name: ct.chg('skill.skillParams.3'),
-          }),
-        },
-        {
-          node: infoMut(dmgFormulas.skill.skillShield, {
-            name: ct.chg('skill.skillParams.4'),
-          }),
-        },
-        {
-          node: infoMut(dmgFormulas.skill.skillShield_electro, {
-            name: ct.chg('skill.skillParams.4'),
           }),
         },
         ...dm.skill.anchorHitArr.map((_, i) => ({
@@ -537,13 +565,33 @@ const sheet: TalentSheet = {
           ),
         })),
         {
+          node: infoMut(dmgFormulas.skill.entryDmg, {
+            name: ct.chg('skill.skillParams.1'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.skill.onFieldDmg, {
+            name: ct.chg('skill.skillParams.2'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.skill.shield, {
+            name: stg('dmgAbsorption'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.skill.electroShield, {
+            name: st('dmgAbsorption.electro'),
+          }),
+        },
+        {
           text: ct.chg('skill.skillParams.9'),
           value: dm.skill.anchorDuration,
           unit: 's',
         },
         {
           text: ct.chg('skill.skillParams.10'),
-          value: dm.skill.protectCd,
+          value: dm.skill.entryCd,
           unit: 's',
         },
         {
@@ -556,53 +604,45 @@ const sheet: TalentSheet = {
     ct.condTem('skill', {
       path: condAnchorPath,
       value: condAnchor,
-      teamBuff: true,
       name: ct.ch('anchorCond'),
+      teamBuff: true,
       states: {
         on: {
           fields: [
-            { node: a1_electro_enemyRes_ },
-            { node: a1_cryo_enemyRes_ },
-            { node: c6Anchor_stellarconduct_specialDmg_ },
+            {
+              node: infoMut(a1_electro_enemyRes_, {
+                path: 'electro_enemyRes_',
+              }),
+            },
+            { node: infoMut(a1_cryo_enemyRes_, { path: 'cryo_enemyRes_' }) },
+            { node: c6_stellarconduct_specialDmg_ },
+            {
+              text: ct.chg('skill.skillParams.9'),
+              value: dm.skill.anchorDuration,
+              unit: 's',
+            },
           ],
         },
       },
     }),
     ct.condTem('skill', {
-      path: condFormPath,
-      value: condForm,
+      path: condMaidPath,
+      value: condMaid,
+      name: ct.ch('maidCond'),
       teamBuff: true,
-      name: ct.ch('formCond'),
-      states: formStates({
-        royalGuard: [
-          { node: a4_atk_ },
-          { node: royalGuardAtk },
-          { node: c6RoyalGuard_stellarconduct_dmg_Disp },
-        ],
-        cleaner: [
-          {
-            node: infoMut(dmgFormulas.skill.purgeDmg, {
-              name: ct.chg('skill.skillParams.2'),
-            }),
-          },
-          { text: ct.ch('cleanerA4') },
-          { node: a4_atkSPD_ },
-          { node: purgeDmgDisp },
-          { node: purgeCritRateDisp },
-          { node: purgeCritDMGDisp },
-        ],
-      }),
-    }),
-    // A4 in forma Pulizie: cariche dopo Will to Purge (le stesse della passiva)
-    ct.condTem('skill', {
-      path: condA4StacksPath,
-      value: condA4Stacks,
-      canShow: greaterEq(input.asc, 4, equal(condForm, 'cleaner', 1)),
-      name: ct.ch('a4StacksCond'),
-      states: objKeyMap(a4StacksArr, (n) => ({
-        name: st('stack', { count: n }),
-        fields: [{ node: a4_atkSPD_ }],
-      })),
+      states: {
+        defense: {
+          name: ct.ch('defenseMaid'),
+          fields: [{ node: c6Defense_dmg_Disp }],
+        },
+        battle: {
+          name: ct.ch('battleMaid'),
+          fields: [
+            { node: infoMut(c6Battle_critRate_, { path: 'critRate_' }) },
+            { node: infoMut(c6Battle_critDMG_, { path: 'critDMG_' }) },
+          ],
+        },
+      },
     }),
   ]),
 
@@ -615,8 +655,8 @@ const sheet: TalentSheet = {
           }),
         },
         {
-          node: infoMut(dmgFormulas.burst.hit1StellarDmg, {
-            name: ct.chg('burst.skillParams.0'),
+          node: infoMut(dmgFormulas.burst.hit1ScDmg, {
+            name: ct.ch('hit1ScDmg'),
           }),
         },
         {
@@ -630,38 +670,32 @@ const sheet: TalentSheet = {
           }),
         },
         {
-          node: infoMut(dmgFormulas.burst.hit5StellarDmg, {
-            name: ct.chg('burst.skillParams.2'),
+          node: infoMut(dmgFormulas.burst.hit5ScDmg, {
+            name: ct.ch('hit5ScDmg'),
           }),
         },
         {
-          text: stg('duration'),
+          text: ct.chg('burst.skillParams.6'),
           value: dm.burst.duration,
           unit: 's',
         },
-        {
-          text: stg('cd'),
-          value: dm.burst.cd,
-          unit: 's',
-        },
-        {
-          text: stg('energyCost'),
-          value: dm.burst.enerCost,
-        },
+        { text: stg('cd'), value: dm.burst.cd, unit: 's' },
+        { text: stg('energyCost'), value: dm.burst.enerCost },
       ],
     },
     ct.condTem('burst', {
-      path: condBurstPath,
-      value: condBurst,
+      path: condBurstEnhPath,
+      value: condBurstEnh,
+      name: ct.ch('burstEnhCond'),
       teamBuff: true,
-      name: st('afterUse.burst'),
+      canShow: sum(inDefense, inBattle),
       states: {
         on: {
           fields: [
-            { node: royalGuardAtk },
-            { node: purgeDmgDisp },
+            { node: burstDefense_atkDisp },
+            { node: burstBattle_onField_dmg_ },
             {
-              text: stg('duration'),
+              text: ct.chg('burst.skillParams.6'),
               value: dm.burst.duration,
               unit: 's',
             },
@@ -671,59 +705,84 @@ const sheet: TalentSheet = {
     }),
   ]),
 
-  passive1: ct.talentTem('passive1'),
+  passive1: ct.talentTem('passive1', [
+    ct.headerTem('passive1', {
+      teamBuff: true,
+      canShow: anchorOn,
+      fields: [
+        { node: infoMut(a1_electro_enemyRes_, { path: 'electro_enemyRes_' }) },
+        { node: infoMut(a1_cryo_enemyRes_, { path: 'cryo_enemyRes_' }) },
+      ],
+    }),
+  ]),
   passive2: ct.talentTem('passive2', [
+    ct.headerTem('passive2', {
+      canShow: inDefense,
+      fields: [{ node: infoMut(a4_atk_, { path: 'atk_' }) }],
+    }),
     ct.condTem('passive2', {
       path: condA4StacksPath,
       value: condA4Stacks,
-      canShow: equal(condForm, 'cleaner', 1),
-      name: ct.ch('a4StacksCond'),
+      name: ct.ch('a4Cond'),
+      canShow: inBattle,
       states: objKeyMap(a4StacksArr, (n) => ({
         name: st('stack', { count: n }),
-        fields: [{ node: a4_atkSPD_ }],
+        fields: [{ node: infoMut(a4_atkSPD_, { path: 'atkSPD_' }) }],
       })),
     }),
   ]),
   passive3: ct.talentTem('passive3', [
-    ct.fieldsTem('passive3', {
+    ct.headerTem('passive3', {
       teamBuff: true,
-      fields: [{ node: a0_stellarconduct_baseDmg_ }],
+      fields: [
+        {
+          node: infoMut(a0_stellarconduct_baseDmg_, {
+            path: 'stellarconduct_baseDmg_',
+            isTeamBuff: true,
+          }),
+        },
+      ],
     }),
     ct.condTem('passive3', {
-      path: condA0StellarRadianceScPath,
-      value: condA0StellarRadianceSc,
-      teamBuff: true,
+      path: condRadiancePath,
+      value: condRadiance,
       name: st('elementalReaction.polestar.inside'),
+      teamBuff: true,
       states: {
-        sc: {
-          fields: [
-            {
-              text: st('elementalReaction.stellar.gainRadianceSc'),
-            },
-          ],
+        on: {
+          fields: [{ text: st('elementalReaction.stellar.gainRadianceSc') }],
         },
       },
     }),
   ]),
+  passive: ct.talentTem('passive'),
   constellation1: ct.talentTem('constellation1'),
   constellation2: ct.talentTem('constellation2', [
+    {
+      fields: [
+        {
+          node: infoMut(dmgFormulas.skill.decreeDmg, {
+            name: ct.ch('c2DecreeDmg'),
+          }),
+        },
+      ],
+    },
     ct.condTem('constellation2', {
       path: condC2ToastPath,
       value: condC2Toast,
-      teamBuff: true,
       name: ct.ch('c2ToastCond'),
-      states: {
-        on: {
-          fields: [
-            { node: c2Toast_stellarconduct_dmgIncDisp },
-            {
-              node: infoMut(c2Cleaner_stellarconduct_dmgInc, {
-                name: ct.ch('c2Cleaner'),
-              }),
-            },
-          ],
-        },
-      },
+      teamBuff: true,
+      states: { on: { fields: [{ node: c2Toast_dmgIncDisp }] } },
+    }),
+    ct.condTem('constellation2', {
+      path: condC2SelfToastPath,
+      value: condC2SelfToast,
+      name: ct.ch('c2SelfToastCond'),
+      canShow: inBattle,
+      states: objKeyMap(c2SelfToastArr, (n) => ({
+        name: st('stack', { count: n }),
+        fields: [{ node: c2SelfToast_dmgInc }],
+      })),
     }),
   ]),
   constellation3: ct.talentTem('constellation3', [
@@ -734,14 +793,13 @@ const sheet: TalentSheet = {
     { fields: [{ node: skillC5 }] },
   ]),
   constellation6: ct.talentTem('constellation6', [
-    ct.fieldsTem('constellation6', {
-      teamBuff: true,
+    {
       fields: [
-        { node: c6RoyalGuard_stellarconduct_dmg_Disp },
-        { node: purgeCritRateDisp },
-        { node: purgeCritDMGDisp },
+        { node: c6_stellarconduct_specialDmg_ },
+        { node: c6Defense_dmg_Disp },
       ],
-    }),
+    },
   ]),
 }
+
 export default new CharacterSheet(sheet, data)

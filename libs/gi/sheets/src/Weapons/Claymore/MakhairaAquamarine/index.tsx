@@ -6,6 +6,7 @@ import {
   percent,
   prod,
   subscript,
+  target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
 import { st } from '../../../SheetUtil'
@@ -25,8 +26,9 @@ const selfAtk = equal(
   )
 )
 const teamAtkDisp = equal(input.weapon.key, key, prod(percent(0.3), selfAtk))
-// Apply to non-equipped character
-const teamAtk = unequal(input.activeCharKey, input.charKey, teamAtkDisp)
+// Every other party member, on the field or not (kqmsim aquamarine.go): not by the active member,
+// which the rotation sets to the member on the field for each attack
+const teamAtk = unequal(input.charKey, target.charKey, teamAtkDisp)
 
 const data = dataObjForWeaponSheet(
   key,

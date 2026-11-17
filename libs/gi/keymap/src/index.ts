@@ -4,6 +4,7 @@ import {
   allEleDmgKeys,
   allEleEnemyResKeys,
   allEleResKeys,
+  allKeyMapEntries,
   KeyMap,
 } from './KeyMap'
 import type {
@@ -33,6 +34,7 @@ export {
   allEleDmgKeys,
   allEleEnemyResKeys,
   allEleResKeys,
+  allKeyMapEntries,
   crittableTransformativeReactions,
   crystallizeLevelMultipliers,
   elementalData,

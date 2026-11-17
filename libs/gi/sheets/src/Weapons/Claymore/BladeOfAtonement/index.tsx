@@ -19,7 +19,7 @@ const react_eleMas = equal(
 )
 const stellar_atk_ = equal(
   'on',
-  condReact,
+  condStellar,
   subscript(input.weapon.refinement, atk_arr)
 )
 

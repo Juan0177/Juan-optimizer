@@ -94,7 +94,7 @@ export function ImportUidCard() {
             onChange={(e) => setUid(e.target.value)}
             error={!!uid && !isUid(clean)}
             helperText={uid && !isUid(clean) ? t('home.uidDigits') : ' '}
-            slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 10 } }}
+            inputProps={{ inputMode: 'numeric', maxLength: 10 }}
             sx={{ flex: '1 1 14em' }}
           />
           <Button
@@ -149,6 +149,17 @@ export function CreditsCard() {
               contrib: ext(`${GO}/graphs/contributors`),
               mit: ext(`${GO}/blob/master/LICENSE`),
               site: ext('https://frzyc.github.io/genshin-optimizer/'),
+            }}
+          />
+        </Typography>
+        <Typography>
+          <Trans
+            t={t}
+            i18nKey="home.creditsStellar"
+            components={{
+              stellar: ext('https://github.com/s-naveen/stellar-optimizer'),
+              agpl: ext('https://www.gnu.org/licenses/agpl-3.0.html'),
+              code: ext('https://github.com/Juan0177/Juan-optimizer'),
             }}
           />
         </Typography>

@@ -33,7 +33,8 @@ const gleam_eleMas = equal(
     subscript(input.weapon.refinement, gleam_eleMasarr)
   )
 )
-const totalEleMas = sum(eleMas, gleam_eleMas)
+// (only after a reaction the wielder triggers: kqmsim masterkey.go)
+const totalEleMas = equal(condAfterReaction, 'on', sum(eleMas, gleam_eleMas))
 
 const data = dataObjForWeaponSheet(key, {
   premod: {

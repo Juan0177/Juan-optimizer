@@ -17,11 +17,7 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { i18n } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
-import {
-  CharacterName,
-  iconAsset,
-  SillyContext,
-} from '@genshin-optimizer/gi/ui'
+import { CharacterName, iconAsset } from '@genshin-optimizer/gi/ui'
 import SearchIcon from '@mui/icons-material/Search'
 import StarRoundedIcon from '@mui/icons-material/StarRounded'
 import type { Palette } from '@mui/material'
@@ -44,7 +40,6 @@ import {
   memo,
   Suspense,
   useCallback,
-  useContext,
   useDeferredValue,
   useMemo,
   useState,
@@ -53,7 +48,6 @@ import { CharacterView } from './CharacterView'
 
 const rarties = [5, 4] as const
 export default function TabCharacter() {
-  const { silly } = useContext(SillyContext)
   const database = useDatabase()
   const archive = useDataEntryBase(database.displayArchive)
   const handleRarity = handleMultiSelect([...rarties])
@@ -75,23 +69,16 @@ export default function TabCharacter() {
       if (!character.weaponType.includes(weaponType)) return false
 
       const nameStr = i18n.t(`charNames_gen:${cKey}`)
-      const sillyStr =
-        silly && i18n.exists(`sillyWisher_charNames:${cKey}`)
-          ? i18n.t(`sillyWisher_charNames:${cKey}`)
-          : ''
       if (
         searchTermDeferred &&
         !nameStr
-          .toLocaleLowerCase()
-          .includes(searchTermDeferred.toLocaleLowerCase()) &&
-        !sillyStr
           .toLocaleLowerCase()
           .includes(searchTermDeferred.toLocaleLowerCase())
       )
         return false
       return true
     })
-  }, [character, searchTermDeferred, silly])
+  }, [character, searchTermDeferred])
 
   const { numShow, setTriggerElement } = useInfScroll(10, charKeys.length)
   type SortKey = 'name' | 'rarity' | 'element' | 'type'
@@ -107,15 +94,12 @@ export default function TabCharacter() {
   const sortedCharKeys = useMemo(
     () =>
       sortFunction([character.sortOrderBy], character.sortOrder === 'asc', {
-        name: (cKey: CharacterKey) =>
-          silly && i18n.exists(`sillyWisher_charNames:${cKey}`)
-            ? i18n.t(`sillyWisher_charNames:${cKey}`)
-            : i18n.t(`charNames_gen:${cKey}`),
+        name: (cKey: CharacterKey) => i18n.t(`charNames_gen:${cKey}`),
         rarity: (cKey: CharacterKey) => getCharStat(cKey).rarity,
         element: (cKey: CharacterKey) => getCharEle(cKey),
         type: (cKey: CharacterKey) => getCharStat(cKey).weaponType,
       } as SortConfigs<SortKey, CharacterKey>),
-    [character.sortOrder, character.sortOrderBy, silly]
+    [character.sortOrder, character.sortOrderBy]
   )
   const charKeysToShow = useMemo(
     () => charKeys.sort(sortedCharKeys).slice(0, numShow),
@@ -167,14 +151,12 @@ export default function TabCharacter() {
           variant="outlined"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            },
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
           }}
         />
       </CardContent>
@@ -232,7 +214,6 @@ const CharacterRow = memo(function CharacterRow({
 }: {
   characterKey: CharacterKey
 }) {
-  const { silly } = useContext(SillyContext)
   const { gender } = useDBMeta()
   const [show, onShow, onHide] = useBoolState()
   const { rarity, weaponType } = getCharStat(cKey)
@@ -244,7 +225,6 @@ const CharacterRow = memo(function CharacterRow({
         level: 90,
         ascension: 6,
         constellation: 6,
-
         talent: {
           auto: 10,
           skill: 10,
@@ -272,17 +252,13 @@ const CharacterRow = memo(function CharacterRow({
       <TableRow hover onClick={onShow} sx={{ cursor: 'pointer' }}>
         <TableCell>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <ImgIcon size={4} src={iconAsset(cKey, gender, silly)} />
+            <ImgIcon size={4} src={iconAsset(cKey, gender)} />
             <CharacterName characterKey={cKey} gender={gender} />
           </Box>
         </TableCell>
 
         <TableCell>
-          <Box
-            sx={{
-              display: 'flex',
-            }}
-          >
+          <Box display="flex">
             <ColorText color={`rarity${rarity}` as keyof Palette}>
               <StarRoundedIcon />
             </ColorText>

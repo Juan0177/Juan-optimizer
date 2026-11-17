@@ -84,12 +84,10 @@ export function ArtifactAllSubstatEditor({
 
   return (
     <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}
+      display="flex"
+      gap={1}
+      justifyContent="space-between"
+      alignItems="center"
     >
       <CardThemed
         sx={{
@@ -121,19 +119,17 @@ export function ArtifactAllSubstatEditor({
         onChange={(v) => v !== undefined && setRolls([v])}
         color={rolls && invalid ? 'warning' : 'primary'}
         size="small"
-        slotProps={{
-          htmlInput: {
-            sx: { textAlign: 'right', width: '1.5em' },
-            min: 0,
-            max: 99,
-          },
-          input: {
-            startAdornment: (
-              <Box sx={{ whiteSpace: 'nowrap' }}>
-                {t('tabTheorycraft.all.rolls')}
-              </Box>
-            ),
-          },
+        inputProps={{
+          sx: { textAlign: 'right', width: '1.5em' },
+          min: 0,
+          max: 99,
+        }}
+        InputProps={{
+          startAdornment: (
+            <Box sx={{ whiteSpace: 'nowrap' }}>
+              {t('tabTheorycraft.all.rolls')}
+            </Box>
+          ),
         }}
         focused
       />
@@ -142,19 +138,17 @@ export function ArtifactAllSubstatEditor({
         onChange={(v) => v !== undefined && setMaxSubstat([v])}
         color={(maxSubstat ?? 0) > maxRollsPerSub ? 'warning' : 'primary'}
         size="small"
-        slotProps={{
-          htmlInput: {
-            sx: { textAlign: 'right', width: '1.5em' },
-            min: 0,
-            max: 99,
-          },
-          input: {
-            startAdornment: (
-              <Box sx={{ whiteSpace: 'nowrap' }}>
-                {t('tabTheorycraft.all.max')}
-              </Box>
-            ),
-          },
+        inputProps={{
+          sx: { textAlign: 'right', width: '1.5em' },
+          min: 0,
+          max: 99,
+        }}
+        InputProps={{
+          startAdornment: (
+            <Box sx={{ whiteSpace: 'nowrap' }}>
+              {t('tabTheorycraft.all.max')}
+            </Box>
+          ),
         }}
         focused
       />

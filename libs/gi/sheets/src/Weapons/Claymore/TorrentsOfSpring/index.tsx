@@ -1,10 +1,11 @@
-// juanlab-beta 7.3: Torrents of Spring (arma di Danica), dal testo della beta (Nanoka 7.2.52).
 import type { WeaponKey } from '@genshin-optimizer/gi/consts'
 import {
   equal,
-  inferInfoMut,
   infoMut,
   input,
+  lookup,
+  naught,
+  prod,
   subscript,
   sum,
   target,
@@ -14,90 +15,91 @@ import type { IWeaponSheet } from '../../IWeaponSheet'
 import { dataObjForWeaponSheet } from '../../util'
 import { headerTemplate, WeaponSheet } from '../../WeaponSheet'
 
+// 7.3 beta weapon
 const key: WeaponKey = 'TorrentsOfSpring'
 const [, trm] = trans('weapon', key)
 
-// R1-R5: ATT; Attendant's Measure: DAN di Astroconduzione del personaggio attivo; potenziamento: ancora ATT e DAN
 const atk_arr = [-1, 0.16, 0.2, 0.24, 0.28, 0.32]
-const stellar_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
-const enhancedAtk_arr = [-1, 0.16, 0.2, 0.24, 0.28, 0.32]
-const enhancedStellar_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
+const stellarconduct_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
 
-// I due ATT finiscono sommati nel premod: senza il percorso i valori da soli si vedrebbero senza nome (0.160)
-const atk_ = infoMut(
-  equal(input.weapon.key, key, subscript(input.weapon.refinement, atk_arr)),
-  { path: 'atk_' }
+const base_atk_ = subscript(input.weapon.refinement, atk_arr)
+
+// "Royal Decree" (15s, after the wielder's Electro attacks hit; also works off-field); its order is
+// "Complete" once the wielder's Stellar-Conduct attacks hit, which doubles both effects.
+const [condDecreePath, condDecree] = cond(key, 'royalDecree')
+const complete_atk_ = equal(
+  condDecree,
+  'complete',
+  subscript(input.weapon.refinement, atk_arr)
 )
-
-const [condMeasurePath, condMeasure] = cond(key, 'measure')
-const measure_stellarconduct_dmg_ = infoMut(
-  sum(
-    equal(
-      condMeasure,
-      'on',
-      subscript(input.weapon.refinement, stellar_dmg_arr, { unit: '%' })
+const decree_stellarconduct_dmg_disp = lookup(
+  condDecree,
+  {
+    decree: subscript(input.weapon.refinement, stellarconduct_dmg_arr, {
+      unit: '%',
+    }),
+    complete: prod(
+      2,
+      subscript(input.weapon.refinement, stellarconduct_dmg_arr, {
+        unit: '%',
+      })
     ),
-    equal(
-      condMeasure,
-      'enhanced',
-      subscript(
-        input.weapon.refinement,
-        stellar_dmg_arr.map((v, i) => v + enhancedStellar_dmg_arr[i]),
-        { unit: '%' }
-      )
-    )
-  ),
-  { path: 'stellarconduct_dmg_', isTeamBuff: true }
+  },
+  naught
 )
-const measure_stellarconduct_dmg_active = equal(
+// Stellar-Conduct DMG dealt by the active (on-field) character, the wielder included
+const decree_stellarconduct_dmg_ = equal(
   input.activeCharKey,
   target.charKey,
-  measure_stellarconduct_dmg_
-)
-const enhanced_atk_ = infoMut(
-  equal(
-    condMeasure,
-    'enhanced',
-    subscript(input.weapon.refinement, enhancedAtk_arr)
-  ),
-  { path: 'atk_' }
+  decree_stellarconduct_dmg_disp
 )
 
-const data = dataObjForWeaponSheet(
-  key,
-  inferInfoMut({
-    premod: { atk_: sum(atk_, enhanced_atk_) },
-    teamBuff: {
-      premod: { stellarconduct_dmg_: measure_stellarconduct_dmg_active },
+const data = dataObjForWeaponSheet(key, {
+  premod: {
+    atk_: sum(base_atk_, complete_atk_),
+  },
+  teamBuff: {
+    premod: {
+      stellarconduct_dmg_: decree_stellarconduct_dmg_,
     },
-  })
-)
+  },
+})
 
 const sheet: IWeaponSheet = {
   document: [
     {
       header: headerTemplate(key, st('base')),
-      fields: [{ node: atk_ }],
+      fields: [{ node: infoMut(base_atk_, { path: 'atk_' }) }],
     },
     {
-      value: condMeasure,
-      path: condMeasurePath,
+      value: condDecree,
+      path: condDecreePath,
       teamBuff: true,
       header: headerTemplate(key, st('conditional')),
-      name: trm('measureCond'),
+      name: trm('royalDecree'),
       states: {
-        on: {
-          name: trm('measure'),
+        decree: {
+          name: trm('decree'),
           fields: [
-            { node: measure_stellarconduct_dmg_ },
+            {
+              node: infoMut(decree_stellarconduct_dmg_disp, {
+                path: 'stellarconduct_dmg_',
+                isTeamBuff: true,
+              }),
+            },
             { text: stg('duration'), value: 15, unit: 's' },
           ],
         },
-        enhanced: {
-          name: trm('enhanced'),
+        complete: {
+          name: trm('complete'),
           fields: [
-            { node: measure_stellarconduct_dmg_ },
-            { node: enhanced_atk_ },
+            { node: infoMut(complete_atk_, { path: 'atk_' }) },
+            {
+              node: infoMut(decree_stellarconduct_dmg_disp, {
+                path: 'stellarconduct_dmg_',
+                isTeamBuff: true,
+              }),
+            },
             { text: stg('duration'), value: 15, unit: 's' },
           ],
         },

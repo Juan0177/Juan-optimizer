@@ -30,7 +30,7 @@ const dmg = equal(
     customDmgNode(
       prod(
         subscript(input.weapon.refinement, atkSrc_, { unit: '%' }),
-        input.premod.atk
+        input.total.atk
       ),
       'elemental',
       {

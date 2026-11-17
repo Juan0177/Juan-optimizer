@@ -19,11 +19,7 @@ export function CharacterCardStats({ bgt }: { bgt?: CardBackgroundColor }) {
       ))}
       {name && (
         <ListItem sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Typography
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Typography flexGrow={1}>
             <strong>{t('specialized')}</strong>
           </Typography>
           {icon}

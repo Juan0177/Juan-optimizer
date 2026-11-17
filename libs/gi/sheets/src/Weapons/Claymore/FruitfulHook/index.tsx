@@ -46,7 +46,6 @@ const sheet: IWeaponSheet = {
     {
       value: condAfterPlunging,
       path: condAfterPlungingPath,
-      teamBuff: true,
       header: headerTemplate(key, st('conditional')),
       name: st('hitOp.plunging'),
       states: {

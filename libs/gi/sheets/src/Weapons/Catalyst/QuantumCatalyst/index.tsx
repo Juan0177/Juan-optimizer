@@ -68,7 +68,6 @@ const sheet: IWeaponSheet = {
     {
       value: condStacks,
       path: condStacksPath,
-      teamBuff: true,
       header: headerTemplate(key, st('stacks')),
       name: st('elementalReaction.electro'),
       states: objKeyMap(eleMas_stacks, (i) => ({

@@ -1,6 +1,5 @@
 import type { Unit } from '@genshin-optimizer/common/util'
 import {
-  clampPercent,
   getUnitStr,
   objKeyMap,
   toPercent,
@@ -16,10 +15,9 @@ import {
   allArtifactSetKeys,
   allSubstatKeys,
   artMaxLevel,
-  artSubstatRollData,
 } from '@genshin-optimizer/gi/consts'
 import type { IArtifact } from '@genshin-optimizer/gi/schema'
-import { allStats, getArtSetStat } from '@genshin-optimizer/gi/stats'
+import { coreStats } from '@genshin-optimizer/gi/stats'
 import { getArtifactMeta } from './artifactMeta'
 
 export function artDisplayValue(value: number, unit: Unit): string {
@@ -35,7 +33,7 @@ export function getSubstatValuesPercent(
   substatKey: SubstatKey,
   rarity: ArtifactRarity
 ) {
-  return allStats.art.sub[rarity][substatKey].map((v) =>
+  return coreStats.art.sub[rarity][substatKey].map((v) =>
     toPercent(v, substatKey)
   )
 }
@@ -46,7 +44,7 @@ export function getSubstatRolls(
   rarity: ArtifactRarity
 ): number[][] {
   const rollData = getSubstatValuesPercent(substatKey, rarity)
-  const table = allStats.art.subRoll[rarity][substatKey]
+  const table = coreStats.art.subRoll[rarity][substatKey]
   const lookupValue = artDisplayValue(substatValue, getUnitStr(substatKey))
   return (
     table[lookupValue as unknown as keyof typeof table]?.map((roll) =>
@@ -70,18 +68,9 @@ export function getSubstatSummedRolls(
   rarity: ArtifactRarity,
   key: SubstatKey
 ): number[] {
-  return Object.keys(allStats.art.subRoll[rarity][key]).map((v) =>
+  return Object.keys(coreStats.art.subRoll[rarity][key]).map((v) =>
     Number.parseFloat(v)
   )
-}
-
-export function getSubstatEfficiency(
-  substatKey: SubstatKey | '',
-  rolls: number[]
-): number {
-  const sum = rolls.reduce((a, b) => a + b, 0)
-  const max = substatKey ? getSubstatValue(substatKey) * rolls.length : 0
-  return max ? clampPercent((sum / max) * 100) : 0
 }
 
 const substatCache = new Map<string, number>()
@@ -94,7 +83,7 @@ export function getSubstatValue(
   const cacheKey = `${substatKey},${rarity},${type}`
   let value = substatCache.get(cacheKey)
   if (!value) {
-    const substats = allStats.art.sub[rarity][substatKey]
+    const substats = coreStats.art.sub[rarity][substatKey]
     value =
       type === 'max'
         ? Math.max(...substats)
@@ -118,7 +107,7 @@ export function getMainStatValue(
   rarity: ArtifactRarity,
   level: number
 ) {
-  return allStats.art.main[rarity][statKey][level]
+  return coreStats.art.main[rarity][statKey][level]
 }
 
 /**
@@ -131,7 +120,7 @@ export function getMainStatDisplayValues(
   rarity: ArtifactRarity,
   statKey: MainStatKey
 ): number[] {
-  return allStats.art.main[rarity][statKey].map((k: number) =>
+  return coreStats.art.main[rarity][statKey].map((k: number) =>
     statKey === 'eleMas' ? Math.round(k) : toPercent(k, statKey)
   )
 }
@@ -160,7 +149,7 @@ export function getMainStatDisplayStr(
 }
 
 export function getSubstatRange(rarity: ArtifactRarity, key: SubstatKey) {
-  const values = Object.keys(allStats.art.subRoll[rarity][key])
+  const values = Object.keys(coreStats.art.subRoll[rarity][key])
   const low = Number.parseFloat(values[0])
   const high = Number.parseFloat(values[values.length - 1])
   return { low, high }
@@ -168,12 +157,6 @@ export function getSubstatRange(rarity: ArtifactRarity, key: SubstatKey) {
 
 export function getRollsRemaining(level: number, rarity: ArtifactRarity) {
   return Math.ceil((artMaxLevel[rarity] - level) / 4)
-}
-
-export function getTotalPossibleRolls(rarity: ArtifactRarity) {
-  return (
-    artSubstatRollData[rarity].high + artSubstatRollData[rarity].numUpgrades
-  )
 }
 const maxSubstatRollEfficiency = objKeyMap(allArtifactRarityKeys, (rarity) =>
   Math.max(
@@ -255,6 +238,6 @@ export const setKeysByRarities = Object.fromEntries(
 ) as Record<ArtifactRarity, ArtifactSetKey[]>
 allArtifactSetKeys.forEach((setKey) =>
   setKeysByRarities[
-    Math.max(...getArtSetStat(setKey).rarities) as ArtifactRarity
+    Math.max(...coreStats.art.data[setKey].rarities) as ArtifactRarity
   ].push(setKey)
 )

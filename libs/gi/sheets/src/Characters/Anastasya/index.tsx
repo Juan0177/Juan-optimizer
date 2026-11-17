@@ -1,11 +1,15 @@
-// juanlab-beta 7.3: Anastasya (la Zarina), dai dati della beta (Nanoka 7.2.52, numeri dei talenti verificati su
-// gachabase). Quando l'originale la aggiunge, questo file si cancella e si tiene il suo.
-// Modello: Odette (Cryo, stessa passiva Stellar Jubilee e stessa logica di Radiance).
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { allStats } from '@genshin-optimizer/gi/stats'
+import { objKeyValMap } from '@genshin-optimizer/common/util'
 import {
+  allStellarReactionKeys,
+  type CharacterKey,
+} from '@genshin-optimizer/gi/consts'
+import { allStats } from '@genshin-optimizer/gi/stats'
+import type { NumNode } from '@genshin-optimizer/gi/wr'
+import {
+  compareEq,
   constant,
   equal,
+  equalStr,
   greaterEq,
   infoMut,
   input,
@@ -15,12 +19,14 @@ import {
   one,
   percent,
   prod,
+  stellarDmgNode,
   subscript,
   sum,
+  tally,
   target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
-import { any, cond, st, stg } from '../../SheetUtil'
+import { cond, st, stg } from '../../SheetUtil'
 import { CharacterSheet } from '../CharacterSheet'
 import { charTemplates } from '../charTemplates'
 import {
@@ -28,7 +34,6 @@ import {
   dmgNode,
   hitEle,
   plungingDmgNodes,
-  stellarTalentDmgNode,
 } from '../dataUtil'
 import type { TalentSheet } from '../ICharacterSheet'
 
@@ -51,7 +56,7 @@ const dm = {
   },
   charged: {
     aimed: skillParam_gen.auto[a++],
-    aimedCharged: skillParam_gen.auto[a++],
+    fullyCharged: skillParam_gen.auto[a++],
   },
   plunging: {
     dmg: skillParam_gen.auto[a++],
@@ -61,17 +66,17 @@ const dm = {
   skill: {
     tapDmg: skillParam_gen.skill[s++],
     holdDmg: skillParam_gen.skill[s++],
-    crownDmg: skillParam_gen.skill[s++],
-    crownScDmg: skillParam_gen.skill[s++],
-    crownSsDmg: skillParam_gen.skill[s++],
-    spearArr: [
+    crownDmg: skillParam_gen.skill[s++], // x2 per attack
+    crownSc: skillParam_gen.skill[s++],
+    crownSs: skillParam_gen.skill[s++],
+    honorHitArr: [
       skillParam_gen.skill[s++], // 1
       skillParam_gen.skill[s++], // 2 (x2)
       skillParam_gen.skill[s++], // 3
       skillParam_gen.skill[s++], // 4 (x3)
       skillParam_gen.skill[s++], // 5 (x3)
     ],
-    spearStellarArr: [0, 1, 2, 3, 4].map(() => ({
+    honorSgArr: [0, 1, 2, 3, 4].map(() => ({
       sc: skillParam_gen.skill[s++],
       ss: skillParam_gen.skill[s++],
     })),
@@ -80,247 +85,401 @@ const dm = {
     cd: skillParam_gen.skill[s++][0],
   },
   burst: {
-    newWorldDmg: skillParam_gen.burst[b++],
-    stellar_dmg_: skillParam_gen.burst[b++],
-    crownScDmg: skillParam_gen.burst[b++],
-    crownSsDmg: skillParam_gen.burst[b++],
-    triumphScDmg: skillParam_gen.burst[b++],
-    triumphSsDmg: skillParam_gen.burst[b++],
-    evernightScDmg: skillParam_gen.burst[b++],
-    evernightSsDmg: skillParam_gen.burst[b++],
-    doomHit1Dmg: skillParam_gen.burst[b++],
-    doomStellarArr: [0, 1, 2].map(() => ({
+    loveDmg: skillParam_gen.burst[b++],
+    love_stellar_dmg_: skillParam_gen.burst[b++],
+    crownSc: skillParam_gen.burst[b++],
+    crownSs: skillParam_gen.burst[b++],
+    triumphSc: skillParam_gen.burst[b++],
+    triumphSs: skillParam_gen.burst[b++],
+    evernightSc: skillParam_gen.burst[b++],
+    evernightSs: skillParam_gen.burst[b++],
+    doom1Dmg: skillParam_gen.burst[b++], // x5
+    doomSgArr: [0, 1, 2].map(() => ({
       sc: skillParam_gen.burst[b++],
       ss: skillParam_gen.burst[b++],
     })),
-    newWorldDuration: skillParam_gen.burst[b++][0],
-    evernightDuration: skillParam_gen.burst[b++][0],
+    loveDuration: skillParam_gen.burst[b++][0],
+    honorDuration: skillParam_gen.burst[b++][0],
     cd: skillParam_gen.burst[b++][0],
     enerCost: skillParam_gen.burst[b++][0],
   },
   passive1: {
     critDMG_: skillParam_gen.passive1[0][0],
     duration: skillParam_gen.passive1[1][0],
+    linger: skillParam_gen.passive1[2][0],
   },
-  // A4: il testo dice +15% al moltiplicatore base del Turbinio astrale, il parametro della beta 10%: si usa il testo
   passive2: {
-    stellarswirl_reactionMult_: 0.15,
+    stellarswirl_mult_: skillParam_gen.passive2[1][0],
   },
   passive3: {
-    radianceSsDuration: skillParam_gen.passive3![0][0],
+    ssDuration: skillParam_gen.passive3![0][0],
     baseDmgPer100Atk: skillParam_gen.passive3![1][0],
     maxBaseDmg: skillParam_gen.passive3![2][0],
   },
   constellation1: {
     cryo_atk_: skillParam_gen.constellation1[0],
     eleMas: skillParam_gen.constellation1[1],
-    selfSealedMult: skillParam_gen.constellation1[2],
+    sealedMult: skillParam_gen.constellation1[2],
   },
-  // C2: il parametro della beta dice 50%, il testo (uguale su Nanoka e gachabase) 60%: si usa il testo.
   constellation2: {
-    love_critDMG_: 0.6,
-    loveDuration: skillParam_gen.constellation2[1],
+    stellar_critDMG_: skillParam_gen.constellation2[0],
     honorMult: skillParam_gen.constellation2[2],
-    honorDuration: skillParam_gen.constellation2[3],
     stellar_specialDmg_: skillParam_gen.constellation2[4],
   },
   constellation4: {
-    accoladeMult_: skillParam_gen.constellation4[0],
+    accoladesInc: skillParam_gen.constellation4[0],
   },
   constellation6: {
-    honorDoomMult: skillParam_gen.constellation6[2],
-    loveTriumphMult: skillParam_gen.constellation6[4],
+    triumphMult: skillParam_gen.constellation6[2],
     love_specialDmg_: skillParam_gen.constellation6[3],
+    doomMult: skillParam_gen.constellation6[4],
     honor_specialDmg_: skillParam_gen.constellation6[5],
   },
 } as const
 
-// Radiance: Stellar-Conduct (nel Campo stellare) o Stellar Swirl (8s dopo un Turbinio astrale del gruppo)
-const [condA0StellarRadiancePath, condA0StellarRadiance] = cond(
-  key,
-  'a0StellarRadiance'
-)
-const isRadianceScOrNotRadiance = any(
-  1,
-  equal(condA0StellarRadiance, 'sc', 1),
-  equal(condA0StellarRadiance, undefined, 1)
-)
+const PARTY_SIZE = 4
 
-// Stellar Jubilee: +0.7% DAN base di Astroconduzione e Turbinio astrale ogni 100 ATT, al massimo 14%
-const a0_stellarconduct_baseDmg_ = min(
-  prod(percent(dm.passive3.baseDmgPer100Atk), input.total.atk, 1 / 100),
-  percent(dm.passive3.maxBaseDmg)
-)
-const a0_stellarswirl_baseDmg_ = { ...a0_stellarconduct_baseDmg_ }
-
-// Benedizione attuale: Amore (abilita premuta) o Onore (abilita tenuta)
-const [condBlessingPath, condBlessing] = cond(key, 'blessing')
-
-// A1, Encomi: DAN da CRIT +12% al gruppo per 20s dopo l'abilita; C1: ATT +15% ai Cryo, Maestria +60 agli altri;
-// C4: questi bonus al 130%
+/* ---------- Conditionals ---------- */
+const [condBlessingPath, condBlessing] = cond(key, 'blessing') // love | honor
+const love = equal(condBlessing, 'love', 1)
+const honor = equal(condBlessing, 'honor', 1)
+const [condBurstPath, condBurst] = cond(key, 'burstActive')
+const burstActive = equal(condBurst, 'on', 1)
+// Radiance: Stellar-Conduct ('on') or Radiance: Stellar Swirl ('ss')
+const [condRadiancePath, condRadiance] = cond(key, 'a0StellarRadianceSc')
+const radianceSc = equal(condRadiance, 'on', 1)
+const radianceSs = equal(condRadiance, 'ss', 1)
+// Accolades (A1): normal / Anastasya Sealed (Love burst) / teammates Sealed (Honor burst)
 const [condAccoladesPath, condAccolades] = cond(key, 'accolades')
-const c4Mult = sum(
-  one,
-  greaterEq(input.constellation, 4, percent(dm.constellation4.accoladeMult_))
+/* Kit-only ('on' | 'off'): the rotation times C2 (Love 30 s, Honor 15 s after the Skill) and C6
+ * (30 s) itself. Unset, as in the UI, each effect follows the current Blessing. */
+const [, condC2LoveWindow] = cond(key, 'c2LoveWindow')
+const [, condC2HonorWindow] = cond(key, 'c2HonorWindow')
+const [, condC6LoveWindow] = cond(key, 'c6LoveWindow')
+const [, condC6HonorWindow] = cond(key, 'c6HonorWindow')
+const windowOn = (
+  window: typeof condC2LoveWindow,
+  blessing: typeof love
+): NumNode => lookup(window, { on: constant(1), off: constant(0) }, blessing)
+
+/* ---------- A1 Accolades ---------- */
+const c1On = greaterEq(input.constellation, 1, 1)
+const isSelf = compareEq(target.charKey, input.charKey, 1, 0)
+// Number of "Accolades" units (1 unit = the base 12% CRIT DMG / C1 15% ATK or 60 EM).
+const others = PARTY_SIZE - 1
+// C1 x3 applies only to the share split off Anastasya while she is Sealed (user-confirmed).
+const c1SealedShare = compareEq(c1On, 1, dm.constellation1.sealedMult, 1)
+// Units held by Anastasya herself
+const mkSelfUnits = () =>
+  lookup(
+    condAccolades,
+    {
+      on: constant(1),
+      // Sealed (Love): her unit is split among the others; with C1 she keeps hers.
+      loveSeal: c1On,
+      // Teammates Sealed (Honor): she receives all of their units.
+      honorSeal: constant(1 + others),
+    },
+    naught
+  )
+// Units held by each teammate
+const mkOthersUnits = () =>
+  lookup(
+    condAccolades,
+    {
+      on: constant(1),
+      // Own unit + 1/3 of Anastasya's (x3 at C1): 12% -> 16% (C1: 24%)
+      loveSeal: sum(1, prod(1 / others, c1SealedShare)),
+      // Sealed themselves: they lose theirs, with C1 they keep it.
+      honorSeal: c1On,
+    },
+    naught
+  )
+const accoladesUnits = compareEq(isSelf, 1, mkSelfUnits(), mkOthersUnits())
+const accoladesMult = prod(
+  accoladesUnits,
+  sum(
+    one,
+    greaterEq(input.constellation, 4, percent(dm.constellation4.accoladesInc))
+  )
 )
-// Gli Encomi dei personaggi Sigillati si dividono tra chi non lo e (fino a 8s dopo il Sigillo).
-// - "sealed" (Onore, The Evernight Yields to Dawn): altri 3 Sigillati, la Tsaritsa riceve i 4 Encomi;
-// - "selfSealed" (Amore, To the New World): la Tsaritsa Sigillata, il suo Encomio va diviso tra gli altri 3.
-// C1: chi divide il proprio Encomio non lo perde, e con la Tsaritsa Sigillata gli Encomi che da agli altri valgono il
-// 300%.
-const c1KeepsOwn = greaterEq(input.constellation, 1, one)
-const c1SelfSealedMult = sum(
-  one,
-  greaterEq(input.constellation, 1, dm.constellation1.selfSealedMult - 1)
+const a1_critDMG_ = greaterEq(
+  input.asc,
+  1,
+  prod(accoladesMult, percent(dm.passive1.critDMG_)),
+  { path: 'critDMG_', isTeamBuff: true }
 )
-const isSelf = (node: Parameters<typeof equal>[2]) =>
-  equal(target.charKey, key, node)
-const isOther = (node: Parameters<typeof unequal>[2]) =>
-  unequal(target.charKey, key, node)
-const accoladeShares = lookup(
-  condAccolades,
+/* C1: each Accolades copy carries the bonus type of the character it came from:
+ * Cryo copy -> +15% ATK, non-Cryo copy -> +60 EM (CRIT DMG is the same for every copy).
+ * - Nobody Sealed: everyone holds their own copy.
+ * - Love (Anastasya Sealed): her Cryo copy is split among the 3 allies and the shared part is
+ *   x3 -> each ally gains one full Cryo copy; she keeps her own.
+ * - Honor (allies Sealed): Anastasya receives every ally's copy (by the ally's element);
+ *   Sealed allies keep their own.
+ * Matches the community table (credits Kuroo) incl. C4 x1.3. Assumes a 4-member party. */
+const mkC4Mult = () =>
+  sum(
+    one,
+    greaterEq(input.constellation, 4, percent(dm.constellation4.accoladesInc))
+  )
+const cryoAllies = sum(tally.cryo, -1) // Cryo party members other than Anastasya
+const nonCryoAllies = sum(PARTY_SIZE - 1, prod(-1, cryoAllies))
+const mkAtkCopies = (self: NumNode, tCryo: NumNode) =>
+  lookup(
+    condAccolades,
+    {
+      on: tCryo,
+      loveSeal: compareEq(self, 1, constant(1), sum(tCryo, 1)),
+      honorSeal: compareEq(self, 1, sum(1, cryoAllies), tCryo),
+    },
+    naught
+  )
+const mkEmCopies = (self: NumNode, tCryo: NumNode) =>
+  lookup(
+    condAccolades,
+    {
+      on: sum(1, prod(-1, tCryo)),
+      loveSeal: compareEq(self, 1, constant(0), sum(1, prod(-1, tCryo))),
+      honorSeal: compareEq(self, 1, nonCryoAllies, sum(1, prod(-1, tCryo))),
+    },
+    naught
+  )
+const targetCryo = equal(target.charEle, 'cryo', 1)
+const mkC1 = (copies: NumNode, base: NumNode | number) =>
+  greaterEq(
+    input.asc,
+    1,
+    greaterEq(input.constellation, 1, prod(copies, mkC4Mult(), base))
+  )
+const c1_atk_ = infoMut(
+  mkC1(mkAtkCopies(isSelf, targetCryo), percent(dm.constellation1.cryo_atk_)),
+  { path: 'atk_', isTeamBuff: true }
+)
+const c1_eleMas = infoMut(
+  mkC1(mkEmCopies(isSelf, targetCryo), dm.constellation1.eleMas),
+  { path: 'eleMas', isTeamBuff: true }
+)
+
+// Display-only lines (not target dependent) so Anastasya's card shows what everyone gets.
+const mkAccDisp = (
+  units: NumNode,
+  base: NumNode | number,
+  minC: number,
+  name: ReturnType<typeof ct.ch>
+) =>
+  infoMut(
+    greaterEq(
+      input.asc,
+      1,
+      greaterEq(input.constellation, minC, prod(units, mkC4Mult(), base))
+    ),
+    { name, isTeamBuff: true }
+  )
+const ONE = constant(1),
+  ZERO = constant(0)
+const accDispFields = () => [
   {
-    on: constant(1),
-    sealed: sum(isSelf(constant(4)), isOther(c1KeepsOwn)),
-    selfSealed: sum(
-      isSelf(c1KeepsOwn),
-      isOther(prod(constant(4 / 3), c1SelfSealedMult))
+    node: infoMut(
+      mkAccDisp(
+        mkSelfUnits(),
+        percent(dm.passive1.critDMG_),
+        0,
+        ct.ch('dispCdSelf')
+      ),
+      { unit: '%' }
     ),
   },
-  naught
-)
-const a1Accolades_critDMG_ = greaterEq(
-  input.asc,
-  1,
-  prod(accoladeShares, percent(dm.passive1.critDMG_), c4Mult)
-)
-const c1Accolades_atk_ = greaterEq(
-  input.constellation,
-  1,
-  equal(
-    target.charEle,
-    'cryo',
-    prod(accoladeShares, percent(dm.constellation1.cryo_atk_), c4Mult)
-  )
-)
-const c1Accolades_eleMas = greaterEq(
-  input.constellation,
-  1,
-  unequal(
-    target.charEle,
-    'cryo',
-    prod(accoladeShares, dm.constellation1.eleMas, c4Mult)
-  )
-)
+  {
+    node: infoMut(
+      mkAccDisp(
+        mkOthersUnits(),
+        percent(dm.passive1.critDMG_),
+        0,
+        ct.ch('dispCdOthers')
+      ),
+      { unit: '%' }
+    ),
+  },
+  {
+    node: infoMut(
+      mkAccDisp(
+        mkAtkCopies(ONE, ONE),
+        percent(dm.constellation1.cryo_atk_),
+        1,
+        ct.ch('dispAtkSelf')
+      ),
+      { unit: '%' }
+    ),
+  },
+  {
+    node: mkAccDisp(
+      mkEmCopies(ONE, ONE),
+      dm.constellation1.eleMas,
+      1,
+      ct.ch('dispEmSelf')
+    ),
+  },
+  {
+    node: infoMut(
+      mkAccDisp(
+        mkAtkCopies(ZERO, ONE),
+        percent(dm.constellation1.cryo_atk_),
+        1,
+        ct.ch('dispAtkCryo')
+      ),
+      { unit: '%' }
+    ),
+  },
+  {
+    node: infoMut(
+      mkAccDisp(
+        mkAtkCopies(ZERO, ZERO),
+        percent(dm.constellation1.cryo_atk_),
+        1,
+        ct.ch('dispAtkNonCryo')
+      ),
+      { unit: '%' }
+    ),
+  },
+  {
+    node: mkAccDisp(
+      mkEmCopies(ZERO, ZERO),
+      dm.constellation1.eleMas,
+      1,
+      ct.ch('dispEmOthers')
+    ),
+  },
+]
 
-// A4: moltiplicatore base della reazione Turbinio astrale +15% per il gruppo. La parte su Astroconduzione (il Campo
-// stellare si rinforza a ogni buff) e i vortici portati subito al livello 2 restano testo: si scelgono con le
-// cariche del Campo e il vortice di livello 2.
-const a4_stellarswirl_reactionMult_ = greaterEq(
+/* ---------- A4 / A0 ---------- */
+const a4_stellarswirl_mult_ = greaterEq(
   input.asc,
   4,
-  percent(dm.passive2.stellarswirl_reactionMult_)
+  percent(dm.passive2.stellarswirl_mult_),
+  { path: 'stellarswirl_mult_', isTeamBuff: true }
 )
+// Factories: each use gets its own node so display info (labels/units) never collides.
+const mkA0 = () =>
+  min(
+    prod(percent(dm.passive3.baseDmgPer100Atk), input.total.atk, 1 / 100),
+    percent(dm.passive3.maxBaseDmg)
+  )
+const a0_stellarconduct_baseDmg_ = mkA0()
+const a0_stellarswirl_baseDmg_ = mkA0()
 
-// Tripudio "To the New World" (Amore): DAN delle reazioni stellari del gruppo aumentati
-const [condNewWorldPath, condNewWorld] = cond(key, 'newWorld')
-const newWorld_stellarconduct_dmg_ = equal(
-  condNewWorld,
-  'on',
-  subscript(input.total.burstIndex, dm.burst.stellar_dmg_, { unit: '%' })
-)
-const newWorld_stellarswirl_dmg_ = { ...newWorld_stellarconduct_dmg_ }
+/* ---------- Burst (Love) team Stellar Glimmer DMG ---------- */
+const mkLove = () =>
+  equal(
+    love,
+    1,
+    equal(
+      burstActive,
+      1,
+      subscript(input.total.burstIndex, dm.burst.love_stellar_dmg_, {
+        unit: '%',
+      })
+    )
+  )
 
-// C2: DAN delle reazioni stellari elevati del 5% sempre; Amore: DAN da CRIT delle reazioni stellari +60%;
-// Onore: attacchi normali, The Evernight Yields to Dawn e Doom al 125%
-const c2_stellarconduct_specialDmg_ = greaterEq(
-  input.constellation,
-  2,
-  percent(dm.constellation2.stellar_specialDmg_),
-  { path: 'stellarconduct_specialDmg_', isTeamBuff: true }
-)
-const c2Love_stellarconduct_critDMG_ = greaterEq(
-  input.constellation,
-  2,
-  equal(condBlessing, 'love', percent(dm.constellation2.love_critDMG_))
-)
-const c2Love_stellarswirl_critDMG_ = { ...c2Love_stellarconduct_critDMG_ }
-const c2HonorMult = sum(
+/* ---------- Constellations ---------- */
+const mkC2Love = () =>
+  greaterEq(
+    input.constellation,
+    2,
+    equal(
+      windowOn(condC2LoveWindow, love),
+      1,
+      percent(dm.constellation2.stellar_critDMG_)
+    )
+  )
+const c2Honor_mult = sum(
   one,
   greaterEq(
     input.constellation,
     2,
-    equal(condBlessing, 'honor', percent(dm.constellation2.honorMult - 1))
+    equal(
+      windowOn(condC2HonorWindow, honor),
+      1,
+      percent(dm.constellation2.honorMult - 1)
+    )
   )
 )
+const mkC2Special = () =>
+  greaterEq(
+    input.constellation,
+    2,
+    percent(dm.constellation2.stellar_specialDmg_)
+  )
+const mkC6LoveSpecial = () =>
+  greaterEq(
+    input.constellation,
+    6,
+    equal(
+      windowOn(condC6LoveWindow, love),
+      1,
+      percent(dm.constellation6.love_specialDmg_)
+    )
+  )
+const mkC6HonorSpecial = () =>
+  greaterEq(
+    input.constellation,
+    6,
+    equal(
+      windowOn(condC6HonorWindow, honor),
+      1,
+      percent(dm.constellation6.honor_specialDmg_)
+    )
+  )
+const teamStellarObj = (
+  mk: () => NumNode,
+  suffix: '_dmg_' | '_critDMG_' | '_specialDmg_'
+) => objKeyValMap(allStellarReactionKeys, (k) => [`${k}${suffix}`, mk()])
+/** A buff that applies to both Stellar Glimmer reactions: one line each (it is the same value) */
+const bothStellarFields = (
+  mk: () => NumNode,
+  suffix: '_critDMG_' | '_specialDmg_',
+  isTeamBuff = true
+) =>
+  allStellarReactionKeys.map((k) => ({
+    node: infoMut(mk(), { path: `${k}${suffix}`, isTeamBuff }),
+  }))
+const mkTeamSpecial = () => sum(mkC2Special(), mkC6LoveSpecial())
 
-// C6: Amore: reazioni stellari del gruppo elevate del 10%; Onore: quelle di Anastasya del 20%
-const c6Love_stellarconduct_specialDmg_ = greaterEq(
-  input.constellation,
-  6,
-  equal(condBlessing, 'love', percent(dm.constellation6.love_specialDmg_)),
-  { path: 'stellarconduct_specialDmg_', isTeamBuff: true }
-)
-const c6Honor_stellarconduct_specialDmg_ = greaterEq(
-  input.constellation,
-  6,
-  equal(condBlessing, 'honor', percent(dm.constellation6.honor_specialDmg_))
-)
-const team_stellarconduct_specialDmg_ = sum(
-  c2_stellarconduct_specialDmg_,
-  c6Love_stellarconduct_specialDmg_
-)
-const team_stellarswirl_specialDmg_ = { ...team_stellarconduct_specialDmg_ }
-const self_stellarconduct_specialDmg_ = c6Honor_stellarconduct_specialDmg_
-const self_stellarswirl_specialDmg_ = { ...c6Honor_stellarconduct_specialDmg_ }
-
-const stellar = (
+/* ---------- Damage ---------- */
+// Stellar Glimmer hit: Stellar-Conduct or Stellar Swirl variant
+const sg = (
+  variant: 'stellarconduct' | 'stellarswirl',
   arr: number[],
   talent: 'skill' | 'burst',
-  variant: 'stellarconduct' | 'stellarswirl',
-  mult?: Parameters<typeof prod>[0],
-  additional?: Parameters<typeof stellarTalentDmgNode>[5]
+  specialMultiplier?: NumNode
 ) =>
-  stellarTalentDmgNode(
+  stellarDmgNode(
+    subscript(input.total[`${talent}Index`], arr, { unit: '%' }),
     'atk',
-    arr,
-    talent,
     variant,
     'cryo',
-    additional,
-    mult as any
+    undefined,
+    specialMultiplier
   )
-// Danno stellare solo in Radiance (Corona, ultimo colpo della lancia): Astroconduzione o Turbinio astrale
-const radianceSc = (node: ReturnType<typeof stellar>) =>
-  equal(condA0StellarRadiance, 'sc', node)
-const radianceSs = (node: ReturnType<typeof stellar>) =>
-  equal(condA0StellarRadiance, 'ss', node)
-// Danno "considerato Astroconduzione", che in Radiance: Stellar Swirl diventa Turbinio astrale
-const scUnlessSs = (node: ReturnType<typeof stellar>) =>
-  equal(isRadianceScOrNotRadiance, 1, node)
+// Hits that are Stellar Glimmer only while in a Radiance state
+const radianceOnly = (
+  sc: number[],
+  ss: number[],
+  talent: 'skill' | 'burst',
+  mult?: NumNode
+) => ({
+  sc: equal(radianceSc, 1, sg('stellarconduct', sc, talent, mult)),
+  ss: equal(radianceSs, 1, sg('stellarswirl', ss, talent, mult)),
+})
+// Burst hits: Stellar-Conduct by default, Stellar Swirl while in Radiance: Stellar Swirl
+const burstStellar = (sc: number[], ss: number[], mult?: NumNode) => ({
+  sc: equal(radianceSs, 0, sg('stellarconduct', sc, 'burst', mult)),
+  ss: equal(radianceSs, 1, sg('stellarswirl', ss, 'burst', mult)),
+})
 
-// C6, Amore: al cambio di personaggio un effetto pari a Palestar Edict: Triumph al 250%
-const c6TriumphMult = prod(dm.constellation6.loveTriumphMult, one)
-// C6, Onore: la prossima E premuta fa un effetto pari al 3o attacco di Doom al 200%; se gli altri non sono Sigillati
-// la Tsaritsa ha gli Encomi di tutto il gruppo per questo colpo (i 3 degli altri si aggiungono al suo)
-const c6DoomMult = prod(c2HonorMult, dm.constellation6.honorDoomMult)
-const c6DoomOtherAccolades = greaterEq(
-  input.asc,
-  1,
-  equal(condAccolades, 'on', prod(constant(3), c4Mult))
-)
-const c6DoomAdditional = {
-  premod: {
-    critDMG_: prod(c6DoomOtherAccolades, percent(dm.passive1.critDMG_)),
-    atk_: greaterEq(
-      input.constellation,
-      1,
-      prod(c6DoomOtherAccolades, percent(dm.constellation1.cryo_atk_))
-    ),
-  },
-}
-const c6 = (node: ReturnType<typeof stellar>) =>
-  greaterEq(input.constellation, 6, node)
+const honorMult = c2Honor_mult
+const c6TriumphMult = constant(dm.constellation6.triumphMult)
+const c6DoomMult = constant(dm.constellation6.doomMult)
 
 const dmgFormulas = {
   normal: Object.fromEntries(
@@ -328,9 +487,9 @@ const dmgFormulas = {
   ),
   charged: {
     aimed: dmgNode('atk', dm.charged.aimed, 'charged'),
-    aimedCharged: dmgNode(
+    fullyCharged: dmgNode(
       'atk',
-      dm.charged.aimedCharged,
+      dm.charged.fullyCharged,
       'charged',
       hitEle.cryo
     ),
@@ -340,108 +499,92 @@ const dmgFormulas = {
     tapDmg: dmgNode('atk', dm.skill.tapDmg, 'skill'),
     holdDmg: dmgNode('atk', dm.skill.holdDmg, 'skill'),
     crownDmg: dmgNode('atk', dm.skill.crownDmg, 'skill'),
-    crownScDmg: radianceSc(
-      stellar(dm.skill.crownScDmg, 'skill', 'stellarconduct')
-    ),
-    crownSsDmg: radianceSs(
-      stellar(dm.skill.crownSsDmg, 'skill', 'stellarswirl')
-    ),
-    // Lancia benedetta (Onore): attacchi normali Cryo con i moltiplicatori dell'abilita
+    ...(() => {
+      const r = radianceOnly(dm.skill.crownSc, dm.skill.crownSs, 'skill')
+      return { crownSc: r.sc, crownSs: r.ss }
+    })(),
     ...Object.fromEntries(
-      dm.skill.spearArr.map((arr, i) => [
-        `spear${i}`,
-        dmgNode('atk', arr, 'normal', hitEle.cryo, c2HonorMult, 'skill'),
-      ])
-    ),
-    ...Object.fromEntries(
-      dm.skill.spearStellarArr.flatMap(({ sc, ss }, i) => [
-        [
-          `spearSc${i}`,
-          radianceSc(stellar(sc, 'skill', 'stellarconduct', c2HonorMult)),
-        ],
-        [
-          `spearSs${i}`,
-          radianceSs(stellar(ss, 'skill', 'stellarswirl', c2HonorMult)),
-        ],
-      ])
+      dm.skill.honorHitArr.flatMap((arr, i) => {
+        const r = radianceOnly(
+          dm.skill.honorSgArr[i].sc,
+          dm.skill.honorSgArr[i].ss,
+          'skill',
+          honorMult
+        )
+        return [
+          [
+            `honor${i}`,
+            dmgNode('atk', arr, 'normal', hitEle.cryo, honorMult, 'skill'),
+          ],
+          [`honor${i}Sc`, r.sc],
+          [`honor${i}Ss`, r.ss],
+        ]
+      })
     ),
   },
   burst: {
-    newWorldDmg: dmgNode('atk', dm.burst.newWorldDmg, 'burst'),
-    crownScDmg: scUnlessSs(
-      stellar(dm.burst.crownScDmg, 'burst', 'stellarconduct')
-    ),
-    crownSsDmg: radianceSs(
-      stellar(dm.burst.crownSsDmg, 'burst', 'stellarswirl')
-    ),
-    triumphScDmg: scUnlessSs(
-      stellar(dm.burst.triumphScDmg, 'burst', 'stellarconduct')
-    ),
-    triumphSsDmg: radianceSs(
-      stellar(dm.burst.triumphSsDmg, 'burst', 'stellarswirl')
-    ),
-    evernightScDmg: scUnlessSs(
-      stellar(dm.burst.evernightScDmg, 'burst', 'stellarconduct', c2HonorMult)
-    ),
-    evernightSsDmg: radianceSs(
-      stellar(dm.burst.evernightSsDmg, 'burst', 'stellarswirl', c2HonorMult)
-    ),
-    doomHit1Dmg: dmgNode(
+    loveDmg: dmgNode('atk', dm.burst.loveDmg, 'burst'),
+    ...(() => {
+      const crown = burstStellar(dm.burst.crownSc, dm.burst.crownSs)
+      const triumph = burstStellar(dm.burst.triumphSc, dm.burst.triumphSs)
+      const evernight = burstStellar(
+        dm.burst.evernightSc,
+        dm.burst.evernightSs,
+        honorMult
+      )
+      return {
+        crownSc: crown.sc,
+        crownSs: crown.ss,
+        triumphSc: triumph.sc,
+        triumphSs: triumph.ss,
+        evernightSc: evernight.sc,
+        evernightSs: evernight.ss,
+      }
+    })(),
+    doom1Dmg: dmgNode(
       'atk',
-      dm.burst.doomHit1Dmg,
+      dm.burst.doom1Dmg,
       'skill',
       hitEle.cryo,
-      c2HonorMult,
+      honorMult,
       'burst'
     ),
     ...Object.fromEntries(
-      dm.burst.doomStellarArr.flatMap(({ sc, ss }, i) => [
-        [
-          `doomSc${i}`,
-          scUnlessSs(stellar(sc, 'burst', 'stellarconduct', c2HonorMult)),
-        ],
-        [
-          `doomSs${i}`,
-          radianceSs(stellar(ss, 'burst', 'stellarswirl', c2HonorMult)),
-        ],
-      ])
+      dm.burst.doomSgArr.flatMap(({ sc, ss }, i) => {
+        const r = burstStellar(sc, ss, honorMult)
+        return [
+          [`doom${i}Sc`, r.sc],
+          [`doom${i}Ss`, r.ss],
+        ]
+      })
     ),
+  },
+  passive3: {
+    a0_stellarconduct_baseDmg_,
+    a0_stellarswirl_baseDmg_,
   },
   constellation6: {
-    triumphScDmg: c6(
-      scUnlessSs(
-        stellar(dm.burst.triumphScDmg, 'burst', 'stellarconduct', c6TriumphMult)
+    ...(() => {
+      const t = burstStellar(
+        dm.burst.triumphSc,
+        dm.burst.triumphSs,
+        c6TriumphMult
       )
-    ),
-    triumphSsDmg: c6(
-      radianceSs(
-        stellar(dm.burst.triumphSsDmg, 'burst', 'stellarswirl', c6TriumphMult)
+      const d = burstStellar(
+        dm.burst.doomSgArr[2].sc,
+        dm.burst.doomSgArr[2].ss,
+        prod(c6DoomMult, honorMult)
       )
-    ),
-    doomScDmg: c6(
-      scUnlessSs(
-        stellar(
-          dm.burst.doomStellarArr[2].sc,
-          'burst',
-          'stellarconduct',
-          c6DoomMult,
-          c6DoomAdditional
-        )
-      )
-    ),
-    doomSsDmg: c6(
-      radianceSs(
-        stellar(
-          dm.burst.doomStellarArr[2].ss,
-          'burst',
-          'stellarswirl',
-          c6DoomMult,
-          c6DoomAdditional
-        )
-      )
-    ),
+      return {
+        triumphSc: greaterEq(input.constellation, 6, equal(love, 1, t.sc)),
+        triumphSs: greaterEq(input.constellation, 6, equal(love, 1, t.ss)),
+        doom3Sc: greaterEq(input.constellation, 6, equal(honor, 1, d.sc)),
+        doom3Ss: greaterEq(input.constellation, 6, equal(honor, 1, d.ss)),
+      }
+    })(),
   },
 }
+
 const burstC3 = greaterEq(input.constellation, 3, 3)
 const skillC5 = greaterEq(input.constellation, 5, 3)
 
@@ -449,63 +592,85 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
   premod: {
     burstBoost: burstC3,
     skillBoost: skillC5,
-    stellarconduct_specialDmg_: self_stellarconduct_specialDmg_,
-    stellarswirl_specialDmg_: self_stellarswirl_specialDmg_,
+    ...teamStellarObj(mkC6HonorSpecial, '_specialDmg_'),
   },
   teamBuff: {
     premod: {
-      stellarconduct_baseDmg_: a0_stellarconduct_baseDmg_,
-      stellarswirl_baseDmg_: a0_stellarswirl_baseDmg_,
-      critDMG_: a1Accolades_critDMG_,
-      atk_: c1Accolades_atk_,
-      eleMas: c1Accolades_eleMas,
-      stellarconduct_dmg_: newWorld_stellarconduct_dmg_,
-      stellarswirl_dmg_: newWorld_stellarswirl_dmg_,
-      stellarconduct_critDMG_: c2Love_stellarconduct_critDMG_,
-      stellarswirl_critDMG_: c2Love_stellarswirl_critDMG_,
-      stellarconduct_specialDmg_: team_stellarconduct_specialDmg_,
-      stellarswirl_specialDmg_: team_stellarswirl_specialDmg_,
-      stellarswirl_reactionMult_: a4_stellarswirl_reactionMult_,
+      critDMG_: a1_critDMG_,
+      atk_: c1_atk_,
+      eleMas: c1_eleMas,
+      stellarswirl_mult_: a4_stellarswirl_mult_,
+      stellarconduct_baseDmg_: mkA0(),
+      stellarswirl_baseDmg_: mkA0(),
+      ...teamStellarObj(mkLove, '_dmg_'),
+      ...teamStellarObj(mkC2Love, '_critDMG_'),
+      ...teamStellarObj(mkTeamSpecial, '_specialDmg_'),
     },
   },
   flags: {
-    radiance: condA0StellarRadiance,
+    radiance: compareEq(
+      condRadiance,
+      'on',
+      'sc',
+      equalStr(condRadiance, 'ss', 'ss')
+    ),
   },
 })
 
-const node = (n: any, name: any, multi?: number) => ({
-  node: infoMut(n, { name, ...(multi ? { multi } : {}) }),
-})
-const sk = (i: number) => ct.chg(`skill.skillParams.${i}`)
-const bu = (i: number) => ct.chg(`burst.skillParams.${i}`)
-// biome-ignore lint/suspicious/noExplicitAny: accesso per nome ai nodi generati con Object.fromEntries
-const f = dmgFormulas as any
+const stellarFields = (
+  sc: NumNode,
+  ss: NumNode,
+  scName: ReturnType<typeof ct.ch>,
+  ssName: ReturnType<typeof ct.ch>
+) => [
+  { node: infoMut(sc, { name: scName }) },
+  { node: infoMut(ss, { name: ssName }) },
+]
 
 const sheet: TalentSheet = {
   auto: ct.talentTem('auto', [
     { text: ct.chg('auto.fields.normal') },
     {
-      fields: dm.normal.hitArr.map((_, i) =>
-        node(
-          f.normal[i],
-          ct.chg(`auto.skillParams.${i}`),
-          i === 2 ? 2 : i === 3 ? 3 : undefined
-        )
-      ),
+      fields: dm.normal.hitArr.map((_, i) => ({
+        node: infoMut(dmgFormulas.normal[i], {
+          name: ct.chg(`auto.skillParams.${i}`),
+          multi: i === 2 ? 2 : i === 3 ? 3 : undefined,
+        }),
+      })),
     },
     { text: ct.chg('auto.fields.charged') },
     {
       fields: [
-        node(f.charged.aimed, ct.chg('auto.skillParams.5')),
-        node(f.charged.aimedCharged, ct.chg('auto.skillParams.6')),
+        {
+          node: infoMut(dmgFormulas.charged.aimed, {
+            name: ct.chg('auto.skillParams.5'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.charged.fullyCharged, {
+            name: ct.chg('auto.skillParams.6'),
+          }),
+        },
       ],
     },
     { text: ct.chg('auto.fields.plunging') },
     {
       fields: [
-        node(f.plunging.dmg, stg('plunging.dmg')),
-        node(f.plunging.low, stg('plunging.low')),
-        node(f.plunging.high, stg('plunging.high')),
+        {
+          node: infoMut(dmgFormulas.plunging.dmg, {
+            name: stg('plunging.dmg'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.plunging.low, {
+            name: stg('plunging.low'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.plunging.high, {
+            name: stg('plunging.high'),
+          }),
+        },
       ],
     },
   ]),
@@ -513,31 +678,92 @@ const sheet: TalentSheet = {
   skill: ct.talentTem('skill', [
     {
       fields: [
-        node(f.skill.tapDmg, sk(0)),
-        node(f.skill.holdDmg, sk(1)),
-        node(f.skill.crownDmg, sk(2), 2),
-        node(f.skill.crownScDmg, sk(3)),
-        node(f.skill.crownSsDmg, sk(3)),
-        ...dm.skill.spearArr.map((_, i) =>
-          node(f.skill[`spear${i}`], sk(4 + i), [1, 2, 1, 3, 3][i])
+        {
+          node: infoMut(dmgFormulas.skill.tapDmg, {
+            name: ct.chg('skill.skillParams.0'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.skill.holdDmg, {
+            name: ct.chg('skill.skillParams.1'),
+          }),
+        },
+        {
+          node: infoMut(dmgFormulas.skill.crownDmg, {
+            name: ct.chg('skill.skillParams.2'),
+            multi: 2,
+          }),
+        },
+        ...stellarFields(
+          dmgFormulas.skill.crownSc,
+          dmgFormulas.skill.crownSs,
+          ct.ch('crownSc'),
+          ct.ch('crownSs')
         ),
-        ...dm.skill.spearStellarArr.flatMap((_, i) => [
-          node(f.skill[`spearSc${i}`], sk(9 + i)),
-          node(f.skill[`spearSs${i}`], sk(9 + i)),
-        ]),
-        { text: sk(14), value: dm.skill.crownDuration, unit: 's' },
-        { text: sk(15), value: dm.skill.honorDuration, unit: 's' },
+        ...dm.skill.honorHitArr.flatMap((_, i) => {
+          const f = dmgFormulas.skill as Record<string, NumNode>
+          return [
+            {
+              node: infoMut(f[`honor${i}`], {
+                name: ct.chg(`skill.skillParams.${4 + i}`),
+                multi: i === 1 ? 2 : i >= 3 ? 3 : undefined,
+              }),
+            },
+            ...stellarFields(
+              f[`honor${i}Sc`],
+              f[`honor${i}Ss`],
+              ct.ch(`honorSc.${i}`),
+              ct.ch(`honorSs.${i}`)
+            ),
+          ]
+        }),
+        {
+          text: ct.chg('skill.skillParams.14'),
+          value: dm.skill.crownDuration,
+          unit: 's',
+        },
+        {
+          text: ct.chg('skill.skillParams.15'),
+          value: dm.skill.honorDuration,
+          unit: 's',
+        },
         { text: stg('cd'), value: dm.skill.cd, unit: 's' },
       ],
     },
     ct.condTem('skill', {
       path: condBlessingPath,
       value: condBlessing,
-      teamBuff: true,
       name: ct.ch('blessingCond'),
+      teamBuff: true,
       states: {
-        love: { name: ct.ch('love'), fields: [] },
+        love: {
+          name: ct.ch('love'),
+          fields: bothStellarFields(mkC2Love, '_critDMG_', false),
+        },
         honor: { name: ct.ch('honor'), fields: [] },
+      },
+    }),
+    ct.condTem('passive1', {
+      path: condAccoladesPath,
+      value: condAccolades,
+      name: ct.ch('accoladesCond'),
+      teamBuff: true,
+      states: {
+        on: {
+          name: ct.ch('accoladesNormal'),
+          fields: [
+            ...accDispFields(),
+            { text: stg('duration'), value: dm.passive1.duration, unit: 's' },
+          ],
+        },
+        loveSeal: {
+          name: ct.ch('accoladesLoveSeal'),
+          fields: accDispFields(),
+        },
+        honorSeal: {
+          name: ct.ch('accoladesHonorSeal'),
+          fields: accDispFields(),
+        },
       },
     }),
   ]),
@@ -545,39 +771,80 @@ const sheet: TalentSheet = {
   burst: ct.talentTem('burst', [
     {
       fields: [
-        node(f.burst.newWorldDmg, bu(0)),
-        node(f.burst.crownScDmg, bu(2)),
-        node(f.burst.crownSsDmg, bu(2)),
-        node(f.burst.triumphScDmg, bu(3)),
-        node(f.burst.triumphSsDmg, bu(3)),
-        node(f.burst.evernightScDmg, bu(4)),
-        node(f.burst.evernightSsDmg, bu(4)),
-        node(f.burst.doomHit1Dmg, bu(5), 5),
-        ...dm.burst.doomStellarArr.flatMap((_, i) => [
-          node(f.burst[`doomSc${i}`], bu(6 + i)),
-          node(f.burst[`doomSs${i}`], bu(6 + i)),
-        ]),
-        { text: bu(9), value: dm.burst.newWorldDuration, unit: 's' },
-        { text: bu(10), value: dm.burst.evernightDuration, unit: 's' },
+        {
+          node: infoMut(dmgFormulas.burst.loveDmg, {
+            name: ct.chg('burst.skillParams.0'),
+          }),
+        },
+        ...stellarFields(
+          dmgFormulas.burst.crownSc,
+          dmgFormulas.burst.crownSs,
+          ct.ch('burstCrownSc'),
+          ct.ch('burstCrownSs')
+        ),
+        ...stellarFields(
+          dmgFormulas.burst.triumphSc,
+          dmgFormulas.burst.triumphSs,
+          ct.ch('triumphSc'),
+          ct.ch('triumphSs')
+        ),
+        ...stellarFields(
+          dmgFormulas.burst.evernightSc,
+          dmgFormulas.burst.evernightSs,
+          ct.ch('evernightSc'),
+          ct.ch('evernightSs')
+        ),
+        {
+          node: infoMut(dmgFormulas.burst.doom1Dmg, {
+            name: ct.chg('burst.skillParams.5'),
+            multi: 5,
+          }),
+        },
+        ...[0, 1, 2].flatMap((i) => {
+          const f = dmgFormulas.burst as Record<string, NumNode>
+          return stellarFields(
+            f[`doom${i}Sc`],
+            f[`doom${i}Ss`],
+            ct.ch(`doomSc.${i}`),
+            ct.ch(`doomSs.${i}`)
+          )
+        }),
+        {
+          text: ct.chg('burst.skillParams.9'),
+          value: dm.burst.loveDuration,
+          unit: 's',
+        },
+        {
+          text: ct.chg('burst.skillParams.10'),
+          value: dm.burst.honorDuration,
+          unit: 's',
+        },
         { text: stg('cd'), value: dm.burst.cd, unit: 's' },
         { text: stg('energyCost'), value: dm.burst.enerCost },
       ],
     },
     ct.condTem('burst', {
-      path: condNewWorldPath,
-      value: condNewWorld,
+      path: condBurstPath,
+      value: condBurst,
+      name: ct.ch('burstCond'),
       teamBuff: true,
-      name: ct.ch('newWorldCond'),
+      canShow: love,
       states: {
         on: {
           fields: [
-            { node: newWorld_stellarconduct_dmg_ },
-            { node: newWorld_stellarswirl_dmg_ },
             {
-              text: stg('duration'),
-              value: dm.burst.newWorldDuration,
-              unit: 's',
+              node: infoMut(mkLove(), {
+                path: 'stellarconduct_dmg_',
+                isTeamBuff: true,
+              }),
             },
+            {
+              node: infoMut(mkLove(), {
+                path: 'stellarswirl_dmg_',
+                isTeamBuff: true,
+              }),
+            },
+            { text: stg('duration'), value: dm.burst.loveDuration, unit: 's' },
           ],
         },
       },
@@ -585,61 +852,47 @@ const sheet: TalentSheet = {
   ]),
 
   passive1: ct.talentTem('passive1', [
-    ct.condTem('passive1', {
-      path: condAccoladesPath,
-      value: condAccolades,
+    ct.headerTem('passive1', {
       teamBuff: true,
-      name: ct.ch('accoladesCond'),
-      states: {
-        on: {
-          name: ct.ch('accoladesOn'),
-          fields: [
-            { node: a1Accolades_critDMG_ },
-            { node: c1Accolades_atk_ },
-            { node: c1Accolades_eleMas },
-            { text: stg('duration'), value: dm.passive1.duration, unit: 's' },
-          ],
-        },
-        sealed: {
-          name: ct.ch('accoladesSealed'),
-          fields: [
-            { node: a1Accolades_critDMG_ },
-            { node: c1Accolades_atk_ },
-            { node: c1Accolades_eleMas },
-          ],
-        },
-        selfSealed: {
-          name: ct.ch('accoladesSelfSealed'),
-          fields: [
-            { node: a1Accolades_critDMG_ },
-            { node: c1Accolades_atk_ },
-            { node: c1Accolades_eleMas },
-          ],
-        },
-      },
+      canShow: unequal(condAccolades, undefined, 1),
+      fields: [
+        ...accDispFields().slice(0, 2),
+        { text: stg('duration'), value: dm.passive1.duration, unit: 's' },
+      ],
     }),
+    { fields: [{ text: ct.ch('accoladesHint') }] },
   ]),
   passive2: ct.talentTem('passive2', [
-    ct.fieldsTem('passive2', {
+    ct.headerTem('passive2', {
       teamBuff: true,
-      fields: [{ node: a4_stellarswirl_reactionMult_ }],
+      fields: [{ node: a4_stellarswirl_mult_ }],
     }),
   ]),
   passive3: ct.talentTem('passive3', [
-    ct.fieldsTem('passive3', {
+    ct.headerTem('passive3', {
       teamBuff: true,
       fields: [
-        { node: a0_stellarconduct_baseDmg_ },
-        { node: a0_stellarswirl_baseDmg_ },
+        {
+          node: infoMut(a0_stellarconduct_baseDmg_, {
+            path: 'stellarconduct_baseDmg_',
+            isTeamBuff: true,
+          }),
+        },
+        {
+          node: infoMut(a0_stellarswirl_baseDmg_, {
+            path: 'stellarswirl_baseDmg_',
+            isTeamBuff: true,
+          }),
+        },
       ],
     }),
     ct.condTem('passive3', {
-      path: condA0StellarRadiancePath,
-      value: condA0StellarRadiance,
-      teamBuff: true,
+      path: condRadiancePath,
+      value: condRadiance,
       name: st('elementalReaction.stellar.radiance'),
+      teamBuff: true,
       states: {
-        sc: {
+        on: {
           name: st('elementalReaction.polestar.inside'),
           fields: [{ text: st('elementalReaction.stellar.gainRadianceSc') }],
         },
@@ -647,56 +900,58 @@ const sheet: TalentSheet = {
           name: st('elementalReaction.team.stellarswirl'),
           fields: [
             { text: st('elementalReaction.stellar.gainRadianceSs') },
-            {
-              text: stg('duration'),
-              value: dm.passive3.radianceSsDuration,
-              unit: 's',
-            },
+            { text: stg('duration'), value: dm.passive3.ssDuration, unit: 's' },
           ],
         },
       },
     }),
   ]),
-  constellation1: ct.talentTem('constellation1'),
-  constellation2: ct.talentTem('constellation2', [
-    ct.fieldsTem('constellation2', {
+  passive: ct.talentTem('passive'),
+  constellation1: ct.talentTem('constellation1', [
+    ct.headerTem('constellation1', {
       teamBuff: true,
-      fields: [
-        { node: c2_stellarconduct_specialDmg_ },
-        { node: c2Love_stellarconduct_critDMG_ },
-        { node: c2Love_stellarswirl_critDMG_ },
-        {
-          node: infoMut(prod(c2HonorMult, 1), {
-            name: ct.ch('honorMult'),
-            unit: '%',
-          }),
-        },
-      ],
+      canShow: unequal(condAccolades, undefined, 1),
+      fields: accDispFields().slice(2),
     }),
+    { fields: [{ text: ct.ch('c1Hint') }] },
+  ]),
+  constellation2: ct.talentTem('constellation2', [
+    {
+      fields: [
+        ...bothStellarFields(mkC2Love, '_critDMG_'),
+        ...bothStellarFields(mkC2Special, '_specialDmg_'),
+      ],
+    },
   ]),
   constellation3: ct.talentTem('constellation3', [
     { fields: [{ node: burstC3 }] },
   ]),
-  constellation4: ct.talentTem('constellation4'),
+  constellation4: ct.talentTem('constellation4', [
+    { fields: [{ text: ct.ch('c4Hint') }] },
+  ]),
   constellation5: ct.talentTem('constellation5', [
     { fields: [{ node: skillC5 }] },
   ]),
   constellation6: ct.talentTem('constellation6', [
-    ct.fieldsTem('constellation6', {
-      teamBuff: true,
+    {
       fields: [
-        { node: c6Love_stellarconduct_specialDmg_ },
-        { node: c6Honor_stellarconduct_specialDmg_ },
+        ...stellarFields(
+          dmgFormulas.constellation6.triumphSc,
+          dmgFormulas.constellation6.triumphSs,
+          ct.ch('c6TriumphSc'),
+          ct.ch('c6TriumphSs')
+        ),
+        ...stellarFields(
+          dmgFormulas.constellation6.doom3Sc,
+          dmgFormulas.constellation6.doom3Ss,
+          ct.ch('c6DoomSc'),
+          ct.ch('c6DoomSs')
+        ),
+        ...bothStellarFields(mkC6LoveSpecial, '_specialDmg_'),
+        ...bothStellarFields(mkC6HonorSpecial, '_specialDmg_', false),
       ],
-    }),
-    ct.fieldsTem('constellation6', {
-      fields: [
-        node(f.constellation6.triumphScDmg, ct.ch('c6Triumph')),
-        node(f.constellation6.triumphSsDmg, ct.ch('c6Triumph')),
-        node(f.constellation6.doomScDmg, ct.ch('c6Doom')),
-        node(f.constellation6.doomSsDmg, ct.ch('c6Doom')),
-      ],
-    }),
+    },
   ]),
 }
+
 export default new CharacterSheet(sheet, data)

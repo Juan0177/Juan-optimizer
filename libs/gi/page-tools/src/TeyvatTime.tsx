@@ -11,10 +11,6 @@ import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import AccessTimeFilledIcon from '@mui/icons-material/AccessTimeFilled'
 import { CardContent, Divider, Grid, MenuItem, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
-
-export function initToolsDisplayTimezone() {
-  return { timeZoneKey: Object.keys(timeZones)[0] as TimeZoneKey }
-}
 export default function TeyvatTime() {
   const database = useDatabase()
   const [{ timeZoneKey }, setState] = useState(() => database.displayTool.get())
@@ -77,24 +73,17 @@ export default function TeyvatTime() {
       </CardContent>
       <Divider />
       <CardContent>
-        <Grid
-          container
-          spacing={3}
-          sx={{
-            justifyContent: 'center',
-          }}
-        >
-          <Grid sx={{ my: 4 }}>
+        <Grid container justifyContent="center" spacing={3}>
+          <Grid item sx={{ my: 4 }}>
             <Typography variant="h2">
               {time.toLocaleTimeString([], { timeZone: 'UTC' })}
             </Typography>
           </Grid>
           <Grid
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-around',
-            }}
+            item
+            display="flex"
+            flexDirection="column"
+            justifyContent="space-around"
           >
             <Typography>
               Server Date: <b>{time.toDateString()}</b>

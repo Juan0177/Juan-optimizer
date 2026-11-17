@@ -1,8 +1,8 @@
 import type { Database } from '@genshin-optimizer/common/database'
 import {
   allGenderKeys,
-  type GenderKey,
   isCharacterKey,
+  type GenderKey,
 } from '@genshin-optimizer/gi/consts'
 import type { IGOOD } from '@genshin-optimizer/gi/good'
 import { z } from 'zod'

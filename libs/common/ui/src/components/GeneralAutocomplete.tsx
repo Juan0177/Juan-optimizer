@@ -9,10 +9,10 @@ import type {
 } from '@mui/material'
 import {
   Autocomplete,
-  Box,
   Chip,
   ListItemIcon,
   ListItemText,
+  MenuItem,
   Skeleton,
   TextField,
   useTheme,
@@ -69,12 +69,7 @@ export function GeneralAutocomplete<T extends string>({
       autoHighlight
       options={options}
       value={value ?? null}
-      onChange={(_event, newValue, reason) => {
-        // juanlab: svuotare il testo serve a cercare, non a scegliere. Prima il valore null diventava la prima
-        // opzione della lista (es. il set "A Day Carved From Rising Winds", o "Inventory" per il personaggio)
-        if (reason === 'clear') return
-        onChange(newValue?.key ?? null)
-      }}
+      onChange={(_event, newValue, _reason) => onChange(newValue?.key ?? null)}
       isOptionEqualToValue={(option, value) => option.key === value?.key}
       renderInput={(params) => {
         const variant = value?.color
@@ -82,25 +77,24 @@ export function GeneralAutocomplete<T extends string>({
           ? (theme.palette[variant] as PaletteColor | undefined)?.main
           : undefined
         const valueKey = value?.key
+        const { InputLabelProps, InputProps, inputProps, ...restParams } =
+          params
         return (
           <TextField
-            {...params}
+            {...restParams}
             {...(textFieldProps as TextFieldProps)}
             label={label}
-            color={valueKey ? 'success' : 'primary'}
-            slotProps={{
-              ...params.slotProps,
-              input: {
-                ...params.slotProps.input,
-                startAdornment:
-                  typeof valueKey === 'string' ? toImg(valueKey) : undefined,
-              },
-              htmlInput: {
-                ...params.slotProps.htmlInput,
-                autoComplete: 'new-password', // disable autocomplete and autofill
-                style: { color },
-              },
+            InputProps={{
+              ...InputProps,
+              startAdornment:
+                typeof valueKey === 'string' ? toImg(valueKey) : undefined,
             }}
+            inputProps={{
+              ...inputProps,
+              autoComplete: 'new-password', // disable autocomplete and autofill
+              style: { color },
+            }}
+            color={valueKey ? 'success' : 'primary'}
           />
         )
       }}
@@ -109,10 +103,9 @@ export function GeneralAutocomplete<T extends string>({
         const { key, ...rest } =
           props as React.HTMLAttributes<HTMLLIElement> & { key: string }
         return (
-          // juanlab: un li e non MenuItem, che con MUI 9 va in errore fuori da un Menu ("MenuListContext is missing")
-          <Box
-            component="li"
-            sx={{ whiteSpace: 'normal', display: 'flex', alignItems: 'center' }}
+          <MenuItem
+            value={option.key}
+            sx={{ whiteSpace: 'normal' }}
             key={key}
             {...rest}
           >
@@ -133,7 +126,7 @@ export function GeneralAutocomplete<T extends string>({
               </Suspense>
             </ListItemText>
             {!!option.favorite && <FavoriteIcon />}
-          </Box>
+          </MenuItem>
         )
       }}
       filterOptions={(options, { inputValue }) =>
@@ -195,25 +188,15 @@ export function GeneralAutocompleteMulti<T extends string>({
         <TextField
           {...params}
           label={label}
-          color={keys.length ? 'success' : 'primary'}
-          slotProps={{
-            ...params.slotProps,
-
-            htmlInput: {
-              ...params.slotProps.htmlInput,
-              autoComplete: 'new-password', // disable autocomplete and autofill
-            },
+          inputProps={{
+            ...params.inputProps,
+            autoComplete: 'new-password', // disable autocomplete and autofill
           }}
+          color={keys.length ? 'success' : 'primary'}
         />
       )}
       renderOption={(props, option) => (
-        // juanlab: un li e non MenuItem, come sopra
-        <Box
-          component="li"
-          sx={{ display: 'flex', alignItems: 'center' }}
-          {...props}
-          key={option.key}
-        >
+        <MenuItem value={option.key} {...props} key={option.key}>
           <ListItemIcon>{toImg(option.key)}</ListItemIcon>
           <ListItemText>
             <Suspense fallback={<Skeleton variant="text" width={100} />}>
@@ -228,13 +211,13 @@ export function GeneralAutocompleteMulti<T extends string>({
             </Suspense>
           </ListItemText>
           {!!option.favorite && <FavoriteIcon />}
-        </Box>
+        </MenuItem>
       )}
-      renderValue={(selected, getItemProps) =>
+      renderTags={(selected, getTagProps) =>
         selected.map(({ key, label, color: variant }, index) => (
           <Chip
             {...chipProps}
-            {...getItemProps({ index })}
+            {...getTagProps({ index })}
             key={`${index}${key}${label}`}
             icon={toImg(key)}
             label={

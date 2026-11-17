@@ -29,14 +29,7 @@ export function ArtifactIconStatWithUnit({
   disableIcon?: boolean
 }) {
   return (
-    <Box
-      component="span"
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-      }}
-    >
+    <Box component="span" display="flex" alignItems="center" gap={1}>
       {!disableIcon && (
         <StatIcon statKey={statKey} iconProps={iconInlineProps} />
       )}

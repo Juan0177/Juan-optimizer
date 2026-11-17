@@ -285,13 +285,9 @@ export function ArtifactCardObj({
                 {!slotDescTooltip ? <Skeleton width={10} /> : slotDescTooltip}
               </Box>
               <Typography
+                color="text.secondary"
                 variant="body2"
-                sx={{
-                  color: 'text.secondary',
-                  display: 'flex',
-                  gap: 0.5,
-                  alignItems: 'center',
-                }}
+                sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}
               >
                 <SlotIcon
                   iconProps={{ fontSize: 'inherit' }}
@@ -326,6 +322,7 @@ export function ArtifactCardObj({
             >
               <Box
                 component="img"
+                loading="lazy"
                 alt="Artifact Piece Image"
                 src={artifactAsset(setKey, slotKey)}
                 sx={{
@@ -417,14 +414,10 @@ export function ArtifactCardObj({
                 )}
               </Typography>
             )}
-            <Box
-              sx={{
-                flexGrow: 1,
-              }}
-            />
+            <Box flexGrow={1} />
             <Typography
+              color="success.main"
               sx={{
-                color: 'success.main',
                 display: 'flex',
                 gap: 1,
                 alignItems: 'center',
@@ -474,13 +467,11 @@ export function ArtifactCardObj({
               ))}
           </Box>
           <Box
-            sx={{
-              display: 'flex',
-              gap: 1,
-              alignItems: 'stretch',
-              height: '100%',
-              '& .MuiButton-root': { minWidth: 0, height: '100%' },
-            }}
+            display="flex"
+            gap={1}
+            alignItems="stretch"
+            height="100%"
+            sx={{ '& .MuiButton-root': { minWidth: 0, height: '100%' } }}
           >
             {!!onEdit && (
               <BootstrapTooltip
@@ -547,12 +538,10 @@ function SubstatDisplay({
     () =>
       stat?.rolls && (
         <Box
-          sx={{
-            display: 'flex',
-            gap: 0.25,
-            height: '1.3em',
-            opacity: inFilter ? 1 : 0.3,
-          }}
+          display="flex"
+          gap={0.25}
+          height="1.3em"
+          sx={{ opacity: inFilter ? 1 : 0.3 }}
         >
           {sortedSubstatRolls(stat.rolls, stat.initialValue !== undefined).map(
             (v, i) => (
@@ -583,13 +572,7 @@ function SubstatDisplay({
   }
   const statLabelSuffix = hideValue && stat.key.endsWith('_') ? '%' : ''
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-        alignContent: 'center',
-      }}
-    >
+    <Box display="flex" gap={1} alignContent="center">
       <Typography
         sx={{ flexGrow: 1 }}
         color={
@@ -642,11 +625,9 @@ function ArtifactBuildUsageModal({
           title={
             <Typography
               variant="h6"
-              sx={{
-                flexGrow: 1,
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              flexGrow={1}
+              display="flex"
+              alignItems="center"
             >
               {usageText}
             </Typography>

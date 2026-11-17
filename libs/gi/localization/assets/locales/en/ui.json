@@ -1,6 +1,10 @@
 {
-  "pageTitle": "Genshin Optimizer",
-  "sillyPageTitle": "Silly Optimizer",
+  "pageTitle": "Juan-optimizer",
+  "homeTitle": "Juan-optimizer: Genshin Impact Artifact & Build Optimizer",
+  "characterOptimizers": "Character optimizers",
+  "faq": "FAQ",
+  "github": "GitHub",
+  "buyMeACoffee": "Buy me a coffee",
   "tabs": {
     "weapons": "Weapons",
     "artifacts": "Artifacts",
@@ -30,7 +34,7 @@
   "descending": "Descending",
   "sortBy": "Sort By: ",
   "loading": "Loading...",
-  "rightsDisclaimer": "Genshin Optimizer is not affiliated with or endorsed by HoYoverse.",
+  "rightsDisclaimer": "Juan-optimizer is not affiliated with or endorsed by HoYoverse.",
   "appVersion": "$t(pageTitle) Version: <1>{{version}}</1>",
   "error": "Error",
   "reset": "Reset",
@@ -74,5 +78,43 @@
     "stamina_buffs": "Stamina Buffs",
     "misc": "Misc. Stats"
   },
-  "notActive": "(Unactivated)"
+  "notActive": "(Unactivated)",
+  "activeDatabase": "Active database",
+  "mainNav": "Main",
+  "openMenu": "Open menu",
+  "optimizationTarget": "Optimization target",
+  "changelog": {
+    "title": "Changelog",
+    "open": "Changelog",
+    "whatsNew": "What’s new",
+    "allChanges": "Full changelog",
+    "allReleases": "All releases on GitHub",
+    "close": "Close",
+    "new": "New",
+    "improved": "Improved",
+    "fixed": "Fixed",
+    "onGitHub": "Release on GitHub"
+  },
+  "buildCard": {
+    "button": "Build card",
+    "title": "Build card",
+    "close": "Close",
+    "alt": "{{name}}’s build",
+    "copy": "Copy image",
+    "copied": "Copied",
+    "download": "Download PNG",
+    "downloadJpg": "Download JPG",
+    "emptySlot": "Empty",
+    "level": "Lv.",
+    "pieces_one": "{{count}}-piece",
+    "pieces_other": "{{count}}-piece",
+    "rv": "RV",
+    "cv": "CV",
+    "tcBuild": "A theorycraft build has no artifacts to show on a card"
+  },
+  "buffSource": {
+    "resonance": "Elemental Resonance",
+    "reaction": "Reaction"
+  },
+  "basedOnStellar": "Based on Stellar Optimizer"
 }

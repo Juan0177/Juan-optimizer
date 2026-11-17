@@ -1,0 +1,20 @@
+Juan-optimizer
+Copyright (c) 2026-present, JuanLab
+
+Juan-optimizer is a modified version of Stellar Optimizer
+(https://github.com/s-naveen/stellar-optimizer), distributed under the same license:
+the GNU Affero General Public License, version 3 or (at your option) any later version.
+Source code: https://github.com/Juan0177/Juan-optimizer
+The changes made for Juan-optimizer are marked with the comment "juanlab" in the code.
+
+Stellar Optimizer
+Copyright (c) 2026-present, the Stellar Optimizer contributors
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. The full text is in LICENSE.
+
+Stellar Optimizer is based on Genshin Optimizer
+(https://github.com/frzyc/genshin-optimizer) by frzyc and contributors, whose
+copyright and permission notice is kept in LICENSE-GENSHIN-OPTIMIZER, as it requires.

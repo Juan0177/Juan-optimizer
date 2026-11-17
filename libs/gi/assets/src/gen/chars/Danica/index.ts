@@ -1,5 +1,5 @@
 // This is a generated index file.
-import burst from './Skill_E_Danica_01.png'
+import burst from './Skill_E_Danica_01_HD.png'
 import skill from './Skill_S_Danica_01.png'
 import icon from './UI_AvatarIcon_Danica.png'
 import iconSide from './UI_AvatarIcon_Side_Danica.png'

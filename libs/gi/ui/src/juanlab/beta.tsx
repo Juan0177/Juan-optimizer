@@ -1,5 +1,5 @@
-// juanlab-beta: contenuti della beta aggiunti dal fork (dati generati da libs/gi/dm/juanlab-beta), con l'avviso
-// "dati provvisori" mostrato sulle loro schede. Quando l'originale li aggiunge, si tolgono da qui e dal resto.
+// juanlab-beta: avviso "dati provvisori" sulle schede dei personaggi della beta. I contenuti della beta vengono da
+// Stellar Optimizer (apps/frontend/beta-content.json, dal dump della beta): l'elenco dei personaggi si legge da li.
 import type {
   ArtifactSetKey,
   CharacterKey,
@@ -10,10 +10,13 @@ import { useTranslation } from 'react-i18next'
 
 export const juanlabBeta = {
   label: '7.3',
-  source: 'Nanoka 7.2.52',
+  source: 'Stellar Optimizer',
   characters: ['Danica', 'Anastasya'] as CharacterKey[],
-  weapons: ['TorrentsOfSpring', 'Silverdawn', 'BlazingLionfang'] as WeaponKey[],
-  artifacts: ['EpochalAdvent', 'EmpyreanSojourn'] as ArtifactSetKey[],
+  weapons: ['TorrentsOfSpring', 'Silverdawn'] as WeaponKey[],
+  artifacts: [
+    'LegacyOfTheFirstChronicle',
+    'PreludeOfTheKingfisherCanopy',
+  ] as ArtifactSetKey[],
 }
 
 export const isBetaCharacter = (key: CharacterKey) =>

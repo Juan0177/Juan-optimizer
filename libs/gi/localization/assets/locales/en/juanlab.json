@@ -42,17 +42,18 @@
     }
   },
   "home": {
-    "intro": "The <gi>Genshin Impact</gi> build calculator by <juanlab>JuanLab</juanlab>, based on Genshin Optimizer. Import the characters in your showcase with your UID and find the best build with what you have.",
+    "intro": "The <gi>Genshin Impact</gi> build calculator by <juanlab>JuanLab</juanlab>, based on Stellar Optimizer and Genshin Optimizer. Import your characters with your UID (Enka or Akasha), find the best build with what you have and simulate team rotations, beta characters included.",
     "importTitle": "Import from showcase",
     "importButton": "Load showcase",
     "uidDigits": "9 or 10 digits",
     "importHint": "Loads the characters in your showcase, with equipped weapons and artifacts, into the current database. You'll see a preview of what changes before saving. Character details must be visible in the game.",
     "creditsTitle": "Credits",
-    "credits1": "Juan-optimizer is a copy of <go>Genshin Optimizer</go> by <frzyc>frzyc</frzyc> and all its <contrib>contributors</contrib>, released under the <mit>MIT</mit> license. Calculations, data and interface are their work: the original site is <site>frzyc.github.io/genshin-optimizer</site>.",
+    "credits1": "Juan-optimizer is based on <go>Genshin Optimizer</go> by <frzyc>frzyc</frzyc> and all its <contrib>contributors</contrib> (<mit>MIT</mit> license): the base calculations, data and interface are their work. The original site is <site>frzyc.github.io/genshin-optimizer</site>.",
     "credits2": "Player showcases from <enka>Enka.network</enka>. This copy is by <juanlab>JuanLab</juanlab> (<code>source code</code>) and is not affiliated with the original project.",
     "credits3": "Genshin Impact is a trademark of HoYoverse. This site is not affiliated with or endorsed by HoYoverse.",
     "importButtonAkasha": "Load the Akasha builds",
-    "importHintAkasha": "Loads every build saved on Akasha, several per character, into the current database. Before saving you see a preview of what changes."
+    "importHintAkasha": "Loads every build saved on Akasha, several per character, into the current database. Before saving you see a preview of what changes.",
+    "creditsStellar": "The optimizer, rotations, KQM Setup, ER calculator and beta kits come from <stellar>Stellar Optimizer</stellar> by s-naveen and its contributors. That is why Juan-optimizer is released under the <agpl>GNU AGPL v3</agpl>: the <code>source code</code> is public."
   },
   "gcweb": {
     "title": "Link to gc-web",
@@ -74,6 +75,6 @@
     "accountSkipped_other": "{{count}} unrecognized items (characters, weapons or artifacts, maybe too new for this version) were left out."
   },
   "beta": {
-    "notice": "Beta {{label}} data ({{source}}): provisional numbers, they may change before release. Icons from the beta, provisional card."
+    "notice": "Beta {{label}} content (kits from {{source}}, from the beta dump): provisional numbers that can change before release."
   }
 }

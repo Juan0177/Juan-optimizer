@@ -1,5 +1,8 @@
 import { useDataManagerValues } from '@genshin-optimizer/common/database-ui'
-import { useMediaQueryUp } from '@genshin-optimizer/common/react-util'
+import {
+  useMediaQueryUp,
+  useOpenedOnce,
+} from '@genshin-optimizer/common/react-util'
 import {
   CardThemed,
   ImgIcon,
@@ -60,19 +63,29 @@ import { WeaponSelectionModal } from './WeaponSelectionModal'
 const numToShowMap = { xs: 2 * 3, sm: 2 * 3, md: 3 * 3, lg: 4 * 3, xl: 4 * 3 }
 const rarityHandler = handleMultiSelect([...allRarityKeys])
 
-export function WeaponSwapModal({
-  weaponId,
-  onChangeId,
-  weaponTypeKey,
-  show,
-  onClose,
-}: {
+type WeaponSwapModalProps = {
   weaponId: string
   onChangeId: (id: string) => void
   weaponTypeKey: WeaponTypeKey
   show: boolean
   onClose: () => void
-}) {
+}
+/**
+ * Mounted on first open: closed, it would still sort the weapon inventory, and its weapon editor work
+ * out the team's stats, each time the build around it renders.
+ */
+export function WeaponSwapModal(props: WeaponSwapModalProps) {
+  return useOpenedOnce(props.show) ? (
+    <WeaponSwapModalContent {...props} />
+  ) : null
+}
+function WeaponSwapModalContent({
+  weaponId,
+  onChangeId,
+  weaponTypeKey,
+  show,
+  onClose,
+}: WeaponSwapModalProps) {
   const { t } = useTranslation([
     'page_character',
     'page_weapon',
@@ -82,13 +95,25 @@ export function WeaponSwapModal({
   const [newWeaponModalShow, setnewWeaponModalShow] = useState(false)
 
   const [editWeaponId, setEditWeaponId] = useState('')
+  // weapon picked for equipping: opens the compare/equip confirmation
+  const [swapWeaponId, setSwapWeaponId] = useState('')
+  // A weapon created from this dialog is meant for this character: once its editor closes,
+  // go straight to the equip confirmation instead of making the user find it in the list.
+  const [createdWeaponId, setCreatedWeaponId] = useState('')
   const newWeapon = useCallback(
     (weaponKey: WeaponKey) => {
-      setEditWeaponId(database.weapons.new(initialWeapon(weaponKey)))
+      const id = database.weapons.new(initialWeapon(weaponKey))
+      setEditWeaponId(id)
+      setCreatedWeaponId(id)
     },
     [database, setEditWeaponId]
   )
-  const resetEditWeapon = useCallback(() => setEditWeaponId(''), [])
+  const resetEditWeapon = useCallback(() => {
+    if (createdWeaponId && database.weapons.get(createdWeaponId))
+      setSwapWeaponId(createdWeaponId)
+    setCreatedWeaponId('')
+    setEditWeaponId('')
+  }, [createdWeaponId, database])
 
   const brPt = useMediaQueryUp()
 
@@ -144,7 +169,6 @@ export function WeaponSwapModal({
     t: t,
     namespace: 'page_weapon',
   }
-  const [swapWeaponId, setSwapWeaponId] = useState('')
   const clickHandler = useCallback(() => {
     if (!swapWeaponId) {
       return
@@ -175,13 +199,7 @@ export function WeaponSwapModal({
         <CardThemed>
           <CardHeader
             title={
-              <Typography
-                variant="h6"
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                }}
-              >
+              <Typography variant="h6" display="flex" gap={1}>
                 {weaponTypeKey ? (
                   <ImgIcon src={imgAssets.weaponTypes[weaponTypeKey]} />
                 ) : null}
@@ -199,7 +217,7 @@ export function WeaponSwapModal({
             sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
           >
             <Grid container spacing={1}>
-              <Grid>
+              <Grid item>
                 <SolidToggleButtonGroup
                   sx={{ height: '100%' }}
                   value={rarity}
@@ -211,11 +229,7 @@ export function WeaponSwapModal({
                       value={star}
                       onClick={() => setRarity(rarityHandler(rarity, star))}
                     >
-                      <Box
-                        sx={{
-                          display: 'flex',
-                        }}
-                      >
+                      <Box display="flex">
                         <strong>{star}</strong>
                         <StarRoundedIcon />
                       </Box>
@@ -223,11 +237,7 @@ export function WeaponSwapModal({
                   ))}
                 </SolidToggleButtonGroup>
               </Grid>
-              <Grid
-                sx={{
-                  flexGrow: 1,
-                }}
-              >
+              <Grid item flexGrow={1}>
                 <TextField
                   autoFocus
                   size="small"
@@ -237,21 +247,17 @@ export function WeaponSwapModal({
                   }
                   label={t('page_weapon:weaponName')}
                   sx={{ height: '100%' }}
-                  slotProps={{
-                    input: {
-                      sx: { height: '100%' },
-                    },
+                  InputProps={{
+                    sx: { height: '100%' },
                   }}
                 />
               </Grid>
             </Grid>
             <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-              }}
+              display="flex"
+              justifyContent="space-between"
+              alignItems="center"
+              flexWrap="wrap"
             >
               <ShowingAndSortOptionSelect showingTextProps={showingTextProps} />
             </Box>
@@ -271,7 +277,12 @@ export function WeaponSwapModal({
             <Grid container spacing={1}>
               {weaponIdsToShow.map((id) => (
                 <Grid
+                  item
                   key={id}
+                  xs={6}
+                  sm={6}
+                  md={4}
+                  lg={3}
                   sx={(theme) => ({
                     ...(weaponId === id && {
                       '> .MuiCard-root': {
@@ -279,12 +290,6 @@ export function WeaponSwapModal({
                       },
                     }),
                   })}
-                  size={{
-                    xs: 6,
-                    sm: 6,
-                    md: 4,
-                    lg: 3,
-                  }}
                 >
                   <WeaponCard
                     weaponId={id}

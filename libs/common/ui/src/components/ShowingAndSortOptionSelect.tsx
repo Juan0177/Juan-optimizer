@@ -58,11 +58,7 @@ function ShowingItem({
   namespace: string
 }) {
   return (
-    <Typography
-      sx={{
-        color: 'text.secondary',
-      }}
-    >
+    <Typography color="text.secondary">
       <Trans
         t={t}
         ns={namespace}

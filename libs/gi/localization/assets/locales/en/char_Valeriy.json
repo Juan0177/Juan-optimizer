@@ -1,7 +1,6 @@
 {
-  "offensiveCond": "Consuming a stack of Offensive Directive",
-  "momentumCond": "Stacks of Impact Momentum consumed",
-  "momentumLimitInc": "Impact Moment limit increase",
-  "c6HitCond": "Opponents hit by special Charged Attack or Thunderburst Shells",
-  "shell_dmg_": "Thunderburst Shell DMG Bonus"
+  "directiveCond": "Offensive Directive (after Direct-Fire Mortar: Point-Blank Bombardment)",
+  "momentumCond": "Impact Momentum consumed by Direct-Fire Mortar",
+  "c2ExcessCond": "20 excess Impact Momentum converted into the shield",
+  "c6Cond": "Opponent hit by Direct-Fire Mortar or Thunderburst Shells"
 }

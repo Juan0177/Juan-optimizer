@@ -2,7 +2,7 @@
   "name": "Valeriy",
   "title": "Blitzschlagbastion",
   "description": "Anführer des Bataillons für Spezialaufträge, der sich auf den Schutz wichtiger Persönlichkeiten und die Umsetzung von Plänen versteht.",
-  "constellationName": "Ursus Fuscus",
+  "constellationName": "Ursus Magnus",
   "auto": {
     "name": "Verteidigende Kampfkunst – Schild und Schwert",
     "fields": {
@@ -46,7 +46,7 @@
   "skill": {
     "name": "Offensive Abwehr – Festungsvorstoß",
     "description": {
-      "0": "Erhebt den Schild, rennt nach vorn, verursacht <electro>Elektro-Flächenschaden</electro>, verleiht 40 Pkt. <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>Impulsenergie</tooltip></strong> und errichtet einen Blitzladungs-Schild.",
+      "0": "Erhebt den Schild, rennt nach vorn, verursacht <electro>Elektro-Flächenschaden</electro>, erhält 40 Pkt. <strong><tooltip ns=tooltips_gen baseKey18=11370003 values=[]>Impulsenergie</tooltip></strong> und errichtet einen Blitzladungs-Schild.",
       "1": "Die Schildstärke des Blitzladungs-Schilds wird anhand von Valeriys ANG berechnet und hält bei <electro>Elektro-SCH</electro> 250 % ab."
     },
     "skillParams": {

@@ -115,9 +115,10 @@ export function CustomMultiTargetModal({
     () =>
       customMultiTargets.map((ctar, i) => (
         <Grid
+          item
           // Use a unique key, because indices dont allow for swapping very well.
           key={`${i}${ctar.name}`}
-          size={1}
+          xs={1}
         >
           <CustomMultiTargetCard
             customMultiTarget={ctar}
@@ -150,37 +151,23 @@ export function CustomMultiTargetModal({
           <CardThemed>
             <CardHeader
               title={
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 1,
-                    alignItems: 'center',
-                  }}
-                >
+                <Box display="flex" gap={1} alignItems="center">
                   <DashboardCustomizeIcon />
                   <Typography variant="h6">{t('multiTarget.title')}</Typography>
                   <InfoTooltip
                     title={
                       <Typography>
                         <Trans t={t} i18nKey="multiTarget.info1">
-                          Note: Community created Multi-Optimization Targets can
-                          be found within the
-                          <a
-                            href={process.env['NX_URL_DISCORD_GO']}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            GO Discord
-                          </a>
-                          or
+                          Note: Community-created Multi-Optimization Targets can
+                          be found in
                           <a
                             href={process.env['NX_URL_KQM_MULTI_GUIDE']}
                             target="_blank"
                             rel="noreferrer"
                           >
-                            KQM Multi-Opt Guide
+                            KQM's Multi-Optimization Guide
                           </a>
-                          , however the validity of such configurations cannot
+                          ; however, the validity of such configurations cannot
                           be guaranteed.
                         </Trans>
                         <br />
@@ -203,7 +190,7 @@ export function CustomMultiTargetModal({
             >
               <Box>
                 <Grid container columns={{ xs: 1, md: 2 }} spacing={2}>
-                  <Grid size={1}>
+                  <Grid item xs={1}>
                     <Button
                       fullWidth
                       onClick={addNewCustomMultiTarget}
@@ -212,7 +199,7 @@ export function CustomMultiTargetModal({
                       {t('multiTarget.addNewMTarget')}
                     </Button>
                   </Grid>
-                  <Grid size={1}>
+                  <Grid item xs={1}>
                     <CustomMultiTargetImportBtn
                       setCustomMultiTarget={setCustomMultiTarget(
                         customMultiTargets.length

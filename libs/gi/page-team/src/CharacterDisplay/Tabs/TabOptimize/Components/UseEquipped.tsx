@@ -3,7 +3,6 @@ import {
   useDataManagerKeys,
 } from '@genshin-optimizer/common/database-ui'
 import { useBoolState } from '@genshin-optimizer/common/react-util'
-import { iconInlineProps } from '@genshin-optimizer/common/svgicons'
 import { CardThemed, ModalWrapper, SqBadge } from '@genshin-optimizer/common/ui'
 import { bulkCatTotal, filterFunction } from '@genshin-optimizer/common/util'
 import type {
@@ -33,12 +32,9 @@ import {
   CharacterRarityToggle,
   characterFilterConfigs,
   ElementToggle,
-  SillyContext,
   WeaponToggle,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
-import SettingsIcon from '@mui/icons-material/Settings'
-import ShowChartIcon from '@mui/icons-material/ShowChart'
 import {
   Box,
   Button,
@@ -49,7 +45,6 @@ import {
   IconButton,
   Stack,
   TextField,
-  Typography,
 } from '@mui/material'
 import type {
   ChangeEvent,
@@ -68,6 +63,13 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  countOf,
+  SettingsCard,
+  SettingsCardButton,
+  SummaryList,
+  SummaryRow,
+} from './SettingsCard'
 
 export default function UseEquipped({
   disabled = false,
@@ -84,7 +86,6 @@ export default function UseEquipped({
   const {
     character: { key: characterKey },
   } = useContext(CharacterContext)
-  const { silly } = useContext(SillyContext)
   const { excludedLocations } = useOptConfig(optConfigId)!
   const database = useDatabase()
   const [show, onOpen, onClose] = useBoolState(false)
@@ -118,7 +119,7 @@ export default function UseEquipped({
                     rarity: deferredCharacterRarityKeys,
                     name: deferredSearchTerm,
                   },
-                  characterFilterConfigs(database, silly)
+                  characterFilterConfigs(database)
                 )(ck)
               )
           )
@@ -132,7 +133,6 @@ export default function UseEquipped({
       deferredCharacterRarityKeys,
       deferredSearchTerm,
       database,
-      silly,
     ]
   )
 
@@ -285,14 +285,15 @@ export default function UseEquipped({
   const total = locListLength
   const useTot = total - excludedLocations.length
   const totalStr = useTot === total ? useTot : `${useTot}/${total}`
+  const allowedText = (str: string) =>
+    countOf(
+      str,
+      (cur, tot) => t('settings.ofAllowed', { cur, tot }),
+      (tot) => t('settings.allAllowed', { tot })
+    )
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        gap: 1,
-      }}
-    >
+    <Box display="flex" gap={1}>
       {/* Begin modal */}
       <ModalWrapper
         open={show}
@@ -305,31 +306,19 @@ export default function UseEquipped({
           {/* Header */}
           <CardHeader
             title={t('excludeChar.title')}
+            titleTypographyProps={{ variant: 'h6' }}
             action={
               <IconButton onClick={onClose}>
                 <CloseIcon />
               </IconButton>
             }
-            slotProps={{
-              title: { variant: 'h6' },
-            }}
           />
           <Divider />
           {/* Content */}
           <CardContent sx={{ pb: 0 }}>
-            <Stack
-              sx={{
-                gap: 1,
-              }}
-            >
+            <Stack gap={1}>
               {/* State + Search box */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  flexWrap: 'wrap',
-                }}
-              >
+              <Box display="flex" gap={1} flexWrap="wrap">
                 <WeaponToggle
                   sx={{ height: '100%' }}
                   onChange={setWeaponTypeKeys}
@@ -360,10 +349,8 @@ export default function UseEquipped({
                   label={t_pc('characterName')}
                   size="small"
                   sx={{ height: '100%' }}
-                  slotProps={{
-                    input: {
-                      sx: { height: '100%' },
-                    },
+                  InputProps={{
+                    sx: { height: '100%' },
                   }}
                 />
               </Box>
@@ -371,15 +358,8 @@ export default function UseEquipped({
           </CardContent>
           {/* Allow/Disallow + grid */}
           <CardContent>
-            <Grid
-              container
-              spacing={1}
-              sx={{
-                pb: 1,
-                flexWrap: 'nowrap',
-              }}
-            >
-              <Grid size={6}>
+            <Grid container pb={1} gap={1} flexWrap="nowrap">
+              <Grid item xs={6}>
                 <Button color="success" fullWidth onClick={allowAll}>
                   {t('excludeChar.modal.allow_all')}
                   <SqBadge sx={{ ml: 1 }}>
@@ -387,7 +367,7 @@ export default function UseEquipped({
                   </SqBadge>
                 </Button>
               </Grid>
-              <Grid size={6}>
+              <Grid item xs={6}>
                 <Button fullWidth color="error" onClick={disallowAll}>
                   {t('excludeChar.modal.disallow_All')}
                   <SqBadge sx={{ ml: 1 }}>
@@ -409,7 +389,7 @@ export default function UseEquipped({
 
                 const allowed = (selected && !isBeingExcluded) || isBeingAllowed
                 return (
-                  <Grid key={lk} size={1}>
+                  <Grid item key={lk} xs={1}>
                     <SelectItem
                       key={lk}
                       allowed={allowed}
@@ -426,38 +406,27 @@ export default function UseEquipped({
         </CardThemed>
       </ModalWrapper>
 
-      {/* Button to open modal */}
-      <CardThemed bgt="light" sx={{ display: 'flex', width: '100%' }}>
-        <CardContent sx={{ flexGrow: 1 }}>
-          <Stack spacing={1}>
-            <Typography>
-              <strong>{t('excludeChar.title')}</strong>
-            </Typography>
-            <Typography>
-              {t('excludeChar.chars')}{' '}
-              <SqBadge color="success">
-                {totalStr} <ShowChartIcon {...iconInlineProps} />
-                {t('artSetConfig.allowed')}
-              </SqBadge>
-            </Typography>
-            <Typography>
-              {t('excludeChar.artis')}{' '}
-              <SqBadge color="success">
-                {allowListTotal} <ShowChartIcon {...iconInlineProps} />
-                {t('artSetConfig.allowed')}
-              </SqBadge>
-            </Typography>
-          </Stack>
-        </CardContent>
-        <Button
-          sx={{ borderRadius: 0, flexShrink: 1, minWidth: 40 }}
-          onClick={onOpen}
-          disabled={disabled}
-          color="info"
+      <Box sx={{ flexGrow: 1 }}>
+        <SettingsCard
+          title={t('excludeChar.title')}
+          action={
+            <SettingsCardButton onClick={onOpen} disabled={disabled}>
+              {t('artSetConfig.edit')}
+            </SettingsCardButton>
+          }
         >
-          <SettingsIcon />
-        </Button>
-      </CardThemed>
+          <SummaryList>
+            <SummaryRow
+              label={t('excludeChar.chars')}
+              value={allowedText(String(totalStr))}
+            />
+            <SummaryRow
+              label={t('excludeChar.artis')}
+              value={allowedText(allowListTotal)}
+            />
+          </SummaryList>
+        </SettingsCard>
+      </Box>
     </Box>
   )
 }
@@ -504,12 +473,10 @@ const SelectItem = memo(function SelectItem({
   const content = useMemo(
     () => (
       <Box
-        sx={{
-          fontSize: '0.85em',
-          display: 'flex',
-          justifyContent: 'space-between',
-          p: 0.3,
-        }}
+        fontSize="0.85em"
+        display="flex"
+        justifyContent="space-between"
+        p={0.3}
       >
         {allArtifactSlotKeys.map((s) => (
           <SlotIcon

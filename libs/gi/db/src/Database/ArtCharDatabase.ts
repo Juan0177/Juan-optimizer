@@ -1,5 +1,9 @@
 import type { DBStorage } from '@genshin-optimizer/common/database'
-import { Database, SandboxStorage } from '@genshin-optimizer/common/database'
+import {
+  Database,
+  getAppStorage,
+  SandboxStorage,
+} from '@genshin-optimizer/common/database'
 import { compressToB64Gzip } from '@genshin-optimizer/common/util'
 import type { GenderKey } from '@genshin-optimizer/gi/consts'
 import type { IGOOD } from '@genshin-optimizer/gi/good'
@@ -10,6 +14,8 @@ import { DisplayCharacterEntry } from './DataEntries/DisplayCharacterEntry'
 import { DisplayTeamEntry } from './DataEntries/DisplayTeamEntry'
 import { DisplayToolEntry } from './DataEntries/DisplayTool'
 import { DisplayWeaponEntry } from './DataEntries/DisplayWeaponEntry'
+import { TeamKqmResultsEntry } from './DataEntries/TeamKqmResultsEntry'
+import { TeamOptResultsEntry } from './DataEntries/TeamOptResultsEntry'
 import { ArtifactDataManager } from './DataManagers/ArtifactDataManager'
 import { BuildDataManager } from './DataManagers/BuildDataManager'
 import { BuildTcDataManager } from './DataManagers/BuildTcDataManager'
@@ -48,6 +54,10 @@ export class ArtCharDatabase extends Database {
   displayArchive: DisplayArchiveEntry
   displayTool: DisplayToolEntry
   displayTeam: DisplayTeamEntry
+  /** Each team's last Team Optimize result (not exported) */
+  teamOptResults: TeamOptResultsEntry
+  /** Each team's last KQM theorycrafting run, for the most recent teams (not exported) */
+  teamKqmResults: TeamKqmResultsEntry
   dbIndex: 1 | 2 | 3 | 4
   dbVer: number
 
@@ -98,6 +108,8 @@ export class ArtCharDatabase extends Database {
     this.displayCharacter = new DisplayCharacterEntry(this)
     this.displayTool = new DisplayToolEntry(this)
     this.displayTeam = new DisplayTeamEntry(this)
+    this.teamOptResults = new TeamOptResultsEntry(this)
+    this.teamKqmResults = new TeamKqmResultsEntry(this)
     this.displayArchive = new DisplayArchiveEntry(this)
 
     // invalidates character when things change.
@@ -151,6 +163,8 @@ export class ArtCharDatabase extends Database {
       this.displayTool,
       this.displayTeam,
       this.displayArchive,
+      this.teamOptResults,
+      this.teamKqmResults,
     ] as const
   }
 
@@ -246,7 +260,7 @@ export class ArtCharDatabase extends Database {
     this.storage = other
     this.saveStorage()
     this.storage = oldstorage
-    localStorage.setItem(
+    getAppStorage().setString(
       key,
       compressToB64Gzip(Object.fromEntries(other.entries))
     )

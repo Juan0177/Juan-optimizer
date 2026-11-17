@@ -1,15 +1,18 @@
-import { AdResponsive } from '@genshin-optimizer/common/ad'
-import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
+import {
+  BootstrapTooltip,
+  CardThemed,
+  ModalWrapper,
+} from '@genshin-optimizer/common/ui'
 import { TeamCharacterContext, useDatabase } from '@genshin-optimizer/gi/db-ui'
 import {
   BuildInfoAlert,
   EquippedBuildInfoAlert,
-  GOAdWrapper,
   TCBuildInfoAlert,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
 import CheckroomIcon from '@mui/icons-material/Checkroom'
 import CloseIcon from '@mui/icons-material/Close'
+import ScienceIcon from '@mui/icons-material/Science'
 import {
   Box,
   Button,
@@ -25,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import { BuildEquipped } from './Build/BuildEquipped'
 import BuildReal from './Build/BuildReal'
 import BuildTc from './Build/BuildTc'
+import { useTheorycraftThisBuild } from './Tabs/TabUpgradeOpt/ImproveSections'
 
 export function BuildsEditorModal({
   open,
@@ -41,14 +45,12 @@ export function BuildsEditorModal({
         <CardHeader
           title={t('buildInfo.editorTitle')}
           avatar={<CheckroomIcon />}
+          titleTypographyProps={{ variant: 'h6' }}
           action={
             <IconButton onClick={onClose}>
               <CloseIcon />
             </IconButton>
           }
-          slotProps={{
-            title: { variant: 'h6' },
-          }}
         />
         <Divider />
         <CardContent>
@@ -77,6 +79,7 @@ function BuildManagementContent({ onClose }: { onClose: () => void }) {
     teamCharId
   )
 
+  const theorycraft = useTheorycraftThisBuild()
   const onChangeBuild = useCallback(
     () => setTimeout(onClose, 1000),
 
@@ -86,14 +89,11 @@ function BuildManagementContent({ onClose }: { onClose: () => void }) {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <EquippedBuildInfoAlert />
       <Grid container columns={columns} spacing={2}>
-        <Grid size={1}>
+        <Grid item xs={1}>
           <BuildEquipped
             active={loadoutDatum?.buildType === 'equipped'}
             onChangeBuild={onChangeBuild}
           />
-        </Grid>
-        <Grid size={1}>
-          <AdResponsive dataAdSlot="5385429639" bgt="light" Ad={GOAdWrapper} />
         </Grid>
       </Grid>
 
@@ -101,7 +101,8 @@ function BuildManagementContent({ onClose }: { onClose: () => void }) {
         <Typography variant="h6">{t('loadoutSettings.builds')}</Typography>
         <Button
           startIcon={<AddIcon />}
-          color="info"
+          variant="contained"
+          color="secondary"
           size="small"
           onClick={() =>
             database.builds.new({ characterKey, srcTeamCharId: teamCharId })
@@ -114,7 +115,7 @@ function BuildManagementContent({ onClose }: { onClose: () => void }) {
       <Box>
         <Grid container columns={columns} spacing={2}>
           {characterBuilds.map(([id]) => (
-            <Grid key={id} size={1}>
+            <Grid item xs={1} key={id}>
               <BuildReal
                 buildId={id}
                 active={
@@ -130,27 +131,32 @@ function BuildManagementContent({ onClose }: { onClose: () => void }) {
 
       <Box sx={{ display: 'flex', gap: 2 }}>
         <Typography variant="h6">{t('loadoutSettings.tcBuilds')}</Typography>
-        <Button
-          startIcon={<AddIcon />}
-          color="info"
-          size="small"
-          onClick={() =>
-            database.buildTcs.newFromBuild(
-              characterKey,
-              undefined,
-              [],
-              teamCharId
-            )
-          }
+        <BootstrapTooltip
+          placement="top"
+          title={t(
+            'loadoutSettings.theorycraftHint',
+            'Starts as a copy of the current build, then opens it in the Theorycraft tab'
+          )}
         >
-          {t('loadoutSettings.newTcBuildBtn')}
-        </Button>
+          <Button
+            startIcon={<ScienceIcon />}
+            variant="contained"
+            color="secondary"
+            size="small"
+            onClick={() => {
+              theorycraft()
+              onClose()
+            }}
+          >
+            {t('loadoutSettings.theorycraftBtn', 'Theorycraft this build')}
+          </Button>
+        </BootstrapTooltip>
       </Box>
       <TCBuildInfoAlert />
       <Box>
         <Grid container columns={columns} spacing={2}>
           {characterTcBuilds.map(([id]) => (
-            <Grid key={id} size={1}>
+            <Grid item xs={1} key={id}>
               <BuildTc
                 buildTcId={id}
                 active={

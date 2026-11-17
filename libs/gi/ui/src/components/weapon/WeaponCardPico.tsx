@@ -48,30 +48,30 @@ export function WeaponCardPicoObj({ weapon }: { weapon: ICachedWeapon }) {
       }}
     >
       <Box
+        display="flex"
+        flexDirection="column"
+        alignContent="flex-end"
         className={`grad-${getWeaponStat(weapon.key).rarity}star`}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignContent: 'flex-end',
-        }}
       >
         <WeaponNameTooltip weaponKey={weapon.key} addlText={tooltipAddl}>
           <Box
             component="img"
+            loading="lazy"
             src={weaponAsset(weapon.key, weapon.ascension >= 2)}
-            sx={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              mt: 'auto',
-            }}
+            maxWidth="100%"
+            maxHeight="100%"
+            sx={{ mt: 'auto' }}
           />
         </WeaponNameTooltip>
       </Box>
       <Typography
         sx={{
           position: 'absolute',
-          fontSize: '0.75rem',
+          fontSize: '0.6875rem',
           lineHeight: 1,
+          // readable on any icon
+          textShadow:
+            '0 0 3px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8)',
           opacity: 0.85,
           pointerEvents: 'none',
           p: 0.25,
@@ -83,8 +83,11 @@ export function WeaponCardPicoObj({ weapon }: { weapon: ICachedWeapon }) {
         <Typography
           sx={{
             position: 'absolute',
-            fontSize: '0.75rem',
+            fontSize: '0.6875rem',
             lineHeight: 1,
+            // readable on any icon
+            textShadow:
+              '0 0 3px rgba(0, 0, 0, 0.9), 0 1px 2px rgba(0, 0, 0, 0.8)',
             opacity: 0.85,
             pointerEvents: 'none',
             bottom: 0,

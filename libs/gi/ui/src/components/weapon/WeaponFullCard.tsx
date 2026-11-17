@@ -3,7 +3,6 @@ import { CardThemed, SqBadge } from '@genshin-optimizer/common/ui'
 import { weaponAsset } from '@genshin-optimizer/gi/assets'
 import { getLevelString as getWeaponLevelString } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
-import { useWeapon } from '@genshin-optimizer/gi/db-ui'
 import type { IWeapon } from '@genshin-optimizer/gi/good'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import { getWeaponStat, weaponHasRefinement } from '@genshin-optimizer/gi/stats'
@@ -14,11 +13,6 @@ import { Box, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { GetCalcDisplay, resolveInfo } from '../../util'
 import { WeaponName } from './WeaponTrans'
-export function WeaponFullCard({ weaponId }: { weaponId: string }) {
-  const weapon = useWeapon(weaponId)
-  if (!weapon) return null
-  return <WeaponFullCardObj weapon={weapon} />
-}
 export function WeaponFullCardObj({
   weapon,
   bgt = 'normal',
@@ -40,37 +34,24 @@ export function WeaponFullCardObj({
   if (!weapon || !weaponSheet || !UIData) return null
   return (
     <CardThemed bgt={bgt}>
-      <Box
-        sx={{
-          display: 'flex',
-        }}
-      >
+      <Box display="flex">
         <Box
+          flexShrink={1}
+          maxWidth="35%"
+          display="flex"
+          flexDirection="column"
+          alignContent="flex-end"
           className={`grad-${getWeaponStat(weapon.key).rarity}star`}
-          sx={{
-            flexShrink: 1,
-            maxWidth: '35%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignContent: 'flex-end',
-          }}
         >
           <Box
             component="img"
             src={weaponAsset(weapon.key, weapon.ascension >= 2)}
-            sx={{
-              width: '100%',
-              height: 'auto',
-              mt: 'auto',
-            }}
+            width="100%"
+            height="auto"
+            sx={{ mt: 'auto' }}
           />
         </Box>
-        <Box
-          sx={{
-            flexGrow: 1,
-            p: 1,
-          }}
-        >
+        <Box flexGrow={1} sx={{ p: 1 }}>
           <Typography variant="body2" gutterBottom>
             <strong>
               <WeaponName weaponKey={weapon.key} />

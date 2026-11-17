@@ -10,6 +10,7 @@ import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
+import type { SxProps, TextFieldProps, Theme } from '@mui/material'
 import {
   Box,
   ButtonGroup,
@@ -23,6 +24,7 @@ import {
 } from '@mui/material'
 import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { statName } from '../util/statName'
 import { statPercent } from './util'
 
 export function StatEditorList({
@@ -32,6 +34,7 @@ export function StatEditorList({
   disabled = false,
   wrapperFunc = (ele) => ele,
   label,
+  only,
 }: {
   statKeys: InputPremodKey[]
   statFilters: Partial<Record<InputPremodKey, number>>
@@ -39,32 +42,10 @@ export function StatEditorList({
   disabled?: boolean
   wrapperFunc?: (ele: JSX.Element, key?: string) => JSX.Element
   label?: string
+  /** Only the stats' rows, or only the field that adds a stat (default: both) */
+  only?: 'rows' | 'add'
 }) {
-  const { t: tk } = useTranslation('statKey_gen')
-  const statOptions = useMemo(
-    () =>
-      statKeys
-        .map(
-          (statKey: InputPremodKey): StatOption => ({
-            key: statKey,
-            grouper: inputPremodKeyToGroupMap[statKey],
-            label: (
-              [...allMainStatKeys, ...allSubstatKeys] as string[]
-            ).includes(statKey)
-              ? `${tk(statKey as MainStatKey | SubstatKey)}${statPercent(
-                  statKey as MainStatKey | SubstatKey
-                )}`
-              : (KeyMap.getStr(statKey) ?? 'ERROR'),
-            color: KeyMap.getVariant(statKey),
-          })
-        )
-        .sort(
-          (a, b) =>
-            allGroupKeys.indexOf(a.grouper as GroupKey) -
-            allGroupKeys.indexOf(b.grouper as GroupKey)
-        ),
-    [tk, statKeys]
-  )
+  const statOptions = useStatKeyOptions(statKeys)
 
   const getOptionDiabled = useCallback(
     (option: StatOption) => Object.keys(statFilters).includes(option.key),
@@ -111,40 +92,146 @@ export function StatEditorList({
 
   return (
     <>
-      {Object.entries(statFilters).map(([statKey, min]) =>
+      {only !== 'add' &&
+        Object.entries(statFilters).map(([statKey, min]) =>
+          wrapperFunc(
+            <StatFilterItem
+              key={statKey}
+              statKey={statKey}
+              statKeyOptions={statOptions}
+              disabled={disabled}
+              value={min}
+              setValue={setFilter}
+              setKey={setKey}
+              delKey={delKey}
+              getOptionDisabled={getOptionDiabled}
+            />,
+            statKey
+          )
+        )}
+      {only !== 'rows' &&
         wrapperFunc(
           <StatFilterItem
-            key={statKey}
-            statKey={statKey}
+            key={Object.entries(statFilters).length}
+            statKey={null}
             statKeyOptions={statOptions}
-            disabled={disabled}
-            value={min}
             setValue={setFilter}
             setKey={setKey}
             delKey={delKey}
+            disabled={disabled}
             getOptionDisabled={getOptionDiabled}
-          />,
-          statKey
-        )
-      )}
-      {wrapperFunc(
-        <StatFilterItem
-          key={Object.entries(statFilters).length}
-          statKey={null}
-          statKeyOptions={statOptions}
-          setValue={setFilter}
-          setKey={setKey}
-          delKey={delKey}
-          disabled={disabled}
-          getOptionDisabled={getOptionDiabled}
-          label={label}
-        />
-      )}
+            label={label}
+          />
+        )}
     </>
   )
 }
 
-type StatOption = GeneralAutocompleteOption<InputPremodKey>
+export type StatOption = GeneralAutocompleteOption<InputPremodKey>
+
+/** `statKeys` as a stat picker's options: each one's name and color, in the stat groups' order */
+export function useStatKeyOptions(statKeys: InputPremodKey[]): StatOption[] {
+  const { t: tk } = useTranslation('statKey_gen')
+  return useMemo(
+    () =>
+      statKeys
+        .map(
+          (statKey: InputPremodKey): StatOption => ({
+            key: statKey,
+            grouper: inputPremodKeyToGroupMap[statKey],
+            label: (
+              [...allMainStatKeys, ...allSubstatKeys] as string[]
+            ).includes(statKey)
+              ? `${tk(statKey as MainStatKey | SubstatKey)}${statPercent(
+                  statKey as MainStatKey | SubstatKey
+                )}`
+              : KeyMap.getStr(statKey)
+                ? statName(statKey)
+                : 'ERROR',
+            color: KeyMap.getVariant(statKey),
+          })
+        )
+        .sort(
+          (a, b) =>
+            allGroupKeys.indexOf(a.grouper as GroupKey) -
+            allGroupKeys.indexOf(b.grouper as GroupKey)
+        ),
+    [tk, statKeys]
+  )
+}
+
+/** A stat picker: the options by group (the stat lists' groups), each with its icon */
+export function StatKeyAutocomplete({
+  options,
+  valueKey,
+  onChange,
+  getOptionDisabled,
+  label,
+  disabled,
+  sx,
+  textFieldProps,
+}: {
+  options: StatOption[]
+  valueKey: InputPremodKey | null
+  onChange: (key: InputPremodKey | null) => void
+  getOptionDisabled?: (option: StatOption) => boolean
+  label?: string
+  disabled?: boolean
+  sx?: SxProps<Theme>
+  textFieldProps?: TextFieldProps
+}) {
+  const theme = useTheme()
+  const { t } = useTranslation('ui')
+  const isThreeCol = useMediaQuery(theme.breakpoints.up('lg'))
+  const isOneCol = useMediaQuery(theme.breakpoints.down('md'))
+  return (
+    <GeneralAutocomplete
+      size="small"
+      options={options}
+      onChange={onChange}
+      valueKey={valueKey}
+      getOptionDisabled={getOptionDisabled}
+      disabled={disabled}
+      groupBy={(option) => inputPremodKeyToGroupMap[option.key]}
+      renderGroup={(params) => (
+        <List
+          key={params.key}
+          component={Box}
+          sx={{ paddingTop: 0, marginTop: 0 }}
+        >
+          <ListSubheader key={`${params.group}Header`} sx={{ top: '-1em' }}>
+            <strong>{t(`statGroupKey.${params.group}`)}</strong>
+          </ListSubheader>
+          {params.children}
+        </List>
+      )}
+      toImg={(sKey: InputPremodKey) => (
+        <StatIcon
+          statKey={sKey}
+          iconProps={{ color: KeyMap.getVariant(sKey) }}
+        />
+      )}
+      ListboxProps={{
+        style: {
+          display: 'grid',
+          gridTemplateColumns: isOneCol
+            ? '100%'
+            : isThreeCol
+              ? '33% 33% 33%'
+              : '50% 50%',
+        },
+      }}
+      // This needs to be done with `style` prop, not `sx` prop, or it doesn't work
+      PopperComponent={(props) => (
+        <Popper {...props} style={{ width: '60%' }} />
+      )}
+      sx={sx}
+      textFieldProps={textFieldProps}
+      label={label}
+    />
+  )
+}
+
 function StatFilterItem({
   statKey,
   statKeyOptions = [],
@@ -166,10 +253,6 @@ function StatFilterItem({
   getOptionDisabled: (option: StatOption) => boolean
   label?: string
 }) {
-  const theme = useTheme()
-  const { t } = useTranslation('ui')
-  const isThreeCol = useMediaQuery(theme.breakpoints.up('lg'))
-  const isOneCol = useMediaQuery(theme.breakpoints.down('md'))
   const isFloat = statKey ? getUnitStr(statKey) === '%' : false
   const onValueChange = useCallback(
     (value?: number) => statKey && setValue(statKey, value ?? 0),
@@ -192,47 +275,11 @@ function StatFilterItem({
   return (
     <Box sx={{ display: 'flex' }}>
       <ButtonGroup sx={{ flexGrow: 1 }}>
-        <GeneralAutocomplete
-          size="small"
+        <StatKeyAutocomplete
           options={statKeyOptions}
           onChange={onKeyChange}
           valueKey={statKey}
           getOptionDisabled={getOptionDisabled}
-          groupBy={(option) => inputPremodKeyToGroupMap[option.key]}
-          renderGroup={(params) => (
-            <List
-              key={params.key}
-              component={Box}
-              sx={{ paddingTop: 0, marginTop: 0 }}
-            >
-              <ListSubheader key={`${params.group}Header`} sx={{ top: '-1em' }}>
-                <strong>{t(`statGroupKey.${params.group}`)}</strong>
-              </ListSubheader>
-              {params.children}
-            </List>
-          )}
-          toImg={(sKey: InputPremodKey) => (
-            <StatIcon
-              statKey={sKey}
-              iconProps={{ color: KeyMap.getVariant(sKey) }}
-            />
-          )}
-          slotProps={{
-            listbox: {
-              style: {
-                display: 'grid',
-                gridTemplateColumns: isOneCol
-                  ? '100%'
-                  : isThreeCol
-                    ? '33% 33% 33%'
-                    : '50% 50%',
-              },
-            },
-          }}
-          // This needs to be done with `style` prop, not `sx` prop, or it doesn't work
-          slots={{
-            popper: (props) => <Popper {...props} style={{ width: '60%' }} />,
-          }}
           sx={{ flexGrow: 1, flexBasis: 150 }}
           textFieldProps={{
             sx: { '& .MuiInputBase-root': { borderRadius: '4px 0 0 4px' } },
@@ -252,26 +299,24 @@ function StatFilterItem({
           onChange={onValueChange}
           placeholder="Stat Value"
           size="small"
-          slotProps={{
-            htmlInput: { sx: { textAlign: 'right' } },
-            input: {
-              sx: {
-                borderTopLeftRadius: 0,
-                borderBottomLeftRadius: 0,
-              },
-              endAdornment: (
-                <InputAdornment position="end" sx={{ ml: 0 }}>
-                  {statKey ? getUnitStr(statKey) : undefined}{' '}
-                  <IconButton
-                    aria-label="Delete Stat Constraint"
-                    onClick={onDeleteKey}
-                    edge="end"
-                  >
-                    <DeleteForeverIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ),
+          inputProps={{ sx: { textAlign: 'right' } }}
+          InputProps={{
+            sx: {
+              borderTopLeftRadius: 0,
+              borderBottomLeftRadius: 0,
             },
+            endAdornment: (
+              <InputAdornment position="end" sx={{ ml: 0 }}>
+                {statKey ? getUnitStr(statKey) : undefined}{' '}
+                <IconButton
+                  aria-label="Delete Stat Constraint"
+                  onClick={onDeleteKey}
+                  edge="end"
+                >
+                  <DeleteForeverIcon fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
           }}
         />
       )}
@@ -345,7 +390,6 @@ const inputPremodKeyToGroupMap: Record<InputPremodKey, GroupKey> = {
   stellarswirl_specialDmg_: 'reaction_dmg_bonus',
   stellarswirl_dmg_: 'reaction_dmg_bonus',
   stellarswirl_mult_: 'reaction_dmg_bonus',
-  stellarswirl_reactionMult_: 'reaction_dmg_bonus',
   vaporize_dmg_: 'reaction_dmg_bonus',
   melt_dmg_: 'reaction_dmg_bonus',
   spread_dmg_: 'reaction_dmg_bonus',
@@ -451,7 +495,6 @@ const inputPremodKeyToGroupMap: Record<InputPremodKey, GroupKey> = {
   lunarcrystallize_reactionDmgInc: 'elem_dmgInc',
   stellarconduct_critRate_: 'reaction_crit',
   stellarconduct_critDMG_: 'reaction_crit',
-  stellarconduct_electro_critDMG_: 'elem_crit',
   stellarconduct_dmgInc: 'elem_dmgInc',
   stellarconduct_directDmgInc: 'elem_dmgInc',
   stellarconduct_reactionDmgInc: 'elem_dmgInc',

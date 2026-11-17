@@ -1,5 +1,4 @@
 import { CardThemed, useTitle } from '@genshin-optimizer/common/ui'
-import { colorToRgbaString, hexToColor } from '@genshin-optimizer/common/util'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { GeneratedBuild } from '@genshin-optimizer/gi/db'
@@ -15,7 +14,7 @@ import {
   useTeam,
   useTeamChar,
 } from '@genshin-optimizer/gi/db-ui'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
 import {
   type ChartData,
   DataContext,
@@ -24,7 +23,6 @@ import {
   GraphContext,
   type GraphContextObj,
   OptTargetWrapper,
-  SillyContext,
   useTeamDataNoContext,
 } from '@genshin-optimizer/gi/ui'
 import { Box, Skeleton } from '@mui/material'
@@ -48,12 +46,20 @@ import {
 import type { BuildTcContexObj, SetBuildTcAction } from './BuildTcContext'
 import { BuildTcContext } from './BuildTcContext'
 import Content from './CharacterDisplay/Content'
+import { kqmTheorycraftingEnabled } from './featureFlags'
+import { TeamBuildCardButton } from './TeamBuildCardButton'
 import TeamCharacterSelector from './TeamCharacterSelector'
+import TeamBuildWorkspace from './TeamOptimize'
 import TeamSetting from './TeamSetting'
+
+/** `/teams/:teamId/optimize`: Team Optimize (no character key is lowercase) */
+const TEAM_OPT_PATH = 'optimize'
+const KQM_PATH = 'kqm'
 
 export default function PageTeam() {
   const database = useDatabase()
   const { teamId } = useParams<{ teamId?: string }>()
+  const kqmRoute = useMatch({ path: '/teams/:teamId/kqm', end: false })
   const invalidKey = !teamId || !database.teams.keys.includes(teamId)
 
   // An edit is triggered whenever a team gets opened even if no edits are done
@@ -63,15 +69,11 @@ export default function PageTeam() {
   }, [teamId, database.teams, invalidKey])
 
   if (invalidKey) return <Navigate to="/teams" />
+  if (kqmRoute && !kqmTheorycraftingEnabled)
+    return <Navigate to={`/teams/${teamId}/optimize`} replace />
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1,
-      }}
-    >
+    <Box display="flex" flexDirection="column" gap={1}>
       <Suspense
         fallback={<Skeleton variant="rectangular" width="100%" height={1000} />}
       >
@@ -89,7 +91,6 @@ const graphBuildAll: Record<string, GeneratedBuild[]> = {}
 function Page({ teamId }: { teamId: string }) {
   const database = useDatabase()
   const navigate = useNavigate()
-  const { silly } = useContext(SillyContext)
   const { gender } = useDBMeta()
 
   const team = useTeam(teamId)!
@@ -120,17 +121,55 @@ function Page({ teamId }: { teamId: string }) {
   useEffect(() => {
     window.scrollTo({ top: 0 })
   }, [])
+  const isTeamOpt = characterKeyRaw === TEAM_OPT_PATH
+  const isKqm = kqmTheorycraftingEnabled && characterKeyRaw === KQM_PATH
+  const isTeamBuild = isTeamOpt || isKqm
   useEffect(() => {
-    if (!loadoutDatum) navigate('', { replace: true })
-  }, [loadoutDatum, navigate])
+    if (!loadoutDatum && !isTeamBuild) navigate('', { replace: true })
+  }, [loadoutDatum, navigate, isTeamBuild])
 
   const teamCharId = loadoutDatum?.teamCharId
   const characterKey = database.teamChars.get(teamCharId)?.key
 
   const teamChar = useTeamChar(teamCharId ?? '')
 
+  // Request the namespaces of the page and of every team member (character, weapon, artifact
+  // sets) at once. Otherwise they are fetched one network round trip at a time as the nested
+  // sheets render (12 sequential rounds for a 4-character team).
+  useMemo(() => {
+    const namespaces = [
+      'charNames_gen',
+      'page_character',
+      'page_team',
+      'tooltips_gen',
+      'sheet_gen',
+      'sheet',
+      'teams_gen',
+      'elementalResonance_gen',
+      'reaction_gen',
+      'weaponNames_gen',
+      'build',
+      'loadout',
+    ]
+    for (const datum of loadoutData) {
+      if (!datum) continue
+      const charKey = database.teamChars.get(datum.teamCharId)?.key
+      // Traveler namespaces are named per element/gender; let them load on demand.
+      if (charKey && !charKey.startsWith('Traveler'))
+        namespaces.push(`char_${charKey}_gen`)
+      const weaponKey = database.teams.getLoadoutWeapon(datum)?.key
+      if (weaponKey) namespaces.push(`weapon_${weaponKey}_gen`)
+      for (const artId of Object.values(
+        database.teams.getLoadoutArtifactIds(datum)
+      )) {
+        const setKey = artId && database.arts.get(artId)?.setKey
+        if (setKey) namespaces.push(`artifact_${setKey}_gen`)
+      }
+    }
+    preloadNamespaces(namespaces)
+  }, [database, loadoutData])
+
   const { t } = useTranslation([
-    'sillyWisher_charNames',
     'charNames_gen',
     'page_character',
     'page_team',
@@ -140,22 +179,22 @@ function Page({ teamId }: { teamId: string }) {
 
   useTitle(
     useMemo(() => {
+      if (isKqm) return `${team.name} - ${t('page_team:teamOpt.kqm.tab')}`
+      if (isTeamOpt) return `${team.name} - ${t('page_team:teamOpt.title')}`
       const charName = characterKey
         ? t(
-            `${
-              silly ? 'sillyWisher_charNames' : 'charNames_gen'
-            }:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+            `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
           )
         : t('page_team:teamSettings.tab.team')
       const tabName = tab
         ? t(`page_character:tabs.${tab}`)
         : characterKey
-          ? t('page_character:tabs.setting')
+          ? t('page_character:tabs.overview')
           : tab
       return tabName
         ? `${team.name} - ${charName} - ${tabName}`
         : `${team.name} - ${charName}`
-    }, [t, team.name, silly, characterKey, gender, tab])
+    }, [t, team.name, characterKey, gender, tab, isTeamOpt, isKqm])
   )
 
   const teamCharacterContextValue: TeamCharacterContextObj | undefined =
@@ -184,40 +223,44 @@ function Page({ teamId }: { teamId: string }) {
   }, [charUIData, teamData])
 
   return (
-    <Box sx={{ display: 'flex', gap: 1, flexDirection: 'column' }}>
-      <CardThemed>
-        <TeamCharacterSelector
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      {/* the team's name, actions and members sit on the page like every page header; the card
+          below holds the open member's tabs and content */}
+      <TeamCharacterSelector
+        teamId={teamId}
+        characterKey={characterKey}
+        tab={tab}
+        teamBuildMode={isKqm ? 'kqm' : isTeamOpt ? 'inventory' : undefined}
+        actions={
+          // a member's tab: its build card, among the header's actions
+          !isTeamBuild &&
+          teamCharacterContextValue &&
+          dataContextValue && (
+            <TeamCharacterContext.Provider value={teamCharacterContextValue}>
+              <DataContext.Provider value={dataContextValue}>
+                <TeamBuildCardButton />
+              </DataContext.Provider>
+            </TeamCharacterContext.Provider>
+          )
+        }
+      />
+      {/* `clip` still clips to the rounded corners but, unlike `hidden`, is not a scroll
+          container, so sticky bars inside (the optimizer's generate bar) stick to the window */}
+      {/* Team optimize and KQM: their sections are panels of their own, straight on the page */}
+      {isTeamBuild ? (
+        <TeamBuildWorkspace
+          key={teamId}
           teamId={teamId}
-          characterKey={characterKey}
-          tab={tab}
+          teamData={teamData}
+          mode={isKqm ? 'kqm' : 'inventory'}
         />
-        <Box
-          sx={(theme) => {
-            const elementKey = characterKey && getCharEle(characterKey)
-            if (!elementKey) return {}
-            const hex = theme.palette[elementKey].main as string
-            const color = hexToColor(hex)
-            if (!color) return {}
-            const rgba = colorToRgbaString(color, 0.1)
-            return {
-              background: `linear-gradient(to bottom, ${rgba} 0%, rgba(0,0,0,0)) 25%`,
-            }
-          }}
-        >
+      ) : (
+        <CardThemed sx={{ '@supports (overflow: clip)': { overflow: 'clip' } }}>
           {teamCharacterContextValue ? (
             dataContextValue ? (
               <TeamCharacterContext.Provider value={teamCharacterContextValue}>
                 <DataContext.Provider value={dataContextValue}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 1,
-                      p: 1,
-                    }}
-                  >
-                    <InnerContent tab={tab} />
-                  </Box>
+                  <InnerContent tab={tab} />
                 </DataContext.Provider>
               </TeamCharacterContext.Provider>
             ) : (
@@ -226,8 +269,8 @@ function Page({ teamId }: { teamId: string }) {
           ) : (
             <TeamSetting teamId={teamId} teamData={teamData} />
           )}
-        </Box>
-      </CardThemed>
+        </CardThemed>
+      )}
     </Box>
   )
 }

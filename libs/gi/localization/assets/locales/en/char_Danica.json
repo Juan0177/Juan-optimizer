@@ -1,13 +1,13 @@
 {
-  "anchorCond": "Storm Anchor present (opponents nearby)",
-  "formCond": "Attendant Form",
-  "royalGuard": "Maid: Royal Guard",
-  "cleaner": "Maid: Cleaner",
-  "purge_dmg_": "Will to Purge DMG Bonus",
-  "a4StacksCond": "Will to Purge stacks",
-  "c2ToastCond": "Consuming a stack of Let Us Toast",
-  "c2Cleaner": "Danica in Maid: Cleaner form: Stellar-Conduct DMG Increase",
-  "purgeCritRate_": "Will to Purge CRIT Rate",
-  "purgeCritDMG_": "Will to Purge CRIT DMG",
-  "cleanerA4": "After Will to Purge: Normal Attacks with the Storm Anchor grant 25 more Will to Cleanse per hit (A4, up to 3 stacks with the ATK SPD)."
+  "anchorCond": "Storm Anchor is present",
+  "maidCond": "Attendant Form",
+  "defenseMaid": "Maid: Royal Guard (after Will to Protect)",
+  "battleMaid": "Maid: Cleaner (after Will to Purge)",
+  "burstEnhCond": "Elemental Burst cast in Radiance: Stellar-Conduct (Attendant Form enhanced)",
+  "hit1ScDmg": "1-Hit Stellar-Conduct DMG (Radiance)",
+  "hit5ScDmg": "5-Hit Stellar-Conduct DMG (Radiance)",
+  "a4Cond": "Will to Purge casts in Maid: Cleaner (ATK SPD stacks)",
+  "c2ToastCond": "\"Let Us Toast\" stack consumed by a Stellar-Conduct reaction",
+  "c2SelfToastCond": "\"Let Us Toast\" stacks Danica consumes on her Stellar-Conduct hit (Maid: Cleaner, up to 2)",
+  "c2DecreeDmg": "Will to Purge with Cleaning Decree (once per combat, 150%)"
 }

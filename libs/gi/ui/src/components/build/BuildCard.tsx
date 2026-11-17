@@ -60,13 +60,7 @@ export function BuildCard({
               {name}
             </Typography>
             {source && (
-              <Typography
-                noWrap
-                variant="caption"
-                sx={{
-                  color: 'text.secondary',
-                }}
-              >
+              <Typography noWrap variant="caption" color="text.secondary">
                 {t('buildCard.source', { name: source })}
               </Typography>
             )}

@@ -105,7 +105,7 @@ export const weaponIdMap: Record<number | string, WeaponKey> = {
   12433: 'MasterKey',
   12435: 'ForgedByTheGoldenMelody',
   12436: 'BladeOfAtonement',
-  12438: 'BlazingLionfang', // juanlab-beta 7.3
+  12438: 'BlazingLionfang',
   12501: 'SkywardPride',
   12502: 'WolfsGravestone',
   12503: 'SongOfBrokenPines',
@@ -120,9 +120,9 @@ export const weaponIdMap: Record<number | string, WeaponKey> = {
   12514: 'AThousandBlazingSuns',
   12515: 'GestOfTheMightyWolf',
   12516: 'ATeaspoonOfTranscendence',
+  12517: 'TorrentsOfSpring',
 
   //polearm
-  12517: 'TorrentsOfSpring', // juanlab-beta 7.3
   13101: 'BeginnersProtector',
   13201: 'IronPoint',
   13301: 'WhiteTassel',
@@ -290,6 +290,6 @@ export const weaponIdMap: Record<number | string, WeaponKey> = {
   15514: 'AstralVulturesCrimsonPlumage',
   15515: 'TheDaybreakChronicles',
   15516: 'GoldenFrostboundOath',
-  15517: 'Silverdawn', // juanlab-beta 7.3
+  15517: 'Silverdawn',
 } as const
 export type WeaponId = keyof typeof weaponIdMap

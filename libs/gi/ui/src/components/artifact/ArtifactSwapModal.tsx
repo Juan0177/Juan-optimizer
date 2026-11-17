@@ -2,6 +2,7 @@ import { useDataManagerValues } from '@genshin-optimizer/common/database-ui'
 import {
   useBoolState,
   useMediaQueryUp,
+  useOpenedOnce,
 } from '@genshin-optimizer/common/react-util'
 import {
   CardThemed,
@@ -36,7 +37,15 @@ import {
   Skeleton,
   Typography,
 } from '@mui/material'
-import { Suspense, useCallback, useMemo, useReducer, useState } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { CompareBuildWrapper } from '../build/CompareBuildWrapper'
 import { ArtifactCard } from './ArtifactCard'
@@ -45,19 +54,29 @@ import { ArtifactEditor } from './editor'
 
 const numToShowMap = { xs: 2 * 3, sm: 2 * 3, md: 3 * 3, lg: 4 * 3, xl: 4 * 3 }
 
-export function ArtifactSwapModal({
-  artId,
-  onChangeId,
-  slotKey,
-  show,
-  onClose,
-}: {
+type ArtifactSwapModalProps = {
   artId: string
   onChangeId: (id: string | null) => void
   slotKey: ArtifactSlotKey
   show: boolean
   onClose: () => void
-}) {
+}
+/**
+ * Mounted on first open: every equipped artifact has one, and closed it would still filter the whole
+ * inventory each time the build around it renders.
+ */
+export function ArtifactSwapModal(props: ArtifactSwapModalProps) {
+  return useOpenedOnce(props.show) ? (
+    <ArtifactSwapModalContent {...props} />
+  ) : null
+}
+function ArtifactSwapModalContent({
+  artId,
+  onChangeId,
+  slotKey,
+  show,
+  onClose,
+}: ArtifactSwapModalProps) {
   const { t } = useTranslation(['page_character', 'artifact'])
   const database = useDatabase()
 
@@ -131,6 +150,24 @@ export function ArtifactSwapModal({
     setSwapArtId('')
     onClose()
   }, [onChangeId, onClose, swapArtId])
+
+  // Artifacts added with the editor opened from this slot are meant for this character: once the
+  // editor closes, go straight to the equip confirmation of the last one added.
+  const createdArtIdRef = useRef('')
+  useEffect(() => {
+    if (!showEditor) return
+    createdArtIdRef.current = ''
+    return database.arts.followAny((key, reason) => {
+      if (reason === 'new') createdArtIdRef.current = key
+    })
+  }, [database, showEditor])
+  const onHideEditorOfferEquip = useCallback(() => {
+    onHideEditor()
+    const createdId = createdArtIdRef.current
+    createdArtIdRef.current = ''
+    if (createdId && database.arts.get(createdId)?.slotKey === slotKey)
+      setSwapArtId(createdId)
+  }, [database, onHideEditor, slotKey])
   return (
     <ModalWrapper
       open={show}
@@ -141,7 +178,7 @@ export function ArtifactSwapModal({
         <Suspense fallback={false}>
           <ArtifactEditor
             artifactIdToEdit={showEditor ? 'new' : ''}
-            cancelEdit={onHideEditor}
+            cancelEdit={onHideEditorOfferEquip}
             allowUpload
             allowEmpty
             fixedSlotKey={filterOption.slotKeys[0]}
@@ -180,13 +217,11 @@ export function ArtifactSwapModal({
         <Divider />
         <CardContent>
           <Box
-            sx={{
-              pb: 1,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-end',
-              flexWrap: 'wrap',
-            }}
+            pb={1}
+            display="flex"
+            justifyContent="space-between"
+            alignItems="flex-end"
+            flexWrap="wrap"
           >
             <ShowingAndSortOptionSelect showingTextProps={showingTextProps} />
           </Box>
@@ -198,11 +233,7 @@ export function ArtifactSwapModal({
           >
             {t('artifact:addNew')}
           </Button>
-          <Box
-            sx={{
-              mt: 1,
-            }}
-          >
+          <Box mt={1}>
             <Suspense
               fallback={
                 <Skeleton variant="rectangular" width="100%" height={300} />
@@ -216,7 +247,7 @@ export function ArtifactSwapModal({
               <Grid container spacing={1} columns={{ xs: 2, md: 3, lg: 4 }}>
                 {/* only show "unequip" when an artifact is equipped */}
                 {artId && (
-                  <Grid size={1}>
+                  <Grid item xs={1}>
                     <CardThemed
                       bgt="light"
                       sx={{ width: '100%', height: '100%' }}
@@ -249,7 +280,9 @@ export function ArtifactSwapModal({
                 )}
                 {artifactIdsToShow.map((id) => (
                   <Grid
+                    item
                     key={id}
+                    xs={1}
                     sx={(theme) => ({
                       ...(artId === id && {
                         '> .MuiCard-root': {
@@ -257,7 +290,6 @@ export function ArtifactSwapModal({
                         },
                       }),
                     })}
-                    size={1}
                   >
                     <ArtifactCard
                       artifactId={id}

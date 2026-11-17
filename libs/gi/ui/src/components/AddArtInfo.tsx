@@ -11,12 +11,10 @@ export function AddArtInfo() {
           "Looks like you haven't added any artifacts yet. If you want, there are "
         }
         <Link
+          color="warning.main"
           component={RouterLink}
           to="/scanner"
-          sx={{
-            color: 'warning.main',
-            fontFamily: 'inherit',
-          }}
+          fontFamily="inherit"
         >
           automatic scanners
         </Link>

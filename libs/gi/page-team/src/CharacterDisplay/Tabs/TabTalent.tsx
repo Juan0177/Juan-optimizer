@@ -1,8 +1,4 @@
-import {
-  CardThemed,
-  ConditionalWrapper,
-  DropdownButton,
-} from '@genshin-optimizer/common/ui'
+import { CardThemed, ConditionalWrapper } from '@genshin-optimizer/common/ui'
 import { range } from '@genshin-optimizer/common/util'
 import { maxConstellationCount } from '@genshin-optimizer/gi/consts'
 import {
@@ -27,12 +23,17 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { CalcResult } from '@genshin-optimizer/gi/uidata'
 import { uiInput as input } from '@genshin-optimizer/gi/wr'
+import CheckIcon from '@mui/icons-material/Check'
+import LockIcon from '@mui/icons-material/Lock'
 import {
+  alpha,
   Box,
   CardActionArea,
   CardContent,
+  Chip,
   Grid,
-  MenuItem,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
   useMediaQuery,
   useTheme,
@@ -87,6 +88,8 @@ export default function CharacterTalentPane() {
           key={i}
           talentKey={`constellation${i}` as TalentSheetElementKey}
           subtitle={t('constellationLvl', { level: i })}
+          badge={`C${i}`}
+          status={constellation >= i ? 'active' : 'locked'}
           onClickTitle={() =>
             buildTc?.character
               ? setBuildTc((buildTc) => {
@@ -131,38 +134,34 @@ export default function CharacterTalentPane() {
         {/* constellations for 4column */}
         {grlg && (
           <Grid
-            sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
-            size={{
-              xs: 12,
-              md: 12,
-              lg: 3,
+            item
+            xs={12}
+            md={12}
+            lg={3}
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              // cards clip their overflow, which would otherwise let the column squeeze them
+              '& > *': { flexShrink: 0 },
             }}
           >
-            <ConstellationDropdown />
+            <ConstellationHeader />
+            {/* plain wrappers: the cards' height: 100% must not stretch to the column */}
             {constellationCards.map((c, i) => (
-              <Box key={i} sx={{ opacity: constellation >= i + 1 ? 1 : 0.5 }}>
-                {c}
-              </Box>
+              <Box key={i}>{c}</Box>
             ))}
           </Grid>
         )}
-        <Grid
-          container
-          spacing={1}
-          size={{
-            xs: 12,
-            md: 12,
-            lg: 9,
-          }}
-        >
+        <Grid item xs={12} md={12} lg={9} container spacing={1}>
           {/* auto, skill, burst */}
           {skillBurstList.map(([tKey, tText]) => (
-            <Grid key={tKey}>
+            <Grid item key={tKey} {...talentSpacing}>
               <SkillDisplayCard talentKey={tKey} subtitle={tText} />
             </Grid>
           ))}
           {!!characterSheet.getTalentOfKey('sprint') && (
-            <Grid>
+            <Grid item {...talentSpacing}>
               <SkillDisplayCard
                 talentKey="sprint"
                 subtitle={t('talents.altSprint')}
@@ -170,7 +169,7 @@ export default function CharacterTalentPane() {
             </Grid>
           )}
           {!!characterSheet.getTalentOfKey('passive') && (
-            <Grid>
+            <Grid item {...talentSpacing}>
               <SkillDisplayCard talentKey="passive" subtitle="Passive" />
             </Grid>
           )}
@@ -179,28 +178,24 @@ export default function CharacterTalentPane() {
             const enabled = ascension >= asc
             if (!characterSheet.getTalentOfKey(tKey)) return null
             return (
-              <Grid key={tKey} style={{ opacity: enabled ? 1 : 0.5 }}>
-                <SkillDisplayCard talentKey={tKey} subtitle={tText} />
+              <Grid item key={tKey} {...talentSpacing}>
+                <SkillDisplayCard
+                  talentKey={tKey}
+                  subtitle={tText}
+                  status={enabled ? undefined : 'locked'}
+                />
               </Grid>
             )
           })}
         </Grid>
         {/* constellations for < 4 columns */}
         {!grlg && (
-          <Grid
-            container
-            spacing={1}
-            size={{
-              xs: 12,
-              md: 12,
-              lg: 3,
-            }}
-          >
-            <Grid size={12}>
-              <ConstellationDropdown />
+          <Grid item xs={12} md={12} lg={3} container spacing={1}>
+            <Grid item xs={12}>
+              <ConstellationHeader />
             </Grid>
             {constellationCards.map((c, i) => (
-              <Grid key={i} sx={{ opacity: constellation >= i + 1 ? 1 : 0.5 }}>
+              <Grid item key={i} {...talentSpacing}>
                 {c}
               </Grid>
             ))}
@@ -223,7 +218,7 @@ function ReactionDisplay() {
             .filter(([_, node]) => !node.isEmpty)
             .map(([key, node]) => {
               return (
-                <Grid key={key}>
+                <Grid item key={key}>
                   <CardThemed>
                     <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
                       <NodeFieldDisplay calcRes={node} />
@@ -242,11 +237,17 @@ type SkillDisplayCardProps = {
   talentKey: TalentSheetElementKey
   subtitle: string
   onClickTitle?: () => void
+  /** Constellations / passives: unlocked ("active") or not yet ("locked"). */
+  status?: 'active' | 'locked'
+  /** Short label on the icon, e.g. "C2". */
+  badge?: string
 }
 function SkillDisplayCard({
   talentKey,
   subtitle,
   onClickTitle,
+  status,
+  badge,
 }: SkillDisplayCardProps) {
   const database = useDatabase()
   const {
@@ -306,81 +307,235 @@ function SkillDisplayCard({
     return false
   }
 
+  const locked = status === 'locked'
+  const titleBlock = status ? (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box sx={{ position: 'relative', flexShrink: 0 }}>
+        <Box
+          component="img"
+          src={talentSheet?.img}
+          alt=""
+          sx={{
+            display: 'block',
+            width: 52,
+            height: 52,
+            p: 0.5,
+            borderRadius: '50%',
+            border: 2,
+            borderColor: locked ? 'divider' : 'primary.main',
+            bgcolor: locked ? 'transparent' : 'contentDark.main',
+            // locked: a grey, faded icon; the text below stays readable
+            filter: locked ? 'grayscale(1)' : undefined,
+            opacity: locked ? 0.5 : 1,
+          }}
+        />
+        {badge && (
+          <Box
+            component="span"
+            sx={{
+              position: 'absolute',
+              right: -6,
+              bottom: -4,
+              px: 0.625,
+              borderRadius: 1,
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              lineHeight: '18px',
+              ...(locked
+                ? {
+                    bgcolor: 'contentNormal.main',
+                    color: 'text.secondary',
+                    border: 1,
+                    borderColor: 'divider',
+                  }
+                : { bgcolor: 'primary.main', color: '#17181f' }),
+            }}
+          >
+            {badge}
+          </Box>
+        )}
+      </Box>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Typography
+          variant="subtitle1"
+          sx={{
+            fontWeight: 600,
+            lineHeight: 1.3,
+            color: locked ? 'text.secondary' : 'text.primary',
+          }}
+        >
+          {talentSheet?.name}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {subtitle}
+        </Typography>
+      </Box>
+      <StatusTag locked={locked} />
+    </Box>
+  ) : (
+    <Grid container sx={{ flexWrap: 'nowrap' }}>
+      <Grid item>
+        <Box
+          component="img"
+          src={talentSheet?.img}
+          sx={{ width: 60, height: 'auto' }}
+        />
+      </Grid>
+      <Grid item flexGrow={1} sx={{ pl: 1 }}>
+        <Typography variant="h6">{talentSheet?.name}</Typography>
+        <Typography variant="subtitle1">{subtitle}</Typography>
+      </Grid>
+    </Grid>
+  )
+
   return (
-    <CardThemed bgt="light" sx={{ height: '100%' }}>
+    <CardThemed
+      bgt="light"
+      sx={{
+        height: '100%',
+        ...(status && {
+          border: 1,
+          borderColor: (theme) =>
+            locked
+              ? theme.palette.divider
+              : alpha(theme.palette.primary.main, 0.35),
+          // a locked one is an empty, dashed slot instead of a raised card
+          ...(locked && { borderStyle: 'dashed', bgcolor: 'transparent' }),
+        }),
+      }}
+    >
       {header}
       <CardContent>
         <ConditionalWrapper
           condition={!!onClickTitle}
           wrapper={actionWrapperFunc}
         >
-          <Grid container sx={{ flexWrap: 'nowrap' }}>
-            <Grid>
-              <Box
-                component="img"
-                src={talentSheet?.img}
-                sx={{ width: 60, height: 'auto' }}
-              />
-            </Grid>
-            <Grid
-              sx={{
-                flexGrow: 1,
-                pl: 1,
-              }}
-            >
-              <Typography variant="h6">{talentSheet?.name}</Typography>
-              <Typography variant="subtitle1">{subtitle}</Typography>
-            </Grid>
-          </Grid>
+          {titleBlock}
         </ConditionalWrapper>
         {/* Display document sections */}
         {talentSheet?.sections ? (
-          <DocumentDisplay
-            sections={talentSheet.sections}
-            hideDesc
-            hideHeader={hideHeader}
-            collapse
-          />
+          <Box sx={{ opacity: locked ? 0.7 : 1 }}>
+            <DocumentDisplay
+              sections={talentSheet.sections}
+              hideDesc
+              hideHeader={hideHeader}
+              collapse
+            />
+          </Box>
         ) : null}
       </CardContent>
     </CardThemed>
   )
 }
 
-export function ConstellationDropdown() {
+/** "Active" (gold) or "Locked" (muted, with a lock) next to a constellation / passive name. */
+function StatusTag({ locked }: { locked: boolean }) {
+  const { t } = useTranslation('page_character')
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        flexShrink: 0,
+        px: 1,
+        py: 0.25,
+        borderRadius: 999,
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        ...(locked
+          ? { color: 'text.secondary', border: 1, borderColor: 'divider' }
+          : {
+              color: 'primary.light',
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.16),
+            }),
+      }}
+    >
+      {locked ? (
+        <LockIcon sx={{ fontSize: 14 }} />
+      ) : (
+        <CheckIcon sx={{ fontSize: 14 }} />
+      )}
+      {locked ? t('constellations.locked') : t('constellations.active')}
+    </Box>
+  )
+}
+
+/** "Constellations · C2 of 6" with a C0–C6 picker; levels already unlocked are tinted gold. */
+function ConstellationHeader() {
+  const { t } = useTranslation(['page_character', 'sheet_gen'])
   const {
     character: { key: characterKey },
   } = useContext(CharacterContext)
   const { data } = useContext(DataContext)
   const { buildTc, setBuildTc } = useContext(BuildTcContext)
-  const { t } = useTranslation('sheet_gen')
   const database = useDatabase()
-  const constellation = data.get(input.constellation).value
+  const constellation = data.get(input.constellation).value as number
+  const setLevel = (level: number) =>
+    buildTc?.character
+      ? setBuildTc((buildTc) => {
+          if (buildTc.character) buildTc.character.constellation = level
+        })
+      : database.chars.set(characterKey, { constellation: level })
+
   return (
-    <DropdownButton
-      fullWidth
-      title={t('constellationLvl', { level: constellation })}
-      color="primary"
-      sx={{ color: buildTc?.character ? 'yellow' : undefined }}
-    >
-      {range(0, maxConstellationCount).map((i) => (
-        <MenuItem
-          key={i}
-          selected={constellation === i}
-          disabled={constellation === i}
-          onClick={() =>
-            buildTc?.character
-              ? setBuildTc((buildTc) => {
-                  if (buildTc.character) buildTc.character.constellation = i
-                })
-              : database.chars.set(characterKey, {
-                  constellation: i,
-                })
+    <CardThemed bgt="light">
+      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
+            {t('constellations.title')}
+          </Typography>
+          {buildTc?.character && (
+            <Chip size="small" label={t('constellations.tc')} />
+          )}
+          <Typography color="text.secondary">
+            {t('constellations.level', {
+              level: constellation,
+              max: maxConstellationCount,
+            })}
+          </Typography>
+        </Box>
+        <ToggleButtonGroup
+          exclusive
+          fullWidth
+          size="small"
+          value={constellation}
+          onChange={(_, level: number | null) =>
+            level !== null && setLevel(level)
           }
+          aria-label={t('constellations.setLevel')}
+          sx={{
+            // the current level is the strongest gold, unlocked ones below it a lighter gold
+            '& .MuiToggleButton-root.Mui-selected': {
+              color: 'primary.light',
+              bgcolor: (theme) => alpha(theme.palette.primary.main, 0.24),
+              boxShadow: (theme) =>
+                `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.6)}`,
+            },
+          }}
         >
-          {t('constellationLvl', { level: i })}
-        </MenuItem>
-      ))}
-    </DropdownButton>
+          {range(0, maxConstellationCount).map((level) => (
+            <ToggleButton
+              key={level}
+              value={level}
+              aria-label={t('sheet_gen:constellationLvl', { level })}
+              sx={
+                // every level below the current one is reached, C0 included
+                level < constellation
+                  ? {
+                      color: 'primary.light',
+                      bgcolor: (theme) =>
+                        alpha(theme.palette.primary.main, 0.1),
+                    }
+                  : undefined
+              }
+            >
+              C{level}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </CardContent>
+    </CardThemed>
   )
 }

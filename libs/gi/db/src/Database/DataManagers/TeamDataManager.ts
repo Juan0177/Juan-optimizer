@@ -20,6 +20,8 @@ import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataManager } from '../DataManager'
 import type { IGO, ImportResult } from '../exim'
 import type { ICachedArtifact } from './ArtifactDataManager'
+import type { TeamOpt } from './TeamOpt'
+import { validateTeamOpt } from './TeamOpt'
 import type { ICachedWeapon } from './WeaponDataManager'
 import { defaultInitialWeapon } from './WeaponDataManager'
 
@@ -51,6 +53,8 @@ export interface Team {
   }
   loadoutData: Array<LoadoutDatum | undefined>
   lastEdit: number
+  /** Team Optimize settings: only stored once the user sets something there */
+  teamOpt?: TeamOpt
 }
 export type LoadoutExportSetting = {
   convertEquipped: boolean
@@ -78,13 +82,12 @@ export class TeamDataManager extends DataManager<
       if (key.startsWith('team_') && !this.set(key, {}))
         this.database.storage.remove(key)
   }
+  /** "Team N": the first number from (team count + 1) that no team is named with yet */
   newName() {
-    const existing = this.values
-    for (let num = existing.length + 1; num <= existing.length * 2; num++) {
-      const name = `Team Name ${num}`
-      if (existing.some((tc) => tc.name !== name)) return name
-    }
-    return 'Team Name'
+    const names = new Set(this.values.map((team) => team.name))
+    let num = this.values.length + 1
+    while (names.has(`Team ${num}`)) num++
+    return `Team ${num}`
   }
   override validate(obj: unknown): Team | undefined {
     let {
@@ -204,6 +207,9 @@ export class TeamDataManager extends DataManager<
 
     if (typeof lastEdit !== 'number') lastEdit = Date.now()
 
+    // optional: a team without Team Optimize settings stays without the field
+    const teamOpt = validateTeamOpt((obj as Team).teamOpt)
+
     return {
       name,
       description,
@@ -211,6 +217,7 @@ export class TeamDataManager extends DataManager<
       conditional,
       loadoutData,
       lastEdit,
+      ...(teamOpt ? { teamOpt } : {}),
     }
   }
   new(value: Partial<Team> = {}): string {

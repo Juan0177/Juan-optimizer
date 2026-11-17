@@ -1,8 +1,13 @@
-import { AppBar, Box, Skeleton, Typography } from '@mui/material'
-import { Suspense } from 'react'
+import { ChangelogDialog, currentRelease } from '@genshin-optimizer/gi/ui'
+import GitHubIcon from '@mui/icons-material/GitHub'
+import { AppBar, Box, Link, Skeleton, Typography } from '@mui/material'
+import { Suspense, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 
-declare const __VERSION__: string
+// juanlab: il sorgente del fork (AGPL: deve essere raggiungibile dal sito) e il progetto su cui si basa
+const GITHUB_URL = 'https://github.com/Juan0177/Juan-optimizer'
+const STELLAR_URL = 'https://github.com/s-naveen/stellar-optimizer'
+
 export default function Footer() {
   return (
     <Suspense fallback={<Skeleton variant="rectangular" height={64} />}>
@@ -12,6 +17,7 @@ export default function Footer() {
 }
 function FooterContent() {
   const { t } = useTranslation('ui')
+  const [changelogOpen, setChangelogOpen] = useState(false)
   return (
     <AppBar
       component="footer"
@@ -21,42 +27,91 @@ function FooterContent() {
     >
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 2,
           px: 2,
           py: 1,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          columnGap: 2,
+          rowGap: 1,
         }}
       >
         <Typography variant="caption" sx={{ color: 'neutral400.main' }}>
           <Trans t={t} i18nKey="ui:rightsDisclaimer">
-            Genshin Optimizer is not affiliated with or endorsed by HoYoverse.
+            Juan-optimizer is not affiliated with or endorsed by HoYoverse.
           </Trans>
         </Typography>
-        <Typography
-          variant="caption"
-          sx={{ color: 'neutral400.main', textAlign: 'right' }}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 1.5,
+            rowGap: 0.5,
+          }}
         >
-          <Trans
-            t={t}
-            i18nKey="ui:appVersion"
-            values={{ version: __VERSION__ }}
+          <Typography variant="caption" sx={{ color: 'neutral400.main' }}>
+            {/* plain links (not hash routes) to the static pages made for search engines */}
+            <Link href="optimizers/" color="inherit" underline="hover">
+              {t('characterOptimizers')}
+            </Link>
+            {' · '}
+            <Link href="faq/" color="inherit" underline="hover">
+              {t('faq')}
+            </Link>
+          </Typography>
+          <Link
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="none"
+            variant="caption"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              color: 'neutral400.main',
+              transition: 'color 120ms',
+              '&:hover': { color: 'neutral300.main' },
+            }}
           >
-            Genshin Optimizer Version:
-            <a
-              href={
-                process.env.NX_URL_GITHUB_GO_CURRENT_VERSION ||
-                `${process.env.NX_URL_GITHUB_GO}/releases`
-              }
-              target="_blank"
-              rel="noreferrer"
-              style={{ color: 'inherit' }}
-            >
-              {{ version: __VERSION__ } as any}
-            </a>
-          </Trans>
-        </Typography>
+            <GitHubIcon sx={{ fontSize: 14 }} />
+            {t('github', 'GitHub')}
+          </Link>
+          {/* this build's version: opens the changelog */}
+          <Link
+            component="button"
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            underline="none"
+            variant="caption"
+            title={t('changelog.open', 'Changelog')}
+            sx={{
+              color: 'neutral400.main',
+              fontVariantNumeric: 'tabular-nums',
+              transition: 'color 120ms',
+              '&:hover': { color: 'neutral300.main' },
+            }}
+          >
+            v{currentRelease.version}
+          </Link>
+          <Link
+            href={STELLAR_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="hover"
+            variant="caption"
+            sx={{ color: 'neutral400.main' }}
+          >
+            {t('basedOnStellar', 'Based on Stellar Optimizer')}
+          </Link>
+        </Box>
       </Box>
+      <ChangelogDialog
+        open={changelogOpen}
+        onClose={() => setChangelogOpen(false)}
+      />
     </AppBar>
   )
 }

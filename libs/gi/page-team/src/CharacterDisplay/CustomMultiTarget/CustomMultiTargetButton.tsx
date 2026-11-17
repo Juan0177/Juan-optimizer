@@ -24,13 +24,7 @@ export function CustomMultiTargetButton({
         startIcon={<DashboardCustomizeIcon />}
         {...buttonProps}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            gap: 1,
-            alignItems: 'center',
-          }}
-        >
+        <Box display="flex" gap={1} alignItems="center">
           <span>{t('multiTarget.title')}</span>
           <SqBadge
             color={teamChar.customMultiTargets.length ? 'success' : 'secondary'}

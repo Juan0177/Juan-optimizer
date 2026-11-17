@@ -32,7 +32,8 @@ const charged_dmg_ = lookup(
   },
   naught
 )
-const atk = equal(input.activeCharKey, 'Aloy', 66)
+// (the wielder's, on or off the field; kqmsim's passive is on unless switched off)
+const atk = equal(input.charKey, 'Aloy', 66)
 
 const data = dataObjForWeaponSheet(key, {
   premod: {

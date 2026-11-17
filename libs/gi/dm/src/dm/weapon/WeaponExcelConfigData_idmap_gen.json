@@ -231,7 +231,6 @@
   "14522": "NocturnesCurtainCall",
   "14523": "AngelosHeptades",
   "14524": "HymnOfTheMaelstrom",
-  "14525": "StarsealedEdict",
   "15101": "HuntersBow",
   "15201": "SeasonedHuntersBow",
   "15301": "RavenBow",
@@ -286,5 +285,9 @@
   "15514": "AstralVulturesCrimsonPlumage",
   "15515": "TheDaybreakChronicles",
   "15516": "GoldenFrostboundOath",
-  "20001": ""
+  "20001": "",
+  "12517": "TorrentsOfSpring",
+  "14525": "StarsealedEdict",
+  "15517": "Silverdawn",
+  "12438": "BlazingLionfang"
 }

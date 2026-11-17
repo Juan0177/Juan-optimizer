@@ -1,32 +1,157 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it">
   <head>
     <meta charset="utf-8" />
     <title>Juan-optimizer · Genshin Optimizer di JuanLab</title>
+    <meta name="application-name" content="Juan-optimizer" />
+    <meta name="apple-mobile-web-app-title" content="Juan-optimizer" />
     <base href="" />
 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#0c1020" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="./favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="./favicon-16x16.png" />
+    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="license" href="LICENSE.txt" />
+    <meta name="theme-color" content="#08080a" />
     <meta
-      name="Description"
-      content="Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer: importa la tua vetrina con l'UID e ottimizza i manufatti."
+      name="description"
+      content="Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer e Juan-optimizer: importa le tue build con l&#39;UID (Enka o Akasha) e ottimizza manufatti, armi e squadre, anche con i contenuti della beta."
     />
-    <!-- juanlab: metadati del fork, tolto lo script di AdSense -->
+    <link rel="canonical" href="https://juan0177.github.io/Juan-optimizer/" />
     <meta property="og:site_name" content="Juan-optimizer" />
-    <meta property="og:url" content="https://juan0177.github.io/Juan-optimizer/" />
+    <meta
+      property="og:url"
+      content="https://juan0177.github.io/Juan-optimizer/"
+    />
     <meta property="og:title" content="Juan-optimizer · Genshin Optimizer di JuanLab" />
     <meta
       property="og:description"
-      content="Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer: importa la tua vetrina con l'UID e ottimizza i manufatti."
+      content="Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer e Juan-optimizer: importa le tue build con l&#39;UID (Enka o Akasha) e ottimizza manufatti, armi e squadre, anche con i contenuti della beta."
     />
     <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://juan0177.github.io/Juan-optimizer/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Juan-optimizer" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Juan-optimizer · Genshin Optimizer di JuanLab" />
+    <meta name="twitter:description" content="Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer e Juan-optimizer: importa le tue build con l&#39;UID (Enka o Akasha) e ottimizza manufatti, armi e squadre, anche con i contenuti della beta." />
+    <meta name="twitter:image" content="https://juan0177.github.io/Juan-optimizer/og-image.png" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://juan0177.github.io/Juan-optimizer/#website","url":"https://juan0177.github.io/Juan-optimizer/","name":"Juan-optimizer","description":"Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer e Juan-optimizer: importa le tue build con l&#39;UID (Enka o Akasha) e ottimizza manufatti, armi e squadre, anche con i contenuti della beta."},{"@type":"WebApplication","@id":"https://juan0177.github.io/Juan-optimizer/#app","name":"Juan-optimizer","url":"https://juan0177.github.io/Juan-optimizer/","description":"Calcolatore di build per Genshin Impact di JuanLab, basato su Genshin Optimizer e Juan-optimizer: importa le tue build con l&#39;UID (Enka o Akasha) e ottimizza manufatti, armi e squadre, anche con i contenuti della beta.","applicationCategory":"GameApplication","operatingSystem":"Any (web browser)","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"image":"https://juan0177.github.io/Juan-optimizer/og-image.png"}]}</script>
+    <!--
+      The page's colours from the first paint (the theme's: same as the app's CssBaseline, so
+      nothing changes when the app takes over), and the loading screen #root shows until then.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #08080a;
+        color-scheme: dark;
+      }
+      .boot {
+        box-sizing: border-box;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 32px 24px 12vh;
+        color: rgba(236, 229, 216, 0.64);
+        font: 15px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        text-align: center;
+      }
+      .boot-logo {
+        width: 64px;
+        height: 64px;
+        margin-bottom: 20px;
+      }
+      .boot h1 {
+        margin: 0 0 8px;
+        color: #ece5d8;
+        font-size: 1.35rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      .boot p {
+        margin: 0;
+        max-width: 560px;
+      }
+      .boot-bar {
+        position: relative;
+        width: 168px;
+        height: 2px;
+        margin: 24px 0;
+        overflow: hidden;
+        border-radius: 2px;
+        background: rgba(211, 188, 142, 0.16);
+      }
+      .boot-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 40%;
+        border-radius: 2px;
+        background: #d3bc8e;
+        animation: boot-slide 1.3s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-bar::after {
+          width: 100%;
+          opacity: 0.4;
+          animation: none;
+        }
+      }
+      .boot-links {
+        font-size: 13px;
+      }
+      .boot a {
+        color: #d3bc8e;
+        text-decoration: none;
+      }
+      .boot a:hover {
+        text-decoration: underline;
+      }
+    </style>
+    <noscript><style>.boot-bar { display: none; }</style></noscript>
   </head>
   <body class="notranslate">
     <script type="module" src="src/main.tsx"></script>
-    <div id="root"></div>
+    <!-- juanlab: basato su Stellar Optimizer (AGPL), con il nome e gli indirizzi del fork -->
+    <!--
+      Shown until the app renders (React replaces it), and what crawlers that don't run JavaScript
+      (most AI crawlers) read. Keep it short and factual.
+    -->
+    <div id="root">
+      <main class="boot">
+        <img class="boot-logo" src="./favicon.svg" alt="Juan-optimizer logo" width="64" height="64" />
+        <h1>Juan-optimizer: ottimizzatore di build per Genshin Impact</h1>
+        <p>
+          Le build migliori per ogni personaggio con quello che hai: manufatti,
+          armi e squadre, con i calcoli completi del danno. Gratis, senza
+          account, nel browser.
+        </p>
+        <div class="boot-bar" role="progressbar" aria-label="Loading"></div>
+        <p class="boot-links">
+          <a href="danica-optimizer/">Danica: build migliore</a>
+          · <a href="tsaritsa-optimizer/">Tsaritsa: build migliore</a>
+          · <a href="optimizers/">Ottimizzatori per personaggio</a>
+          · <a href="faq/">FAQ</a>
+        </p>
+        <noscript><p>Juan-optimizer ha bisogno di JavaScript.</p></noscript>
+      </main>
+    </div>
   </body>
 </html>

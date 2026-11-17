@@ -29,6 +29,7 @@ const isTraveler = lookup(
 )
 
 const [condPassivePath, condPassive] = cond(key, 'passive')
+// (game text: 16/20/24/32/40%)
 const atk_arr = [-1, 0.16, 0.2, 0.24, 0.32, 0.4]
 const critDMG_arr = [-1, 0, 0.06, 0.06, 0.06, 0.06]
 const atk_ = equal(
@@ -36,22 +37,19 @@ const atk_ = equal(
   1,
   equal('on', condPassive, subscript(input.weapon.refinement, atk_arr))
 )
-// Conditional value automatically set in libs/gi/wr/src/api.ts
+// The Traveler's own resonance conditionals (the rotation simulation turns all seven on)
 const numEleRes = sum(
   ...allElementKeys.map((ele) =>
     equal(condReadNode(['Traveler', `traveler${ele}`]), 'on', 1)
   )
 )
+// (R2+, permanent: not part of the after-hit ATK bonus, as kqmsim exaiphanesblade.go)
 const critDMG_ = equal(
   isTraveler,
   1,
-  equal(
-    'on',
-    condPassive,
-    prod(
-      subscript(input.weapon.refinement, critDMG_arr, { unit: '%' }),
-      numEleRes
-    )
+  prod(
+    subscript(input.weapon.refinement, critDMG_arr, { unit: '%' }),
+    numEleRes
   )
 )
 

@@ -20,13 +20,13 @@ const gleam_eleMasarr = [-1, 60, 75, 90, 105, 120]
 const [condAfterReactionPath, condAfterReaction] = cond(key, 'afterReaction')
 
 const eleMas = equal(
-  input.weapon.key,
-  key,
+  condAfterReaction,
+  'on',
   subscript(input.weapon.refinement, eleMasarr)
 )
 const gleam_eleMas = equal(
-  input.weapon.key,
-  key,
+  condAfterReaction,
+  'on',
   greaterEq(
     tally.moonsign,
     2,

@@ -3,8 +3,6 @@ import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { Alert, Grid, LinearProgress, styled, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { CharacterName } from './Trans'
-
-export const warningBuildNumber = 10000000
 export type BuildStatus = {
   type: 'active' | 'inactive'
   tested: number // tested, including `failed`
@@ -114,23 +112,13 @@ export function BuildAlert({
       {title}
       {subtitle}
       {progress !== undefined && (
-        <Grid
-          container
-          spacing={1}
-          sx={{
-            alignItems: 'center',
-          }}
-        >
+        <Grid container spacing={1} alignItems="center">
           {hasTotal && (
-            <Grid>
+            <Grid item>
               <Typography>{`${progress.toFixed(1)}%`}</Typography>
             </Grid>
           )}
-          <Grid
-            sx={{
-              flexGrow: 1,
-            }}
-          >
+          <Grid item flexGrow={1}>
             <BorderLinearProgress
               variant={hasTotal ? 'determinate' : 'indeterminate'}
               value={progress}

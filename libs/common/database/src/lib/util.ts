@@ -1,7 +1,9 @@
 import { unzipFromB64Gzip } from '@genshin-optimizer/common/util'
+import { getAppStorage } from './appStorage'
 
+/** An entry of the app's storage (`getAppStorage`), as JSON or as compressed JSON */
 export function loadJsonOrB64GzipFromStorage(key: string): any {
-  const rawValue = localStorage.getItem(key)
+  const rawValue = getAppStorage().getString(key)
   let obj = {}
   if (rawValue)
     try {

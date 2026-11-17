@@ -39,7 +39,7 @@ const bond_atk = equal(
         hpConsumed,
         subscript(input.weapon.refinement, bond_atkArr, { unit: '%' })
       ),
-      subscript(input.weapon.refinement, bond_maxAtkArr, { unit: '%' })
+      subscript(input.weapon.refinement, bond_maxAtkArr)
     )
   )
 )

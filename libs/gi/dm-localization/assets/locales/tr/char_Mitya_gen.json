@@ -176,7 +176,7 @@
       "0": "<strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>Tespit Çekirdeği</tooltip></strong> geliştirilir. Eğer <strong>Tespit Çekirdeği</strong>:",
       "1": [
         "Kararlı Durumdaysa: <strong>Tespit Çekirdeği</strong>, orijinal Hasarının %115'ini verir.",
-        " Aşırı Yüklü Durumdaysa: Mitya, <strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>Tespit Çekirdeği</tooltip></strong> ile bir <strong><tooltip ns=tooltips_gen baseKey18=11360001 values=[]>Kademeli İşaret</tooltip></strong> tükettiğinde %34 ihtimalle 1 yeni <strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>Kademeli İşaret</tooltip></strong> oluşturur."
+        "Aşırı Yüklü Durumdaysa: Mitya, <strong><tooltip ns=tooltips_gen baseKey18=11360002 values=[]>Tespit Çekirdeği</tooltip></strong> ile bir <strong>Kademeli İşaret</strong> tükettiğinde %34 ihtimalle 1 yeni <strong><tooltip ns=tooltips_gen baseKey18=11360001 values=[]>Kademeli İşaret</tooltip></strong> oluşturur."
       ],
       "2": "Ayrıca yakındaki tüm grup üyelerinin verdiği Yıldız İletimi Tepkimesi Hasarı %20 <strong><tooltip ns=tooltips_gen baseKey18=11190007 values=[]>yükselir</tooltip></strong>."
     }
