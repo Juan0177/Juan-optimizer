@@ -1,5 +1,26 @@
 [
   {
+    "version": "1.14.0",
+    "date": "2026-11-17",
+    "new": [
+      "The KQM tab is now three clear steps: 1 Rotation, 2 Setup and 3 Team builds, with the team's builds raised as the result.",
+      "Damage share beside Top builds: each member's share of the team's damage, and the damage by element.",
+      "The rotation timeline under the KQM results, played with the builds shown. Click an attack to see its damage and the buffs during it; an action with several hits (Mitya's Gradient Detonation) lists them as tabs, most damage first.",
+      "Pin a moment on the timeline to see each member's stats then and what every buff gives at that moment (\"Elemental Burst +400 ATK\"), with the time it has left.",
+      "An empty rotation now starts with a choice: write the rotation, or add attacks yourself (or import one).",
+      "Rotations can swap a member in and straight out: write \"Danica\" (or \"Danica entry\") on its own to play just her Entry Skill, and the rotation says why when no Entry happens."
+    ],
+    "improved": [
+      "KQM builds now assume C2 for standard 5★ characters (Jean, Diluc, Mona, Keqing, Qiqi, Tighnari, Dehya, Mizuki) and C1 for the 5★ characters in the free constellation event; other 5★ stay at C0 and 4★ at C6. Each can still be changed in Setup.",
+      "Top builds show only what changes from the best build, or every member's gear with the All gear switch.",
+      "The run summary above the results is shorter: weapons and artifact sets read Default or Custom, and the ER target Auto-calculated or Custom.",
+      "An attack's buffs read as where they come from and what they give (\"Elemental Skill −30% Electro RES\"), with the condition in the tooltip. Effects the hit doesn't use are faded, buffs with no effect are folded into one list, and the enemy's aura when the hit lands is shown.",
+      "A buff that only counts together with another is listed once, on the one that gives the effect, with the other's setting on it.",
+      "The detailed timeline has a full-screen button, and clicking a bar there pins its moment instead of closing the window.",
+      "The On field setting shows only when attacks were added by hand: a written rotation already says who is on the field for each attack."
+    ]
+  },
+  {
     "version": "1.13.1",
     "date": "2026-11-17"
   },
