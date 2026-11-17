@@ -1124,7 +1124,8 @@
         "melt": "Melt",
         "aggravate": "Aggravate",
         "spread": "Spread"
-      }
+      },
+      "entry": "Entry"
     }
   }
 }

@@ -115,7 +115,14 @@ export function simText(t: TFunction, text: string, language = 'en'): string {
 export function useSimText() {
   const { t, i18n } = useTranslation('page_team')
   return useCallback(
-    (text: string) => simText(t, text, i18n.language),
-    [t, i18n.language]
+    (text: string) => simText(t, text, i18n?.language),
+    [t, i18n?.language]
   )
+}
+
+/** A timeline step's action words: the simulation's automatic "Entry" step in the site's language */
+export function stepText(t: TFunction, text: string): string {
+  return text === 'Entry'
+    ? (t('page_team:teamOpt.sim.entry', { defaultValue: 'Entry' }) as string)
+    : text
 }

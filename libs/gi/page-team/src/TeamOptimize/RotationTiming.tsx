@@ -16,8 +16,10 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import i18next from 'i18next'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 
 const FPS = 60
@@ -118,7 +120,12 @@ export function frameOverrides(
   return out
 }
 
-export const seconds = (frames: number) => (frames / FPS).toFixed(2)
+/** Frames as seconds with 2 decimals, in the site's decimal separator ("1.25" / "1,25") */
+export const seconds = (frames: number) =>
+  localizeDecimal(
+    (frames / FPS).toFixed(2),
+    i18next.isInitialized ? i18next.language : undefined
+  )
 
 /**
  * This rotation's steps: when each action starts and how many frames it takes before the next one,

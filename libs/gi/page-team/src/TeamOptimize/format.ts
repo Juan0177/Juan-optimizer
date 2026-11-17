@@ -15,7 +15,7 @@ export function formatDamage(value: number | undefined, precise = false) {
   if (value === undefined || !Number.isFinite(value)) return '–'
   return localizeDecimal(
     (precise ? compactPrecise : compact).format(value),
-    i18next.isInitialized ? i18next.language : undefined
+    siteLocale()
   )
 }
 
@@ -32,6 +32,11 @@ export function formatRate(
     value !== undefined && rotationTime ? value / rotationTime : value,
     precise
   )
+}
+
+/** The site's language, for numbers ('en' before i18next is ready, as in tests) */
+function siteLocale() {
+  return (i18next.isInitialized && i18next.language) || 'en'
 }
 
 const wholeFormats = new Map<string, Intl.NumberFormat>()

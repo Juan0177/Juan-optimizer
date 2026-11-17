@@ -60,6 +60,7 @@ import {
   openerActions,
   seconds,
 } from './RotationTiming'
+import { stepText } from './simText'
 import type { AuraKey, TimelineTrack } from './timelineModel'
 import {
   auraLanes,
@@ -891,7 +892,7 @@ export function RotationTimeline({
                                         opacity: 0.7,
                                       }}
                                     >
-                                      {a.text}
+                                      {stepText(t, a.text)}
                                     </Box>
                                   )}
                                 </Box>
@@ -965,7 +966,7 @@ export function RotationTimeline({
                                 }
                               }}
                             >
-                              {a.text}
+                              {stepText(t, a.text)}
                             </ButtonBase>
                           </Tooltip>
                         )

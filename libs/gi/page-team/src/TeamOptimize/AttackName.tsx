@@ -193,7 +193,7 @@ export function HitLabel({
 }) {
   const { t, i18n } = useTranslation('page_team')
   const info = useAttackInfo(data, path)
-  if ((i18n.language ?? 'en').startsWith('en') || !info?.name) return label
+  if ((i18n?.language ?? 'en').startsWith('en') || !info?.name) return label
   const tags = [...label.matchAll(/\(([^()]*)\)/g)].map((m) => m[1])
   const kept = tags.flatMap((tag) =>
     /^C\d$/.test(tag)

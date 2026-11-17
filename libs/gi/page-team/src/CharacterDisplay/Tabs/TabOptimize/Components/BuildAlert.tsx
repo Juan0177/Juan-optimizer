@@ -70,7 +70,7 @@ export default function BuildAlert({
   characterName: ReactNode
 }) {
   const { t, i18n } = useTranslation('page_character_optimize')
-  const count = counter(i18n.language ?? 'en')
+  const count = counter(i18n?.language ?? 'en')
   const status = useSyncExternalStore(store.subscribe, store.get)
   const [, tick] = useReducer((x: number) => x + 1, 0)
   useEffect(() => {
@@ -131,7 +131,7 @@ export default function BuildAlert({
     )
     details = (
       <>
-        {duration(elapsed, i18n.language)}
+        {duration(elapsed, i18n?.language)}
         {hasTotal && !!skipped && (
           <>
             {' · '}
@@ -182,7 +182,7 @@ export default function BuildAlert({
         {characterName}
       </>
     )
-    summary = duration(elapsed, i18n.language)
+    summary = duration(elapsed, i18n?.language)
     details = noBuild ? (
       t('buildAlert.noBuildDetail', {
         defaultValue:

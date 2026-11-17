@@ -1,10 +1,10 @@
 {
   "questBonusTitle": "Bonus delle missioni",
-  "bonusCanned": "Dopo aver usato Conoscenze in scatola attivate nella missione dell'Archon \"Ever So Close\"",
+  "bonusCanned": "Dopo aver usato Conoscenze in scatola attivate nella missione dell'Archon \"Così vicini\"",
   "bonusSkirk1": "Dopo aver completato la fase 2 dell'Allenamento speciale nella missione della storia di Skirk",
   "bonusSkirk2": "Dopo aver completato la fase 6 dell'Allenamento speciale nella missione della storia di Skirk",
   "bonusSkirk3": "Dopo aver completato la fase 9 dell'Allenamento speciale nella missione della storia di Skirk",
-  "lockedPassiveCond": "Dopo aver completato la missione dell'Archon \"True Moon\"",
+  "lockedPassiveCond": "Dopo aver completato la missione dell'Archon \"Luna vera\"",
   "resonance": {
     "anemo": "In risonanza con <anemo>Anemo</anemo>",
     "geo": "In risonanza con <geo>Geo</geo>",

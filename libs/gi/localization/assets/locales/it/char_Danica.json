@@ -1,13 +1,13 @@
 {
   "anchorCond": "Ancora della tempesta presente",
   "maidCond": "Forma da cameriera",
-  "defenseMaid": "Cameriera: Guardia reale (dopo Will to Protect)",
-  "battleMaid": "Cameriera: Pulizie (dopo Will to Purge)",
-  "burstEnhCond": "Tripudio usato in Radiance: Astroconduzione (forma da cameriera potenziata)",
-  "hit1ScDmg": "DAN Astroconduzione del 1° colpo (Radiance)",
-  "hit5ScDmg": "DAN Astroconduzione del 5° colpo (Radiance)",
-  "a4Cond": "Will to Purge usato in forma Pulizie (cariche di VEL d'attacco)",
-  "c2ToastCond": "Carica di \"Let Us Toast\" consumata da una reazione di Astroconduzione",
-  "c2SelfToastCond": "Cariche di \"Let Us Toast\" che Danica consuma col suo colpo di Astroconduzione (Pulizie, fino a 2)",
-  "c2DecreeDmg": "Will to Purge con Cleaning Decree (una volta per combattimento, 150%)"
+  "defenseMaid": "Cameriera: Guardia reale (dopo l'abilità d'ingresso E2)",
+  "battleMaid": "Cameriera: Pulizie (dopo l'E2 in campo)",
+  "burstEnhCond": "Tripudio usato in Splendore: Astroconduzione (forma da cameriera potenziata)",
+  "hit1ScDmg": "DAN Astroconduzione del 1° colpo (Splendore)",
+  "hit5ScDmg": "DAN Astroconduzione del 5° colpo (Splendore)",
+  "a4Cond": "E2 in campo usata in forma Pulizie (cariche di VEL d'attacco)",
+  "c2ToastCond": "Carica di \"Toast\" consumata da una reazione di Astroconduzione",
+  "c2SelfToastCond": "Cariche di \"Toast\" che Danica consuma col suo colpo di Astroconduzione (Pulizie, fino a 2)",
+  "c2DecreeDmg": "E2 in campo con Decreto delle pulizie (una volta per combattimento, 150%)"
 }

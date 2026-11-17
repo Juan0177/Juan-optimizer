@@ -1022,7 +1022,13 @@ function WriterModal({
   onApplied: (undo: WriterUndo) => void
 }) {
   const simText = useSimText()
-  const { t } = useTranslation(['page_team', 'charNames_gen'])
+  const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
+  // "19.8" in English, "19,8" in Italian
+  const dec1 = (n: number) =>
+    n.toLocaleString(i18n?.language, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })
   const database = useDatabase()
   const { gender } = useDBMeta()
   // a phone in landscape (or a narrow window): the detailed timeline takes the whole screen
@@ -1530,7 +1536,7 @@ function WriterModal({
                         fontVariantNumeric: 'tabular-nums',
                       }}
                     >
-                      {seconds.toFixed(1)}
+                      {dec1(seconds)}
                       <Box
                         component="span"
                         sx={{ fontSize: 15, fontWeight: 500, ml: 0.5 }}
@@ -1564,14 +1570,12 @@ function WriterModal({
                         >
                           {t('teamOpt.writer.firstTime', {
                             defaultValue: '{{seconds}} s without waiting',
-                            seconds: waited.first.toFixed(1),
+                            seconds: dec1(waited.first),
                           })}
                           {!!waited.waits.length &&
                             ` · ${t('teamOpt.writer.waitsRepeat', 'Waits for cooldowns from the previous rotation:')} ${waited.waits
                               .slice(0, 3)
-                              .map(
-                                (w) => `${w.label} ${w.seconds.toFixed(1)} s`
-                              )
+                              .map((w) => `${w.label} ${dec1(w.seconds)} s`)
                               .join(', ')}`}
                         </Typography>
                       </Tooltip>
@@ -1658,7 +1662,7 @@ function WriterModal({
                           fontVariantNumeric: 'tabular-nums',
                         }}
                       >
-                        {(seconds ?? result.sim.frames / 60).toFixed(1)} s
+                        {dec1(seconds ?? result.sim.frames / 60)} s
                       </Typography>
                       <Typography
                         noWrap
@@ -1921,7 +1925,7 @@ function HitRow({
   const info = useAttackInfo(data, path)
   // in another language, the attack's name from the sheet (`HitLabel`): the label is English
   const { i18n } = useTranslation()
-  const english = (i18n.language ?? 'en').startsWith('en') || !info?.name
+  const english = (i18n?.language ?? 'en').startsWith('en') || !info?.name
   // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
   const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
   const name = tagged ? tagged[1] : label

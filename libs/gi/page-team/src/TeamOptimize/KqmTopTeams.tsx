@@ -165,7 +165,7 @@ function TeamRows({
   disabled?: boolean
   onPick: (option: KqmTeamOption) => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const theme = useTheme()
   // (icons a size apart: the changed member's weapon and sets readable at a glance)
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
@@ -186,7 +186,7 @@ function TeamRows({
     >
       {options.map((option, i) => {
         const selected = i === current
-        const value = formatRateFull(option.total, rotationTime)
+        const value = formatRateFull(option.total, rotationTime, i18n?.language)
         return (
           <ButtonBase
             key={

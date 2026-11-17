@@ -74,7 +74,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatRateFull } from './format'
+import { formatRateFull, localizeDecimal } from './format'
 import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import {
   KqmPool,
@@ -1022,7 +1022,7 @@ export function KqmSetupSummary({
 }) {
   const { t, i18n } = useTranslation('page_team')
   const oneDecimal = (n: number) =>
-    n.toLocaleString(i18n.language, {
+    n.toLocaleString(i18n?.language, {
       minimumFractionDigits: 1,
       maximumFractionDigits: 1,
     })
@@ -1502,10 +1502,10 @@ function ErTag({ er }: { er: { value: number; minimum: number } }) {
 }
 
 /** Like 70%; under 10%, one decimal (1.5%) */
-function shareText(share: number) {
+function shareText(share: number, locale?: string) {
   const pct = share * 100
   if (pct >= 10 || pct === 0) return `${Math.round(pct)}%`
-  return `${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%`
+  return localizeDecimal(`${pct < 0.1 ? '<0.1' : pct.toFixed(1)}%`, locale)
 }
 
 /** A damage figure in full, large, with its unit small beside it: 63,592 DPS */
@@ -1555,11 +1555,11 @@ function ShareFigure({
   share: number
   rotationTime?: number
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const tip = rotationTime
     ? t('teamOpt.result.shareDps', 'Its share of the team’s DPS')
     : t('teamOpt.result.share', 'Its share of the team’s damage')
-  const text = shareText(share)
+  const text = shareText(share, i18n?.language)
   return (
     <Tooltip arrow title={tip}>
       <Box
@@ -1912,7 +1912,7 @@ export function KqmResults({
   /** The level of its title ("Team builds"), the inspector's a level below (default: 2) */
   headingLevel?: 2 | 3 | 4 | 5
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const { gender } = useDBMeta()
   const uid = useId()
   const [shown, setShown] = useState<CharacterKey | undefined>(
@@ -2015,7 +2015,7 @@ export function KqmResults({
             }}
           >
             <Typography sx={type.figure}>
-              {formatRateFull(view.after.total, rotationTime)}
+              {formatRateFull(view.after.total, rotationTime, i18n?.language)}
             </Typography>
             <Typography sx={type.label}>
               {improving
@@ -2031,7 +2031,11 @@ export function KqmResults({
                 arrow
                 title={t('teamOpt.kqm.vsBestTip', {
                   defaultValue: 'The run’s best builds: {{total}}',
-                  total: formatRateFull(result.after.total, rotationTime),
+                  total: formatRateFull(
+                    result.after.total,
+                    rotationTime,
+                    i18n?.language
+                  ),
                 })}
               >
                 <Typography
@@ -2303,7 +2307,8 @@ export function KqmResults({
                   <DamageFigure
                     value={formatRateFull(
                       view.after.members[characterKey],
-                      rotationTime
+                      rotationTime,
+                      i18n?.language
                     )}
                     unit={unit}
                   />

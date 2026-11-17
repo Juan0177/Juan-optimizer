@@ -402,7 +402,11 @@ export function KqmCompare({
                 }}
               >
                 <Typography sx={type.stat}>
-                  {formatRateFull(view.after.total, rotationTime)}
+                  {formatRateFull(
+                    view.after.total,
+                    rotationTime,
+                    i18n?.language
+                  )}
                 </Typography>
                 <Typography sx={{ ...type.label, fontSize: 12 }}>
                   {rotationTime
@@ -872,7 +876,7 @@ function CopyRankingButton({
       name(o) + (o.unmet ? ' ⚠' : ''),
       formatRate(o.total, rotationTime, true),
       best
-        ? `${((o.total / best) * 100).toLocaleString(i18n.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+        ? `${((o.total / best) * 100).toLocaleString(i18n?.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
         : '',
       o.unmet
         ? ''
