@@ -84,5 +84,6 @@
     "oldWeapon": "Old Weapon",
     "tcWeapon": "TC Weapon",
     "newWeapon": "New Weapon"
-  }
+  },
+  "charOverridden": "Character overridden"
 }

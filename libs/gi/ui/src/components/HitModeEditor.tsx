@@ -12,6 +12,7 @@ import {
   allowedAmpReactions,
 } from '@genshin-optimizer/gi/consts'
 import { TeamCharacterContext, useDatabase } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import {
   CryoIcon,
   ElectroIcon,
@@ -28,29 +29,42 @@ import { AdditiveReactionModeText } from './AdditiveReactionModeText'
 import { AmpReactionModeText } from './AmpReactionModeText'
 
 export const infusionVals = {
-  '': <span>No Team Melee Infusion</span>,
+  '': (
+    <span>
+      <Translate ns="ui" key18="infusion.none" />
+    </span>
+  ),
   pyro: (
     <span>
-      <PyroIcon {...iconInlineProps} /> <SqBadge>Bennett C6</SqBadge> Fire
-      Ventures with Me
+      <PyroIcon {...iconInlineProps} /> <SqBadge>Bennett C6</SqBadge>{' '}
+      <Translate ns="char_Bennett_gen" key18="constellation6.name" />
     </span>
   ),
   cryo: (
     <span>
-      <CryoIcon {...iconInlineProps} /> <SqBadge>Chongyun Skill</SqBadge> Spirit
-      Blade: Chonghua's Layered Frost
+      <CryoIcon {...iconInlineProps} />{' '}
+      <SqBadge>
+        Chongyun <Translate ns="ui" key18="infusion.skill" />
+      </SqBadge>{' '}
+      <Translate ns="char_Chongyun_gen" key18="skill.name" />
     </span>
   ),
   hydro: (
     <span>
-      <HydroIcon {...iconInlineProps} /> <SqBadge>Candace Burst</SqBadge> Sacred
-      Rite: Wagtail's Tide
+      <HydroIcon {...iconInlineProps} />{' '}
+      <SqBadge>
+        Candace <Translate ns="ui" key18="infusion.burst" />
+      </SqBadge>{' '}
+      <Translate ns="char_Candace_gen" key18="burst.name" />
     </span>
   ),
   electro: (
     <span>
-      <ElectroIcon {...iconInlineProps} /> <SqBadge>Somnia Burst</SqBadge>{' '}
-      Parallax Paws
+      <ElectroIcon {...iconInlineProps} />{' '}
+      <SqBadge>
+        Somnia <Translate ns="ui" key18="infusion.burst" />
+      </SqBadge>{' '}
+      <Translate ns="char_Somnia" key18="burst.name" />
     </span>
   ),
 }

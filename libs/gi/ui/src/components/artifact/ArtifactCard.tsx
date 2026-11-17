@@ -323,7 +323,7 @@ export function ArtifactCardObj({
               <Box
                 component="img"
                 loading="lazy"
-                alt="Artifact Piece Image"
+                alt={t('artifact:pieceImage', 'Artifact Piece Image')}
                 src={artifactAsset(setKey, slotKey)}
                 sx={{
                   width: 'auto',

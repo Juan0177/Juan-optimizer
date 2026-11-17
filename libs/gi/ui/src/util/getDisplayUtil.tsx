@@ -12,6 +12,7 @@ import type {
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharSheet } from '@genshin-optimizer/gi/sheets'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import type { DisplaySub } from '@genshin-optimizer/gi/wr'
@@ -24,23 +25,35 @@ import type { ReactNode } from 'react'
 import { ArtifactSetName, WeaponName } from '../components'
 
 const errHeader = {
-  title: <ColorText color="warning">ERROR</ColorText>,
-}
-
-const talentMap = {
-  normal: 'Normal Atk.',
-  charged: 'Charged Atk.',
-  plunging: 'Plunging Atk.',
-  skill: 'Ele. Skill',
-  burst: 'Ele. Burst',
-  passive: 'Passive',
-  passive1: '1st Asc. Pass.',
-  passive2: '4th Asc. Pass.',
-  passive3: 'Util. Pass.',
-  ...Object.fromEntries(
-    range(1, 6).map((i) => [`constellation${i}`, `Const. ${i}`])
+  title: (
+    <ColorText color="warning">
+      <Translate ns="ui" key18="displayHeader.error" />
+    </ColorText>
   ),
 }
+
+const talentKeys = [
+  'normal',
+  'charged',
+  'plunging',
+  'skill',
+  'burst',
+  'passive',
+  'passive1',
+  'passive2',
+  'passive3',
+  ...range(1, 6).map((i) => `constellation${i}`),
+]
+/** The talent's short name in a section header ("Normal Atk.", "Const. 1"), in the site's language */
+const talentMap = Object.fromEntries(
+  talentKeys.map((k) => [
+    k,
+    <Translate key={k} ns="ui" key18={`displayHeader.talent.${k}`} />,
+  ])
+) as Record<string, ReactNode>
+const headerTitle = (key: string) => (
+  <Translate ns="ui" key18={`displayHeader.${key}`} />
+)
 
 export function getDisplayHeader(
   data: UIData,
@@ -52,19 +65,21 @@ export function getDisplayHeader(
   action?: ReactNode
 } {
   if (!sectionKey) return errHeader
-  if (sectionKey === 'basic') return { title: 'Basic Stats' }
-  if (sectionKey === 'character') return { title: 'Character' }
+  if (sectionKey === 'basic') return { title: headerTitle('basic') }
+  if (sectionKey === 'character') return { title: headerTitle('character') }
   if (sectionKey === 'bonusStats')
-    return { title: 'Bonus Stats', icon: <BarChartIcon /> }
+    return { title: headerTitle('bonusStats'), icon: <BarChartIcon /> }
   if (sectionKey === 'custom')
-    return { title: 'Custom Multi Target', icon: <DashboardCustomizeIcon /> }
+    return {
+      title: headerTitle('custom'),
+      icon: <DashboardCustomizeIcon />,
+    }
   if (sectionKey === 'teamBuff')
-    return { title: 'Received Team Buffs', icon: <GroupsIcon /> }
-  else if (sectionKey === 'reaction')
-    return { title: 'Transformative Reactions' }
+    return { title: headerTitle('teamBuff'), icon: <GroupsIcon /> }
+  else if (sectionKey === 'reaction') return { title: headerTitle('reaction') }
   else if (sectionKey === 'nicole')
     return {
-      title: "Nicole's Astral Projections",
+      title: headerTitle('nicole'),
       icon: (
         <Box
           component="img"
@@ -76,7 +91,7 @@ export function getDisplayHeader(
     }
   else if (sectionKey === 'moonsign')
     return {
-      title: 'Moonsign: Ascendant Gleam',
+      title: headerTitle('moonsign'),
       icon: (
         <Box display="flex">
           <Box
@@ -119,7 +134,7 @@ export function getDisplayHeader(
       : sectionKey
     const talent = sheet?.getTalentOfKey(talentKey as any)
     if (!talent) return errHeader
-    const actionText = talentMap[sectionKey as keyof typeof talentMap]
+    const actionText = talentMap[sectionKey]
     return {
       icon: <ImgIcon size={2} src={talent.img} />,
       title: talent.name,

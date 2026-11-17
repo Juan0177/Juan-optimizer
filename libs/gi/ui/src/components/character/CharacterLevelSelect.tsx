@@ -15,6 +15,7 @@ import {
 import { Box, Button, InputAdornment, MenuItem } from '@mui/material'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { levelShort } from '../../util/statName'
 
 export function CharacterLevelSelect({
   level,
@@ -124,8 +125,8 @@ export function CharacterLevelSelect({
                 onClick={() => setBoth({ level: lv, ascension: as })}
               >
                 {lv === ascensionMaxLevels[as]
-                  ? `Lv. ${lv}`
-                  : `Lv. ${lv}/${ascensionMaxLevels[as]}`}
+                  ? `${levelShort()} ${lv}`
+                  : `${levelShort()} ${lv}/${ascensionMaxLevels[as]}`}
               </MenuItem>
             )
           }

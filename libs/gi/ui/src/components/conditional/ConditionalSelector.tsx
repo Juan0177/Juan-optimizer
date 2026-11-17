@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useCallback, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DataContext } from '../../context'
 
 interface ConditionalSelectorProps {
@@ -174,6 +175,7 @@ function ExclusiveConditionalSelector({
   conditional,
   disabled,
 }: ExclusiveConditionalSelectorProps) {
+  const { t } = useTranslation('ui')
   const { teamId, teamCharId } = useContext(TeamCharacterContext)
   const { data } = useContext(DataContext)
   const database = useDatabase()
@@ -210,7 +212,9 @@ function ExclusiveConditionalSelector({
               whiteSpace: 'normal',
             }}
           >
-            {state ? stateLabel(state.name) : 'Not Active'}
+            {state
+              ? stateLabel(state.name)
+              : t('conditional.notActive', 'Not Active')}
           </Box>
         }
         disabled={disabled}
@@ -220,7 +224,7 @@ function ExclusiveConditionalSelector({
           onClick={() => setConditional(conditional.path)}
           selected={!state}
         >
-          <span>Not Active</span>
+          <span>{t('conditional.notActive', 'Not Active')}</span>
         </MenuItem>
         <Divider />
         {Object.entries(condStates).map(([stateKey, st]) => (

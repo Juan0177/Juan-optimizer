@@ -173,7 +173,7 @@ export function NodeFieldDisplay({
         <BootstrapTooltip
           title={
             <Typography>
-              Compare to{' '}
+              {t('compareTo', 'Compare to')}{' '}
               <strong>{valueString(compareCalcValue, unit, fixed)}</strong>
             </Typography>
           }

@@ -11,3 +11,9 @@ export function statName(key: string): string {
   if (!i18n.isInitialized) return english
   return i18n.t(key, { ns: 'keymap', defaultValue: english })
 }
+
+/** "Lv." in the site's language ("Liv." in Italian), for a level written as a string */
+export function levelShort(): string {
+  if (!i18n.isInitialized) return 'Lv.'
+  return i18n.t('levelShort', { ns: 'ui', defaultValue: 'Lv.' })
+}

@@ -19,5 +19,6 @@
   "caption": "Live footage of our engineers investigating the problem",
   "confirmNuke": "Are you sure you want to delete ALL data? This is irreversible!",
   "finishNuke": "Wiped all data. Refreshing page.",
-  "nuke": "Delete ALL Data"
+  "nuke": "Delete ALL Data",
+  "oldVersion": "This page runs an older version: reload to get the latest"
 }

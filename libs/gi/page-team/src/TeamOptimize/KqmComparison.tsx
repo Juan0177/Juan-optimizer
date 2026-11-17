@@ -46,7 +46,12 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRate, formatRateFull } from './format'
+import {
+  formatGain,
+  formatRate,
+  formatRateFull,
+  localizeDecimal,
+} from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
 import { kqmStandardRolls } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
@@ -61,7 +66,7 @@ import {
   tokens,
   type,
 } from './ui'
-import { kqmReplayOf } from './useKqmRun'
+import { type KqmRotation, kqmReplayOf } from './useKqmRun'
 
 const cache = new WeakMap<KqmResult, Map<string, KqmResult>>()
 const choices = new WeakMap<
@@ -94,6 +99,8 @@ export function KqmCompare({
   disabled = false,
   base: baseProp,
   onView,
+  rotation,
+  headingLevel = 3,
 }: {
   teamId: string
   runSettings: TeamOpt
@@ -108,6 +115,13 @@ export function KqmCompare({
   base?: KqmResult
   /** The team as it plays with the equipment picked (undefined: the run's own builds) */
   onView?: (view: KqmResult | undefined) => void
+  /**
+   * The rotation the picks are played with (KQM Compare's team B: its own), kept the same while
+   * shown; absent: the team's written one
+   */
+  rotation?: KqmRotation
+  /** The level of its member's heading (default: 3) */
+  headingLevel?: 3 | 4 | 5 | 6
 }) {
   const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
@@ -188,7 +202,16 @@ export function KqmCompare({
       characterKey,
       ...choice,
       // (played again with the picked gear: what its effects change for the whole team)
-      replay: kqmReplayOf(database, gender, i18n, teamId, runSettings),
+      replay: kqmReplayOf(
+        database,
+        gender,
+        i18n,
+        teamId,
+        runSettings,
+        rotation?.text,
+        rotation?.opener,
+        rotation?.timing
+      ),
       isCancelled: () => cancelled,
       // (the figures as soon as the pick's build is found; the rankings after)
       onPreview: (preview) => {
@@ -225,6 +248,7 @@ export function KqmCompare({
     disabled,
     allOriginal,
     i18n,
+    rotation,
   ])
   // (a team with other members' picks ranks this member's options once compared on it; while a
   // pick's are worked out, the ones shown before)
@@ -371,7 +395,7 @@ export function KqmCompare({
           >
             <MemberAvatar characterKey={characterKey} size={40} />
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography component="h3" noWrap sx={type.title}>
+              <Typography component={`h${headingLevel}`} noWrap sx={type.title}>
                 <CharacterName characterKey={characterKey} gender={gender} />
               </Typography>
               <Box
@@ -383,7 +407,11 @@ export function KqmCompare({
                 }}
               >
                 <Typography sx={type.stat}>
-                  {formatRateFull(view.after.total, rotationTime)}
+                  {formatRateFull(
+                    view.after.total,
+                    rotationTime,
+                    i18n?.language
+                  )}
                 </Typography>
                 <Typography sx={{ ...type.label, fontSize: 12 }}>
                   {rotationTime
@@ -402,7 +430,10 @@ export function KqmCompare({
                           : 'text.secondary',
                     }}
                   >
-                    {formatGain(view.after.total / result.after.total - 1)}
+                    {formatGain(
+                      view.after.total / result.after.total - 1,
+                      i18n?.language
+                    )}
                   </Typography>
                 )}
               </Box>
@@ -466,13 +497,13 @@ export function KqmCompare({
                   {t('teamOpt.kqm.erCheck', 'ER check')}
                 </Typography>
                 <Typography sx={{ fontSize: 13.5, fontWeight: 600, ...numSx }}>
-                  {er.value.toFixed(1)}%
+                  {localizeDecimal(er.value.toFixed(1), i18n?.language)}%
                   <Box
                     component="span"
                     sx={{ color: 'text.secondary', fontWeight: 500 }}
                   >
                     {' / '}
-                    {er.minimum.toFixed(1)}%
+                    {localizeDecimal(er.minimum.toFixed(1), i18n?.language)}%
                   </Box>
                 </Typography>
               </Box>
@@ -704,6 +735,7 @@ function RankTabs({
   )
 }
 
+/** A substat's short name in the "+N stat" detail (English; `teamOpt.kqm.short.*` in the site's language) */
 const shortStat: Record<string, string> = {
   critRate_: 'CR',
   critDMG_: 'CD',
@@ -763,7 +795,7 @@ function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
     .filter(([, n]) => n > 1e-5)
     .map(
       ([key, n]) =>
-        `+${artifactStatValue(key, n * KQM_SUBSTAT_ROLLS[key as keyof typeof KQM_SUBSTAT_ROLLS])} ${shortStat[key] ?? statName(key)}`
+        `+${artifactStatValue(key, n * KQM_SUBSTAT_ROLLS[key as keyof typeof KQM_SUBSTAT_ROLLS])} ${shortStat[key] ? t(`teamOpt.kqm.short.${key}`, shortStat[key]) : statName(key)}`
     )
     .join(' · ')
   return (
@@ -830,7 +862,10 @@ function CopyRankingButton({
         ? `${i18n.t(`weaponNames_gen:${o.weapon.key}`)} R${o.weapon.refinement}`
         : Object.entries(o.sets).length
           ? Object.entries(o.sets)
-              .map(([k, n]) => `${n}pc ${i18n.t(`artifactNames_gen:${k}`)}`)
+              .map(
+                ([k, n]) =>
+                  `${t('teamOpt.kqm.copyPieces', { defaultValue: '{{n}}pc', n })} ${i18n.t(`artifactNames_gen:${k}`)}`
+              )
               .join(' + ')
           : t('teamOpt.kqm.noSetBonus', 'No set bonus')
     const head = [
@@ -848,7 +883,9 @@ function CopyRankingButton({
       String(i + 1),
       name(o) + (o.unmet ? ' ⚠' : ''),
       formatRate(o.total, rotationTime, true),
-      best ? `${((o.total / best) * 100).toFixed(1)}%` : '',
+      best
+        ? `${((o.total / best) * 100).toLocaleString(i18n?.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+        : '',
       o.unmet
         ? ''
         : behindText(
@@ -938,7 +975,7 @@ function RankList({
   onSelect: (option: KqmOption) => void
   disabled: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const [expanded, setExpanded] = useState(false)
   const best = options.find((o) => !o.unmet)?.total ?? options[0]?.total ?? 0
   const columns = {
@@ -997,7 +1034,7 @@ function RankList({
             {formatRate(option.total, rotationTime)}
           </Typography>
           <Typography sx={{ fontSize: 12, color: 'text.secondary', ...numSx }}>
-            {(ratio * 100).toFixed(1)}%
+            {localizeDecimal((ratio * 100).toFixed(1), i18n?.language)}%
           </Typography>
         </Box>
         <Box

@@ -146,6 +146,7 @@ export function Overview({
 type CellSx = Record<string, unknown>
 
 function Delta({ value }: { value: number | undefined }) {
+  const { i18n } = useTranslation('juanlab')
   if (value === undefined) return null
   const color = !Number.isFinite(value)
     ? 'text.secondary'
@@ -156,7 +157,7 @@ function Delta({ value }: { value: number | undefined }) {
         : 'text.secondary'
   return (
     <Box component="span" sx={{ color, fontWeight: 600 }}>
-      {formatGain(value)}
+      {formatGain(value, i18n?.language)}
     </Box>
   )
 }

@@ -2,6 +2,7 @@ import { timeStringMs } from '@genshin-optimizer/common/util'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { Alert, Grid, LinearProgress, styled, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CharacterName } from './Trans'
 export type BuildStatus = {
   type: 'active' | 'inactive'
@@ -40,16 +41,21 @@ export function BuildAlert({
   characterKey: CharacterKey
   gender: GenderKey
 }) {
+  const { t, i18n } = useTranslation('ui')
+  const lang = i18n.language
   const hasTotal = Number.isFinite(total)
 
   const generatingBuilds = type !== 'inactive'
   const unskipped = total - skipped
 
-  const testedString = <Monospace>{tested.toLocaleString()}</Monospace>
-  const unskippedString = <Monospace>{unskipped.toLocaleString()}</Monospace>
+  const testedString = <Monospace>{tested.toLocaleString(lang)}</Monospace>
+  const unskippedString = (
+    <Monospace>{unskipped.toLocaleString(lang)}</Monospace>
+  )
   const skippedText = !!skipped && (
     <span>
-      (<b>{<Monospace>{skipped.toLocaleString()}</Monospace>}</b> skipped)
+      (<b>{<Monospace>{skipped.toLocaleString(lang)}</Monospace>}</b>{' '}
+      {t('buildAlert.skipped', 'skipped')})
     </span>
   )
 
@@ -58,7 +64,11 @@ export function BuildAlert({
       {timeStringMs(
         Math.round(
           (finishTime ?? performance.now()) - (startTime ?? Number.NaN)
-        )
+        ),
+        {
+          minutes: t('tools.minutes', 'Minutes'),
+          hours: t('tools.hours', 'Hours'),
+        }
       )}
     </Monospace>
   )
@@ -72,29 +82,43 @@ export function BuildAlert({
     progress = ((tested + skipped) / total) * 100
     title = (
       <Typography>
-        Generating and testing {testedString}
-        {hasTotal ? <>/{unskippedString}</> : undefined} build configurations
-        against the criteria for{' '}
+        {t('buildAlert.generating', 'Generating and testing')} {testedString}
+        {hasTotal ? <>/{unskippedString}</> : undefined}{' '}
+        {t(
+          'buildAlert.generatingFor',
+          'build configurations against the criteria for'
+        )}{' '}
         <b>
           <CharacterName characterKey={characterKey} gender={gender} />
         </b>
         . {skippedText}
       </Typography>
     )
-    subtitle = <Typography>Time elapsed: {durationString}</Typography>
+    subtitle = (
+      <Typography>
+        {t('buildAlert.elapsed', 'Time elapsed:')} {durationString}
+      </Typography>
+    )
   } else if (tested + skipped) {
     progress = 100
     title = (
       <Typography>
-        Generated and tested {testedString} Build configurations against the
-        criteria for{' '}
+        {t('buildAlert.generated', 'Generated and tested')} {testedString}{' '}
+        {t(
+          'buildAlert.generatedFor',
+          'Build configurations against the criteria for'
+        )}{' '}
         <b>
           <CharacterName characterKey={characterKey} gender={gender} />
         </b>
         . {skippedText}
       </Typography>
     )
-    subtitle = <Typography>Total duration: {durationString}</Typography>
+    subtitle = (
+      <Typography>
+        {t('buildAlert.total', 'Total duration:')} {durationString}
+      </Typography>
+    )
   } else {
     return null
   }

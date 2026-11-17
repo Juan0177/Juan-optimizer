@@ -186,17 +186,28 @@
       "create": "Create card",
       "title": "KQM Compare card",
       "alt": "KQM Compare of {{team}}: team A against team B",
-      "team": "Team",
-      "damage": "Damage",
-      "share": "Share",
-      "total": "Total",
-      "rotation": "Rotation",
       "delta": "Change (B vs A)",
       "erBuild": "ER build",
-      "erTarget": "ER required"
+      "erTarget": "ER required",
+      "out": "Out",
+      "rotationTime": "Rotation length",
+      "sharePoints": "{{value}} pts"
     },
     "kqmRunning": "KQM Theorycrafting is still running",
     "staleResult": "Result of the previous settings",
-    "staleResultTip": "The settings changed after the comparison: press Compare to update it. The card is available again with the new result."
+    "staleResultTip": "The settings changed after the comparison: press Compare to update it. The card is available again with the new result.",
+    "ranking": "Ranking B's weapons and sets: {{percent}}%",
+    "results": {
+      "title": "B's KQM results",
+      "titleTip": "KQM Theorycrafting's results screen for team B, worked out on a copy of your data: nothing is saved. Only {{name}} is searched and ranked; the teammates keep A's builds.",
+      "locked": "Locked: A's build",
+      "rankingLabel": "Ranking weapons and sets",
+      "retune": "A pick can differ from its row",
+      "retuneTip": "A weapon or set picked for {{name}} plays the rotation again with its own weapon and set effects (and re-tunes the teammates whose ER requirement it changes), so its figures can differ from its row, which is scored on the rotation as played with the current build.",
+      "ready": "B's rankings ready",
+      "readyLabel": "Rankings ready",
+      "cancelled": "B's rankings cancelled: run the comparison again to see them.",
+      "rankingFailed": "B's rankings failed: {{message}}"
+    }
   }
 }

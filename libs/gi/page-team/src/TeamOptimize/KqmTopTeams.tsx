@@ -16,7 +16,7 @@ import {
 } from '@mui/material'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatGain, formatRateFull } from './format'
+import { formatGain, formatRateFull, localizeDecimal } from './format'
 import { KqmGearIcons } from './KqmBuildView'
 import { MemberAvatar } from './MemberAvatar'
 import { FieldLabel, focusSx, numSx, quickSx, tokens, type } from './ui'
@@ -26,10 +26,13 @@ const SHOWN = 5
 const MAX = 50
 
 /** How far a team is from the best: −0.4%; under 0.1%, two decimals (−0.04%) */
-function gap(ratio: number) {
+function gap(ratio: number, locale?: string) {
   const pct = ratio * 100
-  if (Math.abs(pct) >= 0.1 || pct === 0) return formatGain(ratio)
-  return `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`
+  if (Math.abs(pct) >= 0.1 || pct === 0) return formatGain(ratio, locale)
+  return localizeDecimal(
+    `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)}%`,
+    locale
+  )
 }
 
 const gearId = (
@@ -165,7 +168,7 @@ function TeamRows({
   disabled?: boolean
   onPick: (option: KqmTeamOption) => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const theme = useTheme()
   // (icons a size apart: the changed member's weapon and sets readable at a glance)
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
@@ -186,7 +189,7 @@ function TeamRows({
     >
       {options.map((option, i) => {
         const selected = i === current
-        const value = formatRateFull(option.total, rotationTime)
+        const value = formatRateFull(option.total, rotationTime, i18n?.language)
         return (
           <ButtonBase
             key={
@@ -293,7 +296,7 @@ function TeamRows({
                     color: 'text.secondary',
                   }}
                 >
-                  {gap(option.total / best - 1)}
+                  {gap(option.total / best - 1, i18n?.language)}
                 </Typography>
               )}
             </Box>

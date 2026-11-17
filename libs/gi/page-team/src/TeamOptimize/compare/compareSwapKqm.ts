@@ -37,6 +37,7 @@ import {
 import type { i18n } from 'i18next'
 import type { RotationTimingSettings } from '../RotationTiming'
 import { readRotationTiming } from '../RotationWriter'
+import type { KqmRotation } from '../useKqmRun'
 import { kqmReplayOf } from '../useKqmRun'
 import { CompareSwapFailure } from './compareError'
 import { savedRunOf } from './savedRun'
@@ -81,6 +82,8 @@ export interface SideMember {
   constellation: number
   /** Holds A's build (a teammate of the swap) */
   fixed: boolean
+  /** Its share of the rotation's field time (%), as the ER calculator has it */
+  fieldTime?: number
 }
 export interface Side {
   /** Damage per rotation */
@@ -90,6 +93,13 @@ export interface Side {
   rotationTime: number
   members: SideMember[]
   rotation: string
+  /**
+   * The swapped member's turn of `rotation` (its index among the turns the parser cuts it into),
+   * marked on the card; absent: none (its step was in the opener)
+   */
+  turn?: number
+  /** The KQM talent level its settings use */
+  talents?: number
 }
 export type CompareSwapError =
   | 'inTeam'
@@ -106,8 +116,11 @@ export function sideOf(
   rotation: string,
   fixed: CharacterKey[],
   /** Seconds per rotation when the result played none (the attacks were entered) */
-  fallbackTime?: number
+  fallbackTime?: number,
+  /** The settings it was set up with: its members' field time, its talents */
+  settings?: TeamOpt
 ): Side {
+  const calc = settings?.kqm?.energyCalculator
   const dpr = result.after.total
   const rotationTime = result.played?.rotationTime ?? fallbackTime ?? 0
   const keys = result.optimized?.length
@@ -118,6 +131,7 @@ export function sideOf(
     dps: rotationTime > 0 ? dpr / rotationTime : 0,
     rotationTime,
     rotation,
+    ...(settings && { talents: kqmTalentLevel(settings.kqm) }),
     members: keys.map((key) => {
       const damage = result.after.members[key] ?? 0
       const energy = result.energyRecharge[key]
@@ -130,6 +144,7 @@ export function sideOf(
         build: result.builds[key],
         constellation: result.constellations[key] ?? 0,
         fixed: fixed.includes(key),
+        fieldTime: calc?.members[key]?.fieldTime,
       }
     }),
   }
@@ -484,7 +499,15 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
       }
     sandbox.teams.set(teamId, { teamOpt })
   }
-  return { run, fixed, keysB, teamOpt, sandbox, replay: replayOf(teamOpt) }
+  return {
+    run,
+    fixed,
+    keysB,
+    teamOpt,
+    sandbox,
+    replay: replayOf(teamOpt),
+    rotation: { text: swapped.text, opener: swapped.opener, timing },
+  }
 }
 
 /**
@@ -512,19 +535,46 @@ export function swapSettings(args: SwapArgs):
 }
 
 /**
+ * B's headline: both sides, and B's KQM result (its rankings not yet: `rankings` has none), with
+ * B's sandbox for its results screen while the rankings are worked out
+ */
+export interface CompareSwapPreview {
+  a: Side
+  b: Side
+  /** As KQM Theorycrafting's, for team B: only the entering member optimized (and ranked) */
+  resultB: KqmResult
+  /** The throwaway copy of the database team B was computed on (never the user's) */
+  sandbox: ArtCharDatabase
+  /** Team B's KQM settings, as set on `sandbox` */
+  teamOptB: TeamOpt
+  /**
+   * Team B's rotation as it was played (its text and opener with the entering member's actions,
+   * the team's frame edits moved onto them): its inspector plays this, not the team's written one
+   */
+  rotationB: KqmRotation
+}
+/** The comparison done: with the entering member's rankings */
+export type CompareSwapOutcome = CompareSwapPreview
+
+/**
  * KQM Theorycrafting's saved run (A) against the same team with `out` replaced by `swapIn` (B):
  * the leaving member's single step of the rotation becomes the entering member's `fragment`, and
  * one KQM run on a copy of the database searches the entering member only, its teammates holding
- * A's builds. Writes nothing to `database` or the team's storage.
+ * A's builds, then ranks its weapons and artifact sets (as KQM Theorycrafting's rankings, the
+ * teammates fixed). B's headline is given first (`onPreview`); cancelled after it, the comparison
+ * ends with it (no rankings). Writes nothing to `database` or the team's storage.
  */
 export async function compareSwapKqm({
   onStep,
   isCancelled = () => false,
+  onPreview,
   ...args
 }: SwapArgs & {
   onStep?: (s: KqmStep) => void
   isCancelled?: () => boolean
-}): Promise<{ a: Side; b: Side } | CompareSwapRefusal> {
+  /** B's headline, as soon as the entering member's build is found (before its rankings) */
+  onPreview?: (preview: CompareSwapPreview) => void
+}): Promise<CompareSwapOutcome | CompareSwapRefusal> {
   const { gender, teamId, text, swapIn } = args
   const key = swapIn.key
   const checked = checkSwap(args)
@@ -532,13 +582,20 @@ export async function compareSwapKqm({
   const { swapped, search } = checked
   if (isCancelled()) return { error: 'cancelled' }
 
-  const { run, fixed, keysB, teamOpt, sandbox, replay } = teamB(args, checked)
-  const a = sideOf(
-    run.result,
-    text,
-    fixed,
-    run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime
+  const { run, fixed, keysB, teamOpt, sandbox, replay, rotation } = teamB(
+    args,
+    checked
   )
+  const a: Side = {
+    ...sideOf(
+      run.result,
+      text,
+      fixed,
+      run.runTeamOpt?.rotationTime ?? run.teamOpt?.rotationTime,
+      run.teamOpt ?? run.runTeamOpt
+    ),
+    turn: swapped.turn,
+  }
   if (!replay)
     throw new CompareSwapFailure(
       'notPlayable',
@@ -547,14 +604,44 @@ export async function compareSwapKqm({
   const teammates = Object.fromEntries(
     fixed.map((k) => [k, run.result.builds[k]])
   ) as Partial<Record<CharacterKey, KqmBuild>>
-  const common = { database: sandbox, teamId, gender, teamOpt, replay, onStep }
+  // (A's builds held: a fixed member's build differing between A and B is a failure)
+  const changedBuild = (result: KqmResult) =>
+    fixed.find((k) => !sameBuild(result.builds[k], run.result.builds[k]))
+  /** B's side and result as KQM Theorycrafting shows a result: the entering member optimized */
+  const viewOf = (result: KqmResult): CompareSwapPreview => ({
+    a,
+    b: {
+      ...sideOf(result, swapped.text, fixed, teamOpt.rotationTime, teamOpt),
+      turn: swapped.insertedTurn,
+    },
+    resultB: { ...result, optimized: [key] },
+    sandbox,
+    teamOptB: teamOpt,
+    rotationB: rotation,
+  })
+  // the headline, once (its builds are B's: the rankings that follow do not change them)
+  let preview: KqmResult | undefined
+  const previewed = (p: KqmResult) => {
+    preview = p
+    // (a fixed member's build changed: the comparison fails at the end, no headline)
+    if (onPreview && !changedBuild(p)) onPreview(viewOf(p))
+  }
+  const common = {
+    database: sandbox,
+    teamId,
+    gender,
+    teamOpt,
+    replay,
+    onStep,
+    isCancelled,
+  }
 
   let result: KqmResult | undefined
   try {
     if (search.kind === 'pick') {
       // the comparison of one member's weapon and sets, from A's builds with the entering
-      // member's pick (its main stats and rolls searched); its teammates' searched again only
-      // when its weapon is not the one it holds: it is, so they keep theirs
+      // member's pick (its main stats and rolls searched), then its rankings; its teammates'
+      // searched again only when its weapon is not the one it holds: it is, so they keep theirs
       const start: KqmBuild = {
         weapon: search.weapon,
         sets: search.sets,
@@ -565,60 +652,49 @@ export async function compareSwapKqm({
         },
         rolls: {},
       }
-      // (its build is what B needs: the rankings that follow are not waited for)
-      let preview: KqmResult | undefined
-      try {
-        result = await compareTeamKqm({
-          ...common,
-          isCancelled: () => !!preview || isCancelled(),
-          result: {
-            ...run.result,
-            builds: { ...teammates, [key]: start },
-            constellations: {},
-            energyRecharge: {},
-            rankings: {},
-            assumed: {},
-            optimized: keysB,
-            played: undefined,
-          },
-          characterKey: key,
-          weapon: search.weapon,
-          sets: search.sets,
-          onPreview: (p) => {
-            preview = p
-          },
-        })
-      } catch (e) {
-        if (!(e instanceof TeamOptCancelled) || !preview) throw e
-        result = preview
-      }
+      result = await compareTeamKqm({
+        ...common,
+        result: {
+          ...run.result,
+          builds: { ...teammates, [key]: start },
+          constellations: {},
+          energyRecharge: {},
+          rankings: {},
+          assumed: {},
+          optimized: keysB,
+          played: undefined,
+        },
+        characterKey: key,
+        weapon: search.weapon,
+        sets: search.sets,
+        onPreview: previewed,
+      })
     }
     // KQM Theorycrafting's one-member search from A's builds: only the entering member's,
-    // its weapon and sets free
+    // its weapon and sets free, then its rankings
     else
       result = await optimizeTeamKqm({
         ...common,
-        isCancelled,
         from: teammates,
         only: key,
+        rankOnly: true,
+        onPreview: previewed,
       })
   } catch (e) {
-    if (e instanceof TeamOptCancelled) return { error: 'cancelled' }
-    throw e
+    if (!(e instanceof TeamOptCancelled)) throw e
+    // (cancelled after the headline: the comparison ends with it, no rankings)
+    if (!preview) return { error: 'cancelled' }
+    result = preview
   }
-  if (isCancelled()) return { error: 'cancelled' }
+  if (isCancelled() && !preview) return { error: 'cancelled' }
   if (!result)
     throw new CompareSwapFailure('noResult', 'KQM could not evaluate team B.')
-  // (A's builds held: a fixed member's build differing between A and B is a failure)
-  for (const k of fixed)
-    if (!sameBuild(result.builds[k], run.result.builds[k]))
-      throw new CompareSwapFailure(
-        'buildChanged',
-        `${k}’s build changed in team B.`,
-        k
-      )
-  return {
-    a,
-    b: sideOf(result, swapped.text, fixed, teamOpt.rotationTime),
-  }
+  const changed = changedBuild(result)
+  if (changed)
+    throw new CompareSwapFailure(
+      'buildChanged',
+      `${changed}’s build changed in team B.`,
+      changed
+    )
+  return viewOf(result)
 }

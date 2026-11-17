@@ -186,17 +186,28 @@
       "create": "Crea card",
       "title": "Card KQM Compare",
       "alt": "KQM Compare di {{team}}: team A contro team B",
-      "team": "Team",
-      "damage": "Danno",
-      "share": "Quota",
-      "total": "Totale",
-      "rotation": "Rotazione",
       "delta": "Variazione (B su A)",
       "erBuild": "ER build",
-      "erTarget": "ER richiesta"
+      "erTarget": "ER richiesta",
+      "out": "Esce",
+      "rotationTime": "Durata rotazione",
+      "sharePoints": "{{value}} pt"
     },
     "kqmRunning": "KQM Theorycrafting è ancora in corso",
     "staleResult": "Risultato delle impostazioni precedenti",
-    "staleResultTip": "Hai cambiato le impostazioni dopo il confronto: premi Confronta per aggiornarlo. La card torna disponibile con il nuovo risultato."
+    "staleResultTip": "Hai cambiato le impostazioni dopo il confronto: premi Confronta per aggiornarlo. La card torna disponibile con il nuovo risultato.",
+    "ranking": "Classifiche di armi e set di B: {{percent}}%",
+    "results": {
+      "title": "Risultati KQM di B",
+      "titleTip": "La schermata dei risultati di KQM Theorycrafting per la squadra B, calcolata su una copia dei tuoi dati: non viene salvato nulla. Solo {{name}} viene cercato e classificato; i compagni tengono le build di A.",
+      "locked": "Bloccato: build di A",
+      "rankingLabel": "Classifiche di armi e set in corso",
+      "retune": "Una scelta può differire dalla sua riga",
+      "retuneTip": "Un'arma o un set scelti per {{name}} rieseguono la rotazione con i propri effetti di arma e di set (e ritoccano i compagni di cui cambiano la ER richiesta), quindi i loro valori possono differire da quelli della riga, calcolati sulla rotazione eseguita con la build attuale.",
+      "ready": "Classifiche di B pronte",
+      "readyLabel": "Classifiche pronte",
+      "cancelled": "Classifiche di B annullate: esegui di nuovo il confronto per vederle.",
+      "rankingFailed": "Classifiche di B non riuscite: {{message}}"
+    }
   }
 }

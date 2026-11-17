@@ -12,5 +12,10 @@
     "1": "Chiudere questa scheda 🔪 e usare quella nuova 🆕",
     "2": "Chiudere la nuova scheda ↩️ e, quando sei sicuro che questa sia l'UNICA scheda rimasta 🔂, ricaricare questa pagina 🔄"
   },
-  "refresh": "Ricarica la pagina"
+  "refresh": "Ricarica la pagina",
+  "storageError": {
+    "body": "Il database del browser non si è aperto. I tuoi dati restano salvati in questo browser.",
+    "reload": "Ricarica",
+    "title": "Non è stato possibile aprire i tuoi dati"
+  }
 }

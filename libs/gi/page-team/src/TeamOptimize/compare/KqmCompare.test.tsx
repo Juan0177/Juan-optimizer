@@ -44,6 +44,8 @@ const mocks = vi.hoisted(() => {
   return {
     state,
     compare: vi.fn(),
+    /** The props B's KQM results were last shown with */
+    results: [] as Record<string, unknown>[],
     settings: vi.fn((_args: unknown): unknown => ({ error: 'unsupported' })),
     replay: vi.fn((..._args: unknown[]): unknown => undefined),
     listeners,
@@ -149,8 +151,11 @@ vi.mock('@genshin-optimizer/gi/ui', async () => {
     WeaponName: ({ weaponKey }: { weaponKey: string }) => <>{weaponKey}</>,
     ArtifactSetName: ({ setKey }: { setKey: string }) => <>{setKey}</>,
     statName: (key: string) => key,
-    teamOptMembers: () =>
-      mocks.state.members.map((characterKey) => ({ characterKey })),
+    // (a team B sandbox lists its own members)
+    teamOptMembers: (db?: { members?: string[] }) =>
+      (db?.members ?? mocks.state.members).map((characterKey) => ({
+        characterKey,
+      })),
     kitModels: Object.fromEntries(
       [...MEMBERS, 'Mitya', 'Furina'].map((k) => [k, {}])
     ),
@@ -245,6 +250,12 @@ vi.mock('@genshin-optimizer/gi/sheets', () => ({
 vi.mock('../MemberAvatar', () => ({
   MemberAvatar: () => <span />,
 }))
+vi.mock('../KqmMode', () => ({
+  KqmResults: (props: Record<string, unknown>) => {
+    mocks.results.push(props)
+    return <div data-testid="kqm-results" />
+  },
+}))
 vi.mock('./compareSwapKqm', () => ({
   compareSwapKqm: mocks.compare,
   swapSettings: mocks.settings,
@@ -288,6 +299,7 @@ afterEach(() => {
   stored.clear()
   mocks.compare.mockReset()
   mocks.replay.mockReset()
+  mocks.results.length = 0
   mocks.state.saved = undefined
   mocks.state.members = []
   mocks.state.kqmRunning = false
@@ -515,7 +527,7 @@ describe('KqmCompare', () => {
     expect(
       within(table).getAllByText(/Yae Miko → Mitya/).length
     ).toBeGreaterThan(0)
-    expect(within(table).getAllByText(/^−10(\.0)?%$/).length).toBeGreaterThan(0)
+    expect(within(table).getAllByText(/^−10(,0)?%$/).length).toBeGreaterThan(0)
     // both ER figures, each with its own label: the target and what the build reaches
     expect(
       within(table).getAllByText('kqmCompare.table.erTarget')
@@ -852,6 +864,332 @@ describe('KqmCompare: the result', () => {
     await runOnce()
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('count=3')
+  })
+})
+
+describe('KqmCompare: B’s KQM results', () => {
+  const side = (dpr: number) => ({
+    dpr,
+    dps: dpr / 20,
+    rotationTime: 20,
+    rotation: TEXT,
+    members: [],
+  })
+  const MEMBERS_B = ['Anastasya', 'Mitya', 'Odette', 'Danica']
+  /** What compareSwapKqm gives: B's headline, its KQM result and its sandbox */
+  function outcome(ranked = true) {
+    return {
+      a: side(1000),
+      b: side(900),
+      resultB: {
+        builds: Object.fromEntries(
+          MEMBERS_B.map((k) => [k, build(`${k}Weapon`)])
+        ),
+        constellations: {},
+        energyRecharge: {},
+        after: { total: 900, members: {} },
+        optimized: ['Mitya'],
+        rankings: ranked ? { Mitya: { weapons: [], sets: [] } } : {},
+        played: { rotationTime: 20, attacks: {}, stalls: [] },
+      },
+      // (team B's throwaway copy of the database: never the page's)
+      sandbox: { members: MEMBERS_B, sandbox: true },
+      teamOptB: { attacks: {}, keep: [], rotationTime: 20, kqm: {} },
+      rotationB: { text: TEXT, opener: '', timing: { edits: {} } },
+    }
+  }
+  /** B's results as last shown, or none */
+  const shown = () =>
+    screen.queryByTestId('kqm-results') ? mocks.results.at(-1) : undefined
+  async function runOnce() {
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+  }
+  type Args = {
+    onPreview: (p: object) => void
+    onStep: (s: object) => void
+    isCancelled: () => boolean
+  }
+  /** A run that gives its headline, then ranks until told to end */
+  function ranking() {
+    const run: {
+      args?: Args
+      resolve?: (v: unknown) => void
+      reject?: (e: unknown) => void
+    } = {}
+    mocks.compare.mockImplementation((args: Args) => {
+      run.args = args
+      const { sandbox, ...preview } = outcome(false)
+      args.onPreview({ ...preview, sandbox })
+      return new Promise((resolve, reject) => {
+        run.resolve = resolve
+        run.reject = reject
+      })
+    })
+    return run
+  }
+
+  it('shows B’s KQM results after a run: on its sandbox, read only, B’s members and settings', async () => {
+    withRun()
+    const out = outcome()
+    mocks.compare.mockResolvedValue(out)
+    await runOnce()
+    await screen.findByRole('table')
+    expect(
+      screen.getByRole('heading', { name: /kqmCompare\.results\.title/ })
+    ).toBeTruthy()
+    const props = shown()!
+    expect(props['database']).toBe(out.sandbox)
+    expect(props['database']).not.toBe(mocks.database)
+    expect(props['readOnly']).toBe(true)
+    expect(props['result']).toBe(out.resultB)
+    expect(props['runSettings']).toBe(out.teamOptB)
+    expect(props['setup']).toBe(out.teamOptB)
+    expect(props['replayRotation']).toEqual(out.rotationB)
+    expect(props['teamId']).toBe('t1')
+    expect(props['rotation']).toBe('played')
+    expect(props['rotationTime']).toBe(20)
+    expect(
+      (props['members'] as { characterKey: string }[]).map(
+        (m) => m.characterKey
+      )
+    ).toEqual(MEMBERS_B)
+    expect(props['running']).toBe(false)
+    expect(props['improving']).toBe(false)
+    expect(props['stale']).toBe(false)
+    expect(props['onDiscard']).toBeUndefined()
+    // (its locked members and its inspector's note in the user's language)
+    expect(props['heldLabel']).toBe('kqmCompare.results.locked')
+    expect(props['inspectorNote']).toEqual({
+      label: 'kqmCompare.results.retune',
+      tip: 'kqmCompare.results.retuneTip name=Mitya',
+    })
+    // (its progress said once, by the page's status line; its headings below the section's h3)
+    expect(props['preliminary']).toBe('quiet')
+    expect(props['preliminaryLabel']).toBe('kqmCompare.results.rankingLabel')
+    expect(props['headingLevel']).toBe(4)
+    expect(props['unfinished']).toBe(false)
+    expect(props['preliminaryFinalLabel']).toBe('kqmCompare.results.readyLabel')
+  })
+
+  it('announces the rankings’ end in the same status region that said their progress', async () => {
+    withRun()
+    const run = ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    const status = screen.getByText('kqmCompare.ranking percent=0')
+    expect(status.getAttribute('role')).toBe('status')
+    await act(async () => run.resolve!(outcome()))
+    // (the same element, still mounted: its new words are announced)
+    expect(status.isConnected).toBe(true)
+    expect(status.getAttribute('role')).toBe('status')
+    expect(status.textContent).toBe('kqmCompare.results.ready')
+  })
+
+  it('says a cancel in the same status region, and keeps the focus in B’s section', async () => {
+    withRun()
+    ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    const status = screen.getByText('kqmCompare.ranking percent=0')
+    const cancel = screen.getByRole('button', { name: 'kqmCompare.cancel' })
+    cancel.focus()
+    fireEvent.click(cancel)
+    expect(status.isConnected).toBe(true)
+    expect(status.textContent).toBe('kqmCompare.results.cancelled')
+    // (the button is gone: the focus on B's section title, not lost)
+    await waitFor(() =>
+      expect(document.activeElement?.textContent).toBe(
+        'kqmCompare.results.title'
+      )
+    )
+    expect(
+      screen
+        .getByRole('heading', { name: /kqmCompare\.results\.title/ })
+        .contains(document.activeElement)
+    ).toBe(true)
+  })
+
+  it('a cancel before the summary puts the focus back on Confronta', async () => {
+    withRun()
+    mocks.compare.mockImplementation(() => new Promise(() => {}))
+    await runOnce()
+    const cancel = await screen.findByRole('button', {
+      name: 'kqmCompare.cancel',
+    })
+    cancel.focus()
+    fireEvent.click(cancel)
+    await waitFor(() => expect(document.activeElement).toBe(runButton()))
+  })
+
+  it('keeps B’s rotation the same object while shown (the inspector follows it)', async () => {
+    withRun()
+    mocks.compare.mockResolvedValue(outcome())
+    await runOnce()
+    await screen.findByTestId('kqm-results')
+    const first = shown()!['replayRotation']
+    const members = shown()!['members']
+    // (any re-render: a change elsewhere on the page)
+    fireEvent.click(confirmBox())
+    fireEvent.click(confirmBox())
+    expect(mocks.results.length).toBeGreaterThan(1)
+    expect(shown()!['replayRotation']).toBe(first)
+    expect(shown()!['members']).toBe(members)
+  })
+
+  it('while its rankings are worked out: the summary, their progress and a working Cancel', async () => {
+    withRun()
+    const run = ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    expect(shown()!['improving']).toBe(true)
+    expect(shown()!['running']).toBe(true)
+    act(() => run.args!.onStep({ progress: 0.42 }))
+    await waitFor(() => expect(shown()!['progress']).toBe(0.42))
+    expect(screen.getByText('kqmCompare.ranking percent=42')).toBeTruthy()
+    const cancel = screen.getByRole('button', { name: 'kqmCompare.cancel' })
+    expect(run.args!.isCancelled()).toBe(false)
+    fireEvent.click(cancel)
+    expect(run.args!.isCancelled()).toBe(true)
+    // (the summary and B's builds stay; the rankings are said cancelled)
+    expect(screen.getByRole('table')).toBeTruthy()
+    expect(shown()!['improving']).toBe(false)
+    expect(shown()!['running']).toBe(false)
+    // (not said final: its rankings did not finish)
+    expect(shown()!['unfinished']).toBe(true)
+    // (said in B's section, and announced by the status region)
+    expect(screen.getAllByText('kqmCompare.results.cancelled')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: 'kqmCompare.cancel' })
+    ).toBeNull()
+    // (the run ends with its headline: nothing changes)
+    await act(async () => run.resolve!(outcome(false)))
+    expect(screen.getAllByText('kqmCompare.results.cancelled')).toHaveLength(2)
+  })
+
+  it('gives the rankings’ own progress: from the summary (0%) to their end (100%)', async () => {
+    withRun()
+    const run: { args?: Args } = {}
+    mocks.compare.mockImplementation((args: Args) => {
+      run.args = args
+      // (the run is 60% done when B's summary is known)
+      args.onStep({ progress: 0.6 })
+      const { sandbox, ...preview } = outcome(false)
+      args.onPreview({ ...preview, sandbox })
+      return new Promise(() => {})
+    })
+    await runOnce()
+    await screen.findByRole('table')
+    act(() => run.args!.onStep({ progress: 0.8 }))
+    await waitFor(() =>
+      expect(screen.getByText('kqmCompare.ranking percent=50')).toBeTruthy()
+    )
+    expect(shown()!['progress']).toBeCloseTo(0.5, 6)
+  })
+
+  it('shows the rankings once worked out: no longer improving', async () => {
+    withRun()
+    const run = ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    const done = outcome()
+    await act(async () => run.resolve!(done))
+    expect(shown()!['improving']).toBe(false)
+    expect(shown()!['unfinished']).toBe(false)
+    expect(shown()!['result']).toBe(done.resultB)
+    expect(
+      screen.queryByRole('button', { name: 'kqmCompare.cancel' })
+    ).toBeNull()
+  })
+
+  it('a failure of the rankings keeps the summary and says the rankings failed', async () => {
+    withRun()
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const run = ranking()
+    await runOnce()
+    await screen.findByRole('table')
+    await act(async () =>
+      run.reject!(new CompareSwapFailure('noResult', 'KQM could not…'))
+    )
+    expect(screen.getByRole('table')).toBeTruthy()
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('kqmCompare.results.rankingFailed')
+    expect(alert.textContent).toContain('kqmCompare.error.noResult')
+    expect(shown()!['improving']).toBe(false)
+    expect(shown()!['unfinished']).toBe(true)
+    quiet.mockRestore()
+  })
+
+  it('marks B’s results stale when the settings change', async () => {
+    withRun()
+    mocks.compare.mockResolvedValue(outcome())
+    await runOnce()
+    await screen.findByTestId('kqm-results')
+    expect(shown()!['stale']).toBe(false)
+    fireEvent.change(
+      screen.getByRole('textbox', { name: /kqmCompare\.fragment/ }),
+      { target: { value: 'E E Q' } }
+    )
+    expect(shown()!['stale']).toBe(true)
+  })
+
+  it('drops B’s sandbox when a new run starts, and when a run is cancelled', async () => {
+    withRun()
+    mocks.compare.mockResolvedValueOnce(outcome())
+    await runOnce()
+    await screen.findByTestId('kqm-results')
+    let isCancelled: (() => boolean) | undefined
+    mocks.compare.mockImplementation((args: Args) => {
+      isCancelled = args.isCancelled
+      return new Promise(() => {})
+    })
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('kqm-results')).toBeNull()
+    expect(screen.queryByRole('table')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'kqmCompare.cancel' }))
+    expect(isCancelled?.()).toBe(true)
+    expect(screen.queryByTestId('kqm-results')).toBeNull()
+  })
+
+  it('a new run while ranking cancels the ranking', async () => {
+    withRun()
+    const run = ranking()
+    await runOnce()
+    await screen.findByTestId('kqm-results')
+    const first = run.args!
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    expect(first.isCancelled()).toBe(true)
+  })
+
+  it('leaving the tab while ranking cancels it', async () => {
+    withRun()
+    const run = ranking()
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await screen.findByTestId('kqm-results')
+    cleanup()
+    expect(run.args!.isCancelled()).toBe(true)
+  })
+
+  it('without B’s result (a run that gave only the headline): no section', async () => {
+    withRun()
+    mocks.compare.mockResolvedValue({ a: side(1000), b: side(900) })
+    await runOnce()
+    await screen.findByRole('table')
+    expect(screen.queryByTestId('kqm-results')).toBeNull()
   })
 })
 

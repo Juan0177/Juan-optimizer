@@ -51,6 +51,7 @@ const talentSpacing = {
 
 export default function CharacterTalentPane() {
   const { t } = useTranslation('sheet_gen')
+  const { t: tUi } = useTranslation('ui')
   // Load tooltip translations
   useTranslation('tooltips_gen')
   const {
@@ -170,7 +171,10 @@ export default function CharacterTalentPane() {
           )}
           {!!characterSheet.getTalentOfKey('passive') && (
             <Grid item {...talentSpacing}>
-              <SkillDisplayCard talentKey="passive" subtitle="Passive" />
+              <SkillDisplayCard
+                talentKey="passive"
+                subtitle={tUi('passive', 'Passive')}
+              />
             </Grid>
           )}
           {/* passives */}

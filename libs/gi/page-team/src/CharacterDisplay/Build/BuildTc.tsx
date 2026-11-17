@@ -21,6 +21,7 @@ import { SlotIcon } from '@genshin-optimizer/gi/svgicons'
 import {
   ArtifactSetName,
   BuildCard,
+  levelShort,
   StatWithUnit,
   WeaponCardNanoObj,
 } from '@genshin-optimizer/gi/ui'
@@ -99,6 +100,7 @@ export default function BuildTc({
   )
 }
 function TcEquip({ buildTcId }: { buildTcId: string }) {
+  const { t } = useTranslation('build')
   const {
     weapon,
     artifact: {
@@ -119,7 +121,7 @@ function TcEquip({ buildTcId }: { buildTcId: string }) {
           <CardContent sx={{ display: 'flex', gap: 1 }}>
             <Chip
               size="small"
-              label={`Lv. ${getCharLevelString(
+              label={`${levelShort()} ${getCharLevelString(
                 character.level,
                 character.ascension
               )}`}
@@ -132,7 +134,9 @@ function TcEquip({ buildTcId }: { buildTcId: string }) {
               sx={{ color: 'yellow' }}
             />
             {/* Can't display talents because that would require a calculation for talent boost due to constellations */}
-            <Typography color="yellow">Character Overriden</Typography>
+            <Typography color="yellow">
+              {t('charOverridden', 'Character overridden')}
+            </Typography>
           </CardContent>
         </CardThemed>
       )}

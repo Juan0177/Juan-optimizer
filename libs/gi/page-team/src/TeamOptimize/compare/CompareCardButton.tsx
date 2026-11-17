@@ -1,5 +1,4 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import {
   CardImageDialog,
@@ -13,7 +12,7 @@ import { Button } from '@mui/material'
 import type { TFunction } from 'i18next'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { compareCardData } from './compareCardData'
+import { compareCardData, compareCardRecord } from './compareCardData'
 import type { Side } from './compareSwapKqm'
 
 type CardProps = {
@@ -58,26 +57,32 @@ function CompareCardDialog({
   inKey,
   onClose,
 }: CardProps & { onClose: () => void }) {
-  const { t } = useTranslation([
+  const { t, i18n } = useTranslation([
     'juanlab',
+    'page_team',
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
   ])
   const { gender } = useDBMeta()
   const database = useDatabase()
-  const data = useMemo(() => {
-    const nameOf = (k: CharacterKey) =>
-      t(`charNames_gen:${charKeyToLocGenderedCharKey(k, gender)}`)
-    return compareCardData(a, b, {
-      teamName: database.teams.get(teamId)?.name ?? '',
-      outName: nameOf(out),
-      inName: nameOf(inKey),
-      gender,
-      t: t as unknown as TFunction,
-    })
-  }, [a, b, out, inKey, gender, t, database, teamId])
+  const teamName = database.teams.get(teamId)?.name ?? ''
+  const data = useMemo(
+    () =>
+      compareCardData(a, b, {
+        teamName,
+        out,
+        in: inKey,
+        gender,
+        locale: i18n.language,
+        t: t as unknown as TFunction,
+      }),
+    [a, b, out, inKey, gender, t, teamName, i18n.language]
+  )
   const render = useMemo(() => () => renderKqmCompareCard(data), [data])
+  // (the hidden record of how it was made, as KQM Theorycrafting's pictures carry theirs)
+  const watermark = () =>
+    compareCardRecord({ teamId, teamName, gender, out, inKey, a, b })
   return (
     <CardImageDialog
       title={t('kqmCompare.card.title')}
@@ -85,6 +90,7 @@ function CompareCardDialog({
       fileName={`KQM-Compare-${safeName(data.name)}`}
       aspectRatio={`${KQM_COMPARE_CARD_WIDTH} / ${KQM_COMPARE_CARD_HEIGHT}`}
       render={render}
+      watermark={watermark}
       onClose={onClose}
     />
   )

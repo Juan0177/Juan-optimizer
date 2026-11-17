@@ -31,7 +31,9 @@
       "upload": "Upload",
       "swap": "Swap"
     },
-    "currentDB": "Current Database"
+    "currentDB": "Current Database",
+    "copied": "Copied database to clipboard.",
+    "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?"
   },
   "uploadCard": {
     "title": "Database Upload",

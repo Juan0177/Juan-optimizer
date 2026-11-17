@@ -9,6 +9,7 @@ import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   TeamKqmSavedRun,
+  TeamOpt,
   TeamOptEnergyMember,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
@@ -16,9 +17,11 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type {
   KqmPlayed,
+  KqmResult,
   KqmSets,
   KqmStep,
   TeamData,
+  TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import {
   ArtifactSetName,
@@ -63,8 +66,10 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { KqmResults } from '../KqmMode'
 import { MemberAvatar } from '../MemberAvatar'
 import { openerKey, storageKey } from '../RotationWriter'
+import { useSimText } from '../simText'
 import {
   BetaBadge,
   Disclosure,
@@ -75,15 +80,16 @@ import {
   insetSx,
   numSx,
   Panel,
+  PanelHeader,
   Segmented,
   tokens,
   type,
 } from '../ui'
-import { kqmReplayOf, useKqmRunning } from '../useKqmRun'
+import { type KqmRotation, kqmReplayOf, useKqmRunning } from '../useKqmRun'
 import { CompareCardButton } from './CompareCardButton'
 import { Overview } from './CompareOverview'
 import { compareFailureText } from './compareError'
-import type { Side, SwapIn } from './compareSwapKqm'
+import type { CompareSwapPreview, Side, SwapIn } from './compareSwapKqm'
 import { compareSwapKqm } from './compareSwapKqm'
 import { srOnly, WarningLine } from './compareUi'
 import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
@@ -130,6 +136,20 @@ function readStored(key: string) {
   }
 }
 
+/**
+ * Team B's KQM result as its results screen shows it: on B's throwaway copy of the database
+ * (never the user's), with B's settings and rotation (kept the same objects while shown)
+ */
+interface ResultsB {
+  result: KqmResult
+  database: ArtCharDatabase
+  teamOpt: TeamOpt
+  rotation: KqmRotation
+  members: TeamOptMember[]
+  /** Since the run started (its inspector opens again for each new result) */
+  seconds: number
+}
+
 type RunState =
   | { type: 'idle' }
   | { type: 'running' }
@@ -141,6 +161,16 @@ type RunState =
       in: CharacterKey
       /** The settings it was worked out with (`inputs`) */
       for: string
+      /** B's KQM result (absent: the run gave none) */
+      resultsB?: ResultsB
+      /**
+       * The entering member's rankings: still worked out after the headline, done, cancelled
+       * (the headline kept), or failed (`rankingError`, the headline kept)
+       */
+      rankings: 'pending' | 'done' | 'cancelled' | 'failed'
+      rankingError?: string
+      /** The run's progress (0 to 1) when the headline came: where its rankings start */
+      rankingFrom: number
     }
   | { type: 'error'; message: string }
 
@@ -180,6 +210,7 @@ export default function KqmCompare({
   /** The team's data: where the entering member's effect states that depend on a character are read */
   teamData?: TeamData
 }) {
+  const simText = useSimText()
   const { t, i18n } = useTranslation(['juanlab', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -359,10 +390,29 @@ export default function KqmCompare({
     []
   )
   const running = state.type === 'running'
+  /** The headline shown, B's rankings still worked out */
+  const ranking = state.type === 'done' && state.rankings === 'pending'
+  // Cancel's button goes once pressed: the focus goes to B's section title (cancelled while
+  // ranking), else back to Confronta
+  const resultsTitle = useRef<HTMLElement>(null)
+  const runButton = useRef<HTMLButtonElement>(null)
+  const refocus = useRef<'results' | 'run'>()
+  useEffect(() => {
+    const to = refocus.current
+    if (!to) return
+    refocus.current = undefined
+    ;(to === 'results' ? resultsTitle : runButton).current?.focus()
+  }, [state])
+  // (cancelled while ranking: the headline and B's builds stay, without rankings)
   const cancel = () => {
     if (job.current) job.current.cancelled = true
     job.current = undefined
-    setState({ type: 'idle' })
+    refocus.current = ranking ? 'results' : 'run'
+    setState((s) =>
+      s.type === 'done' && s.rankings === 'pending'
+        ? { ...s, rankings: 'cancelled' }
+        : { type: 'idle' }
+    )
   }
 
   const outName = out ? nameOf(out) : ''
@@ -424,6 +474,7 @@ export default function KqmCompare({
       return
     }
     const runFor = inputs
+    // (a run going on, its rankings included, is replaced; its B and sandbox dropped)
     if (job.current) job.current.cancelled = true
     const mine = { cancelled: false }
     job.current = mine
@@ -443,6 +494,25 @@ export default function KqmCompare({
         if (!mine.cancelled) setStep(latest)
       }, wait)
     }
+    const startTime = performance.now()
+    /** B's results screen, from the headline or the final result (its rotation kept the same) */
+    const resultsOf = (
+      p: Partial<CompareSwapPreview>,
+      before?: ResultsB
+    ): ResultsB | undefined => {
+      if (!p.resultB || !p.sandbox || !p.teamOptB || !p.rotationB)
+        return undefined
+      const same = before?.database === p.sandbox
+      return {
+        result: p.resultB,
+        database: p.sandbox,
+        teamOpt: p.teamOptB,
+        rotation: same ? before.rotation : p.rotationB,
+        members: same ? before.members : teamOptMembers(p.sandbox, teamId),
+        seconds: (performance.now() - startTime) / 1000,
+      }
+    }
+    let previewed = false
     // (the running state paints first)
     await new Promise((resolve) => setTimeout(resolve, 0))
     // (cancelled or the tab left meanwhile: nothing starts)
@@ -461,6 +531,22 @@ export default function KqmCompare({
         fragment,
         onStep,
         isCancelled: () => mine.cancelled,
+        // (the summary as soon as B's build is known: the rankings follow)
+        onPreview: (preview) => {
+          if (mine.cancelled) return
+          previewed = true
+          setState({
+            type: 'done',
+            a: preview.a,
+            b: preview.b,
+            out,
+            in: swapIn.key,
+            for: runFor,
+            resultsB: resultsOf(preview),
+            rankings: 'pending',
+            rankingFrom: latest?.progress ?? 0,
+          })
+        },
       })
       if (mine.cancelled) return
       if ('error' in result)
@@ -473,15 +559,31 @@ export default function KqmCompare({
               }
         )
       else
-        setState({ type: 'done', ...result, out, in: swapIn.key, for: runFor })
+        setState((s) => ({
+          type: 'done',
+          a: result.a,
+          b: result.b,
+          out,
+          in: swapIn.key,
+          for: runFor,
+          resultsB: resultsOf(
+            result,
+            s.type === 'done' ? s.resultsB : undefined
+          ),
+          rankings: 'done',
+          rankingFrom: s.type === 'done' ? s.rankingFrom : 0,
+        }))
     } catch (e) {
       if (mine.cancelled) return
       console.error(e)
-      setState({
-        type: 'error',
-        // (a known failure in the user's language)
-        message: compareFailureText(e, t as unknown as TFunction, nameOf),
-      })
+      // (a known failure in the user's language)
+      const message = compareFailureText(e, t as unknown as TFunction, nameOf)
+      // (after the headline: it stays, B's rankings said failed)
+      setState((s) =>
+        previewed && s.type === 'done'
+          ? { ...s, rankings: 'failed', rankingError: message }
+          : { type: 'error', message }
+      )
     } finally {
       if (pending) clearTimeout(pending)
       if (job.current === mine) job.current = undefined
@@ -550,7 +652,26 @@ export default function KqmCompare({
   const notPlayed = !!run && run.rotation !== 'played'
   /** The result shown is for settings changed since */
   const stale = state.type === 'done' && state.for !== inputs
-  const percent = Math.round((step?.progress ?? 0) * 100)
+  // (while ranking: the rankings' own progress, from the headline to the end)
+  const from = state.type === 'done' ? state.rankingFrom : 0
+  const progress = ranking
+    ? from < 1
+      ? Math.max(0, ((step?.progress ?? 0) - from) / (1 - from))
+      : 0
+    : (step?.progress ?? 0)
+  const percent = Math.round(progress * 100)
+  const busy = running || ranking
+  const statusText = running
+    ? t('kqmCompare.running', { percent })
+    : ranking
+      ? t('kqmCompare.ranking', { percent })
+      : state.type === 'done' && state.resultsB
+        ? state.rankings === 'done'
+          ? t('kqmCompare.results.ready')
+          : state.rankings === 'cancelled'
+            ? t('kqmCompare.results.cancelled')
+            : ''
+        : ''
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -955,7 +1076,7 @@ export default function KqmCompare({
                   </span>
                 )}
                 {warnings.map((w) => (
-                  <WarningLine key={w}>{w}</WarningLine>
+                  <WarningLine key={w}>{simText(w)}</WarningLine>
                 ))}
               </Box>
             )}
@@ -1032,12 +1153,13 @@ export default function KqmCompare({
                   {problem}
                 </Typography>
               )}
-              {running && (
+              {(running || ranking) && (
                 <Button color="inherit" onClick={cancel}>
                   {t('kqmCompare.cancel')}
                 </Button>
               )}
               <Button
+                ref={runButton}
                 variant="contained"
                 disabled={!canRun}
                 aria-describedby={
@@ -1068,9 +1190,10 @@ export default function KqmCompare({
             </Button>
           </Box>
         )}
-        {running && (
-          <Box sx={{ mt: 1.5 }}>
-            {/* (the status line below announces it) */}
+        {/* one status region, always there: the run's progress, then its rankings', then how they
+            ended (ready or cancelled; a failure is an alert), so each change is announced */}
+        <Box sx={busy ? { mt: 1.5 } : undefined}>
+          {busy && (
             <LinearProgress
               variant={step ? 'determinate' : 'indeterminate'}
               value={percent}
@@ -1082,11 +1205,14 @@ export default function KqmCompare({
                 '& .MuiLinearProgress-bar': { bgcolor: tokens.gold },
               }}
             />
-            <Typography role="status" sx={{ ...type.label, mt: 0.75 }}>
-              {t('kqmCompare.running', { percent })}
-            </Typography>
-          </Box>
-        )}
+          )}
+          <Typography
+            role="status"
+            sx={busy ? { ...type.label, mt: 0.75 } : srOnly}
+          >
+            {statusText}
+          </Typography>
+        </Box>
         {state.type === 'error' && (
           <Box role="alert" sx={{ mt: 1.5, color: 'warning.main' }}>
             <WarningLine>{state.message}</WarningLine>
@@ -1130,6 +1256,78 @@ export default function KqmCompare({
               disabled={stale}
             />
           </Box>
+        </Panel>
+      )}
+
+      {/* B's KQM results, as KQM Theorycrafting shows a result: on B's sandbox, read only */}
+      {state.type === 'done' && state.resultsB && (
+        <Panel component="section" sx={{ p: 0 }}>
+          <Box sx={{ px: { xs: 1, sm: 2 }, pt: { xs: 1.5, sm: 2 } }}>
+            <PanelHeader
+              title={
+                // (where the focus goes when its rankings are cancelled)
+                <Box component="span" ref={resultsTitle} tabIndex={-1}>
+                  {t('kqmCompare.results.title')}
+                </Box>
+              }
+              info={t('kqmCompare.results.titleTip', {
+                name: nameOf(state.in),
+              })}
+              sx={{ mb: 0 }}
+            />
+            {/* (announced by the status region above) */}
+            {state.rankings === 'cancelled' && (
+              <Typography sx={{ ...type.label, mt: 0.5 }}>
+                {t('kqmCompare.results.cancelled')}
+              </Typography>
+            )}
+            {state.rankings === 'failed' && (
+              <Box
+                role="alert"
+                sx={{ mt: 0.5, color: 'warning.main', fontSize: 13 }}
+              >
+                <WarningLine>
+                  {t('kqmCompare.results.rankingFailed', {
+                    message: state.rankingError,
+                  })}
+                </WarningLine>
+              </Box>
+            )}
+          </Box>
+          <KqmResults
+            teamId={teamId}
+            database={state.resultsB.database}
+            readOnly
+            replayRotation={state.resultsB.rotation}
+            members={state.resultsB.members}
+            result={state.resultsB.result}
+            runSettings={state.resultsB.teamOpt}
+            setup={state.resultsB.teamOpt}
+            rotation={state.resultsB.result.played ? 'played' : 'entered'}
+            stalls={state.resultsB.result.played?.stalls}
+            seconds={state.resultsB.seconds}
+            rotationTime={state.b.rotationTime || undefined}
+            stale={stale}
+            running={ranking}
+            improving={ranking}
+            progress={ranking ? progress : undefined}
+            // (its progress said by the status line above; its banner's words its own)
+            preliminary="quiet"
+            preliminaryLabel={t('kqmCompare.results.rankingLabel')}
+            preliminaryFinalLabel={t('kqmCompare.results.readyLabel')}
+            unfinished={
+              state.rankings === 'cancelled' || state.rankings === 'failed'
+            }
+            // (below this section's h3)
+            headingLevel={4}
+            heldLabel={t('kqmCompare.results.locked')}
+            inspectorNote={{
+              label: t('kqmCompare.results.retune'),
+              tip: t('kqmCompare.results.retuneTip', {
+                name: nameOf(state.in),
+              }),
+            }}
+          />
         </Panel>
       )}
     </Box>

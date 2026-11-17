@@ -21,7 +21,10 @@
     "desc": "Using data from the builder, this will generate a graph to visualize Optimization Target vs. the selected Graph Target. The graph will show the maximum Optimization Target value per 0.01 of the selected Graph Target. Enabling this is optional, and doing so will slow down build times",
     "currentBuild": "Current build",
     "highlightedBuilds": "Highlighted builds",
-    "buildAlreadyInList": "Build is already in the list"
+    "buildAlreadyInList": "Build is already in the list",
+    "minData": "Min Data",
+    "allData": "All Data",
+    "dmg": "DMG"
   },
   "levelFilter": "Artifact level",
   "upOptLevelFilter": "Artifact Upgrader Level Filter",
@@ -61,7 +64,8 @@
     "estimatedDist": "Estimated Distribution",
     "currentTarget": "Current Target",
     "currentLine": "Current Target Value",
-    "averageLine": "Average Increase"
+    "averageLine": "Average Increase",
+    "equip": "Equip"
   },
   "excludeArt": {
     "title_exclude": "Excluded Artifacts",
@@ -361,5 +365,19 @@
     "keep": "keep {{stat}}",
     "openImprove": "Open Improve",
     "openOptimize": "Open Optimize"
-  }
+  },
+  "buttonHint": "Note: the red buttons above only apply to <b>currently filtered artifacts</b>",
+  "buildAlert": {
+    "optimizing": "Optimizing",
+    "progress": "{{checked}} of {{total}}",
+    "preparing": "Preparing…",
+    "skipped": "{{value}} skipped by pruning",
+    "rate": "{{value}} combinations/s",
+    "progressLabel": "Optimization progress",
+    "noBuild": "No valid build found for",
+    "checked": "Checked {{value}} combinations for",
+    "noBuildDetail": "{{value}} combinations checked · none meet the artifact set and stat constraints, try loosening them",
+    "tested": "{{value}} tested"
+  },
+  "statValuePlaceholder": "Stat Value"
 }

@@ -1132,6 +1132,17 @@ interface KqmRunArgs {
    * about one ranking row's work each.
    */
   only?: CharacterKey | readonly CharacterKey[]
+  /**
+   * With `from` and `only`: the members searched again are also ranked after their rounds (each
+   * list varies one item, the rest of the team fixed, as a comparison ranks its member), once,
+   * no better option taken. Default: no rankings.
+   */
+  rankOnly?: boolean
+  /**
+   * With `rankOnly`: the team as soon as its builds are found (`rankings` has none); the result
+   * follows with the rankings, its builds the same
+   */
+  onPreview?: (preview: KqmResult) => void
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1197,6 +1208,8 @@ async function runKqm({
   onEarly,
   from,
   only,
+  rankOnly = false,
+  onPreview,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1571,11 +1584,15 @@ async function runKqm({
   // tried, the teammates searched again for the energy weapons); two rounds are expected (one to
   // find the builds, one to confirm them), a third is added when the second changes one
   const steps = optimized.length
+  // (from another run's builds: none, or with `rankOnly` the members refitted)
   const rankedMembers = comparison
     ? optimized.filter((m) => m.characterKey === comparison.characterKey)
     : from
-      ? []
+      ? rankOnly && refitted
+        ? optimized.filter((m) => refitted.has(m.characterKey))
+        : []
       : optimized
+  const rankRefitted = !comparison && !!from && rankedMembers.length > 0
   const RANK_UNITS = 2.5
   // The rankings may find a better build, then more rounds and rankings follow (`ADOPT_PASSES`):
   // the line stops short of the end until they are known (`CEILINGS`, by pass), and the room left
@@ -2700,10 +2717,16 @@ async function runKqm({
         comparison.onPreview(shown)
       }
     }
-    // (from another run's builds: its rounds only)
-    for (let pass = 0; !from; pass++) {
+    // (from another run's builds and `rankOnly`: the team first, the refitted members'
+    // rankings after, its builds kept)
+    if (rankRefitted) {
+      preview = finish()
+      if (preview && onPreview) onPreview({ ...preview, rankings: {} })
+    }
+    // (from another run's builds: its rounds only, or with `rankOnly` one ranking pass)
+    for (let pass = 0; !from || rankRefitted; pass++) {
       await rankAll()
-      if (comparison || pass >= ADOPT_PASSES) break
+      if (comparison || from || pass >= ADOPT_PASSES) break
       // (the builds so far, with these rankings, while a better one is looked for: later
       // rankings replace these, not change them)
       if (onEarly) {

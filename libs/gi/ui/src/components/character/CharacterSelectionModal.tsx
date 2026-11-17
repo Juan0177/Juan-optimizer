@@ -34,6 +34,7 @@ import {
   useDatabase,
   useDBMeta,
 } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import CloseIcon from '@mui/icons-material/Close'
 import FavoriteIcon from '@mui/icons-material/Favorite'
@@ -826,6 +827,7 @@ const SelectionCard = memo(function SelectionCard({
   characterKey: CharacterKey
   onSelect: (ck: CharacterKey) => void
 }) {
+  const { t } = useTranslation('page_character')
   const { gender } = useDBMeta()
   const character = useCharacter(characterKey)
 
@@ -904,7 +906,7 @@ const SelectionCard = memo(function SelectionCard({
                   component="span"
                   whiteSpace="nowrap"
                 >
-                  Lv. {level}
+                  <Translate ns="ui" key18="levelShort" /> {level}
                 </Typography>
                 <Typography
                   variant="body2"
@@ -918,7 +920,7 @@ const SelectionCard = memo(function SelectionCard({
             </Box>
           ) : (
             <Typography component="span" variant="body2">
-              <SqBadge color="secondary">New</SqBadge>
+              <SqBadge color="secondary">{t('newBadge', 'New')}</SqBadge>
             </Typography>
           )}
           <StarsDisplay stars={rarity} colored />

@@ -9,5 +9,12 @@
   "c2CoreTypeCond": "Stato del Nucleo di rilevamento",
   "c2CoreSteady": "Stabile",
   "c2CoreOverloaded": "Sovraccarico",
-  "detectionCoreMult_": "Molt. DAN Nucleo di rilevamento"
+  "detectionCoreMult_": "Molt. DAN Nucleo di rilevamento",
+  "a4Cond": "Fari a gradiente creati (ultimi 15 s)",
+  "beaconsCond": "Fari a gradiente posseduti da Mitya",
+  "c4Dmg": "DAN da Astroconduzione del Nucleo di rilevamento (ogni 5 Fari a gradiente consumati)",
+  "coreCond": "Nucleo di rilevamento in campo",
+  "overloaded": "Sovraccarico",
+  "perBeacon": "(per Faro a gradiente)",
+  "steady": "Stabile"
 }

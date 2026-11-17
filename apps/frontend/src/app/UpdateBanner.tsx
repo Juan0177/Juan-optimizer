@@ -1,5 +1,6 @@
 import { Alert, Button, Snackbar } from '@mui/material'
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { newerBuild, newerVersion, onNewerBuild } from './updateCheck'
 
 /**
@@ -7,6 +8,7 @@ import { newerBuild, newerVersion, onNewerBuild } from './updateCheck'
  * opened from the offline cache). Reload when it suits you; nothing in progress is cut short.
  */
 export function UpdateBanner() {
+  const { t } = useTranslation('ui')
   const [newer, setNewer] = useState(newerBuild())
   const [version, setVersion] = useState(newerVersion())
   useEffect(
@@ -31,13 +33,19 @@ export function UpdateBanner() {
             size="small"
             onClick={() => window.location.reload()}
           >
-            Reload
+            {t('update.reload', 'Reload')}
           </Button>
         }
       >
         {version
-          ? `Juan-optimizer v${version} is out.`
-          : 'A newer version of Juan-optimizer is published.'}
+          ? t('update.versionOut', {
+              defaultValue: 'Juan-optimizer v{{version}} is out.',
+              version,
+            })
+          : t(
+              'update.newer',
+              'A newer version of Juan-optimizer is published.'
+            )}
       </Alert>
     </Snackbar>
   )

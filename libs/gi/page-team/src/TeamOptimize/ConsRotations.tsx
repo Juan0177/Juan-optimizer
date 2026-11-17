@@ -21,6 +21,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { RotationReadout } from './RotationInline'
 import { editorSx } from './RotationWriter'
+import { useSimText } from './simText'
 import { focusSx, hairline, insetSx, quickSx, tokens, type } from './ui'
 
 export const CONSTELLATIONS = [0, 1, 2, 3, 4, 5, 6] as const
@@ -108,6 +109,7 @@ export function ConsRotations({
   gender: GenderKey
   onChange: (next: ConsRotationTexts) => void
 }) {
+  const simText = useSimText()
   const { t } = useTranslation('page_team')
   const [editing, setEditing] = useState<number>()
   const [draft, setDraft] = useState('')
@@ -252,7 +254,7 @@ export function ConsRotations({
                   />
                   {!!warnings.length && (
                     <Typography sx={{ fontSize: 12.5, color: 'warning.main' }}>
-                      {warnings[0]}
+                      {simText(warnings[0])}
                     </Typography>
                   )}
                   <Box

@@ -186,7 +186,7 @@ function OptimizationTargetEditorItem({
         sx={{ width: 112, flexShrink: 0 }}
         disabled={disabled}
         onChange={onChange}
-        placeholder="Stat Value"
+        placeholder={t('statValuePlaceholder', 'Stat Value')}
         size="small"
         inputProps={{ sx: { textAlign: 'right' } }}
         InputProps={{

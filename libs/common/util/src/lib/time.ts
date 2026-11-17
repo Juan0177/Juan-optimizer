@@ -12,22 +12,25 @@ export function msToUnits(ms: number) {
   const hours = Math.floor(ms / (1000 * 60 * 60))
   return { hours, minutes, seconds, milliseconds }
 }
-export function timeString(ms: number) {
+/** The unit words after a time ("Minutes", "Hours"), so a caller can show them in its language */
+export type TimeUnitWords = { minutes: string; hours: string }
+const englishUnits: TimeUnitWords = { minutes: 'Minutes', hours: 'Hours' }
+export function timeString(ms: number, units: TimeUnitWords = englishUnits) {
   //shows only in terms of hours/minutes. there are better calculations for days using Date functions.
   const { hours, minutes, seconds } = msToUnits(ms)
-  let timeText = 'Minutes'
-  if (hours) timeText = 'Hours'
+  let timeText = units.minutes
+  if (hours) timeText = units.hours
   return `${hours ? `${hours}:` : ''}${strPadLeft(
     minutes.toString(),
     '0',
     2
   )}:${strPadLeft(seconds.toString(), '0', 2)} ${timeText}`
 }
-export function timeStringMs(ms: number) {
+export function timeStringMs(ms: number, units: TimeUnitWords = englishUnits) {
   //shows only in terms of hours/minutes. there are better calculations for days using Date functions.
   const { hours, minutes, seconds, milliseconds } = msToUnits(ms)
-  let timeText = 'Minutes'
-  if (hours) timeText = 'Hours'
+  let timeText = units.minutes
+  if (hours) timeText = units.hours
   return `${hours ? `${hours}:` : ''}${strPadLeft(
     minutes.toString(),
     '0',

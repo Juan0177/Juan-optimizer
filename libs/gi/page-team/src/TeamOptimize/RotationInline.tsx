@@ -31,6 +31,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { laneColor } from './RotationTimeline'
 import {
@@ -55,6 +56,7 @@ import {
   writtenHits,
   writtenSeconds,
 } from './RotationWriter'
+import { useSimText } from './simText'
 import {
   FieldLabel,
   focusSx,
@@ -102,7 +104,8 @@ export function RotationInline({
   replaces: boolean
   disabled?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const simText = useSimText()
+  const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
   const { applied, text, setText, isDraft } = useRotationText(teamId)
@@ -326,7 +329,7 @@ export function RotationInline({
             }}
           >
             {result?.sim &&
-              `${(writtenSeconds(result) ?? 0).toFixed(1)} s · ${t(
+              `${localizeDecimal((writtenSeconds(result) ?? 0).toFixed(1), i18n?.language)} s · ${t(
                 'teamOpt.writer.hitCount',
                 {
                   defaultValue: '{{count}} hits',
@@ -375,7 +378,7 @@ export function RotationInline({
         >
           {warnings.map((w) => (
             <Typography key={w} variant="body2" color="warning.main">
-              {w}
+              {simText(w)}
             </Typography>
           ))}
         </Box>

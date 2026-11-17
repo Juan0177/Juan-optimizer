@@ -117,5 +117,124 @@
     "reaction": "Reaction"
   },
   "basedOnStellar": "Based on Stellar Optimizer",
-  "dbName": "Database name"
+  "dbName": "Database name",
+  "update": {
+    "reload": "Reload",
+    "versionOut": "Juan-optimizer v{{version}} is out.",
+    "newer": "A newer version of Juan-optimizer is published."
+  },
+  "archive": {
+    "set": "Set",
+    "rarity": "Rarity",
+    "bonus1": "1-piece Bonus",
+    "bonus2": "2-piece Bonus",
+    "bonus4": "4-piece Bonus",
+    "name": "Name",
+    "element": "Element",
+    "type": "Type",
+    "main": "Main",
+    "secondary": "Secondary"
+  },
+  "passive": "Passive",
+  "tools": {
+    "minutes": "Minutes",
+    "hours": "Hours",
+    "resin": {
+      "title": "Resin Counter",
+      "max": "MAX",
+      "next": "Next resin in {{delta}}, full Resin at {{date}}",
+      "full": "Resin has been full for at least {{delta}}, since {{date}}",
+      "note": "Because we do not provide a mechanism to synchronize resin time, actual resin recharge time might be as much as 8 minutes earlier than predicted."
+    },
+    "time": {
+      "title": "Teyvat Time",
+      "serverDate": "Server Date:",
+      "untilReset": "Time until reset:",
+      "resinUntilReset": "Resin until reset:",
+      "zone": {
+        "America": "America",
+        "Europe": "Europe",
+        "Asia": "Asia",
+        "TW": "TW, HK, MO"
+      }
+    },
+    "exp": {
+      "noMora": "You don't have enough <1>Mora</1> for this operation.",
+      "noBooks": "You don't have enough <1>EXP. books</1> to level to the next milestone.",
+      "maxLevel": "You are at the maximum level.",
+      "title": "Experience Calculator",
+      "fullLevel": "Full Level",
+      "notFull": "Don't fully level",
+      "desc": "This calculator tries to calculate the amount of exp books required to get to the next milestone level.",
+      "descUnder": "It will try to get as close to the milestone level as possible, so you can grind the rest of the exp without any waste.",
+      "descFull": "It will try to calculate the amount of books needed to minimize as much exp loss as possible.",
+      "curLevel": "Current Level",
+      "curExp": "Current EXP.",
+      "nextMilestone": "Next Milestone Level:",
+      "toMilestone": "EXP. to milestone:",
+      "curMora": "Current Mora",
+      "moraCost": "Mora Cost:",
+      "waste": "EXP Waste:",
+      "diff": "EXP Diff:",
+      "finalMora": "Final Mora:",
+      "finalLevel": "Final Level:",
+      "finalExp": "Final EXP:",
+      "apply": "Apply",
+      "amount": "Amount",
+      "required": "Required:"
+    }
+  },
+  "infusion": {
+    "none": "No Team Melee Infusion",
+    "skill": "Skill",
+    "burst": "Burst"
+  },
+  "conditional": {
+    "notActive": "Not Active"
+  },
+  "statEditor": {
+    "value": "Stat Value",
+    "delete": "Delete Stat Constraint"
+  },
+  "compareTo": "Compare to",
+  "displayHeader": {
+    "basic": "Basic Stats",
+    "character": "Character",
+    "bonusStats": "Bonus Stats",
+    "custom": "Custom Multi Target",
+    "teamBuff": "Received Team Buffs",
+    "reaction": "Transformative Reactions",
+    "nicole": "Nicole's Astral Projections",
+    "moonsign": "Moonsign: Ascendant Gleam",
+    "error": "ERROR",
+    "talent": {
+      "normal": "Normal Atk.",
+      "charged": "Charged Atk.",
+      "plunging": "Plunging Atk.",
+      "skill": "Ele. Skill",
+      "burst": "Ele. Burst",
+      "passive": "Passive",
+      "passive1": "1st Asc. Pass.",
+      "passive2": "4th Asc. Pass.",
+      "passive3": "Util. Pass.",
+      "constellation1": "Const. 1",
+      "constellation2": "Const. 2",
+      "constellation3": "Const. 3",
+      "constellation4": "Const. 4",
+      "constellation5": "Const. 5",
+      "constellation6": "Const. 6"
+    }
+  },
+  "scrollTop": "Scroll back to top",
+  "codeSample": "Code sample",
+  "buildAlert": {
+    "skipped": "skipped",
+    "generating": "Generating and testing",
+    "generatingFor": "build configurations against the criteria for",
+    "elapsed": "Time elapsed:",
+    "generated": "Generated and tested",
+    "generatedFor": "Build configurations against the criteria for",
+    "total": "Total duration:"
+  },
+  "levelShort": "Lv."
 }

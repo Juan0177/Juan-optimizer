@@ -1,4 +1,27 @@
 {
   "showingNum_one": "Visualizzata <1>{{count}}</1> squadra su {{value}}",
-  "showingNum_other": "Visualizzate <1>{{count}}</1> squadre su {{value}}"
+  "showingNum_other": "Visualizzate <1>{{count}}</1> squadre su {{value}}",
+  "card": {
+    "addMember": "Aggiungi un membro",
+    "build": "Build",
+    "level": "Liv. {{level}}",
+    "levelLabel": "Livello",
+    "loadout": "Configurazione",
+    "openMember": "Apri {{name}} in {{team}}",
+    "talents": "Talenti"
+  },
+  "empty": {
+    "create": "Crea una squadra",
+    "description": "Una squadra contiene fino a quattro personaggi, così i loro buff, la risonanza e le reazioni compaiono in ogni valore di danno. Creane una o importa una squadra che qualcuno ha condiviso con te.",
+    "import": "Importa una squadra",
+    "title": "Ancora nessuna squadra"
+  },
+  "header": {
+    "create": "Crea squadra",
+    "import": "Importa squadra"
+  },
+  "toolbar": {
+    "filtered": "{{count}} di {{total}} squadre",
+    "search": "Cerca squadre"
+  }
 }

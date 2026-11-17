@@ -58,10 +58,12 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { WeaponView } from './WeaponView'
 
 const rarities = [5, 4, 3, 2, 1] as const
 export default function TabWeapon() {
+  const { t } = useTranslation('ui')
   const database = useDatabase()
   const archive = useDataEntryBase(database.displayArchive)
   const handleRarity = handleMultiSelect([...rarities])
@@ -171,11 +173,11 @@ export default function TabWeapon() {
     [weaponKeys]
   )
   const columns: { key: SortKey; label: string; width: number }[] = [
-    { key: 'name', label: 'Name', width: 30 },
-    { key: 'type', label: 'Type', width: 10 },
-    { key: 'rarity', label: 'Rarity', width: 10 },
-    { key: 'main', label: 'Main', width: 20 },
-    { key: 'sub', label: 'Secondary', width: 30 },
+    { key: 'name', label: t('archive.name', 'Name'), width: 30 },
+    { key: 'type', label: t('archive.type', 'Type'), width: 10 },
+    { key: 'rarity', label: t('archive.rarity', 'Rarity'), width: 10 },
+    { key: 'main', label: t('archive.main', 'Main'), width: 20 },
+    { key: 'sub', label: t('archive.secondary', 'Secondary'), width: 30 },
   ]
   return (
     <Box>

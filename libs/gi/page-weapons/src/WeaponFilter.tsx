@@ -286,7 +286,10 @@ function WeaponBulkActions({ weaponIds }: { weaponIds: string[] }) {
       count: numUnlock,
       run: () =>
         window.confirm(
-          `Are you sure you want to lock ${numUnlock} weapons ?`
+          t('bulk.confirmLock', {
+            defaultValue: 'Are you sure you want to lock {{count}} weapons?',
+            count: numUnlock,
+          })
         ) &&
         weaponIds.forEach((id) => database.weapons.set(id, { lock: true })),
     },
@@ -297,7 +300,10 @@ function WeaponBulkActions({ weaponIds }: { weaponIds: string[] }) {
       count: numLock,
       run: () =>
         window.confirm(
-          `Are you sure you want to unlock ${numLock} weapons ?`
+          t('bulk.confirmUnlock', {
+            defaultValue: 'Are you sure you want to unlock {{count}} weapons?',
+            count: numLock,
+          })
         ) &&
         weaponIds.forEach((id) => database.weapons.set(id, { lock: false })),
     },
@@ -309,7 +315,10 @@ function WeaponBulkActions({ weaponIds }: { weaponIds: string[] }) {
       danger: true,
       run: () =>
         window.confirm(
-          `Are you sure you want to delete ${numDelete} weapons?`
+          t('bulk.confirmDelete', {
+            defaultValue: 'Are you sure you want to delete {{count}} weapons?',
+            count: numDelete,
+          })
         ) &&
         weaponIds.forEach((id) => {
           const weapon = database.weapons.get(id)

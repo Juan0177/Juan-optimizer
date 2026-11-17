@@ -16,6 +16,7 @@ import ClearIcon from '@mui/icons-material/Clear'
 import InfoIcon from '@mui/icons-material/Info'
 import { Box, Button, ButtonGroup, MenuItem, Stack } from '@mui/material'
 import { useCallback, useContext, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BuildTcContext } from '../../../../BuildTcContext'
 
 export function ArtifactSetEditor({
@@ -27,6 +28,7 @@ export function ArtifactSetEditor({
   remaining: number
   disabled?: boolean
 }) {
+  const { t } = useTranslation('page_character')
   const {
     buildTc: {
       artifact: { sets },
@@ -77,7 +79,14 @@ export function ArtifactSetEditor({
         <ButtonGroup>
           <DropdownButton
             size="small"
-            title={<Box whiteSpace="nowrap">{value}-set</Box>}
+            title={
+              <Box whiteSpace="nowrap">
+                {t('tabTheorycraft.setPieces', {
+                  defaultValue: '{{count}}-set',
+                  count: value ?? 0,
+                })}
+              </Box>
+            }
             disabled={disabled}
           >
             {Object.keys(artifactSheet.setEffects)
@@ -90,7 +99,10 @@ export function ArtifactSetEditor({
                   }
                   onClick={() => setValue(setKey as 1 | 2 | 4)}
                 >
-                  {setKey}-set
+                  {t('tabTheorycraft.setPieces', {
+                    defaultValue: '{{count}}-set',
+                    count: setKey,
+                  })}
                 </MenuItem>
               ))}
           </DropdownButton>

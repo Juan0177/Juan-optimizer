@@ -12,12 +12,14 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import { getCharMaxLevel } from '@genshin-optimizer/gi/consts'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import { input } from '@genshin-optimizer/gi/wr'
 import { Box, CardActionArea, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useCallback, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { DataContext } from '../../../context'
 import { iconAsset } from '../../../util/iconAsset'
 import type { RollColorKey } from '../../artifact'
@@ -162,7 +164,7 @@ export function CharacterCardHeaderContent({
             color: tcColor ?? 'text.primary',
           }}
         >
-          Lv. {characterLevel}
+          <Translate ns="ui" key18="levelShort" /> {characterLevel}
           <Box
             component="span"
             sx={{ fontWeight: 500, color: tcColor ?? 'text.secondary' }}
@@ -277,6 +279,7 @@ export function HeaderContentNew({
 }: {
   characterKey: CharacterKey
 }) {
+  const { t } = useTranslation('page_character')
   const { gender } = useDBMeta()
   const charStat = getCharStat(characterKey)
   return (
@@ -288,7 +291,7 @@ export function HeaderContentNew({
       />
       <Box mt={1}>
         <Typography variant="h4">
-          <SqBadge>NEW</SqBadge>
+          <SqBadge>{t('newBadgeUpper', 'NEW')}</SqBadge>
         </Typography>
       </Box>
       <Typography mt={1.5}>

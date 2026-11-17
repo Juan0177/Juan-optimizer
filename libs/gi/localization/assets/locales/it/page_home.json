@@ -30,7 +30,11 @@
     }
   },
   "inventoryCard": {
-    "title": "Inventario GO"
+    "title": "Inventario GO",
+    "allTeams": "Tutte le squadre",
+    "loadouts_one": "{{count}} configurazione di personaggio",
+    "loadouts_other": "{{count}} configurazioni di personaggi",
+    "recentTeams": "Squadre recenti"
   },
   "vidGuideCard": {
     "title": "Video guide"
@@ -74,5 +78,12 @@
         "action": "Apri l'ottimizzatore"
       }
     }
+  },
+  "hero": {
+    "addCharacters": "Aggiungi personaggi",
+    "createTeam": "Crea una squadra",
+    "importData": "Importa dati",
+    "openTeams": "Apri le tue squadre",
+    "title": "Pianifica le build con quello che possiedi"
   }
 }

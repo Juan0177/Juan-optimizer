@@ -1,5 +1,6 @@
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { Box, IconButton, styled } from '@mui/material'
+import { useTranslation } from 'react-i18next'
 
 const CodeArea = styled('code')(({ theme }) => ({
   '&:disabled': {
@@ -30,13 +31,14 @@ const CodeArea = styled('code')(({ theme }) => ({
 }))
 
 export function CodeBlock({ text }: { text: string }) {
+  const { t } = useTranslation('ui')
   const lines = text.split(/\r\n|\r|\n/)
 
   return (
     <Box display="flex" flexDirection="row" px={1} pb={1}>
       <CodeArea
         spellCheck="false"
-        aria-label="Code Sample"
+        aria-label={t('codeSample', 'Code sample')}
         sx={{ mt: 0, pt: 0 }}
       >
         <Box display="flex">

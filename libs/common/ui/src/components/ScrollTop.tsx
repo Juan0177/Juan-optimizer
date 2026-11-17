@@ -1,7 +1,9 @@
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
 import { Box, Fab, useScrollTrigger, Zoom } from '@mui/material'
+import { useTranslation } from 'react-i18next'
 
 export function ScrollTop() {
+  const { t } = useTranslation('ui')
   const trigger = useScrollTrigger({
     target: window,
     disableHysteresis: true,
@@ -28,7 +30,11 @@ export function ScrollTop() {
         role="presentation"
         sx={{ position: 'fixed', bottom: 100, right: 16 }}
       >
-        <Fab color="secondary" size="small" aria-label="scroll back to top">
+        <Fab
+          color="secondary"
+          size="small"
+          aria-label={t('scrollTop', 'Scroll back to top')}
+        >
           <KeyboardArrowUpIcon />
         </Fab>
       </Box>

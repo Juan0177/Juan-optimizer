@@ -317,11 +317,11 @@ export default function ChartCard({
             <Collapse in={!!downloadData && showDownload}>
               <CardThemed sx={{ mb: 2 }}>
                 <CardContent>
-                  <Typography>Min Data</Typography>
+                  <Typography>{t('tcGraph.minData', 'Min Data')}</Typography>
                   <ReadOnlyTextArea
                     value={JSON.stringify(downloadData?.minimum)}
                   />
-                  <Typography>All Data</Typography>
+                  <Typography>{t('tcGraph.allData', 'All Data')}</Typography>
                   <ReadOnlyTextArea
                     value={JSON.stringify(downloadData?.allData)}
                   />
@@ -430,7 +430,7 @@ function Chart({
           height={50}
         />
         <YAxis
-          name="DMG"
+          name={t('tcGraph.dmg', 'DMG')}
           domain={['auto', 'auto']}
           unit={valueNodeInfo?.unit}
           allowDecimals={false}

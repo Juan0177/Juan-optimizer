@@ -253,6 +253,7 @@ function StatFilterItem({
   getOptionDisabled: (option: StatOption) => boolean
   label?: string
 }) {
+  const { t } = useTranslation('ui')
   const isFloat = statKey ? getUnitStr(statKey) === '%' : false
   const onValueChange = useCallback(
     (value?: number) => statKey && setValue(statKey, value ?? 0),
@@ -297,7 +298,7 @@ function StatFilterItem({
           }}
           disabled={disabled}
           onChange={onValueChange}
-          placeholder="Stat Value"
+          placeholder={t('statEditor.value', 'Stat Value')}
           size="small"
           inputProps={{ sx: { textAlign: 'right' } }}
           InputProps={{
@@ -309,7 +310,7 @@ function StatFilterItem({
               <InputAdornment position="end" sx={{ ml: 0 }}>
                 {statKey ? getUnitStr(statKey) : undefined}{' '}
                 <IconButton
-                  aria-label="Delete Stat Constraint"
+                  aria-label={t('statEditor.delete', 'Delete Stat Constraint')}
                   onClick={onDeleteKey}
                   edge="end"
                 >

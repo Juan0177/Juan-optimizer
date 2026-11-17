@@ -698,7 +698,10 @@ export function ArtifactEditor({
                             {!!scanningNum && <CircularProgress size="1em" />}
                             <Typography sx={{ flexGrow: 1, ml: 1 }}>
                               <span>
-                                Screenshots in file-queue:
+                                {t(
+                                  'editor.queue',
+                                  'Screenshots in file-queue:'
+                                )}
                                 <b>{queueTotal}</b>
                                 {/* {process.env.NODE_ENV === "development" && ` (Debug: Processed ${processed.length}/${maxProcessedCount}, Processing: ${outstanding.filter(entry => entry.result).length}/${maxProcessingCount}, Outstanding: ${outstanding.length})`} */}
                               </span>
@@ -709,7 +712,7 @@ export function ArtifactEditor({
                               color="error"
                               onClick={clearQueue}
                             >
-                              Clear file-queue
+                              {t('editor.clearQueue', 'Clear file-queue')}
                             </Button>
                           </Box>
                         </CardThemed>

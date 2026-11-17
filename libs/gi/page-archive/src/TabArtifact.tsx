@@ -42,6 +42,7 @@ export default function TabArtifact() {
   const searchTermDeferred = useDeferredValue(searchTerm)
   const handleRarity = handleMultiSelect([...maxRarities])
   //load namespaces for artifact set effects
+  const { t: tUi } = useTranslation('ui')
   const { t } = useTranslation(
     allArtifactSetKeys.map((key) => {
       return `artifact_${key}_gen`
@@ -137,10 +138,10 @@ export default function TabArtifact() {
       <Table>
         <TableHead>
           <TableRow>
-            <TableCell>Set</TableCell>
-            <TableCell>Rarity</TableCell>
-            <TableCell>2-piece Bonus</TableCell>
-            <TableCell>4-piece Bonus</TableCell>
+            <TableCell>{tUi('archive.set', 'Set')}</TableCell>
+            <TableCell>{tUi('archive.rarity', 'Rarity')}</TableCell>
+            <TableCell>{tUi('archive.bonus2', '2-piece Bonus')}</TableCell>
+            <TableCell>{tUi('archive.bonus4', '4-piece Bonus')}</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -223,9 +224,9 @@ export default function TabArtifact() {
         <Table sx={{ mt: 2 }}>
           <TableHead>
             <TableRow>
-              <TableCell>Set</TableCell>
-              <TableCell>Rarity</TableCell>
-              <TableCell>1-piece Bonus</TableCell>
+              <TableCell>{tUi('archive.set', 'Set')}</TableCell>
+              <TableCell>{tUi('archive.rarity', 'Rarity')}</TableCell>
+              <TableCell>{tUi('archive.bonus1', '1-piece Bonus')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

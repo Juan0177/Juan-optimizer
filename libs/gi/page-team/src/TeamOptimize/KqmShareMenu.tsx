@@ -20,7 +20,6 @@ import type {
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import {
-  BETA_KEYS,
   BETA_LABEL,
   CardImageDialog,
   COMPARE_CHART_HEIGHT,
@@ -79,6 +78,12 @@ import {
   refitConstellations,
 } from './consInvestment'
 import { formatRateFull } from './format'
+import {
+  betaOf,
+  kqmStandardNote,
+  kqmTeamCardData,
+  shareStamp,
+} from './kqmTeamCard'
 import { MemberAvatar } from './MemberAvatar'
 import { useMemberNames } from './RotationWriter'
 import { Disclosure, hairline, insetSx, type } from './ui'
@@ -88,21 +93,7 @@ type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
 /** The Share tip was seen on this device */
 const SHARE_TIP_KEY = 'kqm_share_tip_seen'
 
-/**
- * What made the picture and when, small in its corner (to check a shared picture against later):
- * "Stellar Optimizer v1.11.2 · 16 Nov 2026"
- */
-const shareStamp = () =>
-  `Juan-optimizer (Stellar v${currentRelease.version}) · ${new Date().toLocaleDateString(
-    undefined,
-    { day: 'numeric', month: 'short', year: 'numeric' }
-  )}`
-
 declare const __GO_BUILD_ID__: string
-
-/** The unreleased content (keys) among `keys`, each once */
-const betaOf = (keys: Iterable<string>) =>
-  [...new Set(keys)].filter((k) => BETA_KEYS.has(k)).sort()
 
 type ShareProps = {
   teamId: string
@@ -405,12 +396,13 @@ function MemberTabs<V extends CharacterKey | 'team' = CharacterKey>({
 
 /** Names, icons and the standard's line, for every picture */
 function useShareText(props: ShareProps) {
-  const { t } = useTranslation([
+  const { t, i18n } = useTranslation([
     'page_team',
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
   ])
+  const locale = i18n.language
   const { gender } = useDBMeta()
   const team = useTeam(props.teamId)
   const { result, setup, members } = props
@@ -438,19 +430,17 @@ function useShareText(props: ShareProps) {
       t: t as unknown as TFunction,
       beta,
       gender,
+      locale,
       teamName: team?.name ?? '',
       keys,
       cons,
       charName,
       weaponName,
       setName,
-      standard: t('page_team:teamOpt.kqm.share.standard', {
-        defaultValue: 'KQM Standards · Talents {{talents}}',
-        talents: `${talents}/${talents}/${talents}`,
-      }),
+      standard: kqmStandardNote(t as unknown as TFunction, talents),
       teamLine: keys.map((ck) => `C${cons(ck)} ${charName(ck)}`).join('  ·  '),
     }
-  }, [t, gender, team?.name, setup, members, result])
+  }, [t, locale, gender, team?.name, setup, members, result])
 }
 
 /** The written rotation, its members' turns apart */
@@ -537,62 +527,28 @@ function TeamPicture({
   const { result, rotationTime, teamId } = props
   const { setup } = props
   const data = useMemo((): KqmCardData => {
-    const { total } = result.after
     // (field time: the ER calculator's, from the rotation or as typed)
     const calc = setup.kqm?.energyCalculator
-    return {
+    return kqmTeamCardData({
+      t: s.t,
+      gender: s.gender,
       name: s.teamName,
-      members: s.keys.map((ck) => {
-        const build = result.builds[ck]!
-        const damage = result.after.members[ck] ?? 0
-        const fieldTime = calc?.members[ck]?.fieldTime
-        return {
-          ...kqmCardFace(ck, s.gender),
-          name: s.charName(ck),
-          constellation: s.cons(ck),
-          weapon: {
-            name: s.weaponName(build.weapon.key),
-            refinement: build.weapon.refinement,
-            icon: weaponAsset(build.weapon.key, true),
-          },
-          sets: Object.keys(build.sets).map((key) => ({
-            name: s.setName(key),
-            icon: artifactDefIcon(key as never),
-          })),
-          damage: formatRateFull(damage, undefined),
-          share: total > 0 ? damage / total : 0,
-          field:
-            rotationTime && fieldTime !== undefined
-              ? `${((fieldTime / 100) * rotationTime).toFixed(1)}s`
-              : undefined,
-          er: `${Math.round(result.energyRecharge[ck]?.value ?? 100)}%`,
-        }
-      }),
-      total: formatRateFull(total, undefined),
-      dps: rotationTime ? formatRateFull(total, rotationTime) : undefined,
-      seconds: rotationTime
-        ? s.t('page_team:teamOpt.kqm.share.seconds', {
-            defaultValue: '{{seconds}}s rotation',
-            seconds: rotationTime,
-          })
-        : undefined,
+      members: s.keys.map((ck) => ({
+        key: ck,
+        constellation: s.cons(ck),
+        build: result.builds[ck]!,
+        damage: result.after.members[ck] ?? 0,
+        er: result.energyRecharge[ck]?.value,
+        fieldTime: calc?.members[ck]?.fieldTime,
+      })),
+      total: result.after.total,
+      rotationTime,
       rotation: rotationTurns(teamId),
       notes: s.standard,
-      beta: s.beta.length ? BETA_LABEL : undefined,
-      labels: {
-        team: s.t('page_team:teamOpt.kqm.share.colTeam', 'Team'),
-        damage: s.t('page_team:teamOpt.kqm.share.colDamage', 'Damage'),
-        dist: s.t('page_team:teamOpt.kqm.share.colShare', 'Share'),
-        field: s.t('page_team:teamOpt.kqm.share.colField', 'Field'),
-        er: 'ER',
-        total: s.t('page_team:teamOpt.kqm.share.total', 'Total'),
-        dpr: 'DPR',
-        dps: 'DPS',
-        rotation: s.t('page_team:teamOpt.kqm.share.rotation', 'Rotation'),
-        notes: s.t('page_team:teamOpt.kqm.share.notes', 'Notes'),
-        siteName: shareStamp(),
-      },
-    }
+      beta: s.beta.length > 0,
+      siteName: shareStamp(s.locale),
+      locale: s.locale,
+    })
   }, [s, result, rotationTime, teamId, setup])
   const render = useMemo(() => () => renderKqmCard(data), [data])
   const watermark = () => shareRecord(props, s, 'team', s.beta)
@@ -652,7 +608,7 @@ function useCompareChart(
       beta: beta.length ? BETA_LABEL : undefined,
       labels: {
         unmet: s.t('page_team:teamOpt.kqm.share.unmet', 'ER unmet'),
-        siteName: shareStamp(),
+        siteName: shareStamp(s.locale),
         // (the constellation chart's two bars)
         team: rotationTime
           ? s.t('page_team:teamOpt.kqm.share.teamDps', 'Team DPS')
@@ -1097,7 +1053,7 @@ function ConstellationPicture({
         cost: baseCost + row.cost,
         cons: row.cons,
         value: row.dps,
-        detail: formatRateFull(row.dps, undefined),
+        detail: formatRateFull(row.dps, undefined, s.locale),
       })),
       beta: s.beta.length ? BETA_LABEL : undefined,
       labels: {
@@ -1109,7 +1065,7 @@ function ConstellationPicture({
           'page_team:teamOpt.kqm.share.investNote',
           'Cost counts copies: a 5★ is 1 at C0, and every constellation is 1 more. Each row is the best way to spend it.'
         ),
-        siteName: shareStamp(),
+        siteName: shareStamp(s.locale),
       },
     }
   }, [done, investment, baseSeconds, teamTitle, s, keys, baseCost])

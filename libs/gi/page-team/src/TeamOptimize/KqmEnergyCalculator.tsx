@@ -47,6 +47,7 @@ import {
 import type { Theme } from '@mui/material/styles'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import {
   EmptyLine,
@@ -635,7 +636,7 @@ function EnergyBalance({
   short?: { label: string }
   shortUses: number
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   if (!result) return null
   const { sources, burstSpend } = result
   // (a partial Burst spends energy: its skills' flat energy below zero)
@@ -691,7 +692,7 @@ function EnergyBalance({
         value: n(burstSpend),
       }),
     partialSpend > 0 &&
-      `${short?.label ?? t('teamOpt.kqm.calc.partial', 'Partial Bursts')} ×${+shortUses.toFixed(2)} ${n(partialSpend)}`,
+      `${short?.label ?? t('teamOpt.kqm.calc.partial', 'Partial Bursts')} ×${localizeDecimal(`${+shortUses.toFixed(2)}`, i18n?.language)} ${localizeDecimal(`${n(partialSpend)}`, i18n?.language)}`,
   ].filter(Boolean)
   return (
     <Section
@@ -1285,7 +1286,7 @@ export function MemberEnergy({
               onChange={(_, value) =>
                 updateMember(characterKey, { fieldTime: value as number })
               }
-              aria-label={`${name}: field time`}
+              aria-label={`${name}: ${t('teamOpt.kqm.calc.fieldTime', 'Field time')}`}
               sx={{ flex: 1, py: 1, ml: 0.75 }}
             />
             <NumberField

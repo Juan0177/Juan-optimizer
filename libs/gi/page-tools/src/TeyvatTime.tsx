@@ -11,7 +11,9 @@ import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import AccessTimeFilledIcon from '@mui/icons-material/AccessTimeFilled'
 import { CardContent, Divider, Grid, MenuItem, Typography } from '@mui/material'
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 export default function TeyvatTime() {
+  const { t, i18n } = useTranslation('ui')
   const database = useDatabase()
   const [{ timeZoneKey }, setState] = useState(() => database.displayTool.get())
   useEffect(
@@ -49,16 +51,22 @@ export default function TeyvatTime() {
     resetTime.setUTCHours(4, 0, 0, 0)
   }
   const remaningTimeMs = resetTime.getTime() - time.getTime()
-  const remainingResetString = timeString(remaningTimeMs)
+  // the server's name: "Europe" is "Europa" in Italian
+  const zoneName = (key: TimeZoneKey) =>
+    t(`tools.time.zone.${key.split(',')[0]}`, key)
+  const remainingResetString = timeString(remaningTimeMs, {
+    minutes: t('tools.minutes', 'Minutes'),
+    hours: t('tools.hours', 'Hours'),
+  })
 
   return (
     <CardThemed>
       <CardContent sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
         <AccessTimeFilledIcon />
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
-          Teyvat Time
+          {t('tools.time.title', 'Teyvat Time')}
         </Typography>
-        <DropdownButton title={timeZoneKey}>
+        <DropdownButton title={zoneName(timeZoneKey)}>
           {Object.keys(timeZones).map((zoneKey) => (
             <MenuItem
               key={zoneKey}
@@ -66,7 +74,7 @@ export default function TeyvatTime() {
               disabled={timeZoneKey === zoneKey}
               onClick={() => setTimeZoneKey(zoneKey)}
             >
-              {zoneKey}
+              {zoneName(zoneKey as TimeZoneKey)}
             </MenuItem>
           ))}
         </DropdownButton>
@@ -76,7 +84,7 @@ export default function TeyvatTime() {
         <Grid container justifyContent="center" spacing={3}>
           <Grid item sx={{ my: 4 }}>
             <Typography variant="h2">
-              {time.toLocaleTimeString([], { timeZone: 'UTC' })}
+              {time.toLocaleTimeString(i18n.language, { timeZone: 'UTC' })}
             </Typography>
           </Grid>
           <Grid
@@ -86,13 +94,23 @@ export default function TeyvatTime() {
             justifyContent="space-around"
           >
             <Typography>
-              Server Date: <b>{time.toDateString()}</b>
+              {t('tools.time.serverDate', 'Server Date:')}{' '}
+              <b>
+                {time.toLocaleDateString(i18n.language, {
+                  timeZone: 'UTC',
+                  weekday: 'short',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </b>
             </Typography>
             <Typography>
-              Time until reset: <b>{remainingResetString}</b>
+              {t('tools.time.untilReset', 'Time until reset:')}{' '}
+              <b>{remainingResetString}</b>
             </Typography>
             <Typography>
-              Resin until reset:{' '}
+              {t('tools.time.resinUntilReset', 'Resin until reset:')}{' '}
               <b>{Math.floor(remaningTimeMs / (8 * MINUTE_MS))}</b>
             </Typography>
           </Grid>

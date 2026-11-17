@@ -21,6 +21,13 @@ export type SwapFragmentResult =
       replacedActions: number
       /** The actions put in its place, less the replaced ones */
       delta: number
+      /**
+       * The replaced step's turn: its index among the turns of `text` as the parser cuts it (the
+       * KQM sheet's rotation); absent when it is in the opener
+       */
+      turn?: number
+      /** The entering member's turn in the new `text` (its first, if the fragment has several) */
+      insertedTurn?: number
     }
   | { ok: false; error: SwapFragmentError; count: number }
 
@@ -115,11 +122,19 @@ export function swapFragment({
     parseRotation(s, members).steps.reduce((n, st) => n + st.actions.length, 0)
   const firstAction = actions(target.parts.slice(0, i).join(''))
   const replacedActions = actions(target.parts[i])
-  const delta =
-    actions(
-      inserted,
-      names.map((m) => (m.characterKey === out ? { ...m, name } : m))
-    ) - replacedActions
+  // (team B's names: the entering member's in place of the leaving member's)
+  const namesB = names.map((m) => (m.characterKey === out ? { ...m, name } : m))
+  const delta = actions(inserted, namesB) - replacedActions
+  // (its turn: by position, however its member is written; on B's side, the turns before it cut
+  // with B's names)
+  const turns = (s: string, members: RotationMember[]) => {
+    const c = cut(s, members)
+    return c.steps.filter((k) => c.parts[k].trim()).length
+  }
+  const turn =
+    where === 'text' ? turns(t.parts.slice(0, i).join(''), names) : undefined
+  const insertedTurn =
+    where === 'text' ? turns(t.parts.slice(0, i).join(''), namesB) : undefined
   target.parts[i] = inserted
   if (ft.loop !== undefined) t.parts[ft.loop] = name
   if (fo.loop !== undefined) o.parts[fo.loop] = name
@@ -133,6 +148,7 @@ export function swapFragment({
     firstAction,
     replacedActions,
     delta,
+    ...(turn !== undefined && { turn, insertedTurn }),
   }
 }
 

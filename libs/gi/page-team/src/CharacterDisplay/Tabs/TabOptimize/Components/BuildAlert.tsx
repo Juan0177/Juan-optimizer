@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import type { MutableRefObject, ReactNode } from 'react'
 import { useEffect, useReducer, useSyncExternalStore } from 'react'
+import { useTranslation } from 'react-i18next'
 export type BuildStatus = {
   type: 'active' | 'inactive'
   tested: number // tested, including `failed`
@@ -29,23 +30,26 @@ export type BuildStatusStore = {
   subscribe: (listener: () => void) => () => void
 }
 
-// Fixed locale: the surrounding text is English, and locale-specific compact
-// notations ("30.72Cr", "307.21m") read oddly next to it.
-const compact = new Intl.NumberFormat('en-US', {
-  notation: 'compact',
-  maximumSignificantDigits: 3,
-})
-const plain = new Intl.NumberFormat('en-US')
-/** 2,896 / 47.7K / 331M / 5.98B */
-function count(n: number): string {
-  if (!Number.isFinite(n)) return '–'
-  return n < 10_000 ? plain.format(Math.round(n)) : compact.format(n)
+// The site's language (English by default): "2,896 / 47.7K" in English, "2896 / 47,7K" in Italian
+function counter(language: string) {
+  const locale = language.startsWith('it') ? 'it' : 'en-US'
+  const compact = new Intl.NumberFormat(locale, {
+    notation: 'compact',
+    maximumSignificantDigits: 3,
+  })
+  const plain = new Intl.NumberFormat(locale)
+  /** 2,896 / 47.7K / 331M / 5.98B */
+  return (n: number): string => {
+    if (!Number.isFinite(n)) return '–'
+    return n < 10_000 ? plain.format(Math.round(n)) : compact.format(n)
+  }
 }
 /** 820 ms / 7.8 s / 1 min 12 s */
-function duration(ms: number): string {
+function duration(ms: number, language = 'en'): string {
   if (!Number.isFinite(ms) || ms < 0) return '–'
   if (ms < 1000) return `${Math.round(ms)} ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)} s`
+  if (ms < 60_000)
+    return `${(ms / 1000).toLocaleString(language.startsWith('it') ? 'it' : 'en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`
   const s = Math.round(ms / 1000)
   return `${Math.floor(s / 60)} min ${s % 60} s`
 }
@@ -65,6 +69,8 @@ export default function BuildAlert({
   live?: MutableRefObject<Omit<BuildStatus, 'type'> | undefined>
   characterName: ReactNode
 }) {
+  const { t, i18n } = useTranslation('page_character_optimize')
+  const count = counter(i18n?.language ?? 'en')
   const status = useSyncExternalStore(store.subscribe, store.get)
   const [, tick] = useReducer((x: number) => x + 1, 0)
   useEffect(() => {
@@ -106,19 +112,44 @@ export default function BuildAlert({
     icon = <CircularProgress size={18} thickness={5} color="primary" />
     // One title for the whole run (it is what gets announced); the summary
     // tells the setup phase apart
-    title = <>Optimizing {characterName}…</>
+    title = (
+      <>
+        {t('buildAlert.optimizing', 'Optimizing')} {characterName}…
+      </>
+    )
     summary = hasTotal ? (
       <>
-        {count(checked)} of {count(total)} · {Math.floor(progress)}%
+        {t('buildAlert.progress', {
+          defaultValue: '{{checked}} of {{total}}',
+          checked: count(checked),
+          total: count(total),
+        })}{' '}
+        · {Math.floor(progress)}%
       </>
     ) : (
-      'Preparing…'
+      t('buildAlert.preparing', 'Preparing…')
     )
     details = (
       <>
-        {duration(elapsed)}
-        {hasTotal && !!skipped && <> · {count(skipped)} skipped by pruning</>}
-        {hasTotal && rate > 0 && <> · {count(rate)} combinations/s</>}
+        {duration(elapsed, i18n?.language)}
+        {hasTotal && !!skipped && (
+          <>
+            {' · '}
+            {t('buildAlert.skipped', {
+              defaultValue: '{{value}} skipped by pruning',
+              value: count(skipped),
+            })}
+          </>
+        )}
+        {hasTotal && rate > 0 && (
+          <>
+            {' · '}
+            {t('buildAlert.rate', {
+              defaultValue: '{{value}} combinations/s',
+              value: count(rate),
+            })}
+          </>
+        )}
       </>
     )
     bar = (
@@ -126,7 +157,7 @@ export default function BuildAlert({
         variant={hasTotal ? 'determinate' : 'indeterminate'}
         value={progress}
         color="primary"
-        aria-label="Optimization progress"
+        aria-label={t('buildAlert.progressLabel', 'Optimization progress')}
         sx={{ height: 4, borderRadius: 1.5 }}
       />
     )
@@ -139,23 +170,49 @@ export default function BuildAlert({
       <CheckCircleRoundedIcon color="success" fontSize="small" />
     )
     title = noBuild ? (
-      <>No valid build found for {characterName}</>
+      <>
+        {t('buildAlert.noBuild', 'No valid build found for')} {characterName}
+      </>
     ) : (
       <>
-        Checked {count(checked)} combinations for {characterName}
+        {t('buildAlert.checked', {
+          defaultValue: 'Checked {{value}} combinations for',
+          value: count(checked),
+        })}{' '}
+        {characterName}
       </>
     )
-    summary = duration(elapsed)
+    summary = duration(elapsed, i18n?.language)
     details = noBuild ? (
-      <>
-        {count(checked)} combinations checked · none meet the artifact set and
-        stat constraints, try loosening them
-      </>
+      t('buildAlert.noBuildDetail', {
+        defaultValue:
+          '{{value}} combinations checked · none meet the artifact set and stat constraints, try loosening them',
+        value: count(checked),
+      })
     ) : (
       <>
-        {count(tested)} tested
-        {!!skipped && <> · {count(skipped)} skipped by pruning</>}
-        {Number.isFinite(rate) && <> · {count(rate)} combinations/s</>}
+        {t('buildAlert.tested', {
+          defaultValue: '{{value}} tested',
+          value: count(tested),
+        })}
+        {!!skipped && (
+          <>
+            {' · '}
+            {t('buildAlert.skipped', {
+              defaultValue: '{{value}} skipped by pruning',
+              value: count(skipped),
+            })}
+          </>
+        )}
+        {Number.isFinite(rate) && (
+          <>
+            {' · '}
+            {t('buildAlert.rate', {
+              defaultValue: '{{value}} combinations/s',
+              value: count(rate),
+            })}
+          </>
+        )}
       </>
     )
     // Same height as the progress bar, so the page does not jump when a run ends
