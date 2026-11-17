@@ -1,7 +1,7 @@
 import { ColorText } from '@genshin-optimizer/common/ui'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import { elementalData } from '@genshin-optimizer/gi/keymap'
-import { Box } from '@mui/material'
+import { Box, Tooltip } from '@mui/material'
 import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -84,11 +84,25 @@ function signedValue(value: ReactNode): ReactNode {
 export function EffectText({
   effect,
   dim = false,
+  unused = false,
 }: {
   effect: BuffEffect
   dim?: boolean
+  /** A stat the hit does not use (its row's other effects do): faint, and says so */
+  unused?: boolean
 }) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('page_team')
+  if (unused)
+    return (
+      <Tooltip
+        arrow
+        title={t('teamOpt.editor.statUnused', 'Not used by this hit')}
+      >
+        <Box component="span" sx={{ opacity: 0.4, display: 'inline-flex' }}>
+          <EffectText effect={effect} dim={dim} />
+        </Box>
+      </Tooltip>
+    )
   if (effect.value === undefined)
     return (
       <Box
