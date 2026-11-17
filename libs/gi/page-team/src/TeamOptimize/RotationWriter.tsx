@@ -147,7 +147,7 @@ const TOKENS: { text: string; key: string; label: string }[] = [
     text: 'entry',
     key: 'swap',
     label:
-      "Swap in only: the member's swap-in effect and nothing else (Danica's Entry Skill once Will to Cleanse is full)",
+      "Swap in only: the member's swap-in effect and nothing else (an Entry Skill)",
   },
   { text: '->', key: 'next', label: 'Next step or another member' },
 ]
