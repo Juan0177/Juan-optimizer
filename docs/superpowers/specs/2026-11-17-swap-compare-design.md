@@ -23,19 +23,21 @@ and generates a comparison card (an image, to share).
 - Build of the entering character: **KQM** (searched by the KQM engine, like the others) or one of
   its **existing builds** (equipped, saved builds, TC builds), chosen from a list; the weapon is the
   build's.
-- Rotation:
-  - **main rotation**: the team's full rotation, prefilled from the team's rotation text and
-    editable **the same way as in KQM Theorycrafting** (same rotation editor and controls). Edits
-    stay in KQM Compare: they never change the team's own rotation;
-  - **fragment**: only the entering member's actions (e.g. `E Q`), replacing the leaving member's
-    single step (e.g. `Yae Miko E E E` → `Mitya E Q`);
-  - **confirmation**: before anything runs, the user confirms both: the main rotation (A) and the
-    entering fragment, shown as B's resulting rotation with the replaced step highlighted.
-    "Confronta" is enabled only after this confirmation; editing either one asks for it again.
+- **A is KQM Theorycrafting's own result.** KQM Compare does not ask for a rotation or settings:
+  it uses what is in KQM Theorycrafting (its rotation, its settings and its last result, saved in
+  `database.teamKqmResults`). Before anything runs, the user **confirms that the data in KQM
+  Theorycrafting are final** (the confirmation shows when that result was found). No KQM result
+  yet: a message pointing to KQM Theorycrafting, nothing runs.
+- KQM Compare asks only:
+  - the member who leaves and the character who enters (+ constellation, weapon, build);
+  - the **fragment**: only the entering member's actions (e.g. `E Q`), replacing the leaving
+    member's single step in KQM Theorycrafting's rotation (e.g. `Yae Miko E E E` → `Mitya E Q`).
+    B's resulting rotation is shown with the replaced step highlighted.
   - Works only when the leaving member appears **once** in the rotation (one step, one place,
     opener included). Otherwise: a clear message, nothing runs.
-- Computation: the KQM run done **twice**, A and B, same settings, each searching every member's
-  build (B's entering member included, unless an existing build was chosen).
+- Computation: **one** KQM run, for B, with KQM Theorycrafting's settings and the rotation with
+  the fragment, searching every member's build (the entering member's too, unless an existing
+  build was chosen). A is not rerun.
 - Overview A vs B with Δ, and a card as a PNG (copy / download).
 
 ## Non-goals
@@ -86,17 +88,12 @@ team page; its route is its own (e.g. `.../kqm-compare`).
 Esce  [Anastasya] [Yae Miko●] [Odette] [Danica]
 Entra [Mitya ▾]  C[0▾]  Arma [Astro del vespro errante ▾] R[1▾]
 Build (•) KQM  ( ) esistente [— ▾]
-Rotazione principale          (editor as in KQM Theorycrafting)
-┌──────────────────────────────────────────────────────────┐
-│Danica E -> Odette E E -> Yae Miko E E E -> Danica Q -> ..│
-└──────────────────────────────────────────────────────────┘
 Frammento di Mitya  [E Q            ]   (replaces "Yae Miko E E E")
-⚠ messages (leaving member found 0 or 2+ times, parse warnings)
+ B  Danica E -> Odette E E -> [Mitya E Q] -> Danica Q -> …
+⚠ messages (no KQM result; leaving member found 0 or 2+ times; parse warnings)
 
-Conferma
- A  Danica E -> Odette E E -> [Yae Miko E E E] -> Danica Q -> …
- B  Danica E -> Odette E E -> [Mitya E Q]      -> Danica Q -> …
-                                [Conferma rotazioni] [Confronta]
+[✓] I dati in KQM Theorycrafting sono definitivi (risultato del 17/11, 14:32)
+                                                  [Confronta]
 ────────────────────────────────────────────────────────────
                      A: Yae Miko      B: Mitya       Δ
 DPR                  …                …            −x%
@@ -110,7 +107,7 @@ Odette  …
 Danica  …
                                                 [Crea card]
 ```
-- Run shows progress for A then B; leaving the tab cancels.
+- Run shows progress for B; leaving the tab cancels.
 - Δ in status colours (gain/loss) with sign and percent; numbers tabular, right-aligned.
 - ER = the KQM result's `energyRecharge[ck].target` for each side.
 - Strings in the `juanlab` namespace (Italian and English).
@@ -124,9 +121,10 @@ rotation time, each member's damage/share and ER, both rotations, "Juan-optimize
 `compareSwapKqm(database, teamId, { out, in: { key, constellation, weapon, refinement, build:
 'kqm' | buildRef }, text, fragment, settings })` → `{ a: Side, b: Side, warnings }`,
 `Side = { dpr, dps, rotationTime, members: { key, damage, share, er, build }[] }`.
-- Fragment: find the leaving member's single step in `text` (via the parser, so names, nicknames
-  and the opener are handled), replace it with `<entering name> <fragment>`.
-- A: KQM run on the team as is, with `text`, results kept in memory only.
+- Fragment: find the leaving member's single step in KQM Theorycrafting's rotation text (via the
+  parser, so names, nicknames and the opener are handled), replace it with
+  `<entering name> <fragment>`.
+- A: read KQM Theorycrafting's saved result (`teamKqmResults.getRun(teamId)`), read only.
 - B: sandbox copy → add the character if missing → new team char → swap the `loadoutData` slot →
   KQM run with the edited text; an existing build is held fixed for the entering member.
 
@@ -145,9 +143,9 @@ rotation time, each member's damage/share and ER, both rotations, "Juan-optimize
   Anastasya hE N2 Q N5 E E E N2`, fragment `E Q`: the overview shows A and B with DPR, DPS,
   shares and ER; the card downloads.
 - A rotation where the leaving member appears twice is refused with a message.
-- "Confronta" stays disabled until both rotations are confirmed, and again after an edit; editing
-  the main rotation in KQM Compare leaves the team's rotation (Team optimize, KQM Theorycrafting)
-  unchanged.
+- "Confronta" stays disabled until the user confirms KQM Theorycrafting's data are final, and
+  with no KQM result it says to run KQM Theorycrafting first; A's numbers equal KQM
+  Theorycrafting's.
 - The database, `teamOpt` and the team's localStorage are identical before and after; KQM
   Theorycrafting shows the same results as before.
 - Unit tests: fragment substitution (once / zero / twice / nickname / opener), no writes;
