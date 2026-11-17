@@ -3,6 +3,7 @@ import type { TeamOptAttack, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
   KqmBuild,
+  SimGear,
   SimHit,
   TeamData,
   TeamDataOverrides,
@@ -73,9 +74,9 @@ const sameAttack = (a: TeamOptAttack, b: TeamOptAttack) => {
 
 /**
  * The written rotation as these builds play it, under the results: the simple timeline (each
- * member's actions, swaps and the buffs that matter), at the KQM constellations with the shown
- * builds' weapons and sets, never the members' own. A bar opens its attack: its damage and the
- * buffs during it.
+ * member's actions, swaps and the buffs that matter). KQM's: at its constellations with the shown
+ * builds' weapons and sets, never the members' own; Team optimize's: the members' own, with the
+ * result's weapons and sets (`gear`). A bar opens its attack: its damage and the buffs during it.
  */
 export function KqmTimeline({
   teamId,
@@ -83,6 +84,7 @@ export function KqmTimeline({
   teamData,
   kqm,
   kqmBuilds,
+  gear,
   kqmBuffs,
   kqmAttacks,
   kqmDamage,
@@ -93,9 +95,12 @@ export function KqmTimeline({
   teamId: string
   members: TeamOptMember[]
   teamData?: TeamData
-  kqm: TeamOptKqm
+  /** KQM theorycrafting's settings (absent: Team optimize's builds, the members' own) */
+  kqm?: TeamOptKqm
   /** The builds shown: their weapon and set effects are played */
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
+  /** Team optimize: the result's weapons and sets, played instead of the members' own */
+  gear?: Partial<Record<CharacterKey, SimGear>>
   kqmBuffs?: TeamBuff[]
   /**
    * The run's attacks as the page lists them (played: per rotation): a bar opens its attack among
@@ -118,7 +123,11 @@ export function KqmTimeline({
   const { gender } = useDBMeta()
   const { applied } = useRotationText(teamId)
   const { opener, timing, frameData } = useRotationSettings(teamId)
-  const team = useSimTeam(members, kqm, kqmBuilds)
+  const simTeam = useSimTeam(members, kqm, kqmBuilds)
+  const team = useMemo(
+    () => (gear ? { ...simTeam, gear: { ...simTeam.gear, ...gear } } : simTeam),
+    [simTeam, gear]
+  )
   const names = useMemberNames(members)
   // (a heavy team's play takes a moment: the page first, the timeline once it is played)
   const deferredTeam = useDeferredValue(team)
@@ -273,10 +282,17 @@ export function KqmTimeline({
             </Box>
           </Typography>
         }
-        info={t(
-          'teamOpt.kqm.timelineTip',
-          'The written rotation as these builds play it: each member’s actions and swaps, at the KQM constellations with these weapons and artifact sets. Pick an attack to see its damage and the buffs during it.'
-        )}
+        info={
+          kqm
+            ? t(
+                'teamOpt.kqm.timelineTip',
+                'The written rotation as these builds play it: each member’s actions and swaps, at the KQM constellations with these weapons and artifact sets. Pick an attack to see its damage and the buffs during it.'
+              )
+            : t(
+                'teamOpt.result.timelineTip',
+                'The written rotation as these builds play it: each member’s actions and swaps, with these weapons and artifact sets. Pick an attack to see its damage and the buffs during it.'
+              )
+        }
       >
         {t('teamOpt.kqm.timeline', 'Rotation timeline')}
       </SubsectionTitle>

@@ -7,6 +7,7 @@ import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
   RunEnemy,
+  SimGear,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
@@ -23,6 +24,7 @@ import {
   teamOptCurrentWeapons,
   teamOptMembers,
   teamOptPool,
+  teamOptResultGear,
   teamStatFilters,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
@@ -50,9 +52,9 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { EnemySetup } from '../Enemy/EnemySetup'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
 import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
-import { EnemyRow } from './EnemyRow'
 import { ExtraBuffs } from './ExtraBuffs'
 import { fightTeamOf, useRotationApplications } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
@@ -339,6 +341,41 @@ export default function TeamBuildWorkspace({
   const builds = result ? teamBuilds(result.result) : []
   const shown = builds[Math.min(pick, builds.length - 1)]
   useEffect(() => setPick(0), [result?.result])
+  // the shown builds' rotation timeline: the written rotation played with their weapons and sets,
+  // an attack's figures read with their builds (as the run counted them)
+  const shownGear = useMemo(
+    () => (shown ? teamOptResultGear(database, teamId, shown) : undefined),
+    [database, teamId, shown]
+  )
+  const shownSimGear = useMemo(() => {
+    if (!shownGear) return undefined
+    const gear: Partial<Record<CharacterKey, SimGear>> = {}
+    for (const [ck, arts] of Object.entries(shownGear.arts)) {
+      const sets: Record<string, number> = {}
+      for (const art of arts ?? [])
+        sets[art.setKey] = (sets[art.setKey] ?? 0) + 1
+      const weapon = shownGear.weapons[ck as CharacterKey]
+      gear[ck as CharacterKey] = {
+        sets,
+        weapon: weapon?.key,
+        refinement: weapon?.refinement,
+      }
+    }
+    return gear
+  }, [shownGear])
+  const shownTeamOpt = result?.teamOpt ?? teamOpt
+  const shownOverrides = useMemo(
+    () =>
+      shownGear && {
+        ...shownGear,
+        mainStatAssumptionLevel: shownTeamOpt.assumeMaxMain ? 20 : 0,
+        bonusStats: teamOptBonusStats(
+          shownTeamOpt,
+          members.map((m) => m.characterKey)
+        ),
+      },
+    [shownGear, shownTeamOpt, members]
+  )
   // a new result: the rotation folds away (it opens again with a click) and the result, below it,
   // comes into view
   useEffect(() => {
@@ -623,11 +660,15 @@ export default function TeamBuildWorkspace({
                 ))}
               </Box>
             </Box>
-            {/* the enemy the damage is for (the team's): above the extra buffs, in the footer
-                (KQM: in its setup, beside the members) */}
+            {/* the enemy the damage is for (the team's), as KQM's setup shows it: above the extra
+                buffs, in the footer (KQM: in its setup, beside the members) */}
             {mode !== 'kqm' && (
               <Box sx={{ pt: 1.25, mt: 0.25, borderTop: hairline }}>
-                <EnemyRow teamId={teamId} fight={fightNow} disabled={running} />
+                <EnemySetup
+                  teamId={teamId}
+                  fight={fightNow}
+                  disabled={running}
+                />
               </Box>
             )}
             {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
@@ -798,6 +839,20 @@ export default function TeamBuildWorkspace({
             enemyNow={enemyChanged(result.enemy) ? team : undefined}
             applications={applications}
             onRunAgain={() => setRunDialog(true)}
+            timeline={
+              <KqmTimeline
+                teamId={teamId}
+                members={members}
+                teamData={teamData}
+                gear={shownSimGear}
+                kqmBuffs={rotationBuffs}
+                kqmAttacks={result.teamOpt.attacks}
+                kqmDamage={shown.after.attacks}
+                overrides={shownOverrides}
+                onField={onField}
+                mainStatAssumptionLevel={result.teamOpt.assumeMaxMain ? 20 : 0}
+              />
+            }
           />
         </Box>
       )}
