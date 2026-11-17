@@ -4,6 +4,7 @@ import LocalCafeOutlinedIcon from '@mui/icons-material/LocalCafeOutlined'
 import { AppBar, Box, Link, Skeleton, Typography } from '@mui/material'
 import { Suspense, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { ReleasedSiteLink } from './BetaSiteLink'
 
 const GITHUB_URL = 'https://github.com/s-naveen/stellar-optimizer'
 const BUY_ME_A_COFFEE_URL = 'https://www.buymeacoffee.com/neevans'
@@ -63,6 +64,7 @@ function FooterContent() {
               {t('faq')}
             </Link>
           </Typography>
+          <ReleasedSiteLink />
           <Link
             href={GITHUB_URL}
             target="_blank"

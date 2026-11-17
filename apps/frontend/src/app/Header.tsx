@@ -42,6 +42,7 @@ import type { ReactNode } from 'react'
 import { createContext, Suspense, useContext, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link as RouterLink, useMatch } from 'react-router-dom'
+import { BetaBadge } from './BetaSiteLink'
 import goLogo from './go_logo.svg'
 
 type NavEntry = {
@@ -497,6 +498,7 @@ function DesktopHeader({
         sx={{ minHeight: '56px !important', gap: 0.5, px: { md: 2 } }}
       >
         <Brand />
+        <BetaBadge />
         <Divider
           orientation="vertical"
           flexItem
@@ -569,6 +571,7 @@ function MobileHeader({
         </Drawer>
         <Toolbar sx={{ minHeight: '56px !important' }}>
           <Brand />
+          <BetaBadge />
           <Box flexGrow={1} />
           <IconButton
             color="inherit"
