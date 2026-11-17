@@ -551,3 +551,24 @@ describe('team.enemyPreset (the enemy preset last applied)', () => {
     }
   })
 })
+
+describe('team.enemyHp (a custom enemy’s HP)', () => {
+  it('is kept as a whole number from 1 to a trillion, and left out otherwise', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({ enemyHp: 20_000_000.4 })
+    expect(database.teams.get(id)!.enemyHp).toBe(20_000_000)
+    for (const enemyHp of [
+      0,
+      -5,
+      0.5,
+      2e12,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '20M',
+      null,
+    ]) {
+      const other = database.teams.new({ enemyHp } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
+  })
+})

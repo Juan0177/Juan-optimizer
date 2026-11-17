@@ -2,6 +2,7 @@ import { stygianBossIcons } from '@genshin-optimizer/gi/assets'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { Team } from '@genshin-optimizer/gi/db'
 import { Box, Tooltip } from '@mui/material'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
   StygianResSummary,
@@ -10,8 +11,13 @@ import {
 } from './StygianPreset'
 import type { StygianRes } from './stygianBosses'
 import { appliedStygianPreset } from './stygianBosses'
-import type { FightEstimate, FightNote, FightTeam } from './stygianFights'
-import { FIGHT_LIMIT, stygianFight } from './stygianFights'
+import type {
+  FightEnemy,
+  FightEstimate,
+  FightNote,
+  FightTeam,
+} from './stygianFights'
+import { enemyFight, enemyHpOf, FIGHT_LIMIT } from './stygianFights'
 
 /** A team's enemy as a run used it: its level, RES and DEF, and the preset it was */
 export type RunEnemy = Pick<Team, 'enemyOverride' | 'enemyPreset'>
@@ -122,13 +128,44 @@ export function formatFightTime(seconds: number) {
   return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
 
+/**
+ * A fight's length in words, not to be misread: 43s, 1m 43s, 10m, 1h 02m (`formatFightTime`'s
+ * 0:43 is for a time axis)
+ */
+export function formatDuration(t: TFunction, seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '–'
+  const total = Math.round(seconds)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  if (h)
+    return t('page_team:enemyEditor.duration.hm', {
+      defaultValue: '{{h}}h {{m}}m',
+      h,
+      m: pad(m),
+    })
+  if (m)
+    return s
+      ? t('page_team:enemyEditor.duration.ms', {
+          defaultValue: '{{m}}m {{s}}s',
+          m,
+          s: pad(s),
+        })
+      : t('page_team:enemyEditor.duration.m', { defaultValue: '{{m}}m', m })
+  return t('page_team:enemyEditor.duration.s', { defaultValue: '{{s}}s', s })
+}
+
 /** The breakdown of a fight's estimate, line by line */
-function FightBreakdown({
+export function FightBreakdown({
   estimate,
   hp,
+  custom,
 }: {
   estimate: FightEstimate
   hp: number
+  /** An enemy set by hand (its HP, the user's) */
+  custom?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const pct = (v: number) => `${Math.round(v * 100)}%`
@@ -137,7 +174,7 @@ function FightBreakdown({
       case 'phase':
         return t('enemyEditor.fight.phase', {
           defaultValue: '{{time}} at its {{phase}} RES',
-          time: formatFightTime(part.seconds),
+          time: formatDuration(t, part.seconds),
           phase: stygianPhaseName(t, part.phase),
         })
       case 'valiant':
@@ -172,13 +209,19 @@ function FightBreakdown({
           : t('enemyEditor.fight.hornsKept', {
               defaultValue:
                 'Its horns (+150% RES) stay on for the {{time}}: not broken in time',
-              time: formatFightTime(part.seconds),
+              time: formatDuration(t, part.seconds),
             })
       case 'hornsBreak':
         return t('enemyEditor.fight.hornsBreak', {
           defaultValue:
             'Each break: 10% of its HP ({{hp}} in all), then 10 s without horns',
           hp: pct(part.hp),
+        })
+      case 'custom':
+        return t('enemyEditor.fight.custom', {
+          defaultValue: '{{time}} at {{dps}} DPS (its HP ÷ the team’s DPS)',
+          time: formatDuration(t, part.seconds),
+          dps: compact(3).format(part.dps),
         })
       default:
         return ''
@@ -237,44 +280,47 @@ function FightBreakdown({
           {note}
         </Box>
       ))}
-      <Box component="span" sx={{ opacity: 0.7 }}>
-        {t(
-          'enemyEditor.fight.source',
-          'HP and mechanics: stygian.moe and the Fandom wiki.'
-        )}
-      </Box>
+      {!custom && (
+        <Box component="span" sx={{ opacity: 0.7 }}>
+          {t(
+            'enemyEditor.fight.source',
+            'HP and mechanics: stygian.moe and the Fandom wiki.'
+          )}
+        </Box>
+      )}
     </Box>
   )
 }
 
 /**
- * A Stygian Onslaught boss's HP (at the difficulty of its level), and about how long the team
- * takes to defeat it: its fight's mechanics counted where they are known (`stygianFight`)
+ * The enemy's HP (a Stygian Onslaught boss's at the difficulty of its level, else the one set by
+ * hand), and about how long the team takes to defeat it: a boss's fight's mechanics counted where
+ * they are known (`enemyFight`). Its HP unknown: nothing
  */
-export function StygianDefeatTime({
+export function EnemyDefeatTime({
   enemy,
   team,
   hideHp,
 }: {
-  enemy: RunEnemy
+  enemy: FightEnemy
   /** The team in the fight (absent: the HP only) */
   team?: FightTeam
   /** Its HP is said beside it already: the time only */
   hideHp?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const preset = appliedStygianPreset(enemy)
-  if (!preset?.difficulty) return null
-  const hp = preset.boss.hp[preset.difficulty]
-  const estimate = team
-    ? stygianFight(preset.boss, preset.difficulty, team, preset.phase.key)
-    : undefined
+  const hp = enemyHpOf(enemy)
+  if (hp === undefined) return null
+  const custom = !appliedStygianPreset(enemy)
+  const estimate = team ? enemyFight(enemy, team) : undefined
   return (
     <Tooltip
       arrow
       title={
         estimate ? (
-          <FightBreakdown estimate={estimate} hp={hp} />
+          <FightBreakdown estimate={estimate} hp={hp} custom={custom} />
+        ) : custom ? (
+          t('enemyEditor.customHpTip', 'Its HP, as set.')
         ) : (
           t(
             'enemyEditor.stygian.hpTip',
@@ -306,11 +352,11 @@ export function StygianDefeatTime({
             {estimate.seconds !== undefined
               ? t('enemyEditor.stygian.defeat', {
                   defaultValue: '≈ {{time}} to defeat',
-                  time: formatFightTime(estimate.seconds),
+                  time: formatDuration(t, estimate.seconds),
                 })
               : t('enemyEditor.stygian.defeatOver', {
                   defaultValue: 'over {{time}} to defeat',
-                  time: formatFightTime(FIGHT_LIMIT),
+                  time: formatDuration(t, FIGHT_LIMIT),
                 })}
           </Box>
         )}

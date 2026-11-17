@@ -6,10 +6,11 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
-import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  FightEnemy,
   FightTeam,
   KqmResult,
   KqmTeamOption,
@@ -20,6 +21,7 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
+  EnemyDefeatTime,
   EnemySummary,
   KQM_ER_DEFAULT,
   KQM_TALENT_DEFAULT,
@@ -34,7 +36,7 @@ import {
   kqmMemberConstellation,
   kqmTalentLevel,
   kqmWeapons,
-  StygianDefeatTime,
+  sameEnemy,
   setKqmBuildThreads,
   syncEnergyCalculator,
   withRotationEnergy,
@@ -1109,8 +1111,8 @@ export function KqmSetupSummary({
   fight?: FightTeam
   /** The setup as it is now */
   now?: TeamOpt
-  /** The enemy the run was for (absent: run before this was kept) */
-  enemy?: RunEnemy
+  /** The enemy the run was for (absent: run before this was kept; a custom one's HP: now's) */
+  enemy?: FightEnemy
   /** The team's enemy now, when it is not the same */
   enemyNow?: RunEnemy
   /** Its rotation's attacks: the written rotation as KQM played it, or the attacks entered */
@@ -1263,7 +1265,7 @@ export function KqmSetupSummary({
         {enemy && (
           <SpecStat label={t('teamOpt.enemy.label', 'Enemy')}>
             <EnemySummary enemy={enemy} />
-            <StygianDefeatTime enemy={enemy} team={fight} />
+            <EnemyDefeatTime enemy={enemy} team={fight} />
             {enemyNow && nowIs(<EnemySummary enemy={enemyNow} />)}
           </SpecStat>
         )}
@@ -2049,6 +2051,7 @@ export function KqmResults({
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const team = useTeam(teamId)
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
@@ -2069,7 +2072,15 @@ export function KqmResults({
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
-  // the builds in the fight against the enemy they were found for (a Stygian boss)
+  // the enemy the builds are for: the team's now while it takes the same damage (its preset and
+  // HP too: the builds do not depend on them), else the one they were found for
+  const fightEnemy = useMemo(
+    () =>
+      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
+        ? team
+        : enemy,
+    [enemy, team]
+  )
   const fight = useMemo(
     () =>
       enemy &&
@@ -2290,7 +2301,7 @@ export function KqmResults({
           settings={setup ?? runSettings}
           now={stale ? now : undefined}
           rotation={rotation}
-          enemy={enemy}
+          enemy={fightEnemy}
           enemyNow={enemyNow}
           fight={fight}
         />
@@ -2494,8 +2505,8 @@ export function KqmResults({
         />
       </Box>
       {timeline}
-      {/* a Stygian boss: its states and HP over the fight */}
-      {enemy && <FightTimeline enemy={enemy} team={fight} />}
+      {/* the enemy's HP over the fight (a Stygian boss: its states too) */}
+      {fightEnemy && <FightTimeline enemy={fightEnemy} team={fight} />}
     </Box>
   )
 }

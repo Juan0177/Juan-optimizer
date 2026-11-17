@@ -72,7 +72,7 @@ import type {
   LoadoutExportSetting,
   Team,
 } from './TeamDataManager'
-import { defLoadoutExportSetting } from './TeamDataManager'
+import { defLoadoutExportSetting, MAX_ENEMY_HP } from './TeamDataManager'
 import type {
   TeamOpt,
   TeamOptAttack,
@@ -170,6 +170,7 @@ export {
   initTeamOptAttack,
   isPandoTeamCharacterKey,
   MAX_DESC_LENGTH,
+  MAX_ENEMY_HP,
   MAX_NAME_LENGTH,
   maxBuildsToShowList,
   newPandoStatFilterTag,

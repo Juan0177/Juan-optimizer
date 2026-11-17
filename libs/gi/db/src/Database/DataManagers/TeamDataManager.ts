@@ -60,7 +60,14 @@ export interface Team {
    * name while `enemyOverride` still has its RES
    */
   enemyPreset?: string
+  /**
+   * The enemy's HP, when it is set by hand (a Stygian Onslaught boss's is its preset's): how long
+   * the team takes to defeat it
+   */
+  enemyHp?: number
 }
+/** The most HP an enemy can be given (a trillion) */
+export const MAX_ENEMY_HP = 1e12
 export type LoadoutExportSetting = {
   convertEquipped: boolean
   convertbuilds: string[]
@@ -214,7 +221,7 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
-    const { enemyPreset } = obj as Team
+    const { enemyPreset, enemyHp } = obj as Team
 
     return {
       name,
@@ -228,6 +235,12 @@ export class TeamDataManager extends DataManager<
       enemyPreset.length > 0 &&
       enemyPreset.length <= 64
         ? { enemyPreset }
+        : {}),
+      ...(typeof enemyHp === 'number' &&
+      Number.isFinite(enemyHp) &&
+      enemyHp >= 1 &&
+      enemyHp <= MAX_ENEMY_HP
+        ? { enemyHp: Math.round(enemyHp) }
         : {}),
     }
   }

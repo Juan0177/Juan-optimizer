@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { stygianBoss } from '../components/enemy/stygianBosses'
 import type { FightTeam } from '../components/enemy/stygianFights'
 import {
+  customFight,
   dpsAt,
+  enemyFight,
+  enemyHpOf,
+  FIGHT_LIMIT,
   resMultiplier,
   stygianFight,
 } from '../components/enemy/stygianFights'
@@ -162,5 +166,64 @@ describe('Stygian Onslaught fights', () => {
     expect(fight.seconds).toBeCloseTo(boss.hp.dire / 100000, 9)
     expect(fight.modelled).toBe(false)
     expect(fight.notes).toEqual(['mechanics'])
+  })
+})
+
+describe('an enemy set by hand', () => {
+  const custom = { enemyOverride: { enemyLevel: 100, pyro_enemyRes_: 60 } }
+  it('takes its HP ÷ the team’s DPS, all its elements’', () => {
+    const t: FightTeam = {
+      dps: { pyro: 60_000, physical: 40_000 },
+      baseRes: all(0.1),
+      effRes: all(0.1),
+    }
+    const fight = customFight(20_000_000, t)
+    expect(fight.seconds).toBeCloseTo(200)
+    expect(fight.parts).toEqual([{ key: 'custom', dps: 100_000, seconds: 200 }])
+    expect(fight.timeline.segments).toEqual([
+      { start: 0, end: 200, state: 'regular', hpStart: 1, hpEnd: 0 },
+    ])
+    expect(fight.notes).toEqual([])
+    // its HP set: that fight; none: no fight, no HP
+    expect(
+      enemyFight({ ...custom, enemyHp: 20_000_000 }, t)?.seconds
+    ).toBeCloseTo(200)
+    expect(enemyHpOf({ ...custom, enemyHp: 20_000_000 })).toBe(20_000_000)
+    expect(enemyFight(custom, t)).toBeUndefined()
+    expect(enemyHpOf(custom)).toBeUndefined()
+  })
+  it('is too slow to say past the limit, or without damage', () => {
+    const slow = customFight(1e12, team('pyro', 1000))
+    expect(slow.seconds).toBeUndefined()
+    expect(slow.timeline.segments[0].end).toBe(FIGHT_LIMIT)
+    expect(slow.timeline.segments[0].hpEnd).toBeGreaterThan(0.99)
+    const none = customFight(1e6, {
+      dps: {},
+      baseRes: all(0.1),
+      effRes: all(0.1),
+    })
+    expect(none.seconds).toBeUndefined()
+    expect(none.parts).toEqual([])
+  })
+  it('is a Stygian boss’s HP and fight while its preset applies (a custom HP aside)', () => {
+    const boss = stygianBoss(1013061)!
+    const wavebinder = {
+      enemyOverride: {
+        enemyLevel: 110,
+        ...Object.fromEntries(
+          Object.entries(boss.phases.find((p) => p.key === boss.main)!.res).map(
+            ([e, v]) => [
+              `${e}_enemyRes_`,
+              v === 'immune' ? Number.MAX_VALUE : v,
+            ]
+          )
+        ),
+      },
+      enemyPreset: `stygian:1013061:${boss.main}`,
+      enemyHp: 5,
+    }
+    expect(enemyHpOf(wavebinder)).toBe(boss.hp.dire)
+    const t = team('hydro', 100_000)
+    expect(enemyFight(wavebinder, t)).toEqual(stygianFight(boss, 'dire', t))
   })
 })
