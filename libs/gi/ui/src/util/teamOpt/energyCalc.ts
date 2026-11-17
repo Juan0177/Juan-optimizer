@@ -44,6 +44,23 @@ export interface EnergyCalcResult {
         flatEnergy: number
         burstCost: number
         required: number
+        /**
+         * Where the energy comes from, per rotation: particle energy at 100% ER by source (its own
+         * skills, the other members' skills, Favonius, the enemies, Electro resonance), and the flat
+         * energy by kind (bonus entered, weapons and sets, skills: negative for a partial Burst)
+         */
+        sources: {
+          own: number
+          team: number
+          favonius: number
+          enemies: number
+          resonance: number
+          bonus: number
+          gear: number
+          skills: number
+        }
+        /** Energy its Bursts spend per rotation (the Burst cost over its cadence) */
+        burstSpend: number
       }
     >
   >
@@ -219,6 +236,16 @@ export function calculateEnergyRecharge(
     const elementValue = (source: CharacterKey) =>
       getCharEle(source) === getCharEle(recipient) ? 3 : 1
     let particles = 0
+    const sources = {
+      own: 0,
+      team: 0,
+      favonius: 0,
+      enemies: 0,
+      resonance: 0,
+      bonus: 0,
+      gear: 0,
+      skills: 0,
+    }
     for (const source of keys) {
       const member = settings.members[source]!
       const data = energyCalcData[source]!
@@ -253,7 +280,10 @@ export function calculateEnergyRecharge(
           ? field
           : (recipient === catchBy ? fed : 0) +
             (recipient === source ? 1 - fed : 0)
-        particles += count * elementValue(source) * share(caught)
+        const energy = count * elementValue(source) * share(caught)
+        particles += energy
+        if (source === recipient) sources.own += energy
+        else sources.team += energy
       }
       // A Favonius trigger makes 3 clear particles (2 energy each on the field) for whoever
       // is on the field then.
@@ -270,23 +300,32 @@ export function calculateEnergyRecharge(
               settings.rotationTime / favoniusCooldown(refinements?.[source])
             )
           : 0
-      particles +=
+      const favonius =
         3 *
         favoniusProcs *
         2 *
         share(recipient === (member.favoniusCatchBy ?? source) ? 1 : 0)
+      particles += favonius
+      sources.favonius += favonius
     }
-    particles +=
+    const enemies =
       (settings.enemyParticles * 2 * share(field) * settings.rotationTime) /
       settings.clearTime
-    if (hasElectroResonance && settings.electroInterval > 0)
-      particles +=
+    particles += enemies
+    sources.enemies = enemies
+    if (hasElectroResonance && settings.electroInterval > 0) {
+      const resonance =
         (settings.rotationTime / Math.max(5, settings.electroInterval)) *
         (getCharEle(recipient) === 'electro' ? 3 : 1) *
         share(field)
+      particles += resonance
+      sources.resonance = resonance
+    }
     // Dori's A4 converts each skill use into energy that scales with her ER.
-    if (recipient === 'Dori')
+    if (recipient === 'Dori') {
       particles += 5 * (own.skillUses + own.secondaryUses)
+      sources.own += 5 * (own.skillUses + own.secondaryUses)
+    }
     // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
     // the others' (Frostbreath)
     const weaponTriggers = (member: CharacterKey) => {
@@ -329,14 +368,16 @@ export function calculateEnergyRecharge(
           return every > 0 ? 6 / every : 0
         })
     )
-    const flat =
-      own.flatEnergy +
+    sources.bonus = own.flatEnergy
+    sources.gear =
       exileEnergy +
       energyWeaponFlat(weapons?.[recipient], refinements?.[recipient]) *
         weaponTriggers(recipient) +
-      teamWeaponEnergy +
+      teamWeaponEnergy
+    sources.skills =
       ownData.skills[own.skillMode].flatEnergy * own.skillUses +
       ownData.skills[own.secondaryMode].flatEnergy * own.secondaryUses
+    const flat = sources.bonus + sources.gear + sources.skills
     const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
     // (without the Burst, still the energy it spends: Varesa's Kablam is -30 a use)
     const needed =
@@ -352,6 +393,9 @@ export function calculateEnergyRecharge(
       flatEnergy: flat,
       burstCost: cost,
       required,
+      sources,
+      burstSpend:
+        own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
     }
     if (!Number.isFinite(required))
       result.errors.push(
@@ -1349,4 +1393,16 @@ const SHORT_BURSTS: Partial<
 > = {
   Varesa: { label: 'Kablam', variant: 'apex' },
   Flins: { label: 'Thunderous Symphony', variant: 'symphony' },
+}
+/**
+ * A member's special Burst that spends part of the Energy (Flins' Thunderous Symphony, Varesa's
+ * Kablam): its name and its sheet option (the calculator's second skill), when it has one
+ */
+export function shortBurstOf(key: CharacterKey) {
+  const short = SHORT_BURSTS[key]
+  const index = short
+    ? (energyCalcData[key]?.skills.findIndex((s) => s.label === short.label) ??
+      -1)
+    : -1
+  return short && index >= 0 ? { label: short.label, index } : undefined
 }

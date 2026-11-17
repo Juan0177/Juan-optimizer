@@ -1,6 +1,7 @@
 export * from './data'
 export * from './display'
 export * from './energyCalc'
+export * from './energyCalcHelp'
 export * from './itemConditionals'
 export * from './kqm'
 export {
