@@ -28,5 +28,33 @@
     "bow": "Arco",
     "catalyst": "Catalizzatore"
   },
-  "tcBuild": "Build TC"
+  "tcBuild": "Build TC",
+  "bulk": {
+    "delete": "Elimina le armi sbloccate e non equipaggiate",
+    "hint_one": "Si applica a {{count}} arma che corrisponde ai filtri.",
+    "hint_other": "Si applica alle {{count}} armi che corrispondono ai filtri.",
+    "lock": "Blocca",
+    "title": "Azioni multiple",
+    "unlock": "Sblocca",
+    "confirmLock_one": "Vuoi davvero bloccare {{count}} arma?",
+    "confirmLock_other": "Vuoi davvero bloccare {{count}} armi?",
+    "confirmUnlock_one": "Vuoi davvero sbloccare {{count}} arma?",
+    "confirmUnlock_other": "Vuoi davvero sbloccare {{count}} armi?",
+    "confirmDelete_one": "Vuoi davvero eliminare {{count}} arma?",
+    "confirmDelete_other": "Vuoi davvero eliminare {{count}} armi?"
+  },
+  "chooseWeapon": "Scegli un'arma",
+  "filters": {
+    "active_one": "{{count}} attivo",
+    "active_other": "{{count}} attivi",
+    "equipped": "Equipaggiate",
+    "groups": {
+      "weapon": "Arma"
+    },
+    "title": "Filtri",
+    "unequipped": "Non equipaggiate"
+  },
+  "header": {
+    "add": "Aggiungi arma"
+  }
 }

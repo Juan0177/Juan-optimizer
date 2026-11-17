@@ -77,5 +77,164 @@
   "notActive": "(Non attivato)",
   "basedOnStellar": "Basato su Stellar Optimizer",
   "homeTitle": "Juan-optimizer: ottimizzatore di manufatti e build per Genshin Impact",
-  "dbName": "Nome del database"
+  "dbName": "Nome del database",
+  "activeDatabase": "Database attivo",
+  "buffSource": {
+    "reaction": "Reazione",
+    "resonance": "Risonanza elementale"
+  },
+  "buildCard": {
+    "alt": "La build di {{name}}",
+    "button": "Card della build",
+    "close": "Chiudi",
+    "copied": "Copiata",
+    "copy": "Copia immagine",
+    "cv": "CV",
+    "download": "Scarica PNG",
+    "downloadJpg": "Scarica JPG",
+    "emptySlot": "Vuoto",
+    "level": "Liv.",
+    "pieces_one": "{{count}} pezzo",
+    "pieces_other": "{{count}} pezzi",
+    "rv": "RV",
+    "tcBuild": "Una build theorycraft non ha manufatti da mostrare su una card",
+    "title": "Card della build"
+  },
+  "buyMeACoffee": "Offrimi un caffè",
+  "changelog": {
+    "allChanges": "Tutte le modifiche",
+    "allReleases": "Tutte le versioni su GitHub",
+    "close": "Chiudi",
+    "fixed": "Corretto",
+    "improved": "Migliorato",
+    "new": "Novità",
+    "onGitHub": "Versione su GitHub",
+    "open": "Novità della versione",
+    "title": "Novità della versione",
+    "whatsNew": "Cosa c'è di nuovo"
+  },
+  "characterOptimizers": "Ottimizzatori dei personaggi",
+  "faq": "Domande frequenti",
+  "github": "GitHub",
+  "mainNav": "Principale",
+  "openMenu": "Apri il menu",
+  "optimizationTarget": "Obiettivo di ottimizzazione",
+  "update": {
+    "reload": "Ricarica",
+    "versionOut": "È uscito Juan-optimizer v{{version}}.",
+    "newer": "È stata pubblicata una versione più recente di Juan-optimizer."
+  },
+  "archive": {
+    "set": "Set",
+    "rarity": "Rarità",
+    "bonus1": "Bonus 1 pezzo",
+    "bonus2": "Bonus 2 pezzi",
+    "bonus4": "Bonus 4 pezzi",
+    "name": "Nome",
+    "element": "Elemento",
+    "type": "Tipo",
+    "main": "Principale",
+    "secondary": "Secondaria"
+  },
+  "passive": "Passiva",
+  "tools": {
+    "minutes": "minuti",
+    "hours": "ore",
+    "resin": {
+      "title": "Contatore di resina",
+      "max": "MAX",
+      "next": "Prossima resina tra {{delta}}, resina piena alle {{date}}",
+      "full": "La resina è piena da almeno {{delta}}, dalle {{date}}",
+      "note": "Dato che non c'è modo di sincronizzare il tempo della resina, la ricarica reale può arrivare fino a 8 minuti prima del previsto."
+    },
+    "time": {
+      "title": "Ora di Teyvat",
+      "serverDate": "Data del server:",
+      "untilReset": "Tempo al reset:",
+      "resinUntilReset": "Resina fino al reset:",
+      "zone": {
+        "America": "America",
+        "Europe": "Europa",
+        "Asia": "Asia",
+        "TW": "TW, HK, MO"
+      }
+    },
+    "exp": {
+      "noMora": "Non hai abbastanza <1>Mora</1> per questa operazione.",
+      "noBooks": "Non hai abbastanza <1>libri EXP</1> per salire al prossimo traguardo.",
+      "maxLevel": "Sei al livello massimo.",
+      "title": "Calcolatore di esperienza",
+      "fullLevel": "Livello completo",
+      "notFull": "Livello non completo",
+      "desc": "Questo calcolatore stima quanti libri EXP servono per arrivare al prossimo livello traguardo.",
+      "descUnder": "Cerca di avvicinarsi il più possibile al livello traguardo, così puoi farmare il resto dell'esperienza senza sprechi.",
+      "descFull": "Cerca il numero di libri necessario per ridurre il più possibile l'esperienza sprecata.",
+      "curLevel": "Livello attuale",
+      "curExp": "EXP attuale",
+      "nextMilestone": "Prossimo livello traguardo:",
+      "toMilestone": "EXP al traguardo:",
+      "curMora": "Mora attuale",
+      "moraCost": "Costo in Mora:",
+      "waste": "EXP sprecata:",
+      "diff": "Differenza EXP:",
+      "finalMora": "Mora finale:",
+      "finalLevel": "Livello finale:",
+      "finalExp": "EXP finale:",
+      "apply": "Applica",
+      "amount": "Quantità",
+      "required": "Necessari:"
+    }
+  },
+  "infusion": {
+    "none": "Nessuna infusione di squadra in mischia",
+    "skill": "Abilità",
+    "burst": "Tripudio"
+  },
+  "conditional": {
+    "notActive": "Non attivo"
+  },
+  "statEditor": {
+    "value": "Valore",
+    "delete": "Elimina il requisito"
+  },
+  "compareTo": "Confronta con",
+  "displayHeader": {
+    "basic": "Statistiche di base",
+    "character": "Personaggio",
+    "bonusStats": "Statistiche bonus",
+    "custom": "Multi-opt personalizzato",
+    "teamBuff": "Buff di squadra ricevuti",
+    "reaction": "Reazioni trasformative",
+    "nicole": "Proiezioni arcane di Nicole",
+    "moonsign": "Presagio lunare: Barlume ascendente",
+    "error": "ERRORE",
+    "talent": {
+      "normal": "ATT normale",
+      "charged": "ATT caricato",
+      "plunging": "ATT in picchiata",
+      "skill": "Abilità elem.",
+      "burst": "Tripudio elem.",
+      "passive": "Passiva",
+      "passive1": "Passiva 1ª asc.",
+      "passive2": "Passiva 4ª asc.",
+      "passive3": "Passiva util.",
+      "constellation1": "Cost. 1",
+      "constellation2": "Cost. 2",
+      "constellation3": "Cost. 3",
+      "constellation4": "Cost. 4",
+      "constellation5": "Cost. 5",
+      "constellation6": "Cost. 6"
+    }
+  },
+  "scrollTop": "Torna in cima",
+  "codeSample": "Esempio di codice",
+  "buildAlert": {
+    "skipped": "scartate",
+    "generating": "Generazione e verifica di",
+    "generatingFor": "configurazioni di build secondo i criteri di",
+    "elapsed": "Tempo trascorso:",
+    "generated": "Generate e verificate",
+    "generatedFor": "configurazioni di build secondo i criteri di",
+    "total": "Durata totale:"
+  }
 }

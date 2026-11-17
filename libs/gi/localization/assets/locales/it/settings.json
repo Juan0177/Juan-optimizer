@@ -38,7 +38,9 @@
       "upload": "Carica",
       "swap": "Scambia"
     },
-    "currentDB": "Database attuale"
+    "currentDB": "Database attuale",
+    "copied": "Database copiato negli appunti.",
+    "deleteConfirm": "Vuoi davvero eliminare «{{name}}»?"
   },
   "uploadCard": {
     "title": "Caricamento database",

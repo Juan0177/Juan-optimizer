@@ -18,5 +18,7 @@
   "caption": "Immagini in diretta dei nostri ingegneri che indagano sul problema",
   "confirmNuke": "Vuoi davvero eliminare TUTTI i dati di GO? L'operazione è irreversibile!",
   "finishNuke": "Tutti i dati di GO sono stati cancellati. Ricaricamento della pagina in corso.",
-  "nuke": "Elimina TUTTI i dati di GO"
+  "nuke": "Elimina TUTTI i dati di GO",
+  "p2Save": "Se continua a succedere, salva i tuoi dati e i dettagli dell'errore prima di provare qualsiasi altra cosa:",
+  "oldVersion": "Questa pagina usa una versione precedente: ricarica per avere la più recente"
 }

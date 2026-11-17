@@ -4,7 +4,9 @@
     "builds": "Build",
     "newBuildBtn": "Nuova build",
     "tcBuilds": "Build TC",
-    "newTcBuildBtn": "Nuova build TC"
+    "newTcBuildBtn": "Nuova build TC",
+    "theorycraftBtn": "Fai theorycraft su questa build",
+    "theorycraftHint": "Parte da una copia della build attuale, poi la apre nella scheda Theorycraft"
   },
   "mTargetEditor": {
     "title": "Editor obiettivi",

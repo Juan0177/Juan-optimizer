@@ -42,9 +42,14 @@
       "title": "Come caricare gli screenshot da analizzare",
       "alert": "NOTA: al momento la scansione funziona solo con manufatti in <strong>INGLESE</strong>.",
       "section1": "<0>Usare gli screenshot può ridurre drasticamente il tempo che passi a inserire a mano le statistiche in Genshin Optimizer.</0><1>Dove ritagliare lo screenshot.</1><2>Nel gioco, apri lo zaino e vai alla scheda dei manufatti. Seleziona il manufatto che vuoi scansionare con Genshin Optimizer. <2>Si possono scansionare solo i manufatti da questa schermata.</2></2><3>Singolo manufatto</3><4>Per fare uno screenshot su Windows, la scorciatoia è <2>Alt + Stamp</2>. Una volta selezionata l'area, l'immagine viene copiata automaticamente negli appunti.</4><5>Più manufatti</5><6>Per sfruttare il caricamento multiplo, puoi usare uno strumento come <2>PicPick</2> per creare una macro e catturare facilmente più manufatti alla volta.</6><7>Cosa includere nello screenshot.</7><8>L'intera finestra di Genshin, o almeno un'area che comprenda la scheda del manufatto.</8>",
-      "section2": "<0>Aggiungere lo screenshot a Genshin Optimizer</0><1>A questo punto dovresti avere lo screenshot del manufatto salvato sul disco o negli appunti.</1><2>Puoi cliccare sul riquadro accanto a \"Sfoglia\" per cercare più screenshot tra i file del disco.</2><3>Per i singoli screenshot ritagliati, premi <2>Ctrl + V</2> per incollarli dagli appunti.</3><4>Dovresti vedere un'anteprima del ritaglio e, dopo qualche secondo, il set e le statistiche secondarie del manufatto verranno compilati nell'<1>Editor manufatti</1>.</4><5>Completare il manufatto</5><6>Purtroppo la visione artificiale non è precisa al 100%: ci saranno sempre casi in cui qualcosa non viene scansionato correttamente. Controlla sempre i valori del manufatto scansionato! Una volta compilato il manufatto, clicca su <2>Aggiungi manufatto</2> per terminare la modifica.</6>"
+      "section2": "<0>Aggiungere lo screenshot a Genshin Optimizer</0><1>A questo punto dovresti avere lo screenshot del manufatto salvato sul disco o negli appunti.</1><2>Puoi cliccare sul riquadro accanto a \"Sfoglia\" per cercare più screenshot tra i file del disco.</2><3>Per i singoli screenshot ritagliati, premi <2>Ctrl + V</2> per incollarli dagli appunti.</3><4>Dovresti vedere un'anteprima del ritaglio e, dopo qualche secondo, il set e le statistiche secondarie del manufatto verranno compilati nell'<1>Editor manufatti</1>.</4><5>Completare il manufatto</5><6>Purtroppo la visione artificiale non è precisa al 100%: ci saranno sempre casi in cui qualcosa non viene scansionato correttamente. Controlla sempre i valori del manufatto scansionato! Una volta compilato il manufatto, clicca su <2>Aggiungi manufatto</2> per terminare la modifica.</6>",
+      "snippetAlt": "porzione dello schermo da catturare",
+      "mainAlt": "schermata principale dopo l'importazione delle statistiche"
     },
-    "unactivated": "Non attivata"
+    "unactivated": "Non attivata",
+    "added": "Manufatto aggiunto all'inventario. Inserisci il prossimo o chiudi l'editor.",
+    "queue": "Screenshot in coda:",
+    "clearQueue": "Svuota la coda"
   },
   "slot": "Slot",
   "setEffectNum": "Set da {{setNum}} pezzi",
@@ -126,5 +131,43 @@
   },
   "builds_one": "{{count}} build",
   "builds_other": "{{count}} build",
-  "artifactUsage": "Il manufatto è usato nelle seguenti build dei personaggi: "
+  "artifactUsage": "Il manufatto è usato nelle seguenti build dei personaggi: ",
+  "bulk": {
+    "delete": "Elimina i manufatti sbloccati",
+    "hint_one": "Si applica a {{count}} manufatto che corrisponde ai filtri.",
+    "hint_other": "Si applica ai {{count}} manufatti che corrispondono ai filtri.",
+    "lock": "Blocca",
+    "title": "Azioni multiple",
+    "unequip": "Togli ai personaggi",
+    "unlock": "Sblocca",
+    "confirmUnequip_one": "Vuoi davvero togliere {{count}} manufatto equipaggiato a un personaggio?",
+    "confirmUnequip_other": "Vuoi davvero togliere {{count}} manufatti equipaggiati ai personaggi?",
+    "confirmLock_one": "Vuoi davvero bloccare {{count}} manufatto?",
+    "confirmLock_other": "Vuoi davvero bloccare {{count}} manufatti?",
+    "confirmUnlock_one": "Vuoi davvero sbloccare {{count}} manufatto?",
+    "confirmUnlock_other": "Vuoi davvero sbloccare {{count}} manufatti?",
+    "confirmDelete_one": "Vuoi davvero eliminare {{count}} manufatto?",
+    "confirmDelete_other": "Vuoi davvero eliminare {{count}} manufatti?"
+  },
+  "chooseArtifact": "Scegli un manufatto",
+  "filters": {
+    "active_one": "{{count}} attivo",
+    "active_other": "{{count}} attivi",
+    "equipped": "Equipaggiati",
+    "groups": {
+      "artifact": "Manufatto",
+      "stats": "Statistiche"
+    },
+    "rvCurrent": "Attuale",
+    "rvMax": "Massimo",
+    "rvType": "Tipo di RV",
+    "title": "Filtri",
+    "unequipped": "Non equipaggiati"
+  },
+  "header": {
+    "add": "Aggiungi manufatto",
+    "duplicates": "Mostra i duplicati",
+    "guide": "Guida"
+  },
+  "pieceImage": "Immagine del manufatto"
 }

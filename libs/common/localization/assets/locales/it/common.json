@@ -46,6 +46,8 @@
     "zoDb1": "Database ZO 1",
     "zoDb2": "Database ZO 2",
     "zoDb3": "Database ZO 3",
-    "zoDb4": "Database ZO 4"
+    "zoDb4": "Database ZO 4",
+    "infoIndexedDb": "Salvato nel database di questo browser",
+    "notSaved": "Modifiche non ancora salvate: nuovo tentativo in corso"
   }
 }

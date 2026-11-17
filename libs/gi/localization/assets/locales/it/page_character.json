@@ -103,7 +103,22 @@
       "scalesWith": "L'obiettivo di ottimizzazione e i vincoli selezionati scalano con: ",
       "distribute": ". Il risolutore distribuirà i roll solo su queste statistiche secondarie.",
       "feasibilty": "Potrebbero avanzare statistiche secondarie da assegnare a statistiche che non scalano, affinché la soluzione sia realizzabile."
-    }
+    },
+    "back": "Torna a {{name}}",
+    "cancel": "Annulla",
+    "distInfo": "Trova il modo migliore di spendere roll secondari extra su questa build per l'obiettivo di ottimizzazione, nei limiti dei requisiti e di quanti roll può ricevere ogni statistica secondaria, poi li aggiunge alle statistiche secondarie.",
+    "distRolls": "roll extra",
+    "distTitle": "Miglior distribuzione dei roll",
+    "distUsed": "Usati circa {{used}} dei {{max}} roll che questi manufatti contengono",
+    "equipped": "Equipaggiata",
+    "fineTune": "Cursori e limiti",
+    "fineTuneHint": "I cursori, la riga di tutte le statistiche secondarie e il limite di roll di ogni statistica secondaria (quanto può aggiungere «Miglior distribuzione dei roll»)",
+    "noDistributionTip": "Abbassa i filtri delle statistiche o distribuisci più roll",
+    "whatIf": "Una copia ipotetica di una build: cambia quello che vuoi, non viene equipaggiato niente.",
+    "setPieces": "Set da {{count}}",
+    "newSet": "Nuovo set di manufatti",
+    "mainStats": "Statistiche principali",
+    "rollsLabel": "Roll:"
   },
   "tabTeambuff": {
     "team_reso": "Risonanza elementale",
@@ -118,5 +133,32 @@
     "loadoutsWith": "Configurazioni di squadra con <2/>",
     "addLoAndTeam": "Aggiungi configurazione + squadra",
     "addTeam": "Aggiungi nuova squadra"
-  }
+  },
+  "constellations": {
+    "active": "Attiva",
+    "level": "C{{level}} di {{max}}",
+    "locked": "Bloccata",
+    "setLevel": "Livello della costellazione",
+    "tc": "Theorycraft",
+    "title": "Costellazioni"
+  },
+  "empty": {
+    "add": "Aggiungi personaggi",
+    "description": "Aggiungi i personaggi che usi, poi imposta livello, talenti, costellazione ed equipaggiamento nell'editor del personaggio. I personaggi aggiunti qui si possono usare in qualsiasi squadra.",
+    "title": "Ancora nessun personaggio"
+  },
+  "header": {
+    "add": "Aggiungi personaggio"
+  },
+  "jsonDescWarning": "Sembra che tu stia cercando di importare una configurazione multi-opt. Non è il posto giusto! Torna alla finestra precedente e premi <strong>Importa multi-opt.</strong>",
+  "multiSelect": {
+    "count_one": "Scelto {{count}} personaggio su 4",
+    "count_other": "Scelti {{count}} personaggi su 4",
+    "done": "Fatto",
+    "hint": "Scegli nell'ordine della squadra. Il primo personaggio è quello in campo."
+  },
+  "newBadge": "Nuovo",
+  "newBadgeUpper": "NUOVO",
+  "mTargetDeleteConfirm": "Vuoi davvero eliminare «{{name}}»?",
+  "mTargetDuplicateSuffix": "(copia)"
 }

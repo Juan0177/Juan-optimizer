@@ -3,5 +3,8 @@
   "momentumCond": "Accumuli di Slancio d'impatto consumati",
   "momentumLimitInc": "Aumento limite Slancio d'impatto",
   "c6HitCond": "Avversari colpiti dall'attacco caricato speciale o dalle Granate folgoranti",
-  "shell_dmg_": "Bonus DAN Granata folgorante"
+  "shell_dmg_": "Bonus DAN Granata folgorante",
+  "c2ExcessCond": "20 punti di Slancio d'impatto in eccesso convertiti nello scudo",
+  "c6Cond": "Avversario colpito da Mortaio a tiro diretto o dalle Granate folgoranti",
+  "directiveCond": "Direttiva d'assalto (dopo Mortaio a tiro diretto: Bombardamento ravvicinato)"
 }

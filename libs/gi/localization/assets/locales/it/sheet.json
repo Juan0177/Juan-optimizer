@@ -220,7 +220,8 @@
     "polestar": {
       "inside": "Personaggio all'interno di un Campo astropolare",
       "oppInside": "Avversario all'interno di un Campo astropolare",
-      "cond": "Energia elementale sprigionata dal Campo astropolare"
+      "cond": "Energia elementale sprigionata dal Campo astropolare",
+      "anastasyaA4": "Anastasya (A4): +2 accumuli per rilascio"
     },
     "team": {
       "any": "Dopo che un membro del gruppo innesca una reazione elementale",
