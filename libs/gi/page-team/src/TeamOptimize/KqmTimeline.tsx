@@ -85,6 +85,7 @@ export function KqmTimeline({
   kqmBuilds,
   kqmBuffs,
   kqmAttacks,
+  kqmDamage,
   overrides,
   onField,
   mainStatAssumptionLevel = 0,
@@ -101,6 +102,11 @@ export function KqmTimeline({
    * these, as the rotation's member rows do
    */
   kqmAttacks?: Partial<Record<CharacterKey, TeamOptAttack[]>>
+  /**
+   * Each of those attacks' damage in the run (per member, in their order): an action's hits are
+   * listed most damage first, and the window opens on that one
+   */
+  kqmDamage?: Partial<Record<CharacterKey, number[]>>
   /** The KQM builds shown (an attack's figures are read with them, never the members' own) */
   overrides?: TeamDataOverrides
   /** Who is on the field by default */
@@ -226,6 +232,13 @@ export function KqmTimeline({
         },
       })
     }
+    // most damage in the rotation first (Mitya's Gradient Detonation: its Stellar-Conduct hit
+    // before its ATK one); the play's order otherwise
+    const damage = (part: Part) => {
+      const i = listed.indexOf(part.attack)
+      return i < 0 ? 0 : (kqmDamage?.[characterKey]?.[i] ?? 0)
+    }
+    parts.sort((a, b) => damage(b) - damage(a))
     // (a swap, an entry or a buff with no hit of its own: nothing to open)
     if (parts.length) setOpened({ characterKey, parts, index: 0 })
   }
