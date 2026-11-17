@@ -1285,7 +1285,7 @@ export function MemberEnergy({
               onChange={(_, value) =>
                 updateMember(characterKey, { fieldTime: value as number })
               }
-              aria-label={`${name}: field time`}
+              aria-label={`${name}: ${t('teamOpt.kqm.calc.fieldTime', 'Field time')}`}
               sx={{ flex: 1, py: 1, ml: 0.75 }}
             />
             <NumberField

@@ -531,7 +531,20 @@
       "weapons4": "Armi 4★ dei desideri evento",
       "weapons5": "Armi 5★ dei desideri evento",
       "weaponsTab": "Armi ({{count}})",
-      "weaponsTitle": "Armi KQM"
+      "weaponsTitle": "Armi KQM",
+      "short": {
+        "critRate_": "Tasso CRIT",
+        "critDMG_": "DAN CRIT",
+        "enerRech_": "ER",
+        "eleMas": "ME",
+        "atk_": "ATT",
+        "atk": "ATT",
+        "hp_": "PS",
+        "hp": "PS",
+        "def_": "DIF",
+        "def": "DIF"
+      },
+      "copyPieces": "{{n}} pz"
     },
     "card": {
       "button": "Card della squadra",

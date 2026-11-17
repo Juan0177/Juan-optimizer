@@ -924,7 +924,20 @@
       "topBuildsCount_one": "The best build",
       "topBuildsCount_other": "Top {{count}} builds",
       "fourStarTip_one": "{{count}} of the five artifacts is 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}.",
-      "fourStarTip_other": "{{count}} of the five artifacts are 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}."
+      "fourStarTip_other": "{{count}} of the five artifacts are 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}.",
+      "short": {
+        "critRate_": "CR",
+        "critDMG_": "CD",
+        "enerRech_": "ER",
+        "eleMas": "EM",
+        "atk_": "ATK",
+        "atk": "ATK",
+        "hp_": "HP",
+        "hp": "HP",
+        "def_": "DEF",
+        "def": "DEF"
+      },
+      "copyPieces": "{{n}}pc"
     },
     "frames": {
       "title": "Frame data",

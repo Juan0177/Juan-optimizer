@@ -293,7 +293,9 @@ async function startKqmRun(
     if (!result)
       return end({
         type: 'error',
-        message: 'Every member is kept: nothing to optimize.',
+        message: i18n.t('page_team:teamOpt.run.allKept', {
+          defaultValue: 'Every member’s build is kept: nothing to optimize.',
+        }),
       })
     end(doneOf(result))
   } catch (e) {

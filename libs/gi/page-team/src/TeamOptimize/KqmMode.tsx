@@ -1020,7 +1020,12 @@ export function KqmSetupSummary({
   stalls?: { label: string; seconds: number }[]
   sx?: SxProps<Theme>
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
+  const oneDecimal = (n: number) =>
+    n.toLocaleString(i18n.language, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })
   const { gender } = useDBMeta()
   const kqm = settings.kqm ?? defaultTeamOptKqm
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
@@ -1165,7 +1170,7 @@ export function KqmSetupSummary({
               )}
               {stalls.map(({ label, seconds }) => (
                 <Box key={label} sx={{ mt: 0.5, ...numSx }}>
-                  {stallLabel(label)}: {seconds.toFixed(1)} s
+                  {stallLabel(label)}: {oneDecimal(seconds)} s
                 </Box>
               ))}
             </Box>
@@ -1178,7 +1183,7 @@ export function KqmSetupSummary({
             <WarningAmberRoundedIcon sx={{ fontSize: 15 }} />
             {t('teamOpt.kqm.stalls', {
               defaultValue: 'Waits {{seconds}} s per rotation',
-              seconds: stalls.reduce((n, s) => n + s.seconds, 0).toFixed(1),
+              seconds: oneDecimal(stalls.reduce((n, s) => n + s.seconds, 0)),
             })}
             {' · '}
             {stallLabel(stalls[0].label)}

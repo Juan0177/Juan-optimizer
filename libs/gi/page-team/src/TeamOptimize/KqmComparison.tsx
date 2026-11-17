@@ -723,6 +723,7 @@ function RankTabs({
   )
 }
 
+/** A substat's short name in the "+N stat" detail (English; `teamOpt.kqm.short.*` in the site's language) */
 const shortStat: Record<string, string> = {
   critRate_: 'CR',
   critDMG_: 'CD',
@@ -782,7 +783,7 @@ function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
     .filter(([, n]) => n > 1e-5)
     .map(
       ([key, n]) =>
-        `+${artifactStatValue(key, n * KQM_SUBSTAT_ROLLS[key as keyof typeof KQM_SUBSTAT_ROLLS])} ${shortStat[key] ?? statName(key)}`
+        `+${artifactStatValue(key, n * KQM_SUBSTAT_ROLLS[key as keyof typeof KQM_SUBSTAT_ROLLS])} ${shortStat[key] ? t(`teamOpt.kqm.short.${key}`, shortStat[key]) : statName(key)}`
     )
     .join(' · ')
   return (
@@ -849,7 +850,10 @@ function CopyRankingButton({
         ? `${i18n.t(`weaponNames_gen:${o.weapon.key}`)} R${o.weapon.refinement}`
         : Object.entries(o.sets).length
           ? Object.entries(o.sets)
-              .map(([k, n]) => `${n}pc ${i18n.t(`artifactNames_gen:${k}`)}`)
+              .map(
+                ([k, n]) =>
+                  `${t('teamOpt.kqm.copyPieces', { defaultValue: '{{n}}pc', n })} ${i18n.t(`artifactNames_gen:${k}`)}`
+              )
               .join(' + ')
           : t('teamOpt.kqm.noSetBonus', 'No set bonus')
     const head = [
@@ -867,7 +871,9 @@ function CopyRankingButton({
       String(i + 1),
       name(o) + (o.unmet ? ' ⚠' : ''),
       formatRate(o.total, rotationTime, true),
-      best ? `${((o.total / best) * 100).toFixed(1)}%` : '',
+      best
+        ? `${((o.total / best) * 100).toLocaleString(i18n.language, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+        : '',
       o.unmet
         ? ''
         : behindText(

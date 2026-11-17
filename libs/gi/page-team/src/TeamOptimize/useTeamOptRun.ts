@@ -2,6 +2,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { i18n } from '@genshin-optimizer/gi/i18n'
 import type { OptProblemInput } from '@genshin-optimizer/gi/solver'
 import {
   GOSolver,
@@ -260,7 +261,12 @@ export function useTeamOptRun(teamId: string) {
               seconds: (performance.now() - startTime) / 1000,
               teamOpt,
             }
-          : { type: 'error', message: 'The team could not be computed.' }
+          : {
+              type: 'error',
+              message: i18n.t('page_team:teamOpt.run.noTeam', {
+                defaultValue: 'The team could not be computed.',
+              }),
+            }
       )
     } catch (e) {
       if (cancelled || e instanceof TeamOptCancelled)

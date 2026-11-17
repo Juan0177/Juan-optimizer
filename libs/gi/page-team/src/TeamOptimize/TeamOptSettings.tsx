@@ -709,7 +709,10 @@ function shortStat(key: MainStatKey, t: TFunction<'page_team'>) {
   if (key === 'eleMas') return t('teamOpt.short.eleMas', 'EM')
   if (key === 'enerRech_') return t('teamOpt.short.enerRech_', 'ER')
   if (key === 'heal_') return t('teamOpt.short.heal_', 'Healing')
-  const name = statName(key).replace(/ Bonus$/, '')
+  // "Pyro DMG Bonus" → "Pyro DMG", "Bonus DAN da Pyro" → "DAN da Pyro"
+  const name = statName(key)
+    .replace(/ Bonus$/, '')
+    .replace(/^Bonus /, '')
   // (ATK%, HP%, DEF%: the percent tells them from the flat stat)
   return /^(atk|hp|def)_$/.test(key) ? `${name}%` : name
 }
