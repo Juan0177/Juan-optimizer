@@ -327,17 +327,19 @@ export const kit: KitModel = {
             // C6: Light of Obliteration was used: no cooldown
             s.mlBurst = false
             return {
-              cooldown: { key: 'skill', frames: 0, delay: 0 },
+              cooldown: { key: 'skill', frames: 0, delay: 0, use: false },
               frames: afterDash ? 23 : 18,
               framesInto: afterDash
                 ? { normal: 13, burst: 16, dash: 22, jump: 3 }
                 : { normal: 17, burst: 18, dash: 17, jump: 17, swap: 16 },
             }
           }
+          // (not a new use of the Skill: the stance its entry began ends)
           const cooldown = {
             key: 'skill',
             frames: stanceCooldown(inStance, c),
             delay: afterDash ? 0 : 11,
+            use: false as const,
           }
           return afterDash
             ? {

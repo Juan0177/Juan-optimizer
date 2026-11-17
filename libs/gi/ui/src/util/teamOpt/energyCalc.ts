@@ -4,7 +4,11 @@ import type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
 } from '@genshin-optimizer/gi/db'
-import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
+import {
+  getCharEle,
+  getCharStat,
+  getWeaponStat,
+} from '@genshin-optimizer/gi/stats'
 import particleData from './energyCalcData.json'
 import type { SimulationResult } from './rotation/simulate'
 import type { SimHit } from './rotation/types'
@@ -618,7 +622,12 @@ export interface RotationEnergy {
   members: Partial<
     Record<
       CharacterKey,
-      Partial<Pick<TeamOptEnergyMember, TeamOptEnergyRotationField>>
+      Partial<
+        Pick<
+          TeamOptEnergyMember,
+          TeamOptEnergyRotationField | 'weaponEnergyTriggers'
+        >
+      >
     >
   >
 }
@@ -903,6 +912,28 @@ export function weaponTriggersFromRotation(
   return out
 }
 
+/**
+ * The triggers the prefill puts in a member's energy weapon triggers field: the rotation's for the
+ * one energy weapon of its type it would trigger (the Traveler's Exaiphanes Blade), which the
+ * calculator then counts for the weapon its build holds; 0 when none or several have triggers
+ * (each build then counts its own weapon's, `weaponTriggers`)
+ */
+function filledWeaponTriggers(
+  key: CharacterKey,
+  triggers: Partial<Record<WeaponKey, number>> | undefined
+): number {
+  const type = getCharStat(key).weaponType
+  const counted = (
+    Object.entries(triggers ?? {}) as [WeaponKey, number][]
+  ).filter(
+    ([weapon, n]) =>
+      n > 0 &&
+      isCalcEnergyWeapon(weapon) &&
+      getWeaponStat(weapon)?.weaponType === type
+  )
+  return counted.length === 1 ? counted[0][1] : 0
+}
+
 const FAVONIUS_ASSUMED = { cooldown: 360, crit: 0.5 }
 const FAVONIUS_RUNS = 400
 
@@ -971,12 +1002,17 @@ export function favoniusFromRotation(
  * The ER calculator's inputs as a played rotation has them, per written rotation (`rotations` of
  * them in the simulation's kept span):
  * - field time: how long each member is on the field;
- * - skill uses: each time its Skill's cooldown starts, pressed or held (the matching option);
- *   a "Burst" option (Emilie's case, replaced by her Burst) counts the Bursts;
+ * - skill uses: each particle drop its kit marks (`particleMarker`, with the sheet option when the
+ *   kit knows it), else each time its Skill's cooldown starts; the option as played
+ *   (`USE_OPTIONS`), else pressed or held; a "Burst" option (Emilie's case, replaced by her Burst)
+ *   counts the Bursts;
  * - the particle catcher: who is on the field when a Skill's particles arrive (they give energy
  *   on arrival, `particleDelay` after the hit that makes them), and the share they catch;
  * - Burst cadence: unused without a Burst, otherwise once per its Bursts in a rotation;
- * - bonus energy a Skill use restores directly (`SKILL_FLAT_ENERGY`).
+ * - bonus energy a Skill use restores directly (`SKILL_FLAT_ENERGY`), or a constellation on the
+ *   party's reactions (`REACTION_ENERGY`);
+ * - energy weapon triggers: what each weapon would trigger, and in the triggers field those of the
+ *   one energy weapon of its type that has some (`filledWeaponTriggers`).
  * Turrets (particles over time) keep the catcher: the calculator shares them out by field time.
  */
 export function energyFromRotation(
@@ -1088,30 +1124,69 @@ export function energyFromRotation(
       [...sim.actions]
         .reverse()
         .find((a) => a.characterKey === key && a.start <= t)
-    // (a kit whose markers are single particles has its own sheet option for them: Flins)
-    const markerOption = MARKER_OPTIONS[key]
-      ? data.skills.findIndex((s) => s.label === MARKER_OPTIONS[key])
-      : -1
+    // (the sheet option a marker names: the kit's, or the one its markers count as: Flins)
     const uses: {
       t: number
       hold: boolean
       particlesAt?: number
-      mode?: number
+      option?: string
     }[] = markers.length
       ? markers.map((m) => ({
           t: m.t,
           hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
           particlesAt: m.t,
-          ...(markerOption >= 0 ? { mode: markerOption } : {}),
+          option: m.path[2] || MARKER_OPTIONS[key],
         }))
       : (sim.skillUses ?? []).filter(
           (u) => u.characterKey === key && u.t >= start && u.t < end
         )
-    const byMode = new Map<number, number>()
-    for (const u of uses) {
-      const mode = u.mode ?? modeFor(u.hold)
-      byMode.set(mode, (byMode.get(mode) ?? 0) + 1)
+    uses.sort((a, b) => a.t - b.t)
+    // each use's first Skill hit (its particles' for most kits) before the next use
+    const firstHits = uses.map((u, i) => {
+      const until = uses[i + 1]?.t ?? u.t + 20 * 60
+      return sim.hits.find(
+        (h) =>
+          h.characterKey === key &&
+          h.t >= u.t &&
+          h.t < until &&
+          !h.path[0].startsWith('_') &&
+          (h.tag === 'skill' || h.path[0] === 'skill')
+      )
+    })
+    // (the rotation loops: the last use lasts to the first one's next loop, its hits past the end
+    // are the first ones of the kept span)
+    const useHits = (i: number) => {
+      const from = uses[i].t
+      const to = uses[i + 1]?.t ?? uses[0].t + sim.frames
+      return sim.hits
+        .filter((h) => h.characterKey === key)
+        .flatMap((h) =>
+          h.t >= from && h.t < to
+            ? [h]
+            : h.t >= start && h.t < to - sim.frames
+              ? [{ ...h, t: h.t + sim.frames }]
+              : []
+        )
+        .sort((a, b) => a.t - b.t)
     }
+    const optionIndex = (label: string | undefined) =>
+      label
+        ? data.skills.findIndex((s, i) => s.label === label && usable(i))
+        : -1
+    const modeOf = uses.map((u, i) => {
+      const found = optionIndex(
+        u.option ??
+          USE_OPTIONS[key]?.({
+            hold: u.hold,
+            hit: firstHits[i],
+            hits: () => useHits(i),
+            all: sim.hits,
+          })
+      )
+      return found >= 0 ? found : modeFor(u.hold)
+    })
+    const byMode = new Map<number, number>()
+    for (const mode of modeOf) byMode.set(mode, (byMode.get(mode) ?? 0) + 1)
     const modes = [...byMode].sort((a, b) => b[1] - a[1])
     const burstActions = sim.actions.filter(
       (a) =>
@@ -1177,6 +1252,7 @@ export function energyFromRotation(
       member.flatEnergy =
         Math.round(((member.flatEnergy ?? 0) + kitEnergy[key]!) * 100) / 100
     if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
+    member.weaponEnergyTriggers = filledWeaponTriggers(key, weaponTriggers[key])
     if (favonius[key]) {
       member.favoniusProcs = favonius[key]!.procs
       if (favonius[key]!.catchBy)
@@ -1191,17 +1267,7 @@ export function energyFromRotation(
     if (primary && !(primary.perSecond > 0) && uses.length) {
       const caught = new Map<CharacterKey, number>()
       uses.forEach((u, i) => {
-        const until = uses[i + 1]?.t ?? u.t + 20 * 60
-        const made =
-          u.particlesAt ??
-          sim.hits.find(
-            (h) =>
-              h.characterKey === key &&
-              h.t >= u.t &&
-              h.t < until &&
-              !h.path[0].startsWith('_') &&
-              (h.tag === 'skill' || h.path[0] === 'skill')
-          )?.t
+        const made = u.particlesAt ?? firstHits[i]?.t
         if (made === undefined) return
         const who = onFieldAt(made + particleDelay(key))
         caught.set(who, (caught.get(who) ?? 0) + 1)
@@ -1247,15 +1313,27 @@ export function withRotationEnergy(
     const keepShort =
       !!SHORT_BURSTS[key] && !!member.edited?.includes('burstEvery')
     for (const [field, value] of Object.entries(filled) as [
-      TeamOptEnergyRotationField,
+      TeamOptEnergyRotationField | 'weaponEnergyTriggers',
       never,
     ][])
       if (
         field !== 'fieldTime' &&
+        field !== 'weaponEnergyTriggers' &&
         !member.edited?.includes(field) &&
         !(keepShort && (field === 'secondaryMode' || field === 'secondaryUses'))
       )
         next[field] = value
+    // (the energy weapon triggers field has no `edited` mark: a value other than the one the
+    // rotation filled in last time, from the saved `weaponTriggers`, was set by hand)
+    const lastFilled = filledWeaponTriggers(key, member.weaponTriggers)
+    if (
+      filled.weaponEnergyTriggers !== undefined &&
+      !(
+        (member.weaponEnergyTriggers ?? 0) > 0 &&
+        member.weaponEnergyTriggers !== lastFilled
+      )
+    )
+      next.weaponEnergyTriggers = filled.weaponEnergyTriggers
     members[key] = next
   }
   const auto = keys.filter(
@@ -1310,6 +1388,104 @@ const REACTION_ENERGY: Partial<
   >
 > = {
   Flins: { constellation: 1, reaction: 'lunarCharged', energy: 8, icd: 330 },
+  Ineffa: { constellation: 4, reaction: 'lunarCharged', energy: 5, icd: 240 },
+}
+/** What a rule of `USE_OPTIONS` sees of a Skill use */
+interface UseContext {
+  hold: boolean
+  /** Its first Skill hit (the one that makes its particles, for most kits) */
+  hit?: SimHit
+  /**
+   * The member's hits from the use to the next one, in order (the rotation loops: the last use's
+   * run on into the kept span's first hits, a loop later)
+   */
+  hits: () => SimHit[]
+  /** The kept span's hits */
+  all: readonly SimHit[]
+}
+/** How many of the hits make particles, at most once per `icd` frames (a kit's particle ICD) */
+function particlesMade(
+  hits: readonly SimHit[],
+  match: (h: SimHit) => boolean,
+  icd: number
+) {
+  let ready = Number.NEGATIVE_INFINITY
+  let n = 0
+  for (const h of hits)
+    if (match(h) && h.t >= ready) {
+      n++
+      ready = h.t + icd
+    }
+  return n
+}
+/**
+ * The ER sheet's option a Skill use is, where its particles depend on how the rotation played it
+ * (gcsim's particle callbacks); otherwise Press or Hold as played
+ */
+const USE_OPTIONS: Partial<
+  Record<CharacterKey, (use: UseContext) => string | undefined>
+> = {
+  // the hold absorbs 2 hits (Polaris): 2 + 2 particles, the sheet's "Perfect"
+  Beidou: (u) => (u.hit?.path[1] === 'dmgTwoHits' ? 'Perfect' : '0 stacks'),
+  // A4: an enemy Frozen by Frostgnaw drops 1 more particle (one enemy: 1 freeze at most)
+  Kaeya: (u) =>
+    u.hit &&
+    u.all.some(
+      (h) =>
+        h.characterKey === 'Kaeya' &&
+        h.t === u.hit!.t &&
+        h.path[0] === '_reaction' &&
+        h.path[1] === 'frozen'
+    )
+      ? '1 freeze'
+      : '0 freezes',
+  // Declension stacks at the release: 2–3 make 2.5 particles, 4 make 3
+  ShikanoinHeizou: (u) => {
+    const stacks =
+      Number(
+        u.hit?.states?.find((s) => s.path[1] === 'declensionStacks')?.value
+      ) || 0
+    return stacks >= 4
+      ? 'Full stacks'
+      : stacks >= 2
+        ? '2-3 stacks'
+        : '0-1 stacks'
+  },
+  // the Shooting Star volleys while the Curtain lasts (their particles: once per 3.5 s)
+  Layla: (u) => {
+    const volleys = particlesMade(
+      u.hits(),
+      (h) => h.path.join('.') === 'skill.starDmg',
+      210
+    )
+    return ['1 volley', '2 volleys', '3 volleys'][
+      Math.min(3, Math.max(1, volleys)) - 1
+    ]
+  },
+  // the hold is Charge Level 1
+  YunJin: (u) => (u.hit?.path[1] === 'dmg1' ? 'Level 1' : 'Press'),
+  // a stance's particles: its Riptide Slashes', once per 3 s (3 for "7-9s melee", 4 for "11s")
+  Tartaglia: (u) =>
+    particlesMade(
+      u.hits(),
+      (h) => h.path.join('.') === 'skill.riptideSlash',
+      180
+    ) >= 4
+      ? '11s melee'
+      : '7-9s melee',
+  // Windfavored's particles: its Kuugo hits', once per 2 s (3 for "6-8s", 4 for "8-10s")
+  Wanderer: (u) =>
+    particlesMade(
+      u.hits(),
+      (h) =>
+        (h.tag === 'normal' || h.tag === 'charged') &&
+        !!h.states?.some(
+          (s) => s.path.join('.') === 'Wanderer.afterSkill' && s.value === 'on'
+        ),
+      120
+    ) >= 4
+      ? '8-10s uptime'
+      : '6-8s uptime',
 }
 /**
  * Danica's flat Energy a rotation, per member (dump ConfigTalent_Danica, Avatar_Danica_ElementalArt_E2):

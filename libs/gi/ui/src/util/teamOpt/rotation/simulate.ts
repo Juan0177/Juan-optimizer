@@ -1506,9 +1506,11 @@ export function simulateRotation({
     }
     lastNormalActor = action.kind === 'normal' ? characterKey : undefined
     if (result.cooldown) {
-      const { key, frames, delay = 0 } = result.cooldown
+      const { key, frames, delay = 0, use } = result.cooldown
       const at = now + delay
-      if (key === 'skill')
+      // (the Skill's cooldown: 'skill', or 'skill<n>' for a kit whose Burst resets it, Kazuha's and
+      // Arlecchino's; not Cyno's 'skillB' or Xilonen's 'skillRecast', which kits set themselves)
+      if (/^skill\d*$/.test(key) && use !== false)
         skillUses.push({ characterKey, t: at, hold: !!action.hold })
       const spend = () =>
         cooldowns.spend(

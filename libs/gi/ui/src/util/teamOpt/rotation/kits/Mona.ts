@@ -1,7 +1,13 @@
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/mona, main as of 2026-11-10. */
 
@@ -245,6 +251,8 @@ function monaAct(
           { stat: 'atk', path: ['total', 'atk'], t: now, onField: ctx.onField },
         ],
       })
+      // her particles come with the explosion, not the ticks (gcsim's particleCB)
+      particleMarker(ctx, first + 243, 'Mirror Reflection of Doom particles')
       return action.hold
         ? {
             cooldown: { key: 'skill', frames: 12 * 60, delay: 24 },

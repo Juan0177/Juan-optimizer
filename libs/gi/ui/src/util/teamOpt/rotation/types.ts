@@ -185,8 +185,12 @@ export interface ActionResult {
   framesInto?: Partial<Record<RotationAction['kind'] | 'swap', number>>
   /** The action could not be done (e.g. not enough Phase Shift Radiance): why */
   failed?: string
-  /** The cooldown it starts: `delay` frames after the action starts, lasting `frames` */
-  cooldown?: { key: string; frames: number; delay?: number }
+  /**
+   * The cooldown it starts: `delay` frames after the action starts, lasting `frames`. A Skill
+   * cooldown's start is a use of the Skill (the ER calculator's), unless `use` is false (it ends
+   * what an earlier use began: Tartaglia's return to the Ranged Stance)
+   */
+  cooldown?: { key: string; frames: number; delay?: number; use?: false }
   /** Channel duration can grow when resource events land during the action (Mitya). */
   duration?: (next?: RotationAction['kind'] | 'swap') => number
   /** A kit-driven swap (Chiori's Tapestry), which bypasses the ordinary swap cooldown. */

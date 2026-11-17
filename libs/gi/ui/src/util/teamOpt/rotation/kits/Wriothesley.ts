@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -96,6 +97,17 @@ interface WriothesleyState {
   c1LusterUntil: number
   /** C1 (Revelation): Lusters within 5 s of a Stellar N5 hit deal +50% */
   c15HitUntil: number
+  /** The particle ICD (2 s) runs until this frame (his own clock) */
+  particleUntil: number
+}
+
+/** His hits that make a particle (gcsim's particleCB), by the ER sheet's option they are */
+const PARTICLE_HITS: Record<string, string> = {
+  'passive1.hit3': 'NA during skill',
+  'passive1.hit5': 'NA during skill',
+  'constellation6.hit5': 'NA during skill',
+  'charged.rebukeDmg': 'Vaulting Fist',
+  'constellation6.icicleDmg': 'Vaulting Fist',
 }
 
 /**
@@ -142,6 +154,7 @@ export const kit: KitModel = {
     lusterHealIcd: -1,
     c1LusterUntil: -1,
     c15HitUntil: -1,
+    particleUntil: -1,
   }),
   onStart(ctx) {
     // Revelation is unlocked (gcsim's default)
@@ -153,6 +166,19 @@ export const kit: KitModel = {
       ['Wriothesley', 'lockStellarRadianceSc'],
       stellar(ctx) ? 'on' : ''
     )
+    // a particle from a Repelling Fist (an Icefang Rush normal attack) or a Rebuke: Vaulting Fist,
+    // once per 2 s (gcsim's particleCB: a status on his clock, still active on its expiry frame)
+    if (hit.characterKey === 'Wriothesley') {
+      const path = hit.path.join('.')
+      const option = path.startsWith('skill.enhanced_')
+        ? 'NA during skill'
+        : PARTICLE_HITS[path]
+      const own = ctx.characterFrame('Wriothesley')
+      if (option && own >= s.particleUntil) {
+        s.particleUntil = own + 121
+        particleMarker(ctx, 0, 'Wriothesley particle', option)
+      }
+    }
     // Chilling Penalty: Repelling Fists (their Stellar N3 / N5 too) drain HP
     const repelling =
       hit.path[0] === 'skill'

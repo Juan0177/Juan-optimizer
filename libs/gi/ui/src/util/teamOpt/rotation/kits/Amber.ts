@@ -1,5 +1,11 @@
 import type { ActionResult, KitModel } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/amber, main as of 2026-11-10. */
 
@@ -151,6 +157,9 @@ export const kit: KitModel = {
           label: 'Baron Bunny (explosion)',
           snapshotDelay: 45 + hold,
         })
+        // its 4 particles come with the explosion (gcsim's makeParticleCB), one use per cast (C4's
+        // two charges too)
+        particleMarker(ctx, 530 + hold, 'Baron Bunny particles')
         if (c >= 2)
           ctx.note(
             'Amber: C2 manual detonation (an Aimed Shot at the Baron Bunny) and Overload explosions not modelled.'

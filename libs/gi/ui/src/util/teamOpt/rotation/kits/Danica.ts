@@ -4,6 +4,7 @@ import {
   KQMSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   shieldMarker,
   templateJump,
   withHitlag,
@@ -87,6 +88,8 @@ interface State {
   aegisEnd: number
   /** C2 Toast stacks per member */
   toast: Partial<Record<CharacterKey, number>>
+  /** The enemy can drop her particles again from this frame (14 s after the last drop) */
+  ballReady: number
 }
 const hit = (
   c: SimContext,
@@ -169,6 +172,21 @@ function anchor(c: SimContext, s: State, duration: number) {
 const addExcite = (s: State, amount: number) => {
   s.excite = Math.min(100, s.excite + amount)
 }
+/**
+ * Her particles (dump Avatar_Danica_ElementalArt_DropBall_Handler): a hit with the
+ * Danica_ElementalArt_DropBall tag, the Anchor Skill's (InsertClaymore) or the Entry Skill's
+ * (E2_Enter_Attack), gives the enemy the Unique 14 s Avatar_Danica_ElementalArt_DropBall, whose
+ * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 14 s from
+ * either Skill
+ */
+function dropBall(c: SimContext, s: State, delay: number) {
+  c.at(delay, (c2) => {
+    if (c2.now < s.ballReady) return
+    s.ballReady = c2.now + 840
+    particleMarker(c2, 0, 'Danica particles', undefined, 'Danica')
+  })
+}
+
 /** On-Field Skill E2: consumes all Excitement, enters (or continues) Battle Maid. */
 function onFieldE2(c: SimContext, s: State): ActionResult {
   s.excite = 0
@@ -276,6 +294,7 @@ export const kit: KitModel = {
     burstEnd: -1,
     aegisEnd: -1,
     toast: {},
+    ballReady: -1,
   }),
   onStart(c) {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
@@ -306,6 +325,7 @@ export const kit: KitModel = {
           return onFieldE2(ctx, s)
         }
         hit(ctx, 22, ['skill', 'dmg'], 'Anchor Skill', true, 'skill')
+        dropBall(ctx, s, 22)
         // Dump Avatar_Danica_ElementalArt_InsertClaymore: Will to Cleanse to 0, Will to Protect's
         // cooldown (UNIQUE_Danica_E2_GuardMaid_CD) removed, and the Anchor handler removed and
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
@@ -459,6 +479,7 @@ export const kit: KitModel = {
     // Skill's refreshed Anchor at most
     aegisOn(ctx, s, 'Defense Maid shield')
     hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
+    dropBall(ctx, s, 42)
     return { frames: 60 }
   },
 }
