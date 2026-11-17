@@ -1,9 +1,10 @@
 /**
  * Feedback from the site's Feedback button, kept where only the owner can read it: a POST of
- * `{ kind, message, contact?, page?, version?, build?, site?, images? }` from the site's own origins
- * is checked, limited per visitor and stored in Workers KV under `fb:<time>:<id>`, each screenshot
- * (a data URL, made small on the page) under `img:<time>:<id>:<n>`. There is no way to read it back
- * through the Worker.
+ * `{ kind, message, contact?, page?, version?, build?, site?, images?, context? }` from the site's
+ * own origins is checked, limited per visitor and stored in Workers KV under `fb:<time>:<id>`, each
+ * screenshot (a data URL, made small on the page) under `img:<time>:<id>:<n>` and the page's
+ * details (the page, the team and its setup, recent errors: an object) under `ctx:<time>:<id>`.
+ * There is no way to read it back through the Worker.
  */
 /** The Workers KV binding's calls used here (no @cloudflare/workers-types needed) */
 interface KV {
@@ -29,7 +30,9 @@ const KINDS = ['bug', 'idea', 'other'] as const
 /** Screenshots per post, and each one's size (a data URL's characters: about 2.2 MB of image) */
 const MAX_IMAGES = 4
 const MAX_IMAGE = 3_000_000
-const MAX_BODY = 16_000 + MAX_IMAGES * MAX_IMAGE
+/** The page's details (JSON characters; the page sends at most 60 000) */
+const MAX_CONTEXT = 64_000
+const MAX_BODY = 16_000 + MAX_CONTEXT + MAX_IMAGES * MAX_IMAGE
 const IMAGE = /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/
 /** Posts per visitor per hour */
 const PER_HOUR = 8
@@ -106,6 +109,13 @@ export default {
           typeof x === 'string' && x.length <= MAX_IMAGE && IMAGE.test(x)
       )
       .slice(0, MAX_IMAGES)
+    const json =
+      body.context &&
+      typeof body.context === 'object' &&
+      !Array.isArray(body.context)
+        ? JSON.stringify(body.context)
+        : undefined
+    const context = json && json.length <= MAX_CONTEXT ? json : undefined
     const at = new Date().toISOString()
     const id = crypto.randomUUID().slice(0, 8)
     const record = {
@@ -119,10 +129,14 @@ export default {
       site: text(body.site, 80) || undefined,
       browser: text(request.headers.get('User-Agent'), 200) || undefined,
       images: images.length || undefined,
+      context: context ? true : undefined,
     }
-    await Promise.all(
-      images.map((image, n) => env.FEEDBACK.put(`img:${at}:${id}:${n}`, image))
-    )
+    await Promise.all([
+      ...images.map((image, n) =>
+        env.FEEDBACK.put(`img:${at}:${id}:${n}`, image)
+      ),
+      ...(context ? [env.FEEDBACK.put(`ctx:${at}:${id}`, context)] : []),
+    ])
     await env.FEEDBACK.put(`fb:${at}:${id}`, JSON.stringify(record))
     return reply(201, { ok: true }, origin)
   },
