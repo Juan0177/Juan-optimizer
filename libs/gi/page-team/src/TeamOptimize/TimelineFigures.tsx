@@ -6,6 +6,8 @@ import type {
   SimBuffOwner,
   SimHit,
   SimulationResult,
+  TeamData,
+  TeamDataOverrides,
   TeamOptEvaluation,
 } from '@genshin-optimizer/gi/ui'
 import {
@@ -18,10 +20,14 @@ import {
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { HitStats } from './AttackEditor'
+import type { BuffEffect } from './buffs'
+import { buffEffects, describe } from './buffs'
 import { basicStats } from './ResultDetails'
 import type { MomentStat, TimelineMoment } from './RotationTimeline'
+import type { MomentEffects } from './timelineModel'
+import { momentBuffKey } from './timelineModel'
 import { useTeamOpt } from './useTeamOpt'
 
 type HitAttacks = Map<SimHit, { characterKey: CharacterKey; index: number }>
@@ -174,34 +180,63 @@ const shortName = (stat: string) =>
     : undefined)
 
 /**
- * Every member's stats at a moment of the timeline, with the members' own builds (Team
- * optimize's: never on the KQM tab): the buffs the simulation times in the state they are in
- * then (or off), the member on the field then, the extra buffs counted. Worked out in the
- * background; the stats of the moment before stay until then.
+ * The team at a moment of the timeline: the buffs the simulation times in the state they are in
+ * then (or off), the member on the field then, the extra buffs counted. From it, each member's
+ * stats then (`stats`: Team optimize's, with the members' own builds) and what each buff up then
+ * gives, as its sheet shows it (`overrides`: KQM theorycrafting's builds, never the members' own).
+ * Worked out in the background; what a buff gives stays from the moments before (each moment
+ * adds to it), so the panel does not flicker while the next one is worked out.
  */
-export function useMomentStats(
+export function useMomentFigures(
   teamId: string,
   moment: TimelineMoment | undefined,
-  enabled: boolean
+  {
+    enabled,
+    stats: withStats = true,
+    teamData,
+    overrides,
+    mainStatAssumptionLevel,
+  }: {
+    enabled: boolean
+    /** Each member's stats then (off: only what the buffs give) */
+    stats?: boolean
+    /** The members' sheets: what each buff is */
+    teamData?: TeamData
+    overrides?: TeamDataOverrides
+    mainStatAssumptionLevel?: number
+  }
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
   const [teamOpt] = useTeamOpt(teamId)
   const [stats, setStats] =
     useState<Partial<Record<CharacterKey, MomentStat[]>>>()
+  const [effects, setEffects] = useState<MomentEffects>()
   const assumeMaxMain = !!teamOpt.assumeMaxMain
   const { bonusStats } = teamOpt
+  const level = mainStatAssumptionLevel ?? (assumeMaxMain ? 20 : 0)
+  // (what the buffs gave at earlier moments: kept while the team is the same)
+  const known = useRef<{ basis: unknown[]; map: Map<string, BuffEffect[]> }>({
+    basis: [],
+    map: new Map(),
+  })
   const key = moment && enabled ? JSON.stringify(moment) : undefined
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for `moment`
   useEffect(() => {
-    if (!moment || !key) return setStats(undefined)
+    if (!moment || !key) {
+      setStats(undefined)
+      return undefined
+    }
     const timer = setTimeout(() => {
       const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
       const data = getTeamDataWith(database, teamId, {
-        states: moment.states,
+        ...overrides,
+        // (the ones on all rotation too: what they give is read in this data)
+        states: [...moment.states, ...(moment.always ?? [])],
         excluded: moment.excluded,
-        mainStatAssumptionLevel: assumeMaxMain ? 20 : 0,
-        bonusStats: teamOptBonusStats({ bonusStats }, keys),
+        mainStatAssumptionLevel: level,
+        bonusStats:
+          overrides?.bonusStats ?? teamOptBonusStats({ bonusStats }, keys),
       })
       if (!data) return
       const active =
@@ -212,37 +247,78 @@ export function useMomentStats(
         gender,
         active
       )
-      setStats(
-        Object.fromEntries(
-          keys.flatMap((characterKey) => {
-            const target = ui[characterKey]?.target
-            if (!target) return []
-            const found = new Map(basicStats(target))
-            const list = [
-              ...MOMENT_STATS,
-              // (its damage bonuses: the elements' and Physical, when it has any)
-              ...[...found.keys()].filter((k) => k.endsWith('_dmg_')),
-            ].flatMap((stat): MomentStat[] => {
-              const calc = found.get(stat)
-              if (!calc || typeof calc.value !== 'number') return []
-              if (stat.endsWith('_dmg_') && !calc.value) return []
-              const { name, unit, fixed, variant } = resolveInfo(calc.info)
-              return [
-                {
-                  key: stat,
-                  name: shortName(stat) ?? name,
-                  value: valueString(calc.value, unit, fixed),
-                  variant:
-                    variant && variant !== 'invalid' ? variant : undefined,
-                },
-              ]
+      if (withStats)
+        setStats(
+          Object.fromEntries(
+            keys.flatMap((characterKey) => {
+              const target = ui[characterKey]?.target
+              if (!target) return []
+              const found = new Map(basicStats(target))
+              const list = [
+                ...MOMENT_STATS,
+                // (its damage bonuses: the elements' and Physical, when it has any)
+                ...[...found.keys()].filter((k) => k.endsWith('_dmg_')),
+              ].flatMap((stat): MomentStat[] => {
+                const calc = found.get(stat)
+                if (!calc || typeof calc.value !== 'number') return []
+                if (stat.endsWith('_dmg_') && !calc.value) return []
+                const { name, unit, fixed, variant } = resolveInfo(calc.info)
+                return [
+                  {
+                    key: stat,
+                    name: shortName(stat) ?? name,
+                    value: valueString(calc.value, unit, fixed),
+                    variant:
+                      variant && variant !== 'invalid' ? variant : undefined,
+                  },
+                ]
+              })
+              return [[characterKey, list]]
             })
-            return [[characterKey, list]]
-          })
+          )
         )
+      if (!teamData) return
+      // what each buff up then gives: its sheet's fields in that state, read from its owner's
+      // data then (the team's own, a resonance's, from the member on the field)
+      const sheets: TeamData = Object.fromEntries(
+        keys.flatMap((ck) => {
+          const bundle = teamData[ck]
+          const target = ui[ck]?.target
+          return bundle && target ? [[ck, { ...bundle, target }]] : []
+        })
       )
+      const basis = [teamData, overrides, level, bonusStats, gender]
+      if (known.current.basis.some((x, i) => x !== basis[i]))
+        known.current = { basis, map: new Map() }
+      const map = new Map(known.current.map)
+      for (const buff of [...moment.states, ...(moment.always ?? [])]) {
+        const owner = buff.owner === 'team' ? active : buff.owner
+        const target = ui[owner]?.target
+        if (!target) continue
+        const { fields } = describe(
+          { owner: buff.owner, path: buff.path },
+          buff.value,
+          sheets
+        )
+        map.set(momentBuffKey(buff), buffEffects(fields?.[buff.value], target))
+      }
+      known.current.map = map
+      setEffects(map)
     }, 40)
     return () => clearTimeout(timer)
-  }, [database, teamId, gender, key, assumeMaxMain, bonusStats])
-  return enabled ? stats : undefined
+  }, [
+    database,
+    teamId,
+    gender,
+    key,
+    level,
+    bonusStats,
+    overrides,
+    teamData,
+    withStats,
+  ])
+  return {
+    stats: enabled && withStats ? stats : undefined,
+    effects: enabled ? effects : undefined,
+  }
 }

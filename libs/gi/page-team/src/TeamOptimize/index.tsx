@@ -232,6 +232,7 @@ export default function TeamBuildWorkspace({
     kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
     kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
+    kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
   })
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own

@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next'
 import { AttackEditor } from './AttackEditor'
 import type { TeamBuff } from './buffs'
 import { buffsForAttacker } from './buffs'
+import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
   simulateWritten,
@@ -24,6 +25,9 @@ import {
   useSimTeam,
   writtenSeconds,
 } from './RotationWriter'
+import { useMomentFigures } from './TimelineFigures'
+import type { AuraKey } from './timelineModel'
+import { aurasAt } from './timelineModel'
 import { numSx, SubsectionTitle, subsectionSx, type } from './ui'
 
 /** No step of the written rotation is edited here (the timeline only shows it) */
@@ -117,6 +121,8 @@ export function KqmTimeline({
             database,
             teamId,
             gender,
+            // (the enemy's auras: an attack's window says which were on when it hit)
+            auraTimeline: true,
             openerWarning: (warning) => warning,
           })
         : undefined,
@@ -152,6 +158,7 @@ export function KqmTimeline({
   const [opened, setOpened] = useState<{
     characterKey: CharacterKey
     attack: TeamOptAttack
+    moment: { seconds: number; auras: AuraKey[] }
   }>()
   const openAction = ({
     characterKey,
@@ -191,8 +198,20 @@ export function KqmTimeline({
       (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
     )
     const attack = samePath.find((x) => sameAttack(x, mine)) ?? samePath[0]
-    setOpened({ characterKey, attack: attack ?? mine })
+    setOpened({
+      characterKey,
+      attack: attack ?? mine,
+      moment: { seconds: (hit.t - sim.start) / 60, auras: aurasAt(sim, hit.t) },
+    })
   }
+  // the members' stats at the moment shown and what each buff up then gives, with these builds
+  const [moment, setMoment] = useState<TimelineMoment>()
+  const { stats, effects } = useMomentFigures(teamId, moment, {
+    enabled: !!overrides,
+    teamData,
+    overrides,
+    mainStatAssumptionLevel,
+  })
   if (!result?.sim) return null
   // (one written rotation's length, as the writer shows it)
   const length =
@@ -232,6 +251,9 @@ export function KqmTimeline({
         onAction={openAction}
         teamData={teamData}
         buffs={kqmBuffs}
+        stats={stats}
+        effects={effects}
+        onMoment={overrides ? setMoment : undefined}
       />
       {/* the attack a bar opened: its damage and the buffs during it, as the KQM builds have them */}
       {opened && (
@@ -244,6 +266,7 @@ export function KqmTimeline({
           characterKey={opened.characterKey}
           data={teamData?.[opened.characterKey]?.target}
           attack={opened.attack}
+          moment={opened.moment}
           buffs={buffsForAttacker(kqmBuffs ?? [], opened.characterKey)}
           mainStatAssumptionLevel={mainStatAssumptionLevel}
           members={members}
