@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.14.1",
+    "date": "2026-11-17",
+    "improved": [
+      "KQM builds now use 10/10/10 talents by default, as the current KQM Standards do. If you pick 9/9/9 instead, new teams start with your last pick.",
+      "Phones: every team tab is in view (Team optimize and KQM were off-screen), Feedback moved into the menu and footer so nothing covers the Optimize team button, \"Use this rotation\" stays at the bottom of the screen, and attack lists stay folded after you apply a written rotation.",
+      "Phones: the character picker shows each pick's team order and no longer opens the keyboard, timelines show avatars so the chart has more room, ER targets are no longer cut off, and the home page shows your inventory as compact tiles."
+    ],
+    "fixed": [
+      "Team optimize: the Optimize team button stays usable when every member is switched off, so you can turn them back on (it used to lock).",
+      "Team optimize says when every member is on a TC build, and warns when a member has no artifacts to choose from.",
+      "The rotation summary shows waits as written (W1f), not as long decimals."
+    ]
+  },
+  {
     "version": "1.14.0",
     "date": "2026-11-17",
     "new": [
