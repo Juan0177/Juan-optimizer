@@ -10,8 +10,9 @@ import {
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/sandrone. Her timing
  * follows gcsim's later official version (genshinsim/gcsim b107b5d, #3269): a charge is released
- * after the most condensed beams it can fire (3, 6 with C1) rather than held until Decoding Power
- * is full; the Skill repairs Fagio while she hovers (70 as she casts, then 10 every 0.1 s); normal
+ * after its condensed beams rather than held until Decoding Power is full: 3 unless the rotation
+ * writes another number ("CA[beams=6]": up to 6 from C1, whose halved Decoding Power gain allows
+ * them; a plain CA stays 3 beams at every constellation, so a rotation plays the same at C1); the Skill repairs Fagio while she hovers (70 as she casts, then 10 every 0.1 s); normal
  * attacks into a charge take their whole animation; the Prism Shots land at 34 frames. */
 
 /*
@@ -66,21 +67,23 @@ const OVERDRIVE_DELAY = 19
  * decodeNeededForBeams): N beams need Decoding Power at most 100 minus this at the start
  */
 const BEAMS_NEEDED = [0, 128, 458, 788, 1118, 1448, 1778]
-/** Beams a charge fires before it is released: 3, or 6 with C1 (its Decoding Power gain is halved) */
+/** Beams a charge can fire before it is released: 3, or 6 with C1 (its Decoding Power gain is halved) */
 const maxBeams = (c1: boolean) => (c1 ? 6 : 3)
+/** Beams a charge fires when the rotation names none ("CA"): 3, at every constellation */
+const DEFAULT_BEAMS = 3
 
 /**
  * A Decoding charge, in frames from its first tick (gcsim b107b5d, internal/characters/sandrone/
  * charge.go): heat every 12 frames (+3.2), a condensed beam every 60 (+17), released 1 frame
- * after its last beam, the most beams it can fire before Power Overdrive (3, 6 with C1). If
- * Decoding Power reaches 100 first, Fagio enters Power Overdrive 19 frames later and the charge
- * ends the frame after. `exit` is when the next action can start (its end lag has passed by then).
- * `asked`: the beams written ("CA[beams=2]", gcsim's charge[beams=2]), at most the most it can fire.
+ * after its last beam: the beams written (`asked`: "CA[beams=2]", gcsim's charge[beams=2]; at most 3,
+ * 6 with C1), else 3, fewer when Decoding Power would reach 100 first. If it does, Fagio enters
+ * Power Overdrive 19 frames later and the charge ends the frame after. `exit` is when the next
+ * action can start (its end lag has passed by then).
  */
 export function sandroneChannel(decode: number, c1 = false, asked?: number) {
   const divisor = c1 ? 2 : 1
   let count = 0
-  for (let n = 1; n <= Math.min(asked ?? maxBeams(c1), maxBeams(c1)); n++)
+  for (let n = 1; n <= Math.min(asked ?? DEFAULT_BEAMS, maxBeams(c1)); n++)
     if (decode <= MAX_DECODE - BEAMS_NEEDED[n] / divisor) count = n
   let exit = Number.POSITIVE_INFINITY
   /** Frame Decoding Power reached its maximum */

@@ -85,7 +85,7 @@ import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
-import type { TimelineMoment } from './RotationTimeline'
+import type { TimelineMoment, TimelinePin } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
   DEFAULT_SWAP_FRAMES,
@@ -135,7 +135,7 @@ const TOKENS: { text: string; key: string; label: string }[] = [
     text: 'CA',
     key: 'charged',
     label:
-      'Charged Attack (Sandrone: CA[beams=2] releases it after 2 beams; Mavuika: C3F spins 3 times, then the finisher)',
+      'Charged Attack (Sandrone: 3 condensed beams, CA[beams=2] for 2, up to 6 from C1; Mavuika: C3F spins 3 times, then the finisher)',
   },
   { text: 'P', key: 'plunge', label: 'Plunging Attack' },
   { text: 'D', key: 'dash', label: 'Dash' },
@@ -535,6 +535,7 @@ export function kqmRotationReplay({
   gender,
   names,
   teamOpt,
+  text: given,
 }: {
   database: Database
   teamId: string
@@ -542,10 +543,12 @@ export function kqmRotationReplay({
   gender: GenderKey
   names: RotationMember[]
   teamOpt: TeamOpt
+  /** Another rotation to play (one constellation's own); absent: the team's written one */
+  text?: string
 }):
   | ((input: KqmReplayInput) => KqmPlayed & { energy?: RotationEnergy })
   | undefined {
-  const text = localStorage.getItem(storageKey(teamId)) ?? ''
+  const text = given ?? localStorage.getItem(storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
   const common = {
     text,
@@ -1119,6 +1122,8 @@ function WriterModal({
   )
   // the detailed timeline's window
   const [detailOpen, setDetailOpen] = useState(false)
+  // (the moment pinned: the same in the timeline here and in the detailed window)
+  const [timelinePin, setTimelinePin] = useState<TimelinePin>()
   // (what both timelines, the writer's and the detailed window's, are given)
   const timelineProps = (
     rotation: NonNullable<typeof result>['rotation'],
@@ -1256,7 +1261,7 @@ function WriterModal({
                 <Box sx={{ whiteSpace: 'pre-line' }}>
                   {t(
                     'teamOpt.writer.help',
-                    'Who acts, then their actions, steps separated by ->:\nE / tE skill (tap) · hE skill (hold) · Q burst · N1–N6 normal attacks · CA charged (Sandrone: CA[beams=2], 2 condensed beams; Mavuika: C3F, 3 Flamestrider spins and the finisher) · P plunge · D dash · J jump · W1.5 wait 1.5 s (W90f: 90 frames) · E? Q? only when ready (left out, not waited for)\nEnd with the first member ("-> bina") where the rotation loops.\nFrame data: gcsim and kqmsim (AGPLv3). Mitya: E again within 6 s switches cores. Automatic entry skills are included. Unimplemented actions are listed below.'
+                    'Who acts, then their actions, steps separated by ->:\nE / tE skill (tap) · hE skill (hold) · Q burst · N1–N6 normal attacks · CA charged (Sandrone: 3 condensed beams, CA[beams=2] for 2, up to 6 from C1; Mavuika: C3F, 3 Flamestrider spins and the finisher) · P plunge · D dash · J jump · W1.5 wait 1.5 s (W90f: 90 frames) · E? Q? only when ready (left out, not waited for)\nEnd with the first member ("-> bina") where the rotation loops.\nFrame data: gcsim and kqmsim (AGPLv3). Mitya: E again within 6 s switches cores. Automatic entry skills are included. Unimplemented actions are listed below.'
                   )}
                 </Box>
               }
@@ -1590,6 +1595,8 @@ function WriterModal({
                     stats={detailOpen ? undefined : momentStats}
                     onMoment={figures && !detailOpen ? setMoment : undefined}
                     onOpenDetail={() => setDetailOpen(true)}
+                    pinned={timelinePin}
+                    onPin={setTimelinePin}
                   />
                   {/* the detailed timeline: its own large window */}
                   <Dialog
@@ -1602,6 +1609,9 @@ function WriterModal({
                         width: fullScreen
                           ? '100vw'
                           : 'min(1760px, calc(100vw - 32px))',
+                        // (as tall as the screen allows, always: what the moment's panel shows
+                        // changes its height, which would move the window while pointing)
+                        height: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
                         maxHeight: fullScreen ? '100dvh' : 'calc(100vh - 32px)',
                         m: 0,
                         display: 'flex',
@@ -1672,6 +1682,8 @@ function WriterModal({
                           detail
                           stats={momentStats}
                           onMoment={figures ? setMoment : undefined}
+                          pinned={timelinePin}
+                          onPin={setTimelinePin}
                         />
                       )}
                     </Box>
