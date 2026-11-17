@@ -1,13 +1,13 @@
 {
-  "anchorCond": "Ancora della tempesta presente (nemici vicini)",
-  "formCond": "Forma da cameriera",
-  "royalGuard": "Cameriera: Guardia reale",
-  "cleaner": "Cameriera: Pulizie",
-  "purge_dmg_": "Bonus DAN di Will to Purge",
-  "a4StacksCond": "Cariche di Will to Purge",
-  "c2ToastCond": "Consumo di una carica di Let Us Toast",
-  "c2Cleaner": "Danica in forma Pulizie: aumento DAN Astroconduzione",
-  "purgeCritRate_": "Tasso di CRIT di Will to Purge",
-  "purgeCritDMG_": "DAN da CRIT di Will to Purge",
-  "cleanerA4": "Dopo Will to Purge: gli attacchi normali con l'Ancora danno 25 Will to Cleanse in più a colpo (A4, fino a 3 cariche insieme alla VEL d'attacco)."
+  "anchorCond": "Ancora della tempesta presente",
+  "maidCond": "Forma da cameriera",
+  "defenseMaid": "Cameriera: Guardia reale (dopo Will to Protect)",
+  "battleMaid": "Cameriera: Pulizie (dopo Will to Purge)",
+  "burstEnhCond": "Tripudio usato in Radiance: Astroconduzione (forma da cameriera potenziata)",
+  "hit1ScDmg": "DAN Astroconduzione del 1° colpo (Radiance)",
+  "hit5ScDmg": "DAN Astroconduzione del 5° colpo (Radiance)",
+  "a4Cond": "Will to Purge usato in forma Pulizie (cariche di VEL d'attacco)",
+  "c2ToastCond": "Carica di \"Let Us Toast\" consumata da una reazione di Astroconduzione",
+  "c2SelfToastCond": "Cariche di \"Let Us Toast\" che Danica consuma col suo colpo di Astroconduzione (Pulizie, fino a 2)",
+  "c2DecreeDmg": "Will to Purge con Cleaning Decree (una volta per combattimento, 150%)"
 }

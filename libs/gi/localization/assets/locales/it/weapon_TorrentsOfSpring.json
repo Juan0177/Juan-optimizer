@@ -1,5 +1,5 @@
 {
-  "measureCond": "Attendant's Measure",
-  "measure": "Attacchi Electro che colpiscono i nemici",
-  "enhanced": "Potenziata dai colpi che infliggono DAN da Astroconduzione"
+  "royalDecree": "Decreto reale (dopo che gli attacchi <electro>Electro</electro> di chi la impugna colpiscono)",
+  "decree": "Decreto reale",
+  "complete": "Ordine eseguito (dopo un colpo di Astroconduzione)"
 }
