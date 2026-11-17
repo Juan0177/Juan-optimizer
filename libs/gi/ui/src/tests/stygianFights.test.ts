@@ -151,6 +151,36 @@ describe('Stygian Onslaught fights', () => {
     expect(backlash(0.5)).toBeCloseTo((0.6 + 0.45) * 800000, 0)
   })
 
+  it('Wavebinder over time: its Courage fills over each 3 s drink and drains over each Valiant Assault', () => {
+    const boss = stygianBoss(1013061)!
+    const fight = stygianFight(boss, 'dire', {
+      ...team('electro', 300000),
+      electroHits: { stellar: 1, hits: 2, units: 1 },
+    })
+    const { segments, meter } = fight.timeline
+    expect(meter).toEqual({ key: 'courage', max: 600 })
+    const drinks = segments.filter((s) => s.state === 'drinking')
+    const valiants = segments.filter((s) => s.state === 'shielded')
+    expect(drinks.length).toBeGreaterThan(0)
+    for (const d of drinks.slice(0, -1)) {
+      expect(d.end - d.start).toBeCloseTo(3, 9)
+      expect([d.meterStart, d.meterEnd]).toEqual([0, 600])
+    }
+    for (const v of valiants) {
+      expect(v.meterStart).toBe(600)
+      expect(v.meterEnd).toBeCloseTo(0, 9)
+      expect(v.backlashRatio).toBeCloseTo(0.6, 9)
+      // what its shield takes: the team's DPS at its Valiant RES
+      expect(v.dps).toBeGreaterThan(0)
+    }
+    // every stretch has the team's DPS there, and a drink always comes before a Valiant Assault
+    for (const [i, seg] of segments.entries()) {
+      expect(seg.dps).toBeDefined()
+      if (seg.state === 'shielded')
+        expect(segments[i - 1]?.state).toBe('drinking')
+    }
+  })
+
   it('Emperor of Fire and Iron: its horns, broken by reactions on their 64U Pyro', () => {
     const boss = stygianBoss(1006063)!
     const hp = boss.hp.fearless
@@ -174,6 +204,14 @@ describe('Stygian Onslaught fights', () => {
     expect(breaks.hp).toBeCloseTo(horns.count * 0.1, 9)
     // slower than its HP ÷ the DPS without horns: most of the fight is at +150% RES
     expect(fight.seconds!).toBeGreaterThan(hp / 400000)
+    // its horn gauge over time: 64U, gone as they break; none in the 10 s without them
+    expect(fight.timeline.meter).toEqual({ key: 'hornGauge', max: 64 })
+    const first = fight.timeline.segments[0]
+    expect([first.state, first.meterStart, first.meterEnd]).toEqual([
+      'horns',
+      64,
+      0,
+    ])
     // a Pyro team never breaks them
     const pyro = stygianFight(boss, 'fearless', team('pyro', 400000, {}))
     expect(pyro.notes).toContain('noHornRemoval')
@@ -244,7 +282,14 @@ describe('an enemy set by hand', () => {
     expect(fight.seconds).toBeCloseTo(200)
     expect(fight.parts).toEqual([{ key: 'custom', dps: 100_000, seconds: 200 }])
     expect(fight.timeline.segments).toEqual([
-      { start: 0, end: 200, state: 'regular', hpStart: 1, hpEnd: 0 },
+      {
+        start: 0,
+        end: 200,
+        state: 'regular',
+        hpStart: 1,
+        hpEnd: 0,
+        dps: 100_000,
+      },
     ])
     expect(fight.notes).toEqual([])
     // its HP set: that fight; none: no fight, no HP
