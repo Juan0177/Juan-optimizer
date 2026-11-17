@@ -460,11 +460,16 @@ function MultiSelectFooter({
           flexWrap: 'wrap',
         }}
       >
-        <Box sx={{ mr: 'auto' }}>
+        {/* (Done beside the count at any width: never pushed under it) */}
+        <Box sx={{ mr: 'auto', flex: '1 1 0', minWidth: 0 }}>
           <Typography sx={{ fontWeight: 600 }}>
             {t('multiSelect.count', { count })}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: 12.5, sm: 14 } }}
+          >
             {t('multiSelect.hint')}
           </Typography>
         </Box>
@@ -473,7 +478,7 @@ function MultiSelectFooter({
           variant={count ? 'contained' : 'outlined'}
           color="inherit"
           onClick={onDone}
-          sx={count ? { ...giCtaSx, px: 2.5 } : { px: 2.5 }}
+          sx={[{ px: 2.5, flexShrink: 0 }, !!count && giCtaSx]}
         >
           {t('multiSelect.done')}
         </Button>
@@ -578,6 +583,9 @@ function CharacterSelectionModalBase({
       containerProps={{
         sx: {
           height: '100vh',
+          // (the visible screen: on Android Chrome 100vh runs under the bottom address bar,
+          // and the picker's Done went under it)
+          '@supports (height: 100dvh)': { height: '100dvh' },
           p: { xs: 1 },
         },
       }}

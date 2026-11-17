@@ -6,6 +6,8 @@ const ModalContainer = styled(Container)(() => ({
   flexDirection: 'column',
   justifyContent: 'center',
   minHeight: '100vh',
+  // (the visible screen: on phones 100vh runs under the browser's bottom bar)
+  '@supports (height: 100dvh)': { minHeight: '100dvh' },
   ':focus': {
     outline: 'None',
   },
