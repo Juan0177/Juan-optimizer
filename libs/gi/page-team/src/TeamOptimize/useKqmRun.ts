@@ -186,11 +186,14 @@ export function kqmReplayOf(
   gender: GenderKey,
   i18n: i18n,
   teamId: string,
-  teamOpt: TeamOpt
+  teamOpt: TeamOpt,
+  /** Another rotation to play (one constellation's own); absent: the team's written one */
+  text?: string
 ) {
   try {
     const members = teamOptMembers(database, teamId)
     return kqmRotationReplay({
+      text,
       database,
       teamId,
       members,

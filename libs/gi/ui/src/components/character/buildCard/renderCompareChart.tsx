@@ -1,5 +1,5 @@
-import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { charIllustration, charSplash } from '@genshin-optimizer/gi/char-cards'
+import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { hexRgb, offscreen } from './renderBuildCard'
 import {
   betaMark,
@@ -19,6 +19,11 @@ export type CompareRow = {
   icons: { src: string; rarity?: number }[]
   /** the team's damage with it, in any unit (bars and percentages are relative) */
   value: number
+  /**
+   * the member's own damage with it (the constellation chart): a second, slimmer bar under the
+   * team's, with its own percentage of the 100%'s
+   */
+  personal?: number
   /** the 100%: the option the others are measured against (its bar in the member's color) */
   base?: boolean
   /** it misses a requirement the chosen build meets (an Energy Recharge target) */
@@ -43,7 +48,13 @@ export type CompareChartData = {
   footer: string
   /** it shows unreleased content: this name ("7.3 beta v3") over the whole chart; absent: none */
   beta?: string
-  labels: { unmet: string; siteName: string }
+  labels: {
+    unmet: string
+    siteName: string
+    /** the two bars' names when rows have a `personal` value: "Team DPS", "Mitya's DPS" */
+    team?: string
+    personal?: string
+  }
 }
 
 /** A member's art beside a chart: its splash art, else (unreleased) its official art */
@@ -61,19 +72,131 @@ const BAR_H = 62
 /** where the bars start (after the icons), and the longest bar's length */
 const BAR_X = M + 92
 const BAR_MAX = 840
+/** The longest bar beside art: the column right of the percentages is the character's */
+const BAR_MAX_ART = 700
 
 // the charts' palette, the site's own (graphite, parchment, one gold), the same for every
 // character: a graphite-night ground with the member's element glowing where its art stands,
 // parchment bars (the 100%'s gold), gold figures, parchment type
 const GROUND_TOP = '#15161d'
 const GROUND_BOTTOM = '#1f2029'
-const BAR = '#ece5d8'
-const BAR_BASE = '#d3bc8e'
-const BAR_TEXT = '#1b1914'
-const FIGURE = '#e6d5b1'
-const TITLE = '#f5f0e6'
-const SUBTITLE = '#d3bc8e'
-const SHADOW = 'rgba(6, 6, 10, 0.7)'
+export const BAR = '#ece5d8'
+export const BAR_BASE = '#d3bc8e'
+export const BAR_TEXT = '#1b1914'
+export const FIGURE = '#e6d5b1'
+export const TITLE = '#f5f0e6'
+export const SUBTITLE = '#d3bc8e'
+export const SHADOW = 'rgba(6, 6, 10, 0.7)'
+
+/**
+ * The charts' ground (drawn: sharp at any size): graphite night, glows (an element's where its
+ * character stands; always a gold one at the top left), faint stars (the same for the same
+ * `seedText`, denser toward the right), the corners deeper
+ */
+export function nightGround(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  seedText: string,
+  glows: { x: number; y: number; r: number; color: string; alpha: number }[]
+) {
+  const ground = ctx.createLinearGradient(0, 0, W * 0.4, H)
+  ground.addColorStop(0, GROUND_TOP)
+  ground.addColorStop(1, GROUND_BOTTOM)
+  ctx.fillStyle = ground
+  ctx.fillRect(0, 0, W, H)
+  const glowAt = (
+    x: number,
+    y: number,
+    r: number,
+    color: string,
+    alpha: number
+  ) => {
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+    g.addColorStop(0, `rgba(${color}, ${alpha})`)
+    g.addColorStop(0.55, `rgba(${color}, ${alpha * 0.35})`)
+    g.addColorStop(1, `rgba(${color}, 0)`)
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  }
+  for (const g of glows) glowAt(g.x, g.y, g.r, hexRgb(g.color), g.alpha)
+  glowAt(W * 0.06, 0, W * 0.55, '211, 188, 142', 0.1)
+  let seed = [...seedText].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  for (let i = 0; i < 160; i++) {
+    const x = W * Math.sqrt(random())
+    const y = H * random()
+    const r = 0.5 + random() * random() * 1.6
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fillStyle = `rgba(245, 238, 222, ${0.15 + random() * 0.45})`
+    ctx.fill()
+  }
+  const vignette = ctx.createRadialGradient(
+    W / 2,
+    H / 2,
+    Math.min(W, H) * 0.35,
+    W / 2,
+    H / 2,
+    Math.hypot(W, H) / 2
+  )
+  vignette.addColorStop(0, 'rgba(6, 6, 10, 0)')
+  vignette.addColorStop(1, 'rgba(6, 6, 10, 0.5)')
+  ctx.fillStyle = vignette
+  ctx.fillRect(0, 0, W, H)
+}
+
+/**
+ * Where the character is in a transparent splash, as fractions of it: the columns and rows that
+ * hold most of its opaque pixels (a few stray sparkles and effects at the edges left out) and the
+ * middle of its weight across. Opaque art (no transparency to go by), or nothing drawn: undefined.
+ */
+function subjectOf(img: HTMLImageElement) {
+  const w = 160
+  const h = Math.max(1, Math.round((w * img.naturalHeight) / img.naturalWidth))
+  const c = offscreen(w, h)
+  const g = c.getContext('2d', { willReadFrequently: true })
+  if (!g) return undefined
+  g.drawImage(img, 0, 0, w, h)
+  let data: Uint8ClampedArray
+  try {
+    data = g.getImageData(0, 0, w, h).data
+  } catch {
+    return undefined
+  }
+  const cols = new Float64Array(w)
+  const lines = new Float64Array(h)
+  let total = 0
+  let sumX = 0
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const alpha = data[(j * w + i) * 4 + 3] / 255
+      cols[i] += alpha
+      lines[j] += alpha
+      sumX += alpha * i
+      total += alpha
+    }
+  // (nothing, or opaque all over)
+  if (total < 1 || total > w * h * 0.9) return undefined
+  const range = (sums: Float64Array, low: number, high: number) => {
+    let acc = 0
+    let from = 0
+    while (from < sums.length - 1 && acc + sums[from] < total * low)
+      acc += sums[from++]
+    acc = 0
+    let to = sums.length - 1
+    while (to > from && acc + sums[to] < total * high) acc += sums[to--]
+    return [from / sums.length, (to + 1) / sums.length] as const
+  }
+  const [x0, x1] = range(cols, 0.1, 0.1)
+  const [y0, y1] = range(lines, 0.02, 0.06)
+  return { x0, x1, y0, y1, cx: sumX / total / w }
+}
 
 /**
  * A comparison to share: options as bars of the team's damage relative to a base one (100%), best
@@ -104,69 +227,35 @@ export async function renderCompareChart(
   await document.fonts?.ready
 
   const W = COMPARE_CHART_WIDTH
-  const top = 196
+  // (shorter bars beside art: room for the character)
+  const barMax = splash ? BAR_MAX_ART : BAR_MAX
+  // (rows with the member's own damage too: taller, two bars each, a legend over them)
+  const dual = rows.some((r) => r.personal !== undefined)
+  const rowH = dual ? 96 : ROW_H
+  const top = dual ? 232 : 196
   const FOOT_H = 64
   // (as tall as its rows need)
-  const H = top + rows.length * ROW_H + 28 + FOOT_H + 24
+  const H = top + rows.length * rowH + 28 + FOOT_H + 24
   const { canvas, ctx } = page(W, H, scale)
 
   // ── the ground, drawn (sharp at any size): graphite night, a glow of the member's element where
   // the character stands, a cooler one at the top left, a few faint stars
-  const ground = ctx.createLinearGradient(0, 0, W * 0.4, H)
-  ground.addColorStop(0, GROUND_TOP)
-  ground.addColorStop(1, GROUND_BOTTOM)
-  ctx.fillStyle = ground
-  ctx.fillRect(0, 0, W, H)
-  const rgb = hexRgb(data.member.elementColor)
-  const glowAt = (
-    x: number,
-    y: number,
-    r: number,
-    color: string,
-    alpha: number
-  ) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r)
-    g.addColorStop(0, `rgba(${color}, ${alpha})`)
-    g.addColorStop(0.55, `rgba(${color}, ${alpha * 0.35})`)
-    g.addColorStop(1, `rgba(${color}, 0)`)
-    ctx.fillStyle = g
-    ctx.fillRect(0, 0, W, H)
-  }
-  glowAt(W * 0.74, H * 0.45, Math.max(H, W) * 0.62, rgb, 0.3)
-  glowAt(W * 0.06, 0, W * 0.55, '211, 188, 142', 0.1)
-  // (the stars: the same for the same title, denser toward the art)
-  let seed = [...data.title].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)
-  const random = () => {
-    seed = (seed + 0x6d2b79f5) | 0
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-  for (let i = 0; i < 160; i++) {
-    const x = W * Math.sqrt(random())
-    const y = H * random()
-    const r = 0.5 + random() * random() * 1.6
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fillStyle = `rgba(245, 238, 222, ${0.15 + random() * 0.45})`
-    ctx.fill()
-  }
-  // (a vignette: the corners deeper)
-  const vignette = ctx.createRadialGradient(
-    W / 2,
-    H / 2,
-    Math.min(W, H) * 0.35,
-    W / 2,
-    H / 2,
-    Math.hypot(W, H) / 2
-  )
-  vignette.addColorStop(0, 'rgba(6, 6, 10, 0)')
-  vignette.addColorStop(1, 'rgba(6, 6, 10, 0.5)')
-  ctx.fillStyle = vignette
-  ctx.fillRect(0, 0, W, H)
+  nightGround(ctx, W, H, data.title, [
+    {
+      x: W * 0.74,
+      y: H * 0.45,
+      r: Math.max(H, W) * 0.62,
+      color: data.member.elementColor,
+      alpha: 0.3,
+    },
+  ])
 
-  // ── the splash art, full strength, on the right (fading in from the middle: the icons and the
-  // bars' starts on the plain ground)
+  // ── the splash art, sharp and full strength, in the column right of the bars and their
+  // percentages: never blurred or dimmed, enlarged at most a little (the game's 2048×1024 is the
+  // largest there is). A transparent splash is placed by where its character is (`subjectOf`):
+  // the character fills the column, centred on the list (short or long), anything of the art left
+  // of the column fading out; its top and foot fade where the picture goes on past them. Opaque
+  // official art (unreleased characters) stands at the right, faded in from its own left edge.
   if (splash) {
     const art = offscreen(Math.round(W * scale), Math.round(H * scale))
     const a = art.getContext('2d')
@@ -174,42 +263,100 @@ export async function renderCompareChart(
       a.scale(scale, scale)
       a.imageSmoothingQuality = 'high'
       const ratio = splash.naturalWidth / splash.naturalHeight
-      if (ratio > 1.4) {
-        // a splash art (2:1, the character in its middle): a little taller than the picture (the
-        // character from top to foot; it is softened anyway, so enlarging shows little), at most
-        // 2.2 times its own size; its middle at 76% across, its foot at the picture's
-        const dh = Math.min(
-          Math.max(H * 1.04, 900),
-          (splash.naturalHeight * 2.2) / scale
+      // (at most 1.3 times its own pixels: sharp)
+      const sharp = (splash.naturalHeight * 1.3) / scale
+      // the column: from the longest bar's percentage to the right edge; the list, top to bottom
+      const colLeft = BAR_X + barMax + 96
+      const colWidth = W - colLeft
+      const listTop = top - 24
+      const listBottom = top + rows.length * rowH + 12
+      const listMid = (listTop + listBottom) / 2
+      const subject = subjectOf(splash)
+      let x: number
+      let y: number
+      let dh: number
+      if (subject) {
+        const sw = subject.x1 - subject.x0
+        const sh = subject.y1 - subject.y0
+        // as large as is sharp, the character as wide as the column (a little may leave the
+        // picture on the right) and no taller than the picture
+        // (a long list has the height for a larger character: more of it may leave on the right)
+        const tall = Math.min(1, Math.max(0, (rows.length - 8) / 12))
+        dh = Math.min(
+          sharp,
+          (colWidth * (1.25 + 0.35 * tall)) / (sw * ratio),
+          (H * 0.98) / sh
         )
         const dw = dh * ratio
-        a.drawImage(splash, W * 0.76 - dw / 2, H - dh, dw, dh)
+        // its middle a little right of the column's (room from the percentages)
+        x = colLeft + colWidth * 0.62 - subject.cx * dw
+        // its middle on the list's (a little above it on a long list: the face nearer the top), its
+        // top not above the picture's
+        y =
+          listMid -
+          (listBottom - listTop) * 0.06 * tall -
+          ((subject.y0 + subject.y1) / 2) * dh
+        y = Math.min(Math.max(y, 8 - subject.y0 * dh), H - subject.y1 * dh - 8)
       } else {
-        // official art (opaque, cropped to the character): the right part, from the top
-        const dw = H * ratio
-        a.drawImage(splash, W - dw, 0, dw, H)
+        // opaque art: the column and a little more (its left edge fades in), at the right
+        dh = Math.min(sharp, H, (colWidth + 140) / ratio)
+        x = W - dh * ratio
+        y = Math.max(0, Math.min(listMid - dh / 2, H - dh))
       }
+      const dw = dh * ratio
+      a.drawImage(splash, x, y, dw, dh)
       a.globalCompositeOperation = 'destination-in'
-      const fade = a.createLinearGradient(W * 0.3, 0, W * 0.52, 0)
-      fade.addColorStop(0, 'rgba(0, 0, 0, 0)')
-      fade.addColorStop(1, 'rgba(0, 0, 0, 1)')
-      a.fillStyle = fade
-      a.fillRect(0, 0, W, H)
-      // (a little dimmed, the art only: the bars and figures read on it)
-      a.globalCompositeOperation = 'source-atop'
-      a.fillStyle = 'rgba(12, 12, 18, 0.24)'
-      a.fillRect(0, 0, W, H)
-      // (and a little softened: a light blur, else drawn at a smaller size and stretched back)
-      ctx.save()
-      if (typeof (ctx as { filter?: unknown }).filter === 'string') {
-        ctx.filter = `blur(${1.6 * scale}px)`
-        ctx.drawImage(art, 0, 0, W, H)
+      if (subject) {
+        // (left of the column, out)
+        const fade = a.createLinearGradient(colLeft - 150, 0, colLeft + 30, 0)
+        fade.addColorStop(0, 'rgba(0, 0, 0, 0)')
+        fade.addColorStop(1, 'rgba(0, 0, 0, 1)')
+        a.fillStyle = fade
+        a.fillRect(0, 0, W, H)
+        // (its top and foot, where the picture goes on past them: the whole picture is painted,
+        // as destination-in clears what it does not cover)
+        const edge = (from: number, to: number) => {
+          const g = a.createLinearGradient(0, from, 0, to)
+          g.addColorStop(0, 'rgba(0, 0, 0, 0)')
+          g.addColorStop(1, 'rgba(0, 0, 0, 1)')
+          a.fillStyle = g
+          a.fillRect(0, 0, W, H)
+        }
+        if (y > 1) edge(y, y + Math.min(200, dh * 0.2))
+        if (y + dh < H - 1) edge(y + dh, y + dh - Math.min(300, dh * 0.3))
+        // (a wide oval around the character: the whole figure kept, a splash's background
+        // effects far from it, a half-transparent backdrop's corners, faded)
+        const sx = x + ((subject.x0 + subject.x1) / 2) * dw
+        const sy = y + ((subject.y0 + subject.y1) / 2) * dh
+        const ox = Math.max((subject.x1 - subject.x0) * dw * 1, 1)
+        const oy = (subject.y1 - subject.y0) * dh * 0.82
+        a.save()
+        a.translate(sx, sy)
+        a.scale(1, oy / ox)
+        const oval = a.createRadialGradient(0, 0, 0, 0, 0, ox)
+        oval.addColorStop(0, 'rgba(0, 0, 0, 1)')
+        oval.addColorStop(0.5, 'rgba(0, 0, 0, 1)')
+        oval.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        a.fillStyle = oval
+        a.fillRect(-W * 4, -H * 4, W * 8, H * 8)
+        a.restore()
       } else {
-        const soft = offscreen(Math.round(W * 0.6), Math.round(H * 0.6))
-        soft.getContext('2d')?.drawImage(art, 0, 0, soft.width, soft.height)
-        ctx.drawImage(soft, 0, 0, W, H)
+        // opaque art: an oval around the character, its background fading out on every side (no
+        // box shows, whatever its colour)
+        const rx = dw * 0.5
+        const ry = dh * 0.47
+        a.save()
+        a.translate(x + dw * 0.54, y + dh * 0.45)
+        a.scale(1, ry / rx)
+        const oval = a.createRadialGradient(0, 0, 0, 0, 0, rx)
+        oval.addColorStop(0, 'rgba(0, 0, 0, 1)')
+        oval.addColorStop(0.5, 'rgba(0, 0, 0, 1)')
+        oval.addColorStop(1, 'rgba(0, 0, 0, 0)')
+        a.fillStyle = oval
+        a.fillRect(-W * 4, -H * 4, W * 8, H * 8)
+        a.restore()
       }
-      ctx.restore()
+      ctx.drawImage(art, 0, 0, W, H)
     }
   }
   // (the foot a little darker, for the team's line)
@@ -344,12 +491,68 @@ export async function renderCompareChart(
 
   // ── the bars: solid, the 100%'s deeper; the line they start from
   ctx.fillStyle = 'rgba(211, 188, 142, 0.55)'
-  ctx.fillRect(BAR_X - 2, top - 8, 2, rows.length * ROW_H + 16)
+  ctx.fillRect(BAR_X - 2, top - 8, 2, rows.length * rowH + 16)
   const best = Math.max(...rows.map((r) => r.value), 1)
   const baseValue = base?.value || best
+  const bestOwn = Math.max(...rows.map((r) => r.personal ?? 0), 1)
+  const baseOwn = base?.personal || bestOwn
+  const own = hexRgb(data.member.elementColor)
+  /** A percentage after its bar, outlined (clear on any part of the art) */
+  const figure = (
+    text: string,
+    x: number,
+    y: number,
+    size: number,
+    color: string
+  ) => {
+    ctx.font = `750 ${size}px ${FONT}`
+    settle(
+      x - 8,
+      y - size * 0.95,
+      ctx.measureText(text).width + 18,
+      size * 1.5,
+      14
+    )
+    ctx.save()
+    ctx.font = `750 ${size}px ${FONT}`
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'alphabetic'
+    ctx.lineJoin = 'round'
+    ctx.lineWidth = size / 5
+    ctx.strokeStyle = 'rgba(12, 12, 16, 0.8)'
+    ctx.shadowColor = SHADOW
+    ctx.shadowBlur = 10
+    ctx.strokeText(text, x, y)
+    ctx.restore()
+    ink(ctx, text, x, y, { size, weight: 750, color })
+  }
+  // (the legend: which bar is which)
+  if (dual) {
+    ctx.font = `650 19px ${FONT}`
+    const items = [
+      { label: data.labels.team ?? '', fill: BAR, h: 14 },
+      { label: data.labels.personal ?? '', fill: `rgb(${own})`, h: 8 },
+    ]
+    const widths = items.map((x) => 40 + 10 + ctx.measureText(x.label).width)
+    let lx = (W - widths.reduce((a, b) => a + b, 0) - 36) / 2
+    const ly = 186
+    items.forEach((item, k) => {
+      rounded(ctx, lx, ly - item.h / 2, 40, item.h, [0, 4, 4, 0])
+      ctx.fillStyle = item.fill
+      ctx.fill()
+      shaded(() =>
+        ink(ctx, item.label, lx + 50, ly + 7, {
+          size: 19,
+          weight: 650,
+          color: TITLE,
+        })
+      )
+      lx += widths[k] + 36
+    })
+  }
   let iconIndex = 0
   rows.forEach((row, i) => {
-    const cy = top + i * ROW_H + ROW_H / 2
+    const cy = top + i * rowH + rowH / 2
     // its icons, straight on the ground (two sets overlapping)
     const two = row.icons.length > 1
     row.icons.forEach((_, k) => {
@@ -367,18 +570,21 @@ export async function renderCompareChart(
     })
     ctx.save()
     if (row.unmet) ctx.globalAlpha = 0.62
-    const w = Math.max(BAR_H * 2, (row.value / best) * BAR_MAX)
-    const by = cy - BAR_H / 2
+    const w = Math.max(BAR_H * 2, (row.value / best) * barMax)
+    // (with the member's own bar under it: the team's a little slimmer, higher)
+    const barH = dual ? 46 : BAR_H
+    const mid = dual ? cy - 14 : cy
+    const by = mid - barH / 2
     ctx.save()
     ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
     ctx.shadowBlur = 10
     ctx.shadowOffsetY = 3
-    rounded(ctx, BAR_X, by, w, BAR_H, [0, 10, 10, 0])
+    rounded(ctx, BAR_X, by, w, barH, [0, 10, 10, 0])
     ctx.fillStyle = row.base ? BAR_BASE : BAR
     ctx.fill()
     ctx.restore()
     // its name in the bar
-    const nameW = ink(ctx, row.label, BAR_X + 18, cy + 9, {
+    const nameW = ink(ctx, row.label, BAR_X + 18, mid + 9, {
       size: 26,
       weight: 700,
       color: BAR_TEXT,
@@ -386,37 +592,44 @@ export async function renderCompareChart(
       minSize: 15,
     })
     if (row.unmet)
-      ink(ctx, data.labels.unmet, BAR_X + 18 + nameW + 12, cy + 7, {
+      ink(ctx, data.labels.unmet, BAR_X + 18 + nameW + 12, mid + 7, {
         size: 16,
         weight: 600,
         color: 'rgba(27, 25, 20, 0.6)',
       })
     ctx.restore()
-    // its percentage, after the bar (outlined: clear on any part of the art)
-    const pct = `${Math.round((row.value / baseValue) * 100)}%`
-    const px = BAR_X + w + 12
-    ctx.font = `750 30px ${FONT}`
-    settle(px - 8, cy - 24, ctx.measureText(pct).width + 18, 46, 14)
-    ctx.save()
-    ctx.font = `750 30px ${FONT}`
-    ctx.textAlign = 'left'
-    ctx.textBaseline = 'alphabetic'
-    ctx.lineJoin = 'round'
-    ctx.lineWidth = 6
-    ctx.strokeStyle = 'rgba(12, 12, 16, 0.8)'
-    ctx.shadowColor = SHADOW
-    ctx.shadowBlur = 10
-    ctx.strokeText(pct, px, cy + 10)
-    ctx.restore()
-    ink(ctx, pct, px, cy + 10, {
-      size: 30,
-      weight: 750,
-      color: row.unmet ? 'rgba(230, 213, 177, 0.6)' : FIGURE,
-    })
+    // its percentage, after the bar
+    figure(
+      `${Math.round((row.value / baseValue) * 100)}%`,
+      BAR_X + w + 12,
+      mid + 10,
+      dual ? 26 : 30,
+      row.unmet ? 'rgba(230, 213, 177, 0.6)' : FIGURE
+    )
+    // the member's own damage: a slim bar in its colour under the team's, its percentage after
+    if (dual && row.personal !== undefined) {
+      const ownW = Math.max(24, (row.personal / bestOwn) * barMax)
+      const oy = cy + 16
+      ctx.save()
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)'
+      ctx.shadowBlur = 8
+      ctx.shadowOffsetY = 2
+      rounded(ctx, BAR_X, oy, ownW, 18, [0, 7, 7, 0])
+      ctx.fillStyle = `rgba(${own}, ${row.base ? 1 : 0.82})`
+      ctx.fill()
+      ctx.restore()
+      figure(
+        `${Math.round((row.personal / baseOwn) * 100)}%`,
+        BAR_X + ownW + 12,
+        oy + 16,
+        19,
+        `rgb(${own})`
+      )
+    }
   })
 
   // ── the team, by face and constellation; the site
-  const fmid = top + rows.length * ROW_H + 28 + FOOT_H / 2
+  const fmid = top + rows.length * rowH + 28 + FOOT_H / 2
   let fx = M
   const SMALL = 40
   ctx.font = `700 20px ${FONT}`
