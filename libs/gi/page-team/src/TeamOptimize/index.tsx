@@ -61,8 +61,8 @@ import {
   useRotationText,
   useRotationWriter,
 } from './RotationWriter'
-import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { RunDialog } from './RunDialog'
+import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
@@ -462,20 +462,26 @@ export default function TeamBuildWorkspace({
                 writer={writer}
                 disabled={running}
               />
-              {onField && members.length > 1 && (
-                <OnFieldPicker
-                  members={members}
-                  value={onField}
-                  disabled={running}
-                  onChange={(characterKey) =>
-                    setTeamOpt((o) => {
-                      if (characterKey === members[0]?.characterKey)
-                        delete o.onField
-                      else o.onField = characterKey
-                    })
-                  }
-                />
-              )}
+              {/* (a written rotation says who is on the field for each of its attacks: only
+                  attacks entered by hand use this) */}
+              {onField &&
+                members.length > 1 &&
+                members.some((m) =>
+                  teamOpt.attacks[m.characterKey]?.some((a) => !a.onField)
+                ) && (
+                  <OnFieldPicker
+                    members={members}
+                    value={onField}
+                    disabled={running}
+                    onChange={(characterKey) =>
+                      setTeamOpt((o) => {
+                        if (characterKey === members[0]?.characterKey)
+                          delete o.onField
+                        else o.onField = characterKey
+                      })
+                    }
+                  />
+                )}
               <Box sx={{ flexGrow: 1 }} />
               {rotationExpanded && !!attackCount && (
                 <FormControlLabel
