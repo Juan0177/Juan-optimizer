@@ -449,7 +449,7 @@ export function defaultEnergyCalculator(
   keys: readonly CharacterKey[],
   rotationTime = 20,
   onField = keys[0],
-  /** Per member; absent: KQM's standard (4★ C6, 5★ C0) */
+  /** Per member; absent: KQM's default (`kqmConstellation`) */
   constellations?: Partial<Record<CharacterKey, number>>
 ): TeamOptEnergyCalculator {
   return {

@@ -969,7 +969,7 @@ function KqmAssumptions({
   const { t } = useTranslation('page_team')
   const labels = [
     t('teamOpt.kqm.ruleLevel', 'Lv. 90'),
-    t('teamOpt.kqm.ruleCons', '4★ C6 · 5★ C0'),
+    t('teamOpt.kqm.ruleConsDefaults', '4★ C6 · 5★ C0–C2'),
     t('teamOpt.kqm.ruleTalentsLevel', {
       defaultValue: 'Talents {{level}}/{{level}}/{{level}}',
       level: talents,
@@ -984,9 +984,9 @@ function KqmAssumptions({
     <FieldLabel
       // (under the step's title, aligned with its text)
       sx={{ mt: 0.75, pl: '38px', lineHeight: 1.5 }}
-      tip={t('teamOpt.kqm.subtitle', {
+      tip={t('teamOpt.kqm.subtitleCons', {
         defaultValue:
-          'Standard KQM builds for this rotation: level 90, 4★ C6 / 5★ C0, the talent levels set below, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
+          'Standard KQM builds for this rotation: level 90; 4★ C6, standard 5★ C2, 5★ from the free constellation event C1, other 5★ C0 (each can be changed below); the talent levels set below; five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
         rolls,
       })}
     >
