@@ -1,5 +1,5 @@
 import type { HitElement, KitModel, SimContext, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { GCSIM, type NormalHit, normalString, particleMarker } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/pyro/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -66,6 +66,8 @@ interface PyroState {
   /** Foreign Starfire: Blade of the Sacred Flame stacks, and when Inferno is next ready */
   blades: number
   infernoReady: number
+  /** The Thresholds' particle ICD (2.9 s) runs until this frame (the Traveler's clock) */
+  particleUntil: number
 }
 
 /** Nightsoul points: at most 80 */
@@ -133,6 +135,7 @@ export const kit: KitModel = {
     c2Count: 0,
     blades: 0,
     infernoReady: -1,
+    particleUntil: -1,
   }),
   nightsoul: (_ctx, s: PyroState) => ({ active: s.active, points: s.points }),
   onStart(ctx, s: PyroState) {
@@ -339,6 +342,17 @@ export const kit: KitModel = {
     ]
   },
   onHit(ctx, s: PyroState, hit: SimHit) {
+    // a Blazing or Scorching Threshold hit makes a particle, once per 2.9 s (gcsim's particleCB: a
+    // status on the Traveler's clock, still active on its expiry frame)
+    if (
+      hit.characterKey === 'TravelerPyro' &&
+      (hit.path.join('.') === 'skill.blazingDmg' ||
+        hit.path.join('.') === 'skill.scorchingDmg') &&
+      ctx.characterFrame('TravelerPyro') >= s.particleUntil
+    ) {
+      s.particleUntil = ctx.characterFrame('TravelerPyro') + 175
+      particleMarker(ctx, 0, 'Threshold particle')
+    }
     // C2: a party Pyro reaction within 12 s of E restores 14 points (twice per E)
     if (
       ctx.constellation('TravelerPyro') >= 2 &&

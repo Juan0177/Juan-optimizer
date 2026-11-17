@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -78,6 +79,8 @@ interface AlhaithamState {
   a1Until: number
   /** The Projection Attack ICD (1.6 s) ends (Alhaitham's own frame: his hitlag extends it) */
   projectionUntil: number
+  /** The Projection Attacks' particle ICD (1.5 s) ends (his own frame) */
+  particleUntil: number
   /** C6: the Excess Mirror buff ends (frame) */
   c6Until: number
   /** C1: the cooldown reduction's 1 s ICD ends (frame) */
@@ -144,6 +147,7 @@ export const kit: KitModel = {
     nextLoss: 0,
     a1Until: -1,
     projectionUntil: -1,
+    particleUntil: -1,
     c6Until: -1,
     c1Until: -1,
     c4Consumed: '',
@@ -369,6 +373,12 @@ export const kit: KitModel = {
     ) {
       s.c1Until = own + 61
       ctx.reduceCooldown('skill', 72)
+    }
+    // a Projection Attack hit makes a particle, once per 1.5 s (gcsim's particleCB: a status on his
+    // clock, still active on its expiry frame), the ER sheet's "Projection Attack"
+    if (hit.path.join('.') === 'skill.mirrorDmg1' && own >= s.particleUntil) {
+      s.particleUntil = own + 91
+      particleMarker(ctx, 0, 'Alhaitham particle')
     }
     if (hit.tag !== 'normal' && hit.tag !== 'charged' && hit.tag !== 'plunge')
       return

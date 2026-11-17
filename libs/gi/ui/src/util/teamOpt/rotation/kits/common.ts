@@ -363,11 +363,20 @@ export function shieldMarker(
 /**
  * A Skill's particles made `delay` frames from now (kqmsim's QueueParticle, from the hit that
  * makes them), for the ER calculator: each marker is one use of the Skill there. Kits that mark
- * them count their uses this way; others by their Skill cooldown's starts.
+ * them count their uses this way; others by their Skill cooldown's starts. `option`: the ER
+ * sheet's option the use is (its label, when the particles depend on the kit's state); `owner`:
+ * whose particles, when the context may be another member's.
  */
-export function particleMarker(ctx: SimContext, delay: number, label: string) {
+export function particleMarker(
+  ctx: SimContext,
+  delay: number,
+  label: string,
+  option?: string,
+  owner?: CharacterKey
+) {
   ctx.hit(delay, {
-    path: ['_marker', 'particles'],
+    ...(owner && { characterKey: owner }),
+    path: ['_marker', 'particles', ...(option ? [option] : [])],
     tag: 'other',
     element: 'physical',
     label,

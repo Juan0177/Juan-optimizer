@@ -10,6 +10,7 @@ import {
   atkSpdAdjust,
   GCSIM,
   type NormalHit,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -173,6 +174,8 @@ interface SkirkState {
   /** C6: Havoc: Sever stacks (their gain frames), and the flash N3/N5 trigger's ICD */
   sever: number[]
   severIcdUntil: number
+  /** Her Cryo DMG makes particles again from this frame (15 s after the last) */
+  particleReady: number
 }
 
 const inFlash = (s: SkirkState, t: number) => t >= s.skillFrom && t < s.skillEnd
@@ -389,6 +392,7 @@ export const kit: KitModel = {
     c2Gen: 0,
     sever: [],
     severIcdUntil: -1e9,
+    particleReady: -1e9,
   }),
   // In the Seven-Phase Flash her normal and charged attacks (also a charged attack right after a
   // flash N1-N4), Q (Havoc: Extinction) and dash have frames of their own
@@ -650,6 +654,17 @@ export const kit: KitModel = {
     ]
   },
   onHit(ctx, s: SkirkState, hit) {
+    // her Cryo DMG makes 4 particles, once per 15 s (gcsim's particleInit: world time), a use of
+    // the ER sheet's "Attack" (her flash's cooldown starts only when it ends)
+    if (
+      hit.characterKey === 'Skirk' &&
+      !hit.path[0].startsWith('_') &&
+      hit.element === 'cryo' &&
+      hit.t >= s.particleReady
+    ) {
+      s.particleReady = hit.t + 900
+      particleMarker(ctx, 0, 'Skirk particles')
+    }
     // A1: Frozen, Superconduct, Stellar-Conduct, Cryo Swirl, Stellar Swirl and Cryo Crystallize
     // reactions by the party create a Void Rift (2.5 s ICD on her clock, max 3 on the field).
     // One created in Extinction's animation is absorbed at once.

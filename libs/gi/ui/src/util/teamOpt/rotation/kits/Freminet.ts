@@ -4,6 +4,7 @@ import {
   kitFramesInto,
   type NormalHit,
   normalInto,
+  particleMarker,
   withHitlag,
 } from './common'
 
@@ -122,6 +123,8 @@ function detonate(ctx: SimContext, s: FreminetState, at: number): ActionResult {
     // Level 4: 0.09 s halt
     if (lv4) hitlagMarker(ctx, hm, 6, 'Shattering Pressure hitlag')
   }
+  // Level 4 makes particles (gcsim's particleCBLv4), the ER sheet's "Level 4"
+  if (lv4) particleMarker(ctx, hm, 'Shattering Pressure particles', 'Level 4')
   // A1: a detonation below 4 stacks shortens the Upward Thrust cooldown by 1 s
   // (A1 is assumed unlocked: the simulation does not know ascension)
   if (!lv4) ctx.reduceCooldown('skill', 60)
@@ -180,6 +183,15 @@ function thrust(ctx: SimContext, s: FreminetState): ActionResult {
   })
   // 0.08 s halt
   hitlagMarker(ctx, 29, 5, 'Upward Thrust hitlag')
+  // its particles (gcsim's particleCBThrust): 2, or 1 in the Burst's Stalking at the hit
+  ctx.at(29, (c) =>
+    particleMarker(
+      c,
+      0,
+      'Upward Thrust particles',
+      stalking(s) ? 'Level 0 (burst)' : 'Level 0 (no burst)'
+    )
+  )
   if (ctx.characterFrame('Freminet') >= s.thornReady) {
     // the Thorn's 9 s ICD is a status on Freminet's clock: ready again on its expiry frame
     s.thornReady = ctx.characterFrame('Freminet') + thornInterval + 1

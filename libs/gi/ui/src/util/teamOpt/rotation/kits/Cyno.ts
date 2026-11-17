@@ -3,6 +3,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -456,6 +457,9 @@ export const kit: KitModel = {
             icd: 'none',
             label: 'Mortuary Rite',
           })
+          // its particles (gcsim's particleCB: 1, or 2 a third of the time): the ER sheet's
+          // "Press (in burst)"
+          particleMarker(ctx, 28, 'Mortuary Rite particles', 'Press (in burst)')
           if (endseer) {
             // A1 (Judication): +35% for this Mortuary Rite (1 s) and 3 Duststalker Bolts;
             // in a Polestar Field the bolts are Starsame (Stellar-Conduct DMG, no aura)
@@ -524,6 +528,8 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Secret Rite: Chasmic Soulfarer',
         })
+        // its 3 particles (gcsim's particleCB): the ER sheet's "Press (no burst)"
+        particleMarker(ctx, 21, 'Secret Rite particles', 'Press (no burst)')
         enterPact(ctx, s, 379, 0, 265)
         skillCooldowns(ctx, 17)
         return {
