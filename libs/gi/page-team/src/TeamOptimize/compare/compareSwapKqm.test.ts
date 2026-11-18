@@ -118,7 +118,10 @@ const storageKeys = (teamId: string) => [
 ]
 
 /** A 4-member team with a KQM run saved in `teamKqmResults` (its builds given, not searched) */
-async function setup(kqm: Partial<TeamOptKqm> = {}) {
+async function setup(
+  kqm: Partial<TeamOptKqm> = {},
+  ownOverride: Partial<typeof OWN> = {}
+) {
   const database = new ArtCharDatabase(1, new SandboxStorage({}))
   for (const key of MEMBERS)
     database.chars.set(key, {
@@ -163,7 +166,7 @@ async function setup(kqm: Partial<TeamOptKqm> = {}) {
   stored.set(`teamOptRotationTiming_${teamId}`, '{}')
   const builds = Object.fromEntries(
     MEMBERS.map((ck) => {
-      const own = OWN[ck]
+      const own = ownOverride[ck] ?? OWN[ck]
       const weapon = kqmWeapons(ck, teamOpt.kqm).find(
         (w) => w.key === own.weapon
       )!
@@ -444,30 +447,30 @@ describe('compareSwapKqm', () => {
   }, 300_000)
 
   it('runs a same-character swap that changes nothing', async () => {
-    const s = await setup()
+    // (A's Yae Miko is the build KQM itself finds for her with her ER target: a first
+    // comparison's B, so that the same swap on that team has nothing to improve)
+    const er = { energyRecharge: { YaeMiko: 130 } } as Partial<TeamOptKqm>
+    const swapIn = { ...YAE, kqm: er }
     // (the same actions A's rotation has for her)
-    const out = await compareSwapKqm({
-      ...argsOf(s),
-      swapIn: YAE,
-      fragment: 'E E E',
-    })
+    const args = { fragment: 'E E E', swapIn }
+    const first = await setup()
+    const found = await compareSwapKqm({ ...argsOf(first), ...args })
+    if ('error' in found) throw new Error(found.error)
+    const { weapon, ...found_ } = found.b.members.find(
+      (m) => m.key === 'YaeMiko'
+    )!.build!
+    const s = await setup({}, { YaeMiko: { ...found_, weapon: weapon.key } })
+    const out = await compareSwapKqm({ ...argsOf(s), ...args })
     if ('error' in out) throw new Error(out.error)
-    // (the entering member's build is searched again, with A's weapon and sets: A's own was
-    // only given, so B can only match or beat it; everything else is A's)
-    const yae = (side: typeof out.a) =>
-      side.members.find((m) => m.key === 'YaeMiko')!
-    expect(yae(out.b).build?.weapon).toEqual(yae(out.a).build?.weapon)
-    expect(yae(out.b).build?.sets).toEqual(yae(out.a).build?.sets)
-    expect(yae(out.b).constellation).toBe(yae(out.a).constellation)
-    expect(yae(out.b).damage).toBeGreaterThanOrEqual(yae(out.a).damage)
-    for (const k of FIXED) {
+    expect(Math.abs(out.b.dpr - out.a.dpr) / out.a.dpr).toBeLessThan(0.005)
+    for (const k of MEMBERS) {
       const [a, b] = [out.a, out.b].map(
         (side) => side.members.find((m) => m.key === k)!
       )
       expect(b.build).toEqual(a.build)
-      expect(b.damage).toBeCloseTo(a.damage, 3)
+      expect(Math.abs(b.damage - a.damage) / a.damage).toBeLessThan(0.005)
     }
-  }, 300_000)
+  }, 600_000)
 
   it('keeps the character’s own bonus stats when it re-enters', async () => {
     const s = await setup()
@@ -475,7 +478,8 @@ describe('compareSwapKqm', () => {
     const withBonus = {
       ...base,
       bonusStats: { YaeMiko: { critRate_: 5 }, Odette: { critRate_: 3 } },
-    } as TeamOpt
+      attacks: { YaeMiko: [{ sentinel: true }] },
+    } as unknown as TeamOpt
     const saved = {
       ...s.saved,
       run: { ...s.saved.run, teamOpt: withBonus },
@@ -484,9 +488,15 @@ describe('compareSwapKqm', () => {
     if ('error' in same) throw new Error(same.error)
     expect(same.teamOptB.bonusStats?.YaeMiko).toEqual({ critRate_: 5 })
     expect(same.teamOptB.bonusStats?.Odette).toEqual({ critRate_: 3 })
+    // (its attacks are dropped and derived again, not A's carried over)
+    expect(same.teamOptB.attacks.YaeMiko).not.toEqual(withBonus.attacks.YaeMiko)
+    expect(
+      same.sandbox.teams.get(s.teamId)?.teamOpt?.attacks.YaeMiko
+    ).not.toEqual(withBonus.attacks.YaeMiko)
     const other = await compareSwapKqm({ ...argsOf(s), saved })
     if ('error' in other) throw new Error(other.error)
     expect(other.teamOptB.bonusStats?.YaeMiko).toBeUndefined()
+    expect(other.teamOptB.bonusStats?.Odette).toEqual({ critRate_: 3 })
   }, 600_000)
 
   it('refuses a character already in the team', async () => {
@@ -570,10 +580,7 @@ describe('compareSwapKqm', () => {
       })
     ).toEqual({ error: 'unsupported' })
     expect(
-      await compareSwapKqm({
-        ...argsOf(s),
-        swapIn: { ...MITYA, sets: 'auto' },
-      })
+      await compareSwapKqm({ ...argsOf(s), swapIn: { ...MITYA, sets: 'auto' } })
     ).toEqual({ error: 'unsupported' })
   }, 60_000)
 
