@@ -78,6 +78,8 @@ export const MAX_ENEMY_HP = 1e12
 export interface TeamFightSettings {
   wardSeconds?: number
   healSeconds?: number
+  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
+  fullEnergy?: boolean
 }
 const MAX_WARD_SECONDS = 60
 const MAX_HEAL_SECONDS = 40
@@ -86,7 +88,7 @@ export function validateFightSettings(
   value: unknown
 ): TeamFightSettings | undefined {
   if (!value || typeof value !== 'object') return undefined
-  const { wardSeconds, healSeconds } = value as TeamFightSettings
+  const { wardSeconds, healSeconds, fullEnergy } = value as TeamFightSettings
   const tenth = (v: number) => Math.round(v * 10) / 10
   const out: TeamFightSettings = {
     ...(typeof wardSeconds === 'number' &&
@@ -101,6 +103,7 @@ export function validateFightSettings(
       (healSeconds >= 0 && healSeconds <= MAX_HEAL_SECONDS))
       ? { healSeconds: healSeconds === -1 ? -1 : tenth(healSeconds) }
       : {}),
+    ...(fullEnergy === true ? { fullEnergy } : {}),
   }
   return Object.keys(out).length ? out : undefined
 }

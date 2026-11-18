@@ -40,7 +40,7 @@ import {
 import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
 import { formatHp } from './hp'
-import { MoongeckoSettings } from './MoongeckoSettings'
+import { MoongeckoSettings, StartEnergySetting } from './MoongeckoSettings'
 
 const compact = (digits: number) =>
   new Intl.NumberFormat('en', {
@@ -163,14 +163,31 @@ export function EnemySetup({
           {/* its RES, all eight */}
           <ResGrid team={team} />
         </Box>
-        {/* how the team plays the Moongecko where its fight cannot tell */}
-        {stygian?.boss.id === MOONGECKO_BOSS && (
-          <MoongeckoSettings
-            teamId={teamId}
-            team={team}
-            fight={fight}
-            disabled={disabled}
-          />
+        {/* how the fight starts, and how the team plays the Moongecko where its fight cannot tell */}
+        {stygian && (
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 1.25,
+              pt: 1.5,
+              mt: 1.5,
+              borderTop: `1px solid ${giTokens.hairline}`,
+            }}
+          >
+            <StartEnergySetting
+              teamId={teamId}
+              team={team}
+              disabled={disabled}
+            />
+            {stygian.boss.id === MOONGECKO_BOSS && (
+              <MoongeckoSettings
+                teamId={teamId}
+                team={team}
+                fight={fight}
+                disabled={disabled}
+              />
+            )}
+          </Box>
         )}
       </Box>
       <EnemyDialog teamId={teamId} open={open} onClose={onClose} />

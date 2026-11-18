@@ -328,6 +328,10 @@ export function FightBreakdown({
             'enemyEditor.fight.note.noHealer',
             'No healer: the team stays in its Radiant Cocoon until the next Anchor'
           ),
+          opening: t(
+            'enemyEditor.fight.note.opening',
+            'Its first rotation is counted without Bursts: the fight starts with no energy (set in the enemy box)'
+          ),
           cocoonApprox: t(
             'enemyEditor.fight.note.cocoonApprox',
             'The team’s DPS in its cocoon and Disentangled is still being worked out: its own DPS counted for now'

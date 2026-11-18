@@ -588,6 +588,11 @@ describe('team.fightSettings (how the team plays the Moongecko)', () => {
     expect(database.teams.get(never)!.fightSettings).toEqual({
       healSeconds: -1,
     })
+    // (full energy at the start: only when set)
+    const full = database.teams.new({ fightSettings: { fullEnergy: true } })
+    expect(database.teams.get(full)!.fightSettings).toEqual({
+      fullEnergy: true,
+    })
     // a ward past the 35 s it has is kept (not broken in time), to 60 s
     const late = database.teams.new({ fightSettings: { wardSeconds: 60 } })
     expect(database.teams.get(late)!.fightSettings).toEqual({ wardSeconds: 60 })

@@ -32,7 +32,10 @@ export function MoongeckoSettings({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const settings = team.fightSettings ?? {}
-  const set = (key: keyof TeamFightSettings, value: number | undefined) =>
+  const set = (
+    key: 'wardSeconds' | 'healSeconds',
+    value: number | undefined
+  ) =>
     database.teams.set(teamId, (team) => {
       const next: TeamFightSettings = { ...team.fightSettings }
       if (value === undefined) delete next[key]
@@ -72,15 +75,7 @@ export function MoongeckoSettings({
       })
     : t('enemy.moongecko.healNone', 'Never: no healer in the team')
   return (
-    <Box
-      sx={{
-        display: 'grid',
-        gap: 1.25,
-        pt: 1.5,
-        mt: 1.5,
-        borderTop: `1px solid ${giTokens.hairline}`,
-      }}
-    >
+    <Box sx={{ display: 'grid', gap: 1.25 }}>
       <Row
         label={t('enemy.moongecko.ward', 'Ward broken in')}
         hint={kept ? undefined : ward === undefined ? wardAuto : undefined}
@@ -284,5 +279,50 @@ function Toggle({
     >
       {children}
     </ButtonBase>
+  )
+}
+
+/**
+ * A Stygian Onslaught fight's start: with no energy (as the game starts it: the first rotation
+ * without its Bursts), or with full energy
+ */
+export function StartEnergySetting({
+  teamId,
+  team,
+  disabled,
+}: {
+  teamId: string
+  team: Team
+  disabled?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const full = !!team.fightSettings?.fullEnergy
+  const set = (fullEnergy: boolean) =>
+    database.teams.set(teamId, (team) => {
+      const next: TeamFightSettings = { ...team.fightSettings }
+      if (fullEnergy) next.fullEnergy = true
+      else delete next.fullEnergy
+      team.fightSettings = Object.keys(next).length ? next : undefined
+    })
+  return (
+    <Row
+      label={t('enemy.startEnergy', 'Energy at the start')}
+      hint={
+        full
+          ? undefined
+          : t(
+              'enemy.startEnergyNone',
+              'The first rotation without Bursts, as the game starts it'
+            )
+      }
+    >
+      <Toggle on={!full} disabled={disabled} onClick={() => set(false)}>
+        {t('enemy.startEnergyZero', 'None')}
+      </Toggle>
+      <Toggle on={full} disabled={disabled} onClick={() => set(true)}>
+        {t('enemy.startEnergyFull', 'Full')}
+      </Toggle>
+    </Row>
   )
 }

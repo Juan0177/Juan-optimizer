@@ -339,7 +339,10 @@ export function simulateWritten({
   current,
   auraTimeline,
   burstEvery,
+  withoutBursts,
 }: {
+  /** Its Bursts left out (a fight that starts with no energy: its first rotation) */
+  withoutBursts?: boolean
   /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
   auraTimeline?: boolean
   /**
@@ -382,6 +385,17 @@ export function simulateWritten({
     const parsed = parseRotation(opener, names)
     rotation.opener = parsed.steps
     rotation.warnings.push(...parsed.warnings.map(openerWarning))
+  }
+  if (withoutBursts) {
+    // (a step that was only a Burst is left out: the member is not swapped in for nothing)
+    const strip = (steps: typeof rotation.steps) =>
+      steps.flatMap((step) => {
+        if (!step.actions.length) return [step]
+        const actions = step.actions.filter((a) => a.kind !== 'burst')
+        return actions.length ? [{ ...step, actions }] : []
+      })
+    rotation.steps = strip(rotation.steps)
+    if (rotation.opener) rotation.opener = strip(rotation.opener)
   }
   if (!rotation.steps.length) return { rotation }
   // (a Burst every Nth rotation: N written rotations played as one, timing edits kept per copy)
