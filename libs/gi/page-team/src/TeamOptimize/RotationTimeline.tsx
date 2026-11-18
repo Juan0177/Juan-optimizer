@@ -820,6 +820,7 @@ export function RotationTimeline({
                           }
                         >
                           <Box
+                            role="img"
                             aria-label={`${t('teamOpt.timing.swap', 'Swap')} ${seconds(w.start - start)} s`}
                             sx={(theme) => ({
                               position: 'absolute',
