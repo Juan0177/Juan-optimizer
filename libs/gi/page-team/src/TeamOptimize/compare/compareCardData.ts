@@ -6,6 +6,7 @@ import type {
   KqmCardMarks,
   KqmCompareCardData,
   KqmCompareFigure,
+  KqmMemberStats,
   KqmTone,
   RotationMember,
 } from '@genshin-optimizer/gi/ui'
@@ -14,6 +15,8 @@ import type { TFunction } from 'i18next'
 import { formatGain, localizeDecimal, secondsText } from '../format'
 import {
   betaOfBuilds,
+  type KqmCardView,
+  kqmCardDetails,
   kqmStandardNote,
   kqmTeamCardData,
   shareStamp,
@@ -36,6 +39,12 @@ export interface CompareCardContext {
   siteName?: string
   /** The language the figures and the date are written in (default: English) */
   locale?: string
+  /**
+   * The detailed view: A's and B's members' stats out of combat (`kqmOutOfCombatStats`, each on
+   * its own side's database); given, each member's block. `t` loaded for `keymap` too.
+   */
+  statsA?: Partial<Record<CharacterKey, KqmMemberStats>>
+  statsB?: Partial<Record<CharacterKey, KqmMemberStats>>
 }
 
 /**
@@ -125,7 +134,10 @@ export function compareCardData(
   const siteName = ctx.siteName ?? shareStamp(locale)
   const beta = betaOfBuilds([...a.members, ...b.members]).length > 0
 
-  const cardOf = (side: Side): KqmCardData => {
+  const cardOf = (
+    side: Side,
+    stats?: Partial<Record<CharacterKey, KqmMemberStats>>
+  ): KqmCardData => {
     const card = kqmTeamCardData({
       t,
       gender,
@@ -137,6 +149,7 @@ export function compareCardData(
         damage: m.damage,
         er: m.erValue,
         fieldTime: m.fieldTime,
+        ...(stats?.[m.key] && { stats: stats[m.key] }),
       })),
       total: side.dpr,
       rotationTime: side.rotationTime > 0 ? side.rotationTime : undefined,
@@ -162,8 +175,18 @@ export function compareCardData(
       },
     }
   }
-  const cardA = cardOf(a)
-  const cardB = cardOf(b)
+  const cardA = cardOf(a, ctx.statsA)
+  const cardB = cardOf(b, ctx.statsB)
+  // (the same member re-entering: its stats that changed marked against A's; another member
+  // entering, or a teammate (its build A's): nothing to mark)
+  const statsWas = ctx.out === ctx.in ? ctx.statsA?.[ctx.out] : undefined
+  const statsIn = ctx.statsB?.[ctx.in]
+  if (statsWas && statsIn)
+    cardB.members = cardB.members.map((m, i) =>
+      b.members[i].key === ctx.in && m.details
+        ? { ...m, details: kqmCardDetails(t, statsIn, locale, statsWas) }
+        : m
+    )
   const field = (card: KqmCardData) => card.members.some((m) => m.field)
   /** The swapped step's turn, as the comparison found it (by position, not by name) */
   const turnOf = (card: KqmCardData, side: Side) =>
@@ -316,6 +339,7 @@ export function compareCardRecord({
   inKey,
   a,
   b,
+  view,
 }: {
   teamId: string
   teamName: string
@@ -324,6 +348,8 @@ export function compareCardRecord({
   inKey: CharacterKey
   a: Side
   b: Side
+  /** Which sheet was drawn (the usual one, or with each member's stats) */
+  view?: KqmCardView
 }) {
   const side = (s: Side) => ({
     dpr: s.dpr,
@@ -350,6 +376,7 @@ export function compareCardRecord({
     site: globalThis.location?.host,
     generatedAt: new Date().toISOString(),
     picture: 'kqmCompare',
+    view,
     beta: betaOfBuilds([...a.members, ...b.members]),
     gender,
     team: { id: teamId, name: teamName },

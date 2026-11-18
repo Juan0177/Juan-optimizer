@@ -168,6 +168,17 @@ export function kqmCardDetails(
   }
 }
 
+const ER_NOTE =
+  "Out-of-combat stats: no conditional effects or teammates. The ER in the table is the rotation's."
+/**
+ * A member whose Energy Recharge out of combat (its stats, when given) is not the table's, as the
+ * table writes it (whole percent)
+ */
+const erDiffers = (m: KqmTeamCardMember) => {
+  const er = m.stats?.stats.find((s) => s.key === 'enerRech_')?.value
+  return er !== undefined && Math.round(er * 100) !== Math.round(m.er ?? 100)
+}
+
 /** The KQM sheet's data: names, icons, figures as the sheet writes them */
 export function kqmTeamCardData({
   t,
@@ -240,7 +251,10 @@ export function kqmTeamCardData({
         })
       : undefined,
     rotation,
-    notes,
+    // (the detailed sheet: its ER out of combat not the table's (the rotation's), said under)
+    notes: members.some(erDiffers)
+      ? `${notes}\n${t('page_team:teamOpt.card.erNote', ER_NOTE)}`
+      : notes,
     beta: beta ? BETA_LABEL : undefined,
     labels: {
       team: t('page_team:teamOpt.kqm.share.colTeam', 'Team'),

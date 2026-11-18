@@ -242,15 +242,45 @@ describe('KQM team card data with details', () => {
   })
   it('adds each member’s details from its stats, and nothing else', async () => {
     const plain = await card('it')
-    const detailed = await card('it', [stats, undefined])
+    // (its ER out of combat as the table's: no note)
+    const same = withEr(stats, 1.2)
+    const detailed = await card('it', [same, undefined])
     expect(detailed.members[0].details).toStrictEqual(
-      kqmCardDetails(await tIn('it'), stats, 'it')
+      kqmCardDetails(await tIn('it'), same, 'it')
     )
     expect('details' in detailed.members[1]).toBe(false)
     const { details: _, ...rest } = detailed.members[0]
     expect({ ...detailed, members: [rest, detailed.members[1]] }).toStrictEqual(
       plain
     )
+  })
+})
+
+/** `s` with its Energy Recharge out of combat at `er` (a fraction) */
+const withEr = (s: KqmMemberStats, er: number): KqmMemberStats => ({
+  ...s,
+  stats: s.stats.map((x) => (x.key === 'enerRech_' ? { ...x, value: er } : x)),
+})
+
+describe('KQM team card: the ER note (detailed view)', () => {
+  const NOTE = {
+    it: "Statistiche fuori combattimento: senza effetti condizionali né compagni. L'ER nella tabella è quello della rotazione.",
+    en: "Out-of-combat stats: no conditional effects or teammates. The ER in the table is the rotation's.",
+  }
+  it('says so on a line of its own when a member’s ER out of combat is not the table’s', async () => {
+    // (Danica: 128% out of combat, 120% in the table; Mitya: as the table, 100%)
+    const it = await card('it', [stats, withEr(stats, 1)])
+    expect(it.notes).toBe(`Standard KQM · Talenti 9/9/9\n${NOTE.it}`)
+    const en = await card('en', [stats, withEr(stats, 1)])
+    expect(en.notes).toBe(`KQM Standards · Talents 9/9/9\n${NOTE.en}`)
+  })
+  it('compares them as the table writes ER: whole percent', async () => {
+    // (120.4% out of combat: "120%", as the table)
+    const d = await card('en', [withEr(stats, 1.204), withEr(stats, 0.996)])
+    expect(d.notes).toBe('KQM Standards · Talents 9/9/9')
+  })
+  it('has no note in the normal view', async () => {
+    expect((await card('it')).notes).toBe('Standard KQM · Talenti 9/9/9')
   })
 })
 

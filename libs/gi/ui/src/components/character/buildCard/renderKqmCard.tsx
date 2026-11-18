@@ -252,9 +252,19 @@ const CELL = '#f8f9fc'
 const detailsHeight = (data?: KqmCardData) =>
   data?.members.some((m) => m.details) ? KQM_CARD_DETAILS_H : 0
 
+/** Each line of the notes after the first (`notes` cut at "\n"): the sheet grows by it */
+export const KQM_CARD_NOTE_LINE = 28
+/** The notes' lines ("\n" between them) */
+const noteLines = (data?: KqmCardData) => data?.notes.split('\n') ?? ['']
+/** The notes row's height: one line as ever, each line after it one more */
+const notesHeight = (data?: KqmCardData) =>
+  ITEM_ROW + (noteLines(data).length - 1) * KQM_CARD_NOTE_LINE
+
 /** The sheet's height (its margins included) */
 export function kqmCardHeight(data?: KqmCardData) {
-  return TOP + BLOCK_H + detailsHeight(data) + GAP + ROT_H + ITEM_ROW + M
+  return (
+    TOP + BLOCK_H + detailsHeight(data) + GAP + ROT_H + notesHeight(data) + M
+  )
 }
 
 const DIGITS = '0123456789'
@@ -981,9 +991,17 @@ export function drawKqmCard(
       })
     }
   }
-  labelled(notesY, ITEM_ROW, data.labels.notes)
-  say(data.notes, textX, notesY, ITEM_ROW, {
-    size: 19,
-    maxWidth: fullW - LABEL_W - 48,
-  })
+  // (one line as ever; more: one under the other, centred in the taller row)
+  const notes = noteLines(data)
+  const notesH = notesHeight(data)
+  labelled(notesY, notesH, data.labels.notes)
+  notes.forEach((line, j) =>
+    say(
+      line,
+      textX,
+      notesY + (j - (notes.length - 1) / 2) * KQM_CARD_NOTE_LINE,
+      notesH,
+      { size: 19, maxWidth: fullW - LABEL_W - 48 }
+    )
+  )
 }

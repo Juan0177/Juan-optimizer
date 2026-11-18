@@ -561,7 +561,8 @@
         "label": "Vista della card"
       },
       "mains": "Statistiche principali",
-      "outOfCombat": "Statistiche (fuori combattimento)"
+      "outOfCombat": "Statistiche (fuori combattimento)",
+      "erNote": "Statistiche fuori combattimento: senza effetti condizionali né compagni. L'ER nella tabella è quello della rotazione."
     },
     "result": {
       "dps": "DPS della squadra",

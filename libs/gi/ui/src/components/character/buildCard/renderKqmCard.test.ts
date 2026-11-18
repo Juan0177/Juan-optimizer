@@ -4,6 +4,7 @@ import {
   drawKqmCard,
   KQM_CARD_DETAILS_H,
   KQM_CARD_HEIGHT,
+  KQM_CARD_NOTE_LINE,
   KQM_CARD_WIDTH,
   KQM_CHANGED,
   kqmCardHeight,
@@ -625,6 +626,55 @@ describe('drawKqmCard: the detailed block', () => {
           r.w === COL &&
           r.h === KQM_CARD_DETAILS_H
       )
+    ).toBe(true)
+  })
+})
+
+describe('drawKqmCard: notes on more than one line', () => {
+  const draw = (d: KqmCardData) => {
+    const { ctx, log } = recorder()
+    drawKqmCard(ctx as unknown as CanvasRenderingContext2D, d, {
+      faces: [],
+      weaponIcons: [],
+      setIcons: d.members.map(() => []),
+    })
+    return parse(log)
+  }
+  const NOTE = 'Out-of-combat stats: no conditional effects or teammates.'
+  const twoLines: KqmCardData = {
+    ...detailed,
+    notes: `KQM Standards · Talents 9/9/9\n${NOTE}`,
+  }
+  it('the sheet grows by a line for each line after the first', () => {
+    expect(kqmCardHeight(twoLines)).toBe(
+      kqmCardHeight(detailed) + KQM_CARD_NOTE_LINE
+    )
+    const side = (card: KqmCardData) => ({ card, marks: {} })
+    expect(kqmCompareCardHeight({ a: side(twoLines), b: side(detailed) })).toBe(
+      kqmCompareCardHeight({ a: side(detailed), b: side(detailed) }) +
+        KQM_CARD_NOTE_LINE
+    )
+  })
+  it('draws each line, centred in the notes row, one under the other', () => {
+    const plain = draw(detailed).texts
+    const { texts, rects } = draw(twoLines)
+    const at = (ts: typeof texts, text: string) =>
+      ts.find((t) => t.text === text)!
+    const first = at(texts, 'KQM Standards · Talents 9/9/9')
+    const second = at(texts, NOTE)
+    expect(second.y - first.y).toBe(KQM_CARD_NOTE_LINE)
+    expect(second.x).toBe(first.x)
+    expect(first.px).toBe(19)
+    expect(second.px).toBe(19)
+    // (the row's middle between them; the label centred in the taller row)
+    const was = at(plain, 'KQM Standards · Talents 9/9/9')
+    expect((first.y + second.y) / 2).toBe(was.y + KQM_CARD_NOTE_LINE / 2)
+    expect(at(texts, 'Notes').y).toBe(
+      at(plain, 'Notes').y + KQM_CARD_NOTE_LINE / 2
+    )
+    // (its cells as tall as the lines)
+    expect(
+      rects.some((r) => r.x === 36 && r.h === 60 + KQM_CARD_NOTE_LINE)
     ).toBe(true)
   })
 })

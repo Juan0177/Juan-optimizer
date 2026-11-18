@@ -1,3 +1,4 @@
+import type { KqmMemberStats } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
 import { formatRateFull } from '../format'
 import {
@@ -294,5 +295,147 @@ describe('compareCardData: the same member re-entering', () => {
       '−17%',
       '+50%',
     ])
+  })
+})
+
+describe('compareCardData: the detailed view (each member’s stats)', () => {
+  /** A build's stats out of combat (as `kqmOutOfCombatStats` returns them) */
+  const stats = (atk: number, er: number): KqmMemberStats => ({
+    mains: { sands: 'atk_', goblet: 'electro_dmg_', circlet: 'critRate_' },
+    stats: [
+      { key: 'hp', value: 15000 },
+      { key: 'atk', value: atk },
+      { key: 'def', value: 800 },
+      { key: 'eleMas', value: 0 },
+      { key: 'critRate_', value: 0.7 },
+      { key: 'critDMG_', value: 1.5 },
+      { key: 'enerRech_', value: er },
+      { key: 'electro_dmg_', value: 0.466 },
+    ],
+  })
+  // (their ER out of combat as each table writes it: A 121%, B's Danica 125%, Mitya 121%)
+  const statsA = {
+    Danica: stats(2000, 1.214),
+    YaeMiko: stats(2100, 1.214),
+  } as never
+  const statsB = {
+    Danica: stats(2000, 1.25),
+    Mitya: stats(1800, 1.214),
+  } as never
+  const marked = (d: ReturnType<typeof compareCardData>) =>
+    [d.a, d.b].flatMap((half, h) =>
+      half.card.members.flatMap((m, i) =>
+        (m.details?.stats ?? [])
+          .filter((s) => 'was' in s)
+          .map((s) => `${h ? 'B' : 'A'}${i}:${s.label}:${s.was}→${s.value}`)
+      )
+    )
+  /** The card without its members' details */
+  const plain = (d: ReturnType<typeof compareCardData>) => {
+    const strip = (card: (typeof d)['a']['card']) => ({
+      ...card,
+      members: card.members.map(({ details: _, ...m }) => m),
+    })
+    return {
+      ...d,
+      a: { ...d.a, card: strip(d.a.card) },
+      b: { ...d.b, card: strip(d.b.card) },
+    }
+  }
+
+  it('without stats: the card as it was (no details)', () => {
+    const r = compareCardData(a, b, {
+      ...ctx,
+      statsA: undefined,
+      statsB: undefined,
+    })
+    expect(r).toStrictEqual(compareCardData(a, b, ctx))
+    expect(
+      [...r.a.card.members, ...r.b.card.members].some((m) => 'details' in m)
+    ).toBe(false)
+  })
+  it('gives every member of both halves its details', () => {
+    const r = compareCardData(a, b, { ...ctx, statsA, statsB })
+    for (const m of [...r.a.card.members, ...r.b.card.members]) {
+      expect(m.details?.stats).toHaveLength(8)
+      expect(m.details?.mains).toHaveLength(3)
+    }
+    expect(r.b.card.members[1].details?.stats[1]).toEqual({
+      label: 'atk',
+      value: '1,800',
+    })
+  })
+  it('keeps everything the normal card shows: the same card plus the details', () => {
+    const normal = compareCardData(a, b, ctx)
+    const r = compareCardData(a, b, { ...ctx, statsA, statsB })
+    expect(plain(r)).toStrictEqual(normal)
+    // (its Δ column, share points, ER build / required with its change and warning, header)
+    expect(r.b.marks.delta?.members.map((c) => c.text)).toEqual([
+      '−17%',
+      '+50%',
+    ])
+    expect(r.b.marks.er?.[0]).toMatchObject({ warn: true, note: '120% → 130%' })
+    expect(r.b.card.labels.er).toBe('erBuild\nerTarget')
+    expect(r.delta.dpr).toEqual({ text: '↑ +10%', tone: 'better' })
+  })
+  it('a different member entering: its stats plain, nothing marked anywhere', () => {
+    const r = compareCardData(a, b, { ...ctx, statsA, statsB })
+    expect(marked(r)).toEqual([])
+  })
+  it('the same member entering: only its changed stats marked, against A’s', () => {
+    const bSame = side(
+      { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turn: 1 },
+      [
+        ['Danica', 50000, { erValue: 125 }],
+        ['YaeMiko', 60000, { constellation: 1 }],
+      ]
+    )
+    const r = compareCardData(a, bSame, {
+      ...ctx,
+      in: 'YaeMiko' as never,
+      statsA,
+      // (its teammate's too, artificially: a teammate is never marked)
+      statsB: {
+        Danica: stats(2222, 1.25),
+        YaeMiko: stats(2300, 1.214),
+      } as never,
+    })
+    expect(marked(r)).toEqual(['B1:atk:2,100→2,300'])
+  })
+  it('a teammate is never marked, even with other stats', () => {
+    const r = compareCardData(a, b, {
+      ...ctx,
+      statsA,
+      statsB: { ...(statsB as object), Danica: stats(2500, 1.25) } as never,
+    })
+    expect(marked(r)).toEqual([])
+  })
+  it('says on its own line when a member’s ER out of combat is not the table’s', () => {
+    // (A's Yae Miko: 100% out of combat, 121% in the table; B as its table)
+    const r = compareCardData(a, b, {
+      ...ctx,
+      statsA: { ...(statsA as object), YaeMiko: stats(2100, 1) } as never,
+      statsB,
+    })
+    expect(r.a.card.notes).toBe('standard\nerNote')
+    expect(r.b.card.notes).toBe('standard')
+    // (none differing, or the normal view: no note)
+    expect(compareCardData(a, b, { ...ctx, statsA, statsB }).a.card.notes).toBe(
+      'standard'
+    )
+    expect(compareCardData(a, b, ctx).a.card.notes).toBe('standard')
+  })
+  it('records which view it is', () => {
+    const rec = compareCardRecord({
+      teamId: 't1',
+      teamName: 'Team X',
+      gender: 'F',
+      out: 'YaeMiko',
+      inKey: 'Mitya',
+      a,
+      b,
+      view: 'detailed',
+    })
+    expect(rec.view).toBe('detailed')
   })
 })

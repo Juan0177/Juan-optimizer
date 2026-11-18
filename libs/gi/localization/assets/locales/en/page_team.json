@@ -490,7 +490,8 @@
         "label": "Card view"
       },
       "mains": "Main stats",
-      "outOfCombat": "Stats (out of combat)"
+      "outOfCombat": "Stats (out of combat)",
+      "erNote": "Out-of-combat stats: no conditional effects or teammates. The ER in the table is the rotation's."
     },
     "kqm": {
       "tab": "KQM Theorycrafting",

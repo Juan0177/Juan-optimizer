@@ -15,7 +15,9 @@ import type {
   CompareChartData,
   CompareRow,
   InvestmentChartData,
+  KqmBuild,
   KqmCardData,
+  KqmMemberStats,
   KqmResult,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -540,10 +542,29 @@ function TeamPicture({
     setViewState(v)
     writeKqmCardView(v)
   }
+  // (out of combat, as the run had each member: its constellation, the KQM talents; worked out
+  // once per view and result, not again when the language changes)
+  const stats = useMemo(() => {
+    if (view !== 'detailed') return undefined
+    const talent = kqmTalentLevel(setup.kqm)
+    const out: Partial<Record<CharacterKey, KqmMemberStats>> = {}
+    for (const [ck, build] of Object.entries(result.builds) as [
+      CharacterKey,
+      KqmBuild | undefined,
+    ][]) {
+      const own =
+        build &&
+        kqmOutOfCombatStats(database, ck, build, {
+          constellation: result.constellations[ck] ?? 0,
+          talent,
+        })
+      if (own) out[ck] = own
+    }
+    return out
+  }, [view, database, result, setup])
   const data = useMemo((): KqmCardData => {
     // (field time: the ER calculator's, from the rotation or as typed)
     const calc = setup.kqm?.energyCalculator
-    const talent = kqmTalentLevel(setup.kqm)
     return kqmTeamCardData({
       t: s.t,
       gender: s.gender,
@@ -555,14 +576,7 @@ function TeamPicture({
         damage: result.after.members[ck] ?? 0,
         er: result.energyRecharge[ck]?.value,
         fieldTime: calc?.members[ck]?.fieldTime,
-        // (out of combat, as the run had the member: its constellation, the KQM talents)
-        stats:
-          view === 'detailed'
-            ? kqmOutOfCombatStats(database, ck, result.builds[ck]!, {
-                constellation: s.cons(ck),
-                talent,
-              })
-            : undefined,
+        stats: stats?.[ck],
       })),
       total: result.after.total,
       rotationTime,
@@ -572,7 +586,7 @@ function TeamPicture({
       siteName: shareStamp(s.locale),
       locale: s.locale,
     })
-  }, [s, result, rotationTime, teamId, setup, view, database])
+  }, [s, result, rotationTime, teamId, setup, stats])
   const render = useMemo(() => () => renderKqmCard(data), [data])
   const watermark = () => shareRecord(props, s, 'team', s.beta, { view })
   const viewLabel = s.t('page_team:teamOpt.card.view.label', 'Card view')
