@@ -47,6 +47,8 @@ describe('an optional action’s alternative', () => {
       keep: 'all',
     })
     const bennett = sim.actions.filter((a) => a.characterKey === 'Bennett')
+    // (each shown as what was played: "Q" or "N3", never "Q?/N3")
+    expect(bennett.some((a) => a.text.includes('/'))).toBe(false)
     const bursts = bennett.filter((a) => a.text.startsWith('Q')).length
     const normals = bennett.filter((a) => a.text === 'N3').length
     // (Bennett's Burst: 15 s; a loop of a few seconds: one Burst, the other loops N3)

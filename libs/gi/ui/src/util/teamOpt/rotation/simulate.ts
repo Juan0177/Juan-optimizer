@@ -1649,7 +1649,10 @@ export function simulateRotation({
       frames = Math.max(1, Math.round(edited))
     actions.push({
       characterKey,
-      text: action.text,
+      // (an action with an alternative, "Q/N3", played as itself: shown as what was played, "Q")
+      text: action.otherwise?.length
+        ? action.text.slice(0, action.text.indexOf('/')).replace(/\?$/, '')
+        : action.text,
       start: now,
       frames,
       index: own ? i : undefined,
