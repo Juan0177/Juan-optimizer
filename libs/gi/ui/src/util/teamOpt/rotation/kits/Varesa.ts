@@ -375,6 +375,8 @@ function chargedAttack(ctx: SimContext, s: VaresaState): ActionResult {
 }
 
 export const kit: KitModel = {
+  // its short Burst: the Volcanic Kablam (30 Energy, in Apex Drive) still plays in a copy without its full Burst
+  shortBurstVariant: 'apex',
   characterKey: 'Varesa',
   element: 'electro',
   source: `${GCSIM}/varesa`,

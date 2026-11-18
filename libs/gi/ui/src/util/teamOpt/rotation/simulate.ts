@@ -1379,6 +1379,20 @@ export function simulateRotation({
       now += frames
       return
     }
+    // A Burst every Nth rotation, not in this copy: only the member's short Burst plays (Varesa's
+    // Volcanic Kablam, Flins' Thunderous Symphony, which spend part of the Energy); the full one is
+    // left out
+    if (action.kind === 'burst' && action.onlyShort) {
+      const short = kit.shortBurstVariant
+      const variant = short
+        ? kit.variant?.(
+            ctxAt(now, characterKey),
+            states.get(characterKey),
+            action
+          )
+        : undefined
+      if (!short || variant?.key !== short) return
+    }
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
     const waitStart = now
