@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { formatRateFull } from '../format'
-import { compareCardData, compareCardRecord } from './compareCardData'
+import {
+  compareCardData,
+  compareCardRecord,
+  swapLabel,
+} from './compareCardData'
 import type { Side } from './compareSwapKqm'
 
 const build = (weapon: string) =>
@@ -225,5 +229,70 @@ describe('compareCardData', () => {
       b: { dpr: 110000, rotationTime: 22 },
     })
     expect(rec.b.members[1]).toMatchObject({ key: 'Mitya', fieldTime: 40 })
+  })
+})
+
+describe('swapLabel', () => {
+  it('names both members when they differ', () => {
+    expect(swapLabel('Yae Miko', 'Mitya', 0, 1, false)).toBe('Yae Miko → Mitya')
+  })
+  it('gives the constellation change when the same member re-enters', () => {
+    expect(swapLabel('Yae Miko', 'Yae Miko', 0, 1, true)).toBe(
+      'Yae Miko C0 → C1'
+    )
+  })
+  it('names it twice when the constellation is the same too', () => {
+    expect(swapLabel('Yae Miko', 'Yae Miko', 2, 2, true)).toBe(
+      'Yae Miko → Yae Miko'
+    )
+  })
+  it('names both when two members share a name (Travelers): not the same member', () => {
+    expect(swapLabel('Lumine', 'Lumine', 0, 6, false)).toBe('Lumine → Lumine')
+  })
+})
+
+describe('compareCardData: two members sharing a name (Travelers)', () => {
+  const aT = side({ turn: 1 }, [
+    ['Danica', 60000],
+    ['TravelerAnemo', 40000, { constellation: 0 }],
+  ])
+  const bT = side({ dpr: 110000, turn: 1 }, [
+    ['Danica', 50000],
+    ['TravelerDendro', 60000, { constellation: 6 }],
+  ])
+  const d = compareCardData(aT, bT, {
+    ...ctx,
+    out: 'TravelerAnemo' as never,
+    in: 'TravelerDendro' as never,
+    t: ((k: string) =>
+      k === 'charNames_gen:TravelerF' ? 'Lumine' : ctx.t(k)) as never,
+  })
+  it('badges and heads the swap as two members, as before', () => {
+    expect(d.b.marks.changed).toEqual({ index: 1, badge: 'Lumine → Lumine' })
+    expect(d.swap).toEqual({ out: 'Lumine', in: 'Lumine' })
+  })
+})
+
+describe('compareCardData: the same member re-entering', () => {
+  const bSame = side(
+    { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turn: 1 },
+    [
+      ['Danica', 50000],
+      ['YaeMiko', 60000, { constellation: 1 }],
+    ]
+  )
+  const d = compareCardData(a, bSame, { ...ctx, in: 'YaeMiko' as never })
+  it('badges the swapped member with the constellation change', () => {
+    expect(d.b.marks.changed).toEqual({ index: 1, badge: 'Yae Miko C0 → C1' })
+    expect(d.a.marks.changed).toEqual({ index: 1, badge: 'out' })
+  })
+  it('heads the card with the constellation change', () => {
+    expect(`${d.swap.out} → ${d.swap.in}`).toBe('Yae Miko C0 → C1')
+  })
+  it('compares the member with itself in A', () => {
+    expect(d.b.marks.delta?.members.map((c) => c.text)).toEqual([
+      '−17%',
+      '+50%',
+    ])
   })
 })

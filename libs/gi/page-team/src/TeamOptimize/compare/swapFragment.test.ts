@@ -1,6 +1,6 @@
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
-import { swapFragment, timingForSwap } from './swapFragment'
+import { memberActions, swapFragment, timingForSwap } from './swapFragment'
 
 const names: RotationMember[] = [
   { characterKey: 'Anastasya', name: 'Anastasya' },
@@ -71,6 +71,26 @@ describe('swapFragment', () => {
   it('emptyFragment', () => {
     expect(swapFragment({ ...base, fragment: '  ' })).toMatchObject({
       ok: false,
+      error: 'emptyFragment',
+    })
+  })
+  it('emptyFragment before the count, unless the leaving member re-enters', () => {
+    const twice = `${text} -> Yae Miko E`
+    const empty = { ...base, fragment: '', inName: 'Yae Miko' }
+    // (another member: an empty fragment is asked for first, as before)
+    expect(swapFragment({ ...empty, text: twice })).toMatchObject({
+      error: 'emptyFragment',
+    })
+    // (the same member: why its fragment was not filled in)
+    expect(swapFragment({ ...empty, text: twice, same: true })).toEqual({
+      ok: false,
+      error: 'repeated',
+      count: 2,
+    })
+    expect(
+      swapFragment({ ...empty, text: 'Danica E -> Odette E', same: true })
+    ).toEqual({ ok: false, error: 'notFound', count: 0 })
+    expect(swapFragment({ ...empty, same: true })).toMatchObject({
       error: 'emptyFragment',
     })
   })
@@ -250,5 +270,63 @@ describe('swapFragment: the replaced step’s turn', () => {
     expect(r).toMatchObject({ ok: true, where: 'opener' })
     expect(r.ok && r.turn).toBeUndefined()
     expect(r.ok && r.insertedTurn).toBeUndefined()
+  })
+})
+
+describe('memberActions', () => {
+  it('gives the actions of the member’s single step, without its name', () => {
+    expect(
+      memberActions(
+        'Danica E -> Odette E E -> Yae Miko E E E -> Danica Q',
+        '',
+        names,
+        'YaeMiko'
+      )
+    ).toBe('E E E')
+    expect(memberActions(text, '', names, 'YaeMiko')).toBe('E E E')
+    expect(memberActions(text, '', names, 'Anastasya')).toBe(
+      'hE N2 Q N5 E E E N2'
+    )
+  })
+  it('finds it written with a nickname, as written', () => {
+    expect(
+      memberActions(
+        text.replace('Yae Miko E E E', 'Yae EQ'),
+        '',
+        names,
+        'YaeMiko'
+      )
+    ).toBe('EQ')
+    expect(
+      memberActions(
+        'Danica E -> Odette E -> tsaritsa hE N2',
+        '',
+        names,
+        'Anastasya'
+      )
+    ).toBe('hE N2')
+  })
+  it('finds it in the opener, cut as the comparison cuts it', () => {
+    expect(
+      memberActions(
+        'Danica E -> Odette E E -> Danica Q',
+        'Yae Miko E Q Danica E',
+        names,
+        'YaeMiko'
+      )
+    ).toBe('E Q')
+  })
+  it('none when the member acts twice, or not at all', () => {
+    expect(
+      memberActions(`${text} -> Yae Miko E`, '', names, 'YaeMiko')
+    ).toBeUndefined()
+    expect(
+      memberActions(text, 'Yae Miko E -> Danica E', names, 'YaeMiko')
+    ).toBeUndefined()
+    expect(memberActions(text, '', names, 'Mitya' as never)).toBeUndefined()
+    // (a trailing loop marker is not a step)
+    expect(
+      memberActions('Danica E -> Odette E -> Yae', '', names, 'YaeMiko')
+    ).toBeUndefined()
   })
 })

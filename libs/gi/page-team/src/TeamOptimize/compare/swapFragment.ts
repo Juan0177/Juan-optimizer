@@ -1,6 +1,10 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
-import { parseRotation, splitOnNames } from '@genshin-optimizer/gi/ui'
+import {
+  matchMember,
+  parseRotation,
+  splitOnNames,
+} from '@genshin-optimizer/gi/ui'
 import type { RotationTimingSettings } from '../RotationTiming'
 
 export type SwapFragmentError = 'notFound' | 'repeated' | 'emptyFragment'
@@ -84,6 +88,9 @@ function find(c: Cut, out: CharacterKey, names: RotationMember[]) {
  * Replaces the leaving member's single step of a written rotation (the opener counts too) with the
  * entering member's fragment, leaving every other step, separator and space as written. A trailing
  * "-> Leaving" (the loop back to them) becomes "-> Entering".
+ *
+ * `same`: the leaving member re-entering. Its fragment is filled in from that single step, so with
+ * the fragment empty a missing or repeated step is said first (why nothing was filled in).
  */
 export function swapFragment({
   text,
@@ -92,6 +99,7 @@ export function swapFragment({
   out,
   inName,
   fragment,
+  same = false,
 }: {
   text: string
   opener: string
@@ -99,14 +107,17 @@ export function swapFragment({
   out: CharacterKey
   inName: string
   fragment: string
+  same?: boolean
 }): SwapFragmentResult {
   const frag = fragment.trim()
-  if (!frag) return { ok: false, error: 'emptyFragment', count: 0 }
+  if (!frag && !same) return { ok: false, error: 'emptyFragment', count: 0 }
   const t = cut(text, names)
   const o = cut(opener, names)
   const ft = find(t, out, names)
   const fo = find(o, out, names)
   const count = ft.acts.length + fo.acts.length
+  if (!frag && count === 1)
+    return { ok: false, error: 'emptyFragment', count: 0 }
   if (count === 0) return { ok: false, error: 'notFound', count }
   if (count > 1) return { ok: false, error: 'repeated', count }
 
@@ -150,6 +161,31 @@ export function swapFragment({
     delta,
     ...(turn !== undefined && { turn, insertedTurn }),
   }
+}
+
+/**
+ * The actions of the leaving member's single step (the opener counts too), as written, without
+ * its name: what it does in A's rotation ("E E E"). Undefined when it acts in no step, or in more
+ * than one (the comparison refuses those).
+ */
+export function memberActions(
+  text: string,
+  opener: string,
+  names: RotationMember[],
+  out: CharacterKey
+): string | undefined {
+  const t = cut(text, names)
+  const o = cut(opener, names)
+  const ft = find(t, out, names)
+  const fo = find(o, out, names)
+  if (ft.acts.length + fo.acts.length !== 1) return undefined
+  const step = ft.acts.length ? t.parts[ft.acts[0]] : o.parts[fo.acts[0]]
+  // (the name is the step's start that names the member, as the parser reads it)
+  const words = step.trim().split(/\s+/)
+  for (let n = Math.min(words.length, 3); n >= 1; n--)
+    if (matchMember(words.slice(0, n).join(' '), names) === out)
+      return words.slice(n).join(' ')
+  return undefined
 }
 
 /**

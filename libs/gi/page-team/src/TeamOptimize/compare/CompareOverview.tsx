@@ -13,6 +13,7 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDamage, formatGain } from '../format'
 import { hairline, insetSx, numSx, type } from '../ui'
+import { swapLabel } from './compareCardData'
 import type { Side, SideMember } from './compareSwapKqm'
 import { srOnly } from './compareUi'
 
@@ -56,6 +57,14 @@ export function Overview({
     a: m,
     b: b.members.find((x) => x.key === (m.key === out ? inKey : m.key)),
   }))
+  // (the swapped slot's constellation on each side: tells the same member re-entering apart)
+  const consOut = a.members.find((m) => m.key === out)?.constellation ?? 0
+  const consIn = b.members.find((m) => m.key === inKey)?.constellation ?? 0
+  // (the same member by key: Travelers of different elements share a name)
+  const same = out === inKey
+  const byCons = same && consOut !== consIn
+  const headA = byCons ? `${nameOf(out)} C${consOut}` : nameOf(out)
+  const headB = byCons ? `${nameOf(inKey)} C${consIn}` : nameOf(inKey)
   const head = {
     ...type.label,
     fontWeight: 600,
@@ -83,10 +92,10 @@ export function Overview({
               </Box>
             </TableCell>
             <TableCell sx={{ ...num, ...head }}>
-              {t('kqmCompare.table.a', { name: nameOf(out) })}
+              {t('kqmCompare.table.a', { name: headA })}
             </TableCell>
             <TableCell sx={{ ...num, ...head }}>
-              {t('kqmCompare.table.b', { name: nameOf(inKey) })}
+              {t('kqmCompare.table.b', { name: headB })}
             </TableCell>
             <TableCell sx={{ ...num, ...head }}>
               {t('kqmCompare.table.delta')}
@@ -120,7 +129,7 @@ export function Overview({
           {pairs.map(({ a: ma, b: mb }) => {
             const swapped = ma.key === out
             const name = swapped
-              ? `${nameOf(ma.key)} → ${nameOf(inKey)}`
+              ? swapLabel(nameOf(ma.key), nameOf(inKey), consOut, consIn, same)
               : nameOf(ma.key)
             return (
               <MemberRows

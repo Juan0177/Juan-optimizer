@@ -12,6 +12,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { Overview } from './CompareOverview'
 import { CompareSwapFailure } from './compareError'
 import { srOnly } from './compareUi'
 import KqmCompare, { savedRunFor } from './KqmCompare'
@@ -145,6 +146,7 @@ vi.mock('@genshin-optimizer/gi/ui', async () => {
   return {
     parseRotation: parse.parseRotation,
     splitOnNames: parse.splitOnNames,
+    matchMember: parse.matchMember,
     CharacterName: ({ characterKey }: { characterKey: string }) => (
       <>{NAMES[characterKey] ?? characterKey}</>
     ),
@@ -527,6 +529,17 @@ describe('KqmCompare', () => {
     expect(
       within(table).getAllByText(/Yae Miko → Mitya/).length
     ).toBeGreaterThan(0)
+    // (the columns: the two members, by name only)
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Yae Miko',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Mitya',
+      })
+    ).toBeTruthy()
     expect(within(table).getAllByText(/^−10(,0)?%$/).length).toBeGreaterThan(0)
     // both ER figures, each with its own label: the target and what the build reaches
     expect(
@@ -1224,6 +1237,300 @@ describe('KqmCompare: rotation changed since A', () => {
     }))
     show()
     expect(await screen.findByText('kqmCompare.rotationChanged')).toBeTruthy()
+  })
+})
+
+describe('KqmCompare: the same member re-entering', () => {
+  const character = () =>
+    screen.getByRole('combobox', { name: /kqmCompare\.character/ })
+  const fragment = () =>
+    screen.getByRole('textbox', {
+      name: /kqmCompare\.fragment/,
+    }) as HTMLInputElement
+  const pickIn = (typed: string, name: string) => {
+    fireEvent.change(character(), { target: { value: typed } })
+    fireEvent.click(screen.getByRole('option', { name }))
+  }
+  /** The list as it opens: every member that can enter */
+  const options = () => {
+    fireEvent.keyDown(character(), { key: 'ArrowDown' })
+    return screen.queryAllByRole('option').map((o) => o.textContent)
+  }
+
+  it('offers the leaving member in Entra, and none of the others', () => {
+    withRun()
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    // (Furina and Mitya are not in the team; of its members, only the one leaving)
+    expect(options()).toEqual(['Furina', 'Mitya', 'Yae Miko'])
+  })
+
+  it('fills the fragment with the leaving member’s actions in A’s rotation, still editable', () => {
+    withRun()
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('E E E')
+    const preview = screen.getByLabelText(/kqmCompare\.preview/)
+    expect(preview.querySelector('mark')?.textContent).toBe('Yae Miko E E E')
+    fireEvent.change(fragment(), { target: { value: 'E E' } })
+    expect(fragment().value).toBe('E E')
+  })
+
+  it('clears the prefill when another member is picked, keeps what was typed', () => {
+    withRun()
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('E E E')
+    pickIn('Mit', 'Mitya')
+    expect(fragment().value).toBe('')
+    // (typed by the user: re-picking the leaving member does not overwrite it)
+    fireEvent.change(fragment(), { target: { value: 'E Q' } })
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('E Q')
+    pickIn('Mit', 'Mitya')
+    expect(fragment().value).toBe('E Q')
+  })
+
+  it('keeps a fragment typed before the leaving member is picked', () => {
+    withRun()
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Mit', 'Mitya')
+    fireEvent.change(fragment(), { target: { value: 'E Q' } })
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('E Q')
+  })
+
+  it('drops the pick when the leaving member changes and it is a teammate again', () => {
+    withRun()
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    fireEvent.click(screen.getByRole('radio', { name: /Danica/ }))
+    expect((character() as HTMLInputElement).value).toBe('')
+    expect(fragment().value).toBe('')
+  })
+
+  it('starts from A’s settings for it: its constellation, ER target, effects and energy weapons', async () => {
+    withRun()
+    const saved = mocks.state.saved as {
+      run: { teamOpt: { kqm: object } }
+    }
+    saved.run.teamOpt.kqm = {
+      energyRecharge: { YaeMiko: 130, Danica: 160 },
+      passives: { YaeMiko: { YaeMikoWeapon: { effect: 'on' } } },
+      weaponEnergy: { WintersHeavyHeart: { YaeMiko: 20, Danica: 10 } },
+    }
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    // (A's result: C1)
+    expect(
+      screen.getByRole('combobox', { name: /kqmCompare\.constellation/ })
+        .textContent
+    ).toBe('C1')
+    fireEvent.click(
+      screen.getByRole('button', { name: /kqmCompare\.settings/ })
+    )
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: /kqmCompare\.erTarget/,
+        }) as HTMLInputElement
+      ).value
+    ).toBe('130')
+    // (another member: as today, nothing of A's)
+    pickIn('Mit', 'Mitya')
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: /kqmCompare\.erTarget/,
+        }) as HTMLInputElement
+      ).value
+    ).toBe('')
+    pickIn('Yae', 'Yae Miko')
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(1))
+    const { out, swapIn, fragment: sent } = mocks.compare.mock.calls[0][0]
+    expect(out).toBe('YaeMiko')
+    expect(sent).toBe('E E E')
+    expect(swapIn).toMatchObject({ key: 'YaeMiko', constellation: 1 })
+    expect(swapIn.kqm).toEqual({
+      energyRecharge: { YaeMiko: 130 },
+      passives: { YaeMiko: { YaeMikoWeapon: { effect: 'on' } } },
+      weaponEnergy: { WintersHeavyHeart: { YaeMiko: 20 } },
+    })
+  })
+
+  it('starts from A’s ER calculator inputs for it', async () => {
+    withRun()
+    const saved = mocks.state.saved as {
+      run: { teamOpt: { kqm: object } }
+    }
+    const yae = {
+      fieldTime: 10,
+      skillUses: 3,
+      favoniusProcs: 1,
+      edited: ['favoniusProcs'],
+    }
+    saved.run.teamOpt.kqm = {
+      energySource: 'calculator',
+      energyCalculator: {
+        rotationTime: 20,
+        members: { YaeMiko: yae, Danica: { fieldTime: 30 } },
+      },
+    }
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(1))
+    const { swapIn } = mocks.compare.mock.calls[0][0]
+    expect(swapIn.kqm.energyCalculator.members).toEqual({ YaeMiko: yae })
+  })
+
+  it('names the swapped row with the constellation change', async () => {
+    withRun()
+    const member = (key: string, constellation: number) => ({
+      key,
+      damage: 250,
+      share: 0.25,
+      er: 120,
+      erValue: 125,
+      constellation,
+      fixed: key !== 'YaeMiko',
+    })
+    const side = (yae: number) => ({
+      dpr: 1000,
+      dps: 50,
+      rotationTime: 20,
+      rotation: TEXT,
+      members: [
+        member('Anastasya', 0),
+        member('YaeMiko', yae),
+        member('Odette', 6),
+        member('Danica', 6),
+      ],
+    })
+    mocks.compare.mockResolvedValue({ a: side(1), b: side(2) })
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    const table = await screen.findByRole('table')
+    expect(
+      within(table).getAllByText(/Yae Miko C1 → C2/).length
+    ).toBeGreaterThan(0)
+    // (the columns: the member at each constellation)
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Yae Miko C1',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Yae Miko C2',
+      })
+    ).toBeTruthy()
+  })
+
+  it('starts from A’s result constellation when A’s run has no KQM settings (older saves)', () => {
+    withRun()
+    // (a run without `teamOpt` at all is not offered as A: `savedRunFor`)
+    const saved = mocks.state.saved as { run: { teamOpt: { kqm?: object } } }
+    delete saved.run.teamOpt.kqm
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(
+      screen.getByRole('combobox', { name: /kqmCompare\.constellation/ })
+        .textContent
+    ).toBe('C1')
+  })
+
+  it.each([
+    [
+      'repeated',
+      `${TEXT} -> Yae Miko E`,
+      'kqmCompare.error.repeated name=Yae Miko count=2',
+    ],
+    [
+      'notFound',
+      'Danica E -> Odette E E -> Danica Q',
+      'kqmCompare.error.notFound name=Yae Miko',
+    ],
+  ])('leaves the fragment empty and says why when the leaving member is %s in A’s rotation', (_, rotation, refusal) => {
+    withRun()
+    stored.set('teamOptRotationText_t1', rotation)
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('')
+    // (the refusal, under the fragment, describing Confronta; not "write its actions")
+    expect(screen.getByText(refusal)).toBeTruthy()
+    expect(screen.queryByText(/kqmCompare\.need\.fragment/)).toBeNull()
+    expect(runButton().getAttribute('aria-describedby')).toMatch(/-refusal$/)
+  })
+})
+
+describe('Overview: two members sharing a name (Travelers)', () => {
+  it('names the swap and the columns as two members, without constellations', () => {
+    const member = (key: string, constellation: number) => ({
+      key,
+      damage: 250,
+      share: 0.5,
+      er: 120,
+      erValue: 125,
+      constellation,
+      fixed: key === 'Danica',
+    })
+    const side = (traveler: string, cons: number) => ({
+      dpr: 1000,
+      dps: 50,
+      rotationTime: 20,
+      rotation: TEXT,
+      members: [member('Danica', 6), member(traveler, cons)],
+    })
+    render(
+      <ThemeProvider theme={theme}>
+        <Overview
+          a={side('TravelerAnemo', 0) as never}
+          b={side('TravelerDendro', 6) as never}
+          out={'TravelerAnemo' as never}
+          inKey={'TravelerDendro' as never}
+          nameOf={(k) => (k.startsWith('Traveler') ? 'Lumine' : k)}
+          language="it"
+        />
+      </ThemeProvider>
+    )
+    const table = screen.getByRole('table')
+    expect(
+      within(table).getAllByText('Lumine → Lumine').length
+    ).toBeGreaterThan(0)
+    expect(within(table).queryByText(/C0|C6/)).toBeNull()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Lumine',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Lumine',
+      })
+    ).toBeTruthy()
   })
 })
 

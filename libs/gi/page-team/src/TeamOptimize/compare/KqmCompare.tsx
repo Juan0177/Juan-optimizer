@@ -96,7 +96,7 @@ import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
 import { EnteringSettings } from './EnteringSettings'
 import type { SavedKqmRun } from './savedRun'
 import { savedRunOf } from './savedRun'
-import { swapFragment } from './swapFragment'
+import { memberActions, swapFragment } from './swapFragment'
 
 /*
  * KQM Compare (Alpha): KQM Theorycrafting's last result (A) against the same team with one member
@@ -257,6 +257,8 @@ export default function KqmCompare({
   const [erText, setErText] = useState('')
   const [calcOwn, setCalcOwn] = useState<TeamOptEnergyMember>()
   const [fragment, setFragment] = useState('')
+  /** What the fragment was filled in with (the leaving member's actions), while it holds it */
+  const [prefilled, setPrefilled] = useState<string>()
   /** The result confirmed final (its `savedAt`): a confirmation is for that result only */
   const [confirmedAt, setConfirmedAt] = useState<number>()
   const confirmed = !!saved && confirmedAt === saved.savedAt
@@ -264,16 +266,59 @@ export default function KqmCompare({
   const resultChanged = confirmedAt !== undefined && !confirmed
   const [settingsOpen, setSettingsOpen] = useState(false)
 
+  // the members' names as A's rotation is read
+  const namesA = useMemo(
+    () => members.map((ck) => ({ characterKey: ck, name: nameOf(ck) })),
+    [members, nameOf]
+  )
+  /**
+   * The entering member picked: its settings start from nothing, or, for the leaving member
+   * entering again, from A's (its constellation in A's result, its KQM settings), so B differs
+   * from A only in what is changed here. The fragment is filled in with the leaving member's
+   * actions in A's rotation when it is empty or still holds what was filled in; a fragment the
+   * user wrote is kept.
+   */
   const chooseIn = (key: CharacterKey | null) => {
+    if (key === inKey) return
     setInKey(key)
-    setConstellation(key ? kqmMemberConstellation(key, undefined) : 0)
+    const same = !!key && key === out
+    const own = same ? teamKqm : undefined
+    // (A's result's, as A's members show it, also for a run saved without KQM settings)
+    setConstellation(
+      !key
+        ? 0
+        : same
+          ? (run?.result?.constellations?.[key] ??
+            kqmMemberConstellation(key, teamKqm))
+          : kqmMemberConstellation(key, undefined)
+    )
     setWeapon('')
     setSetKey('')
     setSetKey2('')
-    setErText('')
-    setCalcOwn(undefined)
-    setPassives({})
-    setWeaponEnergy({})
+    const er = key ? own?.energyRecharge?.[key] : undefined
+    setErText(er !== undefined ? String(er) : '')
+    setCalcOwn(key ? own?.energyCalculator?.members[key] : undefined)
+    setPassives((key && own?.passives?.[key]) || {})
+    setWeaponEnergy(
+      key && own?.weaponEnergy
+        ? Object.fromEntries(
+            Object.entries(own.weaponEnergy).flatMap(([w, byMember]) => {
+              const v = byMember?.[key]
+              return v !== undefined ? [[w, v]] : []
+            })
+          )
+        : {}
+    )
+    const actions = same ? memberActions(text, opener, namesA, key) : undefined
+    if (!fragment.trim() || fragment === prefilled) {
+      setFragment(actions ?? '')
+      setPrefilled(actions)
+    } else setPrefilled(undefined)
+  }
+  /** Who leaves: an entering member that is a teammate again (the one leaving before) goes */
+  const chooseOut = (key: CharacterKey) => {
+    setOut(key)
+    if (inKey && inKey !== key && members.includes(inKey)) chooseIn(null)
   }
 
   const weapons = useMemo(
@@ -284,10 +329,11 @@ export default function KqmCompare({
   const candidates = useMemo(
     () =>
       (Object.keys(kitModels) as CharacterKey[])
-        .filter((k) => !members.includes(k))
+        // (the leaving member too: the same member at another constellation, weapon or sets)
+        .filter((k) => !members.includes(k) || k === out)
         .map((k) => ({ key: k, name: nameOf(k) }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-    [members, nameOf]
+    [members, nameOf, out]
   )
 
   const calculator = teamKqm?.energySource === 'calculator'
@@ -310,7 +356,10 @@ export default function KqmCompare({
   const swapIn: SwapIn | undefined = useMemo(() => {
     if (!inKey) return undefined
     if (!auto && (!weapon || !pickedSets)) return undefined
-    const energyEntries = Object.entries(weaponEnergy).filter(([, v]) => v)
+    // (0 too: A's, for the leaving member entering again)
+    const energyEntries = Object.entries(weaponEnergy).filter(
+      ([, v]) => v !== undefined
+    )
     const own: Partial<TeamOptKqm> = {
       ...(Object.keys(passives).length && { passives: { [inKey]: passives } }),
       ...(energyEntries.length && {
@@ -360,12 +409,13 @@ export default function KqmCompare({
     return swapFragment({
       text,
       opener,
-      names: members.map((ck) => ({ characterKey: ck, name: nameOf(ck) })),
+      names: namesA,
       out,
       inName: nameOf(inKey),
       fragment,
+      same: inKey === out,
     })
-  }, [out, inKey, text, opener, members, fragment, nameOf])
+  }, [out, inKey, text, opener, namesA, fragment, nameOf])
   const warnings = useMemo(() => {
     if (!swapped?.ok || !out || !inKey) return []
     const names = members.map((ck) => {
@@ -426,6 +476,8 @@ export default function KqmCompare({
             count: swapped.count,
           })
       : undefined
+  // (a refused fragment before an empty one: for the leaving member re-entering, it says why its
+  // fragment was not filled in)
   const problem = !saved
     ? t('kqmCompare.noResult')
     : kqmRunning
@@ -440,10 +492,10 @@ export default function KqmCompare({
               ? t('kqmCompare.need.gear')
               : erInvalid
                 ? t('kqmCompare.need.er')
-                : !fragment.trim()
-                  ? t('kqmCompare.need.fragment', { name: inName })
-                  : fragmentError
-                    ? fragmentError
+                : fragmentError
+                  ? fragmentError
+                  : !fragment.trim()
+                    ? t('kqmCompare.need.fragment', { name: inName })
                     : !confirmed
                       ? t('kqmCompare.need.confirm')
                       : ''
@@ -738,7 +790,7 @@ export default function KqmCompare({
               <Segmented
                 aria-label={t('kqmCompare.out')}
                 value={out}
-                onChange={setOut}
+                onChange={chooseOut}
                 wrap
                 options={members.map((key) => ({
                   value: key,
