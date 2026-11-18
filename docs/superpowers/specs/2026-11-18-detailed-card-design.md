@@ -1,5 +1,7 @@
 # Card dettagliata (detailed KQM cards) — design
 
+**Status:** approved by the user on 2026-11-18 (after the preview images).
+
 ## Intent
 The user shares KQM cards (KQM Theorycrafting's team card, KQM Compare's comparison card) and wants
 whoever looks at one to see each character's build at a glance, not only weapon and sets: the three

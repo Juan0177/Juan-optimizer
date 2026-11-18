@@ -45,6 +45,23 @@ const mocks = vi.hoisted(() => {
   return {
     state,
     compare: vi.fn(),
+    /** The comparison card's data, as asked for (its context: the stats given) */
+    cardData: vi.fn((_a: unknown, _b: unknown, ctx: { teamName: string }) => ({
+      name: ctx.teamName,
+      a: { card: { members: [] }, marks: {} },
+      b: { card: { members: [] }, marks: {} },
+    })),
+    /** A member's stats out of combat: what it was asked with */
+    outOfCombat: vi.fn(
+      (db: { name?: string }, key: string, build: unknown, opts: object) => ({
+        db: db.name ?? 'user',
+        key,
+        build,
+        ...opts,
+      })
+    ),
+    /** The card dialogs' hidden records */
+    records: [] as Record<string, unknown>[],
     /** The props B's KQM results were last shown with */
     results: [] as Record<string, unknown>[],
     settings: vi.fn((_args: unknown): unknown => ({ error: 'unsupported' })),
@@ -174,8 +191,41 @@ vi.mock('@genshin-optimizer/gi/ui', async () => {
     kqmSimGear: (build: unknown) => build,
     isEnergyWeapon: (key: string) => key === 'WintersHeavyHeart',
     TeamOptCancelled: class extends Error {},
+    // (the comparison card's dialog: its header, its height, its hidden record)
+    CardImageDialog: ({
+      title,
+      aspectRatio,
+      header,
+      watermark,
+    }: {
+      title: string
+      aspectRatio: string
+      header?: React.ReactNode
+      watermark: () => Record<string, unknown>
+    }) => (
+      <div role="dialog" aria-label={title} data-aspect={aspectRatio}>
+        {header}
+        <button type="button" onClick={() => mocks.records.push(watermark())}>
+          record
+        </button>
+      </div>
+    ),
+    KQM_COMPARE_CARD_WIDTH: 1760,
+    KQM_COMPARE_CARD_HEIGHT: 1208,
+    kqmCompareCardHeight: () => 1700,
+    renderKqmCompareCard: vi.fn(),
+    safeName: (s: string) => s,
+    KQM_TALENT_DEFAULT: 9,
+    // (the card's hidden record)
+    currentRelease: { version: 'test' },
+    BETA_KEYS: new Set(),
+    kqmOutOfCombatStats: mocks.outOfCombat,
   }
 })
+vi.mock('./compareCardData', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./compareCardData')>()),
+  compareCardData: mocks.cardData,
+}))
 vi.mock('../KqmEnergyCalculator', () => ({
   // (what it is shown, and one input set by hand)
   MemberEnergy: ({
@@ -302,6 +352,9 @@ afterEach(() => {
   mocks.compare.mockReset()
   mocks.replay.mockReset()
   mocks.results.length = 0
+  mocks.records.length = 0
+  mocks.cardData.mockClear()
+  mocks.outOfCombat.mockClear()
   mocks.state.saved = undefined
   mocks.state.members = []
   mocks.state.kqmRunning = false
@@ -877,6 +930,120 @@ describe('KqmCompare: the result', () => {
     await runOnce()
     const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('count=3')
+  })
+})
+
+describe('KqmCompare: the card’s view (Normal | Detailed)', () => {
+  const member = (key: string, constellation: number, fixed: boolean) => ({
+    key,
+    damage: 500,
+    share: 0.5,
+    er: 120,
+    erValue: 121,
+    constellation,
+    fixed,
+    build: build(`${key}Weapon`),
+  })
+  const side = (members: ReturnType<typeof member>[]) => ({
+    dpr: 1000,
+    dps: 50,
+    rotationTime: 20,
+    rotation: TEXT,
+    talents: 10,
+    members,
+  })
+  const sandbox = { name: 'sandbox', members: [...MEMBERS] }
+  async function openCard() {
+    withRun()
+    mocks.compare.mockResolvedValue({
+      a: side([member('Danica', 2, true), member('YaeMiko', 0, false)]),
+      b: side([member('Danica', 2, true), member('Mitya', 1, false)]),
+      resultB: { builds: {}, after: { total: 1000, members: {} } },
+      sandbox,
+      teamOptB: { attacks: {}, keep: [], rotationTime: 20, kqm: {} },
+      rotationB: {},
+    })
+    show()
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'kqmCompare.card.create' })
+    )
+    return screen.getByRole('dialog', { name: 'kqmCompare.card.title' })
+  }
+  const lastCtx = () =>
+    mocks.cardData.mock.calls.at(-1)![2] as unknown as Record<string, unknown>
+
+  it('is Normal at first: no stats worked out, the usual height', async () => {
+    const dialog = await openCard()
+    const group = within(dialog).getByRole('radiogroup', {
+      name: 'teamOpt.card.view.label',
+    })
+    expect(
+      within(group)
+        .getByRole('radio', { name: 'teamOpt.card.view.normal' })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    expect(lastCtx()['statsA']).toBeUndefined()
+    expect(lastCtx()['statsB']).toBeUndefined()
+    expect(mocks.outOfCombat).not.toHaveBeenCalled()
+    expect(dialog.getAttribute('data-aspect')).toBe('1760 / 1208')
+  })
+  it('Detailed: A’s stats on the user’s database, B’s on its sandbox, remembered', async () => {
+    const dialog = await openCard()
+    fireEvent.click(
+      within(dialog).getByRole('radio', { name: 'teamOpt.card.view.detailed' })
+    )
+    // (each side's builds and constellations, the run's KQM talents for both)
+    expect(lastCtx()['statsA']).toEqual({
+      Danica: {
+        db: 'user',
+        key: 'Danica',
+        build: build('DanicaWeapon'),
+        constellation: 2,
+        talent: 10,
+      },
+      YaeMiko: {
+        db: 'user',
+        key: 'YaeMiko',
+        build: build('YaeMikoWeapon'),
+        constellation: 0,
+        talent: 10,
+      },
+    })
+    expect(lastCtx()['statsB']).toEqual({
+      Danica: {
+        db: 'sandbox',
+        key: 'Danica',
+        build: build('DanicaWeapon'),
+        constellation: 2,
+        talent: 10,
+      },
+      Mitya: {
+        db: 'sandbox',
+        key: 'Mitya',
+        build: build('MityaWeapon'),
+        constellation: 1,
+        talent: 10,
+      },
+    })
+    expect(dialog.getAttribute('data-aspect')).toBe('1760 / 1700')
+    expect(stored.get('juanlab-kqmCardView')).toBe('detailed')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'record' }))
+    expect(mocks.records.at(-1)).toMatchObject({ view: 'detailed' })
+  })
+  it('opens on the view last picked', async () => {
+    stored.set('juanlab-kqmCardView', 'detailed')
+    const dialog = await openCard()
+    expect(
+      within(dialog)
+        .getByRole('radio', { name: 'teamOpt.card.view.detailed' })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    expect(lastCtx()['statsB']).toBeDefined()
   })
 })
 

@@ -1305,6 +1305,7 @@ export default function KqmCompare({
               b={state.b}
               out={state.out}
               inKey={state.in}
+              sandbox={state.resultsB?.database}
               disabled={stale}
             />
           </Box>
