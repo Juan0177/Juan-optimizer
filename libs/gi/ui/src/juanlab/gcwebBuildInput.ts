@@ -13,9 +13,9 @@ import {
 } from '@genshin-optimizer/gi/consts'
 import type { BuildTc } from '@genshin-optimizer/gi/db'
 import { getArtSetStat } from '@genshin-optimizer/gi/stats'
-import { getMainStatValue } from '@genshin-optimizer/gi/util'
+import { getMainStatValue, getSubstatValue } from '@genshin-optimizer/gi/util'
 import type { KqmBuild } from '../util/teamOpt/kqm'
-import { kqmBuildRarity, kqmValues } from '../util/teamOpt/kqm'
+import { KQM_FIXED_ROLLS, kqmBuildRarity, kqmValues } from '../util/teamOpt/kqm'
 import type { GenInput, GenSlot } from './gcwebArtifacts'
 
 /**
@@ -35,6 +35,17 @@ const OFF_SETS: readonly ArtifactSetKey[] = [
 ]
 export const DEFAULT_OFF_SET: ArtifactSetKey = OFF_SETS[0]
 
+/** The set's game data, or undefined for a key it does not know (a stale TC set, a bad offSet) */
+const setStat = (setKey: ArtifactSetKey) => {
+  try {
+    return getArtSetStat(setKey) as
+      | { slots: readonly string[]; rarities: readonly number[] }
+      | undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** A set can be this piece: it has the slot, and (`strict`) the rarity */
 const fits = (
   setKey: ArtifactSetKey,
@@ -42,11 +53,11 @@ const fits = (
   rarity: number,
   strict = true
 ) => {
-  const stat = getArtSetStat(setKey)
+  const stat = setStat(setKey)
   return (
     !!stat &&
-    (stat.slots as readonly string[]).includes(slotKey) &&
-    (!strict || (stat.rarities as readonly number[]).includes(rarity))
+    !!stat.slots?.includes(slotKey) &&
+    (!strict || !!stat.rarities?.includes(rarity))
   )
 }
 
@@ -63,7 +74,7 @@ function assignSets(
   offSet?: ArtifactSetKey
 ): ArtifactSetKey[] {
   const entries = (Object.entries(sets) as [ArtifactSetKey, number][]).filter(
-    ([setKey, count]) => count > 0 && getArtSetStat(setKey)
+    ([setKey, count]) => count > 0 && !!setStat(setKey)
   )
   const room = (setKey: ArtifactSetKey) =>
     slots.filter((s) => fits(setKey, s.slotKey, s.rarity)).length
@@ -93,6 +104,7 @@ function assignSets(
     const { slotKey, rarity } = slots[i]
     const free = (key: ArtifactSetKey) =>
       !buildSets.has(key) && !taken.has(key) && fits(key, slotKey, rarity)
+    // An explicit offSet wins, also over a 2+2 build's own fifth piece (rule 2 below)
     if (offSet && free(offSet)) {
       taken.add(offSet)
       return offSet
@@ -114,6 +126,12 @@ function assignSets(
 const maxLevel = (rarity: 4 | 5) => (rarity === 5 ? 20 : 16)
 const isPercent = (key: SubstatKey) => key.endsWith('_')
 const round6 = (value: number) => Math.round(value * 1e6) / 1e6
+/** Counted whenever the entry point does not say which stats matter */
+const ALWAYS_USED: readonly SubstatKey[] = [
+  'critRate_',
+  'critDMG_',
+  'enerRech_',
+]
 
 /**
  * A KQM build as the generator's input. Pieces: KQMS's (5★ +20; with 4★ sets, their pieces 4★ +16, the
@@ -125,15 +143,13 @@ const round6 = (value: number) => Math.round(value * 1e6) / 1e6
 export function genInputFromKqm(
   build: KqmBuild,
   opts: {
-    /** The standard's distributed rolls (`TeamOptKqm.rolls`; KQMS: 20) */
-    rolls?: number
     /** The stats the damage or a requirement reads (the KQM problem's `scales`) */
     scales?: SubstatKey[]
     /** The set of the pieces the build leaves free (default `DEFAULT_OFF_SET`) */
     offSet?: ArtifactSetKey
   }
 ): GenInput {
-  const { four } = kqmBuildRarity(build, opts.rolls)
+  const { four } = kqmBuildRarity(build)
   const off = build.mains.off ?? 'circlet'
   const mains: MainStatKey[] = [
     'hp',
@@ -163,11 +179,7 @@ export function genInputFromKqm(
   const used: SubstatKey[] = opts.scales?.length
     ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
     : allSubstatKeys.filter(
-        (key) =>
-          (build.rolls[key] ?? 0) > 0 ||
-          key === 'critRate_' ||
-          key === 'critDMG_' ||
-          key === 'enerRech_'
+        (key) => (build.rolls[key] ?? 0) > 0 || ALWAYS_USED.includes(key)
       )
   const values = kqmValues(build)
   const targets: GenInput['targets'] = {}
@@ -187,10 +199,19 @@ export function genInputFromKqm(
 
 /**
  * A TC build (GO's theorycraft loadout) as the generator's input: its slots (main stat, rarity, level; 4★
- * for rarities below, which the generator has no tiers for), its substat totals as targets (TC keeps
- * values, as the game shows them), every substat with a total as used, its sets.
+ * for rarities below, which the generator has no tiers for), its sets, and its substat totals (TC keeps
+ * values, as the game shows them) as targets for the used substats. Used: `scales` when given (as for
+ * KQM), else the substats above what 2 rolls give (GO's roll value for the build's substat rarity and
+ * type: KQMS-style builds put 2 on every substat) plus CRIT Rate, CRIT DMG and ER. The others are filler:
+ * their fixed rolls are not targets, so the pieces' extra rolls land on them, not on a counted stat.
  */
-export function genInputFromTc(buildTc: BuildTc): GenInput {
+export function genInputFromTc(
+  buildTc: BuildTc,
+  opts: {
+    /** The stats the damage or a requirement reads */
+    scales?: SubstatKey[]
+  } = {}
+): GenInput {
   const { slots: tcSlots, substats, sets } = buildTc.artifact
   const pieces = allArtifactSlotKeys.map((slotKey) => {
     const { statKey, rarity, level } = tcSlots[slotKey]
@@ -205,14 +226,22 @@ export function genInputFromTc(buildTc: BuildTc): GenInput {
     pieces,
     sets as Partial<Record<ArtifactSetKey, number>>
   )
+  const value = (key: SubstatKey) => substats.stats[key] ?? 0
+  /** What the 2 fixed rolls give, a hair above for float noise */
+  const fixed = (key: SubstatKey) =>
+    KQM_FIXED_ROLLS *
+    getSubstatValue(key, substats.rarity, substats.type) *
+    (1 + 1e-6)
+  const used: SubstatKey[] = opts.scales?.length
+    ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
+    : allSubstatKeys.filter(
+        (key) => ALWAYS_USED.includes(key) || value(key) > fixed(key)
+      )
   const targets: GenInput['targets'] = {}
-  for (const key of allSubstatKeys) {
-    const value = substats.stats[key] ?? 0
-    if (value > 0) targets[key] = value
-  }
+  for (const key of used) targets[key] = Math.max(0, value(key))
   return {
     slots: pieces.map((piece, i) => ({ ...piece, setKey: setKeys[i] })),
     targets,
-    used: Object.keys(targets) as SubstatKey[],
+    used,
   }
 }

@@ -3,7 +3,7 @@ import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 import type { BuildTc } from '@genshin-optimizer/gi/db'
 import { initCharTC } from '@genshin-optimizer/gi/db'
 import type { IArtifact } from '@genshin-optimizer/gi/schema'
-import { getMainStatValue } from '@genshin-optimizer/gi/util'
+import { getMainStatValue, getSubstatValue } from '@genshin-optimizer/gi/util'
 import { describe, expect, it } from 'vitest'
 import type { KqmBuild } from '../util/teamOpt/kqm'
 import { kqmValues } from '../util/teamOpt/kqm'
@@ -289,6 +289,78 @@ describe('genInputFromTc', () => {
       'PrayersForWisdom',
     ])
     expect(input.slots[2].rarity).toBe(4)
+  })
+
+  // GO's KQMS button (TabTheorycraft kqms): 2 rolls of every substat at the `mid` value, then the
+  // distributed ones on top. Only the stats above their 2 fixed rolls (and CRIT, ER) are counted.
+  const kqmsTc = (extra: Partial<Record<SubstatKey, number>>) => {
+    const build = initCharTC('Furina', 'SplendorOfTranquilWaters')
+    build.artifact.slots.sands = { level: 20, statKey: 'hp_', rarity: 5 }
+    build.artifact.slots.goblet = {
+      level: 20,
+      statKey: 'hydro_dmg_',
+      rarity: 5,
+    }
+    build.artifact.slots.circlet = {
+      level: 20,
+      statKey: 'critRate_',
+      rarity: 5,
+    }
+    build.artifact.sets = { GoldenTroupe: 4 }
+    build.artifact.substats.type = 'mid'
+    for (const key of allSubstatKeys)
+      build.artifact.substats.stats[key] =
+        getSubstatValue(key, 5, 'mid') * (2 + (extra[key] ?? 0))
+    return build
+  }
+
+  it('KQMS-style TC build: the 2 fixed rolls of the other substats are filler, not targets', () => {
+    const build = kqmsTc({ critDMG_: 10, critRate_: 4, hp_: 4, eleMas: 2 })
+    const input = genInputFromTc(build)
+    expect(new Set(input.used)).toEqual(
+      new Set(['critDMG_', 'critRate_', 'hp_', 'eleMas', 'enerRech_'])
+    )
+    expect(Object.keys(input.targets).sort()).toEqual([...input.used].sort())
+    expect(input.targets.hp_).toBeCloseTo(build.artifact.substats.stats.hp_, 9)
+    // ER is counted with its 2 fixed rolls only
+    expect(input.targets.enerRech_).toBeCloseTo(
+      2 * getSubstatValue('enerRech_', 5, 'mid'),
+      9
+    )
+    // the extra rolls (45 slots for 40 rolls) go on filler: every counted stat within one roll
+    const result = generateArtifacts(input)
+    for (const key of input.used)
+      expect(Math.abs(result.gaps[key] ?? 0)).toBeLessThan(
+        getSubstatValue(key, 5, 'min')
+      )
+  })
+
+  it('TC with scales: the used substats are the ones read', () => {
+    const input = genInputFromTc(kqmsTc({ critDMG_: 10, critRate_: 4 }), {
+      scales: ['hp', 'critRate_', 'critDMG_'],
+    })
+    expect(new Set(input.used)).toEqual(
+      new Set(['hp', 'critRate_', 'critDMG_'])
+    )
+    expect(input.targets.hp).toBeCloseTo(2 * getSubstatValue('hp', 5, 'mid'), 9)
+    expect(input.targets.enerRech_).toBeUndefined()
+  })
+
+  it('a set key the game data does not know is skipped, not thrown on', () => {
+    const build = tc('max', STATS)
+    build.artifact.sets = {
+      NoSuchSet: 4,
+    } as unknown as BuildTc['artifact']['sets']
+    const input = genInputFromTc(build)
+    expect(input.slots.map((s) => s.setKey)).toHaveLength(5)
+    expect(new Set(input.slots.map((s) => s.setKey)).size).toBe(5)
+    expect(input.slots.map((s) => s.setKey)).not.toContain('NoSuchSet')
+    // and an unknown off-piece set is ignored
+    expect(
+      genInputFromKqm(RAIDEN, {
+        offSet: 'NoSuchSet' as unknown as typeof DEFAULT_OFF_SET,
+      }).slots[4].setKey
+    ).toBe(DEFAULT_OFF_SET)
   })
 })
 
