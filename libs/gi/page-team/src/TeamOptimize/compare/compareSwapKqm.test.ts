@@ -416,6 +416,79 @@ describe('compareSwapKqm', () => {
     expect(mitya.damage).toBeGreaterThan(0)
   }, 300_000)
 
+  const YAE: SwapIn = {
+    key: 'YaeMiko',
+    constellation: 1,
+    weapon: { key: 'WintersHeavyHeart', refinement: 5 },
+    sets: { GildedDreams: 4 },
+    build: 'kqm',
+  }
+
+  it('compares the leaving character with itself at another constellation', async () => {
+    const s = await setup({ constellations: { YaeMiko: 0 } })
+    const before = snapshot(s)
+    const out = await compareSwapKqm({ ...argsOf(s), swapIn: YAE })
+    expect(snapshot(s)).toEqual(before)
+    if ('error' in out) throw new Error(out.error)
+    expect(out.b.members.map((m) => m.key)).toEqual(MEMBERS)
+    expect(out.a.members.find((m) => m.key === 'YaeMiko')?.constellation).toBe(
+      0
+    )
+    expect(out.b.members.find((m) => m.key === 'YaeMiko')?.constellation).toBe(
+      1
+    )
+    const savedBuilds = (s.saved.run.result as unknown as KqmResult).builds
+    for (const m of out.b.members.filter((m) => FIXED.includes(m.key)))
+      expect(m.build).toEqual(savedBuilds[m.key])
+    expect(out.b.dpr).toBeGreaterThan(0)
+  }, 300_000)
+
+  it('runs a same-character swap that changes nothing', async () => {
+    const s = await setup()
+    // (the same actions A's rotation has for her)
+    const out = await compareSwapKqm({
+      ...argsOf(s),
+      swapIn: YAE,
+      fragment: 'E E E',
+    })
+    if ('error' in out) throw new Error(out.error)
+    // (the entering member's build is searched again, with A's weapon and sets: A's own was
+    // only given, so B can only match or beat it; everything else is A's)
+    const yae = (side: typeof out.a) =>
+      side.members.find((m) => m.key === 'YaeMiko')!
+    expect(yae(out.b).build?.weapon).toEqual(yae(out.a).build?.weapon)
+    expect(yae(out.b).build?.sets).toEqual(yae(out.a).build?.sets)
+    expect(yae(out.b).constellation).toBe(yae(out.a).constellation)
+    expect(yae(out.b).damage).toBeGreaterThanOrEqual(yae(out.a).damage)
+    for (const k of FIXED) {
+      const [a, b] = [out.a, out.b].map(
+        (side) => side.members.find((m) => m.key === k)!
+      )
+      expect(b.build).toEqual(a.build)
+      expect(b.damage).toBeCloseTo(a.damage, 3)
+    }
+  }, 300_000)
+
+  it('keeps the character’s own bonus stats when it re-enters', async () => {
+    const s = await setup()
+    const base = s.database.teams.get(s.teamId)!.teamOpt!
+    const withBonus = {
+      ...base,
+      bonusStats: { YaeMiko: { critRate_: 5 }, Odette: { critRate_: 3 } },
+    } as TeamOpt
+    const saved = {
+      ...s.saved,
+      run: { ...s.saved.run, teamOpt: withBonus },
+    } as typeof s.saved
+    const same = await compareSwapKqm({ ...argsOf(s), saved, swapIn: YAE })
+    if ('error' in same) throw new Error(same.error)
+    expect(same.teamOptB.bonusStats?.YaeMiko).toEqual({ critRate_: 5 })
+    expect(same.teamOptB.bonusStats?.Odette).toEqual({ critRate_: 3 })
+    const other = await compareSwapKqm({ ...argsOf(s), saved })
+    if ('error' in other) throw new Error(other.error)
+    expect(other.teamOptB.bonusStats?.YaeMiko).toBeUndefined()
+  }, 600_000)
+
   it('refuses a character already in the team', async () => {
     const s = await setup()
     const before = snapshot(s)
@@ -497,7 +570,10 @@ describe('compareSwapKqm', () => {
       })
     ).toEqual({ error: 'unsupported' })
     expect(
-      await compareSwapKqm({ ...argsOf(s), swapIn: { ...MITYA, sets: 'auto' } })
+      await compareSwapKqm({
+        ...argsOf(s),
+        swapIn: { ...MITYA, sets: 'auto' },
+      })
     ).toEqual({ error: 'unsupported' })
   }, 60_000)
 

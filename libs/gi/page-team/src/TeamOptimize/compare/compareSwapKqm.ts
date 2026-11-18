@@ -270,7 +270,7 @@ function swappedTeamOpt(
   const attacks = { ...base.attacks }
   delete attacks[out]
   const bonusStats = base.bonusStats && { ...base.bonusStats }
-  delete bonusStats?.[out]
+  if (swapIn.key !== out) delete bonusStats?.[out]
   return {
     ...base,
     attacks,
@@ -398,7 +398,7 @@ function checkSwap({
 }: SwapArgs): CheckedSwap | CompareSwapRefusal {
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const key = swapIn.key
-  if (keys.includes(key)) return { error: 'inTeam' }
+  if (key !== out && keys.includes(key)) return { error: 'inTeam' }
   const nameOf = (ck: CharacterKey) =>
     i18n.t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, gender)}`)
   const swapped = swapFragment({
