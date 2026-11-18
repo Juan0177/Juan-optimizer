@@ -460,6 +460,11 @@ export interface KitModel {
    * The version an action is in the member's current state, asked just before it is played (no
    * side effects): undefined for the ordinary one
    */
+  /**
+   * The variant key of its short Burst, one that spends part of the Energy (Varesa's 'apex' Kablam,
+   * Flins' 'symphony'): it still plays in a rotation copy without the member's full Burst
+   */
+  shortBurstVariant?: string
   variant?: (
     ctx: SimContext,
     state: any,

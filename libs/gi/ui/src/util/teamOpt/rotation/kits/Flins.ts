@@ -72,6 +72,8 @@ const LC_FRAMES = 330
 const C2_SHRED = 7 * 60
 
 export const kit: KitModel = {
+  // its short Burst: Thunderous Symphony (after Northland Spearstorm) still plays in a copy without its full Burst
+  shortBurstVariant: 'symphony',
   characterKey: 'Flins',
   moonsign: 1,
   element: 'electro',

@@ -50,6 +50,11 @@ export interface RotationAction {
   final?: boolean
   /** As written (for messages) */
   text: string
+  /**
+   * A Burst every Nth rotation, in a copy without it (KQM's ER calculator): played only when it is
+   * the member's short Burst (Varesa's Volcanic Kablam, Flins' Thunderous Symphony)
+   */
+  onlyShort?: boolean
 }
 
 export interface RotationStep {
@@ -540,13 +545,19 @@ export function everyNthBursts(
     for (const step of rotation.steps) {
       const actions: RotationAction[] = []
       for (const action of step.actions) {
-        if (action.kind !== 'burst' || k % every(step.characterKey) === 0) {
-          actions.push(action)
-          index.push(i)
-        }
+        // (a Burst out of its copy stays as "short only": the simulation knows which one is
+        // Varesa's Kablam or Flins' Symphony, and leaves the full ones out)
+        actions.push(
+          action.kind !== 'burst' || k % every(step.characterKey) === 0
+            ? action
+            : { ...action, onlyShort: true }
+        )
+        index.push(i)
         i++
       }
-      if (actions.length) steps.push({ ...step, actions })
+      // (a step left with nothing but such Bursts is left out, its swap too)
+      if (actions.some((a) => !a.onlyShort)) steps.push({ ...step, actions })
+      else index.splice(index.length - actions.length, actions.length)
     }
   }
   return { rotation: { ...rotation, steps }, loops, index }
