@@ -218,6 +218,9 @@ type Event = { t: number; priority: number; seq: number; run: () => void }
  * so what carries over from the previous rotation (a summon still ticking, a buff still up) is
  * counted as it is in practice.
  */
+/** A frame count to use: a non-number (NaN, Infinity) would never end a wait or an action */
+const finiteFrames = (frames: number) => (Number.isFinite(frames) ? frames : 0)
+
 export function simulateRotation({
   rotation,
   members,
@@ -1358,10 +1361,10 @@ export function simulateRotation({
     }
     if (action.kind === 'wait') {
       lastNormalActor = undefined
-      const defaultFrames = Math.round((action.count ?? 0) * FPS)
-      const frames = Math.max(
-        0,
-        (opener ? undefined : frameOverrides[i]) ?? defaultFrames
+      const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
+      // (a length that is not a number would never end the wait: 0 instead)
+      const frames = finiteFrames(
+        Math.max(0, (opener ? undefined : frameOverrides[i]) ?? defaultFrames)
       )
       waits.push({
         characterKey,
@@ -1597,7 +1600,8 @@ export function simulateRotation({
     }
     const defaultFrames = frames
     const edited = opener ? undefined : frameOverrides[i]
-    if (edited !== undefined) frames = Math.max(1, Math.round(edited))
+    if (edited !== undefined && Number.isFinite(edited))
+      frames = Math.max(1, Math.round(edited))
     actions.push({
       characterKey,
       text: action.text,
