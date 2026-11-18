@@ -1,6 +1,12 @@
 import type { SimHit } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
-import { applicationsOf, stellarAttack } from './fightTeam'
+import {
+  applicationsOf,
+  fightTeamOf,
+  PARTY_HEALERS,
+  stellarAttack,
+  wardTimeOf,
+} from './fightTeam'
 
 const hit = (t: number, over: Partial<SimHit>): SimHit => ({
   t,
@@ -59,5 +65,116 @@ describe('attacks entered by hand', () => {
       false
     )
     expect(stellarAttack('Fischl', attack(['skill', 'press']))).toBe(false)
+  })
+})
+
+describe('the Moongecko’s Anchor ward (9 layers of 100 durability)', () => {
+  it('falls to Blunt hits’ poise (0.35 of it), at most a layer a hit, none in the 0.1 s after each layer', () => {
+    // Navia's claymore hits, 100 poise each (35 durability): 3 a layer, every 0.2 s
+    const navia = (t: number) =>
+      hit(t, {
+        characterKey: 'Navia' as never,
+        tag: 'normal',
+        element: 'physical',
+        poiseDamage: 100,
+      })
+    const hits = Array.from({ length: 40 }, (_, i) => navia(i * 12))
+    // 27 hits: the last at 26 × 0.2 s (none lost: each comes 0.2 s after the one before)
+    expect(wardTimeOf(hits, 40 * 12)).toBeCloseTo(26 * 0.2, 9)
+    // one huge hit takes a layer, not more (its excess is lost)
+    const big = [
+      hit(0, {
+        characterKey: 'Zhongli' as never,
+        element: 'geo',
+        poiseDamage: 2000,
+      }),
+    ]
+    // (looped every 1 s: the 9th layer on the 9th loop)
+    expect(wardTimeOf(big, 60)).toBeCloseTo(8, 9)
+  })
+  it('counts other melee hits at 0.05 of their poise, and nothing else: a catalyst’s hits never break it', () => {
+    const sword = (t: number) =>
+      hit(t, {
+        characterKey: 'Furina' as never,
+        tag: 'normal',
+        element: 'physical',
+      })
+    // (Furina's normal attacks: 50 poise assumed, 2.5 durability each: 360 for the ward)
+    const t = wardTimeOf(
+      Array.from({ length: 10 }, (_, i) => sword(i * 6)),
+      60
+    )
+    expect(t).toBeGreaterThan(30)
+    // (a catalyst's Electro skill hits)
+    expect(wardTimeOf([hit(0, {}), hit(30, {})], 60)).toBe(
+      Number.POSITIVE_INFINITY
+    )
+  })
+  it('times the kept rotation from its own start (its hits’ times are the whole play’s)', () => {
+    const navia = (t: number) =>
+      hit(t, {
+        characterKey: 'Navia' as never,
+        tag: 'normal',
+        element: 'physical',
+        poiseDamage: 1000,
+      })
+    // (the kept rotation: frames 600–660, after warm-up rotations)
+    expect(wardTimeOf([navia(600)], 60, 600)).toBeCloseTo(8, 9)
+  })
+  it('comes with the written rotation’s applications', () => {
+    const hits = [
+      hit(0, {
+        characterKey: 'Navia' as never,
+        tag: 'normal',
+        element: 'physical',
+        poiseDamage: 1000,
+      }),
+    ]
+    // (a layer a loop of 1 s)
+    expect(applicationsOf(hits, 60).wardSeconds).toBeCloseTo(8, 9)
+  })
+})
+
+describe('the team in the Moongecko’s fight', () => {
+  const base = {
+    members: ['Bennett', 'Navia'] as never[],
+    attacks: {
+      Bennett: [{ path: ['burst', 'dmg'], hits: 1 }],
+      Navia: [{ path: ['skill', 'dmg'], hits: 1 }],
+    } as never,
+    teamData: {} as never,
+    rotationTime: 10,
+    enemyOverride: {},
+  }
+  it('has a healer when a member’s kit heals the party', () => {
+    expect(PARTY_HEALERS.has('Bennett')).toBe(true)
+    expect(PARTY_HEALERS.has('HuTao')).toBe(false)
+  })
+  it('takes its DPS in the cocoon and Disentangled as their evaluations change it, element by element', () => {
+    const evaluation = (bennett: number, navia: number) =>
+      ({
+        total: bennett + navia,
+        members: {},
+        unmet: {},
+        attacks: { Bennett: [bennett], Navia: [navia] },
+      }) as never
+    const team = fightTeamOf({
+      ...base,
+      // (the damage shown: a run's, 1000 + 3000 a rotation)
+      evaluation: evaluation(1000, 3000),
+      cocoon: {
+        // (evaluated again with the page's settings: other figures, same changes)
+        base: evaluation(2000, 2000),
+        cocooned: evaluation(1000, 1000),
+        disentangled: evaluation(3000, 4000),
+      },
+    })!
+    expect(team.healer).toBe(true)
+    const total = (d: Partial<Record<string, number>> | undefined) =>
+      Object.values(d ?? {}).reduce<number>((a, b) => a + (b ?? 0), 0)
+    // (Bennett's and Navia's attacks: their elements unknown here, physical)
+    expect(total(team.dps)).toBeCloseTo(400, 9)
+    expect(total(team.cocooned)).toBeCloseTo(400 * 0.5, 9)
+    expect(total(team.disentangled)).toBeCloseTo(400 * 1.75, 9)
   })
 })

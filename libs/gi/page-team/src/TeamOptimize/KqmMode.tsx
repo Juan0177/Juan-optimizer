@@ -20,6 +20,7 @@ import type {
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import {
+  appliedStygianPreset,
   CharacterName,
   EnemyDefeatTime,
   EnemySummary,
@@ -35,7 +36,9 @@ import {
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
   kqmTalentLevel,
+  kqmTeamOverrides,
   kqmWeapons,
+  MOONGECKO_BOSS,
   sameEnemy,
   setKqmBuildThreads,
   syncEnergyCalculator,
@@ -80,7 +83,7 @@ import { EnemySetup } from '../Enemy/EnemySetup'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { DamageShare } from './DamageShare'
 import type { FightApplications } from './fightTeam'
-import { fightTeamOf } from './fightTeam'
+import { fightTeamOf, useCocoonEvaluations } from './fightTeam'
 import { formatRateFull } from './format'
 import { KqmGearIcons, KqmRollLine } from './KqmBuildView'
 import {
@@ -2052,10 +2055,32 @@ export function KqmResults({
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const database = useDatabase()
   const team = useTeam(teamId)
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
+  // the builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
+  const cocoonSettings = useMemo(
+    () =>
+      enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS
+        ? (() => {
+            const overrides = kqmTeamOverrides(
+              database,
+              teamId,
+              runSettings,
+              result
+            )
+            return {
+              ...overrides,
+              arts: overrides.arts ?? {},
+              attacks: runSettings.attacks,
+            }
+          })()
+        : undefined,
+    [enemy, database, teamId, runSettings, result]
+  )
+  const cocoon = useCocoonEvaluations(teamId, cocoonSettings)
   const compared =
     shown && result.optimized.includes(shown) ? shown : result.optimized[0]
   // (the member tiles' icons a size smaller on a phone)
@@ -2093,6 +2118,7 @@ export function KqmResults({
         rotationTime,
         enemyOverride: enemy.enemyOverride,
         applications,
+        cocoon,
       }),
     [
       enemy,
@@ -2102,6 +2128,7 @@ export function KqmResults({
       teamData,
       rotationTime,
       applications,
+      cocoon,
     ]
   )
   useEffect(() => onView?.(view), [onView, view])

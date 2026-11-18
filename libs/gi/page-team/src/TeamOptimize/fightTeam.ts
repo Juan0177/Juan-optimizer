@@ -5,7 +5,9 @@ import type {
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { TeamOptAttack, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { getCharStat } from '@genshin-optimizer/gi/stats'
 import type {
+  BonusStats,
   ElectroHits,
   FightTeam,
   KqmBuild,
@@ -14,9 +16,15 @@ import type {
   TeamOptEvaluation,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { icdTracker } from '@genshin-optimizer/gi/ui'
+import {
+  addBonusStats,
+  evaluateTeamRotation,
+  icdTracker,
+  MOONGECKO,
+  teamOptMembers,
+} from '@genshin-optimizer/gi/ui'
 import { input } from '@genshin-optimizer/gi/wr'
-import { useDeferredValue, useMemo } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { attackElement } from './DamageShare'
 import {
   simulateWritten,
@@ -32,7 +40,95 @@ export interface FightApplications {
   gauge: Partial<Record<ElementWithPhyKey, number>>
   /** Its Electro hits, by what each takes off Wavebinder's Courage */
   electroHits: ElectroHits
+  /** Seconds it takes to break the Moongecko's Moonstone Anchor ward (`wardTimeOf`) */
+  wardSeconds: number
 }
+
+const MELEE = ['sword', 'claymore', 'polearm']
+/**
+ * Seconds a played rotation's hits take to break the Radiant Moongecko's Moonstone Anchor ward
+ * (`MOONGECKO`: 9 layers of 4U Geo, 100 durability each), the rotation looped from its start.
+ * Its poise takes a Geo ward down (the wiki's Ward page, from the game's cost ratios): a Blunt hit
+ * 0.35 of its poise (claymores' normal and charged attacks, plunges, Geo attacks: gcsim's Shatter
+ * rule), another melee hit 0.05. Poise: the kit's, else 100 (Blunt) or 50. A hit takes at most the
+ * layer left; none land in the 0.1 s before the next layer. Not within 120 s: Infinity. `start`:
+ * the kept rotation's first frame (its hits' times are the whole play's)
+ */
+export function wardTimeOf(
+  hits: readonly SimHit[],
+  frames: number,
+  start = 0
+): number {
+  const cost = (hit: SimHit) => {
+    if (hit.path[0] === '_marker' || hit.path[0] === '_heal') return 0
+    const weapon = getCharStat(hit.characterKey).weaponType
+    const attack =
+      hit.tag === 'normal' || hit.tag === 'charged' || hit.tag === 'plunge'
+    const blunt =
+      hit.blunt ||
+      hit.element === 'geo' ||
+      (hit.tag === 'plunge' && hit.durability !== 0) ||
+      ((hit.tag === 'normal' || hit.tag === 'charged') && weapon === 'claymore')
+    const melee = attack && MELEE.includes(weapon)
+    if (!blunt && !melee) return 0
+    const poise = hit.poiseDamage ?? (blunt ? 100 : 50)
+    return (blunt ? 0.35 : 0.05) * poise * (hit.weight ?? 1)
+  }
+  const sorted = hits
+    .map((hit) => ({ t: hit.t - start, cost: cost(hit) }))
+    .filter((h) => h.cost > 0)
+    .sort((a, b) => a.t - b.t)
+  if (!sorted.length || frames <= 0) return Number.POSITIVE_INFINITY
+  let layers = 0
+  let left: number = MOONGECKO.layerDurability
+  let ready = 0
+  for (let loop = 0; (loop * frames) / 60 < 120; loop++)
+    for (const hit of sorted) {
+      const time = (loop * frames + hit.t) / 60
+      if (time < ready) continue
+      left -= hit.cost
+      if (left > 1e-9) continue
+      if (++layers >= MOONGECKO.layers) return time
+      left = MOONGECKO.layerDurability
+      ready = time + MOONGECKO.layerGap
+    }
+  return Number.POSITIVE_INFINITY
+}
+
+/**
+ * Members whose kit heals the party (the rotation kits' heals): they break the Moongecko's Radiant
+ * Cocoon. Not counted: self-heals (Hu Tao), a constellation's heal (Gorou, Dehya), Xingqiu's
+ * small Rain Sword heal
+ */
+export const PARTY_HEALERS: ReadonlySet<CharacterKey> = new Set<CharacterKey>([
+  'Alyosha',
+  'Baizhu',
+  'Barbara',
+  'Bennett',
+  'Charlotte',
+  'Chevreuse',
+  'Diona',
+  'Dori',
+  'Escoffier',
+  'Furina',
+  'Iansan',
+  'Ifa',
+  'Jahoda',
+  'Jean',
+  'KukiShinobu',
+  'Linnea',
+  'Mika',
+  'Noelle',
+  'Qiqi',
+  'SangonomiyaKokomi',
+  'Sayu',
+  'Sigewinne',
+  'Vodyanitsa',
+  'Xianyun',
+  'Xilonen',
+  'Yaoyao',
+  'YumemizukiMizuki',
+])
 
 /**
  * A played rotation's hits, per second: the gauge units each element applies through its ICD, and
@@ -40,7 +136,8 @@ export interface FightApplications {
  */
 export function applicationsOf(
   hits: readonly SimHit[],
-  frames: number
+  frames: number,
+  start = 0
 ): FightApplications {
   const passes = icdTracker()
   const units: Partial<Record<ElementWithPhyKey, number>> = {}
@@ -79,6 +176,7 @@ export function applicationsOf(
       units: electro.units / seconds,
       plain: electro.plain / seconds,
     },
+    wardSeconds: wardTimeOf(hits, frames, start),
   }
 }
 
@@ -122,7 +220,7 @@ export function useRotationApplications(
       })
       const sim = played?.sim
       if (!sim || sim.frames <= 0) return undefined
-      return applicationsOf(sim.hits, sim.frames)
+      return applicationsOf(sim.hits, sim.frames, sim.start)
     } catch (e) {
       // (a rotation that cannot be played: no applications counted)
       if (process.env['NODE_ENV'] === 'development')
@@ -163,11 +261,33 @@ export const stellarAttack = (ck: CharacterKey, attack: TeamOptAttack) =>
   /stellar/i.test(attack.path[attack.path.length - 1] ?? '') ||
   !!STELLAR_ATTACKS[ck]?.test(attack.path.join('.'))
 
+/** An evaluation's damage per second, by element (each attack's element from the members' data) */
+function dpsByElement(
+  members: CharacterKey[],
+  evaluation: TeamOptEvaluation,
+  attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>,
+  teamData: TeamData,
+  rotationTime: number
+) {
+  const dps: Partial<Record<ElementWithPhyKey, number>> = {}
+  for (const ck of members) {
+    const damage = evaluation.attacks?.[ck] ?? []
+    ;(attacks[ck] ?? []).forEach((attack, i) => {
+      const value = damage[i] ?? 0
+      if (value <= 0) return
+      const element = attackElement(teamData, ck, attack) as ElementWithPhyKey
+      dps[element] = (dps[element] ?? 0) + value / rotationTime
+    })
+  }
+  return dps
+}
+
 /**
  * The team in a fight, from an evaluation of its rotation: its DPS by element (each attack's
  * element from the members' data), the enemy's RES it was computed at, before and after the
  * team's shred, and its element applications (the written rotation's; without one, its Electro
- * hits estimated from the attacks entered)
+ * hits estimated from the attacks entered). With `cocoon` (the same evaluation in the Moongecko's
+ * Radiant Cocoon and Disentangled, `useCocoonEvaluations`): its DPS in them too.
  */
 export function fightTeamOf({
   members,
@@ -177,6 +297,7 @@ export function fightTeamOf({
   rotationTime,
   enemyOverride,
   applications,
+  cocoon,
 }: {
   members: CharacterKey[]
   evaluation: TeamOptEvaluation | undefined
@@ -185,9 +306,10 @@ export function fightTeamOf({
   rotationTime: number | undefined
   enemyOverride: Partial<Record<string, number>>
   applications?: FightApplications
+  cocoon?: CocoonEvaluations
 }): FightTeam | undefined {
   if (!evaluation || !rotationTime || !teamData) return undefined
-  const dps: Partial<Record<ElementWithPhyKey, number>> = {}
+  const dps = dpsByElement(members, evaluation, attacks, teamData, rotationTime)
   // (its Electro hits per rotation, Stellar Glimmer DMG and the others; its Stellar Glimmer DMG)
   let stellarHits = 0
   let electroHits = 0
@@ -204,7 +326,6 @@ export function fightTeamOf({
       }
       const value = damage[i] ?? 0
       if (value <= 0) return
-      dps[element] = (dps[element] ?? 0) + value / rotationTime
       damageTotal += value
       if (stellar) stellarDamage += value
     })
@@ -223,13 +344,35 @@ export function fightTeamOf({
       return [e, typeof v === 'number' && Number.isFinite(v) ? v : baseRes[e]]
     })
   ) as Record<ElementWithPhyKey, number>
+  // its DPS in the cocoon and Disentangled: each element's, as their evaluation changes it from
+  // the same one without them (the damage shown may be a run's, found with its own settings)
+  const base =
+    cocoon?.base &&
+    dpsByElement(members, cocoon.base, attacks, teamData, rotationTime)
+  const variant = (e: TeamOptEvaluation | undefined) => {
+    if (!e || !base) return undefined
+    const changed = dpsByElement(members, e, attacks, teamData, rotationTime)
+    return Object.fromEntries(
+      Object.entries(dps).map(([el, v]) => {
+        const from = base[el as ElementWithPhyKey] ?? 0
+        const to = changed[el as ElementWithPhyKey] ?? 0
+        return [el, from > 0 ? (v * to) / from : v]
+      })
+    ) as Partial<Record<ElementWithPhyKey, number>>
+  }
+  const cocooned = variant(cocoon?.cocooned)
+  const disentangled = variant(cocoon?.disentangled)
   return {
     dps,
     baseRes,
     effRes,
     stellarShare: damageTotal > 0 ? stellarDamage / damageTotal : 0,
     ...(applications
-      ? { gauge: applications.gauge, electroHits: applications.electroHits }
+      ? {
+          gauge: applications.gauge,
+          electroHits: applications.electroHits,
+          wardSeconds: applications.wardSeconds,
+        }
       : {
           // (no written rotation: every 3rd other hit applying 1U, as the standard ICD lets it)
           electroHits: {
@@ -239,5 +382,77 @@ export function fightTeamOf({
             estimated: true,
           },
         }),
+    ...(cocooned ? { cocooned } : {}),
+    ...(disentangled ? { disentangled } : {}),
+    healer: members.some((ck) => PARTY_HEALERS.has(ck)),
   }
+}
+
+/** Radiant Cocoon's stats on a member (percent points): −100% CRIT Rate, −50% DMG Bonus */
+export const COCOON_BONUS: BonusStats = { critRate_: -100, all_dmg_: -50 }
+/** Disentangled's: +15% CRIT Rate, +50% DMG Bonus */
+export const DISENTANGLED_BONUS: BonusStats = { critRate_: 15, all_dmg_: 50 }
+
+/**
+ * The rotation's damage in the Moongecko's Radiant Cocoon, and with Disentangled, and the same
+ * evaluation without them
+ */
+export interface CocoonEvaluations {
+  base?: TeamOptEvaluation
+  cocooned?: TeamOptEvaluation
+  disentangled?: TeamOptEvaluation
+}
+type EvaluationSettings = Parameters<typeof evaluateTeamRotation>[3]
+
+/**
+ * The rotation's damage with the Moongecko's Radiant Cocoon on every member, and with Disentangled:
+ * the evaluation the damage shown comes from (`settings`), their stats added to each member's.
+ * `settings` undefined (another enemy): none. Computed after a pause (a team's formulas take a
+ * moment).
+ */
+export function useCocoonEvaluations(
+  teamId: string,
+  settings: EvaluationSettings | undefined
+): CocoonEvaluations | undefined {
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  const deferred = useDeferredValue(settings)
+  const [out, setOut] = useState<{
+    settings: EvaluationSettings
+    value: CocoonEvaluations
+  }>()
+  useEffect(() => {
+    if (!deferred) return undefined
+    const timer = setTimeout(() => {
+      try {
+        const members = teamOptMembers(database, teamId).map(
+          (m) => m.characterKey
+        )
+        const withBonus = (bonus?: BonusStats) =>
+          evaluateTeamRotation(database, teamId, gender, {
+            ...deferred,
+            bonusStats: Object.fromEntries(
+              members.map((ck) => [
+                ck,
+                addBonusStats(deferred.bonusStats?.[ck], bonus),
+              ])
+            ),
+          })
+        setOut({
+          settings: deferred,
+          value: {
+            base: withBonus(),
+            cocooned: withBonus(COCOON_BONUS),
+            disentangled: withBonus(DISENTANGLED_BONUS),
+          },
+        })
+      } catch (e) {
+        if (process.env['NODE_ENV'] === 'development')
+          console.warn('[fight] cocoon evaluations', e)
+      }
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [database, teamId, gender, deferred])
+  // (only for the settings asked: an older team's stay out)
+  return settings && out?.settings === settings ? out.value : undefined
 }

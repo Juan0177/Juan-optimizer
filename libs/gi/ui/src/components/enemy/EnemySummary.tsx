@@ -17,7 +17,7 @@ import type {
   FightNote,
   FightTeam,
 } from './stygianFights'
-import { enemyFight, enemyHpOf, FIGHT_LIMIT } from './stygianFights'
+import { enemyFight, enemyHpOf, FIGHT_LIMIT, MOONGECKO } from './stygianFights'
 
 /** A team's enemy as a run used it: its level, RES and DEF, and the preset it was */
 export type RunEnemy = Pick<Team, 'enemyOverride' | 'enemyPreset'>
@@ -239,6 +239,46 @@ export function FightBreakdown({
           time: formatDuration(t, part.seconds),
           dps: compact(3).format(part.dps),
         })
+      case 'anchors':
+        return part.broken
+          ? t('enemyEditor.fight.anchors', {
+              defaultValue:
+                '{{count}} Vagrant Reverberations: its Moonstone Anchor’s ward (9 layers of 4U Geo) takes the damage for ≈ {{seconds}} s each, its HP untouched',
+              count: part.count,
+              seconds: Math.round(part.seconds),
+            })
+          : t('enemyEditor.fight.anchorsKept', {
+              defaultValue:
+                '{{count}} Vagrant Reverberations: its Moonstone Anchor’s ward (9 layers of 4U Geo) is not broken in its 35 s, its HP untouched, then the Anchor blasts the team (200% ATK Geo DMG) and its next cocoon raises all its RES',
+              count: part.count,
+            })
+      case 'wardBreak':
+        return t('enemyEditor.fight.wardBreak', {
+          defaultValue:
+            'Each ward broken: 70% of the Geo DMG the Anchor took and 10% of the rest, at most 40% of its HP, then 4.4 s stunned: {{hp}} of its HP in all',
+          hp: pct(part.hp),
+        })
+      case 'cocoon':
+        return part.healed !== undefined
+          ? t('enemyEditor.fight.cocoon', {
+              defaultValue:
+                '{{count}} Radiant Cocoons on the team (−100% CRIT Rate, −50% DMG Bonus; +60% Geo RES on it), each healed out {{healed}} s after its roar: {{time}} in all',
+              count: part.count,
+              healed: part.healed,
+              time: formatDuration(t, part.seconds),
+            })
+          : t('enemyEditor.fight.cocoonKept', {
+              defaultValue:
+                '{{count}} Radiant Cocoons on the team (−100% CRIT Rate, −50% DMG Bonus; +60% Geo RES on it), never healed out: {{time}} in all, until each next Anchor',
+              count: part.count,
+              time: formatDuration(t, part.seconds),
+            })
+      case 'disentangled':
+        return t('enemyEditor.fight.disentangled', {
+          defaultValue:
+            'Disentangled (+15% CRIT Rate, +50% DMG Bonus) for 15 s after each: {{time}} in all',
+          time: formatDuration(t, part.seconds),
+        })
       default:
         return ''
     }
@@ -271,13 +311,26 @@ export function FightBreakdown({
             'enemyEditor.fight.note.crabs',
             'Not counted: its Sternshield Crabs (their Pyro takes the same reactions; their slam, up to 15% of its HP)'
           ),
-          healedToFull: t(
-            'enemyEditor.fight.note.healedToFull',
-            'Counted at its Dull Carapace RES: the team healed to full after each Radiant Cocoon (its CRIT Rate debuff until then, and the buff after, not counted)'
+          wardEstimated: t(
+            'enemyEditor.fight.note.wardEstimated',
+            'Ward time from the written rotation: its Blunt hits’ poise (claymores, plunges, most Geo attacks) and its other melee hits’, 100 or 50 where a kit does not give it. Set your own in the enemy box.'
           ),
-          ward: t(
-            'enemyEditor.fight.note.ward',
-            'Not counted: the Moonstone Anchor’s ward (breaking it moves up to 40% of its HP onto it)'
+          wardAssumed: t('enemyEditor.fight.note.wardAssumed', {
+            defaultValue:
+              'Ward time assumed ({{seconds}} s): no written rotation to read it from. Set your own in the enemy box.',
+            seconds: MOONGECKO.wardDefault,
+          }),
+          wardSet: t(
+            'enemyEditor.fight.note.wardSet',
+            'Ward time and healing as set in the enemy box'
+          ),
+          noHealer: t(
+            'enemyEditor.fight.note.noHealer',
+            'No healer: the team stays in its Radiant Cocoon until the next Anchor'
+          ),
+          cocoonApprox: t(
+            'enemyEditor.fight.note.cocoonApprox',
+            'The team’s DPS in its cocoon and Disentangled is still being worked out: its own DPS counted for now'
           ),
           mechanics: t(
             'enemyEditor.fight.note.mechanics',

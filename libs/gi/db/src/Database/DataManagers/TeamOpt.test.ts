@@ -572,3 +572,37 @@ describe('team.enemyHp (a custom enemy’s HP)', () => {
     }
   })
 })
+
+describe('team.fightSettings (how the team plays the Moongecko)', () => {
+  it('keeps its ward and heal seconds in range, to 0.1 s, and drops the rest', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({
+      fightSettings: { wardSeconds: 12.34, healSeconds: 2.06 },
+    })
+    expect(database.teams.get(id)!.fightSettings).toEqual({
+      wardSeconds: 12.3,
+      healSeconds: 2.1,
+    })
+    // (never healed: -1)
+    const never = database.teams.new({ fightSettings: { healSeconds: -1 } })
+    expect(database.teams.get(never)!.fightSettings).toEqual({
+      healSeconds: -1,
+    })
+    // a ward past the 35 s it has is kept (not broken in time), to 60 s
+    const late = database.teams.new({ fightSettings: { wardSeconds: 60 } })
+    expect(database.teams.get(late)!.fightSettings).toEqual({ wardSeconds: 60 })
+    for (const fightSettings of [
+      { wardSeconds: 0.5 },
+      { wardSeconds: 61 },
+      { healSeconds: -0.5 },
+      { healSeconds: 41 },
+      { wardSeconds: Number.NaN, healSeconds: '3' },
+      {},
+      'fast',
+      null,
+    ]) {
+      const other = database.teams.new({ fightSettings } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
+  })
+})

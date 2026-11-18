@@ -71,8 +71,13 @@ import type {
   LoadoutDatum,
   LoadoutExportSetting,
   Team,
+  TeamFightSettings,
 } from './TeamDataManager'
-import { defLoadoutExportSetting, MAX_ENEMY_HP } from './TeamDataManager'
+import {
+  defLoadoutExportSetting,
+  MAX_ENEMY_HP,
+  validateFightSettings,
+} from './TeamDataManager'
 import type {
   TeamOpt,
   TeamOptAttack,
@@ -142,6 +147,7 @@ export type {
   StatFilters,
   Team,
   TeamCharacter,
+  TeamFightSettings,
   TeamOpt,
   TeamOptAttack,
   TeamOptBuffLimit,
@@ -190,5 +196,6 @@ export {
   toBuildTc,
   validateArtifact,
   validateCustomMultiTarget,
+  validateFightSettings,
   validateTeamOpt,
 }
