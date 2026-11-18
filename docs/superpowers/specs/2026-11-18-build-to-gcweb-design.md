@@ -36,7 +36,9 @@ fine, the build must be essentially the same.
   from the least valuable stats and the preview shows the gap (my call: generate the closest, never
   refuse).
 - "Used" substats: the ones the damage reads when the entry point knows them (the KQM problem's
-  `scales`), else judged from the build: substats with placed rolls, CRIT Rate/DMG, ER. The others
+  `scales`), else judged from the build: substats with placed rolls (TC: above their 2 fixed rolls),
+  CRIT Rate/DMG, ER, the sands/goblet/circlet main stats that are substats (an ATK% sands counts
+  ATK%, even with no placed rolls), and the flat HP/ATK/DEF of a counted HP%/ATK%/DEF%. The others
   are filler: their KQM fixed rolls are not targets (my call).
 - Every substat's roll count must survive gc-web's read-back (`countsFor` returns the fewest-rolls
   combination for a value): the generator checks each value against gc-web's rule (reimplemented

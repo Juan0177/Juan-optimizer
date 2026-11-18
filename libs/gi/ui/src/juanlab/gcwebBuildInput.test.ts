@@ -123,6 +123,40 @@ describe('genInputFromKqm', () => {
     expect(input.targets.enerRech_).toBeUndefined()
   })
 
+  it('a substat that is a sands/goblet/circlet main stat is used, with its flat counterpart', () => {
+    // (an ATK scaler with ATK% sands and goblet: no placed ATK% rolls, the main stats say it matters)
+    const build = kqmBuild(
+      { GladiatorsFinale: 4 },
+      { sands: 'atk_', goblet: 'atk_', circlet: 'critRate_' },
+      { critDMG_: 10, critRate_: 8 }
+    )
+    const input = genInputFromKqm(build, {})
+    expect(new Set(input.used)).toEqual(
+      new Set(['critDMG_', 'critRate_', 'enerRech_', 'atk_', 'atk'])
+    )
+    // targets: their 2 fixed rolls (the main stats are not substats)
+    expect(input.targets.atk_).toBeCloseTo(2 * ROLL.atk_, 6)
+    expect(input.targets.atk).toBeCloseTo(2 * ROLL.atk, 6)
+    // the flower's flat HP and the plume's flat ATK are not "used" mains
+    expect(input.targets.hp).toBeUndefined()
+    expect(input.targets.hp_).toBeUndefined()
+    // EM sands: EM is used (no flat counterpart)
+    const em = genInputFromKqm(
+      { ...build, mains: { ...build.mains, sands: 'eleMas' } },
+      {}
+    )
+    expect(em.used).toContain('eleMas')
+    expect(em.targets.eleMas).toBeCloseTo(2 * ROLL.eleMas, 6)
+    // the generator lands the counted ATK% and ATK within one roll
+    const result = generateArtifacts(input)
+    expect(Math.abs(result.gaps.atk_ ?? 0)).toBeLessThan(
+      getSubstatValue('atk_', 5, 'min')
+    )
+    expect(Math.abs(result.gaps.atk ?? 0)).toBeLessThan(
+      getSubstatValue('atk', 5, 'min')
+    )
+  })
+
   it('4★ set: the 4★ pieces +16, the 5★ off-piece +20 of another set', () => {
     const build = kqmBuild(
       { Instructor: 4 },
@@ -339,6 +373,31 @@ describe('genInputFromTc', () => {
       )
     expect(Math.abs((result.totals.hp ?? 0) - 508)).toBeLessThan(
       getSubstatValue('hp', 5, 'min')
+    )
+  })
+
+  it('KQMS-style TC build: a substat that is a sands/goblet/circlet main stat is used at its 2 fixed rolls', () => {
+    const build = kqmsTc({ critDMG_: 10, critRate_: 4 })
+    build.artifact.slots.sands = { level: 20, statKey: 'atk_', rarity: 5 }
+    const input = genInputFromTc(build)
+    expect(new Set(input.used)).toEqual(
+      new Set(['critDMG_', 'critRate_', 'enerRech_', 'atk_', 'atk'])
+    )
+    expect(input.targets.atk_).toBeCloseTo(
+      2 * getSubstatValue('atk_', 5, 'mid'),
+      9
+    )
+    // flat ATK follows ATK% (its 2 fixed rolls as target)
+    expect(input.targets.atk).toBeCloseTo(
+      2 * getSubstatValue('atk', 5, 'mid'),
+      9
+    )
+    // the flower's HP and the plume's ATK mains do not count; hydro DMG goblet is no substat
+    expect(input.targets.hp).toBeUndefined()
+    expect(input.targets.hp_).toBeUndefined()
+    const result = generateArtifacts(input)
+    expect(Math.abs(result.gaps.atk_ ?? 0)).toBeLessThan(
+      getSubstatValue('atk_', 5, 'min')
     )
   })
 

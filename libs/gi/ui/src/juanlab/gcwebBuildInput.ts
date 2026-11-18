@@ -140,14 +140,18 @@ const FLAT_OF: Partial<Record<SubstatKey, SubstatKey>> = {
 }
 /**
  * The used substats when the entry point does not give `scales`: those `counted` judges from the build,
- * plus each counted percent stat's flat counterpart when `hasFlat` (it keeps the build's value as its
- * target: an HP scaler's flat HP is not filler that takes the pieces' extra rolls)
+ * those that are the main stat of the sands, goblet or circlet (`mains`: an ATK% sands says ATK% matters,
+ * even with no placed rolls), plus each counted percent stat's flat counterpart when `hasFlat` (it keeps
+ * the build's value as its target: an HP scaler's flat HP is not filler that takes the pieces' extra rolls)
  */
 const judgedUsed = (
   counted: (key: SubstatKey) => boolean,
+  mains: readonly string[],
   hasFlat: (key: SubstatKey) => boolean = () => true
 ): SubstatKey[] => {
-  const base = new Set(allSubstatKeys.filter(counted))
+  const base = new Set(
+    allSubstatKeys.filter((key) => counted(key) || mains.includes(key))
+  )
   return allSubstatKeys.filter(
     (key) =>
       base.has(key) ||
@@ -161,8 +165,9 @@ const judgedUsed = (
  * flower and plume first, then all but the `mains.off` slot, as `kqmStatValues` counts them). Targets: the
  * build's substat totals (`kqmValues`, without the main stats) as the game shows them, for the used
  * substats only (the others' fixed rolls are not targets). Used: `scales` when given (the stats the
- * damage reads), else the substats with placed rolls, CRIT Rate, CRIT DMG and ER, and the flat
- * counterpart of a counted HP%/ATK%/DEF% (target: its fixed rolls).
+ * damage reads), else the substats with placed rolls, CRIT Rate, CRIT DMG and ER, the substats that are
+ * the sands/goblet/circlet main stat (an ATK% sands with no placed ATK% rolls: target, its fixed rolls),
+ * and the flat counterpart of a counted HP%/ATK%/DEF% (target: its fixed rolls).
  */
 export function genInputFromKqm(
   build: KqmBuild,
@@ -203,7 +208,8 @@ export function genInputFromKqm(
   const used: SubstatKey[] = opts.scales?.length
     ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
     : judgedUsed(
-        (key) => (build.rolls[key] ?? 0) > 0 || ALWAYS_USED.includes(key)
+        (key) => (build.rolls[key] ?? 0) > 0 || ALWAYS_USED.includes(key),
+        [build.mains.sands, build.mains.goblet, build.mains.circlet]
       )
   const values = kqmValues(build)
   const targets: GenInput['targets'] = {}
@@ -226,8 +232,9 @@ export function genInputFromKqm(
  * for rarities below, which the generator has no tiers for), its sets, and its substat totals (TC keeps
  * values, as the game shows them) as targets for the used substats. Used: `scales` when given (as for
  * KQM), else the substats above what 2 rolls give (GO's roll value for the build's substat rarity and
- * type: KQMS-style builds put 2 on every substat) plus CRIT Rate, CRIT DMG and ER, and the flat counterpart
- * (with a value) of a counted HP%/ATK%/DEF%, its stored value as target. The others are filler:
+ * type: KQMS-style builds put 2 on every substat) plus CRIT Rate, CRIT DMG and ER, the substats that are
+ * the sands/goblet/circlet main stat (whatever their value), and the flat counterpart (with a value) of a
+ * counted HP%/ATK%/DEF%, its stored value as target. The others are filler:
  * their fixed rolls are not targets, so the pieces' extra rolls land on them, not on a counted stat.
  */
 export function genInputFromTc(
@@ -261,6 +268,11 @@ export function genInputFromTc(
     ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
     : judgedUsed(
         (key) => ALWAYS_USED.includes(key) || value(key) > fixed(key),
+        [
+          tcSlots.sands.statKey,
+          tcSlots.goblet.statKey,
+          tcSlots.circlet.statKey,
+        ],
         (key) => value(key) > 0
       )
   const targets: GenInput['targets'] = {}
