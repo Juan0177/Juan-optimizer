@@ -42,6 +42,14 @@ export interface FightApplications {
   electroHits: ElectroHits
   /** Seconds it takes to break the Moongecko's Moonstone Anchor ward (`wardTimeOf`) */
   wardSeconds: number
+  /**
+   * Its first rotation from no energy: played once from the start without its Bursts, its
+   * attacks and how long it takes
+   */
+  opening?: {
+    attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>
+    seconds: number
+  }
 }
 
 const MELEE = ['sword', 'claymore', 'polearm']
@@ -60,7 +68,16 @@ export function wardTimeOf(
   start = 0
 ): number {
   const cost = (hit: SimHit) => {
-    if (hit.path[0] === '_marker' || hit.path[0] === '_heal') return 0
+    // (reaction damage, Lunar or Stellar included, strikes with no poise: only the members'
+    // own attacks wear the ward down)
+    if (
+      hit.path[0] === '_marker' ||
+      hit.path[0] === '_heal' ||
+      hit.path[0] === 'reaction' ||
+      hit.path[0] === '_reaction' ||
+      !['normal', 'charged', 'plunge', 'skill', 'burst'].includes(hit.tag)
+    )
+      return 0
     const weapon = getCharStat(hit.characterKey).weaponType
     const attack =
       hit.tag === 'normal' || hit.tag === 'charged' || hit.tag === 'plunge'
@@ -220,7 +237,32 @@ export function useRotationApplications(
       })
       const sim = played?.sim
       if (!sim || sim.frames <= 0) return undefined
-      return applicationsOf(sim.hits, sim.frames, sim.start)
+      const applications = applicationsOf(sim.hits, sim.frames, sim.start)
+      // (a fight from no energy: its first rotation without Bursts)
+      const opening = simulateWritten({
+        text: applied,
+        opener,
+        timing,
+        frameData,
+        team: deferredTeam,
+        names,
+        members,
+        database,
+        teamId,
+        gender,
+        openerWarning: (warning) => warning,
+        samples: 4,
+        repeats: 1,
+        keep: 'all',
+        withoutBursts: true,
+      })
+      const span = opening?.sim && opening.sim.start + opening.sim.frames
+      return opening?.attacks && span && span > 0
+        ? {
+            ...applications,
+            opening: { attacks: opening.attacks, seconds: span / 60 },
+          }
+        : applications
     } catch (e) {
       // (a rotation that cannot be played: no applications counted)
       if (process.env['NODE_ENV'] === 'development')
@@ -362,6 +404,28 @@ export function fightTeamOf({
   }
   const cocooned = variant(cocoon?.cocooned)
   const disentangled = variant(cocoon?.disentangled)
+  // the first rotation from no energy: its own attacks and length, as its evaluation changes
+  // each element's DPS from the rotation's
+  const open = applications?.opening
+  const opening =
+    open && cocoon?.opening && base
+      ? (() => {
+          const own = dpsByElement(
+            members,
+            cocoon.opening!,
+            open.attacks,
+            teamData,
+            open.seconds
+          )
+          return Object.fromEntries(
+            allElementWithPhyKeys.map((el) => {
+              const from = base[el] ?? 0
+              const to = own[el] ?? 0
+              return [el, from > 0 ? ((dps[el] ?? 0) * to) / from : to]
+            })
+          ) as Partial<Record<ElementWithPhyKey, number>>
+        })()
+      : undefined
   return {
     dps,
     baseRes,
@@ -384,6 +448,9 @@ export function fightTeamOf({
         }),
     ...(cocooned ? { cocooned } : {}),
     ...(disentangled ? { disentangled } : {}),
+    ...(opening && open
+      ? { opening: { dps: opening, seconds: open.seconds } }
+      : {}),
     healer: members.some((ck) => PARTY_HEALERS.has(ck)),
   }
 }
@@ -401,6 +468,8 @@ export interface CocoonEvaluations {
   base?: TeamOptEvaluation
   cocooned?: TeamOptEvaluation
   disentangled?: TeamOptEvaluation
+  /** The first rotation from no energy (`FightApplications.opening`'s attacks) */
+  opening?: TeamOptEvaluation
 }
 type EvaluationSettings = Parameters<typeof evaluateTeamRotation>[3]
 
@@ -412,7 +481,16 @@ type EvaluationSettings = Parameters<typeof evaluateTeamRotation>[3]
  */
 export function useCocoonEvaluations(
   teamId: string,
-  settings: EvaluationSettings | undefined
+  settings: EvaluationSettings | undefined,
+  {
+    cocoon = true,
+    opening,
+  }: {
+    /** The Moongecko's cocoon and Disentangled too (another boss: the opening only) */
+    cocoon?: boolean
+    /** The first rotation from no energy: its attacks */
+    opening?: Partial<Record<CharacterKey, TeamOptAttack[]>>
+  } = {}
 ): CocoonEvaluations | undefined {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -428,9 +506,13 @@ export function useCocoonEvaluations(
         const members = teamOptMembers(database, teamId).map(
           (m) => m.characterKey
         )
-        const withBonus = (bonus?: BonusStats) =>
+        const withBonus = (
+          bonus?: BonusStats,
+          attacks: EvaluationSettings['attacks'] = deferred.attacks
+        ) =>
           evaluateTeamRotation(database, teamId, gender, {
             ...deferred,
+            attacks,
             bonusStats: Object.fromEntries(
               members.map((ck) => [
                 ck,
@@ -442,8 +524,13 @@ export function useCocoonEvaluations(
           settings: deferred,
           value: {
             base: withBonus(),
-            cocooned: withBonus(COCOON_BONUS),
-            disentangled: withBonus(DISENTANGLED_BONUS),
+            ...(cocoon
+              ? {
+                  cocooned: withBonus(COCOON_BONUS),
+                  disentangled: withBonus(DISENTANGLED_BONUS),
+                }
+              : {}),
+            ...(opening ? { opening: withBonus(undefined, opening) } : {}),
           },
         })
       } catch (e) {
@@ -452,7 +539,7 @@ export function useCocoonEvaluations(
       }
     }, 150)
     return () => clearTimeout(timer)
-  }, [database, teamId, gender, deferred])
+  }, [database, teamId, gender, deferred, cocoon, opening])
   // (only for the settings asked: an older team's stay out)
   return settings && out?.settings === settings ? out.value : undefined
 }
