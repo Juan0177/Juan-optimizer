@@ -260,7 +260,7 @@ export function KqmShareMenu({
           sx={{
             height: 40,
             px: 2.25,
-            borderRadius: 999,
+            borderRadius: 1,
             textTransform: 'none',
             fontSize: 14,
             fontWeight: 650,

@@ -372,7 +372,7 @@ function PartTab({
         maxWidth: '100%',
         px: 1.25,
         py: 0.5,
-        borderRadius: 999,
+        borderRadius: 1,
         border: `1px solid ${selected ? alpha(tokens.gold, 0.55) : theme.palette.divider}`,
         bgcolor: selected ? alpha(tokens.gold, 0.1) : 'transparent',
         opacity: selected ? 1 : 0.8,

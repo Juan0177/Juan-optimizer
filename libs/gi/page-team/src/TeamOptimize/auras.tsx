@@ -39,7 +39,7 @@ export function AuraChips({ auras }: { auras: AuraKey[] }) {
           component="span"
           sx={(theme) => ({
             px: 0.75,
-            borderRadius: 999,
+            borderRadius: 1,
             fontSize: 11.5,
             fontWeight: 650,
             lineHeight: '18px',

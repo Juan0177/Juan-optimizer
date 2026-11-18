@@ -2728,7 +2728,7 @@ const effectsSx = {
 const stateSx = (theme: Theme) => ({
   flexShrink: 0,
   px: 0.625,
-  borderRadius: 999,
+  borderRadius: 1,
   fontSize: 11,
   fontWeight: 600,
   lineHeight: '16px',

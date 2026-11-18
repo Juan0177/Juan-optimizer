@@ -412,7 +412,7 @@ export function AttackEditor({
                       sx={{
                         flexShrink: 0,
                         px: 1,
-                        borderRadius: 999,
+                        borderRadius: 1,
                         fontSize: 12.5,
                         fontWeight: 650,
                         lineHeight: '24px',
