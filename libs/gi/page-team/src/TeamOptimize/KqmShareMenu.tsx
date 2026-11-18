@@ -17,7 +17,6 @@ import type {
   InvestmentChartData,
   KqmBuild,
   KqmCardData,
-  KqmMemberStats,
   KqmResult,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -33,7 +32,6 @@ import {
   kqmCardFace,
   kqmCardHeight,
   kqmDefaultExcludedWeapons,
-  kqmOutOfCombatStats,
   kqmRefinement,
   kqmSetsId,
   kqmTalentLevel,
@@ -85,6 +83,8 @@ import { formatRateFull } from './format'
 import {
   betaOf,
   type KqmCardView,
+  kqmCardFileName,
+  kqmMembersStats,
   kqmStandardNote,
   kqmTeamCardData,
   readKqmCardView,
@@ -543,24 +543,21 @@ function TeamPicture({
     writeKqmCardView(v)
   }
   // (out of combat, as the run had each member: its constellation, the KQM talents; worked out
-  // once per view and result, not again when the language changes)
+  // once per view and result, not again when the language changes; a member whose stats fail to
+  // compute gets no details, the card still opens)
   const stats = useMemo(() => {
     if (view !== 'detailed') return undefined
-    const talent = kqmTalentLevel(setup.kqm)
-    const out: Partial<Record<CharacterKey, KqmMemberStats>> = {}
-    for (const [ck, build] of Object.entries(result.builds) as [
-      CharacterKey,
-      KqmBuild | undefined,
-    ][]) {
-      const own =
-        build &&
-        kqmOutOfCombatStats(database, ck, build, {
-          constellation: result.constellations[ck] ?? 0,
-          talent,
-        })
-      if (own) out[ck] = own
-    }
-    return out
+    return kqmMembersStats(
+      database,
+      (
+        Object.entries(result.builds) as [CharacterKey, KqmBuild | undefined][]
+      ).map(([key, build]) => ({
+        key,
+        build,
+        constellation: result.constellations[key] ?? 0,
+      })),
+      kqmTalentLevel(setup.kqm)
+    )
   }, [view, database, result, setup])
   const data = useMemo((): KqmCardData => {
     // (field time: the ER calculator's, from the rotation or as typed)
@@ -597,7 +594,7 @@ function TeamPicture({
         defaultValue: 'The KQM builds of {{team}}',
         team: s.teamName,
       })}
-      fileName={`${safeName(s.teamName)}-kqm`}
+      fileName={kqmCardFileName(`${safeName(s.teamName)}-kqm`, view)}
       // (the detailed sheet is taller: its own height; the usual one as ever)
       aspectRatio={`${KQM_CARD_WIDTH} / ${view === 'detailed' ? kqmCardHeight(data) : KQM_CARD_HEIGHT}`}
       render={render}

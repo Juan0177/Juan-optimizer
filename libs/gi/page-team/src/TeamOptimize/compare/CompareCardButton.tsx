@@ -1,14 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import type { KqmMemberStats } from '@genshin-optimizer/gi/ui'
 import {
   CardImageDialog,
   KQM_COMPARE_CARD_HEIGHT,
   KQM_COMPARE_CARD_WIDTH,
   KQM_TALENT_DEFAULT,
   kqmCompareCardHeight,
-  kqmOutOfCombatStats,
   renderKqmCompareCard,
   safeName,
 } from '@genshin-optimizer/gi/ui'
@@ -19,6 +17,8 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   type KqmCardView,
+  kqmCardFileName,
+  kqmMembersStats,
   readKqmCardView,
   writeKqmCardView,
 } from '../kqmTeamCard'
@@ -64,21 +64,11 @@ export function CompareCardButton({
 
 /**
  * A side's members' stats out of combat, on the database it was computed on: each one's build and
- * constellation, the run's KQM talents
+ * constellation, the run's KQM talents (a member whose stats fail to compute: none, see
+ * `kqmMembersStats`)
  */
-function sideStats(database: ArtCharDatabase, side: Side, talent: number) {
-  const stats: Partial<Record<CharacterKey, KqmMemberStats>> = {}
-  for (const m of side.members) {
-    const s =
-      m.build &&
-      kqmOutOfCombatStats(database, m.key, m.build, {
-        constellation: m.constellation,
-        talent,
-      })
-    if (s) stats[m.key] = s
-  }
-  return stats
-}
+const sideStats = (database: ArtCharDatabase, side: Side, talent: number) =>
+  kqmMembersStats(database, side.members, talent)
 
 function CompareCardDialog({
   teamId,
@@ -138,7 +128,7 @@ function CompareCardDialog({
     <CardImageDialog
       title={t('kqmCompare.card.title')}
       alt={t('kqmCompare.card.alt', { team: data.name })}
-      fileName={`KQM-Compare-${safeName(data.name)}`}
+      fileName={kqmCardFileName(`KQM-Compare-${safeName(data.name)}`, view)}
       // (the detailed card is taller: its own height; the usual one as ever)
       aspectRatio={`${KQM_COMPARE_CARD_WIDTH} / ${view === 'detailed' ? kqmCompareCardHeight(data) : KQM_COMPARE_CARD_HEIGHT}`}
       render={render}

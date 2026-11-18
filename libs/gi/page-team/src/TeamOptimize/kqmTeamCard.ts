@@ -1,6 +1,7 @@
 import { artifactDefIcon, weaponAsset } from '@genshin-optimizer/gi/assets'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
+import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import type {
   KqmBuild,
   KqmCardData,
@@ -12,6 +13,7 @@ import {
   BETA_LABEL,
   currentRelease,
   kqmCardFace,
+  kqmOutOfCombatStats,
   statName,
 } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
@@ -95,6 +97,46 @@ export function writeKqmCardView(view: KqmCardView) {
   } catch {
     // (private window, blocked storage: the view is simply not remembered)
   }
+}
+
+/**
+ * A KQM card's download name in a view: the usual one for Normal; Detailed adds "-detailed" (the
+ * same in every language), so both views can be downloaded side by side
+ */
+export const kqmCardFileName = (name: string, view: KqmCardView) =>
+  view === 'detailed' ? `${name}-detailed` : name
+
+/** A member whose stats a detailed card shows: its build (none: no stats) and constellation */
+export type KqmStatsMember = {
+  key: CharacterKey
+  build?: KqmBuild
+  constellation: number
+}
+
+/**
+ * The members' stats out of combat (`kqmOutOfCombatStats`), at the run's KQM talents, on the
+ * database their result was computed on. A member whose calculation throws gets none (a warning in
+ * the console): the card still opens, that member without its details
+ */
+export function kqmMembersStats(
+  database: ArtCharDatabase,
+  members: KqmStatsMember[],
+  talent: number
+): Partial<Record<CharacterKey, KqmMemberStats>> {
+  const stats: Partial<Record<CharacterKey, KqmMemberStats>> = {}
+  for (const { key, build, constellation } of members) {
+    if (!build) continue
+    try {
+      const own = kqmOutOfCombatStats(database, key, build, {
+        constellation,
+        talent,
+      })
+      if (own) stats[key] = own
+    } catch (error) {
+      console.warn(`KQM card: no stats for ${key}`, error)
+    }
+  }
+  return stats
 }
 
 /** A stat's official name in `t`'s language (the `keymap` namespace; else `statName`'s) */

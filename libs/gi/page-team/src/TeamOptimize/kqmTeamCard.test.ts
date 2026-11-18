@@ -10,6 +10,7 @@ import {
   KQM_CARD_VIEW_KEY,
   type KqmTeamCardMember,
   kqmCardDetails,
+  kqmCardFileName,
   kqmStandardNote,
   kqmTeamCardData,
   readKqmCardView,
@@ -294,5 +295,17 @@ describe('KQM card view (remembered in the browser)', () => {
     expect(readKqmCardView()).toBe('detailed')
     globalThis.localStorage.setItem(KQM_CARD_VIEW_KEY, 'other')
     expect(readKqmCardView()).toBe('normal')
+  })
+})
+
+describe('KQM card file name', () => {
+  it('keeps the usual name for Normal and adds -detailed for Detailed', () => {
+    expect(kqmCardFileName('Team_X-kqm', 'normal')).toBe('Team_X-kqm')
+    expect(kqmCardFileName('Team_X-kqm', 'detailed')).toBe(
+      'Team_X-kqm-detailed'
+    )
+    expect(kqmCardFileName('KQM-Compare-Team_X', 'detailed')).toBe(
+      'KQM-Compare-Team_X-detailed'
+    )
   })
 })
