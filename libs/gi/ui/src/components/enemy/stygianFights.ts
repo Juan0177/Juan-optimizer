@@ -208,7 +208,8 @@ function plain(
 }
 
 /**
- * Wavebinder: Stormfang (stygian.moe's mechanical guide and the game files): ~10 s in, and every 20 s while it is not in its Valiant Assault, it drinks for 3 s:
+ * Wavebinder: Stormfang (stygian.moe's mechanical guide and the game files): ~10 s in, and every
+ * 20 s while it is not in its Valiant Assault, it drinks for 3 s:
  * 600 Courage, or 540 under Radiance: Stellar Glimmer (a Stellar Glimmer team: its next drink
  * fills it). Outside its drinks, the team's Electro hits lower its Courage. At 600: Valiant Assault,
  * a shield of its Max HP at Valiant RES (+20% Electro, +60% the rest), Courage draining 15/s and 8
