@@ -1,50 +1,70 @@
+<p align="center">
+  <a href="https://stellaroptimizer.com/"><img src="apps/frontend/public/og-image.png" alt="Stellar Optimizer: Genshin Impact artifact and build optimizer" width="720"></a>
+</p>
+
+<p align="center">
+  <a href="https://stellaroptimizer.com/"><b>stellaroptimizer.com</b></a> ·
+  <a href="https://gi-beta73.github.io/">Beta site</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/s-naveen/stellar-optimizer/releases">Releases</a>
+</p>
+
 # Stellar Optimizer
 
-<a href="https://gi-beta73.github.io/"><img alt="Website-link" src="https://img.shields.io/website?url=https%3A%2F%2Fgi-beta73.github.io%2F&style=for-the-badge&logo=data%3Aimage%2Fpng%3Bbase64%2CiVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAABDRJREFUWEftV21QVFUYfu62TBAL1lQTuSaK7IqQyWgGsn3I1J%2Fyh81ItdGmFGyzQLQRLMSypLSBLJaEhTkoIgRsfG6IGFM4NIogAiJtlgoN5ORQ1hSwBBEjtzkX98C9bEvTjOs0%2Bf7Z%2B9z33Pc873vOvh8MAJFUFqYHw8QBuBeukSGw7N7LfW3ZjFQWZgDDGF2zr2AXls1gFssVQwzgM1clEomwNjgIQQEyeHtLMD4%2BgYv9AzjV2YupqSmnXD083BG6Phj%2Bfkvh7n4rhkdssJ67gF7rebAsK%2Fx2iJHKFby3YSFrYTLqsNz3vnkbXfn5V2TuzEd94zGHJKK3PoOkhGiOtFD6%2BgeRkmFC5xkrT8UjQJibi%2FPg5ub2t14SLxLfzELNp028NcmvxeD1%2BCin0Zmc%2FBPKKC2PBCUgEjFoOVqOFcuXLngdRm1jCA2PAPklslLmhy8OHwI5uoXku4FLCH9KhenpaW4pJfDQg2tQV17A%2B%2F7jT%2Brx%2BbETWCL1QWriK7h9kTfVJ%2Bl3orK2kcPb0xKgjnqO6my2MZjyCjF46TIe3xiGl1RbeHaf3ZqAto4ePgFN9PMwpMTThV09VjytjKVYpdyMnEwdxeWV9Uh9axeHj1QXIviBQKrbnpWPotJqiitL8qEIXUcxIffBvlI%2BAaEXxAAxZJfVQSvxWV0Rxc0tJxGlSeVw13ELfO65m%2BoIceKAXfTJsYhTv0BxaYUF%2Bsz3%2BASMGYm8UO0rMuOd3NkjCZD7oblhhjWRL090QBWTxD2fbWvAXXfeQXWbItTotX5LsU6rhjZuG8UV1Q1IMZj%2BYwQWeXvhiXAF9eKnK7%2Bgtb3LdRGgOzt4cMkR3DACshW%2BIFlOKOfO92PPRyXX%2FwgcJSiX%2FgtuEhCLxfCSeELuvwy1c2rF%2Fy8R3UzF1z0CwnJ8oKQKO7L30Pxzf6AcTZaD%2F6gcb1Zq0N3zNV2blqxBvFo1W47NFuh3CMpxbEwk0nVkNJiRU6fPIuLFVylWbtmEd7PTZktq1WGkZORyuLFmP9asXkV1BmMeDpXVzq49mIdHFesp3vX%2BfuRfy6K0JSMNaU3Zh7yMW1hcieaWVkgX%2B3Dk5tZ8XXoOzDVHuPWZ6VqQjtguwyOjyMrde60l2wBNdCTPLmlMW9u7uXdzmlIRjjdVYJnvEmd1h9ONjf2OkPAIjIzaOBwY4I8mSzFIY7uQDH7%2FAx57MhJXrwqaUvLhwxvWoezAbojFtzi1ozPkwFw9471dhG2XIwNkqIl8%2BQ20n55pSHkRsL%2FY%2BEgITG%2FruLAL5bfhERhNBaiqOzpPxzAMyD3Sxm6Dp%2Bdt8%2FTEc3Jn2jrO8HQORzMSAXInglbJ4e0lwfjEBC70DeBkexcm%2Fph0Gh2JxJOLJJkvPOyj2TcX0dn9FZ0F7AZY4McbP5zax3OWYeKFQ%2BpCF%2Brf6jnPWbaAjOd%2FASJtuXEC9sEpAAAAAElFTkSuQmCC&label=Stellar%20Optimizer"></a>
+Stellar Optimizer is a free, open-source build optimizer for [Genshin Impact](https://genshin.hoyoverse.com/). It finds the best artifacts and weapons for your characters and whole teams from your own inventory, and shows how a team's rotation plays out, hit by hit.
 
-[Stellar Optimizer](https://gi-beta73.github.io/) is a helper website for the action RPG [Genshin Impact](https://genshin.hoyoverse.com/). It helps players optimize artifacts and weapons for their characters and teams, with a clean, structured UI and real-time results.
+Everything runs in your browser. Your characters, weapons and artifacts are saved on your device, and you can export them as a GOOD file at any time to back them up or move them.
 
-It is based on the open-source [Genshin Optimizer](https://github.com/frzyc/genshin-optimizer) project by frzyc and contributors (see [LICENSE-GENSHIN-OPTIMIZER](/LICENSE-GENSHIN-OPTIMIZER)).
+## What it does
+
+- **Optimize**: searches your artifacts for a character's best build, with your own stat requirements and set rules.
+- **Team optimize**: optimizes a whole team's artifacts and weapons together for the team's damage over its rotation. Each artifact goes to one member, and support sets are judged by what they add to the team.
+- **Write rotation**: type a rotation such as `Bennett E Q -> Xiangling Q E -> ...` and get the attacks, hits, buffs and rotation time, simulated from frame data with cooldowns and cancels.
+- **KQM Theorycrafting**: ranks weapons and artifact sets for a team using KQM-standard substats instead of your own artifacts, and shows each member's share of the damage.
+- **Energy Recharge**: works out each member's Energy Recharge needs from the written rotation.
+- **Enemies**: pick a Stygian Onslaught boss, or give a custom enemy's HP and resistances, and see how long the team takes to defeat it on a fight timeline.
+- **Improve and Theorycraft**: see which artifact upgrades help most, and try builds with chosen substats.
+- **Share**: save build cards and team cards as pictures.
+
+To get started, import your account from a scanner that exports the [GOOD format](/libs/gi/good/), or add items by hand or from screenshots with the built-in artifact scanner.
+
+## Thanks
+
+Stellar Optimizer would not exist without these people and projects:
+
+- **[Genshin Optimizer](https://github.com/frzyc/genshin-optimizer)**: frzyc and the whole Genshin Optimizer team and contributors. This project is built on their work: the database, the character, weapon and artifact sheets, the calculation engine and the optimizer.
+- **[gcsim](https://github.com/genshinsim/gcsim) and [kqmsim](https://github.com/KQM-git/kqmsim)**: their maintainers, team and contributors. The rotation simulator's frame data, hitmarks and ICDs come from their work, and we check our results against their simulations.
+- **The JStern Mains (JSM) Discord**: for their help with game mechanics and testing.
+- **[KQM](https://keqingmains.com/)**: the KQM Theorycrafting tab follows KQM's theorycrafting standards.
+- **[Inventory Kamera](https://github.com/Andrewthe13th/Inventory_Kamera)**: its creator trained and provided the tesseract model for the artifact scanner.
+- **[stygian.moe](https://stygian.moe/) and the [Genshin Impact Wiki](https://genshin-impact.fandom.com/)**: Stygian Onslaught boss HP and mechanics.
+- **[Nx](https://nx.dev)**: the workspace and build system.
 
 ## License
 
-Stellar Optimizer is licensed under the [GNU Affero General Public License v3.0](/LICENSE) or later. The original Genshin Optimizer code's copyright and permission notice is kept in [LICENSE-GENSHIN-OPTIMIZER](/LICENSE-GENSHIN-OPTIMIZER). Anyone using a copy of the site must be able to get its source: this repository, at the tag of the deployed release. The copyright notice is in [NOTICE](/NOTICE).
+Stellar Optimizer is licensed under the [GNU Affero General Public License v3.0](/LICENSE) or later. The original Genshin Optimizer code's copyright and permission notice is kept in [LICENSE-GENSHIN-OPTIMIZER](/LICENSE-GENSHIN-OPTIMIZER). The rotation simulator's frame data is adapted from gcsim and kqmsim, which are AGPLv3 too. Anyone using a copy of the site must be able to get its source: this repository, at the tag of the deployed release. The copyright notice is in [NOTICE](/NOTICE).
 
-## Code structure
+## Development
+
+### Setup
+
+Install `yarn` ([link](https://yarnpkg.com/getting-started/install)), then run `yarn` to install dependencies.
+
+Run `yarn run nx serve frontend` for a dev server, then open [http://localhost:4200](http://localhost:4200). The app reloads when you change a source file. `yarn test` runs every project's tests.
+
+### Code structure
 
 The project is an [Nx](https://nx.dev) monorepo.
 The website is in [/apps/frontend](/apps/frontend/), and the libraries it uses are in [/libs](/libs/): Genshin code in [/libs/gi](/libs/gi/), shared code in [/libs/common](/libs/common/).
 
 For an interactive view of how the projects depend on each other, run `yarn run nx graph`.
 
-### Application
+- [`frontend`](/apps/frontend/): the Stellar Optimizer website, a static site built with React and MUI, using the Waverider (WR) calculation engine.
+- [gi-good](/libs/gi/good/): the Genshin Open Object Description (GOOD), the import format for Genshin scanners.
+- [gi-wr](/libs/gi/wr/): the calculation engine used by the website.
+- [gi-solver](/libs/gi/solver/): the artifact optimizer.
+- [gi-stats](/libs/gi/stats/): Genshin numbers and values extracted from the game data by the pipeline.
 
-[`frontend`](/apps/frontend/) - the Stellar Optimizer website: a static site built with React and MUI, using the Waverider (WR) calculation engine.
-
-### Notable libs
-
-[gi-good](/libs/gi/good/) - interface for the Genshin Open Object Description (GOOD), the import format for Genshin scanners.
-
-[gi-wr](/libs/gi/wr/) - the calculation engine used by the website.
-
-[gi-solver](/libs/gi/solver/) - the artifact optimizer.
-
-[gi-stats](/libs/gi/stats/) - Genshin numbers and values extracted from the datamine by the pipeline.
-
-## Basic setup
-
-Install `yarn` ([link](https://yarnpkg.com/getting-started/install)), then run `yarn` to install dependencies.
-
-## Development server
-
-Run `yarn run nx serve frontend` for a dev server, then open [http://localhost:4200](http://localhost:4200). The app reloads when you change a source file.
-
-## Releases
+### Releases
 
 Every deploy of the site is a release: [CHANGELOG.md](/CHANGELOG.md) and the [GitHub releases](https://github.com/s-naveen/stellar-optimizer/releases) list what each one brought. The app shows the same notes on its home page and when you click the version in the footer. They come from `libs/gi/ui/src/changelog/changelog.json`; `node tools/site/release.mjs draft` proposes the next release from the commits.
-
-## Acknowledgments
-
-✨ The tesseract model for the artifact scanner was trained and provided by the creator of [Inventory Kamera](https://github.com/Andrewthe13th/Inventory_Kamera).
-
-✨ This workspace was generated by [Nx, a Smart, fast and extensible build system.](https://nx.dev)
