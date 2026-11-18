@@ -433,11 +433,11 @@ describe('genInputFromTc', () => {
 describe('genResultToPayload', () => {
   const result = generateArtifacts(genInputFromKqm(RAIDEN, {}))
 
-  it('the same ids as artifactsToPayload, values as shown', () => {
+  it('the same ids as artifactsToPayload, values as shown; build and character named apart', () => {
     const payload = genResultToPayload(
       'RaidenShogun',
       'F',
-      'Raiden KQM',
+      { build: 'KQM Raiden Shogun', character: 'Raiden Shogun' },
       result
     )
     const artifacts: IArtifact[] = result.pieces.map((p) => ({
@@ -450,9 +450,19 @@ describe('genResultToPayload', () => {
       lock: false,
       substats: p.substats.map((s) => ({ key: s.key, value: s.value })),
     }))
-    expect(payload).toEqual(
-      artifactsToPayload('RaidenShogun', 'F', 'Raiden KQM', artifacts)
+    const equipped = artifactsToPayload(
+      'RaidenShogun',
+      'F',
+      'KQM Raiden Shogun',
+      artifacts
     )
+    // (artifactsToPayload, as the character card's button sends it: one name for both)
+    expect(equipped.name).toBe('KQM Raiden Shogun')
+    expect(equipped.character?.name).toBe('KQM Raiden Shogun')
+    expect(payload).toEqual({
+      ...equipped,
+      character: { ...equipped.character, name: 'Raiden Shogun' },
+    })
     expect(payload.artifacts).toHaveLength(5)
     expect(payload.artifacts.map((a) => a.slot)).toEqual([
       'EQUIP_BRACER',
@@ -465,7 +475,9 @@ describe('genResultToPayload', () => {
     expect(payload.artifacts[0].mainProp).toBe('FIGHT_PROP_HP')
     expect(payload.artifacts[2].mainProp).toBe('FIGHT_PROP_CHARGE_EFFICIENCY')
     expect(payload.artifacts[4].mainProp).toBe('FIGHT_PROP_CRITICAL')
-    expect(payload.character?.name).toBe('Raiden KQM')
+    expect(payload.name).toBe('KQM Raiden Shogun')
+    expect(payload.character?.name).toBe('Raiden Shogun')
+    expect(payload.character?.key).toBe('RaidenShogun')
     payload.artifacts.forEach((a, i) => {
       expect(a.rarity).toBe(result.pieces[i].rarity)
       expect(a.level).toBe(result.pieces[i].level)
@@ -477,7 +489,12 @@ describe('genResultToPayload', () => {
   })
 
   it('gc-web reads each value back with the piece’s rolls; round-trips through the link', () => {
-    const payload = genResultToPayload('RaidenShogun', 'F', 'x', result)
+    const payload = genResultToPayload(
+      'RaidenShogun',
+      'F',
+      { build: 'x', character: 'y' },
+      result
+    )
     const PROP_KEY: Record<string, SubstatKey> = {
       FIGHT_PROP_HP: 'hp',
       FIGHT_PROP_HP_PERCENT: 'hp_',
@@ -502,7 +519,12 @@ describe('genResultToPayload', () => {
 
   it('Traveler: the avatar id by gender', () => {
     expect(
-      genResultToPayload('TravelerAnemo', 'M', 'x', result).character?.avatarId
+      genResultToPayload(
+        'TravelerAnemo',
+        'M',
+        { build: 'x', character: 'y' },
+        result
+      ).character?.avatarId
     ).toBe(10000005)
   })
 })

@@ -91,6 +91,7 @@
     "colStat": "Substat",
     "colTarget": "Target",
     "colGenerated": "Generated",
+    "colDelta": "Difference",
     "copy": "Copy link",
     "copied": "Link copied",
     "copyFailed": "The link could not be copied",

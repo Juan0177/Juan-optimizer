@@ -91,6 +91,7 @@
     "colStat": "Statistica secondaria",
     "colTarget": "Obiettivo",
     "colGenerated": "Generato",
+    "colDelta": "Differenza",
     "copy": "Copia link",
     "copied": "Link copiato",
     "copyFailed": "Non riesco a copiare il link",

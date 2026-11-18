@@ -527,7 +527,8 @@ describe('KQM focused results', () => {
       {
         characterKey: 'KamisatoAyaka',
         gender: 'F',
-        name: 'KQM',
+        // (the build's name with the character's: charNames_gen's; the test's t returns the key)
+        name: 'KQM charNames_gen:KamisatoAyaka',
         // (no scales: judged from the build)
         input: { fromKqm: build, opts: {} },
       },

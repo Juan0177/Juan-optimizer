@@ -3,6 +3,7 @@ import {
   InfoTooltipInline,
 } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon, TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
@@ -125,7 +126,8 @@ export function KqmCompare({
   /** The level of its member's heading (default: 3) */
   headingLevel?: 3 | 4 | 5 | 6
 }) {
-  const { t, i18n } = useTranslation('page_team')
+  // (charNames_gen: the character's name in the gc-web build's name)
+  const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
   const original = result.builds[characterKey]!
@@ -468,7 +470,7 @@ export function KqmCompare({
               input={() => genInputFromKqm(build, {})}
               characterKey={characterKey}
               gender={gender}
-              name="KQM"
+              name={`KQM ${t(`charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`)}`}
             />
           </Box>
           {er && (

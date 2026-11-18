@@ -7,6 +7,7 @@ import type {
   CharacterKey,
   SubstatKey,
 } from '@genshin-optimizer/gi/consts'
+import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
@@ -31,7 +32,7 @@ import {
 import { visuallyHidden } from '@mui/utils'
 import { Suspense, useId, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { statName } from '../util/statName'
+import { artifactStatName } from '../util/statName'
 import { gcwebLink, genResultToPayload, useGcwebSettings } from './gcweb'
 import type { GenInput, GenResult } from './gcwebArtifacts'
 import { generateArtifacts } from './gcwebArtifacts'
@@ -79,15 +80,19 @@ export function GcwebBuildButton({
   input: () => GenInput
   characterKey: CharacterKey
   gender: 'F' | 'M'
-  /** The build's name in gc-web (its CharacterBuilder build) */
+  /** The build's name in gc-web (its CharacterBuilder build): "KQM <character>", the TC build's name */
   name: string
   /** Only the icon (its name as aria-label and tooltip), for card footers */
   compact?: boolean
   sx?: SxProps<Theme>
 }) {
-  const { t } = useTranslation('juanlab')
+  const { t } = useTranslation(['juanlab', 'charNames_gen'])
   const settings = useGcwebSettings()
   const [open, setOpen] = useState(false)
+  // (the character's name, sent apart from the build's)
+  const characterName = t(
+    `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+  )
   const hintId = useId()
   const off = !settings.enabled
   const label = t('gcwebBuild.button', 'Artifacts for gc-web')
@@ -149,7 +154,7 @@ export function GcwebBuildButton({
           input={input}
           characterKey={characterKey}
           gender={gender}
-          name={name}
+          names={{ build: name, character: characterName }}
           url={settings.url}
           onClose={() => setOpen(false)}
         />
@@ -162,14 +167,14 @@ function GcwebBuildDialog({
   input: makeInput,
   characterKey,
   gender,
-  name,
+  names,
   url,
   onClose,
 }: {
   input: () => GenInput
   characterKey: CharacterKey
   gender: 'F' | 'M'
-  name: string
+  names: { build: string; character: string }
   url: string
   onClose: () => void
 }) {
@@ -183,7 +188,7 @@ function GcwebBuildDialog({
       const result = generateArtifacts(input)
       const link = gcwebLink(
         url,
-        genResultToPayload(characterKey, gender, name, result)
+        genResultToPayload(characterKey, gender, names, result)
       )
       return { input, result, link }
     } catch (error) {
@@ -355,7 +360,6 @@ export function GcwebBuildPreview({
             <Box
               component="li"
               key={piece.slotKey}
-              aria-label={slot}
               sx={{ ...insetSx, p: 1.5, minWidth: 0 }}
             >
               <Typography
@@ -382,7 +386,7 @@ export function GcwebBuildPreview({
                   data-testid="main"
                   sx={{ fontSize: 14, fontWeight: 600 }}
                 >
-                  {statName(piece.mainStatKey)}
+                  {artifactStatName(piece.mainStatKey)}
                 </Typography>
                 <Typography sx={{ ...labelSx, ...numSx, whiteSpace: 'nowrap' }}>
                   {`${piece.rarity}★ +${piece.level}`}
@@ -402,7 +406,7 @@ export function GcwebBuildPreview({
                     }}
                   >
                     <Box component="span" sx={{ flex: 1, minWidth: 0 }}>
-                      {statName(sub.key)}
+                      {artifactStatName(sub.key)}
                     </Box>
                     <Box component="span" sx={{ ...numSx, fontWeight: 600 }}>
                       {formatValue(sub.key, sub.value, language)}
@@ -429,7 +433,7 @@ export function GcwebBuildPreview({
                 <Typography sx={{ ...labelSx, mt: 0.5 }}>
                   {t('gcwebBuild.raised', {
                     defaultValue: 'Rolls above the minimum: {{stats}}',
-                    stats: above.map((key) => statName(key)).join(', '),
+                    stats: above.map((key) => artifactStatName(key)).join(', '),
                   })}
                 </Typography>
               )}
@@ -452,7 +456,10 @@ export function GcwebBuildPreview({
                 {t('gcwebBuild.colGenerated', 'Generated')}
               </TableCell>
               <TableCell align="right" sx={labelSx}>
-                Δ
+                <span aria-hidden="true">Δ</span>
+                <Box component="span" sx={visuallyHidden}>
+                  {t('gcwebBuild.colDelta', 'Difference')}
+                </Box>
               </TableCell>
             </TableRow>
           </TableHead>
@@ -460,7 +467,7 @@ export function GcwebBuildPreview({
             {used.map((key) => (
               <TableRow key={key}>
                 <TableCell component="th" scope="row">
-                  {statName(key)}
+                  {artifactStatName(key)}
                 </TableCell>
                 <TableCell align="right" sx={numSx}>
                   {formatValue(key, input.targets[key] ?? 0, language)}

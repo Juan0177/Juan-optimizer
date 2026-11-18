@@ -205,17 +205,18 @@ export function artifactsToPayload(
   }
 }
 
-/** I 5 manufatti generati da una build (KQM o TC, gcwebArtifacts.ts) come build per gc-web: stessi ID, valori come li mostra il gioco. */
+/** I 5 manufatti generati da una build (KQM o TC, gcwebArtifacts.ts) come build per gc-web: stessi ID, valori come li mostra il gioco.
+ *  Il nome della build ("KQM Furina", il nome della build TC) e quello del personaggio viaggiano separati. */
 export function genResultToPayload(
   characterKey: CharacterKey,
   gender: 'F' | 'M',
-  name: string,
+  names: { build: string; character: string },
   result: GenResult
 ): JuanLabBuild {
-  return artifactsToPayload(
+  const payload = artifactsToPayload(
     characterKey,
     gender,
-    name,
+    names.build,
     result.pieces.map((piece) => ({
       setKey: piece.setKey,
       slotKey: piece.slotKey,
@@ -227,6 +228,10 @@ export function genResultToPayload(
       substats: piece.substats.map(({ key, value }) => ({ key, value })),
     }))
   )
+  return {
+    ...payload,
+    character: { ...payload.character, name: names.character },
+  }
 }
 
 /* ---------- gc-web -> Juan-optimizer ---------- */

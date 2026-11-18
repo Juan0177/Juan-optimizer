@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { statName } from '../util/statName'
 import type { KqmBuild } from '../util/teamOpt/kqm'
 import { GcwebBuildButton, GcwebBuildPreview } from './GcwebBuildDialog'
-import { gcwebLink, genResultToPayload } from './gcweb'
+import { decodePayload, gcwebLink, genResultToPayload } from './gcweb'
 import type { GenInput, GenResult } from './gcwebArtifacts'
 import { generateArtifacts } from './gcwebArtifacts'
 import { genInputFromKqm } from './gcwebBuildInput'
@@ -63,9 +63,17 @@ const renderButton = (
       input={input}
       characterKey="RaidenShogun"
       gender="F"
-      name="KQM"
+      name="KQM Raiden"
     />
   )
+/** The piece cards, by their slot heading (the li has no name of its own: its h3 names it) */
+const pieceCards = (scope: HTMLElement = document.body) =>
+  within(scope)
+    .getAllByRole('heading', { level: 3 })
+    .map((h) => h.closest('li'))
+    .filter((li): li is HTMLLIElement => !!li)
+const pieceCard = (slot: string) =>
+  screen.getByRole('heading', { level: 3, name: slot }).closest('li')!
 const open = () =>
   fireEvent.click(screen.getByRole('button', { name: 'Artifacts for gc-web' }))
 
@@ -85,14 +93,13 @@ describe('GcwebBuildButton', () => {
     const dialog = await screen.findByRole('dialog', {
       name: '5 artifacts for gc-web',
     })
-    const pieces = within(dialog).getAllByRole('listitem', { name: /./ })
-    expect(pieces.map((p) => p.getAttribute('aria-label'))).toEqual([
-      'flower',
-      'plume',
-      'sands',
-      'goblet',
-      'circlet',
-    ])
+    const pieces = pieceCards(dialog)
+    expect(
+      pieces.map((p) => within(p).getByRole('heading').textContent)
+    ).toEqual(['flower', 'plume', 'sands', 'goblet', 'circlet'])
+    // (no aria-label repeating the heading)
+    for (const piece of pieces)
+      expect(piece.hasAttribute('aria-label')).toBe(false)
     const result = generateArtifacts(genInputFromKqm(RAIDEN, {}))
     result.pieces.forEach((piece, i) => {
       const card = within(pieces[i])
@@ -123,11 +130,20 @@ describe('GcwebBuildButton', () => {
     const input = genInputFromKqm(RAIDEN, {})
     const result = generateArtifacts(input)
     const rows = within(table).getAllByRole('row')
+    const heads = within(rows[0]).getAllByRole('columnheader')
+    expect(heads.map((c) => c.textContent)).toEqual([
+      'Substat',
+      'Target',
+      'Generated',
+      'ΔDifference',
+    ])
+    // Δ is seen, "Difference" is read (the Δ sign itself hidden from screen readers)
     expect(
-      within(rows[0])
-        .getAllByRole('columnheader')
-        .map((c) => c.textContent)
-    ).toEqual(['Substat', 'Target', 'Generated', 'Δ'])
+      within(rows[0]).getByRole('columnheader', { name: 'Difference' })
+    ).toBeTruthy()
+    expect(within(heads[3]).getByText('Δ').getAttribute('aria-hidden')).toBe(
+      'true'
+    )
     // (used substats only: no filler row)
     expect(rows).toHaveLength(1 + Object.keys(result.gaps).length)
     expect(rows.length - 1).toBe(input.used.length)
@@ -149,10 +165,11 @@ describe('GcwebBuildButton', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Send to gc-web' })
     )
+    // (the build's name, and the character's: charNames_gen's, the key with the test's t)
     const payload = genResultToPayload(
       'RaidenShogun',
       'F',
-      'KQM',
+      { build: 'KQM Raiden', character: 'RaidenShogun' },
       generateArtifacts(genInputFromKqm(RAIDEN, {}))
     )
     expect(openSpy).toHaveBeenCalledWith(
@@ -160,6 +177,11 @@ describe('GcwebBuildButton', () => {
       '_blank',
       'noopener'
     )
+    const sent = decodePayload(
+      String(openSpy.mock.calls[0][0]).split('#juanlab=')[1]
+    )
+    expect(sent.name).toBe('KQM Raiden')
+    expect(sent.character?.name).toBe('RaidenShogun')
   })
   it('“Copy link” copies the same link', async () => {
     setLink(true)
@@ -173,10 +195,11 @@ describe('GcwebBuildButton', () => {
     await act(async () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Copy link' }))
     })
+    // (the build's name, and the character's: charNames_gen's, the key with the test's t)
     const payload = genResultToPayload(
       'RaidenShogun',
       'F',
-      'KQM',
+      { build: 'KQM Raiden', character: 'RaidenShogun' },
       generateArtifacts(genInputFromKqm(RAIDEN, {}))
     )
     expect(writeText).toHaveBeenCalledWith(gcwebLink(URL, payload))
@@ -211,6 +234,47 @@ describe('GcwebBuildButton', () => {
 })
 
 describe('GcwebBuildPreview', () => {
+  it('names percent stats as percent: an ATK% sands, ATK% substats, ATK and ATK% rows apart', () => {
+    const input = genInputFromKqm(
+      {
+        ...RAIDEN,
+        mains: { sands: 'atk_', goblet: 'electro_dmg_', circlet: 'critRate_' },
+      },
+      {}
+    )
+    const result: GenResult = {
+      ...generateArtifacts(input),
+      fillerRaised: [{ slotKey: 'plume', key: 'def_' }],
+    }
+    render(<GcwebBuildPreview input={input} result={result} />)
+    // (KeyMap's English names: i18n is not initialized here; "ATK" for both atk and atk_)
+    const sands = pieceCard('sands')
+    expect(within(sands).getByTestId('main').textContent).toBe('ATK%')
+    const plume = pieceCard('plume')
+    expect(plume.textContent).toContain('Rolls above the minimum: DEF%')
+    // every substat line: percent stats with %, flat ones without
+    const pieceAtk = result.pieces.flatMap((p, i) =>
+      p.substats
+        .map((sub, j) => ({ sub, i, j }))
+        .filter(({ sub }) => sub.key === 'atk_' || sub.key === 'atk')
+    )
+    expect(pieceAtk.length).toBeGreaterThan(0)
+    const cards = pieceCards()
+    for (const { sub, i, j } of pieceAtk) {
+      const line = within(cards[i]).getAllByRole('listitem')[j]
+      expect(line.firstElementChild?.textContent).toBe(
+        sub.key === 'atk_' ? 'ATK%' : 'ATK'
+      )
+    }
+    const table = screen.getByRole('table', { name: 'Compared with the build' })
+    const heads = within(table)
+      .getAllByRole('rowheader')
+      .map((h) => h.textContent)
+    expect(heads).toContain('ATK%')
+    expect(heads).toContain('ATK')
+    expect(new Set(heads).size).toBe(heads.length)
+  })
+
   it('notes the filler substats rolled above the minimum on their piece', () => {
     const input = genInputFromKqm(RAIDEN, {})
     const result: GenResult = {
@@ -218,11 +282,11 @@ describe('GcwebBuildPreview', () => {
       fillerRaised: [{ slotKey: 'plume', key: 'def' }],
     }
     render(<GcwebBuildPreview input={input} result={result} />)
-    const plume = screen.getByRole('listitem', { name: 'plume' })
+    const plume = pieceCard('plume')
     expect(plume.textContent).toContain(
       `Rolls above the minimum: ${statName('def')}`
     )
-    const flower = screen.getByRole('listitem', { name: 'flower' })
+    const flower = pieceCard('flower')
     expect(flower.textContent).not.toContain('Rolls above the minimum')
   })
 })

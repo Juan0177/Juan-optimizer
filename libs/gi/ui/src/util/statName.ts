@@ -1,5 +1,7 @@
+import type { MainStatKey, SubstatKey } from '@genshin-optimizer/gi/consts'
 import { i18n } from '@genshin-optimizer/gi/i18n'
 import { KeyMap } from '@genshin-optimizer/gi/keymap'
+import { statPercent } from '../components/util'
 
 /**
  * A stat's name in the current language, for display: the `keymap` namespace (official game
@@ -10,6 +12,14 @@ export function statName(key: string): string {
   const english = KeyMap.get(key)
   if (!i18n.isInitialized) return english
   return i18n.t(key, { ns: 'keymap', defaultValue: english })
+}
+
+/**
+ * An artifact stat's name for display: `statName` plus "%" for HP%/ATK%/DEF%, whose names are the
+ * flat stats' ("ATT" for both ATK and ATK% in Italian)
+ */
+export function artifactStatName(key: string): string {
+  return `${statName(key)}${statPercent(key as MainStatKey | SubstatKey)}`
 }
 
 /** "Lv." in the site's language ("Liv." in Italian), for a level written as a string */
