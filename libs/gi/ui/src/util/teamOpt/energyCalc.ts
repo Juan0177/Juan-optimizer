@@ -428,13 +428,17 @@ export function energyCalcWeapons(
     const member = settings.members[key]
     if (!member) continue
     const candidates = allowed(key)
-    // (Favonius triggers filled in from the rotation are what a Favonius would give: assumed
-    // held only when set by hand; KQM's runs count it for the builds that do hold one)
+    // (Favonius and energy-weapon triggers filled in from the rotation are what such a weapon
+    // would give: assumed held only when set by hand; KQM's runs count them for the builds that
+    // do hold one)
     const weapon =
       (member.favoniusProcs > 0 && member.edited?.includes('favoniusProcs')
         ? candidates.find((w) => isFavonius(w.key))
         : undefined) ??
-      ((member.weaponEnergyTriggers ?? 0) > 0
+      ((member.weaponEnergyTriggers ?? 0) > 0 &&
+      // (set by hand: other than the rotation's last fill, as `withRotationEnergy` tells it)
+      member.weaponEnergyTriggers !==
+        filledWeaponTriggers(key, member.weaponTriggers)
         ? candidates.find((w) => isCalcEnergyWeapon(w.key))
         : undefined)
     if (!weapon) continue
@@ -449,7 +453,7 @@ export function defaultEnergyCalculator(
   keys: readonly CharacterKey[],
   rotationTime = 20,
   onField = keys[0],
-  /** Per member; absent: KQM's standard (4★ C6, 5★ C0) */
+  /** Per member; absent: KQM's default (`kqmConstellation`) */
   constellations?: Partial<Record<CharacterKey, number>>
 ): TeamOptEnergyCalculator {
   return {

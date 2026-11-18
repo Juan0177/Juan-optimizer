@@ -13,8 +13,11 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
  *                its finisher waited for (F): KQM's "C3FD C3FD CF"
  *   D       dash                             J    jump
+ *   4[N5 CD] / 4N5CD  a group written once with how many times (1 to 20)
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
+ *   entry / swap  swap in and straight out again (a name alone mid-rotation is the same): her
+ *                swap-in effects only, e.g. Danica's Entry Skill once Will to Cleanse is full
  * A trailing step with no actions ("-> bina") marks the swap back to that member: where the
  * rotation loops. "A/B" alternatives take the first one; "(…)" comments are ignored.
  */
@@ -28,6 +31,8 @@ export type RotationActionKind =
   | 'dash'
   | 'jump'
   | 'wait'
+  /** Swap in and do nothing else ("Danica" alone, or "Danica entry"): her swap-in effects only */
+  | 'swap'
 
 export interface RotationAction {
   kind: RotationActionKind
@@ -45,6 +50,11 @@ export interface RotationAction {
   final?: boolean
   /** As written (for messages) */
   text: string
+  /**
+   * A Burst every Nth rotation, in a copy without it (KQM's ER calculator): played only when it is
+   * the member's short Burst (Varesa's Volcanic Kablam, Flins' Thunderous Symphony)
+   */
+  onlyShort?: boolean
 }
 
 export interface RotationStep {
@@ -186,6 +196,40 @@ const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
 /** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
 const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
 
+/** The most times one group is repeated ("4[N5CD]", "4N5CD") */
+const MAX_REPEAT = 20
+
+/**
+ * A group written once with how many times, as players write it: "4[N5 CD]" (KQM's notation) or
+ * "4N5CD" (the number glued to a word) is the group that many times. The number starts a word, so
+ * Sandrone's "CA[beams=2]" stays as it is.
+ */
+export function expandRepeats(
+  text: string,
+  warnings: string[] = [],
+  who = ''
+): string {
+  const repeat = (
+    match: string,
+    before: string,
+    times: string,
+    group: string
+  ) => {
+    const n = Number(times)
+    if (n >= 1 && n <= MAX_REPEAT)
+      return before + Array(n).fill(group.trim()).join(' ')
+    warnings.push(
+      `${who}: "${match.trim()}": 1 to ${MAX_REPEAT} times (played once)`
+    )
+    return before + group.trim()
+  }
+  return text
+    .replace(/(^|\s)(\d+)\s*\[([^[\]]+)\]/g, (m, before, times, group) =>
+      /^\s*beams\s*=/i.test(group) ? m : repeat(m, before, times, group)
+    )
+    .replace(/(^|\s)(\d+)([a-z]\S*)/gi, repeat)
+}
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
@@ -203,8 +247,17 @@ function parseActions(
   const token =
     /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
   let i = 0
-  const s = cleaned.trim()
+  const s = expandRepeats(cleaned, warnings, who).trim()
   while (i < s.length) {
+    // "entry" / "swap": swap in for the member's swap-in effects only (Danica's Entry Skill)
+    const swapWord = /\s*(entry|swap)(?![a-z])/iy
+    swapWord.lastIndex = i
+    const sw = swapWord.exec(s)
+    if (sw) {
+      actions.push({ kind: 'swap', text: sw[1] })
+      i = swapWord.lastIndex
+      continue
+    }
     token.lastIndex = i
     const m = token.exec(s)
     if (!m || m[0].length === 0) {
@@ -217,14 +270,19 @@ function parseActions(
     }
     i = token.lastIndex
     const raw = m[0].trim()
-    if (m[1])
-      actions.push({
-        kind: 'wait',
-        // seconds, or frames with an "f" (W1.5 = W90f)
-        count: /f$/i.test(m[2]) ? Number(m[2].slice(0, -1)) / 60 : Number(m[2]),
-        text: raw,
-      })
-    else if (m[4])
+    if (m[1]) {
+      // seconds, or frames with an "f" (W1.5 = W90f)
+      const count = /f$/i.test(m[2])
+        ? Number(m[2].slice(0, -1)) / 60
+        : Number(m[2])
+      // ("W." or "W1..5" while typing: no length, not a wait; it never reaches the simulation)
+      if (Number.isFinite(count) && count >= 0)
+        actions.push({ kind: 'wait', count, text: raw })
+      else
+        warnings.push(
+          `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
+        )
+    } else if (m[4])
       actions.push({
         kind: 'skill',
         hold: m[3]?.toLowerCase() === 'h',
@@ -311,13 +369,143 @@ export function parseRotation(
     }
     const actions = parseActions(rest, warnings, words[0], characterKey)
     if (!actions.length) {
-      if (index === parts.length - 1) loopsTo = characterKey
-      else warnings.push(`${words[0]}: no actions (step skipped)`)
-      return
+      if (index === parts.length - 1) {
+        loopsTo = characterKey
+        return
+      }
+      // a name alone mid-rotation: swap in and out (Danica's Entry Skill once Will to Cleanse is full)
+      actions.push({ kind: 'swap', text: 'swap' })
     }
     steps.push({ characterKey, actions })
   })
   return { steps, loopsTo, warnings }
+}
+
+/** What a piece of rotation text is, as the writer colours it */
+export type RotationSpanKind =
+  /** `->`, `→`, `>`, `,`, `;` or a new line */
+  | 'separator'
+  /** A member's name (its `characterKey`) */
+  | 'member'
+  | 'action'
+  /** W1.5, W90f */
+  | 'wait'
+  /** (a note in parentheses), or an alternative after "/" */
+  | 'note'
+  /** Skipped by the parser: not an action, or a step naming no member */
+  | 'unknown'
+export interface RotationSpan {
+  from: number
+  to: number
+  kind: RotationSpanKind
+  characterKey?: CharacterKey
+}
+
+/**
+ * The rotation text in pieces, read as `parseRotation` reads it: separators, each step's member
+ * name, its actions (an unknown one marked), waits and notes. The spaces between are left out.
+ */
+export function rotationSpans(
+  text: string,
+  members: readonly RotationMember[]
+): RotationSpan[] {
+  const spans: RotationSpan[] = []
+  const part = (from: number, to: number) => {
+    const words = [...text.slice(from, to).matchAll(/\S+/g)].map((m) => ({
+      word: m[0],
+      from: from + (m.index ?? 0),
+      to: from + (m.index ?? 0) + m[0].length,
+    }))
+    let depth = 0
+    let key: CharacterKey | undefined
+    /** Whether the step being read named a member */
+    let named = false
+    /** Words left of the name just matched */
+    let inName = 0
+    /** A repeated group's words ("4[N5 CD]"): its last word and how it reads */
+    let group: { last: number; kind: RotationSpanKind } | undefined
+    const nameAt = (i: number, exact: boolean) => {
+      for (let n = Math.min(3, words.length - i); n >= 1; n--) {
+        const slice = words.slice(i, i + n)
+        if (slice.some((w) => /[()]/.test(w.word))) continue
+        const candidate = slice.map((w) => w.word).join(' ')
+        const found = exact
+          ? exactMember(candidate, members)
+          : matchMember(candidate, members)
+        if (found) return { n, found }
+      }
+      return undefined
+    }
+    words.forEach((w, i) => {
+      const opens = w.word.match(/\(/g)?.length ?? 0
+      const closes = w.word.match(/\)/g)?.length ?? 0
+      if (depth === 0 && inName <= 0 && !/^\(/.test(w.word)) {
+        // the part's first words name its member; a later exact name starts a new step
+        const name = nameAt(i, i > 0)
+        if (name) {
+          key = name.found
+          named = true
+          inName = name.n
+        } else if (i === 0) named = false
+      }
+      if (inName > 0) {
+        spans.push({
+          from: w.from,
+          to: w.to,
+          kind: 'member',
+          characterKey: key,
+        })
+        inName--
+      } else if (depth > 0 || opens) {
+        spans.push({ from: w.from, to: w.to, kind: 'note' })
+      } else if (!named) {
+        spans.push({ from: w.from, to: w.to, kind: 'unknown' })
+      } else if (group && i <= group.last) {
+        // (a repeated group written with spaces, "4[N5 CD]": read as one)
+        spans.push({ from: w.from, to: w.to, kind: group.kind })
+      } else if (/^\d+\s*\[/.test(w.word) && !w.word.includes(']')) {
+        const last = words.findIndex((x, j) => j > i && x.word.includes(']'))
+        const joined = words
+          .slice(i, last < 0 ? words.length : last + 1)
+          .map((x) => x.word)
+          .join(' ')
+        const problems: string[] = []
+        parseActions(joined, problems, '', key)
+        group = {
+          last: last < 0 ? words.length - 1 : last,
+          kind: last < 0 || problems.length ? 'unknown' : 'action',
+        }
+        spans.push({ from: w.from, to: w.to, kind: group.kind })
+      } else {
+        // (an alternative: the first one is played, the rest is a note)
+        const slash = w.word.indexOf('/')
+        const played = slash > 0 ? w.word.slice(0, slash) : w.word
+        const problems: string[] = []
+        parseActions(played, problems, '', key)
+        spans.push({
+          from: w.from,
+          to: w.from + played.length,
+          kind: problems.length
+            ? 'unknown'
+            : /^w\s*[\d.]+f?$/i.test(played)
+              ? 'wait'
+              : 'action',
+        })
+        if (slash > 0)
+          spans.push({ from: w.from + slash, to: w.to, kind: 'note' })
+      }
+      depth = Math.max(0, depth + opens - closes)
+    })
+  }
+  let at = 0
+  for (const m of text.matchAll(/->|→|=>|>|,|;|\n/g)) {
+    const index = m.index ?? 0
+    part(at, index)
+    spans.push({ from: index, to: index + m[0].length, kind: 'separator' })
+    at = index + m[0].length
+  }
+  part(at, text.length)
+  return spans
 }
 
 /** At most this many written rotations are played as one (members bursting every 2nd and 3rd: 6) */
@@ -357,13 +545,19 @@ export function everyNthBursts(
     for (const step of rotation.steps) {
       const actions: RotationAction[] = []
       for (const action of step.actions) {
-        if (action.kind !== 'burst' || k % every(step.characterKey) === 0) {
-          actions.push(action)
-          index.push(i)
-        }
+        // (a Burst out of its copy stays as "short only": the simulation knows which one is
+        // Varesa's Kablam or Flins' Symphony, and leaves the full ones out)
+        actions.push(
+          action.kind !== 'burst' || k % every(step.characterKey) === 0
+            ? action
+            : { ...action, onlyShort: true }
+        )
+        index.push(i)
         i++
       }
-      if (actions.length) steps.push({ ...step, actions })
+      // (a step left with nothing but such Bursts is left out, its swap too)
+      if (actions.some((a) => !a.onlyShort)) steps.push({ ...step, actions })
+      else index.splice(index.length - actions.length, actions.length)
     }
   }
   return { rotation: { ...rotation, steps }, loops, index }

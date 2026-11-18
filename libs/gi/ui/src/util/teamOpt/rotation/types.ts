@@ -183,6 +183,11 @@ export interface ActionResult {
    * member's
    */
   framesInto?: Partial<Record<RotationAction['kind'] | 'swap', number>>
+  /**
+   * A written wait after this action is a walk (Mualani on Sharky in her blessing): it starts at
+   * this frame, gcsim's walk cancel, rather than at the earliest cancel (gcsim's wait)
+   */
+  walkFrames?: number
   /** The action could not be done (e.g. not enough Phase Shift Radiance): why */
   failed?: string
   /**
@@ -455,6 +460,11 @@ export interface KitModel {
    * The version an action is in the member's current state, asked just before it is played (no
    * side effects): undefined for the ordinary one
    */
+  /**
+   * The variant key of its short Burst, one that spends part of the Energy (Varesa's 'apex' Kablam,
+   * Flins' 'symphony'): it still plays in a rotation copy without the member's full Burst
+   */
+  shortBurstVariant?: string
   variant?: (
     ctx: SimContext,
     state: any,
@@ -536,6 +546,11 @@ export interface KitModel {
   ) => void
   /** An automatic entry action, before the requested action (Danica's entry / Triumph). */
   onSwapIn?: (ctx: SimContext, state: any) => ActionResult | undefined
+  /**
+   * Why a swap-in played no entry action (`onSwapIn` gave none): noted when the step only swaps
+   * in ("Danica", "Danica entry", "Danica W1")
+   */
+  noEntryReason?: (state: any, now: number) => string | undefined
   /** Earliest frame this member can be swapped in; rechecked as queued events run. */
   swapReadyAt?: (state: any, now: number) => number
   /**

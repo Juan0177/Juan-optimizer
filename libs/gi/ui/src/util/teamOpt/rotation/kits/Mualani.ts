@@ -131,6 +131,8 @@ function biteTiming(stacks: number): {
   hit: number
   frames: number
   into: Into
+  /** Into a walk (a wait in the blessing): gcsim's ActionWalk */
+  walk: number
 } {
   // the bite starts a 1.8 s Sharky's Bite cooldown at its hit, which sets the next normal: hit + 108
   return stacks >= 3
@@ -145,6 +147,7 @@ function biteTiming(stacks: number): {
           jump: 81,
           swap: 258,
         },
+        walk: 81,
       }
     : {
         hit: 7,
@@ -157,6 +160,7 @@ function biteTiming(stacks: number): {
           jump: 40,
           swap: 215,
         },
+        walk: 39,
       }
 }
 
@@ -304,6 +308,7 @@ function bites(ctx: SimContext, s: MualaniState, count: number): ActionResult {
     framesInto: Object.fromEntries(
       Object.entries(last.into).map(([k, v]) => [k, ls + (v as number)])
     ),
+    ...(s.blessing && { walkFrames: ls + last.walk }),
   }
 }
 
@@ -434,10 +439,14 @@ export const kit: KitModel = {
         return {
           frames: 69,
           framesInto: { normal: 5, burst: 6, dash: 15, jump: 18, swap: 65 },
+          // (a wait after it is her walking on Sharky: gcsim's walk cancel)
+          walkFrames: 19,
           cooldown: skillCd(s, ctx.now, 65),
         }
       }
-      case 'burst':
+      case 'burst': {
+        // (cast in the blessing, a wait after it is a walk on Sharky: gcsim's walk cancel, 167)
+        const walking = s.blessing
         // Boomsharka-laka: 108 frames to the launch, then 70 frames of travel
         ctx.hit(178, {
           path: ['burst', 'dmg'],
@@ -468,7 +477,9 @@ export const kit: KitModel = {
             swap: 108,
             wait: 108,
           },
+          ...(walking && { walkFrames: 167 }),
         }
+      }
       case 'dash': {
         if (!s.blessing)
           // template dash (Girl body): 20 frames, 4 into a jump
@@ -483,7 +494,7 @@ export const kit: KitModel = {
         }
         surf(s, ctx.now, ctx.now + 24)
         resetSkillCd(ctx, skillCd(s, ctx.now, 1))
-        return { frames: 24, framesInto }
+        return { frames: 24, framesInto, walkFrames: 3 }
       }
       case 'jump': {
         if (!s.blessing)
@@ -505,7 +516,7 @@ export const kit: KitModel = {
         }
         surf(s, ctx.now, ctx.now + 54)
         resetSkillCd(ctx, skillCd(s, ctx.now, 48))
-        return { frames: 54, framesInto }
+        return { frames: 54, framesInto, walkFrames: 47 }
       }
       case 'plunge':
         // gcsim has no plunge frames for Mualani (no plunge.go): not modelled

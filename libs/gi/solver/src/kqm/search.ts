@@ -187,12 +187,25 @@ export interface KqmProblem {
    * each time: no garbage in the search's millions of calls
    */
   values: (values: Record<string, number>) => Float64Array
+  /**
+   * `values` from the stats as an array (`columns` order), the same one each time: what the
+   * search's hot loop uses (stats read by name from an object cost several times the arithmetic)
+   */
+  valuesAt: (stats: Float64Array) => Float64Array
+  /** The stats the formulas read, in the order of `valuesAt`'s array */
+  columns: readonly string[]
+  /** A stat's place in that array (-1: nothing reads it) */
+  columnOf: (key: string) => number
+  /** These stats as such an array (absent ones 0, as the formulas read them) */
+  statsOf: (values: Record<string, number>) => Float64Array
   nTerms: number
   mins: number[]
   scales: Set<string>
   /** The artifact standard's distributed rolls (absent: KQMS's 20) */
   rolls?: number
 }
+/** `precompute`'s read of a stat (one artifact slot, no initial value), as KQM compiles it */
+const STAT_READ = /\(b\[0\]\.values\["([^"]*)"\] \?\? 0\)/g
 export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
   // The optimizer's compiled formulas, as `precompute` makes them, but writing their values into
   // one array (`o`) instead of returning a new one each call
@@ -204,16 +217,55 @@ export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
         .map((name, i) => `o[${i}]=${name};`)
         .join('')}return o`
   )
-  const compute = new Function('b', 'o', source) as (
-    b: { values: Record<string, number> }[],
-    o: Float64Array
-  ) => Float64Array
   const { nTerms, mins } = spec
   const out = new Float64Array(nTerms + mins.length)
-  const arg = [{ values: {} as Record<string, number> }]
-  const values = (v: Record<string, number>) => {
-    arg[0].values = v
-    return compute(arg, out)
+  // ...and reading the stats from an array, one entry per stat read (`V[j]`), instead of by name
+  // from an object (`b[0].values["key"] ?? 0`): the search's stat objects hold a different set of
+  // keys per set and main stat, and those reads cost several times the arithmetic. The same
+  // values either way: `statsOf` keeps the `?? 0`, and the formulas read each stat once.
+  const columns: string[] = []
+  const index = new Map<string, number>()
+  const arraySource = source.replace(STAT_READ, (_, key: string) => {
+    let j = index.get(key)
+    if (j === undefined) {
+      j = columns.length
+      index.set(key, j)
+      columns.push(key)
+    }
+    return `V[${j}]`
+  })
+  const statsOf = (
+    v: Record<string, number>,
+    into = new Float64Array(columns.length)
+  ) => {
+    for (let j = 0; j < columns.length; j++) into[j] = v[columns[j]] ?? 0
+    return into
+  }
+  let valuesAt: (stats: Float64Array) => Float64Array
+  let values: (v: Record<string, number>) => Float64Array
+  if (/\bb\[/.test(arraySource)) {
+    // (a read in another form: by name, as `precompute` wrote them, the array's stats included)
+    for (const key of spec.scales)
+      if (!index.has(key)) index.set(key, columns.push(key) - 1)
+    const compute = new Function('b', 'o', source) as (
+      b: { values: Record<string, number> }[],
+      o: Float64Array
+    ) => Float64Array
+    const arg = [{ values: {} as Record<string, number> }]
+    values = (v) => {
+      arg[0].values = v
+      return compute(arg, out)
+    }
+    valuesAt = (stats) =>
+      values(Object.fromEntries(columns.map((k, j) => [k, stats[j]])))
+  } else {
+    const compute = new Function('V', 'o', arraySource) as (
+      V: Float64Array,
+      o: Float64Array
+    ) => Float64Array
+    const scratch = new Float64Array(columns.length)
+    valuesAt = (stats) => compute(stats, out)
+    values = (v) => compute(statsOf(v, scratch), out)
   }
   return {
     run: (v) => {
@@ -223,6 +275,10 @@ export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
       return { total, cons: Array.from(o.subarray(nTerms)) }
     },
     values,
+    valuesAt,
+    columns,
+    columnOf: (key) => index.get(key) ?? -1,
+    statsOf: (v) => statsOf(v),
     nTerms,
     mins,
     scales: new Set(spec.scales),
@@ -249,7 +305,14 @@ export function scoreOf(
   problem: KqmProblem,
   values: Record<string, number>
 ): KqmScore {
-  const o = problem.values(values)
+  return scoreFrom(problem, problem.values(values))
+}
+/** `scoreOf` from the stats as an array (`problem.columns` order; see `KqmProblem.valuesAt`) */
+export function scoreAt(problem: KqmProblem, stats: Float64Array): KqmScore {
+  return scoreFrom(problem, problem.valuesAt(stats))
+}
+/** The score of the formulas' values: the damage terms' sum, and how far the requirements are */
+function scoreFrom(problem: KqmProblem, o: Float64Array): KqmScore {
   const { nTerms, mins } = problem
   let total = 0
   for (let i = 0; i < nTerms; i++) total += o[i] || 0
@@ -297,11 +360,18 @@ export function placeRolls(
     (k) => caps[k] > 0 && problem.scales.has(k)
   )
   const rolls: KqmRolls = {}
-  const values = kqmStatValues({ sets, mains, rolls }, mainValues)
-  let score = scoreOf(problem, values)
+  // the stats as the formulas read them (an array, changed in place: see `KqmProblem.valuesAt`)
+  const stats = problem.statsOf(
+    kqmStatValues({ sets, mains, rolls }, mainValues)
+  )
+  const column: Partial<Record<SubstatKey, number>> = {}
+  for (const k of allSubstatKeys) column[k] = problem.columnOf(k)
+  let score = scoreAt(problem, stats)
 
   const add = (k: SubstatKey, n: number) => {
-    values[k] += n * subRoll(k)
+    // (a stat nothing reads changes nothing)
+    const j = column[k]!
+    if (j >= 0) stats[j] += n * subRoll(k)
     rolls[k] = (rolls[k] ?? 0) + n
   }
   for (let i = 0; i < budget; i++) {
@@ -310,7 +380,7 @@ export function placeRolls(
     for (const k of subs) {
       if ((rolls[k] ?? 0) >= caps[k]) continue
       add(k, 1)
-      const s = scoreOf(problem, values)
+      const s = scoreAt(problem, stats)
       add(k, -1)
       if (!bestScore || betterScore(s, bestScore)) (best = k), (bestScore = s)
     }
@@ -328,7 +398,7 @@ export function placeRolls(
         if (a === b || (rolls[b] ?? 0) >= caps[b]) continue
         add(a, -1)
         add(b, 1)
-        const s = scoreOf(problem, values)
+        const s = scoreAt(problem, stats)
         add(b, -1)
         add(a, 1)
         if (betterScore(s, moveScore)) (move = [a, b]), (moveScore = s)
@@ -350,7 +420,7 @@ export function placeRolls(
       remaining -= count
     }
   }
-  score = scoreOf(problem, values)
+  score = scoreAt(problem, stats)
   for (const k of Object.keys(rolls) as SubstatKey[])
     if (!rolls[k]) delete rolls[k]
   return { rolls, score, mains }

@@ -11,7 +11,11 @@ const parse = (text: string) =>
   )
 const written = (r: ReturnType<typeof parse>) =>
   r.steps.map(
-    (s) => `${s.characterKey} ${s.actions.map((a) => a.text).join(' ')}`
+    (s) =>
+      `${s.characterKey} ${s.actions
+        // (a Burst out of its copy: kept "short only", played only as a short Burst)
+        .map((a) => (a.onlyShort ? `(${a.text})` : a.text))
+        .join(' ')}`
   )
 
 describe('a Burst every Nth rotation (KQM ER calculator)', () => {
@@ -23,12 +27,13 @@ describe('a Burst every Nth rotation (KQM ER calculator)', () => {
       'Sucrose E Q',
       'Flins E Q',
       'Sucrose Q',
-      // (the 2nd: Sucrose's Bursts left out, her step with nothing left too)
-      'Sucrose E',
+      // (the 2nd: Sucrose's Bursts kept only as short ones, which she has none of; her step with
+      // nothing else is left out)
+      'Sucrose E (Q)',
       'Flins E Q',
     ])
     // the written positions: Sucrose E Q, Flins E Q, Sucrose Q = 0..4
-    expect(nth.index).toEqual([0, 1, 2, 3, 4, 0, 2, 3])
+    expect(nth.index).toEqual([0, 1, 2, 3, 4, 0, 1, 2, 3])
   })
   it('combines members (every 2nd and every 3rd: 6 rotations), and is off when none', () => {
     const rotation = parse('Sucrose E Q -> Flins E Q')
@@ -38,7 +43,7 @@ describe('a Burst every Nth rotation (KQM ER calculator)', () => {
       nth.rotation.steps
         .filter((s) => s.characterKey === ck)
         .flatMap((s) => s.actions)
-        .filter((a) => a.kind === 'burst').length
+        .filter((a) => a.kind === 'burst' && !a.onlyShort).length
     expect(count('Sucrose')).toBe(3)
     expect(count('Flins')).toBe(2)
     expect(everyNthBursts(rotation, { Sucrose: 1, Flins: 0 })).toBeUndefined()

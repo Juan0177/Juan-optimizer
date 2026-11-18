@@ -218,6 +218,9 @@ type Event = { t: number; priority: number; seq: number; run: () => void }
  * so what carries over from the previous rotation (a summon still ticking, a buff still up) is
  * counted as it is in practice.
  */
+/** A frame count to use: a non-number (NaN, Infinity) would never end a wait or an action */
+const finiteFrames = (frames: number) => (Number.isFinite(frames) ? frames : 0)
+
 export function simulateRotation({
   rotation,
   members,
@@ -1330,10 +1333,20 @@ export function simulateRotation({
         states.get(characterKey)
       )
       if (entry) {
-        const frames = kitFramesInto(entry, action.kind)
+        const frames = kitFramesInto(
+          entry,
+          action.kind === 'swap' ? 'swap' : action.kind
+        )
         actions.push({ characterKey, text: 'Entry', start: now, frames })
         now += frames
         runUntil(now, true)
+      } else if (
+        (action.kind === 'swap' || action.kind === 'wait') &&
+        r === Math.min(1, repeats - 1)
+      ) {
+        const why = kit?.noEntryReason?.(states.get(characterKey), now)
+        if (why)
+          notes.add(`${characterKey}: no entry action on this swap-in: ${why}.`)
       }
       // Zero-delay swap/entry tasks resolve before the new member's first
       // action. Otherwise a queued passive can observe a buff that the
@@ -1341,12 +1354,17 @@ export function simulateRotation({
       runUntil(now, true)
     }
     if (!kit) return
+    // a swap-only step: the swap (and any swap-in effect) was all of it
+    if (action.kind === 'swap') {
+      lastNormalActor = undefined
+      return
+    }
     if (action.kind === 'wait') {
       lastNormalActor = undefined
-      const defaultFrames = Math.round((action.count ?? 0) * FPS)
-      const frames = Math.max(
-        0,
-        (opener ? undefined : frameOverrides[i]) ?? defaultFrames
+      const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
+      // (a length that is not a number would never end the wait: 0 instead)
+      const frames = finiteFrames(
+        Math.max(0, (opener ? undefined : frameOverrides[i]) ?? defaultFrames)
       )
       waits.push({
         characterKey,
@@ -1360,6 +1378,20 @@ export function simulateRotation({
       kit.onWait?.(ctxAt(now, characterKey), states.get(characterKey), frames)
       now += frames
       return
+    }
+    // A Burst every Nth rotation, not in this copy: only the member's short Burst plays (Varesa's
+    // Volcanic Kablam, Flins' Thunderous Symphony, which spend part of the Energy); the full one is
+    // left out
+    if (action.kind === 'burst' && action.onlyShort) {
+      const short = kit.shortBurstVariant
+      const variant = short
+        ? kit.variant?.(
+            ctxAt(now, characterKey),
+            states.get(characterKey),
+            action
+          )
+        : undefined
+      if (!short || variant?.key !== short) return
     }
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
@@ -1460,6 +1492,9 @@ export function simulateRotation({
       ? {
           ...kitResult,
           frames: edit.frames ?? kitResult.frames,
+          ...(kitResult.walkFrames !== undefined && {
+            walkFrames: Math.max(0, kitResult.walkFrames + shift),
+          }),
           framesInto: {
             ...Object.fromEntries(
               Object.entries(kitResult.framesInto ?? {}).map(([k, v]) => [
@@ -1540,7 +1575,12 @@ export function simulateRotation({
     let stateFrames = frames
     // gcsim queues the next item once the action reaches its earliest cancel (CanQueueAfter):
     // a written wait starts there, and the action after it is held until this one allows it
-    if (nextKind === 'wait' && !result.duration) {
+    if (nextKind === 'wait' && result.walkFrames !== undefined) {
+      // (a wait that is a walk: it starts at the action's walk cancel and ends it there, as an
+      // action of its own)
+      frames = result.walkFrames
+      stateFrames = frames
+    } else if (nextKind === 'wait' && !result.duration) {
       frames = Math.min(
         result.frames,
         ...Object.values(result.framesInto ?? {}).filter(
@@ -1574,7 +1614,8 @@ export function simulateRotation({
     }
     const defaultFrames = frames
     const edited = opener ? undefined : frameOverrides[i]
-    if (edited !== undefined) frames = Math.max(1, Math.round(edited))
+    if (edited !== undefined && Number.isFinite(edited))
+      frames = Math.max(1, Math.round(edited))
     actions.push({
       characterKey,
       text: action.text,

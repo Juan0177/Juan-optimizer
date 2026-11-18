@@ -11,6 +11,7 @@ import {
 import type { TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { getCharStat, getWeaponStat } from '@genshin-optimizer/gi/stats'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   CompareChartData,
   CompareRow,
@@ -42,6 +43,7 @@ import {
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import {
+  alpha,
   Box,
   Button,
   ButtonBase,
@@ -243,16 +245,40 @@ export function KqmShareMenu({
           arrow: { sx: { color: 'background.paper' } },
         }}
       >
+        {/* the results' main action after a run: a gold pill, larger than the rest */}
         <Button
-          size="small"
           variant="outlined"
-          color="inherit"
-          startIcon={<IosShareRoundedIcon />}
+          startIcon={
+            <IosShareRoundedIcon sx={{ fontSize: '19px !important' }} />
+          }
           disabled={disabled}
           aria-haspopup="menu"
           onClick={(e) => {
             seeTip()
             setAnchor(e.currentTarget)
+          }}
+          sx={{
+            height: 40,
+            px: 2.25,
+            borderRadius: 999,
+            textTransform: 'none',
+            fontSize: 14,
+            fontWeight: 650,
+            letterSpacing: '0.005em',
+            color: giTokens.goldLight,
+            borderColor: alpha(giTokens.gold, 0.5),
+            bgcolor: alpha(giTokens.gold, 0.1),
+            transition: 'background-color .15s, border-color .15s, color .15s',
+            '& .MuiButton-startIcon': { mr: 0.875 },
+            '&:hover': {
+              borderColor: giTokens.gold,
+              bgcolor: alpha(giTokens.gold, 0.18),
+            },
+            '&.Mui-focusVisible': {
+              outline: `2px solid ${giTokens.gold}`,
+              outlineOffset: 2,
+            },
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
           }}
         >
           {t('teamOpt.kqm.share.button', 'Share')}

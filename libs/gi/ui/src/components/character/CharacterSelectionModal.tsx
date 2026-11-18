@@ -36,6 +36,7 @@ import {
 } from '@genshin-optimizer/gi/db-ui'
 import { Translate } from '@genshin-optimizer/gi/i18n'
 import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
+import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import CloseIcon from '@mui/icons-material/Close'
 import FavoriteIcon from '@mui/icons-material/Favorite'
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder'
@@ -460,15 +461,28 @@ function MultiSelectFooter({
           flexWrap: 'wrap',
         }}
       >
-        <Box sx={{ mr: 'auto' }}>
+        {/* (Done beside the count at any width: never pushed under it) */}
+        <Box sx={{ mr: 'auto', flex: '1 1 0', minWidth: 0 }}>
           <Typography sx={{ fontWeight: 600 }}>
             {t('multiSelect.count', { count })}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ fontSize: { xs: 12.5, sm: 14 } }}
+          >
             {t('multiSelect.hint')}
           </Typography>
         </Box>
-        <Button onClick={onDone}>{t('multiSelect.done')}</Button>
+        {/* (the step that applies the picks: gold once there are some) */}
+        <Button
+          variant={count ? 'contained' : 'outlined'}
+          color="inherit"
+          onClick={onDone}
+          sx={[{ px: 2.5, flexShrink: 0 }, !!count && giCtaSx]}
+        >
+          {t('multiSelect.done')}
+        </Button>
       </Box>
     </>
   )
@@ -522,6 +536,8 @@ function CharacterSelectionModalBase({
 
   useEffect(() => {
     if (!show) return
+    // (not on touch screens: the keyboard would cover half the characters at once)
+    if (window.matchMedia?.('(pointer: coarse)').matches) return
     const id = requestAnimationFrame(() => searchInputRef.current?.focus())
     return () => cancelAnimationFrame(id)
   }, [show])
@@ -568,6 +584,9 @@ function CharacterSelectionModalBase({
       containerProps={{
         sx: {
           height: '100vh',
+          // (the visible screen: on Android Chrome 100vh runs under the bottom address bar,
+          // and the picker's Done went under it)
+          '@supports (height: 100dvh)': { height: '100dvh' },
           p: { xs: 1 },
         },
       }}
@@ -609,7 +628,12 @@ function CharacterSelectionModalBase({
               <CloseIcon />
             </IconButton>
           </Box>
-          <Box display="flex" gap={1}>
+          {/* (phones: the search on its own line, sorting under it) */}
+          <Box
+            display="flex"
+            gap={1}
+            sx={{ flexWrap: { xs: 'wrap', sm: 'nowrap' } }}
+          >
             <TextField
               inputRef={searchInputRef}
               value={searchTerm}
@@ -618,10 +642,14 @@ function CharacterSelectionModalBase({
               }
               label={t('characterName')}
               size="small"
-              sx={{ height: '100%', mr: 'auto' }}
+              sx={{
+                height: { xs: 'auto', sm: '100%' },
+                mr: 'auto',
+                flex: { xs: '1 1 100%', sm: '0 1 auto' },
+              }}
               inputProps={commandSearchInputProps}
               InputProps={{
-                sx: { height: '100%' },
+                sx: { height: { xs: 'auto', sm: '100%' } },
                 startAdornment: (
                   <InputAdornment position="start">
                     <SearchIcon fontSize="small" />
@@ -802,10 +830,11 @@ const MultiSelectCardWrapper = memo(function MultiSelectCardWrapper({
           <Typography variant="body2" sx={{ flexGrow: 1 }}>
             <SqBadge
               color={'warning'}
+              // (its place in the team, at the card's top right: inside the card at any width)
               sx={{
                 position: 'absolute',
-                top: 60,
-                left: 204,
+                top: 6,
+                right: 8,
                 zIndex: 2,
                 textShadow: '0 0 5px gray',
               }}
@@ -923,7 +952,15 @@ const SelectionCard = memo(function SelectionCard({
               <SqBadge color="secondary">{t('newBadge', 'New')}</SqBadge>
             </Typography>
           )}
-          <StarsDisplay stars={rarity} colored />
+          {/* (one line at any width: smaller stars on phones) */}
+          <Box
+            sx={{
+              whiteSpace: 'nowrap',
+              '& svg': { fontSize: { xs: 15, sm: 'inherit' } },
+            }}
+          >
+            <StarsDisplay stars={rarity} colored />
+          </Box>
         </Box>
       </Box>
     </CardActionArea>

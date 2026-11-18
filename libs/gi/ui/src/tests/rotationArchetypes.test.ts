@@ -1,11 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { describe, expect, it } from 'vitest'
-import {
-  KQM_SUBSTAT_ROLLS,
-  kqmConstellation,
-  kqmRollCaps,
-} from '../util/teamOpt/kqm'
+import { KQM_SUBSTAT_ROLLS, kqmRollCaps } from '../util/teamOpt/kqm'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import {
   rotationAttacks,
@@ -67,7 +63,11 @@ describe.each([
 ])('$archetype: $id', (team) => {
   it('uses C6 four-stars / C0 five-stars, 10/10/10 talents, and legal KQM artifact roll budgets', () => {
     for (const b of team.members) {
-      expect(b.cons, b.key).toBe(kqmConstellation(b.key as CharacterKey))
+      // (KQM's reference sheets: 4★ C6, 5★ C0; the app's own defaults differ for standard and
+      // free-constellation 5★)
+      expect(b.cons, b.key).toBe(
+        getCharStat(b.key as CharacterKey).rarity === 4 ? 6 : 0
+      )
       expect(b.talent).toEqual([10, 10, 10])
       const caps = kqmRollCaps(b.mains as never)
       expect(

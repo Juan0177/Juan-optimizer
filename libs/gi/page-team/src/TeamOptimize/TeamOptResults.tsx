@@ -19,6 +19,7 @@ import {
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  RunEnemy,
   TeamData,
   TeamOptMember,
   TeamOptResult,
@@ -29,8 +30,11 @@ import {
   ArtifactSetName,
   ArtifactSetTooltip,
   CharacterName,
+  EnemyDefeatTime,
+  EnemySummary,
   ExcludeIcon,
   resolveInfo,
+  sameEnemy,
   statName,
   WeaponDetails,
   WeaponName,
@@ -65,7 +69,10 @@ import type { SxProps, Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
 import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { FightTimeline } from '../Enemy/FightTimeline'
 import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
+import type { CocoonEvaluations, FightApplications } from './fightTeam'
+import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import type { ResultDetailsData } from './ResultDetails'
@@ -99,16 +106,31 @@ export function TeamOptResults({
   teamData,
   stale,
   onRunAgain,
+  timeline,
+  enemy,
+  enemyNow,
+  applications,
+  cocoon,
 }: {
   teamId: string
+  /** The written rotation's element applications per second (a Stygian boss's mechanics) */
+  applications?: FightApplications
+  /** The builds' damage in the Moongecko's Radiant Cocoon and Disentangled (its fight) */
+  cocoon?: CocoonEvaluations
   members: TeamOptMember[]
   result: TeamOptResult
   seconds: number
+  /** The enemy it was found for (absent: found before this was kept) */
+  enemy?: RunEnemy
+  /** The team's enemy now, when it is not the same: shown after the run's */
+  enemyNow?: RunEnemy
   /** The team's data now: what names the members' requirements */
   teamData: TeamData | undefined
   /** The rotation or the settings changed since the run: the result does not include it */
   stale?: boolean
   onRunAgain?: () => void
+  /** The written rotation as these builds play it (its timeline), under the members */
+  timeline?: ReactNode
   /** The settings the result was found with (its rotation) */
   runTeamOpt: TeamOpt
   /** How long one rotation takes (seconds): damage is then shown per second */
@@ -119,6 +141,39 @@ export function TeamOptResults({
   const database = useDatabase()
   const team = useTeam(teamId)
   const { before, after } = result
+  // the enemy the builds are for: the team's now while it takes the same damage (its preset and
+  // HP too: the builds do not depend on them), else the one they were found for
+  const fightEnemy = useMemo(
+    () =>
+      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
+        ? team
+        : enemy,
+    [enemy, team]
+  )
+  const fight = useMemo(
+    () =>
+      enemy &&
+      fightTeamOf({
+        members: members.map((m) => m.characterKey),
+        evaluation: after,
+        attacks: runTeamOpt.attacks,
+        teamData,
+        rotationTime,
+        enemyOverride: enemy.enemyOverride,
+        applications,
+        cocoon,
+      }),
+    [
+      enemy,
+      members,
+      after,
+      runTeamOpt.attacks,
+      teamData,
+      rotationTime,
+      applications,
+      cocoon,
+    ]
+  )
   const { gender } = useDBMeta()
   const gain = before.total > 0 ? after.total / before.total - 1 : 0
   // recomputed with the database: an applied result has no changes left
@@ -227,6 +282,42 @@ export function TeamOptResults({
               count: result.rounds,
             })}
           </Typography>
+          {/* the enemy the damage is for (and the team's now, if it changed since) */}
+          {enemy && (
+            <Typography
+              component="div"
+              sx={{
+                ...type.label,
+                ...numSx,
+                fontWeight: 400,
+                mt: 0.25,
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                columnGap: 0.75,
+              }}
+            >
+              <span>{t('teamOpt.result.enemy', 'For')}</span>
+              <EnemySummary enemy={enemy} />
+              {fightEnemy && (
+                <EnemyDefeatTime enemy={fightEnemy} team={fight} />
+              )}
+              {enemyNow && (
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    columnGap: 0.75,
+                    color: 'warning.main',
+                  }}
+                >
+                  {t('teamOpt.result.enemyNow', '→ now')}
+                  <EnemySummary enemy={enemyNow} />
+                </Box>
+              )}
+            </Typography>
+          )}
         </Box>
 
         <Box
@@ -535,6 +626,10 @@ export function TeamOptResults({
             />
           ))}
         </Box>
+        {/* the rotation as these builds play it, then the enemy's HP over the fight (a Stygian
+            boss: its states too), as KQM theorycrafting's results show them */}
+        {timeline}
+        {fightEnemy && <FightTimeline enemy={fightEnemy} team={fight} />}
       </Box>
       <Snackbar
         open={!!lastExcluded}

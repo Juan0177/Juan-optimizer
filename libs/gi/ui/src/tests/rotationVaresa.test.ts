@@ -65,3 +65,30 @@ describe('Varesa', () => {
     expect(pinned(kablam, 'c4FpApex')).toBe('on')
   })
 })
+
+describe('Varesa: notes that explain her Kablam and her Rush charges (a player report)', () => {
+  const notes = (text: string) => run(text).notes.join(' ')
+  it('says nothing when the Q after a Fiery Passion plunge is the Kablam', () => {
+    const sim = run('Varesa E CA P E CA P Q')
+    expect(sim.actions.at(-1)?.variant?.label).toBe('Volcanic Kablam')
+    expect(sim.notes.join(' ')).not.toMatch(/Flying Kick|Rush charge/)
+  })
+  it('says a Rush after the plunge ended Apex Drive, when the Q is a full Flying Kick', () => {
+    const sim = run('Varesa E CA P E CA P E Q')
+    expect(sim.actions.at(-1)?.variant).toBeUndefined()
+    expect(sim.notes.join(' ')).toContain(
+      'a Rush after her Fiery Passion plunge ended Apex Drive'
+    )
+  })
+  it("says Apex Drive's 2.3 s ran out, when the Q comes too late", () => {
+    expect(notes('Varesa E CA P E CA P W3 Q')).toContain(
+      'Apex Drive lasts 2.3 s'
+    )
+  })
+  it('explains a Q that waits for the Flying Kick, and an E that waits for a charge', () => {
+    expect(notes('Varesa Q W1 Q')).toContain(
+      "waited for the Flying Kick's 18 s cooldown"
+    )
+    expect(notes('Varesa E E E')).toContain('waited for a Rush charge')
+  })
+})

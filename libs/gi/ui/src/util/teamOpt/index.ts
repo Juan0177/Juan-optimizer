@@ -11,6 +11,7 @@ export {
   setKqmBuildThreads,
 } from './kqmBuildPool'
 export * from './kqmWeaponSources'
+export * from './lowHpUptime'
 export * from './objective'
 export * from './rotation'
 export * from './rotationCalculation'

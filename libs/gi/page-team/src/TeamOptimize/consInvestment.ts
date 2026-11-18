@@ -2,7 +2,7 @@ import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import type { KqmBuild, KqmResult } from '@genshin-optimizer/gi/ui'
-import { optimizeTeamKqm } from '@genshin-optimizer/gi/ui'
+import { optimizeTeamKqm, playedAttackStates } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import { kqmReplayOf } from './useKqmRun'
 
@@ -210,6 +210,8 @@ export async function refitConstellations({
     gender,
     teamOpt,
     replay: kqmReplayOf(database, gender, i18n, teamId, teamOpt, text),
+    // (as its result was played: Wolf's Gravestone's uptime against the enemy)
+    attackStates: playedAttackStates(result.played),
     from: { ...result.builds, ...start },
     only: raised,
     maxRounds: 1,

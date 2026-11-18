@@ -19,6 +19,21 @@ const teamKeys = [
 const good = () => structuredClone(van) as unknown as IGOOD & IGO
 
 describe('team.teamOpt (Team Optimize settings)', () => {
+  it('keeps the characters left out of "Other characters’ artifacts", valid ones only', () => {
+    const result = validateTeamOpt({
+      ...initTeamOpt(),
+      useOtherChars: true,
+      excludedLocations: ['Bennett', 'NotACharacter', 'Bennett', 7, 'Traveler'],
+    })!
+    expect(result.excludedLocations).toEqual(['Bennett', 'Traveler'])
+    // (absent when none are left out: an earlier result is not "found with other settings")
+    expect(
+      'excludedLocations' in
+        validateTeamOpt({ ...initTeamOpt(), excludedLocations: [] })!
+    ).toBe(false)
+    expect('excludedLocations' in validateTeamOpt(initTeamOpt())!).toBe(false)
+  })
+
   it('is not added to teams without it (GOOD import)', () => {
     const database = new ArtCharDatabase(1, new SandboxStorage())
     database.importGOOD(good(), false, false, false)
@@ -435,6 +450,7 @@ describe('team.teamOpt (Team Optimize settings)', () => {
       },
       keep: ['Shenhe'],
       useOtherChars: true,
+      excludedLocations: ['Bennett', 'Traveler'],
       useExcludedArts: true,
       levelLow: 16,
       levelHigh: 20,
@@ -521,5 +537,77 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     // and none of the newer settings is made up
     for (const key of ['onField', 'bonusStats', 'rotationTime'] as const)
       expect(key in loaded).toBe(false)
+  })
+})
+
+describe('team.enemyPreset (the enemy preset last applied)', () => {
+  it('is kept as a string, and left out otherwise', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({ enemyPreset: 'stygian:1013061:regular' })
+    expect(database.teams.get(id)!.enemyPreset).toBe('stygian:1013061:regular')
+    for (const enemyPreset of [3, '', 'x'.repeat(65), null, {}]) {
+      const other = database.teams.new({ enemyPreset } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
+  })
+})
+
+describe('team.enemyHp (a custom enemy’s HP)', () => {
+  it('is kept as a whole number from 1 to a trillion, and left out otherwise', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({ enemyHp: 20_000_000.4 })
+    expect(database.teams.get(id)!.enemyHp).toBe(20_000_000)
+    for (const enemyHp of [
+      0,
+      -5,
+      0.5,
+      2e12,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      '20M',
+      null,
+    ]) {
+      const other = database.teams.new({ enemyHp } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
+  })
+})
+
+describe('team.fightSettings (how the team plays the Moongecko)', () => {
+  it('keeps its ward and heal seconds in range, to 0.1 s, and drops the rest', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const id = database.teams.new({
+      fightSettings: { wardSeconds: 12.34, healSeconds: 2.06 },
+    })
+    expect(database.teams.get(id)!.fightSettings).toEqual({
+      wardSeconds: 12.3,
+      healSeconds: 2.1,
+    })
+    // (never healed: -1)
+    const never = database.teams.new({ fightSettings: { healSeconds: -1 } })
+    expect(database.teams.get(never)!.fightSettings).toEqual({
+      healSeconds: -1,
+    })
+    // (full energy at the start: only when set)
+    const full = database.teams.new({ fightSettings: { fullEnergy: true } })
+    expect(database.teams.get(full)!.fightSettings).toEqual({
+      fullEnergy: true,
+    })
+    // a ward past the 35 s it has is kept (not broken in time), to 60 s
+    const late = database.teams.new({ fightSettings: { wardSeconds: 60 } })
+    expect(database.teams.get(late)!.fightSettings).toEqual({ wardSeconds: 60 })
+    for (const fightSettings of [
+      { wardSeconds: 0.5 },
+      { wardSeconds: 61 },
+      { healSeconds: -0.5 },
+      { healSeconds: 41 },
+      { wardSeconds: Number.NaN, healSeconds: '3' },
+      {},
+      'fast',
+      null,
+    ]) {
+      const other = database.teams.new({ fightSettings } as never)
+      expect(Object.keys(database.teams.get(other)!).sort()).toEqual(teamKeys)
+    }
   })
 })

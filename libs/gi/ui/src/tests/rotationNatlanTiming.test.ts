@@ -86,6 +86,47 @@ describe('Natlan team queue and snapshot boundaries', () => {
     ).toBe(1.5)
   })
 
+  it('starts a walk on Sharky at gcsim’s walk cancel (Burst 167, Surging Bite 81, bite 39, E 19), so E Q W1.5 N1 ×3 has two Surging Bites, as kqmsim', () => {
+    const sim = simulateRotation({
+      rotation: parseRotation('Mualani E Q W1.5 N1 W1.5 N1 W1.5 N1', [
+        { characterKey: 'Mualani', name: 'Mualani' },
+      ]),
+      members: ['Mualani'],
+      elements: { Mualani: 'hydro' },
+      constellations: {},
+      repeats: 1,
+      keep: 'all',
+    })
+    const starts = sim.actions.map((a) => [a.text, a.start])
+    // E (walk cancel unused: Q follows at 6), Q + 167 + 90, then each bite + 81 + 90
+    expect(starts).toEqual([
+      ['E', 0],
+      ['Q', 6],
+      ['N1', 6 + 167 + 90],
+      ['N1', 6 + 167 + 90 + 81 + 90],
+      ['N1', 6 + 167 + 90 + 2 * (81 + 90)],
+    ])
+    // (her Nightsoul's Blessing ends before the third: a normal attack, as in kqmsim)
+    expect(
+      sim.hits
+        .filter((h) => h.characterKey === 'Mualani' && h.path[0] !== '_marker')
+        .map((h) => h.label)
+        .filter((l) => /Bite|N1|Normal/.test(l))
+    ).toEqual(["Sharky's Surging Bite", "Sharky's Surging Bite", 'N1'])
+    // outside the blessing a wait still starts at the earliest cancel (gcsim's wait)
+    const out = simulateRotation({
+      rotation: parseRotation('Mualani Q W1 N1', [
+        { characterKey: 'Mualani', name: 'Mualani' },
+      ]),
+      members: ['Mualani'],
+      elements: { Mualani: 'hydro' },
+      constellations: {},
+      repeats: 1,
+      keep: 'all',
+    })
+    expect(out.waits[0]?.start).toBe(108)
+  })
+
   it('keeps Xilonen’s first crystallizing hit from gaining its own Scroll buff', () => {
     const members: CharacterKey[] = ['Xilonen', 'SangonomiyaKokomi']
     const hydro: KitModel = {

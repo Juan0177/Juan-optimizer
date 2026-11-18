@@ -55,6 +55,57 @@ export interface Team {
   lastEdit: number
   /** Team Optimize settings: only stored once the user sets something there */
   teamOpt?: TeamOpt
+  /**
+   * The enemy preset last applied (a Stygian Onslaught boss: `stygian:<boss>:<phase>`): shown by
+   * name while `enemyOverride` still has its RES
+   */
+  enemyPreset?: string
+  /**
+   * The enemy's HP, when it is set by hand (a Stygian Onslaught boss's is its preset's): how long
+   * the team takes to defeat it
+   */
+  enemyHp?: number
+  /** How the team plays a boss's mechanics where its fight cannot tell (the Moongecko's) */
+  fightSettings?: TeamFightSettings
+}
+/** The most HP an enemy can be given (a trillion) */
+export const MAX_ENEMY_HP = 1e12
+/**
+ * How the team plays a boss's mechanics where its fight cannot tell: seconds to break the Radiant
+ * Moongecko's Moonstone Anchor ward (1–60: past its 35 s, not in time), and to be healed to full
+ * after its Radiant Cocoon (0–40; -1: never)
+ */
+export interface TeamFightSettings {
+  wardSeconds?: number
+  healSeconds?: number
+  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
+  fullEnergy?: boolean
+}
+const MAX_WARD_SECONDS = 60
+const MAX_HEAL_SECONDS = 40
+/** `TeamFightSettings` kept to their ranges (to 0.1 s); none left: undefined */
+export function validateFightSettings(
+  value: unknown
+): TeamFightSettings | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const { wardSeconds, healSeconds, fullEnergy } = value as TeamFightSettings
+  const tenth = (v: number) => Math.round(v * 10) / 10
+  const out: TeamFightSettings = {
+    ...(typeof wardSeconds === 'number' &&
+    Number.isFinite(wardSeconds) &&
+    wardSeconds >= 1 &&
+    wardSeconds <= MAX_WARD_SECONDS
+      ? { wardSeconds: tenth(wardSeconds) }
+      : {}),
+    ...(typeof healSeconds === 'number' &&
+    Number.isFinite(healSeconds) &&
+    (healSeconds === -1 ||
+      (healSeconds >= 0 && healSeconds <= MAX_HEAL_SECONDS))
+      ? { healSeconds: healSeconds === -1 ? -1 : tenth(healSeconds) }
+      : {}),
+    ...(fullEnergy === true ? { fullEnergy } : {}),
+  }
+  return Object.keys(out).length ? out : undefined
 }
 export type LoadoutExportSetting = {
   convertEquipped: boolean
@@ -209,6 +260,8 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
+    const { enemyPreset, enemyHp } = obj as Team
+    const fightSettings = validateFightSettings((obj as Team).fightSettings)
 
     return {
       name,
@@ -218,6 +271,18 @@ export class TeamDataManager extends DataManager<
       loadoutData,
       lastEdit,
       ...(teamOpt ? { teamOpt } : {}),
+      ...(typeof enemyPreset === 'string' &&
+      enemyPreset.length > 0 &&
+      enemyPreset.length <= 64
+        ? { enemyPreset }
+        : {}),
+      ...(typeof enemyHp === 'number' &&
+      Number.isFinite(enemyHp) &&
+      enemyHp >= 1 &&
+      enemyHp <= MAX_ENEMY_HP
+        ? { enemyHp: Math.round(enemyHp) }
+        : {}),
+      ...(fightSettings ? { fightSettings } : {}),
     }
   }
   new(value: Partial<Team> = {}): string {
