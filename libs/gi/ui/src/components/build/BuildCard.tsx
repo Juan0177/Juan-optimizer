@@ -31,6 +31,7 @@ export function BuildCard({
   onDupe,
   onEquip,
   onRemove,
+  actions,
   hideFooter = false,
 }: {
   avatar?: ReactNode
@@ -46,6 +47,8 @@ export function BuildCard({
   onDupe?: () => void
   onEquip?: () => void
   onRemove?: () => void
+  /** juanlab: more footer buttons (icons with their own tooltip), before Delete */
+  actions?: ReactNode
   hideFooter?: boolean
 }) {
   const { t } = useTranslation('build')
@@ -173,6 +176,7 @@ export function BuildCard({
               </IconButton>
             </Box>
           </Tooltip>
+          {actions}
           <Tooltip
             title={<Typography>{t('buildCardTip.delete')}</Typography>}
             placement="top"

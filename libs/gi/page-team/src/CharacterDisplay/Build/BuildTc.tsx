@@ -14,6 +14,7 @@ import {
   TeamCharacterContext,
   useBuildTc,
   useDatabase,
+  useDBMeta,
   useTeamChar,
 } from '@genshin-optimizer/gi/db-ui'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
@@ -21,6 +22,8 @@ import { SlotIcon } from '@genshin-optimizer/gi/svgicons'
 import {
   ArtifactSetName,
   BuildCard,
+  GcwebBuildButton,
+  genInputFromTc,
   levelShort,
   StatWithUnit,
   WeaponCardNanoObj,
@@ -51,8 +54,9 @@ export default function BuildTc({
 }) {
   const { t } = useTranslation('build')
   const [open, onOpen, onClose] = useBoolState()
-  const { teamId, teamCharId } = useContext(TeamCharacterContext)
+  const { teamId, teamCharId, teamChar } = useContext(TeamCharacterContext)
   const database = useDatabase()
+  const { gender } = useDBMeta()
   const buildTc = useBuildTc(buildTcId)!
   const { name, description, srcTeamCharId } = buildTc
   const source = useTeamChar(srcTeamCharId ?? '')?.name
@@ -93,6 +97,18 @@ export default function BuildTc({
         onEdit={onOpen}
         onDupe={onDupe}
         onRemove={onRemove}
+        actions={
+          // juanlab: the TC build's 5 artifacts for gc-web (no `scales`: used substats judged from the build)
+          !!teamChar?.key && (
+            <GcwebBuildButton
+              compact
+              input={() => genInputFromTc(buildTc)}
+              characterKey={teamChar.key}
+              gender={gender}
+              name={name}
+            />
+          )
+        }
       >
         <TcEquip buildTcId={buildTcId} />
       </BuildCard>

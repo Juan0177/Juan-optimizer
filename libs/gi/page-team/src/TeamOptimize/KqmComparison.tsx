@@ -16,6 +16,8 @@ import type {
 import {
   CharacterName,
   compareTeamKqm,
+  GcwebBuildButton,
+  genInputFromKqm,
   KQM_SUBSTAT_ROLLS,
   kqmSetsId,
   kqmWeaponData,
@@ -458,6 +460,17 @@ export function KqmCompare({
             equipment={equipment}
             rolls={kqmStandardRolls(runSettings.kqm)}
           />
+          {/* juanlab: the 5 artifacts of this build (the one shown, picks included) for gc-web.
+              No `scales`: the run keeps no record of what the damage reads, so the used
+              substats are judged from the build (genInputFromKqm) */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+            <GcwebBuildButton
+              input={() => genInputFromKqm(build, {})}
+              characterKey={characterKey}
+              gender={gender}
+              name="KQM"
+            />
+          </Box>
           {er && (
             <Tooltip
               arrow

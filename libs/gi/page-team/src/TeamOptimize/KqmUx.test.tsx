@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
   return {
     compare: vi.fn(),
     optimize: vi.fn(),
+    // (the "Artifacts for gc-web" buttons: what each was given, its input read on click)
+    gcweb: [] as Record<string, unknown>[],
     saved,
     database: {
       weapons: { get: () => ({ key: 'AmenomaKageuchi', refinement: 5 }) },
@@ -221,6 +223,20 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   ],
   compareTeamKqm: mocks.compare,
   optimizeTeamKqm: mocks.optimize,
+  genInputFromKqm: (build: object, opts: object) => ({ fromKqm: build, opts }),
+  GcwebBuildButton: ({
+    input,
+    ...props
+  }: {
+    input: () => unknown
+  } & Record<string, unknown>) => (
+    <button
+      type="button"
+      onClick={() => mocks.gcweb.push({ ...props, input: input() })}
+    >
+      Artifacts for gc-web
+    </button>
+  ),
   TeamOptCancelled: class extends Error {},
 }))
 // (the timeline names its tracks from the sheets: not needed here)
@@ -486,6 +502,48 @@ describe('KQM focused results', () => {
         .getByRole('tab', { name: 'Artifact sets' })
         .getAttribute('aria-selected')
     ).toBe('true')
+  })
+  it('offers the shown build’s 5 artifacts for gc-web, as the picks change it', async () => {
+    const result = sampleResult()
+    mocks.gcweb.length = 0
+    mocks.compare.mockImplementation(async ({ weapon, sets }) => ({
+      ...result,
+      builds: { KamisatoAyaka: { ...build, weapon, sets } },
+    }))
+    render(
+      <KqmCompare
+        teamId="ui-gcweb"
+        runSettings={initial()}
+        result={result}
+        characterKey="KamisatoAyaka"
+        rotationTime={20}
+      />,
+      { wrapper: wrap }
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Artifacts for gc-web' })
+    )
+    expect(mocks.gcweb).toEqual([
+      {
+        characterKey: 'KamisatoAyaka',
+        gender: 'F',
+        name: 'KQM',
+        // (no scales: judged from the build)
+        input: { fromKqm: build, opts: {} },
+      },
+    ])
+    fireEvent.click(screen.getByRole('tab', { name: 'Artifact sets' }))
+    fireEvent.click(screen.getByRole('button', { name: /GladiatorsFinale/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Reset' })).toBeTruthy()
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Artifacts for gc-web' })
+    )
+    expect(mocks.gcweb[1]?.['input']).toEqual({
+      fromKqm: { ...build, sets: { GladiatorsFinale: 4 } },
+      opts: {},
+    })
   })
   it('measures each ranked option against the best, on one line', () => {
     const result = sampleResult()
@@ -974,6 +1032,26 @@ describe('KQM results on another database (KQM Compare’s team B)', () => {
       getItem.mockRestore()
       localStorage.removeItem('teamOptRotationText_ui-b-rot')
     }
+  })
+
+  it('offers B’s build for gc-web too (only the build is read, not B’s database)', () => {
+    mocks.gcweb.length = 0
+    render(
+      <KqmResults
+        {...props('ui-b-gcweb')}
+        database={sandbox() as never}
+        readOnly
+        replayRotation={rotationB}
+      />,
+      { wrapper: wrap }
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Artifacts for gc-web' })
+    )
+    expect(mocks.gcweb[0]).toMatchObject({
+      characterKey: 'KamisatoAyaka',
+      input: { fromKqm: build },
+    })
   })
 
   it('read only: no discard and no share of B as the team', () => {
