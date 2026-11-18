@@ -9,6 +9,7 @@ import {
   KQM_CARD_WIDTH,
   KQM_CHANGED,
   KQM_TONE,
+  kqmCardHeight,
   loadKqmCardImages,
 } from './renderKqmCard'
 import { betaMark, ink, loadShareFont, page } from './shareStyle'
@@ -50,15 +51,29 @@ export const KQM_COMPARE_CARD_WIDTH = KQM_CARD_WIDTH
 const HEAD_H = 128
 const SHEET_GAP = 14
 /**
- * A KQM sheet's height (`kqmCardHeight`, as a number: this module may be read before the sheet's,
- * the buildCard modules importing each other)
+ * A KQM sheet's usual height (`kqmCardHeight`, as a number: this module may be read before the
+ * sheet's, the buildCard modules importing each other)
  */
 export const KQM_COMPARE_SHEET_H = 594
-const SHEET_Y = [
-  HEAD_H - 24,
-  HEAD_H - 24 + KQM_COMPARE_SHEET_H - 36 + SHEET_GAP,
-]
-export const KQM_COMPARE_CARD_HEIGHT = SHEET_Y[1] + KQM_COMPARE_SHEET_H
+/** The sheets' tops and the card's height, from the sheets' heights (A's, B's) */
+const layout = (a: number, b: number) => {
+  const ya = HEAD_H - 24
+  const yb = ya + a - 36 + SHEET_GAP
+  return { ya, yb, height: yb + b }
+}
+/** The usual card's height (for placeholders) */
+export const KQM_COMPARE_CARD_HEIGHT = layout(
+  KQM_COMPARE_SHEET_H,
+  KQM_COMPARE_SHEET_H
+).height
+/** The card's height: its sheets' (taller when detailed) */
+export function kqmCompareCardHeight(
+  data: Pick<KqmCompareCardData, 'a' | 'b'>
+) {
+  return sheetsLayout(data).height
+}
+const sheetsLayout = ({ a, b }: Pick<KqmCompareCardData, 'a' | 'b'>) =>
+  layout(kqmCardHeight(a.card), kqmCardHeight(b.card))
 
 const TEXT = '#1c2331'
 const PAGE = '#e8ecf3'
@@ -81,12 +96,11 @@ export async function renderKqmCompareCard(
   ])
   await document.fonts?.ready
   const W = KQM_COMPARE_CARD_WIDTH
-  const H = KQM_COMPARE_CARD_HEIGHT
+  const { ya, yb, height: H } = sheetsLayout(data)
   const { canvas, ctx } = page(W, H, scale)
   ctx.fillStyle = PAGE
   ctx.fillRect(0, 0, W, H)
   drawCompareHeader(ctx, data)
-  const [ya, yb] = SHEET_Y
   const images: KqmCardImages[] = [a, b]
   ;[data.a, data.b].forEach((side, i) =>
     drawKqmCard(ctx, side.card, images[i], {

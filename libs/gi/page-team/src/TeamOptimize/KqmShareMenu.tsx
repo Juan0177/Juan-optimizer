@@ -15,6 +15,7 @@ import type {
   CompareChartData,
   CompareRow,
   InvestmentChartData,
+  KqmBuild,
   KqmCardData,
   KqmResult,
   TeamOptMember,
@@ -29,6 +30,7 @@ import {
   KQM_CARD_HEIGHT,
   KQM_CARD_WIDTH,
   kqmCardFace,
+  kqmCardHeight,
   kqmDefaultExcludedWeapons,
   kqmRefinement,
   kqmSetsId,
@@ -80,13 +82,18 @@ import {
 import { formatRateFull } from './format'
 import {
   betaOf,
+  type KqmCardView,
+  kqmCardFileName,
+  kqmMembersStats,
   kqmStandardNote,
   kqmTeamCardData,
+  readKqmCardView,
   shareStamp,
+  writeKqmCardView,
 } from './kqmTeamCard'
 import { MemberAvatar } from './MemberAvatar'
 import { useMemberNames } from './RotationWriter'
-import { Disclosure, hairline, insetSx, type } from './ui'
+import { Disclosure, hairline, insetSx, Segmented, type } from './ui'
 
 type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
 
@@ -401,6 +408,8 @@ function useShareText(props: ShareProps) {
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
+    // (the detailed team card's stat names)
+    'keymap',
   ])
   const locale = i18n.language
   const { gender } = useDBMeta()
@@ -524,8 +533,32 @@ function TeamPicture({
   ...props
 }: ShareProps & { onClose: () => void }) {
   const s = useShareText(props)
+  const database = useDatabase()
   const { result, rotationTime, teamId } = props
   const { setup } = props
+  // (the usual sheet, or with each member's stats; the last pick, in this browser)
+  const [view, setViewState] = useState<KqmCardView>(readKqmCardView)
+  const setView = (v: KqmCardView) => {
+    setViewState(v)
+    writeKqmCardView(v)
+  }
+  // (out of combat, as the run had each member: its constellation, the KQM talents; worked out
+  // once per view and result, not again when the language changes; a member whose stats fail to
+  // compute gets no details, the card still opens)
+  const stats = useMemo(() => {
+    if (view !== 'detailed') return undefined
+    return kqmMembersStats(
+      database,
+      (
+        Object.entries(result.builds) as [CharacterKey, KqmBuild | undefined][]
+      ).map(([key, build]) => ({
+        key,
+        build,
+        constellation: result.constellations[key] ?? 0,
+      })),
+      kqmTalentLevel(setup.kqm)
+    )
+  }, [view, database, result, setup])
   const data = useMemo((): KqmCardData => {
     // (field time: the ER calculator's, from the rotation or as typed)
     const calc = setup.kqm?.energyCalculator
@@ -540,6 +573,7 @@ function TeamPicture({
         damage: result.after.members[ck] ?? 0,
         er: result.energyRecharge[ck]?.value,
         fieldTime: calc?.members[ck]?.fieldTime,
+        stats: stats?.[ck],
       })),
       total: result.after.total,
       rotationTime,
@@ -549,9 +583,10 @@ function TeamPicture({
       siteName: shareStamp(s.locale),
       locale: s.locale,
     })
-  }, [s, result, rotationTime, teamId, setup])
+  }, [s, result, rotationTime, teamId, setup, stats])
   const render = useMemo(() => () => renderKqmCard(data), [data])
-  const watermark = () => shareRecord(props, s, 'team', s.beta)
+  const watermark = () => shareRecord(props, s, 'team', s.beta, { view })
+  const viewLabel = s.t('page_team:teamOpt.card.view.label', 'Card view')
   return (
     <CardImageDialog
       title={s.t('page_team:teamOpt.kqm.share.team', 'Team card')}
@@ -559,10 +594,29 @@ function TeamPicture({
         defaultValue: 'The KQM builds of {{team}}',
         team: s.teamName,
       })}
-      fileName={`${safeName(s.teamName)}-kqm`}
-      aspectRatio={`${KQM_CARD_WIDTH} / ${KQM_CARD_HEIGHT}`}
+      fileName={kqmCardFileName(`${safeName(s.teamName)}-kqm`, view)}
+      // (the detailed sheet is taller: its own height; the usual one as ever)
+      aspectRatio={`${KQM_CARD_WIDTH} / ${view === 'detailed' ? kqmCardHeight(data) : KQM_CARD_HEIGHT}`}
       render={render}
       watermark={watermark}
+      header={
+        <Segmented<KqmCardView>
+          size="small"
+          value={view}
+          aria-label={viewLabel}
+          options={[
+            {
+              value: 'normal',
+              label: s.t('page_team:teamOpt.card.view.normal', 'Normal'),
+            },
+            {
+              value: 'detailed',
+              label: s.t('page_team:teamOpt.card.view.detailed', 'Detailed'),
+            },
+          ]}
+          onChange={setView}
+        />
+      }
       onClose={onClose}
     />
   )
