@@ -4,6 +4,26 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.18.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.18.0) (2026-11-19)
+
+### New
+
+- Team optimize works out each member's Min ER from the written rotation with the ER calculator, as KQM Theorycrafting does. The run window shows the targets, "Calculate ER" opens the same side panel to adjust them, and a run works them out for the weapons each build holds. Typing a member's minimum keeps your own values instead.
+- The fight timeline shows the team's damage in every 3 s, into a shield or ward too, and pointing at a bar shows the team's DPS in those 3 s.
+- On KQM Theorycrafting, a weapon row says when its passive is counted ("Passive on", or the share of the fight it is on), and a pick lists how it changes the teammates' Energy Recharge, for example with Favonius particles.
+
+### Improved
+
+- KQM Theorycrafting keeps its own enemy, team buffs, kit switches and extra buffs, apart from Team optimize's, and never uses the switches or buffs of your own builds. A weapon passive switched off on Team optimize no longer changes KQM's results. The first time, KQM starts with a copy of Team optimize's.
+- Clicking the rotation opens the rotation writer at once, and the rotation time and the number of rotations sit at the end of the rotation's line, in a menu.
+- The rotation, setup and result sections each have their own colour, the toggles are redesigned, and Export and Import moved to the right of the header.
+
+### Fixed
+
+- Switching the enemy from a Stygian boss to Custom no longer keeps the boss's HP.
+- The equipped team's DPS counts Wolf's Gravestone's passive as a run does, so it matches the result's DPS.
+- On Team optimize, the rotation timeline plays Team optimize's own rotation, not KQM's.
+
 ## [v1.17.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.17.0) (2026-11-18)
 
 ### New
