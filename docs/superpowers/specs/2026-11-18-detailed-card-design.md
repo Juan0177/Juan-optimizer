@@ -15,8 +15,12 @@ The usual card stays as it is; the detailed one is a second view of the same pic
     Corona DAN CRIT`);
   - the final stats, out of combat: HP, ATK, DEF, Elemental Mastery, CRIT Rate, CRIT DMG, Energy
     Recharge, the character's element DMG Bonus.
-- Comparison card: the block in both halves (A and B). In B, a value that differs from A for the same
-  member is marked with the card's existing "changed" tone, so re-tuned teammates show.
+- Comparison card: the block in both halves (A and B). In B, a value that differs from A is marked
+  with the card's existing "changed" tone **only when both sides have the same character in that
+  slot**: the fixed members (so re-tuned teammates show) and the swapped slot when the same
+  character enters (e.g. Yae Miko C0 → C1). When a different character enters (Yae Miko → Mitya),
+  its stats are shown plain, with no comparison marks (user: comparing two different characters'
+  stats makes no sense).
 - Every text and number in the site's language (Italian/English), decimal comma in Italian, like the
   rest of the cards.
 - Download/copy, file name and hidden record work as today; the hidden record says which view it is.
