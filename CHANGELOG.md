@@ -68,7 +68,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 ### Improved
 
 - KQM builds now use 10/10/10 talents by default, as the current KQM Standards do. If you pick 9/9/9 instead, new teams start with your last pick.
-- Phones: every team tab is in view (Team optimize and KQM were off-screen), Feedback moved into the menu and footer so nothing covers the Optimize team button, "Use this rotation" stays at the bottom of the screen, and attack lists stay folded after you apply a written rotation.
+- Phones: every team tab is in view (Team optimize and KQM were off-screen), "Use this rotation" stays at the bottom of the screen, and attack lists stay folded after you apply a written rotation.
 - Phones: the character picker shows each pick's team order and no longer opens the keyboard, timelines show avatars so the chart has more room, ER targets are no longer cut off, and the home page shows your inventory as compact tiles.
 
 ### Fixed

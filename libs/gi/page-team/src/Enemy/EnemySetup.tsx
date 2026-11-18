@@ -10,6 +10,7 @@ import {
   enemyHpOf,
   FIGHT_LIMIT,
   FightBreakdown,
+  formatCompact,
   formatDuration,
   MOONGECKO_BOSS,
   stygianDifficulties,
@@ -42,11 +43,10 @@ import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
 import { formatHp } from './hp'
 import { MoongeckoSettings, StartEnergySetting } from './MoongeckoSettings'
 
-const compact = (digits: number) =>
-  new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumSignificantDigits: digits,
-  })
+// juanlab: 13.5M; in Italian 13,5M (the site's decimal separator)
+const compact = (digits: number) => ({
+  format: (value: number) => formatCompact(value, digits),
+})
 
 /**
  * The enemy as a part of a setup (KQM theorycrafting's): what the builds are made against (a

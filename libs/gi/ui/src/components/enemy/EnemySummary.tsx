@@ -4,6 +4,7 @@ import type { Team } from '@genshin-optimizer/gi/db'
 import { Box, Tooltip } from '@mui/material'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
+import { formatCompact } from '../../util/siteNumber'
 import {
   StygianResSummary,
   stygianBossName,
@@ -111,11 +112,10 @@ export function EnemySummary({ enemy }: { enemy: RunEnemy }) {
   )
 }
 
-const compact = (digits: number) =>
-  new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumSignificantDigits: digits,
-  })
+// juanlab: 13.5M; in Italian 13,5M (the site's decimal separator)
+const compact = (digits: number) => ({
+  format: (value: number) => formatCompact(value, digits),
+})
 
 /** A fight's length: 4:33 (an hour or more: 1:02:05) */
 export function formatFightTime(seconds: number) {

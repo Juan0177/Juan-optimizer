@@ -275,7 +275,9 @@ export default function TeamCharacterSelector({
             value="kqm-compare"
             label={
               <>
-                {t('juanlab:kqmCompare.tab')}
+                {compact
+                  ? t('juanlab:kqmCompare.shortTab')
+                  : t('juanlab:kqmCompare.tab')}
                 <BetaBadge
                   label={t('juanlab:kqmCompare.alpha')}
                   tip={t('juanlab:kqmCompare.alphaTip')}

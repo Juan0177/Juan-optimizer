@@ -1032,6 +1032,7 @@
       },
       "copyPieces": "{{n}}pc",
       "shareTip": "How the team’s damage splits: by who deals it, and by the element it deals (a reaction’s damage counts as its element, Lunar-Charged as Electro).",
+      "shareTitle": "Damage share",
       "shareMembers": "By member",
       "shareElements": "By element",
       "dps": "DPS",

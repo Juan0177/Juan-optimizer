@@ -15,6 +15,8 @@ import {
   appliedStygianPreset,
   currentStygianSeason,
   enemyHpOf,
+  formatCompact,
+  formatWhole,
   StygianResSummary,
   stygianBosses,
   stygianBossName,
@@ -61,11 +63,10 @@ const WIKI_RES =
   'https://genshin-impact.fandom.com/wiki/Resistance#Base_Enemy_Resistances'
 const IMMUNE = Number.MAX_VALUE
 
-const compact = (digits: number) =>
-  new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumSignificantDigits: digits,
-  })
+// juanlab: 13.5M; in Italian 13,5M (the site's decimal separator)
+const compact = (digits: number) => ({
+  format: (value: number) => formatCompact(value, digits),
+})
 
 type Mode = 'custom' | 'stygian'
 
@@ -882,7 +883,7 @@ function BossDetail({
             >
               {t('enemy.hpFull', {
                 defaultValue: '{{hp}} HP',
-                hp: new Intl.NumberFormat('en').format(boss.hp[difficulty]),
+                hp: formatWhole(boss.hp[difficulty]),
               })}
             </Box>
             {' · '}

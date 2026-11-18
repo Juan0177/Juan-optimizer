@@ -15,6 +15,7 @@ import {
   enemyFight,
   enemyHpOf,
   FIGHT_LIMIT,
+  formatCompact,
   formatDuration,
   formatFightTime,
   MOONGECKO,
@@ -81,11 +82,10 @@ function marks(end: number) {
   return out
 }
 
-const compact = (digits: number) =>
-  new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumSignificantDigits: digits,
-  })
+// juanlab: 13.5M; in Italian 13,5M (the site's decimal separator)
+const compact = (digits: number) => ({
+  format: (value: number) => formatCompact(value, digits),
+})
 
 const W = 1000
 const H = 100

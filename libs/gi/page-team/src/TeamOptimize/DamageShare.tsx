@@ -166,7 +166,7 @@ export function DamageShare({
   return (
     <Box
       component="section"
-      aria-label={t('teamOpt.kqm.share', 'Damage share')}
+      aria-label={t('teamOpt.kqm.shareTitle', 'Damage share')}
       sx={{
         height: '100%',
         display: 'flex',
@@ -180,7 +180,7 @@ export function DamageShare({
           'How the team’s damage splits: by who deals it, and by the element it deals (a reaction’s damage counts as its element, Lunar-Charged as Electro).'
         )}
       >
-        {t('teamOpt.kqm.share', 'Damage share')}
+        {t('teamOpt.kqm.shareTitle', 'Damage share')}
       </SubsectionTitle>
       <Box
         sx={{
@@ -250,7 +250,7 @@ function Ring({
   /** In the middle, the largest part (not the total) when nothing is hovered */
   lead?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const titleId = useId()
   const [hover, setHover] = useState<string>()
   const total = slices.reduce((s, x) => s + x.value, 0)
@@ -318,7 +318,7 @@ function Ring({
               <Tooltip
                 key={p.key}
                 followCursor
-                title={`${p.label}: ${pct(p.value)} · ${formatRateFull(p.value, rotationTime)} ${unit}`}
+                title={`${p.label}: ${pct(p.value)} · ${formatRateFull(p.value, rotationTime, i18n?.language)} ${unit}`}
               >
                 {p.d ? (
                   // biome-ignore lint/a11y/noStaticElementInteractions: a hover highlight only (every part is listed beside the ring)
@@ -359,7 +359,9 @@ function Ring({
             <Typography
               sx={{ fontSize: 19, fontWeight: 650, lineHeight: 1.15, ...numSx }}
             >
-              {focus ? pct(focus.value) : formatRateFull(total, rotationTime)}
+              {focus
+                ? pct(focus.value)
+                : formatRateFull(total, rotationTime, i18n?.language)}
             </Typography>
             <Typography
               sx={{
@@ -452,7 +454,7 @@ function Ring({
                     color: 'text.secondary',
                   }}
                 >
-                  {formatRateFull(s.value, rotationTime)}
+                  {formatRateFull(s.value, rotationTime, i18n?.language)}
                 </Box>
               </Typography>
             </Box>

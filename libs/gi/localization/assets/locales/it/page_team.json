@@ -639,6 +639,7 @@
       },
       "copyPieces": "{{n}} pz",
       "shareTip": "Come si divide il danno della squadra: per chi lo infligge e per l'elemento inflitto (il danno di una reazione conta come il suo elemento, Carica lunare come Electro).",
+      "shareTitle": "Quota di danno",
       "shareMembers": "Per membro",
       "shareElements": "Per elemento",
       "dps": "DPS",
