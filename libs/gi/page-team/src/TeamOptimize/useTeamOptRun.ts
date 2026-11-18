@@ -59,6 +59,8 @@ export type TeamOptStatus = {
   failed: number
   skipped: number
   total: number
+  /** Every combination, set rules not applied (the GPU's sweep), until `total` is known */
+  upper?: number
   testedPerSecond: number
   skippedPerSecond: number
 }
