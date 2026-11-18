@@ -1411,7 +1411,10 @@ function KqmRunNotes({
     display: 'inline-flex',
     alignItems: 'center',
     gap: 0.625,
-    height: 28,
+    minHeight: 28,
+    maxWidth: '100%',
+    minWidth: 0,
+    py: 0.25,
     px: 1.25,
     borderRadius: 1,
     fontSize: 12.5,
@@ -1419,7 +1422,8 @@ function KqmRunNotes({
     color: tone,
     bgcolor: alpha(tone, 0.1),
     boxShadow: `inset 0 0 0 1px ${alpha(tone, 0.28)}`,
-    whiteSpace: 'nowrap',
+    // (one line when it fits; on a phone it wraps inside the row)
+    overflowWrap: 'anywhere',
   })
   return (
     <>
@@ -2508,6 +2512,8 @@ function KqmResultsView({
               flexWrap: 'wrap',
               justifyContent: 'flex-end',
               gap: 0.75,
+              minWidth: 0,
+              maxWidth: '100%',
             }}
           >
             <KqmRunNotes
