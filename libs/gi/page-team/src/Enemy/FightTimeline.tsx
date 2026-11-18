@@ -3,6 +3,7 @@ import type { ElementWithPhyKey } from '@genshin-optimizer/gi/consts'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  DamageTimes,
   FightEnemy,
   FightEstimate,
   FightEvent,
@@ -134,8 +135,9 @@ export function FightTimeline({
   )
   const hp = enemyHpOf(enemy)
   const view = useMemo(
-    () => (estimate && hp !== undefined ? fightView(estimate) : undefined),
-    [estimate, hp]
+    () =>
+      estimate && hp !== undefined ? fightView(estimate, team) : undefined,
+    [estimate, hp, team]
   )
   if (!estimate || hp === undefined || !view) return null
   const { segments, events, meter } = estimate.timeline
@@ -347,9 +349,18 @@ export function FightTimeline({
                   })}
           </Swatch>
         )}
-        <Swatch color={alpha(giTokens.parchment, 0.6)} line>
-          {t('enemy.fight.dpsLegend', 'Team DPS (into a shield or ward)')}
-        </Swatch>
+        {view.windowPath ? (
+          <Swatch color={alpha(giTokens.parchment, 0.42)}>
+            {t(
+              'enemy.fight.windowLegend',
+              'Team damage every 3 s (into a shield or ward too)'
+            )}
+          </Swatch>
+        ) : (
+          <Swatch color={alpha(giTokens.parchment, 0.6)} line>
+            {t('enemy.fight.dpsLegend', 'Team DPS (into a shield or ward)')}
+          </Swatch>
+        )}
         {events.length > 0 && (
           <Typography sx={{ ...type.label, fontWeight: 400, ml: 'auto' }}>
             {t(
@@ -396,8 +407,58 @@ function Swatch({
   )
 }
 
+/** Seconds of each damage window */
+const WINDOW = 3
+
+/**
+ * The team's damage in each `WINDOW` of the fight: the written rotation's hits looped from the
+ * start (its opening first, when the fight starts from no energy), each at the fight's damage
+ * there (its state's RES, a shield's take, nothing out of reach)
+ */
+function damageWindows(
+  estimate: FightEstimate,
+  team: FightTeam | undefined,
+  fightEnd: number
+): number[] | undefined {
+  const times = team?.damageTimes
+  const { segments } = estimate.timeline
+  if (!times || !segments.length || !(fightEnd > 0)) return undefined
+  const average = (d: DamageTimes) =>
+    d.hits.reduce((n, [, v]) => n + v, 0) / d.seconds + d.spread
+  const main = times.rotation
+  const mainAverage = average(main)
+  if (!(main.seconds > 0) || !(mainAverage > 0)) return undefined
+  const openSeconds =
+    estimate.notes.includes('opening') && team?.opening
+      ? team.opening.seconds
+      : 0
+  const opening = openSeconds > 0 ? (times.opening ?? main) : undefined
+  const openingAverage = opening ? average(opening) : 0
+  const windows = new Array<number>(Math.ceil(fightEnd / WINDOW)).fill(0)
+  const dpsAt = (t: number) =>
+    (segments.find((g) => t < g.end) ?? segments[segments.length - 1]).dps ?? 0
+  const add = (t: number, value: number, profileAverage: number) => {
+    if (t < 0 || t >= fightEnd || !(profileAverage > 0)) return
+    windows[Math.floor(t / WINDOW)] += (value * dpsAt(t)) / profileAverage
+  }
+  if (opening)
+    for (let start = 0; start < openSeconds; start += opening.seconds)
+      for (const [t, v] of opening.hits)
+        if (start + t < openSeconds) add(start + t, v, openingAverage)
+  for (let start = openSeconds; start < fightEnd; start += main.seconds)
+    for (const [t, v] of main.hits) add(start + t, v, mainAverage)
+  // (the damage tied to no hit: spread over the time, a tenth of a second at a time)
+  for (let t = 0; t < fightEnd; t += 0.1) {
+    const inOpening = t < openSeconds && opening
+    const spread = inOpening ? opening.spread : main.spread
+    if (spread > 0)
+      add(t, spread * 0.1, inOpening ? openingAverage : mainAverage)
+  }
+  return windows
+}
+
 /** The fight laid out once: its length, its HP and meter lines, and its moments */
-function fightView(estimate: FightEstimate) {
+function fightView(estimate: FightEstimate, team?: FightTeam) {
   const { segments, events, meter } = estimate.timeline
   // (a little room after its end: a drop to 0 there is not cut off at the edge)
   const end =
@@ -450,6 +511,26 @@ function fightView(estimate: FightEstimate) {
           )
           .join(' ')
       : undefined
+  // the team's damage in each window of the fight: a bar each, scaled to the highest
+  const fightEnd =
+    estimate.seconds ?? segments[segments.length - 1]?.end ?? FIGHT_LIMIT
+  const windows = damageWindows(estimate, team, fightEnd)
+  const maxWindow = windows ? Math.max(0, ...windows) : 0
+  const windowY = (v: number) =>
+    maxWindow > 0 ? (1 - (0.9 * v) / maxWindow) * H : H
+  const windowPath =
+    windows && maxWindow > 0
+      ? windows
+          .map((v, i) => {
+            const x0 = Number(sx(i * WINDOW)) + 0.6
+            const x1 = Number(sx(Math.min(fightEnd, (i + 1) * WINDOW))) - 0.6
+            const y = windowY(v).toFixed(2)
+            return x1 > x0 && v > 0
+              ? `M${x0.toFixed(2)},${H} L${x0.toFixed(2)},${y} L${x1.toFixed(2)},${y} L${x1.toFixed(2)},${H} Z`
+              : ''
+          })
+          .join(' ')
+      : undefined
   return {
     estimate,
     end,
@@ -459,6 +540,22 @@ function fightView(estimate: FightEstimate) {
     meterArea,
     dpsPath,
     maxDps,
+    windows: windowPath ? windows : undefined,
+    windowPath,
+    maxWindow,
+    /** The damage window at `s` seconds: its start, end and damage */
+    windowAt(s: number) {
+      if (!windows || !windowPath) return undefined
+      const i = Math.min(
+        windows.length - 1,
+        Math.max(0, Math.floor(s / WINDOW))
+      )
+      return {
+        from: i * WINDOW,
+        to: Math.min(fightEnd, (i + 1) * WINDOW),
+        damage: windows[i],
+      }
+    },
     /** The fight at `s` seconds (`maxHp`: its Max HP, for its shield's backlash cap) */
     at(s: number, maxHp: number): Moment {
       const time = Math.min(Math.max(0, s), end)
@@ -682,20 +779,32 @@ function FightChart({
               height: '100%',
             }}
           >
-            <path
-              d={view.dpsPath}
-              fill="none"
-              stroke={alpha(giTokens.parchment, 0.6)}
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="round"
-            />
+            {view.windowPath ? (
+              <path
+                d={view.windowPath}
+                fill={alpha(giTokens.parchment, 0.42)}
+              />
+            ) : (
+              <path
+                d={view.dpsPath}
+                fill="none"
+                stroke={alpha(giTokens.parchment, 0.6)}
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            )}
           </Box>
           <LaneLabel>
-            {t('enemy.fight.dpsAxis', {
-              defaultValue: 'DPS (top {{dps}})',
-              dps: compact(3).format(view.maxDps / 0.9),
-            })}
+            {view.windowPath
+              ? t('enemy.fight.windowAxis', {
+                  defaultValue: 'Damage per 3 s (top {{damage}})',
+                  damage: compact(3).format(view.maxWindow),
+                })
+              : t('enemy.fight.dpsAxis', {
+                  defaultValue: 'DPS (top {{dps}})',
+                  dps: compact(3).format(view.maxDps / 0.9),
+                })}
           </LaneLabel>
         </Box>
       )}
@@ -888,7 +997,12 @@ function FightScrub({
                   HP_H +
                   meterLane +
                   4 +
-                  (1 - (0.9 * (moment.seg.dps ?? 0)) / view.maxDps) * DPS_H
+                  (view.windowPath && view.maxWindow > 0
+                    ? 1 -
+                      (0.9 * (view.windowAt(moment.t)?.damage ?? 0)) /
+                        view.maxWindow
+                    : 1 - (0.9 * (moment.seg.dps ?? 0)) / view.maxDps) *
+                    DPS_H
                 }
                 color={giTokens.parchment}
               />
@@ -915,6 +1029,7 @@ function FightScrub({
         {moment ? (
           <MomentLine
             moment={moment}
+            window={view.windowAt(moment.t)}
             maxHp={maxHp}
             meter={meter}
             meterColor={meterColor}
@@ -970,6 +1085,7 @@ function Dot({ top, color }: { top: number; color: string }) {
 /** The fight at a moment, in a line: its time, state, HP, meter, RES, the DPS there, its shield */
 function MomentLine({
   moment,
+  window: damageWindow,
   maxHp,
   meter,
   meterColor,
@@ -981,6 +1097,8 @@ function MomentLine({
   onUnpin,
 }: {
   moment: Moment
+  /** The damage window at the moment */
+  window?: { from: number; to: number; damage: number }
   maxHp: number
   meter?: FightEstimate['timeline']['meter']
   meterColor: string
@@ -1066,13 +1184,35 @@ function MomentLine({
       </Box>
       {seg.dps !== undefined && (
         <Box sx={item}>
-          {moment.absorbed !== undefined
-            ? seg.state === 'ward'
-              ? t('enemy.fight.dpsWard', 'Into its ward')
-              : t('enemy.fight.dpsShield', 'Into its shield')
-            : t('enemy.fight.dpsHere', 'Team DPS here')}
+          {damageWindow
+            ? t(
+                moment.absorbed !== undefined
+                  ? seg.state === 'ward'
+                    ? 'enemy.fight.dpsWardWindow'
+                    : 'enemy.fight.dpsShieldWindow'
+                  : 'enemy.fight.dpsWindow',
+                {
+                  defaultValue:
+                    moment.absorbed !== undefined
+                      ? seg.state === 'ward'
+                        ? 'Into its ward {{from}}–{{to}} s'
+                        : 'Into its shield {{from}}–{{to}} s'
+                      : 'Team DPS {{from}}–{{to}} s',
+                  from: +damageWindow.from.toFixed(1),
+                  to: +damageWindow.to.toFixed(1),
+                }
+              )
+            : moment.absorbed !== undefined
+              ? seg.state === 'ward'
+                ? t('enemy.fight.dpsWard', 'Into its ward')
+                : t('enemy.fight.dpsShield', 'Into its shield')
+              : t('enemy.fight.dpsHere', 'Team DPS here')}
           <Box component="span" sx={value}>
-            {compact(3).format(seg.dps)}
+            {compact(3).format(
+              damageWindow && damageWindow.to > damageWindow.from
+                ? damageWindow.damage / (damageWindow.to - damageWindow.from)
+                : seg.dps
+            )}
           </Box>
         </Box>
       )}

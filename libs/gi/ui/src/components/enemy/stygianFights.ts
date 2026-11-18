@@ -53,6 +53,24 @@ export interface FightTeam {
     dps: Partial<Record<ElementWithPhyKey, number>>
     seconds: number
   }
+  /**
+   * When its damage lands: one rotation's hits (seconds into it, damage against `baseRes`) and
+   * the damage of attacks with no timed hit, per second; the opening's too. Absent: no written
+   * rotation played
+   */
+  damageTimes?: {
+    rotation: DamageTimes
+    opening?: DamageTimes
+  }
+}
+
+/** A played rotation's damage over its time (`FightTeam.damageTimes`) */
+export interface DamageTimes {
+  seconds: number
+  /** [seconds into the rotation, damage] */
+  hits: [number, number][]
+  /** Damage per second not tied to a hit (spread over the rotation) */
+  spread: number
 }
 
 /**

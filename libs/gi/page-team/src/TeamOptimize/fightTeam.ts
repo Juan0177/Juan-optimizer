@@ -8,6 +8,7 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharStat } from '@genshin-optimizer/gi/stats'
 import type {
   BonusStats,
+  DamageTimes,
   ElectroHits,
   FightTeam,
   KqmBuild,
@@ -44,6 +45,8 @@ export interface FightApplications {
   electroHits: ElectroHits
   /** Seconds it takes to break the Moongecko's Moonstone Anchor ward (`wardTimeOf`) */
   wardSeconds: number
+  /** One rotation's hits as played, and how long it takes (its damage over time) */
+  played?: PlayedHits
   /**
    * Its first rotation from no energy: played once from the start without its Bursts, its
    * attacks and how long it takes
@@ -51,7 +54,38 @@ export interface FightApplications {
   opening?: {
     attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>
     seconds: number
+    hits?: PlayedHit[]
   }
+}
+
+/** A played hit: seconds from its rotation's start, whose, its sheet node and weight */
+export interface PlayedHit {
+  t: number
+  characterKey: CharacterKey
+  path: string[]
+  weight: number
+}
+export interface PlayedHits {
+  seconds: number
+  hits: PlayedHit[]
+}
+
+/** The hits from `start` for `frames` frames, timed from `start` */
+function playedHits(
+  hits: readonly SimHit[],
+  start: number,
+  frames: number
+): PlayedHit[] {
+  return hits
+    .filter(
+      (h) => h.path[0] !== '_marker' && h.t >= start && h.t < start + frames
+    )
+    .map((h) => ({
+      t: (h.t - start) / 60,
+      characterKey: h.characterKey,
+      path: h.path,
+      weight: h.weight ?? 1,
+    }))
 }
 
 const MELEE = ['sword', 'claymore', 'polearm']
@@ -221,10 +255,12 @@ export function useRotationApplications(
   const names = useMemberNames(members)
   // (played after the page: a heavy team's rotation takes a moment)
   const deferredTeam = useDeferredValue(team)
+  const isKqm = !!kqm
   return useMemo(() => {
     if (!enabled || !applied.trim()) return undefined
     try {
       const played = simulateWritten({
+        kqm: isKqm,
         text: applied,
         opener,
         timing,
@@ -241,9 +277,16 @@ export function useRotationApplications(
       })
       const sim = played?.sim
       if (!sim || sim.frames <= 0) return undefined
-      const applications = applicationsOf(sim.hits, sim.frames, sim.start)
+      const applications: FightApplications = {
+        ...applicationsOf(sim.hits, sim.frames, sim.start),
+        played: {
+          seconds: sim.frames / 60,
+          hits: playedHits(sim.hits, sim.start, sim.frames),
+        },
+      }
       // (a fight from no energy: its first rotation without Bursts)
       const opening = simulateWritten({
+        kqm: isKqm,
         text: applied,
         opener,
         timing,
@@ -264,7 +307,11 @@ export function useRotationApplications(
       return opening?.attacks && span && span > 0
         ? {
             ...applications,
-            opening: { attacks: opening.attacks, seconds: span / 60 },
+            opening: {
+              attacks: opening.attacks,
+              seconds: span / 60,
+              hits: playedHits(opening.sim?.hits ?? [], 0, span),
+            },
           }
         : applications
     } catch (e) {
@@ -274,6 +321,7 @@ export function useRotationApplications(
       return undefined
     }
   }, [
+    isKqm,
     enabled,
     applied,
     opener,
@@ -360,6 +408,7 @@ export function fightTeamOf({
   teamData,
   rotationTime,
   enemyOverride,
+  dataEnemy = enemyOverride,
   applications,
   cocoon,
 }: {
@@ -369,6 +418,11 @@ export function fightTeamOf({
   teamData: TeamData | undefined
   rotationTime: number | undefined
   enemyOverride: Partial<Record<string, number>>
+  /**
+   * The enemy `teamData` was computed against, when another (the KQM tab's own): its RES after the
+   * team's shred is moved by the difference
+   */
+  dataEnemy?: Partial<Record<string, number>>
   applications?: FightApplications
   cocoon?: CocoonEvaluations
 }): FightTeam | undefined {
@@ -417,7 +471,13 @@ export function fightTeamOf({
       if (from > 0 && to > 0 && Number.isFinite(baseRes[e]))
         return [e, resFromRatio(to / from, baseRes[e])]
       const v = data?.get(input.total[`${e}_enemyRes_`]).value
-      return [e, typeof v === 'number' && Number.isFinite(v) ? v : baseRes[e]]
+      const dataBase = (dataEnemy[`${e}_enemyRes_`] ?? 10) / 100
+      return [
+        e,
+        typeof v === 'number' && Number.isFinite(v) && Number.isFinite(dataBase)
+          ? v + (baseRes[e] - dataBase)
+          : baseRes[e],
+      ]
     })
   ) as Record<ElementWithPhyKey, number>
   // its DPS in the cocoon and Disentangled: each element's, as their evaluation changes it from
@@ -460,6 +520,18 @@ export function fightTeamOf({
           ) as Partial<Record<ElementWithPhyKey, number>>
         })()
       : undefined
+  const rotationTimes = damageTimesOf(
+    members,
+    evaluation,
+    attacks,
+    applications?.played
+  )
+  const openingTimes =
+    open?.hits &&
+    damageTimesOf(members, cocoon?.opening, open.attacks, {
+      seconds: open.seconds,
+      hits: open.hits,
+    })
   return {
     dps,
     baseRes,
@@ -485,7 +557,64 @@ export function fightTeamOf({
     ...(opening && open
       ? { opening: { dps: opening, seconds: open.seconds } }
       : {}),
+    ...(rotationTimes
+      ? {
+          damageTimes: {
+            rotation: rotationTimes,
+            ...(openingTimes ? { opening: openingTimes } : {}),
+          },
+        }
+      : {}),
     healer: members.some((ck) => PARTY_HEALERS.has(ck)),
+  }
+}
+
+/**
+ * A played rotation's damage over its time: each attack's damage shared among its hits (by sheet
+ * node, weighted), the rest (no hit of its node played) spread over the rotation
+ */
+function damageTimesOf(
+  members: CharacterKey[],
+  evaluation: TeamOptEvaluation | undefined,
+  attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>,
+  played: PlayedHits | undefined
+): DamageTimes | undefined {
+  if (!evaluation || !played?.hits.length || !(played.seconds > 0))
+    return undefined
+  const keyOf = (ck: CharacterKey, path: readonly string[]) =>
+    `${ck}|${path.join('.')}`
+  const damageOf = new Map<string, number>()
+  let total = 0
+  for (const ck of members) {
+    const damage = evaluation.attacks?.[ck] ?? []
+    ;(attacks[ck] ?? []).forEach((attack, i) => {
+      const value = damage[i] ?? 0
+      if (!(value > 0)) return
+      total += value
+      const key = keyOf(ck, attack.path)
+      damageOf.set(key, (damageOf.get(key) ?? 0) + value)
+    })
+  }
+  const weightOf = new Map<string, number>()
+  for (const hit of played.hits) {
+    const key = keyOf(hit.characterKey, hit.path)
+    if (damageOf.has(key))
+      weightOf.set(key, (weightOf.get(key) ?? 0) + hit.weight)
+  }
+  const hits: [number, number][] = []
+  let timed = 0
+  for (const hit of played.hits) {
+    const key = keyOf(hit.characterKey, hit.path)
+    const weight = weightOf.get(key)
+    if (!weight) continue
+    const value = (damageOf.get(key)! * hit.weight) / weight
+    hits.push([hit.t, value])
+    timed += value
+  }
+  return {
+    seconds: played.seconds,
+    hits: hits.sort((a, b) => a[0] - b[0]),
+    spread: Math.max(0, total - timed) / played.seconds,
   }
 }
 
@@ -544,9 +673,12 @@ export function useCocoonEvaluations(
   useEffect(() => {
     if (!deferred) return undefined
     const timer = setTimeout(() => {
-      // (every RES `RES_PROBE` lower than the team's enemy's)
+      // (every RES `RES_PROBE` lower than the enemy's: the evaluation's own, else the team's)
       const shiftedEnemy = () => {
-        const enemy = database.teams.get(teamId)?.enemyOverride ?? {}
+        const enemy =
+          (deferred as { enemy?: Partial<Record<string, number>> }).enemy ??
+          database.teams.get(teamId)?.enemyOverride ??
+          {}
         return Object.fromEntries(
           allElementWithPhyKeys.map((e) => {
             const v = enemy[`${e}_enemyRes_`] ?? 10
