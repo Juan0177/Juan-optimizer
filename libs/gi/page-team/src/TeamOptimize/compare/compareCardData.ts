@@ -39,6 +39,33 @@ export interface CompareCardContext {
 }
 
 /**
+ * The swap's two sides as named: the two members; the same member re-entering, its name and the
+ * constellation change ("Yae Miko C0", "C1"); at the same constellation too, its name twice (what
+ * differs is its weapon or sets)
+ */
+export function swapSides(
+  outName: string,
+  inName: string,
+  consOut: number,
+  consIn: number
+): { out: string; in: string } {
+  return outName === inName && consOut !== consIn
+    ? { out: `${outName} C${consOut}`, in: `C${consIn}` }
+    : { out: outName, in: inName }
+}
+
+/** The swap as named: "Yae Miko → Mitya", "Yae Miko C0 → C1", "Yae Miko → Yae Miko" */
+export function swapLabel(
+  outName: string,
+  inName: string,
+  consOut: number,
+  consIn: number
+): string {
+  const sides = swapSides(outName, inName, consOut, consIn)
+  return `${sides.out} → ${sides.in}`
+}
+
+/**
  * The written rotation, its members' turns apart (as the KQM sheet does): cut where the parser cuts
  * it, at every separator and at each bare member name
  */
@@ -199,6 +226,9 @@ export function compareCardData(
     return { damage, share, field: fieldCell, er }
   })
   const inIndex = b.members.findIndex((m) => m.key === ctx.in)
+  // (the swapped slot's constellation on each side: A's leaving member, B's entering one)
+  const consOut = a.members[outIndex]?.constellation ?? 0
+  const consIn = b.members[inIndex]?.constellation ?? 0
   const dpr = gainOf(a.dpr, b.dpr, locale)
   const dps = a.dps > 0 && b.dps > 0 ? gainOf(a.dps, b.dps, locale) : undefined
   const timeChange =
@@ -209,7 +239,10 @@ export function compareCardData(
     tag: 'B',
     weights: field(cardB) ? WEIGHTS_B.field : WEIGHTS_B.none,
     ...(inIndex >= 0 && {
-      changed: { index: inIndex, badge: `${outName} → ${inName}` },
+      changed: {
+        index: inIndex,
+        badge: swapLabel(outName, inName, consOut, consIn),
+      },
     }),
     rotationTurn: turnOf(cardB, b),
     delta: {
@@ -240,7 +273,7 @@ export function compareCardData(
     secondsText(`${Math.round(s * 10) / 10}`, locale)
   return {
     name: ctx.teamName || label('title'),
-    swap: { out: outName, in: inName },
+    swap: swapSides(outName, inName, consOut, consIn),
     siteName,
     beta: beta ? BETA_LABEL : undefined,
     labels: {

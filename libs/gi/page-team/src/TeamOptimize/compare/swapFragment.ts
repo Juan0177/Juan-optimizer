@@ -1,6 +1,10 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
-import { parseRotation, splitOnNames } from '@genshin-optimizer/gi/ui'
+import {
+  matchMember,
+  parseRotation,
+  splitOnNames,
+} from '@genshin-optimizer/gi/ui'
 import type { RotationTimingSettings } from '../RotationTiming'
 
 export type SwapFragmentError = 'notFound' | 'repeated' | 'emptyFragment'
@@ -150,6 +154,31 @@ export function swapFragment({
     delta,
     ...(turn !== undefined && { turn, insertedTurn }),
   }
+}
+
+/**
+ * The actions of the leaving member's single step (the opener counts too), as written, without
+ * its name: what it does in A's rotation ("E E E"). Undefined when it acts in no step, or in more
+ * than one (the comparison refuses those).
+ */
+export function memberActions(
+  text: string,
+  opener: string,
+  names: RotationMember[],
+  out: CharacterKey
+): string | undefined {
+  const t = cut(text, names)
+  const o = cut(opener, names)
+  const ft = find(t, out, names)
+  const fo = find(o, out, names)
+  if (ft.acts.length + fo.acts.length !== 1) return undefined
+  const step = ft.acts.length ? t.parts[ft.acts[0]] : o.parts[fo.acts[0]]
+  // (the name is the step's start that names the member, as the parser reads it)
+  const words = step.trim().split(/\s+/)
+  for (let n = Math.min(words.length, 3); n >= 1; n--)
+    if (matchMember(words.slice(0, n).join(' '), names) === out)
+      return words.slice(n).join(' ')
+  return undefined
 }
 
 /**
