@@ -615,6 +615,8 @@ export interface TeamRotationSettings {
   onField?: CharacterKey
   /** Extra bonus stats per member (`teamOptBonusStats`) */
   bonusStats?: Partial<Record<CharacterKey, BonusStats>>
+  /** The enemy's stats over the team's own */
+  enemyOverride?: Partial<Record<string, number>>
   /** Members with another level, ascension or talent levels */
   characters?: Partial<Record<CharacterKey, CharacterOverride>>
   /** Conditionals over the members' own (`TeamDataOverrides.conditionalOverrides`) */
@@ -637,6 +639,7 @@ function rotationNodes(
     bonusStats,
     characters,
     conditionalOverrides,
+    enemyOverride,
   }: TeamRotationSettings,
   shared: boolean
 ): TeamRotationNodes | undefined {
@@ -698,6 +701,7 @@ function rotationNodes(
     bonusStats,
     characters,
     conditionalOverrides,
+    enemyOverride,
   }
   let source: TeamSource | undefined
   if (shared) {

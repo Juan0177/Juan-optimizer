@@ -21,6 +21,7 @@ import {
   evaluateTeamRotation,
   icdTracker,
   MOONGECKO,
+  resMultiplier,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import { input } from '@genshin-optimizer/gi/wr'
@@ -303,6 +304,24 @@ export const stellarAttack = (ck: CharacterKey, attack: TeamOptAttack) =>
   /stellar/i.test(attack.path[attack.path.length - 1] ?? '') ||
   !!STELLAR_ATTACKS[ck]?.test(attack.path.join('.'))
 
+/**
+ * The RES (a fraction) whose damage goes up by `ratio` when every RES is `RES_PROBE` lower: the
+ * game's RES multiplier solved on a fine grid, from the enemy's own RES (`from`) down (shred only
+ * lowers it; above 75% the multiplier bends back, so the nearest match wins)
+ */
+export function resFromRatio(ratio: number, from = 0.75) {
+  let best = from
+  let gap = Number.POSITIVE_INFINITY
+  for (let r = from; r >= from - 3; r -= 0.0005) {
+    const g = Math.abs(resMultiplier(r - RES_PROBE) / resMultiplier(r) - ratio)
+    if (g < gap - 1e-9) {
+      gap = g
+      best = r
+    }
+  }
+  return Math.round(best * 1000) / 1000
+}
+
 /** An evaluation's damage per second, by element (each attack's element from the members' data) */
 function dpsByElement(
   members: CharacterKey[],
@@ -378,10 +397,22 @@ export function fightTeamOf({
       return [e, v === Number.MAX_VALUE ? Number.POSITIVE_INFINITY : v / 100]
     })
   ) as Record<ElementWithPhyKey, number>
-  // the RES after the team's shred: one member's (the enemy's debuffs are the team's)
+  // the RES after the team's shred: one member's (the enemy's debuffs are the team's); with the
+  // RES probe, each element's as the rotation's damage shows it (its buffs' shred included)
   const data = members.map((ck) => teamData[ck]?.target).find((d) => d)
+  const probe =
+    cocoon?.base &&
+    cocoon.shifted &&
+    dpsByElement(members, cocoon.shifted, attacks, teamData, rotationTime)
+  const probeBase =
+    probe &&
+    dpsByElement(members, cocoon!.base!, attacks, teamData, rotationTime)
   const effRes = Object.fromEntries(
     allElementWithPhyKeys.map((e) => {
+      const from = probeBase?.[e] ?? 0
+      const to = probe?.[e] ?? 0
+      if (from > 0 && to > 0 && Number.isFinite(baseRes[e]))
+        return [e, resFromRatio(to / from, baseRes[e])]
       const v = data?.get(input.total[`${e}_enemyRes_`]).value
       return [e, typeof v === 'number' && Number.isFinite(v) ? v : baseRes[e]]
     })
@@ -470,7 +501,15 @@ export interface CocoonEvaluations {
   disentangled?: TeamOptEvaluation
   /** The first rotation from no energy (`FightApplications.opening`'s attacks) */
   opening?: TeamOptEvaluation
+  /**
+   * The rotation against every RES `RES_PROBE` lower: what each element's RES really is under
+   * the rotation's own shred (its buffs, not the members' resting stats)
+   */
+  shifted?: TeamOptEvaluation
 }
+
+/** How far the RES probe lowers every RES (a fraction) */
+export const RES_PROBE = 0.6
 type EvaluationSettings = Parameters<typeof evaluateTeamRotation>[3]
 
 /**
@@ -502,17 +541,32 @@ export function useCocoonEvaluations(
   useEffect(() => {
     if (!deferred) return undefined
     const timer = setTimeout(() => {
+      // (every RES `RES_PROBE` lower than the team's enemy's)
+      const shiftedEnemy = () => {
+        const enemy = database.teams.get(teamId)?.enemyOverride ?? {}
+        return Object.fromEntries(
+          allElementWithPhyKeys.map((e) => {
+            const v = enemy[`${e}_enemyRes_`] ?? 10
+            return [
+              `${e}_enemyRes_`,
+              v === Number.MAX_VALUE ? v : v - RES_PROBE * 100,
+            ]
+          })
+        )
+      }
       try {
         const members = teamOptMembers(database, teamId).map(
           (m) => m.characterKey
         )
         const withBonus = (
           bonus?: BonusStats,
-          attacks: EvaluationSettings['attacks'] = deferred.attacks
+          attacks: EvaluationSettings['attacks'] = deferred.attacks,
+          enemyOverride?: Partial<Record<string, number>>
         ) =>
           evaluateTeamRotation(database, teamId, gender, {
             ...deferred,
             attacks,
+            ...(enemyOverride ? { enemyOverride } : {}),
             bonusStats: Object.fromEntries(
               members.map((ck) => [
                 ck,
@@ -531,6 +585,7 @@ export function useCocoonEvaluations(
                 }
               : {}),
             ...(opening ? { opening: withBonus(undefined, opening) } : {}),
+            shifted: withBonus(undefined, undefined, shiftedEnemy()),
           },
         })
       } catch (e) {
