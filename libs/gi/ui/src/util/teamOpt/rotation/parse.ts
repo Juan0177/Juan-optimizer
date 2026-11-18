@@ -13,6 +13,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
  *                its finisher waited for (F): KQM's "C3FD C3FD CF"
  *   D       dash                             J    jump
+ *   4[N5 CD] / 4N5CD  a group written once with how many times (1 to 20)
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
  *   entry / swap  swap in and straight out again (a name alone mid-rotation is the same): her
@@ -190,6 +191,40 @@ const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
 /** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
 const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
 
+/** The most times one group is repeated ("4[N5CD]", "4N5CD") */
+const MAX_REPEAT = 20
+
+/**
+ * A group written once with how many times, as players write it: "4[N5 CD]" (KQM's notation) or
+ * "4N5CD" (the number glued to a word) is the group that many times. The number starts a word, so
+ * Sandrone's "CA[beams=2]" stays as it is.
+ */
+export function expandRepeats(
+  text: string,
+  warnings: string[] = [],
+  who = ''
+): string {
+  const repeat = (
+    match: string,
+    before: string,
+    times: string,
+    group: string
+  ) => {
+    const n = Number(times)
+    if (n >= 1 && n <= MAX_REPEAT)
+      return before + Array(n).fill(group.trim()).join(' ')
+    warnings.push(
+      `${who}: "${match.trim()}": 1 to ${MAX_REPEAT} times (played once)`
+    )
+    return before + group.trim()
+  }
+  return text
+    .replace(/(^|\s)(\d+)\s*\[([^[\]]+)\]/g, (m, before, times, group) =>
+      /^\s*beams\s*=/i.test(group) ? m : repeat(m, before, times, group)
+    )
+    .replace(/(^|\s)(\d+)([a-z]\S*)/gi, repeat)
+}
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
@@ -207,7 +242,7 @@ function parseActions(
   const token =
     /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
   let i = 0
-  const s = cleaned.trim()
+  const s = expandRepeats(cleaned, warnings, who).trim()
   while (i < s.length) {
     // "entry" / "swap": swap in for the member's swap-in effects only (Danica's Entry Skill)
     const swapWord = /\s*(entry|swap)(?![a-z])/iy
@@ -382,6 +417,8 @@ export function rotationSpans(
     let named = false
     /** Words left of the name just matched */
     let inName = 0
+    /** A repeated group's words ("4[N5 CD]"): its last word and how it reads */
+    let group: { last: number; kind: RotationSpanKind } | undefined
     const nameAt = (i: number, exact: boolean) => {
       for (let n = Math.min(3, words.length - i); n >= 1; n--) {
         const slice = words.slice(i, i + n)
@@ -418,6 +455,22 @@ export function rotationSpans(
         spans.push({ from: w.from, to: w.to, kind: 'note' })
       } else if (!named) {
         spans.push({ from: w.from, to: w.to, kind: 'unknown' })
+      } else if (group && i <= group.last) {
+        // (a repeated group written with spaces, "4[N5 CD]": read as one)
+        spans.push({ from: w.from, to: w.to, kind: group.kind })
+      } else if (/^\d+\s*\[/.test(w.word) && !w.word.includes(']')) {
+        const last = words.findIndex((x, j) => j > i && x.word.includes(']'))
+        const joined = words
+          .slice(i, last < 0 ? words.length : last + 1)
+          .map((x) => x.word)
+          .join(' ')
+        const problems: string[] = []
+        parseActions(joined, problems, '', key)
+        group = {
+          last: last < 0 ? words.length - 1 : last,
+          kind: last < 0 || problems.length ? 'unknown' : 'action',
+        }
+        spans.push({ from: w.from, to: w.to, kind: group.kind })
       } else {
         // (an alternative: the first one is played, the rest is a note)
         const slash = w.word.indexOf('/')

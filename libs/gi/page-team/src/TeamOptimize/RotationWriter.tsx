@@ -2690,6 +2690,13 @@ function SyntaxSheet() {
       ),
     ],
     ['P · D · J', t('teamOpt.writer.syntax.moves', 'Plunge · dash · jump')],
+    [
+      '4[N5 CD] · 4N5CD',
+      t(
+        'teamOpt.writer.syntax.repeat',
+        'A group that many times (up to 20), as N5 CD four times'
+      ),
+    ],
     ['W1.5 · W90f', t('teamOpt.writer.syntax.wait', 'Wait 1.5 s · 90 frames')],
     [
       'E? · Q?',
