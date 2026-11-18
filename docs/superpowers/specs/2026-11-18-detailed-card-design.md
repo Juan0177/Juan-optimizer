@@ -15,12 +15,13 @@ The usual card stays as it is; the detailed one is a second view of the same pic
     Corona DAN CRIT`);
   - the final stats, out of combat: HP, ATK, DEF, Elemental Mastery, CRIT Rate, CRIT DMG, Energy
     Recharge, the character's element DMG Bonus.
-- Comparison card: the block in both halves (A and B). In B, a value that differs from A is marked
-  with the card's existing "changed" tone **only when both sides have the same character in that
-  slot**: the fixed members (so re-tuned teammates show) and the swapped slot when the same
-  character enters (e.g. Yae Miko C0 → C1). When a different character enters (Yae Miko → Mitya),
-  its stats are shown plain, with no comparison marks (user: comparing two different characters'
-  stats makes no sense).
+- Comparison card: the block in both halves (A and B). The fixed members' builds are identical in A
+  and B by construction (`compareSwapKqm` holds them and fails with `buildChanged` otherwise), so
+  their stats are equal and carry no marks. In the swapped slot, B's values that differ from A are
+  marked with the card's existing "changed" tone **only when the same character enters** (e.g. Yae
+  Miko C0 → C1, see `2026-11-18-compare-same-character-design.md`). When a different character
+  enters (Yae Miko → Mitya), its stats are shown plain, with no comparison marks (user: comparing two
+  different characters' stats makes no sense).
 - Every text and number in the site's language (Italian/English), decimal comma in Italian, like the
   rest of the cards.
 - Download/copy, file name and hidden record work as today; the hidden record says which view it is.
@@ -118,11 +119,17 @@ card simply gets taller.
   the stats block shows the out-of-combat value; if they can differ, say so in a card note).
 
 ## Done when
-- With the user's save (`Tsaritsa - Yae - Odette - Danica`): KQM Theorycrafting team card and a
-  KQM Compare card (Yae → Mitya) download in both views, Italian and English; the detailed view shows
-  the three main stats and the eight final stats for every member (both halves of the comparison);
-  values checked by hand against the character page with the same build for one member.
+- With the user's save (scratchpad copy `kqmcompare/c1run/Juan-optimizer_DB_Tsaritsa_completo.json`,
+  team `Tsaritsa - Yae - Odette - Danica`; not committed): KQM Theorycrafting team card and KQM
+  Compare cards (Yae → Mitya, and Yae C0 → C1) download in both views, Italian and English; the
+  detailed view shows the three main stats and the eight final stats for every member (both halves);
+  marks only in the Yae C0 → C1 card's swapped slot.
+- Stats reference (builder's call settled here): a unit test computes one member's out-of-combat
+  stats independently — the same KQM build as a TC loadout in a one-member team with conditionals
+  cleared — and the helper's values must match; plus one hand sum (base ATK + weapon + ATK% + flat)
+  written in the test as a comment. The character page in a team is NOT the reference (it includes
+  team buffs and saved conditionals).
 - The normal card is pixel-identical (existing hash test unchanged).
-- Unit tests for the stats helper (one known build → expected values) and for the card data with
-  details; typecheck, lint, tests pass; axe no violations on the dialog (three themes); no overflow at
-  360/390 px in the dialog.
+- Unit tests for the stats helper and for the card data with details (marks only for the same
+  character); typecheck, lint, tests pass; axe no violations on the dialog (three themes); no
+  overflow at 360/390 px in the dialog.
