@@ -530,6 +530,82 @@ describe('drawKqmCard: the detailed block', () => {
       expect(measured(label) + valueW).toBeLessThanOrEqual(COL)
     }
   })
+  it('realistic labels beside changed values: whole, in both languages', () => {
+    const changed = (labels: string[], mains: string[]) =>
+      details(
+        {
+          mains: [
+            { slot: 'Sabbie', stat: mains[0] },
+            { slot: 'Calice', stat: mains[1] },
+            { slot: 'Corona', stat: mains[2] },
+          ],
+        },
+        [
+          { label: labels[0], value: '13.810', was: '13.096' },
+          { label: labels[1], value: '2.096', was: '2.012' },
+          { label: labels[2], value: '683', was: '612' },
+          { label: labels[3], value: '79', was: '42' },
+          { label: labels[4], value: '70,9%', was: '74,8%' },
+          { label: labels[5], value: '162,8%', was: '151,2%' },
+          { label: labels[6], value: '162,8%', was: '151,2%' },
+          { label: labels[7], value: '146,6%', was: '100,0%' },
+        ]
+      )
+    const it = changed(
+      [
+        'PS',
+        'ATT',
+        'DIF',
+        'Maestria elementale',
+        'Tasso CRIT',
+        'DAN CRIT',
+        'Ricarica di energia',
+        'Bonus DAN Electro',
+      ],
+      ['Ricarica di energia', 'Bonus DAN Electro', 'Tasso CRIT']
+    )
+    const en = changed(
+      [
+        'HP',
+        'ATK',
+        'DEF',
+        'Elemental Mastery',
+        'CRIT Rate',
+        'CRIT DMG',
+        'Energy Recharge',
+        'Electro DMG Bonus',
+      ],
+      ['Energy Recharge', 'Electro DMG Bonus', 'CRIT Rate']
+    )
+    const { texts } = draw({
+      ...data,
+      members: data.members.map((m, i) => ({
+        ...m,
+        details: i % 2 ? en : it,
+      })),
+    })
+    const block = rows(texts)
+    expect(block.length).toBe(4 * 13)
+    for (const { texts: ts } of block) {
+      for (const t of ts) expect(t.text).not.toContain('…')
+      // (label and value at one size, not smaller than 11px)
+      for (const t of ts.slice(1)) expect(t.px).toBe(ts[0].px)
+      expect(ts[0].px).toBeGreaterThanOrEqual(11)
+    }
+  })
+  it('more main stats or stats than the block holds: only the first 3 and 8', () => {
+    const many = details({
+      mains: [...details().mains, { slot: 'Flower', stat: 'HP' }],
+    })
+    many.stats = [...many.stats, { label: 'Healing Bonus', value: '0.0%' }]
+    const { texts } = draw({
+      ...data,
+      members: data.members.map((m) => ({ ...m, details: many })),
+    })
+    expect(rows(texts).length).toBe(4 * 13)
+    expect(texts.some((t) => t.text === 'Flower')).toBe(false)
+    expect(texts.some((t) => t.text === 'Healing Bonus')).toBe(false)
+  })
   it('a member without details: its column empty, the card drawn', () => {
     const { texts, rects } = draw({
       ...detailed,
@@ -554,8 +630,8 @@ describe('drawKqmCard: the detailed block', () => {
 })
 
 /** The detailed sheet's drawing, pinned when it was approved: a change to it must be seen */
-const DETAILED_LOG = 1753
-const DETAILED_HASH = '523e4ef8'
+const DETAILED_LOG = 1853
+const DETAILED_HASH = '9f385eaf'
 
 describe('renderKqmCard: the detailed sheet', () => {
   let log: string[] = []

@@ -38,7 +38,8 @@ export type KqmCardMember = {
 
 /**
  * A member's block on the detailed sheet, under its weapon and sets: its artifacts' main stats and
- * its stats out of combat, as written (the site's language)
+ * its stats out of combat, as written (the site's language). The block is sized for exactly 3 main
+ * stats and 8 stats (`KQM_CARD_DETAILS_H`): more are not drawn.
  */
 export interface KqmCardDetails {
   mainsTitle: string
@@ -235,6 +236,9 @@ const DETAILS_TITLE = 20
 const DETAILS_ROW = 19
 const DETAILS_RULE = 12
 const DETAILS_SIZE = 14
+/** a row's smallest size (its label and value shrink together down to it), the gap between them */
+const DETAILS_MIN = 11
+const DETAILS_GAP = 8
 /** The detailed block's height (the sheet grows by it) */
 export const KQM_CARD_DETAILS_H =
   2 * DETAILS_PAD + 2 * DETAILS_TITLE + 11 * DETAILS_ROW + DETAILS_RULE
@@ -558,25 +562,44 @@ export function drawKqmCard(
       ry: number,
       { figures, changed }: { figures: boolean; changed?: boolean }
     ) => {
-      const base = mid(ry, DETAILS_ROW, DETAILS_SIZE)
       if (changed) fillCell(x + 6, ry, COL - 12, DETAILS_ROW, CHANGED_TINT)
-      const valueOpts = {
-        size: DETAILS_SIZE,
-        weight: changed ? 700 : 600,
+      const weight = changed ? 700 : 600
+      const valueAt = (px: number, maxWidth: number) => ({
+        size: px,
+        weight,
         color: changed ? KQM_CHANGED : TEXT,
-        maxWidth: avail * 0.62,
-        minSize: 11,
+        maxWidth,
+        minSize: Math.min(px, DETAILS_MIN),
+      })
+      const valueWidth = (px: number) =>
+        figures
+          ? tabularFit(ctx, value, valueAt(px, Number.POSITIVE_INFINITY)).width
+          : fitWidth(value, valueAt(px, Number.POSITIVE_INFINITY))
+      const labelWidth = (px: number) => {
+        ctx.font = `400 ${px}px ${FONT}`
+        return ctx.measureText(label).width
       }
-      // (the value's width, to leave the label the rest: measured as it will be drawn)
+      // (label and value together at the largest size both fit, down to the smallest: a changed
+      // value, "151.2% → 162.8%", beside "Energy Recharge")
+      let px = DETAILS_SIZE
+      while (
+        px > DETAILS_MIN &&
+        labelWidth(px) + DETAILS_GAP + valueWidth(px) > avail
+      )
+        px--
+      const base = mid(ry, DETAILS_ROW, px)
+      // (still too wide at the smallest: the value whole as long as it leaves the label some room,
+      // the label smaller still; cut short only past that)
+      const valueOpts = valueAt(px, avail * 0.7)
       const valueW = figures
         ? tabularFit(ctx, value, valueOpts).width
         : fitWidth(value, valueOpts)
       ink(ctx, label, left, base, {
-        size: DETAILS_SIZE,
+        size: px,
         weight: 400,
         color: TEXT,
-        maxWidth: avail - valueW - 10,
-        minSize: 11,
+        maxWidth: Math.max(1, avail - valueW - DETAILS_GAP),
+        minSize: Math.min(px, 9),
       })
       if (figures) tabularInk(ctx, value, right, base, valueOpts)
       else ink(ctx, value, right, base, { ...valueOpts, align: 'right' })
@@ -584,7 +607,7 @@ export function drawKqmCard(
     let ry = y + DETAILS_PAD
     title(d.mainsTitle, ry)
     ry += DETAILS_TITLE
-    for (const main of d.mains) {
+    for (const main of d.mains.slice(0, 3)) {
       row(main.slot, main.stat, ry, { figures: false })
       ry += DETAILS_ROW
     }
@@ -598,7 +621,7 @@ export function drawKqmCard(
     ry += DETAILS_RULE
     title(d.statsTitle, ry)
     ry += DETAILS_TITLE
-    for (const stat of d.stats) {
+    for (const stat of d.stats.slice(0, 8)) {
       const changed = stat.was !== undefined
       row(
         stat.label,
