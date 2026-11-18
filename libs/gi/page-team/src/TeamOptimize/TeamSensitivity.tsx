@@ -2,6 +2,7 @@ import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey, SubstatKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   SensitivityLevel,
   SensitivityTalent,
@@ -16,7 +17,6 @@ import {
   teamOptMembers,
   teamSensitivity,
 } from '@genshin-optimizer/gi/ui'
-import { giTokens } from '@genshin-optimizer/gi/theme'
 import { alpha, Box, ButtonBase, Skeleton, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
@@ -253,7 +253,8 @@ export function TeamSensitivity({
     rows: { id: RowId; label: ReactNode }[]
   }[] = [
     {
-      label: t('teamOpt.sens.substats', '+1 substat roll'),
+      // (an average 5★ roll, as the Improve tab's: said in the label, not only in the ⓘ)
+      label: t('teamOpt.sens.substatsAverage', '+1 average substat roll'),
       rows: sensitivitySubstats.map((key) => ({
         id: `sub:${key}` as const,
         label: `${t(`statKey_gen:${key}`)}${percentKeys.includes(key) ? '%' : ''}`,
