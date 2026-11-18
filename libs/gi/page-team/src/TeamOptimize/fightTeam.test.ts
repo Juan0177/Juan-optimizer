@@ -4,6 +4,7 @@ import {
   applicationsOf,
   fightTeamOf,
   PARTY_HEALERS,
+  resFromRatio,
   stellarAttack,
   wardTimeOf,
 } from './fightTeam'
@@ -176,5 +177,18 @@ describe('the team in the Moongecko’s fight', () => {
     expect(total(team.dps)).toBeCloseTo(400, 9)
     expect(total(team.cocooned)).toBeCloseTo(400 * 0.5, 9)
     expect(total(team.disentangled)).toBeCloseTo(400 * 1.75, 9)
+  })
+})
+
+describe('the enemy’s RES under the rotation’s own shred', () => {
+  it('is solved from how much the damage rises with every RES 60% lower', () => {
+    // (70% RES, 50% shred from the rotation's buffs: 20% effective; 60% lower, -40%: 1.2 / 0.8)
+    expect(resFromRatio(1.2 / 0.8, 0.7)).toBeCloseTo(0.2, 2)
+    // (no shred: 70% to 10%, 0.9 / 0.3)
+    expect(resFromRatio(0.9 / 0.3, 0.7)).toBeCloseTo(0.7, 2)
+    // (a shielded boss's 135% RES with no shred: the bent side, its own)
+    expect(
+      resFromRatio(1 / (4 * 0.75 + 1) / (1 / (4 * 1.35 + 1)), 1.35)
+    ).toBeCloseTo(1.35, 2)
   })
 })

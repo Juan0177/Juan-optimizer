@@ -221,6 +221,7 @@ export function evaluateTeamRotation(
     bonusStats,
     characters,
     conditionalOverrides,
+    enemyOverride,
   }: {
     /** Builds of the members: real artifacts or data (missing: their loadout's) */
     arts: Partial<Record<CharacterKey, ICachedArtifact[] | Data>>
@@ -239,6 +240,8 @@ export function evaluateTeamRotation(
     conditionalOverrides?: Partial<
       Record<CharacterKey, Record<string, Record<string, string>>>
     >
+    /** The enemy's stats over the team's own (another RES, as a boss's fight changes it) */
+    enemyOverride?: Partial<Record<string, number>>
   }
 ): TeamOptEvaluation | undefined {
   const nodes = teamRotationNodes(database, teamId, gender, {
@@ -252,6 +255,7 @@ export function evaluateTeamRotation(
     onField,
     bonusStats,
     characters,
+    enemyOverride,
   })
   if (!nodes) return undefined
   return evaluateTeamNodes(database, teamId, attacks, nodes)
