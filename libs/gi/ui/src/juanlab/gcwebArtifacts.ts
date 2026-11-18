@@ -36,6 +36,11 @@ export interface GenResult {
   totals: Partial<Record<SubstatKey, number>>
   /** generated − target, used substats only */
   gaps: Partial<Record<SubstatKey, number>>
+  /**
+   * Filler substats not at the lowest tier: with 4+ rolls all-lowest shows a value gc-web reads back
+   * with fewer rolls, so a higher mix was needed (only when no placement kept every filler ≤ 3 rolls)
+   */
+  fillerRaised: { slotKey: ArtifactSlotKey; key: SubstatKey }[]
 }
 
 /* ---------- gc-web's read-back (public/commands.js substatMarks, public/juanlab.js countsFor) ---------- */
@@ -203,12 +208,19 @@ const FILLER: readonly SubstatKey[] = [
 ]
 /** Assignments tried per slot-count configuration before giving up on it */
 const LEAF_BUDGET = 200
+/** Most rolls a filler substat can have all at the lowest tier and still read back as many in gc-web */
+const LOW_FILLER_ROLLS = 3
+/** All rolls at the lowest tier show a value gc-web reads back with this many rolls */
+const lowestReadsBack = (key: SubstatKey, rarity: 4 | 5, count: number) =>
+  options(key, rarity, count)[0]?.counts[0] === count
 
 interface Placement {
   /** Per piece: substat and roll count */
   pieces: { key: SubstatKey; count: number }[][]
   /** No used substat had to fill a free slot */
   clean: boolean
+  /** Filler substats whose rolls cannot all be at the lowest tier */
+  raised: number
 }
 
 interface Context {
@@ -244,7 +256,9 @@ function routeUpgrades(
   active: number[],
   supply: number[],
   y: boolean[][],
-  free: number[]
+  free: number[],
+  /** Most filler upgrades per piece (with free slots) */
+  fillerCap: number[]
 ): { flow: number[][]; filler: number[] } | null {
   const P = ctx.slots.length
   const total = ctx.limits.reduce((sum, l) => sum + l.upgrades, 0)
@@ -255,8 +269,14 @@ function routeUpgrades(
   const flow = Array.from({ length: sources }, () => new Array(P).fill(0))
   const left = [...active.map((i) => supply[i]), fillerSupply]
   const load = new Array(P).fill(0)
-  const edge = (s: number, p: number) =>
-    s < active.length ? y[p][active[s]] : free[p] > 0
+  const cap = (s: number, p: number) =>
+    s < active.length
+      ? y[p][active[s]]
+        ? ctx.limits[p].upgrades
+        : 0
+      : free[p] > 0
+        ? fillerCap[p]
+        : 0
   // One unit from source s to a piece with room, through a path of reassignments (BFS).
   const push = (s: number) => {
     const prev = new Map<string, string | null>()
@@ -268,12 +288,7 @@ function routeUpgrades(
       if (node.startsWith('s')) {
         const from = Number(node.slice(1))
         const pieces = [...Array(P).keys()]
-          .filter(
-            (p) =>
-              edge(from, p) &&
-              flow[from][p] < ctx.limits[p].upgrades &&
-              !prev.has(`p${p}`)
-          )
+          .filter((p) => flow[from][p] < cap(from, p) && !prev.has(`p${p}`))
           .sort(
             (a, b) =>
               flow[from][a] - flow[from][b] || load[a] - load[b] || a - b
@@ -322,6 +337,12 @@ function routeUpgrades(
   return { flow, filler: flow[active.length] }
 }
 
+/** Placements in order of preference: clean first, then fewer filler substats above the lowest tier */
+const rank = (placement: Placement) =>
+  (placement.clean ? 0 : 1000) + placement.raised
+const better = (a: Placement | null, b: Placement | null) =>
+  a && (!b || rank(a) < rank(b)) ? a : b
+
 /** A placement for these roll counts (index of ctx.used → rolls), or null when none was found */
 function place(ctx: Context, n: number[]): Placement | null {
   const P = ctx.slots.length
@@ -344,9 +365,19 @@ function place(ctx: Context, n: number[]): Placement | null {
   for (let t = Math.min(tMax, soft); t >= tMin; t--) counts.push(t)
   for (let t = Math.max(soft + 1, tMin); t <= Math.min(tMax, hard); t++)
     counts.push(t)
+  // Filler at the lowest tier needs ≤ 3 rolls per filler substat (4+ all-lowest reads back as fewer
+  // rolls in gc-web): the slot counts that leave enough free slots for the filler's rolls go first.
+  const fillerRolls =
+    sum(ctx.limits.map((l) => l.stats + l.upgrades)) -
+    sum(active.map((i) => n[i]))
+  const lowFits = (t: number) => fillerRolls <= LOW_FILLER_ROLLS * (hard - t)
+  const ordered = [
+    ...counts.filter(lowFits),
+    ...counts.filter((t) => !lowFits(t)),
+  ]
 
-  let fallback: Placement | null = null
-  for (const t of counts) {
+  let best: Placement | null = null
+  for (const t of ordered) {
     // Pieces per used substat: as spread as allowed, the most spread one gathered first.
     const m = mMax.slice()
     while (sum(m) > t) {
@@ -362,11 +393,10 @@ function place(ctx: Context, n: number[]): Placement | null {
           pick = i
       m[pick]--
     }
-    const found = assign(ctx, n, m, active)
-    if (found?.clean) return found
-    fallback ??= found
+    best = better(best, assign(ctx, n, m, active, lowFits(t)))
+    if (best && rank(best) === 0) return best
   }
-  return fallback
+  return best
 }
 
 /** Pieces for each used substat (y), then the upgrades and the filler; a small search over the pieces */
@@ -374,7 +404,9 @@ function assign(
   ctx: Context,
   n: number[],
   m: number[],
-  active: number[]
+  active: number[],
+  /** Look for a placement with every filler substat at the lowest tier */
+  wantLow: boolean
 ): Placement | null {
   const P = ctx.slots.length
   const order = active
@@ -388,14 +420,24 @@ function assign(
   )
   const room = ctx.limits.map((l) => l.stats)
   let leaves = 0
-  let fallback: Placement | null = null
+  let best: Placement | null = null
+  const done = (placement: Placement | null) =>
+    !!placement && placement.clean && (!wantLow || placement.raised === 0)
 
   const finish = (): Placement | null => {
     const free = room.slice()
     const supply = n.map((count, i) => count - m[i])
-    const route = routeUpgrades(ctx, active, supply, y, free)
+    // First with ≤ 3 rolls per filler substat, then (if that cannot be routed) as many as fit.
+    const upgrades = ctx.limits.map((l) => l.upgrades)
+    const low = upgrades.map((u, p) =>
+      Math.min(u, (LOW_FILLER_ROLLS - 1) * free[p])
+    )
+    const route =
+      (wantLow ? routeUpgrades(ctx, active, supply, y, free, low) : null) ??
+      routeUpgrades(ctx, active, supply, y, free, upgrades)
     if (!route) return null
     let clean = true
+    let raised = 0
     const pieces = ctx.slots.map((slot, p) => {
       const list: { key: SubstatKey; count: number }[] = []
       active.forEach((i, s) => {
@@ -412,19 +454,22 @@ function assign(
           keys = [...keys, ...ctx.used.filter(ok)]
         }
         keys = keys.slice(0, free[p])
-        // The leftover upgrades spread over the free slots (fewer rolls each: more low mixes read back)
+        // The leftover upgrades spread over the free slots (fewer rolls each: the lowest tier reads back)
         const extra = route.filler[p]
-        keys.forEach((key, j) =>
-          list.push({
-            key,
-            count:
-              1 + Math.floor(extra / free[p]) + (j < extra % free[p] ? 1 : 0),
-          })
-        )
+        keys.forEach((key, j) => {
+          const count =
+            1 + Math.floor(extra / free[p]) + (j < extra % free[p] ? 1 : 0)
+          if (
+            !ctx.usedSet.has(key) &&
+            !lowestReadsBack(key, slot.rarity, count)
+          )
+            raised++
+          list.push({ key, count })
+        })
       }
       return list
     })
-    return { pieces, clean }
+    return { pieces, clean, raised }
   }
 
   const search = (depth: number): Placement | null => {
@@ -457,16 +502,15 @@ function assign(
         pick.push(candidates[c])
         const found = choose(c + 1)
         pick.pop()
-        if (found?.clean) return found
-        fallback ??= found
+        if (done(found)) return found
+        best = better(best, found)
         if (leaves >= LEAF_BUDGET) return null
       }
       return null
     }
     return choose(0)
   }
-  const found = search(0)
-  return found?.clean ? found : fallback
+  return better(search(0), best)
 }
 
 /* ---------- tiers: each used total closest to its target ---------- */
@@ -533,7 +577,11 @@ const roundTo = (value: number, digits: number) =>
  * where the rest still covers the most of the target (ties: the smaller target), and the gap is reported.
  */
 export function generateArtifacts(input: GenInput): GenResult {
-  const slots = input.slots
+  // The level gc-web gives the piece: it clamps to the piece's maximum (+16 for 4★, +20 for 5★)
+  const slots = input.slots.map((slot) => ({
+    ...slot,
+    level: Math.max(0, Math.min(slot.level, slot.rarity === 5 ? 20 : 16)),
+  }))
   const target = (key: SubstatKey) => Math.max(0, input.targets[key] ?? 0)
   const used = [
     ...new Set(input.used.filter((key) => allSubstatKeys.includes(key))),
@@ -641,5 +689,15 @@ export function generateArtifacts(input: GenInput): GenResult {
   const gaps: Partial<Record<SubstatKey, number>> = {}
   for (const key of used)
     gaps[key] = roundTo((totals[key] ?? 0) - target(key), 2)
-  return { pieces, totals, gaps }
+  const usedSet = ctx.usedSet
+  const fillerRaised = pieces.flatMap((piece) =>
+    piece.substats
+      .filter(
+        (sub) =>
+          !usedSet.has(sub.key) &&
+          !lowestReadsBack(sub.key, piece.rarity, sub.rolls.length)
+      )
+      .map((sub) => ({ slotKey: piece.slotKey, key: sub.key }))
+  )
+  return { pieces, totals, gaps, fillerRaised }
 }

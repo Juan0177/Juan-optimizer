@@ -58,6 +58,22 @@ const lowest = (key: SubstatKey, rarity: 4 | 5) =>
 const tiersShown = (key: SubstatKey, rarity: 4 | 5) =>
   coreStats.art.sub[rarity][key].map((v) => v * (isPercent(key) ? 100 : 1))
 
+/**
+ * What the game shows for these rolls, exactly as gc-web computes it (commands.js shownRolls/rollsKey):
+ * the tiers as float32, added strongest first, then tenths of a percent or whole points.
+ */
+function shownExact(key: SubstatKey, rarity: 4 | 5, rolls: number[]) {
+  const scale = isPercent(key) ? 100 : 1
+  const tiers = coreStats.art.sub[rarity][key]
+  let sum = 0
+  for (const roll of [...rolls].sort((a, b) => b - a)) {
+    const tier = tiers.find((t) => Math.abs(t * scale - roll) < 1e-6)
+    if (tier === undefined) return Number.NaN
+    sum = Math.fround(sum + Math.fround(tier))
+  }
+  return isPercent(key) ? Math.round(sum * 1000) / 10 : Math.round(sum)
+}
+
 /** Every rule a piece must keep to exist on the server through gc-web unchanged */
 function expectLegal(input: GenInput, result: GenResult) {
   expect(result.pieces).toHaveLength(input.slots.length)
@@ -66,10 +82,12 @@ function expectLegal(input: GenInput, result: GenResult) {
     expect(p.slotKey).toBe(slot.slotKey)
     expect(p.mainStatKey).toBe(slot.mainStatKey)
     expect(p.rarity).toBe(slot.rarity)
-    expect(p.level).toBe(slot.level)
+    // gc-web clamps the level to the piece's maximum: +16 for 4★, +20 for 5★
+    const level = Math.min(slot.level, slot.rarity === 5 ? 20 : 16)
+    expect(p.level).toBe(level)
     expect(p.setKey).toBe(slot.setKey)
     // gc-web's artifactRollLimits(4, level): 4 + level/4 rolls, 1 + level/4 per substat
-    const upgrades = Math.floor(slot.level / 4)
+    const upgrades = Math.floor(level / 4)
     const rolls = p.substats.reduce((sum, s) => sum + s.rolls.length, 0)
     expect(rolls, `${p.slotKey} rolls`).toBe(4 + upgrades)
     expect(p.substats).toHaveLength(4)
@@ -85,15 +103,10 @@ function expectLegal(input: GenInput, result: GenResult) {
           tiers.some((t) => Math.abs(t - roll) < 1e-6),
           `${sub.key} roll ${roll}`
         ).toBe(true)
-      // value: the shown sum of its rolls (one decimal for percent, whole for flat)
-      const sum = sub.rolls.reduce((a, b) => a + b, 0)
-      const shown = isPercent(sub.key)
-        ? Math.round(sum * 10) / 10
-        : Math.round(sum)
-      expect(
-        Math.abs(sub.value - shown),
-        `${sub.key} ${sub.value}`
-      ).toBeLessThanOrEqual(isPercent(sub.key) ? 0.1 + 1e-9 : 1)
+      // value: exactly what the game shows for its rolls (gc-web's mark for them: an exact read-back)
+      expect(sub.value, `${p.slotKey} ${sub.key}`).toBe(
+        shownExact(sub.key, p.rarity, sub.rolls)
+      )
       expect(
         gcwebReadBack(sub.key, p.rarity, sub.value),
         `${p.slotKey} ${sub.key} ${sub.value}`
@@ -108,6 +121,19 @@ function expectLegal(input: GenInput, result: GenResult) {
       .reduce((a, s) => a + s.value, 0)
     expect(result.totals[key] ?? 0).toBeCloseTo(sum, 6)
   }
+  // fillerRaised: exactly the filler substats whose rolls are not all at the lowest tier
+  const raised = result.pieces.flatMap((p) =>
+    p.substats
+      .filter(
+        (s) =>
+          !input.used.includes(s.key) &&
+          s.rolls.some(
+            (roll) => Math.abs(roll - lowest(s.key, p.rarity)) > 1e-6
+          )
+      )
+      .map((s) => ({ slotKey: p.slotKey, key: s.key }))
+  )
+  expect(result.fillerRaised).toEqual(raised)
   // gaps: generated − target, used substats only
   for (const key of allSubstatKeys) {
     if (input.used.includes(key))
@@ -161,6 +187,7 @@ describe('generateArtifacts', () => {
   it('KQMS build: 5 legal +20 pieces, used totals within one lowest tier', () => {
     const result = generateArtifacts(anastasya)
     expectLegal(anastasya, result)
+    expect(result.fillerRaised).toEqual([])
     for (const key of anastasya.used)
       expect(
         Math.abs(result.gaps[key] ?? Number.POSITIVE_INFINITY),
@@ -183,6 +210,7 @@ describe('generateArtifacts', () => {
     }
     const result = generateArtifacts(input)
     expectLegal(input, result)
+    expect(result.fillerRaised).toEqual([])
     const carriers = result.pieces.filter((p) =>
       p.substats.some((s) => s.key === 'critDMG_')
     )
@@ -206,6 +234,7 @@ describe('generateArtifacts', () => {
     }
     const result = generateArtifacts(input)
     expectLegal(input, result)
+    expect(result.fillerRaised).toEqual([])
     expect(
       result.pieces
         .find((p) => p.slotKey === 'sands')!
@@ -235,6 +264,7 @@ describe('generateArtifacts', () => {
     }
     const result = generateArtifacts(input)
     expectLegal(input, result)
+    expect(result.fillerRaised).toEqual([])
     // (eleMas is the main of 3 pieces: it can only be on the flower and plume)
     expect(Math.abs(result.gaps.enerRech_ ?? 99)).toBeLessThanOrEqual(
       lowest('enerRech_', 4)
@@ -259,6 +289,7 @@ describe('generateArtifacts', () => {
     }
     const result = generateArtifacts(input)
     expectLegal(input, result)
+    expect(result.fillerRaised).toEqual([])
     const placedRolls = result.pieces
       .flatMap((p) => p.substats)
       .filter((s) => input.used.includes(s.key))
@@ -275,9 +306,9 @@ describe('generateArtifacts', () => {
       )
   })
 
-  it('a value two tier mixes reach with different roll counts: only mixes gc-web reads back with the same count', () => {
-    // Three used substats on every piece, one roll each: the extra rolls (6 per piece) go to one
-    // unused substat at the lowest tier gc-web reads back as 6 rolls (6 × lowest reads fewer).
+  it('filler at the lowest tier: placements keep every filler substat at ≤ 3 rolls when they can', () => {
+    // Three used substats with few rolls: 32 filler rolls, so the pieces need enough free slots
+    // (4+ rolls all at the lowest tier read back as fewer rolls in gc-web).
     const input: GenInput = {
       slots: slots5('hp_', 'hydro_dmg_', 'critDMG_'),
       targets: kqm({ critRate_: 5, hp_: 4, critDMG_: 4 }),
@@ -285,24 +316,71 @@ describe('generateArtifacts', () => {
     }
     const result = generateArtifacts(input)
     expectLegal(input, result)
-    const filler = result.pieces
-      .flatMap((p) => p.substats.map((s) => ({ ...s, rarity: p.rarity })))
-      .filter((s) => !input.used.includes(s.key) && s.rolls.length >= 4)
-    expect(filler.length).toBeGreaterThan(0)
-    for (const s of filler) {
-      const allLowest = s.rolls.length * lowest(s.key, s.rarity)
+    expect(result.fillerRaised).toEqual([])
+    for (const p of result.pieces)
+      for (const s of p.substats.filter((s) => !input.used.includes(s.key))) {
+        expect(s.rolls.length, `${p.slotKey} ${s.key}`).toBeLessThanOrEqual(3)
+        for (const roll of s.rolls)
+          expect(roll).toBeCloseTo(lowest(s.key, p.rarity), 6)
+      }
+  })
+
+  it('a value two tier mixes reach with different roll counts: only mixes gc-web reads back with the same count, reported', () => {
+    // 8 used substats with one roll each: only ATK and DEF are filler, too few free slots for 37
+    // filler rolls at ≤ 3 each, so some filler needs 4+ rolls: all-lowest would read back as fewer
+    // rolls, a higher mix is used and reported in fillerRaised.
+    const used: SubstatKey[] = [
+      'hp',
+      'hp_',
+      'atk_',
+      'def_',
+      'eleMas',
+      'enerRech_',
+      'critRate_',
+      'critDMG_',
+    ]
+    const input: GenInput = {
+      slots: slots5('atk_', 'pyro_dmg_', 'critRate_'),
+      targets: kqm(Object.fromEntries(used.map((k) => [k, 1]))),
+      used,
+    }
+    const result = generateArtifacts(input)
+    expectLegal(input, result)
+    expect(result.fillerRaised.length).toBeGreaterThan(0)
+    for (const { slotKey, key } of result.fillerRaised) {
+      const p = result.pieces.find((p) => p.slotKey === slotKey)!
+      const s = p.substats.find((s) => s.key === key)!
+      expect(s.rolls.length).toBeGreaterThanOrEqual(4)
+      const allLowest = s.rolls.length * lowest(s.key, p.rarity)
       // all lowest reads back with fewer rolls, so it is not used
       expect(
         gcwebReadBack(
           s.key,
-          s.rarity,
+          p.rarity,
           isPercent(s.key)
             ? Math.round(allLowest * 10) / 10
             : Math.round(allLowest)
         )
       ).toBeLessThan(s.rolls.length)
-      expect(gcwebReadBack(s.key, s.rarity, s.value)).toBe(s.rolls.length)
+      expect(gcwebReadBack(s.key, p.rarity, s.value)).toBe(s.rolls.length)
     }
+  })
+
+  it('a 4★ piece above +16 is generated at +16 (gc-web clamps to the maximum)', () => {
+    const input: GenInput = {
+      slots: [
+        { ...piece('flower', 'hp', 4, 'Instructor'), level: 20 },
+        ...slots5('atk_', 'pyro_dmg_', 'critRate_').slice(1),
+      ],
+      targets: kqm({ critDMG_: 10, critRate_: 6 }),
+      used: ['critDMG_', 'critRate_'],
+    }
+    const result = generateArtifacts(input)
+    expectLegal(input, result)
+    expect(result.pieces[0].level).toBe(16)
+    expect(
+      result.pieces[0].substats.reduce((n, s) => n + s.rolls.length, 0)
+    ).toBe(8)
   })
 
   it('keeps every piece legal over many targets (sweep)', () => {
