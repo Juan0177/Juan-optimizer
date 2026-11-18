@@ -75,6 +75,28 @@
     "accountSkipped_one": "{{count}} unrecognized item (character, weapon or artifact, maybe too new for this version) was left out.",
     "accountSkipped_other": "{{count}} unrecognized items (characters, weapons or artifacts, maybe too new for this version) were left out."
   },
+  "gcwebBuild": {
+    "button": "Artifacts for gc-web",
+    "buttonTitle": "Make 5 artifacts with this build, preview them and send them to gc-web",
+    "off": "Turn on the gc-web link in Settings → Database → Upload, under “Link to gc-web”.",
+    "title": "5 artifacts for gc-web",
+    "close": "Close",
+    "error": "These artifacts could not be made: {{error}}",
+    "rolls_one": "{{count}} roll",
+    "rolls_other": "{{count}} rolls",
+    "raised": "Rolls above the minimum: {{stats}}",
+    "compare": "Compared with the build",
+    "compareInfo": "Only the substats the build uses. Each piece has the rolls the server gives it (9 for a 5★ +20, 8 for a 4★ +16): the rolls beyond the build’s go to substats the build does not use, at their lowest value.",
+    "compareInfoLabel": "About the rolls",
+    "colStat": "Substat",
+    "colTarget": "Target",
+    "colGenerated": "Generated",
+    "colDelta": "Difference",
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "copyFailed": "The link could not be copied",
+    "send": "Send to gc-web"
+  },
   "beta": {
     "notice": "Beta {{label}} content (kits from {{source}}, from the beta dump): provisional numbers that can change before release."
   },

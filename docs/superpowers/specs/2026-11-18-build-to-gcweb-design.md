@@ -1,5 +1,7 @@
 # Build KQM / TC → 5 manufatti per gc-web — design
 
+**Status:** approved by the user on 2026-11-18 (approach 1; +20 with 9 rolls).
+
 ## Intent
 The user builds a team, runs KQM Theorycrafting, and wants to **test those builds on the private
 server** (LunaGC, through gc-web). A KQM build is not five artifacts: it is main stats plus substat
@@ -18,7 +20,7 @@ fine, the build must be essentially the same.
     `appendNum (4) + floor(level/4)` rolls (`artifactRollLimits`, gc-web/public/commands.js) and fill
     missing rolls at random; so every generated piece carries exactly that many rolls (5★ +20: 9,
     4★ +16: 8), never fewer (no random upgrades). Main stats stay at 5★ +20 / 4★ +16 as KQM counts
-    them (`kqmMainValues`). [pending user confirmation: see "Open"]
+    them (`kqmMainValues`). Chosen by the user (2026-11-18): +20 with 9 rolls, the extra rolls on substats the build does not use, at the lowest tier.
   - substats: at most 4 per piece, never the piece's main stat, at most 6 rolls per substat on a
     piece, each roll one of the game's 4 values for that substat and rarity (70/80/90/100% tiers),
     the totals as close as possible to the build's.
@@ -34,7 +36,9 @@ fine, the build must be essentially the same.
   from the least valuable stats and the preview shows the gap (my call: generate the closest, never
   refuse).
 - "Used" substats: the ones the damage reads when the entry point knows them (the KQM problem's
-  `scales`), else judged from the build: substats with placed rolls, CRIT Rate/DMG, ER. The others
+  `scales`), else judged from the build: substats with placed rolls (TC: above their 2 fixed rolls),
+  CRIT Rate/DMG, ER, the sands/goblet/circlet main stats that are substats (an ATK% sands counts
+  ATK%, even with no placed rolls), and the flat HP/ATK/DEF of a counted HP%/ATK%/DEF%. The others
   are filler: their KQM fixed rolls are not targets (my call).
 - Every substat's roll count must survive gc-web's read-back (`countsFor` returns the fewest-rolls
   combination for a value): the generator checks each value against gc-web's rule (reimplemented
@@ -97,11 +101,6 @@ fine, the build must be essentially the same.
 - The search algorithm (exhaustive over placements is small: 10 substats × 5 pieces; tiers per
   roll ≤ 4^6), as long as it is deterministic and fast (< 100 ms).
 - Off-piece set choice; level per piece for non-KQMS budgets; exact dialog layout.
-
-## Open
-- Which gives way when a KQM piece (8 rolls) meets the server's 9-roll +20 piece: (a) +20 with 9
-  rolls, extra on unused stats (recommended); (b) +16 with 8 rolls, lower main stats; (c) 8 rolls and
-  a random server roll.
 
 ## Done when
 - Unit tests: KQMS 5★ build → 5 legal pieces, each 9 rolls / +20 (no random upgrades in gc-web), totals within one lowest tier of

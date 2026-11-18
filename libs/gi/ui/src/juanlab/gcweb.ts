@@ -23,6 +23,7 @@ import * as artifactMap from '../../../dm/src/mapping/artifact'
 import { characterIdMap } from '../../../dm/src/mapping/character'
 import type { EnkaResponse } from './enkaToGood'
 import { PROP } from './enkaToGood'
+import type { GenResult } from './gcwebArtifacts'
 
 const { artifactIdMap, artifactSlotMap } = artifactMap
 
@@ -201,6 +202,35 @@ export function artifactsToPayload(
           .filter((s) => s.key && PROP_ID[s.key] && s.value)
           .map((s) => ({ prop: PROP_ID[s.key], value: s.value })),
       })),
+  }
+}
+
+/** I 5 manufatti generati da una build (KQM o TC, gcwebArtifacts.ts) come build per gc-web: stessi ID, valori come li mostra il gioco.
+ *  Il nome della build ("KQM Furina", il nome della build TC) e quello del personaggio viaggiano separati. */
+export function genResultToPayload(
+  characterKey: CharacterKey,
+  gender: 'F' | 'M',
+  names: { build: string; character: string },
+  result: GenResult
+): JuanLabBuild {
+  const payload = artifactsToPayload(
+    characterKey,
+    gender,
+    names.build,
+    result.pieces.map((piece) => ({
+      setKey: piece.setKey,
+      slotKey: piece.slotKey,
+      level: piece.level,
+      rarity: piece.rarity,
+      mainStatKey: piece.mainStatKey,
+      location: '',
+      lock: false,
+      substats: piece.substats.map(({ key, value }) => ({ key, value })),
+    }))
+  )
+  return {
+    ...payload,
+    character: { ...payload.character, name: names.character },
   }
 }
 

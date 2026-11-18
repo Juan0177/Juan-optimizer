@@ -1159,8 +1159,9 @@ export function KqmSetupSummary({
   rotation?: 'played' | 'entered'
   sx?: SxProps<Theme>
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const num = (value: number) => localizeDecimal(`${value}`, i18n?.language)
   const kqm = settings.kqm ?? defaultTeamOptKqm
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
   const fromCalculator = kqm.energySource === 'calculator'
@@ -1191,13 +1192,14 @@ export function KqmSetupSummary({
           flexWrap: 'wrap',
           columnGap: 2.5,
           rowGap: 1.25,
+          minWidth: 0,
           ...numSx,
         },
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
     >
       {/* the members: each a pill, its constellation and the ER it was built to */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, minWidth: 0 }}>
         {members.map(({ characterKey }) => {
           const cons = kqmMemberConstellation(characterKey, kqm)
           const nowCons = nowKqm && kqmMemberConstellation(characterKey, nowKqm)
@@ -1219,7 +1221,9 @@ export function KqmSetupSummary({
                 sx={{
                   ...item,
                   gap: 0.75,
-                  height: 32,
+                  flexWrap: 'wrap',
+                  maxWidth: '100%',
+                  minHeight: 32,
                   pl: 0.375,
                   pr: 1.25,
                   borderRadius: 1,
@@ -1239,9 +1243,9 @@ export function KqmSetupSummary({
                   nowCons !== cons &&
                   nowIs(`C${nowCons}`)}
                 <Box component="span" sx={{ color: 'text.secondary' }}>
-                  {er}% {t('teamOpt.kqm.erShort', 'ER')}
+                  {num(er)}% {t('teamOpt.kqm.erShort', 'ER')}
                 </Box>
-                {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
+                {nowEr !== undefined && nowEr !== er && nowIs(`${num(nowEr)}%`)}
               </Box>
             </Tooltip>
           )
@@ -1407,7 +1411,10 @@ function KqmRunNotes({
     display: 'inline-flex',
     alignItems: 'center',
     gap: 0.625,
-    height: 28,
+    minHeight: 28,
+    maxWidth: '100%',
+    minWidth: 0,
+    py: 0.25,
     px: 1.25,
     borderRadius: 1,
     fontSize: 12.5,
@@ -1415,7 +1422,8 @@ function KqmRunNotes({
     color: tone,
     bgcolor: alpha(tone, 0.1),
     boxShadow: `inset 0 0 0 1px ${alpha(tone, 0.28)}`,
-    whiteSpace: 'nowrap',
+    // (one line when it fits; on a phone it wraps inside the row)
+    overflowWrap: 'anywhere',
   })
   return (
     <>
@@ -2470,6 +2478,7 @@ function KqmResultsView({
         sx={{
           ...insetSx,
           display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: 1.25,
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
@@ -2485,6 +2494,7 @@ function KqmResultsView({
             columnGap: 1,
             rowGap: 0.75,
             minHeight: 28,
+            minWidth: 0,
           }}
         >
           <FieldLabel
@@ -2502,6 +2512,8 @@ function KqmResultsView({
               flexWrap: 'wrap',
               justifyContent: 'flex-end',
               gap: 0.75,
+              minWidth: 0,
+              maxWidth: '100%',
             }}
           >
             <KqmRunNotes

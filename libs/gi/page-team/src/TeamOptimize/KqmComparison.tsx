@@ -3,6 +3,7 @@ import {
   InfoTooltipInline,
 } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon, TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
@@ -16,6 +17,8 @@ import type {
 import {
   CharacterName,
   compareTeamKqm,
+  GcwebBuildButton,
+  genInputFromKqm,
   KQM_SUBSTAT_ROLLS,
   kqmSetsId,
   kqmWeaponData,
@@ -123,7 +126,8 @@ export function KqmCompare({
   /** The level of its member's heading (default: 3) */
   headingLevel?: 3 | 4 | 5 | 6
 }) {
-  const { t, i18n } = useTranslation('page_team')
+  // (charNames_gen: the character's name in the gc-web build's name)
+  const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
   const original = result.builds[characterKey]!
@@ -458,6 +462,17 @@ export function KqmCompare({
             equipment={equipment}
             rolls={kqmStandardRolls(runSettings.kqm)}
           />
+          {/* juanlab: the 5 artifacts of this build (the one shown, picks included) for gc-web.
+              No `scales`: the run keeps no record of what the damage reads, so the used
+              substats are judged from the build (genInputFromKqm) */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+            <GcwebBuildButton
+              input={() => genInputFromKqm(build, {})}
+              characterKey={characterKey}
+              gender={gender}
+              name={`KQM ${t(`charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`)}`}
+            />
+          </Box>
           {er && (
             <Tooltip
               arrow

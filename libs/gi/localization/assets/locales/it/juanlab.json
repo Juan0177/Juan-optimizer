@@ -75,6 +75,28 @@
     "accountSkipped_one": "{{count}} elemento non riconosciuto (personaggio, arma o manufatto, forse troppo nuovo per questa versione) è stato escluso.",
     "accountSkipped_other": "{{count}} elementi non riconosciuti (personaggi, armi o manufatti, forse troppo nuovi per questa versione) sono stati esclusi."
   },
+  "gcwebBuild": {
+    "button": "Manufatti per gc-web",
+    "buttonTitle": "Genera 5 manufatti con questa build, per vederli e inviarli a gc-web",
+    "off": "Attiva il collegamento a gc-web in Impostazioni → Database → Carica, alla voce «Collegamento a gc-web».",
+    "title": "5 manufatti per gc-web",
+    "close": "Chiudi",
+    "error": "Non riesco a generare i manufatti di questa build: {{error}}",
+    "rolls_one": "{{count}} roll",
+    "rolls_other": "{{count}} roll",
+    "raised": "Roll più alti del minimo: {{stats}}",
+    "compare": "Confronto con la build",
+    "compareInfo": "Solo le statistiche secondarie che la build usa. Ogni pezzo ha i roll che gli dà il server (9 per un 5★ +20, 8 per un 4★ +16): i roll oltre quelli della build vanno sulle statistiche secondarie che la build non usa, al valore più basso.",
+    "compareInfoLabel": "Informazioni sui roll",
+    "colStat": "Statistica secondaria",
+    "colTarget": "Obiettivo",
+    "colGenerated": "Generato",
+    "colDelta": "Differenza",
+    "copy": "Copia link",
+    "copied": "Link copiato",
+    "copyFailed": "Non riesco a copiare il link",
+    "send": "Invia a gc-web"
+  },
   "beta": {
     "notice": "Contenuti della beta {{label}} (kit di {{source}}, dal dump della beta): numeri provvisori, possono cambiare prima dell'uscita."
   },
