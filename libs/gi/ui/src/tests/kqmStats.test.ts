@@ -1,5 +1,11 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { toPercent } from '@genshin-optimizer/common/util'
+import type {
+  ArtifactSlotKey,
+  CharacterKey,
+  MainStatKey,
+} from '@genshin-optimizer/gi/consts'
+import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 import type { LoadoutDatum } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import {
@@ -7,9 +13,12 @@ import {
   getCharStat,
   getWeaponStat,
 } from '@genshin-optimizer/gi/stats'
+import { getMainStatValue } from '@genshin-optimizer/gi/util'
+import { input } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import type { KqmBuild } from '../'
 import { kqmBuildRarity, kqmOutOfCombatStats, kqmValues } from '../'
+import { getTeamDataCalc } from '../hooks/useTeamData'
 
 const ayaka: CharacterKey = 'KamisatoAyaka'
 const shenhe: CharacterKey = 'Shenhe'
@@ -79,6 +88,79 @@ const charCurve = (ck: CharacterKey, key: 'hp' | 'atk' | 'def') => {
   )
 }
 
+/**
+ * The reference: the same KQM build as a TC loadout (same weapon at 90/6 and refinement, same 5★
+ * +20 main stats, the same substat totals, same sets, constellation and talents) in a one-member
+ * team with no conditionals, computed through the team path the character page uses
+ * (`getTeamDataCalc`: `getTeamData` + `uiDataForTeam`)
+ */
+function referenceStats(
+  characterKey: CharacterKey,
+  build: KqmBuild,
+  { constellation, talent }: { constellation: number; talent: number }
+) {
+  const database = new ArtCharDatabase(1, new SandboxStorage({}))
+  // (the character's own saved state differs: the TC loadout's must win)
+  database.chars.set(characterKey, {
+    key: characterKey,
+    level: 20,
+    ascension: 1,
+    talent: { auto: 1, skill: 1, burst: 1 },
+    constellation: 0,
+  })
+  const slots: Record<ArtifactSlotKey, MainStatKey> = {
+    flower: 'hp',
+    plume: 'atk',
+    ...build.mains,
+  }
+  const values = kqmValues(build)
+  // Substat totals: the build's stats less its five main stats
+  const substats = Object.fromEntries(
+    allSubstatKeys.map((key) => {
+      const mains = Object.values(slots).filter((k) => k === key).length
+      const main = mains && getMainStatValue(key as MainStatKey, 5, 20)
+      const total = (values[key] ?? 0) - mains * main
+      return [key, toPercent(total, key)]
+    })
+  )
+  const buildTcId = database.buildTcs.new({
+    characterKey,
+    character: {
+      level: 90,
+      ascension: 6,
+      constellation,
+      talent: { auto: talent, skill: talent, burst: talent },
+    },
+    weapon: {
+      key: build.weapon.key,
+      level: 90,
+      ascension: 6,
+      refinement: build.weapon.refinement,
+    },
+    artifact: {
+      slots: Object.fromEntries(
+        Object.entries(slots).map(([slot, statKey]) => [
+          slot,
+          { level: 20, rarity: 5, statKey },
+        ])
+      ),
+      substats: { type: 'max', stats: substats, rarity: 5 },
+      sets: build.sets,
+    },
+  } as never)
+  const teamCharId = database.teamChars.new(characterKey, { conditional: {} })
+  const teamId = database.teams.new({
+    loadoutData: [{ teamCharId, buildType: 'tc', buildTcId }] as LoadoutDatum[],
+    conditional: {},
+  } as never)
+  const data = getTeamDataCalc(database, teamId, database.gender, teamCharId)?.[
+    characterKey
+  ]?.target
+  if (!data) throw new Error('no team data')
+  return (key: string) =>
+    Number(data.get(input.total[key as keyof typeof input.total]).value)
+}
+
 describe('kqmOutOfCombatStats', () => {
   it('reads the eight stats in order for a KQM build', () => {
     const result = kqmOutOfCombatStats(bareDatabase(), ayaka, ayakaBuild, run)
@@ -138,7 +220,25 @@ describe('kqmOutOfCombatStats', () => {
     expect(stat('enerRech_')).toBeCloseTo(1 + values['enerRech_'], 6)
   })
 
+  it('matches the same build as a TC loadout in a one-member team', () => {
+    for (const [ck, build] of [
+      [shenhe, shenheBuild],
+      [ayaka, ayakaBuild],
+    ] as const)
+      for (const options of [run, { constellation: 6, talent: 10 }]) {
+        const result = kqmOutOfCombatStats(bareDatabase(), ck, build, options)!
+        const reference = referenceStats(ck, build, options)
+        expect(result.stats).toHaveLength(8)
+        for (const { key, value } of result.stats)
+          expect({ key, value }).toEqual({
+            key,
+            value: expect.closeTo(reference(key), 6),
+          })
+      }
+  })
+
   it('ignores conditionals and teammates', () => {
+    // (the helper reads no teams: a database whose team has conditionals on changes nothing)
     for (const [ck, build] of [
       [shenhe, shenheBuild],
       [ayaka, ayakaBuild],
