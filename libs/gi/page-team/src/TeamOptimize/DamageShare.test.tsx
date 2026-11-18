@@ -47,6 +47,17 @@ describe('DamageShare', () => {
     expect(screen.getByLabelText('Damage share')).toBeTruthy()
   })
 
+  it('keeps aria-label off the ring’s parts (the svg names them all)', () => {
+    site.language = 'en'
+    const { container } = renderShare()
+    const svg = container.querySelector('svg[role="img"]')
+    expect(svg?.getAttribute('aria-label')).toBeTruthy()
+    const parts = svg?.querySelectorAll('path, circle') ?? []
+    expect(parts.length).toBeGreaterThan(0)
+    for (const part of parts)
+      expect(part.hasAttribute('aria-label')).toBe(false)
+  })
+
   it('writes the damage as the site’s language does', () => {
     site.language = 'it'
     renderShare()

@@ -1898,7 +1898,13 @@ function Readout({
         ))}
       {hit && (
         <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+            minWidth: 0,
+            overflow: 'hidden',
+          }}
         >
           <Box
             sx={(theme) => ({
@@ -1909,7 +1915,10 @@ function Readout({
               bgcolor: laneColor(theme, hit.characterKey),
             })}
           />
-          <Typography noWrap sx={{ fontSize: 12.5, fontWeight: 600 }}>
+          <Typography
+            noWrap
+            sx={{ fontSize: 12.5, fontWeight: 600, minWidth: 0 }}
+          >
             <HitLabel
               label={hit.label}
               data={teamData?.[hit.characterKey]?.target}
@@ -2023,6 +2032,7 @@ function MomentPanel({
   return (
     <Box
       sx={(theme) => ({
+        minWidth: 0,
         borderRadius: 1.5,
         border: `1px solid ${pinned ? alpha(tokens.gold, 0.35) : theme.palette.divider}`,
         bgcolor: tokens.inset,
@@ -2068,10 +2078,15 @@ function MomentPanel({
               alignItems: 'center',
               gap: 0.75,
               minWidth: 0,
+              maxWidth: '100%',
+              overflow: 'hidden',
             }}
           >
             <MemberAvatar characterKey={hit.characterKey} size={22} />
-            <Typography noWrap sx={{ fontSize: 13.5, fontWeight: 650 }}>
+            <Typography
+              noWrap
+              sx={{ fontSize: 13.5, fontWeight: 650, minWidth: 0 }}
+            >
               <HitLabel
                 label={hit.label}
                 data={teamData?.[hit.characterKey]?.target}

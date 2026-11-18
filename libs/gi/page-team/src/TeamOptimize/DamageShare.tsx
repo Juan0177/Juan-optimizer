@@ -318,6 +318,7 @@ function Ring({
               <Tooltip
                 key={p.key}
                 followCursor
+                describeChild
                 title={`${p.label}: ${pct(p.value)} · ${formatRateFull(p.value, rotationTime, i18n?.language)} ${unit}`}
               >
                 {p.d ? (
