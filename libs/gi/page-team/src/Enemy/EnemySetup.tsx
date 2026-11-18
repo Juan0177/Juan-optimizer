@@ -11,6 +11,7 @@ import {
   FIGHT_LIMIT,
   FightBreakdown,
   formatDuration,
+  MOONGECKO_BOSS,
   stygianDifficulties,
   stygianFightModelled,
   stygianPhaseName,
@@ -39,6 +40,7 @@ import {
 import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
 import { formatHp } from './hp'
+import { MoongeckoSettings } from './MoongeckoSettings'
 
 const compact = (digits: number) =>
   new Intl.NumberFormat('en', {
@@ -161,6 +163,15 @@ export function EnemySetup({
           {/* its RES, all eight */}
           <ResGrid team={team} />
         </Box>
+        {/* how the team plays the Moongecko where its fight cannot tell */}
+        {stygian?.boss.id === MOONGECKO_BOSS && (
+          <MoongeckoSettings
+            teamId={teamId}
+            team={team}
+            fight={fight}
+            disabled={disabled}
+          />
+        )}
       </Box>
       <EnemyDialog teamId={teamId} open={open} onClose={onClose} />
     </Box>
@@ -183,6 +194,17 @@ function mechanicsLine(t: TFunction, estimate: FightEstimate) {
             count: part.count,
           })
         : t('enemy.hornsKeptLine', 'Its horns never broken')
+    if (part.key === 'anchors')
+      return part.broken
+        ? t('enemy.anchorsLine', {
+            defaultValue: '{{count}} Anchors, each ward ≈ {{time}}',
+            count: part.count,
+            time: formatDuration(t, part.seconds),
+          })
+        : t('enemy.anchorsKeptLine', {
+            defaultValue: '{{count}} Anchors, wards not broken in time',
+            count: part.count,
+          })
   }
   const phase = estimate.parts.find((p) => p.key === 'phase')
   return phase?.key === 'phase'

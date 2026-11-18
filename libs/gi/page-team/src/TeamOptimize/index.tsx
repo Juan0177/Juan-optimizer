@@ -19,6 +19,7 @@ import {
   enemyFight,
   evaluateTeamRotation,
   kqmTeamOverrides,
+  MOONGECKO_BOSS,
   sameEnemy,
   stygianFightModelled,
   teamOptBonusStats,
@@ -59,7 +60,11 @@ import { EnemySetup } from '../Enemy/EnemySetup'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
 import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
-import { fightTeamOf, useRotationApplications } from './fightTeam'
+import {
+  fightTeamOf,
+  useCocoonEvaluations,
+  useRotationApplications,
+} from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { KqmTimeline } from './KqmTimeline'
@@ -142,7 +147,7 @@ export default function TeamBuildWorkspace({
   const buffs = useTeamBuffs(teamId, teamData)
   // the rotation with the builds equipped now: Team optimize's only (KQM theorycrafting never
   // counts or shows the members' own builds)
-  const evaluation = useCurrentEvaluation(
+  const [evaluation, evaluationSettings] = useCurrentEvaluation(
     teamId,
     teamOpt,
     mode === 'inventory' ? teamData : undefined
@@ -279,6 +284,24 @@ export default function TeamBuildWorkspace({
     mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
     mode === 'kqm' ? kqmShown?.builds : undefined
   )
+  // the Moongecko's Radiant Cocoon and Disentangled: the damage shown evaluated in them too (the
+  // equipped builds', or the KQM builds' played)
+  const cocoonSettings = useMemo(
+    () =>
+      stygian?.boss.id !== MOONGECKO_BOSS
+        ? undefined
+        : mode === 'kqm'
+          ? kqmOverrides && kqmAttacks
+            ? {
+                ...kqmOverrides,
+                arts: kqmOverrides.arts ?? {},
+                attacks: kqmAttacks,
+              }
+            : undefined
+          : evaluationSettings,
+    [stygian, mode, kqmOverrides, kqmAttacks, evaluationSettings]
+  )
+  const cocoonNow = useCocoonEvaluations(teamId, cocoonSettings)
   const fightNow = useMemo(
     () =>
       team && (stygian || team.enemyHp)
@@ -292,6 +315,7 @@ export default function TeamBuildWorkspace({
               mode === 'kqm' ? (kqmRotationTime ?? rotationTime) : rotationTime,
             enemyOverride: team.enemyOverride,
             applications,
+            cocoon: cocoonNow,
           })
         : undefined,
     [
@@ -307,6 +331,7 @@ export default function TeamBuildWorkspace({
       kqmRotationTime,
       rotationTime,
       applications,
+      cocoonNow,
     ]
   )
   // Wolf's Gravestone's passive (enemies under 30% HP) for the share of the fight it is on against
@@ -396,6 +421,17 @@ export default function TeamBuildWorkspace({
       },
     [shownGear, shownTeamOpt, members]
   )
+  // the shown builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
+  const resultCocoonSettings = useMemo(
+    () =>
+      shownOverrides &&
+      result?.enemy &&
+      appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS
+        ? { ...shownOverrides, attacks: shownTeamOpt.attacks }
+        : undefined,
+    [shownOverrides, result?.enemy, shownTeamOpt.attacks]
+  )
+  const resultCocoon = useCocoonEvaluations(teamId, resultCocoonSettings)
   // a new result: the rotation folds away (it opens again with a click) and the result, below it,
   // comes into view
   useEffect(() => {
@@ -858,6 +894,7 @@ export default function TeamBuildWorkspace({
             enemy={result.enemy}
             enemyNow={enemyChanged(result.enemy) ? team : undefined}
             applications={applications}
+            cocoon={resultCocoon}
             onRunAgain={() => setRunDialog(true)}
             timeline={
               <KqmTimeline
@@ -1458,7 +1495,10 @@ function useCurrentEvaluation(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const [evaluation, setEvaluation] = useState<TeamOptEvaluation>()
+  const [current, setCurrent] = useState<{
+    evaluation: TeamOptEvaluation | undefined
+    settings: Parameters<typeof evaluateTeamRotation>[3]
+  }>()
   useEffect(() => {
     if (!teamData) return undefined
     const timer = setTimeout(() => {
@@ -1474,23 +1514,26 @@ function useCurrentEvaluation(
         teamOptCurrentWeapons(database, members),
         teamOpt
       )
-      setEvaluation(
-        evaluateTeamRotation(database, teamId, gender, {
-          arts: {},
-          attacks: teamOpt.attacks,
-          mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
-          statFilters,
-          onField: teamOpt.onField,
-          bonusStats: teamOptBonusStats(
-            teamOpt,
-            members.map((m) => m.characterKey)
-          ),
-        })
-      )
+      const settings = {
+        arts: {},
+        attacks: teamOpt.attacks,
+        mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
+        statFilters,
+        onField: teamOpt.onField,
+        bonusStats: teamOptBonusStats(
+          teamOpt,
+          members.map((m) => m.characterKey)
+        ),
+      }
+      setCurrent({
+        evaluation: evaluateTeamRotation(database, teamId, gender, settings),
+        settings,
+      })
     }, 120)
     return () => clearTimeout(timer)
   }, [database, teamId, gender, teamOpt, teamData])
-  return evaluation
+  // (and the settings it was found with: the Moongecko's cocoon evaluates the same)
+  return [current?.evaluation, current?.settings] as const
 }
 
 /** How many artifacts the team may use (any member, before main-stat filters) */

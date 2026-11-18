@@ -17,6 +17,7 @@ import {
   FIGHT_LIMIT,
   formatDuration,
   formatFightTime,
+  MOONGECKO,
   StygianResSummary,
   stygianBossName,
   stygianPhaseName,
@@ -37,23 +38,35 @@ import {
   type,
 } from '../TeamOptimize/ui'
 
-/** A state's colour: its RES's (shielded: water, horns: fire, a weak carapace: rock) */
+/**
+ * A state's colour: its RES's (shielded or cocooned: water, horns: fire, weakened or stunned:
+ * rock), a ward up (rock, faint), out of reach (none), the team buffed (gold); its regular RES
+ * (the Moongecko's Dull Carapace) the lane's own
+ */
 function stateColor(theme: Theme, state: FightSegment['state']) {
   switch (state) {
     case 'shielded':
     case 'enhanced':
     case 'rage':
     case 'geohuman':
+    case 'enhancedCocoon':
       return theme.palette.hydro.main
     case 'drinking':
       return alpha(theme.palette.hydro.main, 0.45)
+    case 'cocooned':
+      return alpha(theme.palette.hydro.main, 0.7)
     case 'horns':
     case 'molten':
       return theme.palette.pyro.main
-    case 'dullCarapace':
     case 'weakened':
     case 'stunned':
       return theme.palette.geo.main
+    case 'ward':
+      return alpha(theme.palette.geo.main, 0.4)
+    case 'leap':
+      return alpha(giTokens.parchment, 0.1)
+    case 'disentangled':
+      return giTokens.gold
     default:
       return alpha(giTokens.parchment, 0.32)
   }
@@ -75,10 +88,11 @@ const compact = (digits: number) =>
 
 const W = 1000
 const H = 100
-/** The lanes' heights (px): its state, its HP, its meter, the time marks */
+/** The lanes' heights (px): its state, its HP, its meter, the team's DPS, the time marks */
 const STATE_H = 12
 const HP_H = 96
 const METER_H = 40
+const DPS_H = 40
 const MARKS_H = 16
 
 /** The fight at one moment: its state there, its HP, its meter and its shield's take so far */
@@ -125,28 +139,61 @@ export function FightTimeline({
   )
   if (!estimate || hp === undefined || !view) return null
   const { segments, events, meter } = estimate.timeline
-  const stateName = (state: FightSegment['state']) =>
-    state === 'horns'
-      ? t('enemy.fight.hornsState', 'Horns on (+150% RES)')
-      : state === 'drinking'
-        ? t('enemy.fight.drinking', 'Drinking (Courage rising)')
-        : state === 'shielded' && preset?.boss.id === 1013061
+  const stateName = (state: FightSegment['state']) => {
+    switch (state) {
+      case 'horns':
+        return t('enemy.fight.hornsState', 'Horns on (+150% RES)')
+      case 'drinking':
+        return t('enemy.fight.drinking', 'Drinking (Courage rising)')
+      case 'leap':
+        return t('enemy.fight.leap', 'Out of reach')
+      case 'ward':
+        return t('enemy.fight.ward', 'Anchor’s ward up (its HP untouched)')
+      case 'cocooned':
+        return t('enemy.fight.cocooned', 'Radiant Cocoon on the team')
+      case 'enhancedCocoon':
+        return t(
+          'enemy.fight.enhancedCocoon',
+          'Radiant Cocoon on the team (all its RES up)'
+        )
+      case 'disentangled':
+        return t('enemy.fight.disentangled', 'Disentangled (team buffed)')
+      default:
+        return state === 'shielded' && preset?.boss.id === 1013061
           ? t('enemy.fight.valiantAssault', 'Valiant Assault (shielded)')
           : stygianPhaseName(t, state)
-  // each state's RES (a boss's phase; its horns: +150%; its drink: its regular RES)
+    }
+  }
+  // each state's RES (a boss's phase; its horns: +150%; its drink: its regular RES; the
+  // Moongecko's: its Dull Carapace RES, +60% Geo RES in the cocoon, all RES after a ward kept)
   const resOf = (state: FightSegment['state']): StygianRes => {
     if (!preset) return customRes(enemy)
     const phases = preset.boss.phases
     const regular =
       phases.find((p) => p.key === 'regular')?.res ?? preset.phase.res
-    if (state === 'horns')
-      return Object.fromEntries(
+    const plus = (res: StygianRes, add: (e: ElementWithPhyKey) => number) =>
+      Object.fromEntries(
         allElementWithPhyKeys.map((e) => {
-          const v = regular[e]
-          return [e, v === 'immune' ? v : v + 150]
+          const v = res[e]
+          return [e, v === 'immune' ? v : v + add(e)]
         })
       ) as StygianRes
+    if (state === 'horns') return plus(regular, () => 150)
     if (state === 'drinking') return regular
+    const dull = phases.find((p) => p.key === 'dullCarapace')?.res
+    if (dull) {
+      if (state === 'cocooned')
+        return plus(dull, (e) => (e === 'geo' ? MOONGECKO.cocoonRes : 0))
+      if (state === 'enhancedCocoon')
+        return plus(dull, () => MOONGECKO.cocoonRes)
+      if (
+        state === 'ward' ||
+        state === 'leap' ||
+        state === 'stunned' ||
+        state === 'disentangled'
+      )
+        return dull
+    }
     return phases.find((p) => p.key === state)?.res ?? preset.phase.res
   }
   const icon = preset && stygianBossIcons[preset.boss.id]
@@ -154,11 +201,15 @@ export function FightTimeline({
   const meterLabel =
     meter?.key === 'courage'
       ? t('enemy.fight.courage', 'Courage')
-      : t('enemy.fight.hornGauge', 'Horn gauge')
+      : meter?.key === 'ward'
+        ? t('enemy.fight.wardLayers', 'Ward layers')
+        : t('enemy.fight.hornGauge', 'Horn gauge')
   const meterColor =
     meter?.key === 'hornGauge'
       ? theme.palette.pyro.main
-      : theme.palette.anemo.main
+      : meter?.key === 'ward'
+        ? theme.palette.geo.main
+        : theme.palette.anemo.main
   return (
     <Box
       component="section"
@@ -285,12 +336,20 @@ export function FightTimeline({
                   defaultValue: 'Courage (full at {{max}})',
                   max: meter.max,
                 })
-              : t('enemy.fight.hornGaugeLegend', {
-                  defaultValue: 'Horn gauge ({{max}}U of Pyro)',
-                  max: meter.max,
-                })}
+              : meter.key === 'ward'
+                ? t('enemy.fight.wardLegend', {
+                    defaultValue: 'Ward layers left ({{max}} of 4U Geo)',
+                    max: meter.max,
+                  })
+                : t('enemy.fight.hornGaugeLegend', {
+                    defaultValue: 'Horn gauge ({{max}}U of Pyro)',
+                    max: meter.max,
+                  })}
           </Swatch>
         )}
+        <Swatch color={alpha(giTokens.parchment, 0.6)} line>
+          {t('enemy.fight.dpsLegend', 'Team DPS (into a shield or ward)')}
+        </Swatch>
         {events.length > 0 && (
           <Typography sx={{ ...type.label, fontWeight: 400, ml: 'auto' }}>
             {t(
@@ -376,6 +435,19 @@ function fightView(estimate: FightEstimate) {
   const meterArea =
     meterPath &&
     `${meterPath} L${sx(segments[segments.length - 1]?.end ?? 0)},${H} L0,${H} Z`
+  // the team's DPS: a step per stretch (into a shield or ward there), scaled to its highest
+  const maxDps = Math.max(0, ...segments.map((seg) => seg.dps ?? 0))
+  const dpsY = (v: number) =>
+    maxDps > 0 ? ((1 - (0.9 * v) / maxDps) * H).toFixed(2) : `${H}`
+  const dpsPath =
+    maxDps > 0
+      ? segments
+          .map(
+            (seg, i) =>
+              `${i ? 'L' : 'M'}${sx(seg.start)},${dpsY(seg.dps ?? 0)} L${sx(seg.end)},${dpsY(seg.dps ?? 0)}`
+          )
+          .join(' ')
+      : undefined
   return {
     estimate,
     end,
@@ -383,6 +455,8 @@ function fightView(estimate: FightEstimate) {
     hpArea,
     meterPath,
     meterArea,
+    dpsPath,
+    maxDps,
     /** The fight at `s` seconds (`maxHp`: its Max HP, for its shield's backlash cap) */
     at(s: number, maxHp: number): Moment {
       const time = Math.min(Math.max(0, s), end)
@@ -395,10 +469,12 @@ function fightView(estimate: FightEstimate) {
       const hpNow = seg.hpStart + (seg.hpEnd - seg.hpStart) * f
       const m0 = seg.meterStart
       const m1 = seg.meterEnd ?? m0
-      const absorbed =
+      const here =
         seg.backlashRatio !== undefined && seg.dps
           ? seg.dps * (time - seg.start)
           : undefined
+      const absorbed =
+        here !== undefined ? (seg.absorbedBefore ?? 0) + here : undefined
       return {
         t: time,
         seg,
@@ -409,12 +485,12 @@ function fightView(estimate: FightEstimate) {
               ...(span > 0 ? { rate: (m1 - m0) / span } : {}),
             }
           : {}),
-        ...(absorbed !== undefined
+        ...(absorbed !== undefined && here !== undefined
           ? {
               absorbed,
               backlash: Math.min(
-                (seg.backlashRatio ?? 0) * absorbed,
-                0.15 * maxHp,
+                (seg.backlashBefore ?? 0) + (seg.backlashRatio ?? 0) * here,
+                (seg.backlashCap ?? 0.15) * maxHp,
                 hpNow * maxHp
               ),
             }
@@ -529,10 +605,19 @@ function FightChart({
                 ml: '-5px',
                 mt: '-5px',
                 borderRadius: '50%',
+                // (the Anchor's blast takes no HP: a ring)
                 bgcolor:
-                  e.kind === 'backlash'
-                    ? theme.palette.electro.main
-                    : theme.palette.pyro.main,
+                  e.kind === 'blast'
+                    ? giTokens.panelDark
+                    : e.kind === 'backlash'
+                      ? theme.palette.electro.main
+                      : e.kind === 'wardBreak'
+                        ? theme.palette.geo.main
+                        : theme.palette.pyro.main,
+                border:
+                  e.kind === 'blast'
+                    ? `2px solid ${theme.palette.pyro.main}`
+                    : undefined,
                 boxShadow: `0 0 0 2px ${giTokens.panelDark}`,
                 pointerEvents: 'none',
               }}
@@ -572,6 +657,44 @@ function FightChart({
             />
           </Box>
           <LaneLabel>{meterLabel}</LaneLabel>
+        </Box>
+      )}
+      {/* the team's DPS over the fight (where a shield or ward takes it: what it takes) */}
+      {view.dpsPath && (
+        <Box
+          sx={{
+            ...lane,
+            height: DPS_H,
+            bgcolor: alpha(giTokens.parchment, 0.03),
+          }}
+        >
+          <Box
+            component="svg"
+            viewBox={`0 0 ${W} ${H}`}
+            preserveAspectRatio="none"
+            aria-hidden
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+            }}
+          >
+            <path
+              d={view.dpsPath}
+              fill="none"
+              stroke={alpha(giTokens.parchment, 0.6)}
+              strokeWidth="1.5"
+              vectorEffect="non-scaling-stroke"
+              strokeLinejoin="round"
+            />
+          </Box>
+          <LaneLabel>
+            {t('enemy.fight.dpsAxis', {
+              defaultValue: 'DPS (top {{dps}})',
+              dps: compact(3).format(view.maxDps / 0.9),
+            })}
+          </LaneLabel>
         </Box>
       )}
       {/* the time marks */}
@@ -695,10 +818,12 @@ function FightScrub({
   }
   const moment = cursor ? view.at(cursor.t, maxHp) : undefined
   // (the line spans the lanes above the time marks)
+  const meterLane = meter && view.meterPath ? METER_H + 4 : 0
   const lanes =
     (hasStates ? STATE_H + 4 : 0) +
     HP_H +
-    (meter && view.meterPath ? METER_H + 4 : 0)
+    meterLane +
+    (view.dpsPath ? DPS_H + 4 : 0)
   const valueText = moment ? momentText(t, moment, maxHp, stateName) : undefined
   return (
     <Box sx={{ display: 'grid', gap: 1 }}>
@@ -754,6 +879,18 @@ function FightScrub({
                 color={meterColor}
               />
             )}
+            {view.dpsPath && view.maxDps > 0 && (
+              <Dot
+                top={
+                  (hasStates ? STATE_H + 4 : 0) +
+                  HP_H +
+                  meterLane +
+                  4 +
+                  (1 - (0.9 * (moment.seg.dps ?? 0)) / view.maxDps) * DPS_H
+                }
+                color={giTokens.parchment}
+              />
+            )}
           </Box>
         )}
       </Box>
@@ -793,10 +930,15 @@ function FightScrub({
                   'enemy.fight.scrubHintCourage',
                   'Point at a moment to see its HP, Courage and RES there · click to pin it · ← → by 1 s'
                 )
-              : t(
-                  'enemy.fight.scrubHint',
-                  'Point at a moment to see its HP and RES there · click to pin it · ← → by 1 s'
-                )}
+              : meter?.key === 'ward'
+                ? t(
+                    'enemy.fight.scrubHintWard',
+                    'Point at a moment to see its HP, its ward, RES and the team’s DPS there · click to pin it · ← → by 1 s'
+                  )
+                : t(
+                    'enemy.fight.scrubHint',
+                    'Point at a moment to see its HP and RES there · click to pin it · ← → by 1 s'
+                  )}
           </Typography>
         )}
       </Box>
@@ -896,7 +1038,9 @@ function MomentLine({
           <Box component="span" sx={value}>
             {meter.key === 'hornGauge'
               ? `${moment.meter.toFixed(1)}U`
-              : Math.round(moment.meter)}
+              : meter.key === 'ward'
+                ? moment.meter.toFixed(1)
+                : Math.round(moment.meter)}
           </Box>
           <span>
             / {meter.max}
@@ -921,7 +1065,9 @@ function MomentLine({
       {seg.dps !== undefined && (
         <Box sx={item}>
           {moment.absorbed !== undefined
-            ? t('enemy.fight.dpsShield', 'Into its shield')
+            ? seg.state === 'ward'
+              ? t('enemy.fight.dpsWard', 'Into its ward')
+              : t('enemy.fight.dpsShield', 'Into its shield')
             : t('enemy.fight.dpsHere', 'Team DPS here')}
           <Box component="span" sx={value}>
             {compact(3).format(seg.dps)}
@@ -930,15 +1076,25 @@ function MomentLine({
       )}
       {moment.absorbed !== undefined && moment.backlash !== undefined && (
         <Box sx={item}>
-          {t('enemy.fight.shieldTook', 'Its shield took')}
+          {seg.state === 'ward'
+            ? t('enemy.fight.anchorTook', 'The Anchor took')
+            : t('enemy.fight.shieldTook', 'Its shield took')}
           <Box component="span" sx={value}>
             {compact(3).format(moment.absorbed)}
           </Box>
-          {t('enemy.fight.backlashSoFar', {
-            defaultValue: '→ {{hp}} backlash when it ends ({{pct}}% of its HP)',
-            hp: compact(3).format(moment.backlash),
-            pct: ((moment.backlash / maxHp) * 100).toFixed(1),
-          })}
+          {seg.state === 'ward'
+            ? t('enemy.fight.wardSoFar', {
+                defaultValue:
+                  '→ {{hp}} off it when the ward breaks ({{pct}}% of its HP)',
+                hp: compact(3).format(moment.backlash),
+                pct: ((moment.backlash / maxHp) * 100).toFixed(1),
+              })
+            : t('enemy.fight.backlashSoFar', {
+                defaultValue:
+                  '→ {{hp}} backlash when it ends ({{pct}}% of its HP)',
+                hp: compact(3).format(moment.backlash),
+                pct: ((moment.backlash / maxHp) * 100).toFixed(1),
+              })}
         </Box>
       )}
       {moment.event && (
@@ -948,10 +1104,20 @@ function MomentLine({
                 defaultValue: 'Backlash: −{{hp}}% of its HP',
                 hp: (moment.event.hp * 100).toFixed(1),
               })
-            : t('enemy.fight.hornsBreakAt', {
-                defaultValue: 'Horns broken: −{{hp}}% of its HP',
-                hp: (moment.event.hp * 100).toFixed(1),
-              })}
+            : moment.event.kind === 'wardBreak'
+              ? t('enemy.fight.wardBreakAt', {
+                  defaultValue: 'Ward broken: −{{hp}}% of its HP',
+                  hp: (moment.event.hp * 100).toFixed(1),
+                })
+              : moment.event.kind === 'blast'
+                ? t(
+                    'enemy.fight.blastAt',
+                    'Ward not broken: the Anchor blasts the team (200% ATK Geo DMG)'
+                  )
+                : t('enemy.fight.hornsBreakAt', {
+                    defaultValue: 'Horns broken: −{{hp}}% of its HP',
+                    hp: (moment.event.hp * 100).toFixed(1),
+                  })}
         </Box>
       )}
       {pinned && (

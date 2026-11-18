@@ -31,6 +31,31 @@ export interface FightTeam {
   electroHits?: ElectroHits
   /** The share of its damage that is Stellar Glimmer DMG (Stellar-Conduct or -Swirl) */
   stellarShare?: number
+  /**
+   * Its DPS by element (against `baseRes`, as `dps`) with the Moongecko's Radiant Cocoon on every
+   * member: −100% CRIT Rate, −50% DMG Bonus. Absent: not computed (its own DPS counted)
+   */
+  cocooned?: Partial<Record<ElementWithPhyKey, number>>
+  /** …and with Disentangled on every member: +15% CRIT Rate, +50% DMG Bonus */
+  disentangled?: Partial<Record<ElementWithPhyKey, number>>
+  /**
+   * Seconds its written rotation takes to break the Moongecko's Moonstone Anchor ward (`wardTime`):
+   * Infinity, never; absent: not known
+   */
+  wardSeconds?: number
+  /** Whether a member heals the party (its kit heals): it breaks out of the Radiant Cocoon */
+  healer?: boolean
+}
+
+/**
+ * How the team plays a boss's mechanics where the fight cannot tell (`Team.fightSettings`): the
+ * Moongecko's ward and cocoon
+ */
+export interface FightSettings {
+  /** Seconds to break the Moonstone Anchor's ward (over `MOONGECKO.window`: not in time) */
+  wardSeconds?: number
+  /** Seconds after each Radiant Cocoon until the team is healed to full; below 0: never */
+  healSeconds?: number
 }
 
 /** Electro hits per second, by what each takes off Wavebinder's Courage */
@@ -92,6 +117,17 @@ export type FightPart =
   | { key: 'hornsBreak'; count: number; hp: number }
   /** An enemy set by hand: its HP ÷ the team's DPS */
   | { key: 'custom'; dps: number; seconds: number }
+  /**
+   * The Moongecko's Vagrant Reverberations: their number, how long its ward held each (`seconds`)
+   * and how many were broken in time
+   */
+  | { key: 'anchors'; count: number; seconds: number; broken: number }
+  /** Its wards broken: what they took off it (70% of the Geo DMG the Anchor took, 10% of the rest) */
+  | { key: 'wardBreak'; count: number; hp: number; capped: number }
+  /** Its Radiant Cocoons: how long the team spent in them; `healed`: seconds to heal out */
+  | { key: 'cocoon'; count: number; seconds: number; healed?: number }
+  /** Disentangled: how long the team had it */
+  | { key: 'disentangled'; seconds: number }
 export type FightNote =
   | 'noRotation'
   | 'electroEstimated'
@@ -99,16 +135,36 @@ export type FightNote =
   | 'sip'
   | 'noHornRemoval'
   | 'crabs'
-  | 'healedToFull'
-  | 'ward'
+  /** The Moongecko's ward time: the written rotation's hits (poise known or assumed) */
+  | 'wardEstimated'
+  /** …neither set nor known from a written rotation: assumed */
+  | 'wardAssumed'
+  /** …set by hand */
+  | 'wardSet'
+  /** No healer: the team stays in its Radiant Cocoon until the next Anchor */
+  | 'noHealer'
+  /** The team's DPS in its cocoon and Disentangled not computed (its own counted) */
+  | 'cocoonApprox'
   | 'mechanics'
 
 /** A stretch of the fight in one state: its HP (fractions of its Max HP) from start to end */
 export interface FightSegment {
   start: number
   end: number
-  /** Its state: one of its phases, its horns on (the Emperor) or its drink (Wavebinder) */
-  state: StygianPhaseKey | 'horns' | 'drinking'
+  /**
+   * Its state: one of its phases, its horns on (the Emperor) or its drink (Wavebinder); the
+   * Moongecko's leap (out of reach), its ward up, the team in its Radiant Cocoon (all RES: after a
+   * ward not broken) or Disentangled
+   */
+  state:
+    | StygianPhaseKey
+    | 'horns'
+    | 'drinking'
+    | 'leap'
+    | 'ward'
+    | 'cocooned'
+    | 'enhancedCocoon'
+    | 'disentangled'
   hpStart: number
   hpEnd: number
   /** The team's DPS against it here (a shield state: what its shield takes) */
@@ -118,11 +174,19 @@ export interface FightSegment {
   meterEnd?: number
   /** A shield state: the share of what its shield takes that comes back as backlash (uncapped) */
   backlashRatio?: number
+  /** …its cap (a fraction of its Max HP; absent: Wavebinder's 15%) */
+  backlashCap?: number
+  /**
+   * A shield state: what its shield took before this stretch (the Moongecko's ward: its earlier
+   * stretches in the same Anchor), and its backlash so far
+   */
+  absorbedBefore?: number
+  backlashBefore?: number
 }
-/** A moment that takes HP off at once (fractions of its Max HP) */
+/** A moment that takes HP off at once (fractions of its Max HP); the Anchor's blast: none */
 export interface FightEvent {
   t: number
-  kind: 'backlash' | 'hornsBreak'
+  kind: 'backlash' | 'hornsBreak' | 'wardBreak' | 'blast'
   hp: number
 }
 
@@ -134,7 +198,7 @@ export interface FightEstimate {
   timeline: {
     segments: FightSegment[]
     events: FightEvent[]
-    meter?: { key: 'courage' | 'hornGauge'; max: number }
+    meter?: { key: 'courage' | 'hornGauge' | 'ward'; max: number }
   }
   /** What it does not count */
   notes: FightNote[]
@@ -155,18 +219,27 @@ export function resMultiplier(res: number) {
 const fraction = (v: number | 'immune') =>
   v === 'immune' ? Number.POSITIVE_INFINITY : v / 100
 
-/** The team's DPS against another phase's RES: each element's, its shred kept */
-export function dpsAt(team: FightTeam, res: StygianRes) {
+/**
+ * The team's DPS against another phase's RES: each element's, its shred kept (`dps`: its DPS by
+ * element in another state, against the same enemy; `only`: these elements' alone)
+ */
+export function dpsAt(
+  team: FightTeam,
+  res: StygianRes,
+  dps: Partial<Record<ElementWithPhyKey, number>> = team.dps,
+  only?: (e: ElementWithPhyKey) => boolean
+) {
   let total = 0
   for (const e of allElementWithPhyKeys) {
-    const dps = team.dps[e] ?? 0
-    if (dps <= 0) continue
+    if (only && !only(e)) continue
+    const value = dps[e] ?? 0
+    if (value <= 0) continue
     const target = fraction(res[e])
     if (!Number.isFinite(target)) continue
     const base = team.baseRes[e]
     const eff = team.effRes[e]
     if (!Number.isFinite(base) || !Number.isFinite(eff)) continue
-    total += (dps * resMultiplier(eff + target - base)) / resMultiplier(eff)
+    total += (value * resMultiplier(eff + target - base)) / resMultiplier(eff)
   }
   return total
 }
@@ -530,30 +603,322 @@ function emperor(
   }
 }
 
+/** Radiant Moongecko: Entangled Fangs' stage (its boss id) */
+export const MOONGECKO_BOSS = 1008061
 /**
- * Radiant Moongecko: Entangled Fangs: healed to full after its Radiant Cocoon, the team fights it
- * at its Dull Carapace RES (stygian.moe). Its Moonstone Anchor's ward (9 segments of 4U Geo, up
- * to 40% of its Max HP moved to it when broken) comes at times its guide does not give: not
- * counted, nor the CRIT debuff before healing or the buff after.
+ * Radiant Moongecko: Entangled Fangs, Fearless/Dire: the game files' values for it in Stygian
+ * Onslaught (its LeyLineChallenge_MonsterLevelHigh branch), with the Fandom wiki and stygian.moe
+ */
+export const MOONGECKO = {
+  /** Its leap to the arena's centre, until its Moonstone Anchor's ward is up (estimate) */
+  entry: 2,
+  /** The time the ward has (its ShieldTimer: 35 s in Fearless/Dire, 25 s elsewhere) */
+  window: 35,
+  /** After it, out of reach until the Anchor's blast (Gecko_UltimateAttackDelay) */
+  blast: 1.5,
+  /** The ward: 9 layers of 4U Geo (100 durability each; 70 outside Fearless/Dire) */
+  layers: 9,
+  layerDurability: 100,
+  /** After each broken layer, the next one's delay (its MulShieldInterval) */
+  layerGap: 0.1,
+  /**
+   * The ward broken: it takes 10% of the DMG the Anchor took and 70% of its Geo DMG (the wiki and
+   * stygian.moe read it as 70% of the Geo DMG and 10% of the rest), at most 40% of its Max HP
+   */
+  geo: 0.7,
+  other: 0.1,
+  cap: 0.4,
+  /** Then stunned (Gecko_WeakStateTimer_LeyLineChallenge) */
+  stun: 4.36,
+  /** Back on the ground until the next Anchor (Gecko_StageChangeTimer) */
+  stage: 40,
+  /** Into that time, its roar: the Radiant Cocoon (estimate) */
+  roar: 2,
+  /** The cocoon's RES: +60% Geo RES (all RES after a ward not broken in time) */
+  cocoonRes: 60,
+  /** Disentangled: +15% CRIT Rate, +50% DMG Bonus for 15 s */
+  disentangled: 15,
+  /** A team with a healer: healed to full this long after the roar */
+  heal: 3,
+  /** The ward's time neither set nor known from the written rotation */
+  wardDefault: 15,
+} as const
+
+/**
+ * Radiant Moongecko: Entangled Fangs (Fearless/Dire, `MOONGECKO`): the fight opens with its
+ * Vagrant Reverberation, and another one comes after each 40 s back on the ground. Its Moonstone
+ * Anchor's ward (9 layers of 4U Geo) takes the team's damage, its HP untouched; broken within
+ * 35 s, it takes 70% of the Geo DMG the Anchor took and 10% of the rest (at most 40% of its Max
+ * HP) and is stunned 4.36 s; not broken, it blasts the team, and its next cocoon raises all its
+ * RES. Back on the ground it roars: Radiant Cocoon on the team (−100% CRIT Rate, −50% DMG Bonus)
+ * and +60% Geo RES on it, until the team is healed to full; then Disentangled (+15% CRIT Rate,
+ * +50% DMG Bonus) for 15 s, and its RES back to 10%. The ward's time: as set, else the written
+ * rotation's (`FightTeam.wardSeconds`), else assumed; healed to full: as set, else a few seconds
+ * after the roar for a team with a healer.
  */
 function moongecko(
   boss: StygianBoss,
   hp: number,
-  team: FightTeam
+  team: FightTeam,
+  settings: FightSettings = {}
 ): FightEstimate {
-  const estimate = plain(boss, hp, team, 'dullCarapace')
-  return { ...estimate, notes: ['healedToFull', 'ward'], modelled: true }
+  const M = MOONGECKO
+  const dull = phaseRes(boss, 'dullCarapace')!
+  const plus = (add: (e: ElementWithPhyKey) => number) =>
+    Object.fromEntries(
+      allElementWithPhyKeys.map((e) => {
+        const v = dull[e]
+        return [e, v === 'immune' ? v : v + add(e)]
+      })
+    ) as StygianRes
+  const cocoonRes = plus((e) => (e === 'geo' ? M.cocoonRes : 0))
+  const enhancedRes = plus(() => M.cocoonRes)
+  const own = team.dps
+  const cocooned = team.cocooned ?? own
+  const freed = team.disentangled ?? own
+  const dpsOf = {
+    own: dpsAt(team, dull, own),
+    freed: dpsAt(team, dull, freed),
+    cocoon: dpsAt(team, cocoonRes, cocooned),
+    enhanced: dpsAt(team, enhancedRes, cocooned),
+  }
+  // what the Anchor takes per second (at its Dull Carapace RES: the cocoon's RES goes as it
+  // leaps), its Geo DMG and the rest
+  const into = (dps: Partial<Record<ElementWithPhyKey, number>>) => ({
+    geo: dpsAt(team, dull, dps, (e) => e === 'geo'),
+    other: dpsAt(team, dull, dps, (e) => e !== 'geo'),
+  })
+  const intoOwn = into(own)
+  const intoFreed = into(freed)
+
+  const notes: FightNote[] = []
+  const ward = settings.wardSeconds ?? team.wardSeconds ?? M.wardDefault
+  notes.push(
+    settings.wardSeconds !== undefined
+      ? 'wardSet'
+      : team.wardSeconds !== undefined
+        ? 'wardEstimated'
+        : 'wardAssumed'
+  )
+  const broken = ward <= M.window
+  const heal =
+    settings.healSeconds !== undefined
+      ? settings.healSeconds >= 0
+        ? settings.healSeconds
+        : undefined
+      : team.healer
+        ? M.heal
+        : undefined
+  if (heal === undefined) notes.push('noHealer')
+  if (!team.cocooned || !team.disentangled) notes.push('cocoonApprox')
+
+  const segments: FightSegment[] = []
+  const events: FightEvent[] = []
+  let t = 0
+  let left = hp
+  // Disentangled on until then (a late heal: into the next Anchor)
+  let freedUntil = Number.NEGATIVE_INFINITY
+  let anchors = 0
+  let brokenCount = 0
+  let capped = 0
+  let transfer = 0
+  let cocoons = 0
+  let cocoonTime = 0
+  let freedTime = 0
+  // a stretch at `dps` until `until` (the fight's limit at most): whether it falls in it
+  const fall = (state: FightSegment['state'], until: number, dps: number) => {
+    const end = Math.min(until, FIGHT_LIMIT)
+    if (end <= t + 1e-9) return false
+    const hpStart = left / hp
+    const reaches = dps > 0 && dps * (end - t) >= left
+    const stop = reaches ? t + left / dps : end
+    left = reaches ? 0 : left - dps * (end - t)
+    segments.push({
+      start: t,
+      end: stop,
+      state,
+      hpStart,
+      hpEnd: left / hp,
+      dps,
+      meterStart: 0,
+      meterEnd: 0,
+    })
+    if (state === 'cocooned' || state === 'enhancedCocoon')
+      cocoonTime += stop - t
+    if (state === 'disentangled') freedTime += stop - t
+    t = stop
+    return reaches
+  }
+  // at its Dull Carapace RES: the team's own stats, or Disentangled while it lasts
+  const stretch = (state: 'stunned' | 'dullCarapace', until: number) => {
+    if (
+      t < freedUntil &&
+      fall(
+        state === 'stunned' ? state : 'disentangled',
+        Math.min(until, freedUntil),
+        dpsOf.freed
+      )
+    )
+      return true
+    return fall(state, until, dpsOf.own)
+  }
+  // out of reach (no damage) until `until`
+  const pause = (until: number) => {
+    const end = Math.min(until, FIGHT_LIMIT)
+    if (end > t + 1e-9)
+      segments.push({
+        start: t,
+        end,
+        state: 'leap',
+        hpStart: left / hp,
+        hpEnd: left / hp,
+        dps: 0,
+        meterStart: 0,
+        meterEnd: 0,
+      })
+    t = end
+  }
+  // the layers left, `elapsed` seconds after the ward is up (worn down evenly)
+  const layersAt = (elapsed: number) =>
+    Number.isFinite(ward)
+      ? Math.max(0, M.layers * (1 - elapsed / ward))
+      : M.layers
+  while (left > 0 && t < FIGHT_LIMIT) {
+    // Vagrant Reverberation: its leap, then its Anchor's ward
+    pause(t + M.entry)
+    if (t >= FIGHT_LIMIT) break
+    anchors++
+    const wardStart = t
+    const wardEnd = wardStart + (broken ? ward : M.window)
+    let geo = 0
+    let other = 0
+    while (t < wardEnd - 1e-9 && t < FIGHT_LIMIT) {
+      const freedNow = t < freedUntil
+      const end = Math.min(
+        wardEnd,
+        freedNow ? freedUntil : wardEnd,
+        FIGHT_LIMIT
+      )
+      const into = freedNow ? intoFreed : intoOwn
+      const total = into.geo + into.other
+      segments.push({
+        start: t,
+        end,
+        state: 'ward',
+        hpStart: left / hp,
+        hpEnd: left / hp,
+        dps: total,
+        meterStart: layersAt(t - wardStart),
+        meterEnd: layersAt(end - wardStart),
+        backlashRatio:
+          total > 0 ? (M.geo * into.geo + M.other * into.other) / total : 0,
+        backlashCap: M.cap,
+        absorbedBefore: geo + other,
+        backlashBefore: Math.min(M.geo * geo + M.other * other, M.cap * hp),
+      })
+      geo += into.geo * (end - t)
+      other += into.other * (end - t)
+      t = end
+    }
+    if (t >= FIGHT_LIMIT) break
+    let enhanced = false
+    if (broken) {
+      brokenCount++
+      const raw = M.geo * geo + M.other * other
+      if (raw > M.cap * hp) capped++
+      const taken = Math.min(raw, M.cap * hp, left)
+      transfer += taken
+      left -= taken
+      events.push({ t, kind: 'wardBreak', hp: taken / hp })
+      if (left <= 0) break
+      if (stretch('stunned', t + M.stun)) break
+    } else {
+      pause(t + M.blast)
+      if (t >= FIGHT_LIMIT) break
+      events.push({ t, kind: 'blast', hp: 0 })
+      enhanced = true
+    }
+    // back on the ground for 40 s: its roar, then the cocoon until the team is healed to full
+    const stageEnd = t + M.stage
+    if (stretch('dullCarapace', t + M.roar)) break
+    if (t >= FIGHT_LIMIT) break
+    cocoons++
+    const cocoonEnd =
+      heal !== undefined ? Math.min(t + heal, stageEnd) : stageEnd
+    if (
+      fall(
+        enhanced ? 'enhancedCocoon' : 'cocooned',
+        cocoonEnd,
+        enhanced ? dpsOf.enhanced : dpsOf.cocoon
+      )
+    )
+      break
+    if (heal !== undefined && t < stageEnd - 1e-9)
+      freedUntil = t + M.disentangled
+    if (stretch('dullCarapace', stageEnd)) break
+  }
+  const seconds = left <= 0 && t <= FIGHT_LIMIT ? t : undefined
+  return {
+    seconds,
+    parts: [
+      ...(anchors
+        ? [
+            {
+              key: 'anchors' as const,
+              count: anchors,
+              seconds: broken ? ward : M.window,
+              broken: brokenCount,
+            },
+          ]
+        : []),
+      ...(brokenCount
+        ? [
+            {
+              key: 'wardBreak' as const,
+              count: brokenCount,
+              hp: transfer / hp,
+              capped,
+            },
+          ]
+        : []),
+      ...(cocoons
+        ? [
+            {
+              key: 'cocoon' as const,
+              count: cocoons,
+              seconds: cocoonTime,
+              ...(heal !== undefined ? { healed: heal } : {}),
+            },
+          ]
+        : []),
+      ...(freedTime
+        ? [{ key: 'disentangled' as const, seconds: freedTime }]
+        : []),
+    ],
+    timeline: {
+      segments,
+      events,
+      meter: { key: 'ward', max: M.layers },
+    },
+    notes,
+    modelled: true,
+  }
 }
 
 const models: Partial<
   Record<
     number,
-    (boss: StygianBoss, hp: number, team: FightTeam) => FightEstimate
+    (
+      boss: StygianBoss,
+      hp: number,
+      team: FightTeam,
+      settings?: FightSettings
+    ) => FightEstimate
   >
 > = {
   1013061: wavebinder,
   1006063: emperor,
-  1008061: moongecko,
+  [MOONGECKO_BOSS]: moongecko,
 }
 
 /** The fight at a difficulty: its mechanics where they are known, else HP ÷ DPS at `phase` */
@@ -561,11 +926,12 @@ export function stygianFight(
   boss: StygianBoss,
   difficulty: StygianDifficultyKey,
   team: FightTeam,
-  phase: StygianPhaseKey = boss.main
+  phase: StygianPhaseKey = boss.main,
+  settings?: FightSettings
 ): FightEstimate {
   const hp = boss.hp[difficulty]
   const model = models[boss.id]
-  if (model) return model(boss, hp, team)
+  if (model) return model(boss, hp, team, settings)
   return { ...plain(boss, hp, team, phase), notes: ['mechanics'] }
 }
 
@@ -603,8 +969,14 @@ export function customFight(hp: number, team: FightTeam): FightEstimate {
   }
 }
 
-/** An enemy in a fight: its level, RES and DEF, the preset it is, and its HP if set by hand */
-export type FightEnemy = Pick<Team, 'enemyOverride' | 'enemyPreset' | 'enemyHp'>
+/**
+ * An enemy in a fight: its level, RES and DEF, the preset it is, its HP if set by hand, and how
+ * the team plays its mechanics where the fight cannot tell
+ */
+export type FightEnemy = Pick<
+  Team,
+  'enemyOverride' | 'enemyPreset' | 'enemyHp' | 'fightSettings'
+>
 
 /** The enemy's HP: a Stygian boss's at its difficulty, else the one set by hand (none: unknown) */
 export function enemyHpOf(enemy: FightEnemy): number | undefined {
@@ -625,7 +997,13 @@ export function enemyFight(
   const preset = appliedStygianPreset(enemy)
   if (preset)
     return preset.difficulty
-      ? stygianFight(preset.boss, preset.difficulty, team, preset.phase.key)
+      ? stygianFight(
+          preset.boss,
+          preset.difficulty,
+          team,
+          preset.phase.key,
+          enemy.fightSettings
+        )
       : undefined
   return enemy.enemyHp ? customFight(enemy.enemyHp, team) : undefined
 }

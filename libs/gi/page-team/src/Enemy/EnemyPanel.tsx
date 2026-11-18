@@ -583,7 +583,7 @@ function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
         <InfoOutlinedIcon sx={{ fontSize: 16, flexShrink: 0 }} />
         {t(
           'enemy.mechanicsScope',
-          'Time to defeat: only Wavebinder’s mechanics are modelled in full for now. The Emperor’s horns and the Moongecko’s carapace are counted in part; other bosses are their HP ÷ the team’s DPS.'
+          'Time to defeat: Wavebinder’s and the Moongecko’s mechanics are modelled in full, the Emperor’s horns in part; other bosses are their HP ÷ the team’s DPS.'
         )}
       </Typography>
       {/* the boss set: its details */}

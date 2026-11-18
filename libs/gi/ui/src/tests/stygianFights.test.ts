@@ -9,6 +9,8 @@ import {
   enemyFight,
   enemyHpOf,
   FIGHT_LIMIT,
+  MOONGECKO,
+  MOONGECKO_BOSS,
   resMultiplier,
   stygianFight,
 } from '../components/enemy/stygianFights'
@@ -257,6 +259,7 @@ describe('Stygian Onslaught fights', () => {
     for (const [id, gauge] of [
       [1013061, { electro: 1.5 }],
       [1006063, { hydro: 1.5 }],
+      [MOONGECKO_BOSS, {}],
       [1004062, {}],
     ] as const) {
       const fight = stygianFight(
@@ -289,6 +292,10 @@ describe('Stygian Onslaught fights', () => {
       if (id === 1006063)
         expect(events.filter((e) => e.kind === 'hornsBreak').length).toBe(
           count('horns')
+        )
+      if (id === MOONGECKO_BOSS)
+        expect(events.filter((e) => e.kind === 'wardBreak').length).toBe(
+          count('wardBreak')
         )
       if (id === 1004062) expect(events).toEqual([])
     }
@@ -366,5 +373,168 @@ describe('an enemy set by hand', () => {
     expect(enemyHpOf(wavebinder)).toBe(boss.hp.dire)
     const t = team('hydro', 100_000)
     expect(enemyFight(wavebinder, t)).toEqual(stygianFight(boss, 'dire', t))
+  })
+})
+
+describe('Radiant Moongecko (the game files’ Fearless/Dire values)', () => {
+  const boss = stygianBoss(MOONGECKO_BOSS)!
+  const hp = boss.hp.dire
+  /** Half Geo, half Physical: 10% RES everywhere, as its Dull Carapace */
+  const mixed = (extra: Partial<FightTeam> = {}): FightTeam => ({
+    dps: { geo: 100000, physical: 100000 },
+    baseRes: all(0.1),
+    effRes: all(0.1),
+    ...extra,
+  })
+  const states = (f: ReturnType<typeof stygianFight>) =>
+    f.timeline.segments.map((s) => s.state)
+
+  it('opens with its Anchor: the ward takes the damage, its HP untouched; broken, 70% of the Geo DMG and 10% of the rest come off it, then a 4.36 s stun', () => {
+    const fight = stygianFight(boss, 'dire', mixed(), undefined, {
+      wardSeconds: 10,
+    })
+    const [leap, ward, stun] = fight.timeline.segments
+    expect(leap).toMatchObject({
+      start: 0,
+      end: MOONGECKO.entry,
+      state: 'leap',
+      hpStart: 1,
+      hpEnd: 1,
+      dps: 0,
+    })
+    expect(ward).toMatchObject({ state: 'ward', hpStart: 1, hpEnd: 1 })
+    expect(ward.start).toBeCloseTo(2, 9)
+    expect(ward.end).toBeCloseTo(12, 9)
+    // its ward wears down from 9 layers to none
+    expect(ward.meterStart).toBeCloseTo(9, 9)
+    expect(ward.meterEnd).toBeCloseTo(0, 9)
+    const [broken] = fight.timeline.events
+    expect(broken.kind).toBe('wardBreak')
+    expect(broken.t).toBeCloseTo(12, 9)
+    expect(broken.hp).toBeCloseTo((0.7 * 1e6 + 0.1 * 1e6) / hp, 9)
+    expect(stun.state).toBe('stunned')
+    expect(stun.end - stun.start).toBeCloseTo(4.36, 9)
+    expect(fight.notes).toContain('wardSet')
+    expect(fight.modelled).toBe(true)
+  })
+
+  it('moves at most 40% of its Max HP off it when its ward breaks', () => {
+    const fight = stygianFight(
+      boss,
+      'dire',
+      mixed({ dps: { geo: 5e6 } }),
+      undefined,
+      { wardSeconds: 30 }
+    )
+    expect(fight.timeline.events[0].hp).toBeCloseTo(0.4, 9)
+    expect(fight.parts.find((p) => p.key === 'wardBreak')).toMatchObject({
+      capped: 1,
+    })
+  })
+
+  it('roars 2 s after its stun: the cocoon (+60% Geo RES, the team’s cocooned DPS) until healed, then 15 s Disentangled, its next Anchor 40 s after the stun', () => {
+    const fight = stygianFight(
+      boss,
+      'dire',
+      mixed({
+        healer: true,
+        cocooned: { geo: 40000, physical: 40000 },
+        disentangled: { geo: 150000, physical: 150000 },
+      }),
+      undefined,
+      { wardSeconds: 10 }
+    )
+    const segs = fight.timeline.segments
+    expect(states(fight).slice(0, 8)).toEqual([
+      'leap',
+      'ward',
+      'stunned',
+      'dullCarapace',
+      'cocooned',
+      'disentangled',
+      'dullCarapace',
+      'leap',
+    ])
+    const stunEnd = 12 + MOONGECKO.stun
+    const [, , , before, cocoon, freed, after, next] = segs
+    expect(before.end - before.start).toBeCloseTo(MOONGECKO.roar, 9)
+    expect(cocoon.end - cocoon.start).toBeCloseTo(MOONGECKO.heal, 9)
+    // the cocooned DPS, its Geo at 70% RES; Disentangled, at its Dull Carapace RES
+    expect(cocoon.dps).toBeCloseTo(
+      (40000 * resMultiplier(0.7)) / resMultiplier(0.1) + 40000,
+      6
+    )
+    expect(freed.dps).toBeCloseTo(300000, 6)
+    expect(freed.end - freed.start).toBeCloseTo(MOONGECKO.disentangled, 9)
+    expect(after.dps).toBeCloseTo(200000, 6)
+    expect(next.start).toBeCloseTo(stunEnd + MOONGECKO.stage, 9)
+    expect(fight.notes).not.toContain('noHealer')
+    expect(fight.notes).not.toContain('cocoonApprox')
+  })
+
+  it('without a healer, the team stays in its cocoon until the next Anchor', () => {
+    const fight = stygianFight(boss, 'dire', mixed(), undefined, {
+      wardSeconds: 10,
+    })
+    expect(states(fight).slice(3, 6)).toEqual([
+      'dullCarapace',
+      'cocooned',
+      'leap',
+    ])
+    expect(fight.notes).toContain('noHealer')
+    // (its DPS in the cocoon not computed: its own, at +60% Geo RES)
+    expect(fight.notes).toContain('cocoonApprox')
+  })
+
+  it('a ward not broken in its 35 s: no HP off it, the Anchor’s blast, and all its RES up in the next cocoon', () => {
+    const fight = stygianFight(boss, 'dire', mixed(), undefined, {
+      wardSeconds: 60,
+    })
+    const [, ward, leap] = fight.timeline.segments
+    expect(ward.end - ward.start).toBeCloseTo(MOONGECKO.window, 9)
+    expect(leap.state).toBe('leap')
+    expect(leap.end - leap.start).toBeCloseTo(MOONGECKO.blast, 9)
+    expect(fight.timeline.events[0]).toMatchObject({ kind: 'blast', hp: 0 })
+    expect(states(fight)).toContain('enhancedCocoon')
+    expect(fight.parts.find((p) => p.key === 'anchors')).toMatchObject({
+      broken: 0,
+    })
+  })
+
+  it('takes the ward’s time as set, else the written rotation’s, else assumed', () => {
+    const at = (t: FightTeam, settings?: { wardSeconds?: number }) =>
+      stygianFight(boss, 'dire', t, undefined, settings).timeline.segments[1]
+    const ward = (s: { start: number; end: number }) => s.end - s.start
+    expect(ward(at(mixed({ wardSeconds: 8 })))).toBeCloseTo(8, 9)
+    expect(ward(at(mixed({ wardSeconds: 8 }), { wardSeconds: 5 }))).toBeCloseTo(
+      5,
+      9
+    )
+    expect(ward(at(mixed()))).toBeCloseTo(MOONGECKO.wardDefault, 9)
+    expect(
+      stygianFight(boss, 'dire', mixed({ wardSeconds: 8 })).notes
+    ).toContain('wardEstimated')
+    expect(stygianFight(boss, 'dire', mixed()).notes).toContain('wardAssumed')
+  })
+
+  it('reads the team’s settings from its enemy', () => {
+    const enemy = {
+      enemyOverride: { enemyLevel: 110 },
+      enemyPreset: `stygian:${MOONGECKO_BOSS}:regular`,
+      fightSettings: { wardSeconds: 7, healSeconds: -1 },
+    }
+    // (its preset's RES: Geo 70%, the rest 10%)
+    Object.assign(
+      enemy.enemyOverride,
+      Object.fromEntries(
+        Object.entries(boss.phases.find((p) => p.key === 'regular')!.res).map(
+          ([e, v]) => [`${e}_enemyRes_`, v]
+        )
+      )
+    )
+    const fight = enemyFight(enemy as never, mixed({ healer: true }))!
+    expect(fight.timeline.segments[1].end).toBeCloseTo(9, 9)
+    // (never healed, as set, though the team has a healer)
+    expect(fight.notes).toContain('noHealer')
   })
 })

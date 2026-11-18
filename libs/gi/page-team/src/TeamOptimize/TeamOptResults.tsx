@@ -71,7 +71,7 @@ import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
-import type { FightApplications } from './fightTeam'
+import type { CocoonEvaluations, FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
@@ -110,10 +110,13 @@ export function TeamOptResults({
   enemy,
   enemyNow,
   applications,
+  cocoon,
 }: {
   teamId: string
   /** The written rotation's element applications per second (a Stygian boss's mechanics) */
   applications?: FightApplications
+  /** The builds' damage in the Moongecko's Radiant Cocoon and Disentangled (its fight) */
+  cocoon?: CocoonEvaluations
   members: TeamOptMember[]
   result: TeamOptResult
   seconds: number
@@ -158,6 +161,7 @@ export function TeamOptResults({
         rotationTime,
         enemyOverride: enemy.enemyOverride,
         applications,
+        cocoon,
       }),
     [
       enemy,
@@ -167,6 +171,7 @@ export function TeamOptResults({
       teamData,
       rotationTime,
       applications,
+      cocoon,
     ]
   )
   const { gender } = useDBMeta()
