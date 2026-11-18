@@ -103,7 +103,6 @@ import {
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmShareMenu } from './KqmShareMenu'
-import { useRotationSettings } from './RotationWriter'
 import {
   KqmArtifactStandard,
   kqmStandardName,
@@ -111,6 +110,7 @@ import {
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
+import { useRotationSettings } from './RotationWriter'
 import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
@@ -121,6 +121,7 @@ import {
   quickSx,
   Segmented,
   StepTitle,
+  SubsectionLevel,
   selectedSx,
   subsectionSx,
   tokens,
@@ -2094,12 +2095,18 @@ function OnDatabase({
  * below reads that database (`useDatabase`, `useTeam`), not the page's.
  */
 export function KqmResults(props: Parameters<typeof KqmResultsView>[0]) {
-  return props.database ? (
-    <OnDatabase database={props.database}>
+  // (its parts' titles, Top builds and Damage share, a level below its own)
+  const view = (
+    <SubsectionLevel.Provider
+      value={((props.headingLevel ?? 2) + 1) as 3 | 4 | 5 | 6}
+    >
       <KqmResultsView {...props} />
-    </OnDatabase>
+    </SubsectionLevel.Provider>
+  )
+  return props.database ? (
+    <OnDatabase database={props.database}>{view}</OnDatabase>
   ) : (
-    <KqmResultsView {...props} />
+    view
   )
 }
 

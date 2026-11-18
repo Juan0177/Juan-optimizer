@@ -17,7 +17,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
-import { type ReactNode, Suspense } from 'react'
+import { createContext, type ReactNode, Suspense, useContext } from 'react'
 
 /* ---------- tokens ---------- */
 
@@ -164,6 +164,13 @@ export function StepTitle({
   )
 }
 
+/**
+ * juanlab: the level of a step's part titles (Top builds, Damage share): h3 under the page's
+ * steps (h2); a host that shows a step lower down (KQM Compare's team B) sets it a level below its
+ * own title
+ */
+export const SubsectionLevel = createContext<3 | 4 | 5 | 6>(3)
+
 /** A part of a step (Top builds, Damage share, Rotation timeline): its title and ⓘ */
 export function SubsectionTitle({
   children,
@@ -177,6 +184,7 @@ export function SubsectionTitle({
   /** Less room under it (a part with its own line of help under the title) */
   dense?: boolean
 }) {
+  const level = useContext(SubsectionLevel)
   return (
     <Box
       sx={{
@@ -188,7 +196,7 @@ export function SubsectionTitle({
       }}
     >
       <Typography
-        component="h3"
+        component={`h${level}`}
         sx={{
           ...type.title,
           fontSize: 16,
