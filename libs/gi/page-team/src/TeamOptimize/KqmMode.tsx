@@ -95,6 +95,7 @@ import {
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmShareMenu } from './KqmShareMenu'
+import { useRotationSettings } from './RotationWriter'
 import {
   KqmArtifactStandard,
   kqmStandardName,
@@ -180,6 +181,11 @@ function useRotationEnergy(
   teamOpt: TeamOpt
 ): {
   text: string
+  /**
+   * The rotation as played: its text, opener and timing settings (an opener or timing change is
+   * a new rotation too); empty: nothing written
+   */
+  rotation: string
   energy?: RotationEnergy
   for?: string
   /** The rotation's length as KQM plays it (s): what the inputs above are per */
@@ -212,6 +218,10 @@ function useRotationEnergy(
       : []
   )
   const keys = members.map((m) => m.characterKey).join()
+  // (the opener and the timing settings too: the replay plays them)
+  const { opener, timing, frameData } = useRotationSettings(teamId)
+  const played = JSON.stringify([opener, timing, frameData])
+  const rotation = text.trim() ? `${text.trim()}|${played}` : ''
   useEffect(() => {
     if (!text.trim()) {
       setWorked(undefined)
@@ -246,16 +256,27 @@ function useRotationEnergy(
         seconds = undefined
       }
       if (!cancelled)
-        setWorked({ for: text, energy: next, rotationTime: seconds })
+        setWorked({ for: rotation, energy: next, rotationTime: seconds })
     }, 0)
     return () => {
       cancelled = true
       clearTimeout(id)
     }
     // (members by their keys; the rest of the team's settings read when it runs)
-  }, [database, gender, i18n, teamId, text, constellations, cadence, keys])
+  }, [
+    database,
+    gender,
+    i18n,
+    teamId,
+    text,
+    constellations,
+    cadence,
+    keys,
+    played,
+  ])
   return {
     text,
+    rotation,
     energy: worked?.energy,
     for: worked?.for,
     rotationTime: worked?.energy ? worked.rotationTime : undefined,
@@ -335,7 +356,7 @@ export function KqmSettings({
   )
   // (the written rotation fills in the inputs not set by hand)
   const {
-    text: writtenText,
+    rotation: writtenRotation,
     energy: rotationEnergy,
     for: energyFor,
     rotationTime: playedTime,
@@ -430,10 +451,16 @@ export function KqmSettings({
   useEffect(() => {
     const kqm = teamOpt.kqm
     const source = kqm?.energySource
-    const written = writtenText.trim()
-    const ready = !!written && energyFor === writtenText && !!rotationEnergy
-    // (typed by hand before the rotation was recorded: kept, and the rotation is recorded now)
-    if (source === 'manual' && ready && kqm?.energyRotation === undefined) {
+    const written = writtenRotation
+    const ready = !!written && energyFor === written && !!rotationEnergy
+    // (typed by hand before the rotation was recorded, or recorded as its text alone before its
+    // opener and timing counted: kept, and the rotation is recorded now)
+    if (
+      source === 'manual' &&
+      ready &&
+      (kqm?.energyRotation === undefined ||
+        kqm.energyRotation === written.split('|')[0])
+    ) {
       setTeamOpt((o) => {
         o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), energyRotation: written }
       })
@@ -484,7 +511,7 @@ export function KqmSettings({
     setTeamOpt,
     rotationEnergy,
     energyFor,
-    writtenText,
+    writtenRotation,
     playedTime,
   ])
   const problem = !canRun
