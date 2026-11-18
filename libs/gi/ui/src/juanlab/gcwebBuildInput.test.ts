@@ -85,15 +85,18 @@ describe('genInputFromKqm', () => {
   it('targets: KQM totals minus main stats, in shown units; unused substats dropped', () => {
     const input = genInputFromKqm(RAIDEN, {})
     expect(new Set(input.used)).toEqual(
-      new Set(['critDMG_', 'critRate_', 'enerRech_', 'atk_'])
+      new Set(['critDMG_', 'critRate_', 'enerRech_', 'atk_', 'atk'])
     )
     expect(Object.keys(input.targets).sort()).toEqual(
-      ['atk_', 'critDMG_', 'critRate_', 'enerRech_'].sort()
+      ['atk', 'atk_', 'critDMG_', 'critRate_', 'enerRech_'].sort()
     )
     expect(input.targets.critRate_).toBeCloseTo(8 * ROLL.critRate_, 6)
     expect(input.targets.critDMG_).toBeCloseTo(10 * ROLL.critDMG_, 6)
     expect(input.targets.enerRech_).toBeCloseTo(6 * ROLL.enerRech_, 6)
     expect(input.targets.atk_).toBeCloseTo(4 * ROLL.atk_, 6)
+    // ATK% has placed rolls: flat ATK keeps its 2 fixed rolls as a target (not filler)
+    expect(input.targets.atk).toBeCloseTo(2 * ROLL.atk, 6)
+    expect(input.targets.hp).toBeUndefined()
     // the same numbers as kqmValues, once the main stats are added back (fractions)
     const values = kqmValues(RAIDEN)
     const mains = (key: SubstatKey) =>
@@ -104,10 +107,9 @@ describe('genInputFromKqm', () => {
           0
         )
     for (const key of input.used)
-      expect((input.targets[key] ?? 0) / 100 + mains(key)).toBeCloseTo(
-        values[key],
-        9
-      )
+      expect(
+        (input.targets[key] ?? 0) / (key.endsWith('_') ? 100 : 1) + mains(key)
+      ).toBeCloseTo(values[key], 6)
   })
 
   it('used from scales when given (substats only), fixed rolls as targets', () => {
@@ -318,8 +320,10 @@ describe('genInputFromTc', () => {
     const build = kqmsTc({ critDMG_: 10, critRate_: 4, hp_: 4, eleMas: 2 })
     const input = genInputFromTc(build)
     expect(new Set(input.used)).toEqual(
-      new Set(['critDMG_', 'critRate_', 'hp_', 'eleMas', 'enerRech_'])
+      new Set(['critDMG_', 'critRate_', 'hp_', 'hp', 'eleMas', 'enerRech_'])
     )
+    // HP% is counted, so flat HP keeps its 2 fixed rolls (an HP scaler's extra rolls go elsewhere)
+    expect(input.targets.hp).toBeCloseTo(2 * getSubstatValue('hp', 5, 'mid'), 9)
     expect(Object.keys(input.targets).sort()).toEqual([...input.used].sort())
     expect(input.targets.hp_).toBeCloseTo(build.artifact.substats.stats.hp_, 9)
     // ER is counted with its 2 fixed rolls only
@@ -333,6 +337,9 @@ describe('genInputFromTc', () => {
       expect(Math.abs(result.gaps[key] ?? 0)).toBeLessThan(
         getSubstatValue(key, 5, 'min')
       )
+    expect(Math.abs((result.totals.hp ?? 0) - 508)).toBeLessThan(
+      getSubstatValue('hp', 5, 'min')
+    )
   })
 
   it('TC with scales: the used substats are the ones read', () => {

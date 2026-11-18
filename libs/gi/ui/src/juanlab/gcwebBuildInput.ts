@@ -132,13 +132,37 @@ const ALWAYS_USED: readonly SubstatKey[] = [
   'critDMG_',
   'enerRech_',
 ]
+/** A percent stat's flat counterpart: counted with it when the entry point does not say what matters */
+const FLAT_OF: Partial<Record<SubstatKey, SubstatKey>> = {
+  hp_: 'hp',
+  atk_: 'atk',
+  def_: 'def',
+}
+/**
+ * The used substats when the entry point does not give `scales`: those `counted` judges from the build,
+ * plus each counted percent stat's flat counterpart when `hasFlat` (it keeps the build's value as its
+ * target: an HP scaler's flat HP is not filler that takes the pieces' extra rolls)
+ */
+const judgedUsed = (
+  counted: (key: SubstatKey) => boolean,
+  hasFlat: (key: SubstatKey) => boolean = () => true
+): SubstatKey[] => {
+  const base = new Set(allSubstatKeys.filter(counted))
+  return allSubstatKeys.filter(
+    (key) =>
+      base.has(key) ||
+      (hasFlat(key) &&
+        allSubstatKeys.some((pct) => base.has(pct) && FLAT_OF[pct] === key))
+  )
+}
 
 /**
  * A KQM build as the generator's input. Pieces: KQMS's (5★ +20; with 4★ sets, their pieces 4★ +16, the
  * flower and plume first, then all but the `mains.off` slot, as `kqmStatValues` counts them). Targets: the
  * build's substat totals (`kqmValues`, without the main stats) as the game shows them, for the used
  * substats only (the others' fixed rolls are not targets). Used: `scales` when given (the stats the
- * damage reads), else the substats with placed rolls, CRIT Rate, CRIT DMG and ER.
+ * damage reads), else the substats with placed rolls, CRIT Rate, CRIT DMG and ER, and the flat
+ * counterpart of a counted HP%/ATK%/DEF% (target: its fixed rolls).
  */
 export function genInputFromKqm(
   build: KqmBuild,
@@ -178,7 +202,7 @@ export function genInputFromKqm(
 
   const used: SubstatKey[] = opts.scales?.length
     ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
-    : allSubstatKeys.filter(
+    : judgedUsed(
         (key) => (build.rolls[key] ?? 0) > 0 || ALWAYS_USED.includes(key)
       )
   const values = kqmValues(build)
@@ -202,7 +226,8 @@ export function genInputFromKqm(
  * for rarities below, which the generator has no tiers for), its sets, and its substat totals (TC keeps
  * values, as the game shows them) as targets for the used substats. Used: `scales` when given (as for
  * KQM), else the substats above what 2 rolls give (GO's roll value for the build's substat rarity and
- * type: KQMS-style builds put 2 on every substat) plus CRIT Rate, CRIT DMG and ER. The others are filler:
+ * type: KQMS-style builds put 2 on every substat) plus CRIT Rate, CRIT DMG and ER, and the flat counterpart
+ * (with a value) of a counted HP%/ATK%/DEF%, its stored value as target. The others are filler:
  * their fixed rolls are not targets, so the pieces' extra rolls land on them, not on a counted stat.
  */
 export function genInputFromTc(
@@ -234,8 +259,9 @@ export function genInputFromTc(
     (1 + 1e-6)
   const used: SubstatKey[] = opts.scales?.length
     ? allSubstatKeys.filter((key) => opts.scales!.includes(key))
-    : allSubstatKeys.filter(
-        (key) => ALWAYS_USED.includes(key) || value(key) > fixed(key)
+    : judgedUsed(
+        (key) => ALWAYS_USED.includes(key) || value(key) > fixed(key),
+        (key) => value(key) > 0
       )
   const targets: GenInput['targets'] = {}
   for (const key of used) targets[key] = Math.max(0, value(key))
