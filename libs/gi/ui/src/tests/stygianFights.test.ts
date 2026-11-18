@@ -538,3 +538,49 @@ describe('Radiant Moongecko (the game files’ Fearless/Dire values)', () => {
     expect(fight.notes).toContain('noHealer')
   })
 })
+
+describe('a fight that starts with no energy', () => {
+  const boss = stygianBoss(1004062)! // Battle-Hardened Lightkeeper (10% RES)
+  const hp = boss.hp.dire
+  const opened = (over: Partial<FightTeam> = {}): FightTeam => ({
+    ...team('pyro', 100000),
+    // (its first 20 s without Bursts: half the DPS)
+    opening: { dps: { pyro: 50000 }, seconds: 20 },
+    ...over,
+  })
+  it('plays its first rotation at its own DPS, then the rotation as it repeats', () => {
+    const fight = stygianFight(boss, 'dire', opened())
+    expect(fight.seconds).toBeCloseTo(20 + (hp - 50000 * 20) / 100000, 6)
+    expect(fight.timeline.segments[0]).toMatchObject({ end: 20, dps: 50000 })
+    expect(fight.notes).toContain('opening')
+  })
+  it('starts with full energy when set so', () => {
+    const fight = stygianFight(boss, 'dire', opened(), undefined, {
+      fullEnergy: true,
+    })
+    expect(fight.seconds).toBeCloseTo(hp / 100000, 6)
+    expect(fight.notes).not.toContain('opening')
+  })
+  it('the Moongecko: its first ward takes the opening’s damage', () => {
+    const geo = (dps: number) => ({ geo: dps })
+    const t: FightTeam = {
+      dps: geo(200000),
+      baseRes: all(0.1),
+      effRes: all(0.1),
+      opening: { dps: geo(100000), seconds: 12 },
+    }
+    const fight = stygianFight(
+      stygianBoss(MOONGECKO_BOSS)!,
+      'dire',
+      t,
+      undefined,
+      { wardSeconds: 15 }
+    )
+    // (ward from 2 s to 17 s: 10 s of the opening, 5 s of the rotation)
+    const recorded = 100000 * 10 + 200000 * 5
+    expect(fight.timeline.events[0].hp).toBeCloseTo(
+      (0.7 * recorded) / stygianBoss(MOONGECKO_BOSS)!.hp.dire,
+      9
+    )
+  })
+})

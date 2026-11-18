@@ -1308,7 +1308,7 @@ export function KqmSetupSummary({
               'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, 4 rotations in a row with the last 2 averaged, at the pace it can keep.'
             )}
           >
-            <Box sx={{ cursor: 'help' }}>
+            <Box sx={{ display: 'grid', cursor: 'help' }}>
               <SpecStat label={t('teamOpt.kqm.rotationLabel', 'Rotation')}>
                 {t(
                   'teamOpt.kqm.rotationPlayedValue',
@@ -1333,7 +1333,13 @@ function SpecStat({
 }) {
   return (
     <Box
-      sx={{ display: 'grid', alignContent: 'center', gap: 0.25, minWidth: 0 }}
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 1fr)',
+        alignContent: 'start',
+        gap: 0.25,
+        minWidth: 0,
+      }}
     >
       <Typography
         component="span"
@@ -1353,9 +1359,12 @@ function SpecStat({
           fontWeight: 650,
           lineHeight: 1.3,
           display: 'inline-flex',
-          alignItems: 'baseline',
-          gap: 0.75,
-          whiteSpace: 'nowrap',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          columnGap: 0.75,
+          rowGap: 0.25,
+          minHeight: 22,
+          overflowWrap: 'anywhere',
           ...numSx,
         }}
       >
@@ -2090,7 +2099,7 @@ export function KqmResults({
   // the builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
   const cocoonSettings = useMemo(
     () =>
-      enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS
+      enemy && appliedStygianPreset(enemy)
         ? (() => {
             const overrides = kqmTeamOverrides(
               database,
@@ -2107,7 +2116,10 @@ export function KqmResults({
         : undefined,
     [enemy, database, teamId, runSettings, result]
   )
-  const cocoon = useCocoonEvaluations(teamId, cocoonSettings)
+  const cocoon = useCocoonEvaluations(teamId, cocoonSettings, {
+    cocoon: !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS,
+    opening: applications?.opening?.attacks,
+  })
   const compared =
     shown && result.optimized.includes(shown) ? shown : result.optimized[0]
   // (the member tiles' icons a size smaller on a phone)

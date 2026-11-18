@@ -21,7 +21,6 @@ import {
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameEnemy,
-  stygianFightModelled,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
@@ -280,7 +279,7 @@ export default function TeamBuildWorkspace({
   const applications = useRotationApplications(
     teamId,
     members,
-    !!stygian && stygianFightModelled(stygian.boss.id),
+    !!stygian,
     mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
     mode === 'kqm' ? kqmShown?.builds : undefined
   )
@@ -288,7 +287,7 @@ export default function TeamBuildWorkspace({
   // equipped builds', or the KQM builds' played)
   const cocoonSettings = useMemo(
     () =>
-      stygian?.boss.id !== MOONGECKO_BOSS
+      !stygian
         ? undefined
         : mode === 'kqm'
           ? kqmOverrides && kqmAttacks
@@ -301,7 +300,10 @@ export default function TeamBuildWorkspace({
           : evaluationSettings,
     [stygian, mode, kqmOverrides, kqmAttacks, evaluationSettings]
   )
-  const cocoonNow = useCocoonEvaluations(teamId, cocoonSettings)
+  const cocoonNow = useCocoonEvaluations(teamId, cocoonSettings, {
+    cocoon: stygian?.boss.id === MOONGECKO_BOSS,
+    opening: applications?.opening?.attacks,
+  })
   const fightNow = useMemo(
     () =>
       team && (stygian || team.enemyHp)
@@ -424,14 +426,17 @@ export default function TeamBuildWorkspace({
   // the shown builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
   const resultCocoonSettings = useMemo(
     () =>
-      shownOverrides &&
-      result?.enemy &&
-      appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS
+      shownOverrides && result?.enemy && appliedStygianPreset(result.enemy)
         ? { ...shownOverrides, attacks: shownTeamOpt.attacks }
         : undefined,
     [shownOverrides, result?.enemy, shownTeamOpt.attacks]
   )
-  const resultCocoon = useCocoonEvaluations(teamId, resultCocoonSettings)
+  const resultCocoon = useCocoonEvaluations(teamId, resultCocoonSettings, {
+    cocoon:
+      !!result?.enemy &&
+      appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS,
+    opening: applications?.opening?.attacks,
+  })
   // a new result: the rotation folds away (it opens again with a click) and the result, below it,
   // comes into view
   useEffect(() => {

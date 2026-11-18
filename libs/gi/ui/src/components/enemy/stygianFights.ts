@@ -45,6 +45,11 @@ export interface FightTeam {
   wardSeconds?: number
   /** Whether a member heals the party (its kit heals): it breaks out of the Radiant Cocoon */
   healer?: boolean
+  /**
+   * Its first rotation from no energy (Stygian Onslaught starts at none): its DPS by element
+   * without Bursts (against `baseRes`), for its first `seconds`
+   */
+  opening?: { dps: Partial<Record<ElementWithPhyKey, number>>; seconds: number }
 }
 
 /**
@@ -56,6 +61,8 @@ export interface FightSettings {
   wardSeconds?: number
   /** Seconds after each Radiant Cocoon until the team is healed to full; below 0: never */
   healSeconds?: number
+  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
+  fullEnergy?: boolean
 }
 
 /** Electro hits per second, by what each takes off Wavebinder's Courage */
@@ -145,6 +152,8 @@ export type FightNote =
   | 'noHealer'
   /** The team's DPS in its cocoon and Disentangled not computed (its own counted) */
   | 'cocoonApprox'
+  /** Its first rotation counted without Bursts: the fight starts with no energy */
+  | 'opening'
   | 'mechanics'
 
 /** A stretch of the fight in one state: its HP (fractions of its Max HP) from start to end */
@@ -247,37 +256,58 @@ export function dpsAt(
 const phaseRes = (boss: StygianBoss, key: StygianPhaseKey) =>
   boss.phases.find((p) => p.key === key)?.res
 
-/** HP ÷ DPS at a phase */
+/** HP ÷ DPS at a phase (its first rotation from no energy at its own DPS) */
 function plain(
   boss: StygianBoss,
   hp: number,
   team: FightTeam,
-  phase: StygianPhaseKey
+  phase: StygianPhaseKey,
+  settings: FightSettings = {}
 ): FightEstimate {
   const res = phaseRes(boss, phase)
   const dps = res ? dpsAt(team, res) : 0
-  const seconds = dps > 0 ? hp / dps : undefined
+  const open = openingOf(team, settings)
+  const openDps = open && res ? dpsAt(team, res, open.dps) : dps
+  const openFor = open?.seconds ?? 0
+  const openDone = Math.min(openFor, openDps > 0 ? hp / openDps : openFor)
+  const left = Math.max(0, hp - openDps * openDone)
+  const seconds =
+    left <= 1e-6 ? openDone : dps > 0 ? openDone + left / dps : undefined
   const end = Math.min(seconds ?? FIGHT_LIMIT, FIGHT_LIMIT)
+  const segments: FightSegment[] = []
+  if (openDone > 0)
+    segments.push({
+      start: 0,
+      end: Math.min(openDone, end),
+      state: phase,
+      hpStart: 1,
+      hpEnd: Math.max(0, 1 - (openDps * Math.min(openDone, end)) / hp),
+      dps: openDps,
+    })
+  if (end > openDone)
+    segments.push({
+      start: openDone,
+      end,
+      state: phase,
+      hpStart: left / hp,
+      hpEnd: Math.max(0, (left - dps * (end - openDone)) / hp),
+      dps,
+    })
   return {
     seconds:
       seconds !== undefined && seconds <= FIGHT_LIMIT ? seconds : undefined,
     parts: seconds ? [{ key: 'phase', phase, seconds }] : [],
-    timeline: {
-      segments: [
-        {
-          start: 0,
-          end,
-          state: phase,
-          hpStart: 1,
-          hpEnd: Math.max(0, 1 - (dps * end) / hp),
-          dps,
-        },
-      ],
-      events: [],
-    },
-    notes: [],
+    timeline: { segments, events: [] },
+    notes: open ? ['opening'] : [],
     modelled: false,
   }
+}
+
+/** The fight's first rotation from no energy, unless it starts with full energy */
+function openingOf(team: FightTeam, settings: FightSettings) {
+  return !settings.fullEnergy && team.opening && team.opening.seconds > 0
+    ? team.opening
+    : undefined
 }
 
 /**
@@ -690,6 +720,12 @@ function moongecko(
   })
   const intoOwn = into(own)
   const intoFreed = into(freed)
+  // its first rotation from no energy (no Bursts): its own DPS, the share of the rotation's
+  const open = openingOf(team, settings)
+  const openEnd = open ? open.seconds : 0
+  const intoOpen = open ? into(open.dps) : intoOwn
+  const openShare =
+    open && dpsOf.own > 0 ? dpsAt(team, dull, open.dps) / dpsOf.own : 1
 
   const notes: FightNote[] = []
   const ward = settings.wardSeconds ?? team.wardSeconds ?? M.wardDefault
@@ -711,6 +747,7 @@ function moongecko(
         : undefined
   if (heal === undefined) notes.push('noHealer')
   if (!team.cocooned || !team.disentangled) notes.push('cocoonApprox')
+  if (open) notes.push('opening')
 
   const segments: FightSegment[] = []
   const events: FightEvent[] = []
@@ -727,6 +764,16 @@ function moongecko(
   let freedTime = 0
   // a stretch at `dps` until `until` (the fight's limit at most): whether it falls in it
   const fall = (state: FightSegment['state'], until: number, dps: number) => {
+    // (its first rotation from no energy: at its share of the DPS)
+    if (
+      t < openEnd - 1e-9 &&
+      until > t + 1e-9 &&
+      fallAt(state, Math.min(until, openEnd), dps * openShare)
+    )
+      return true
+    return fallAt(state, until, dps)
+  }
+  const fallAt = (state: FightSegment['state'], until: number, dps: number) => {
     const end = Math.min(until, FIGHT_LIMIT)
     if (end <= t + 1e-9) return false
     const hpStart = left / hp
@@ -794,12 +841,14 @@ function moongecko(
     let other = 0
     while (t < wardEnd - 1e-9 && t < FIGHT_LIMIT) {
       const freedNow = t < freedUntil
+      const opening = t < openEnd - 1e-9
       const end = Math.min(
         wardEnd,
         freedNow ? freedUntil : wardEnd,
+        opening ? openEnd : wardEnd,
         FIGHT_LIMIT
       )
-      const into = freedNow ? intoFreed : intoOwn
+      const into = opening ? intoOpen : freedNow ? intoFreed : intoOwn
       const total = into.geo + into.other
       segments.push({
         start: t,
@@ -932,7 +981,8 @@ export function stygianFight(
   const hp = boss.hp[difficulty]
   const model = models[boss.id]
   if (model) return model(boss, hp, team, settings)
-  return { ...plain(boss, hp, team, phase), notes: ['mechanics'] }
+  const estimate = plain(boss, hp, team, phase, settings)
+  return { ...estimate, notes: [...estimate.notes, 'mechanics'] }
 }
 
 /** Whether a boss's fight has its mechanics modelled */
