@@ -919,6 +919,19 @@ export function kqmEnergyRelief(
 }
 
 /**
+ * What a KQM calculation takes instead of the team's own: none of the members' gear switches or
+ * bonus stats (their builds' settings), and once KQM has its own (set up from the team's), its own
+ * kit and team switches and enemy instead of the members' and the team's
+ */
+export const kqmOwnSettings = (kqm: TeamOptKqm | undefined) => ({
+  ownBuild: false,
+  ...(kqm?.teamConditional
+    ? { ownKit: false, teamConditional: kqm.teamConditional }
+    : {}),
+  ...(kqm?.enemy ? { enemy: kqm.enemy.enemyOverride } : {}),
+})
+
+/**
  * Per optimized member, the weapon and set effects counted by rule where nobody set them (see
  * `itemConditionals`): from what it does in the rotation and the team's elements
  */
@@ -993,6 +1006,7 @@ export function kqmTeamOverrides(
     ) as NonNullable<TeamDataOverrides['extraConditionals']>,
     conditionalOverrides: kqm.passives,
     bonusStats: teamOptBonusStats(teamOpt, keys),
+    ...kqmOwnSettings(kqm),
   }
 }
 
@@ -1413,8 +1427,8 @@ async function runKqm({
       weapons: [...new Set((space?.weapons ?? []).map((w) => w.key))],
     }
   }
-  // the weapon and set effects nobody set up, by rule; the members' own settings win over them,
-  // and KQM mode's own (`conditionalOverrides`) over both
+  // the weapon and set effects nobody set up, by rule; KQM mode's own (`conditionalOverrides`)
+  // over them (the members' own switches for their gear play no part: `ownBuild`)
   // (from what the members do in the rotation: again when it is played differently)
   const ruleConditionals = () => {
     const ctx = kqmRuleConditionals(database, teamId, { attacks: attacksNow() })
@@ -1628,6 +1642,7 @@ async function runKqm({
       weapons,
       extraConditionals,
       conditionalOverrides,
+      ...kqmOwnSettings(kqm),
       characters,
       onField: teamOpt.onField,
       bonusStats,
@@ -2602,6 +2617,7 @@ async function runKqm({
         extraConditionals,
         conditionalOverrides,
         bonusStats,
+        ...kqmOwnSettings(kqm),
       },
     })
     if (!next) return false
@@ -2629,6 +2645,7 @@ async function runKqm({
       weapons,
       extraConditionals,
       conditionalOverrides,
+      ...kqmOwnSettings(kqm),
       characters,
       onField: teamOpt.onField,
       bonusStats,
@@ -2664,14 +2681,10 @@ async function runKqm({
     for (const m of optimized) {
       const ck = m.characterKey
       const b = builds[ck]!
-      const own = m.teamChar.conditional as
-        | Record<string, Record<string, unknown>>
-        | undefined
       const items = new Set<string>([b.weapon.key, ...Object.keys(b.sets)])
       assumed[ck] = (ctxConditionals[ck]?.picked ?? []).filter(
         ({ path }) =>
           items.has(path[0]) &&
-          own?.[path[0]]?.[path[path.length - 1]] === undefined &&
           kqm.passives?.[ck]?.[path[0]]?.[path[path.length - 1]] === undefined
       )
     }

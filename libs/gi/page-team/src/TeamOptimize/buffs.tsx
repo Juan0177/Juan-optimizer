@@ -5,7 +5,11 @@ import type {
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
 import { allArtifactSetKeys, allWeaponKeys } from '@genshin-optimizer/gi/consts'
-import type { ArtCharDatabase, TeamOptAttack } from '@genshin-optimizer/gi/db'
+import type {
+  ArtCharDatabase,
+  TeamOptAttack,
+  TeamOptKqm,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
   CharacterSheet,
@@ -279,6 +283,50 @@ export function teamBuffsOf(
   }))
 }
 
+/**
+ * The KQM tab's switches that are on, with their names, before it has builds: its members' kit
+ * switches and its team switches (its own; not set up yet: the team's), no gear effects
+ */
+export function useKqmSwitchBuffs(
+  teamId: string,
+  teamData: TeamData | undefined,
+  kqm: TeamOptKqm | undefined
+): TeamBuff[] {
+  const database = useDatabase()
+  return useMemo(() => {
+    if (!teamData) return []
+    if (!kqm?.teamConditional)
+      return teamBuffsOf(database, teamId, teamData).filter(
+        (b) => b.inactive !== 'gear'
+      )
+    const out: { ref: BuffRef; value: string }[] = []
+    for (const [ck, items] of Object.entries(kqm.passives ?? {}))
+      for (const [item, conds] of Object.entries(items ?? {}))
+        if (
+          !(allWeaponKeys as readonly string[]).includes(item) &&
+          !(allArtifactSetKeys as readonly string[]).includes(item)
+        )
+          for (const [cond, value] of Object.entries(conds ?? {}))
+            if (value)
+              out.push({
+                ref: { owner: ck as CharacterKey, path: [item, cond] },
+                value,
+              })
+    for (const [item, conds] of Object.entries(
+      kqm.teamConditional as Record<string, Record<string, string>>
+    ))
+      for (const [cond, value] of Object.entries(conds ?? {}))
+        if (value)
+          out.push({ ref: { owner: 'team', path: [item, cond] }, value })
+    return out.map(({ ref, value }) => ({
+      ref,
+      key: buffRefKey(ref),
+      value,
+      ...describe(ref, value, teamData),
+    }))
+  }, [database, teamId, teamData, kqm])
+}
+
 export function useTeamBuffs(teamId: string, teamData: TeamData | undefined) {
   const database = useDatabase()
   // `teamData` is recomputed whenever a conditional changes
@@ -454,8 +502,25 @@ export function useKqmTeamBuffs(
       const key = buffRefKey(ref)
       if (!refs.has(key)) refs.set(key, { ref, value })
     }
-    for (const { ref, value } of teamConditionals(database, teamId))
-      add(ref, value)
+    // the switches the builds count: KQM's own (its members' and team's), never the team's own
+    // once KQM has them (`kqmOwnSettings`)
+    if (overrides.ownKit === false) {
+      for (const [ck, items] of Object.entries(
+        overrides.conditionalOverrides ?? {}
+      ))
+        for (const [item, conds] of Object.entries(items ?? {}))
+          for (const [cond, value] of Object.entries(conds ?? {}))
+            if (value)
+              add({ owner: ck as CharacterKey, path: [item, cond] }, value)
+      const teamSwitches = (overrides.teamConditional ??
+        database.teams.get(teamId)?.conditional ??
+        {}) as Record<string, Record<string, string>>
+      for (const [item, conds] of Object.entries(teamSwitches))
+        for (const [cond, value] of Object.entries(conds ?? {}))
+          if (value) add({ owner: 'team', path: [item, cond] }, value)
+    } else
+      for (const { ref, value } of teamConditionals(database, teamId))
+        add(ref, value)
     for (const [ck, list] of Object.entries(result.assumed ?? {}))
       for (const { path, value } of list ?? [])
         add({ owner: ck as CharacterKey, path }, value)

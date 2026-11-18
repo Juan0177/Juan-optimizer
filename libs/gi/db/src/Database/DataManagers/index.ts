@@ -78,6 +78,8 @@ import {
   MAX_ENEMY_HP,
   validateFightSettings,
 } from './TeamDataManager'
+import type { EnemyOverride, TeamEnemy } from './TeamEnemy'
+import { validateEnemyOverride, validateTeamEnemy } from './TeamEnemy'
 import type {
   TeamOpt,
   TeamOptAttack,
@@ -119,6 +121,7 @@ export type {
   BuildTcArtifactSlot,
   CustomMultiTarget,
   CustomTarget,
+  EnemyOverride,
   GeneratedBuild,
   ICachedArtifact,
   ICachedCharacter,
@@ -147,6 +150,7 @@ export type {
   StatFilters,
   Team,
   TeamCharacter,
+  TeamEnemy,
   TeamFightSettings,
   TeamOpt,
   TeamOptAttack,
@@ -196,6 +200,8 @@ export {
   toBuildTc,
   validateArtifact,
   validateCustomMultiTarget,
+  validateEnemyOverride,
   validateFightSettings,
+  validateTeamEnemy,
   validateTeamOpt,
 }

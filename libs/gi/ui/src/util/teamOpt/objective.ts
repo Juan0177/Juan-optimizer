@@ -621,6 +621,14 @@ export interface TeamRotationSettings {
   characters?: Partial<Record<CharacterKey, CharacterOverride>>
   /** Conditionals over the members' own (`TeamDataOverrides.conditionalOverrides`) */
   conditionalOverrides?: TeamDataOverrides['conditionalOverrides']
+  /** Whether the members' own build settings count (`TeamDataOverrides.ownBuild`) */
+  ownBuild?: boolean
+  /** Whether the members' own kit switches count (`TeamDataOverrides.ownKit`) */
+  ownKit?: boolean
+  /** The team's switches instead of its own (`TeamDataOverrides.teamConditional`) */
+  teamConditional?: TeamDataOverrides['teamConditional']
+  /** The enemy instead of the team's (`TeamDataOverrides.enemy`) */
+  enemy?: TeamDataOverrides['enemy']
 }
 
 function rotationNodes(
@@ -640,6 +648,10 @@ function rotationNodes(
     characters,
     conditionalOverrides,
     enemyOverride,
+    ownBuild,
+    ownKit,
+    teamConditional,
+    enemy,
   }: TeamRotationSettings,
   shared: boolean
 ): TeamRotationNodes | undefined {
@@ -702,6 +714,10 @@ function rotationNodes(
     characters,
     conditionalOverrides,
     enemyOverride,
+    ownBuild,
+    ownKit,
+    teamConditional,
+    enemy,
   }
   let source: TeamSource | undefined
   if (shared) {

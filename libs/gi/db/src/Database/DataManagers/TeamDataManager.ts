@@ -20,6 +20,8 @@ import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataManager } from '../DataManager'
 import type { IGO, ImportResult } from '../exim'
 import type { ICachedArtifact } from './ArtifactDataManager'
+import type { TeamFightSettings } from './TeamEnemy'
+import { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
 import type { TeamOpt } from './TeamOpt'
 import { validateTeamOpt } from './TeamOpt'
 import type { ICachedWeapon } from './WeaponDataManager'
@@ -68,45 +70,8 @@ export interface Team {
   /** How the team plays a boss's mechanics where its fight cannot tell (the Moongecko's) */
   fightSettings?: TeamFightSettings
 }
-/** The most HP an enemy can be given (a trillion) */
-export const MAX_ENEMY_HP = 1e12
-/**
- * How the team plays a boss's mechanics where its fight cannot tell: seconds to break the Radiant
- * Moongecko's Moonstone Anchor ward (1–60: past its 35 s, not in time), and to be healed to full
- * after its Radiant Cocoon (0–40; -1: never)
- */
-export interface TeamFightSettings {
-  wardSeconds?: number
-  healSeconds?: number
-  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
-  fullEnergy?: boolean
-}
-const MAX_WARD_SECONDS = 60
-const MAX_HEAL_SECONDS = 40
-/** `TeamFightSettings` kept to their ranges (to 0.1 s); none left: undefined */
-export function validateFightSettings(
-  value: unknown
-): TeamFightSettings | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const { wardSeconds, healSeconds, fullEnergy } = value as TeamFightSettings
-  const tenth = (v: number) => Math.round(v * 10) / 10
-  const out: TeamFightSettings = {
-    ...(typeof wardSeconds === 'number' &&
-    Number.isFinite(wardSeconds) &&
-    wardSeconds >= 1 &&
-    wardSeconds <= MAX_WARD_SECONDS
-      ? { wardSeconds: tenth(wardSeconds) }
-      : {}),
-    ...(typeof healSeconds === 'number' &&
-    Number.isFinite(healSeconds) &&
-    (healSeconds === -1 ||
-      (healSeconds >= 0 && healSeconds <= MAX_HEAL_SECONDS))
-      ? { healSeconds: healSeconds === -1 ? -1 : tenth(healSeconds) }
-      : {}),
-    ...(fullEnergy === true ? { fullEnergy } : {}),
-  }
-  return Object.keys(out).length ? out : undefined
-}
+export type { TeamFightSettings } from './TeamEnemy'
+export { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
 export type LoadoutExportSetting = {
   convertEquipped: boolean
   convertbuilds: string[]

@@ -252,6 +252,10 @@ vi.mock('./KqmChoosers', () => ({
   ),
   KqmSetChooser: () => <div>Set options</div>,
 }))
+vi.mock('./CountedPassives', () => ({
+  PassiveTag: () => null,
+  useCountedPassives: () => () => [],
+}))
 vi.mock('./KqmEnergyCalculator', () => ({
   KqmEnergyCalculator: () => <div>Team ER calculator</div>,
   kqmEnergyEstimate: () => ({

@@ -1,7 +1,6 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { Team } from '@genshin-optimizer/gi/db'
-import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { FightEstimate, FightTeam } from '@genshin-optimizer/gi/ui'
 import {
@@ -39,6 +38,7 @@ import {
 } from '../TeamOptimize/ui'
 import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
+import { useEnemyTeam, useSetEnemy } from './enemyScope'
 import { formatHp } from './hp'
 import { MoongeckoSettings, StartEnergySetting } from './MoongeckoSettings'
 
@@ -64,8 +64,8 @@ export function EnemySetup({
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const database = useDatabase()
-  const team = useTeam(teamId)
+  const setEnemy = useSetEnemy(teamId)
+  const team = useEnemyTeam(teamId)
   const [open, onOpen, onClose] = useBoolState()
   if (!team) return null
   const stygian = appliedStygianPreset(team)
@@ -134,7 +134,7 @@ export function EnemySetup({
                 size="small"
                 value={stygian.difficulty}
                 onChange={(key) =>
-                  database.teams.set(teamId, (team) => {
+                  setEnemy((team) => {
                     team.enemyOverride.enemyLevel = levelOf(key)
                   })
                 }

@@ -46,6 +46,7 @@ import {
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { PassiveTag, useCountedPassives } from './CountedPassives'
 import { formatGain, formatRate, formatRateFull } from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
 import { kqmStandardRolls } from './KqmStandard'
@@ -246,6 +247,12 @@ export function KqmCompare({
       ]),
     [ranking]
   )
+  const countedPassives = useCountedPassives(
+    teamId,
+    runSettings,
+    result,
+    characterKey
+  )
   if (!ranking) return null
   // (a pick while another is worked out replaces it)
   const choose = (next: Pick<KqmBuild, 'weapon' | 'sets'>) => {
@@ -322,6 +329,18 @@ export function KqmCompare({
   )
   const shortfalls = view.after.shortfalls?.[characterKey] ?? []
   const erMet = !!er && er.value + 1e-6 >= er.minimum
+  const teammatesEr = changed
+    ? (Object.keys(view.energyRecharge) as CharacterKey[]).flatMap((ck) => {
+        const now = view.energyRecharge[ck]
+        const before = base.energyRecharge[ck]
+        return ck !== characterKey &&
+          now &&
+          before &&
+          Math.abs(now.minimum - before.minimum) >= 0.05
+          ? [{ ck, from: before.minimum, to: now.minimum }]
+          : []
+      })
+    : []
   return (
     <Box
       component="section"
@@ -478,6 +497,56 @@ export function KqmCompare({
               </Box>
             </Tooltip>
           )}
+          {!!teammatesEr.length && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.kqm.teammatesErHelp',
+                'The Energy Recharge the teammates need with this pick, and before it: its energy (Favonius particles, a weapon’s or set’s energy) changes theirs, and their artifacts are searched again'
+              )}
+            >
+              <Box sx={{ mt: 1, cursor: 'help' }}>
+                <Typography
+                  sx={{
+                    fontSize: 12.5,
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {t('teamOpt.kqm.teammatesEr', 'Teammates’ ER required')}
+                </Typography>
+                {teammatesEr.map(({ ck, from, to }) => (
+                  <Box
+                    key={ck}
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 1,
+                      color: 'text.secondary',
+                      fontSize: 12.5,
+                      lineHeight: 1.7,
+                    }}
+                  >
+                    <Box component="span" sx={{ minWidth: 0 }}>
+                      <CharacterName characterKey={ck} gender={gender} />
+                    </Box>
+                    <Box component="span" sx={{ ...numSx, flexShrink: 0 }}>
+                      {from.toFixed(1)}% →{' '}
+                      <Box
+                        component="span"
+                        sx={{
+                          fontWeight: 600,
+                          color: to < from ? 'success.main' : 'warning.main',
+                        }}
+                      >
+                        {to.toFixed(1)}%
+                      </Box>
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            </Tooltip>
+          )}
           {!!shortfalls.length && (
             <Tooltip
               arrow
@@ -575,7 +644,12 @@ export function KqmCompare({
               disabled={disabled}
               label={(o) =>
                 category === 0 ? (
-                  <WeaponLabel weapon={kqmWeaponData(o.weapon, characterKey)} />
+                  <WeaponLabel
+                    weapon={kqmWeaponData(o.weapon, characterKey)}
+                    passive={
+                      <PassiveTag passives={countedPassives(o.weapon.key)} />
+                    }
+                  />
                 ) : (
                   <SetLines sets={o.sets} tooltipPlacement="left" />
                 )
@@ -589,41 +663,58 @@ export function KqmCompare({
 }
 
 /** A ranked weapon: its icon and name, its details (stats, passive) on hover */
-function WeaponLabel({ weapon }: { weapon: ICachedWeapon }) {
+function WeaponLabel({
+  weapon,
+  passive,
+}: {
+  weapon: ICachedWeapon
+  passive?: ReactNode
+}) {
   return (
-    <BootstrapTooltip
-      // (beside the list, not over it: the other rows stay readable)
-      placement="left"
-      disableInteractive
-      title={<WeaponDetails weapon={weapon} />}
-      {...quickTooltipProps}
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        minWidth: 0,
+        maxWidth: '100%',
+        verticalAlign: 'middle',
+      }}
     >
-      <Box
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 1,
-          minWidth: 0,
-          maxWidth: '100%',
-          verticalAlign: 'middle',
-        }}
+      <BootstrapTooltip
+        // (beside the list, not over it: the other rows stay readable)
+        placement="left"
+        disableInteractive
+        title={<WeaponDetails weapon={weapon} />}
+        {...quickTooltipProps}
       >
         <Box
           sx={{
-            transform: 'scale(0.7)',
-            transformOrigin: 'left center',
-            width: 32,
-            height: 32,
-            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 1,
+            minWidth: 0,
+            maxWidth: '100%',
+            verticalAlign: 'middle',
           }}
         >
-          <WeaponThumb weapon={weapon} highlight={false} />
+          <Box
+            sx={{
+              transform: 'scale(0.7)',
+              transformOrigin: 'left center',
+              width: 32,
+              height: 32,
+              flexShrink: 0,
+            }}
+          >
+            <WeaponThumb weapon={weapon} highlight={false} />
+          </Box>
+          <Typography sx={{ fontSize: 13.5, lineHeight: 1.4 }}>
+            <WeaponName weaponKey={weapon.key} />
+          </Typography>
         </Box>
-        <Typography sx={{ fontSize: 13.5, lineHeight: 1.4 }}>
-          <WeaponName weaponKey={weapon.key} />
-        </Typography>
-      </Box>
-    </BootstrapTooltip>
+      </BootstrapTooltip>
+      {passive}
+    </Box>
   )
 }
 

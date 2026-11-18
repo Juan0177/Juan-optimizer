@@ -80,6 +80,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EnemySetup } from '../Enemy/EnemySetup'
+import { EnemyScopeContext, kqmEnemyTeam } from '../Enemy/enemyScope'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { DamageShare } from './DamageShare'
 import type { FightApplications } from './fightTeam'
@@ -95,7 +96,6 @@ import {
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmShareMenu } from './KqmShareMenu'
-import { kqmRotationId, useRotationSettings } from './RotationWriter'
 import {
   KqmArtifactStandard,
   kqmStandardName,
@@ -103,6 +103,7 @@ import {
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
+import { kqmRotationId, useRotationSettings } from './RotationWriter'
 import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
@@ -914,7 +915,9 @@ export function KqmSettings({
             )
           })}
         </Box>
-        <EnemySetup teamId={teamId} fight={fight} disabled={disabled} />
+        <EnemyScopeContext.Provider value="kqm">
+          <EnemySetup teamId={teamId} fight={fight} disabled={disabled} />
+        </EnemyScopeContext.Provider>
       </Box>
       {/* what the builds may use: the weapon groups, and the drawers that choose one by one */}
       <KqmPool
@@ -2096,6 +2099,7 @@ export function KqmResults({
   const { gender } = useDBMeta()
   const database = useDatabase()
   const team = useTeam(teamId)
+  const kqmTeam = useMemo(() => team && kqmEnemyTeam(team), [team])
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
@@ -2144,10 +2148,10 @@ export function KqmResults({
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(
     () =>
-      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
-        ? team
+      enemy && kqmTeam && sameEnemy(enemy.enemyOverride, kqmTeam.enemyOverride)
+        ? kqmTeam
         : enemy,
-    [enemy, team]
+    [enemy, kqmTeam]
   )
   const fight = useMemo(
     () =>
@@ -2159,6 +2163,7 @@ export function KqmResults({
         teamData,
         rotationTime,
         enemyOverride: enemy.enemyOverride,
+        ...(team ? { dataEnemy: team.enemyOverride } : {}),
         applications,
         cocoon,
       }),

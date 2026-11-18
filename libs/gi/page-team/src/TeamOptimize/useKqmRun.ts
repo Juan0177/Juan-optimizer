@@ -24,6 +24,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { kqmEnemyTeam } from '../Enemy/enemyScope'
 import { kqmRotationReplay } from './RotationWriter'
 
 export type KqmRunState =
@@ -247,7 +248,7 @@ async function startKqmRun(
   }
   // (the enemy its damage is for, as it is now)
   const team = database.teams.get(teamId)
-  const enemy = team && runEnemyOf(team)
+  const enemy = team && runEnemyOf(kqmEnemyTeam(team))
   const doneOf = (result: KqmResult): KqmDoneRun => {
     const { played } = result
     return {

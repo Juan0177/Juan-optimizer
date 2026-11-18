@@ -1,4 +1,4 @@
-import type { TeamOpt } from '@genshin-optimizer/gi/db'
+import type { TeamOpt, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { useCallback, useMemo } from 'react'
@@ -54,46 +54,55 @@ export function kqmRunKey(teamOpt: TeamOpt): string {
   })
 }
 
+/** The settings each tab keeps its own of: the KQM tab's are in `TeamOptKqm` */
+const KQM_OWN = ['rotationTime', 'bonusStats', 'onField'] as const
+
 /**
- * The KQM tab's settings as the page reads them: its own rotation (`TeamOptKqm.attacks` and
- * `rotationTime`) as `attacks` and `rotationTime`, the rest as they are. Before it has one of its
- * own (not set up yet): Team optimize's.
+ * The KQM tab's settings as the page reads them: its own rotation (`TeamOptKqm.attacks`), its
+ * length, extra buffs and on-field member as `attacks`, `rotationTime`, `bonusStats` and
+ * `onField`; the rest as they are. Before it has one of its own (not set up yet): Team optimize's.
  */
 export function kqmRotationView(teamOpt: TeamOpt): TeamOpt {
   const kqm = teamOpt.kqm
   if (kqm?.attacks === undefined) return teamOpt
-  const { rotationTime: _own, ...rest } = teamOpt
-  return {
-    ...rest,
-    attacks: kqm.attacks,
-    ...(kqm.rotationTime !== undefined
-      ? { rotationTime: kqm.rotationTime }
-      : {}),
+  const view: TeamOpt = { ...teamOpt, attacks: kqm.attacks }
+  for (const key of KQM_OWN) {
+    delete view[key]
+    if (kqm[key] !== undefined)
+      (view as unknown as Record<string, unknown>)[key] = kqm[key]
   }
+  return view
 }
 
 /**
- * A change made on the KQM tab (`kqmRotationView`): to its own rotation, the rest as it is; Team
- * optimize's attacks and rotation time are left alone
+ * A change made on the KQM tab (`kqmRotationView`): to its own rotation, length, extra buffs and
+ * on-field member, the rest as it is; Team optimize's are left alone
  */
 export const kqmRotationUpdate =
   (update: TeamOptUpdate): TeamOptUpdate =>
   (teamOpt) => {
     const view = structuredClone(kqmRotationView(teamOpt))
     const next = update(view) ?? view
-    const { attacks, rotationTime, ...rest } = next
-    const kqm = { ...(rest.kqm ?? defaultTeamOptKqm), attacks }
-    if (rotationTime !== undefined) kqm.rotationTime = rotationTime
-    else delete kqm.rotationTime
-    const result: TeamOpt = { ...rest, attacks: teamOpt.attacks, kqm }
-    if (teamOpt.rotationTime !== undefined)
-      result.rotationTime = teamOpt.rotationTime
+    const kqm: TeamOptKqm = {
+      ...(next.kqm ?? defaultTeamOptKqm),
+      attacks: next.attacks,
+    }
+    const result: TeamOpt = { ...next, attacks: teamOpt.attacks, kqm }
+    for (const key of KQM_OWN) {
+      if (next[key] !== undefined)
+        (kqm as unknown as Record<string, unknown>)[key] = next[key]
+      else delete kqm[key]
+      delete result[key]
+      if (teamOpt[key] !== undefined)
+        (result as unknown as Record<string, unknown>)[key] = teamOpt[key]
+    }
     return result
   }
 
 /**
  * The KQM tab's own rotation, set up from Team optimize's the first time (a copy: the two are
- * separate from then on)
+ * separate from then on), with its length and on-field member; no extra buffs (KQM's builds are
+ * general, not the user's)
  */
 export const kqmRotationSetUp: TeamOptUpdate = (teamOpt) => {
   if (teamOpt.kqm?.attacks !== undefined) return
@@ -103,6 +112,7 @@ export const kqmRotationSetUp: TeamOptUpdate = (teamOpt) => {
     ...(teamOpt.rotationTime !== undefined
       ? { rotationTime: teamOpt.rotationTime }
       : {}),
+    ...(teamOpt.onField !== undefined ? { onField: teamOpt.onField } : {}),
   }
 }
 

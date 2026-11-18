@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PARTY_HEALERS } from '../TeamOptimize/fightTeam'
 import { focusSx, numSx, quickSx, tokens, type } from '../TeamOptimize/ui'
+import { useSetEnemy } from './enemyScope'
 
 /** A ward kept past its 35 s, as set: the most it can be given */
 const NOT_IN_TIME = 60
@@ -31,12 +32,10 @@ export function MoongeckoSettings({
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
+  const setEnemy = useSetEnemy(teamId)
   const settings = team.fightSettings ?? {}
-  const set = (
-    key: 'wardSeconds' | 'healSeconds',
-    value: number | undefined
-  ) =>
-    database.teams.set(teamId, (team) => {
+  const set = (key: 'wardSeconds' | 'healSeconds', value: number | undefined) =>
+    setEnemy((team) => {
       const next: TeamFightSettings = { ...team.fightSettings }
       if (value === undefined) delete next[key]
       else next[key] = value
@@ -296,10 +295,10 @@ export function StartEnergySetting({
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const database = useDatabase()
+  const setEnemy = useSetEnemy(teamId)
   const full = !!team.fightSettings?.fullEnergy
   const set = (fullEnergy: boolean) =>
-    database.teams.set(teamId, (team) => {
+    setEnemy((team) => {
       const next: TeamFightSettings = { ...team.fightSettings }
       if (fullEnergy) next.fullEnergy = true
       else delete next.fullEnergy

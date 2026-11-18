@@ -99,8 +99,8 @@ import {
 
 /**
  * KQM mode's passive switches: its own setting for the member if there is one (`''`: off), else
- * the member's loadout conditional, else the rule-based state (what a run counts). A switch writes
- * KQM mode's setting, never the loadout's.
+ * the rule-based state (what a run counts; the member's own switches play no part). A switch
+ * writes KQM mode's setting, never the loadout's.
  */
 function useKqmPassiveStore(
   teamId: string,
@@ -120,11 +120,6 @@ function useKqmPassiveStore(
         const [item, cond] = [path[0], path[path.length - 1]]
         const own = teamOpt.kqm?.passives?.[member.characterKey]?.[item]?.[cond]
         if (own !== undefined) return own || undefined
-        const loadout = objPathValue(
-          (member.teamChar.conditional ?? {}) as Record<string, unknown>,
-          path as string[]
-        ) as string | undefined
-        if (loadout) return loadout
         return objPathValue(
           (rules[member.characterKey]?.conditional ?? {}) as Record<
             string,

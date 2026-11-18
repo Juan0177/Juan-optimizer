@@ -3,7 +3,6 @@ import type { ElementWithPhyKey } from '@genshin-optimizer/gi/consts'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import type { Team } from '@genshin-optimizer/gi/db'
 import { MAX_ENEMY_HP } from '@genshin-optimizer/gi/db'
-import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { ElementIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
@@ -14,7 +13,6 @@ import type {
 import {
   appliedStygianPreset,
   currentStygianSeason,
-  enemyHpOf,
   StygianResSummary,
   stygianBosses,
   stygianBossName,
@@ -54,6 +52,7 @@ import {
   tokens,
   type,
 } from '../TeamOptimize/ui'
+import { useEnemyTeam, useSetEnemy } from './enemyScope'
 import { GameText } from './GameText'
 import { formatHp, parseHp } from './hp'
 
@@ -76,19 +75,18 @@ type Mode = 'custom' | 'stygian'
  */
 export function EnemyPanel({ teamId }: { teamId: string }) {
   const { t } = useTranslation('page_team')
-  const team = useTeam(teamId)
+  const team = useEnemyTeam(teamId)
   const applied = team && appliedStygianPreset(team)
-  const database = useDatabase()
+  const setEnemy = useSetEnemy(teamId)
   const [mode, setMode] = useState<Mode>(applied ? 'stygian' : 'custom')
-  // Custom: the enemy is the team's own from now on (the boss's numbers, its HP too, to edit); a
-  // boss is set by picking one in the catalogue
+  // Custom: the enemy is the team's own from now on (the boss's level and RES, to edit; not its
+  // HP); a boss is set by picking one in the catalogue
   const pickMode = (next: Mode) => {
     setMode(next)
     if (next === 'custom' && team?.enemyPreset)
-      database.teams.set(teamId, (team) => {
-        const hp = enemyHpOf(team)
+      setEnemy((team) => {
         delete team.enemyPreset
-        if (hp) team.enemyHp = hp
+        delete team.enemyHp
       })
   }
   if (!team) return null
@@ -241,10 +239,10 @@ function HpField({
 
 function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
   const { t } = useTranslation(['page_team', 'sheet_gen'])
-  const database = useDatabase()
+  const setEnemy = useSetEnemy(teamId)
   const { enemyOverride } = team
   const set = (key: keyof Team['enemyOverride'], value: number | undefined) =>
-    database.teams.set(teamId, (team) => {
+    setEnemy((team) => {
       if (value === undefined) delete team.enemyOverride[key]
       else team.enemyOverride[key] = value
     })
@@ -275,7 +273,7 @@ function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
           <HpField
             value={team.enemyHp}
             onChange={(hp) =>
-              database.teams.set(teamId, (team) => {
+              setEnemy((team) => {
                 if (hp === undefined) delete team.enemyHp
                 else team.enemyHp = hp
               })
@@ -350,7 +348,7 @@ function CustomEnemy({ teamId, team }: { teamId: string; team: Team }) {
           <Pill
             disabled={allTen}
             onClick={() =>
-              database.teams.set(teamId, (team) => {
+              setEnemy((team) => {
                 for (const e of allElementWithPhyKeys)
                   team.enemyOverride[`${e}_enemyRes_`] = 10
               })
@@ -474,7 +472,7 @@ export const levelOf = (key: StygianDifficultyKey) =>
 
 function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
   const { t, i18n } = useTranslation(['page_team', 'stygian'])
-  const database = useDatabase()
+  const setEnemy = useSetEnemy(teamId)
   const applied = appliedStygianPreset(team)
   const [difficulty, setDifficulty] = useState<StygianDifficultyKey>(
     applied?.difficulty ?? 'dire'
@@ -485,7 +483,7 @@ function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
   const [search, setSearch] = useState('')
   const season = currentStygianSeason()
   const apply = (boss: StygianBoss, phase: StygianPhaseKey = boss.main) =>
-    database.teams.set(teamId, (team) => {
+    setEnemy((team) => {
       Object.assign(
         team.enemyOverride,
         stygianEnemy(boss.id, phase, levelOf(difficulty))
@@ -496,7 +494,7 @@ function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
     setDifficulty(key)
     // (the boss set: at that difficulty's level)
     if (applied)
-      database.teams.set(teamId, (team) => {
+      setEnemy((team) => {
         team.enemyOverride.enemyLevel = levelOf(key)
       })
   }

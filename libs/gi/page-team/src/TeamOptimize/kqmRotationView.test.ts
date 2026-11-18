@@ -32,13 +32,14 @@ describe('the KQM tab’s rotation', () => {
     expect(kqmRotationView(next).attacks).toEqual({ Zibai: [attack(5)] })
     expect(kqmRotationView(next).rotationTime).toBe(18.3)
   })
-  it('passes other settings through, and the run key ignores the copy', () => {
+  it("keeps its own on-field member, and the run key ignores the rotation's copy", () => {
     const teamOpt = own()
     kqmRotationSetUp(teamOpt)
     const next = kqmRotationUpdate((o) => {
       o.onField = 'Zibai'
     })(structuredClone(teamOpt)) as TeamOpt
-    expect(next.onField).toBe('Zibai')
+    expect(next.onField).toBe(teamOpt.onField)
+    expect(kqmRotationView(next).onField).toBe('Zibai')
     const view = kqmRotationView(next)
     expect(kqmRunKey(view)).toBe(
       kqmRunKey({ ...view, kqm: { ...view.kqm!, attacks: {} } })
