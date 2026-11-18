@@ -23,6 +23,7 @@ import * as artifactMap from '../../../dm/src/mapping/artifact'
 import { characterIdMap } from '../../../dm/src/mapping/character'
 import type { EnkaResponse } from './enkaToGood'
 import { PROP } from './enkaToGood'
+import type { GenResult } from './gcwebArtifacts'
 
 const { artifactIdMap, artifactSlotMap } = artifactMap
 
@@ -202,6 +203,30 @@ export function artifactsToPayload(
           .map((s) => ({ prop: PROP_ID[s.key], value: s.value })),
       })),
   }
+}
+
+/** I 5 manufatti generati da una build (KQM o TC, gcwebArtifacts.ts) come build per gc-web: stessi ID, valori come li mostra il gioco. */
+export function genResultToPayload(
+  characterKey: CharacterKey,
+  gender: 'F' | 'M',
+  name: string,
+  result: GenResult
+): JuanLabBuild {
+  return artifactsToPayload(
+    characterKey,
+    gender,
+    name,
+    result.pieces.map((piece) => ({
+      setKey: piece.setKey,
+      slotKey: piece.slotKey,
+      level: piece.level,
+      rarity: piece.rarity,
+      mainStatKey: piece.mainStatKey,
+      location: '',
+      lock: false,
+      substats: piece.substats.map(({ key, value }) => ({ key, value })),
+    }))
+  )
 }
 
 /* ---------- gc-web -> Juan-optimizer ---------- */
