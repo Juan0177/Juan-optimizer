@@ -28,6 +28,7 @@ import { input } from '@genshin-optimizer/gi/wr'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { attackElement } from './DamageShare'
 import {
+  rotationIdOf,
   simulateWritten,
   useMemberNames,
   useRotationSettings,
@@ -212,8 +213,10 @@ export function useRotationApplications(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied } = useRotationText(teamId)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  // (the tab's own rotation: Team optimize's, or KQM's)
+  const rid = rotationIdOf(teamId, kqm)
+  const { applied } = useRotationText(rid)
+  const { opener, timing, frameData } = useRotationSettings(rid)
   const team = useSimTeam(members, kqm, kqmBuilds)
   const names = useMemberNames(members)
   // (played after the page: a heavy team's rotation takes a moment)

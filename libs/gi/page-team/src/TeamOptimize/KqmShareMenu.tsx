@@ -82,7 +82,7 @@ import {
 } from './consInvestment'
 import { formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
-import { useMemberNames } from './RotationWriter'
+import { kqmRotationId, useMemberNames } from './RotationWriter'
 import { Disclosure, hairline, insetSx, type } from './ui'
 
 type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
@@ -481,7 +481,9 @@ function useShareText(props: ShareProps) {
 
 /** The written rotation, its members' turns apart */
 function rotationTurns(teamId: string) {
-  const text = globalThis.localStorage?.getItem(`teamOptRotationText_${teamId}`)
+  const text = globalThis.localStorage?.getItem(
+    `teamOptRotationText_${kqmRotationId(teamId)}`
+  )
   return (text ?? '')
     .split(/\s*(?:->|→|\n)+\s*/)
     .map((turn) => turn.replace(/^>\s*/, '').trim())
@@ -504,7 +506,10 @@ function shareRecord(
   const { teamId, result, setup, members, rotationTime, characterKey } = props
   const stored = (key: string) => {
     try {
-      return globalThis.localStorage?.getItem(`${key}_${teamId}`) ?? undefined
+      return (
+        globalThis.localStorage?.getItem(`${key}_${kqmRotationId(teamId)}`) ??
+        undefined
+      )
     } catch {
       return undefined
     }
@@ -843,7 +848,9 @@ function ConstellationPicture({
   const keys = s.keys
   const names = useMemberNames(members)
   const teamText =
-    globalThis.localStorage?.getItem(`teamOptRotationText_${teamId}`) ?? ''
+    globalThis.localStorage?.getItem(
+      `teamOptRotationText_${kqmRotationId(teamId)}`
+    ) ?? ''
   const [view, setView] = useState<CharacterKey | 'team'>('team')
   // each member's rotation at each constellation (kept per team and member)
   const [rotationsOf, setRotationsOf] = useState<

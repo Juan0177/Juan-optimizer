@@ -17,6 +17,7 @@ import {
   appliedStygianPreset,
   CharacterName,
   enemyFight,
+  fightBuffShare,
   evaluateTeamRotation,
   kqmTeamOverrides,
   MOONGECKO_BOSS,
@@ -72,9 +73,12 @@ import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { RotationTransfer } from './RotationTransfer'
 import {
+  copyRotationToKqm,
   RotationConfigureButton,
+  rotationIdOf,
   useRotationText,
   useRotationWriter,
+  useSimTeam,
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
@@ -97,7 +101,15 @@ import {
 } from './ui'
 import type { KqmRunState } from './useKqmRun'
 import { useKqmRun } from './useKqmRun'
-import { kqmRunKey, teamOptRunKey, useTeamOpt } from './useTeamOpt'
+import {
+  kqmRotationSetUp,
+  kqmRotationUpdate,
+  kqmRotationView,
+  kqmRunKey,
+  teamOptRunKey,
+  type TeamOptUpdate,
+  useTeamOpt,
+} from './useTeamOpt'
 import type { TeamOptRunState, TeamOptStatus } from './useTeamOptRun'
 import { useTeamOptRun } from './useTeamOptRun'
 
@@ -137,12 +149,31 @@ export default function TeamBuildWorkspace({
   // results: not known, not flagged)
   const enemyChanged = (enemy?: RunEnemy) =>
     !!enemy && !!team && !sameEnemy(enemy.enemyOverride, team.enemyOverride)
-  const [teamOpt, setTeamOpt] = useTeamOpt(teamId)
+  const [storedTeamOpt, setStoredTeamOpt] = useTeamOpt(teamId)
+  // Each tab has its own rotation: on the KQM tab the page reads and changes KQM's (its attacks
+  // and rotation time), at its constellations; the rest of the settings are shared
+  const teamOpt = useMemo(
+    () => (mode === 'kqm' ? kqmRotationView(storedTeamOpt) : storedTeamOpt),
+    [mode, storedTeamOpt]
+  )
+  const setTeamOpt = useCallback(
+    (update: TeamOptUpdate) =>
+      setStoredTeamOpt(mode === 'kqm' ? kqmRotationUpdate(update) : update),
+    [mode, setStoredTeamOpt]
+  )
   // `teamData` is recomputed whenever a member, a build or a conditional changes
   const members = useMemo(
     () => teamOptMembers(database, teamId),
     [database, teamId, team, teamData]
   )
+  // (the KQM tab's rotation, the first time: a copy of Team optimize's)
+  const kqmSetUp = storedTeamOpt.kqm?.attacks !== undefined
+  const ownConstellations = useSimTeam(members).constellations
+  useEffect(() => {
+    if (mode !== 'kqm' || kqmSetUp) return
+    copyRotationToKqm(teamId, ownConstellations)
+    setStoredTeamOpt(kqmRotationSetUp)
+  }, [mode, kqmSetUp, teamId, setStoredTeamOpt, ownConstellations])
   const buffs = useTeamBuffs(teamId, teamData)
   // the rotation with the builds equipped now: Team optimize's only (KQM theorycrafting never
   // counts or shows the members' own builds)
@@ -171,9 +202,11 @@ export default function TeamBuildWorkspace({
     0
   )
   // the first visit (no attacks, no written rotation, no choice made yet): the start screen
-  const { applied: writtenRotation } = useRotationText(teamId)
+  const { applied: writtenRotation } = useRotationText(
+    rotationIdOf(teamId, mode === 'kqm')
+  )
   const { manual, chooseManual } = useManualStart(teamId)
-  // (both tabs: the rotation is shared by Team Optimize and KQM Theorycrafting)
+  // (each tab: its own rotation)
   const showStart = !attackCount && !writtenRotation && !manual
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
@@ -353,6 +386,18 @@ export default function TeamBuildWorkspace({
         }
       : undefined
   }, [team, fightNow, members])
+  // the Moongecko's Disentangled (+15% CRIT Rate, +50% DMG Bonus) averaged over the fight's damage
+  // time, added while a run ranks builds: a build then leaves room for its CRIT Rate
+  const fightBuffs = useMemo(() => {
+    const share = fightBuffShare(
+      team && fightNow ? enemyFight(team, fightNow) : undefined
+    )
+    return share
+      ? Object.fromEntries(
+          members.map((m) => [m.characterKey, { ...share.bonus }])
+        )
+      : undefined
+  }, [team, fightNow, members])
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
@@ -496,7 +541,7 @@ export default function TeamBuildWorkspace({
                 id={rotationTitleId}
                 info={t(
                   'teamOpt.rotation.info',
-                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                  'Add each member’s attacks and how often they hit in one rotation. The buffs are the ones that are on in Team settings and on the characters’ tabs: open an attack to turn off one that is not up during it, to put it in another state, or to limit one to its first hits (Shenhe’s quills, a buff that runs out).'
                 )}
               >
                 {t('teamOpt.rotation.title', 'Rotation')}
@@ -516,7 +561,7 @@ export default function TeamBuildWorkspace({
               <InfoTooltipInline
                 title={t(
                   'teamOpt.rotation.info',
-                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                  'Add each member’s attacks and how often they hit in one rotation. The buffs are the ones that are on in Team settings and on the characters’ tabs: open an attack to turn off one that is not up during it, to put it in another state, or to limit one to its first hits (Shenhe’s quills, a buff that runs out).'
                 )}
               />
             </Box>
@@ -619,6 +664,11 @@ export default function TeamBuildWorkspace({
                 setTeamOpt={setTeamOpt}
                 writer={writer}
                 disabled={running}
+                kqm={
+                  mode === 'kqm'
+                    ? (teamOpt.kqm ?? defaultTeamOptKqm)
+                    : undefined
+                }
               />
               {/* (a written rotation says who is on the field for each of its attacks: only
                   attacks entered by hand use this) */}
@@ -788,7 +838,7 @@ export default function TeamBuildWorkspace({
         <RunDialog
           open
           onClose={() => setRunDialog(false)}
-          onStart={() => run(lowHp?.states)}
+          onStart={() => run(lowHp?.states, fightBuffs)}
           teamId={teamId}
           members={members}
           teamData={teamData}

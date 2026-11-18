@@ -212,6 +212,13 @@ export interface TeamOptEnergyCalculator {
 
 /** KQM mode's settings */
 export interface TeamOptKqm {
+  /**
+   * The KQM tab's own rotation: each member's attacks in one rotation (the Team optimize tab's
+   * are `TeamOpt.attacks`). Absent: not set up yet (the tab starts with a copy of those)
+   */
+  attacks?: Partial<Record<CharacterKey, TeamOptAttack[]>>
+  /** The KQM tab's own rotation length (seconds; absent: the default) */
+  rotationTime?: number
   /** User-entered total ER% per member, before weapon energy adjustments. Required to run. */
   energyRecharge?: Partial<Record<CharacterKey, number>>
   /** A constellation per member over the KQM standard (4★ C6, 5★ C0) */
@@ -439,24 +446,26 @@ const energyCalculatorSchema = z.object({
   }),
 })
 
+const attacksSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((record) => {
+    const result: Partial<Record<CharacterKey, TeamOptAttack[]>> = {}
+    for (const [key, attacks] of Object.entries(record)) {
+      if (!allCharacterKeys.includes(key as CharacterKey)) continue
+      if (!Array.isArray(attacks)) continue
+      result[key as CharacterKey] = attacks
+        .flatMap((attack) => {
+          const parsed = attackSchema.safeParse(attack)
+          return parsed.success ? [stripUndefined(parsed.data)] : []
+        })
+        .slice(0, TEAM_OPT_MAX_ATTACKS)
+    }
+    return result
+  })
+
 const teamOptSchema = z.object({
-  attacks: z
-    .record(z.string(), z.unknown())
-    .catch({})
-    .transform((record) => {
-      const result: Partial<Record<CharacterKey, TeamOptAttack[]>> = {}
-      for (const [key, attacks] of Object.entries(record)) {
-        if (!allCharacterKeys.includes(key as CharacterKey)) continue
-        if (!Array.isArray(attacks)) continue
-        result[key as CharacterKey] = attacks
-          .flatMap((attack) => {
-            const parsed = attackSchema.safeParse(attack)
-            return parsed.success ? [stripUndefined(parsed.data)] : []
-          })
-          .slice(0, TEAM_OPT_MAX_ATTACKS)
-      }
-      return result
-    }),
+  attacks: attacksSchema,
   keep: zodFilteredArray(allCharacterKeys, []),
   useOtherChars: zodBoolean(false),
   // (absent when empty: a result found before the list existed is not "found with other settings")
@@ -522,6 +531,19 @@ const teamOptSchema = z.object({
   topN: z.number().int().min(2).max(5).optional().catch(undefined),
   kqm: z
     .object({
+      attacks: z
+        .unknown()
+        .optional()
+        .transform((v) =>
+          v === undefined ? undefined : attacksSchema.parse(v)
+        ),
+      rotationTime: z
+        .number()
+        .finite()
+        .positive()
+        .max(600)
+        .optional()
+        .catch(undefined),
       refinement5: z.number().int().min(1).max(5).catch(1),
       refinement4: z.number().int().min(1).max(5).catch(5),
       refinementBp: z.number().int().min(1).max(5).optional().catch(undefined),

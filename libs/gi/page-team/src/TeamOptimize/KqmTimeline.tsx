@@ -21,6 +21,7 @@ import { buffsForAttacker } from './buffs'
 import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
+  kqmRotationId,
   simulateWritten,
   useMemberNames,
   useRotationSettings,
@@ -121,8 +122,11 @@ export function KqmTimeline({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied } = useRotationText(teamId)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  // (the KQM tab's own rotation)
+  const { applied } = useRotationText(kqmRotationId(teamId))
+  const { opener, timing, frameData } = useRotationSettings(
+    kqmRotationId(teamId)
+  )
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
   const team = useMemo(
     () => (gear ? { ...simTeam, gear: { ...simTeam.gear, ...gear } } : simTeam),

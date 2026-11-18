@@ -49,7 +49,10 @@ export interface FightTeam {
    * Its first rotation from no energy (Stygian Onslaught starts at none): its DPS by element
    * without Bursts (against `baseRes`), for its first `seconds`
    */
-  opening?: { dps: Partial<Record<ElementWithPhyKey, number>>; seconds: number }
+  opening?: {
+    dps: Partial<Record<ElementWithPhyKey, number>>
+    seconds: number
+  }
 }
 
 /**
@@ -1057,3 +1060,38 @@ export function enemyFight(
       : undefined
   return enemy.enemyHp ? customFight(enemy.enemyHp, team) : undefined
 }
+
+/**
+ * The share of the fight's damage time a state with buffs of its own takes (the Moongecko's
+ * Disentangled), and those buffs averaged over it: what a Team optimize run adds while it ranks
+ * builds (one calculation, not one per state), so a build does not cap its CRIT Rate without
+ * Disentangled's. Out of reach and cocooned stretches are not damage time (the cocoon's damage
+ * is a sliver, its −100% CRIT Rate left out).
+ */
+export function fightBuffShare(
+  estimate: FightEstimate | undefined
+):
+  | { share: number; bonus: { critRate_: number; all_dmg_: number } }
+  | undefined {
+  const segments = estimate?.timeline?.segments
+  if (!segments?.length) return undefined
+  let damage = 0
+  let freed = 0
+  for (const { start, end, state, dps } of segments) {
+    if (!((dps ?? 0) > 0) || state === 'cocooned' || state === 'enhancedCocoon')
+      continue
+    damage += end - start
+    if (state === 'disentangled') freed += end - start
+  }
+  if (!(damage > 0) || !(freed > 0)) return undefined
+  const share = freed / damage
+  return {
+    share,
+    bonus: {
+      critRate_: MOONGECKO_DISENTANGLED.critRate_ * share,
+      all_dmg_: MOONGECKO_DISENTANGLED.all_dmg_ * share,
+    },
+  }
+}
+/** Disentangled's buffs (percent points) */
+export const MOONGECKO_DISENTANGLED = { critRate_: 15, all_dmg_: 50 } as const

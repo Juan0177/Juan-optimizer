@@ -95,7 +95,7 @@ import {
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
 import { KqmShareMenu } from './KqmShareMenu'
-import { useRotationSettings } from './RotationWriter'
+import { kqmRotationId, useRotationSettings } from './RotationWriter'
 import {
   KqmArtifactStandard,
   kqmStandardName,
@@ -204,7 +204,8 @@ function useRotationEnergy(
   latest.current = teamOpt
   let text = ''
   try {
-    text = localStorage.getItem(`teamOptRotationText_${teamId}`) ?? ''
+    text =
+      localStorage.getItem(`teamOptRotationText_${kqmRotationId(teamId)}`) ?? ''
   } catch {
     // (no storage: nothing written)
   }
@@ -219,7 +220,9 @@ function useRotationEnergy(
   )
   const keys = members.map((m) => m.characterKey).join()
   // (the opener and the timing settings too: the replay plays them)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  const { opener, timing, frameData } = useRotationSettings(
+    kqmRotationId(teamId)
+  )
   const played = JSON.stringify([opener, timing, frameData])
   const rotation = text.trim() ? `${text.trim()}|${played}` : ''
   useEffect(() => {

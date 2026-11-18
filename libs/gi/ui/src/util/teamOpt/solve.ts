@@ -19,7 +19,7 @@ import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
 import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
-import { teamOptBonusStats, teamOptMembers } from './data'
+import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
 import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import {
@@ -502,6 +502,7 @@ export async function optimizeTeam({
   maxRounds = 4,
   builds = 1,
   attackStates,
+  rankingBonusStats,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -518,6 +519,11 @@ export async function optimizeTeam({
    * passive at its uptime against the team's enemy
    */
   attackStates?: readonly RunAttackState[]
+  /**
+   * Bonus stats per member added only while builds are ranked (the fight's state buffs averaged
+   * over it, `fightBuffShare`): the damage the result shows is without them
+   */
+  rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -634,10 +640,22 @@ export async function optimizeTeam({
   const mainStatAssumptionLevel = teamOpt.assumeMaxMain ? 20 : 0
   const attacks = withAttackStates(teamOpt.attacks, attackStates)
   // the extra buffs (food, an Abyss blessing...) of each member
-  const bonusStats = teamOptBonusStats(
+  const shownBonusStats = teamOptBonusStats(
     teamOpt,
     members.map((m) => m.characterKey)
   )
+  // (ranking: with the fight's averaged state buffs too)
+  const bonusStats = rankingBonusStats
+    ? Object.fromEntries(
+        members.map(({ characterKey }) => [
+          characterKey,
+          addBonusStats(
+            shownBonusStats[characterKey],
+            rankingBonusStats[characterKey]
+          ),
+        ])
+      )
+    : shownBonusStats
 
   // The starting state: the members' current builds (an artifact in two of them stays with the
   // first) and weapons. An optimized member's excluded artifacts (the team's list, and its own
@@ -704,7 +722,7 @@ export async function optimizeTeam({
     profile.evalMs += performance.now() - t0
     return result
   }
-  const evaluateInRaw = (s: TeamState) => {
+  const evaluateInRaw = (s: TeamState, shown = false) => {
     const weapons = weaponsIn(s)
     return evaluateTeamRotation(database, teamId, gender, {
       arts: fixedArtsIn(s),
@@ -713,9 +731,12 @@ export async function optimizeTeam({
       statFilters: teamStatFilters(statFilters, weapons, teamOpt),
       weapons,
       onField: teamOpt.onField,
-      bonusStats,
+      bonusStats: shown ? shownBonusStats : bonusStats,
     })
   }
+  /** `s`'s damage as the result shows it (without the ranking's bonus stats) */
+  const shownIn = (s: TeamState, ranked: TeamOptEvaluation) =>
+    rankingBonusStats ? (evaluateInRaw(s, true) ?? ranked) : ranked
 
   const before = evaluateIn(state)
   if (!before) return undefined
@@ -1640,7 +1661,7 @@ export async function optimizeTeam({
   // The next best team builds: each optimized member's next best builds (the others as they are,
   // their pieces out of reach), by the team's damage. One member changes at a time; one that
   // would leave another member's requirements unmet is passed over.
-  const alternatives: TeamOptAlternative[] = []
+  const alternatives: (TeamOptAlternative & { state: TeamState })[] = []
   if (builds > 1) {
     const candidates: {
       member: TeamOptMember
@@ -1716,10 +1737,15 @@ export async function optimizeTeam({
         builds: next.builds,
         after: evaluation,
         changed: member.characterKey,
+        state: next,
       })
     }
     alternatives.sort((a, b) => b.after.total - a.after.total)
   }
+  // the damage shown: without the ranking's bonus stats
+  for (const alternative of alternatives)
+    alternative.after = shownIn(alternative.state, alternative.after)
+
   if (process.env['NODE_ENV'] === 'development')
     console.log('[TeamOpt] profile', {
       ...profile,
@@ -1763,14 +1789,16 @@ export async function optimizeTeam({
   return {
     builds: state.builds,
     weapons: { ...state.weaponIds },
-    before,
-    after,
+    before: shownIn(start, before),
+    after: shownIn(state, after),
     rounds,
     optimized: order.map((m) => m.characterKey),
     energy,
     ...(untickedWeapons.length ? { untickedWeapons } : {}),
     ...(startBreaksSetRules.length ? { startBreaksSetRules } : {}),
     ...(startUntickedWeapons.length ? { startUntickedWeapons } : {}),
-    ...(alternatives.length ? { alternatives } : {}),
+    ...(alternatives.length
+      ? { alternatives: alternatives.map(({ state: _, ...a }) => a) }
+      : {}),
   }
 }

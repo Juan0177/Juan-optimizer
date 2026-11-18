@@ -122,9 +122,9 @@ describe('the first rotations from the start', () => {
     expect(firstRotations({ edits: {} })).toBeUndefined()
   })
   it('KQM’s replay counts the same rotations', () => {
-    localStorage.setItem(`teamOptRotationText_${teamId}`, TEXT)
+    localStorage.setItem(`teamOptRotationText_${teamId}_kqm`, TEXT)
     localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+      `teamOptRotationTiming_${teamId}_kqm`,
       JSON.stringify({ edits: {}, rotations: 1 })
     )
     const replay = kqmRotationReplay({
@@ -252,10 +252,10 @@ describe('the first rotation written apart, counted from the start', () => {
     expect(hits(repeating)).toBeCloseTo(hits(play(undefined, '')), 1)
   })
   it('KQM’s replay counts the opener the same way', () => {
-    localStorage.setItem(`teamOptRotationText_${teamId}`, TEXT)
-    localStorage.setItem(`teamOptRotationOpener_${teamId}`, OPENER)
+    localStorage.setItem(`teamOptRotationText_${teamId}_kqm`, TEXT)
+    localStorage.setItem(`teamOptRotationOpener_${teamId}_kqm`, OPENER)
     localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+      `teamOptRotationTiming_${teamId}_kqm`,
       JSON.stringify({ edits: {}, rotations: 1 })
     )
     const replay = kqmRotationReplay({
@@ -274,7 +274,7 @@ describe('the first rotation written apart, counted from the start', () => {
     expect(played.rotationTime).toBeCloseTo(writtenSeconds(play(1))!, 1)
     // ("Counted" off: the rotation after the setup)
     localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+      `teamOptRotationTiming_${teamId}_kqm`,
       JSON.stringify({ edits: {}, rotations: 1, openerSetup: true })
     )
     // (a replay reads the settings when it is made)
@@ -294,6 +294,6 @@ describe('the first rotation written apart, counted from the start', () => {
       writtenSeconds(play(1, OPENER, TEXT, true))!,
       1
     )
-    localStorage.removeItem(`teamOptRotationOpener_${teamId}`)
+    localStorage.removeItem(`teamOptRotationOpener_${teamId}_kqm`)
   })
 })

@@ -49,6 +49,7 @@ import {
   useMemberNames,
   useRotationSettings,
   useRotationText,
+  rotationIdOf,
   useSimTeam,
   WriterQuickRow,
   type WrittenRotation,
@@ -105,12 +106,15 @@ export function RotationInline({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied, text, setText, isDraft } = useRotationText(teamId)
-  const settings = useRotationSettings(teamId)
+  // (the tab's own rotation: Team optimize's, or KQM's)
+  const rid = rotationIdOf(teamId, kqm)
+  const { applied, text, setText, isDraft } = useRotationText(rid)
+  const settings = useRotationSettings(rid)
   const names = useMemberNames(members)
   const team = useSimTeam(members, kqm, kqmBuilds)
-  // (the attacks a rotation leaves on the team are Team optimize's: always the members' own)
-  const ownTeam = useSimTeam(members)
+  // (the attacks a rotation leaves are the tab's: at the members' own constellations, or KQM's
+  // without the shown builds' gear)
+  const ownTeam = useSimTeam(members, kqm)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [focused, setFocused] = useState(false)
   // read as steps while it is the rotation in use; a text field while it is written or changed
@@ -208,6 +212,8 @@ export function RotationInline({
       opener,
       timing,
       frameData,
+      kqm: !!kqm,
+      constellations: ownTeam.constellations,
     })
     if (undo) writer.onApplied(undo)
     inputRef.current?.blur()
@@ -628,7 +634,7 @@ function Step({
 }
 
 /**
- * The rotations Team optimize and KQM count, on the page beside the rotation: the pace it keeps
+ * The rotations a tab counts (Team optimize's, or KQM's own), on the page beside the rotation: the pace it keeps
  * repeating, or the first 1–6 from the start. Changing it plays the rotation in use again with it
  * (Undo as for using a rotation).
  */
@@ -638,7 +644,10 @@ export function RotationsSetting({
   setTeamOpt,
   writer,
   disabled,
+  kqm,
 }: {
+  /** KQM theorycrafting's settings, on its tab: its own rotation, at its constellations */
+  kqm?: TeamOptKqm
   teamId: string
   members: TeamOptMember[]
   setTeamOpt: (update: TeamOptUpdate) => void
@@ -648,11 +657,12 @@ export function RotationsSetting({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied } = useRotationText(teamId)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  const rid = rotationIdOf(teamId, kqm)
+  const { applied } = useRotationText(rid)
+  const { opener, timing, frameData } = useRotationSettings(rid)
   const names = useMemberNames(members)
-  // (the attacks a rotation leaves on the team are Team optimize's: the members' own)
-  const ownTeam = useSimTeam(members)
+  // (the tab's: the members' own constellations, or KQM's)
+  const ownTeam = useSimTeam(members, kqm)
   const first = firstRotations(timing)
   const set = (rotations: number | undefined) => {
     const { rotations: _previous, ...rest } = timing
@@ -691,6 +701,8 @@ export function RotationsSetting({
             opener,
             timing: next,
             frameData,
+            kqm: !!kqm,
+            constellations: ownTeam.constellations,
           })
           if (undo) writer.onApplied(undo)
           return
@@ -699,14 +711,14 @@ export function RotationsSetting({
         // (a rotation that does not play: the setting is still saved)
       }
     }
-    saveRotationTiming(teamId, next)
+    saveRotationTiming(rid, next)
   }
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <FieldLabel
         tip={t(
           'teamOpt.timing.rotationsTip',
-          'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Team optimize and KQM use the same choice.'
+          'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Each tab keeps its own.'
         )}
       >
         {t('teamOpt.timing.rotations', 'Rotations')}

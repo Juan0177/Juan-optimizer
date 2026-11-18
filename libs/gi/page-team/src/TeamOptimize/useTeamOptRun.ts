@@ -11,6 +11,7 @@ import {
 } from '@genshin-optimizer/gi/solver'
 import { compactArtifacts } from '@genshin-optimizer/gi/solver-tc'
 import type {
+  BonusStats,
   RunAttackState,
   RunEnemy,
   TeamOptResult,
@@ -168,7 +169,9 @@ export function useTeamOptRun(teamId: string) {
   const run = useCallback(
     async (
       /** States every attack gets (e.g. Wolf's Gravestone's uptime against the enemy) */
-      attackStates?: readonly RunAttackState[]
+      attackStates?: readonly RunAttackState[],
+      /** Bonus stats added while builds are ranked (the fight's averaged state buffs) */
+      rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
     ) => {
       let cancelled = false
       let stopSolver: (() => void) | undefined
@@ -258,6 +261,7 @@ export function useTeamOptRun(teamId: string) {
           solve,
           builds: teamOpt.topN ?? 1,
           attackStates,
+          rankingBonusStats,
           isCancelled: () => cancelled,
           onStep: async (step) => {
             status.current.step = step
