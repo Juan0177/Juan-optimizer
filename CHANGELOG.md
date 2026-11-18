@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.19.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.0) (2026-11-19)
+
+### New
+
+- Time to defeat now follows the mechanics of five more Stygian Onslaught bosses, from the game files: the Battle-Hardened Domovoy Sculptor, the Guardian Blade of Drifting Snow, the Chimeric Winged Lion and both Secret Source Automatons. The fight timeline shows each one's states, wards, shields and backlash.
+- Domovoy Sculptor: Radiance: Stellar Glimmer on it as it sculpts turns the sculptures into statues that explode on it and take its RES down, as the game does. Without Radiance it stays at 90% RES.
+- Guardian Blade of Drifting Snow: its Ice Coffin at 81% HP is worn down by the team's Pyro, Electro, Anemo and Geo, or turned into a shield by Radiance. A coffin that holds 20 s gives it 10% of its HP back, and a second coffin follows.
+- Chimeric Winged Lion: its Electro Ward is worn down by the team's reactions and by its own shockwave under Radiance. Breaking it brings the backlash, paralysis, flight and vortex.
+- Secret Source Automatons: the Overseer Device's Sweeper Modes stop under Cryo hits and turn to Forced Counterstrike with Nightsoul's Blessing; Lysis Shears' shield holds until Nightsoul's Blessing fills its Adaptive Countermeasures.
+
 ## [v1.18.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.18.0) (2026-11-19)
 
 ### New
