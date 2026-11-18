@@ -16,6 +16,8 @@ export type BuildStatus = {
   failed: number // tested but fail the filter criteria, e.g., not enough EM
   skipped: number
   total: number
+  /** Every combination, set rules not applied (the GPU's sweep), until `total` is known */
+  upper?: number
   testedPerSecond: number // number of configs tested in the last second (none are skipped)
   skippedPerSecond: number // number of configs skipped in the last second (none are tested)
   startTime?: number
@@ -78,6 +80,7 @@ export default function BuildAlert({
     failed,
     skipped,
     total,
+    upper,
     testedPerSecond,
     skippedPerSecond,
     startTime,
@@ -91,8 +94,14 @@ export default function BuildAlert({
   if (!active && !(tested + skipped)) return null
 
   const hasTotal = Number.isFinite(total) && total > 0
+  // (the GPU's sweep before the exact total: a share of every combination, never shown as a count)
+  const hasUpper = !hasTotal && Number.isFinite(upper) && (upper ?? 0) > 0
   const checked = tested + skipped
-  const progress = hasTotal ? Math.min(100, (checked / total) * 100) : 0
+  const progress = hasTotal
+    ? Math.min(100, (checked / total) * 100)
+    : hasUpper
+      ? Math.min(100, (checked / upper!) * 100)
+      : 0
   const elapsed = (finishTime ?? performance.now()) - (startTime ?? Number.NaN)
   const noBuild = !active && tested - failed <= 0
 
@@ -111,6 +120,8 @@ export default function BuildAlert({
       <>
         {count(checked)} of {count(total)} · {Math.floor(progress)}%
       </>
+    ) : hasUpper ? (
+      <>{Math.floor(progress)}%</>
     ) : (
       'Preparing…'
     )
@@ -123,7 +134,7 @@ export default function BuildAlert({
     )
     bar = (
       <LinearProgress
-        variant={hasTotal ? 'determinate' : 'indeterminate'}
+        variant={hasTotal || hasUpper ? 'determinate' : 'indeterminate'}
         value={progress}
         color="primary"
         aria-label="Optimization progress"

@@ -1425,6 +1425,8 @@ function RunProgress({
   const step = status.step ?? state.step
   const seconds = (performance.now() - state.startTime) / 1000
   const total = Number.isFinite(status.total) ? status.total : 0
+  // (the GPU's sweep before the exact total: a share of every combination, not a count of builds)
+  const upper = status.upper && Number.isFinite(status.upper) ? status.upper : 0
   const done = status.tested + status.skipped
   return (
     <>
@@ -1466,18 +1468,23 @@ function RunProgress({
             seconds: Math.round(seconds),
           })}
           {' · '}
-          {!total
-            ? t('teamOpt.run.setup', 'setting up the search')
-            : !done
-              ? t('teamOpt.run.searching', {
-                  defaultValue: 'searching {{total}} builds',
-                  total: formatDamage(total),
-                })
-              : t('teamOpt.run.builds', {
-                  defaultValue: '{{done}} of {{total}} builds',
-                  done: formatDamage(done),
-                  total: formatDamage(total),
-                })}
+          {!total && upper
+            ? t('teamOpt.run.share', {
+                defaultValue: 'searching · {{percent}}%',
+                percent: Math.floor(Math.min(1, done / upper) * 100),
+              })
+            : !total
+              ? t('teamOpt.run.setup', 'setting up the search')
+              : !done
+                ? t('teamOpt.run.searching', {
+                    defaultValue: 'searching {{total}} builds',
+                    total: formatDamage(total),
+                  })
+                : t('teamOpt.run.builds', {
+                    defaultValue: '{{done}} of {{total}} builds',
+                    done: formatDamage(done),
+                    total: formatDamage(total),
+                  })}
         </Box>
       </Typography>
       <ProgressLine
