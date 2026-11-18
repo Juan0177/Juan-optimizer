@@ -554,7 +554,14 @@
       "memberDps": "{{value}} DPS",
       "rotation": "Rotazione",
       "seconds": "{{value}} s",
-      "rotationDamage": "Danno per rotazione"
+      "rotationDamage": "Danno per rotazione",
+      "view": {
+        "normal": "Normale",
+        "detailed": "Dettagliata",
+        "label": "Vista della card"
+      },
+      "mains": "Statistiche principali",
+      "outOfCombat": "Statistiche (fuori combattimento)"
     },
     "result": {
       "dps": "DPS della squadra",

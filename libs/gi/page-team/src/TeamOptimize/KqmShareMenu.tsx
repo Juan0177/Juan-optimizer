@@ -29,7 +29,9 @@ import {
   KQM_CARD_HEIGHT,
   KQM_CARD_WIDTH,
   kqmCardFace,
+  kqmCardHeight,
   kqmDefaultExcludedWeapons,
+  kqmOutOfCombatStats,
   kqmRefinement,
   kqmSetsId,
   kqmTalentLevel,
@@ -80,13 +82,16 @@ import {
 import { formatRateFull } from './format'
 import {
   betaOf,
+  type KqmCardView,
   kqmStandardNote,
   kqmTeamCardData,
+  readKqmCardView,
   shareStamp,
+  writeKqmCardView,
 } from './kqmTeamCard'
 import { MemberAvatar } from './MemberAvatar'
 import { useMemberNames } from './RotationWriter'
-import { Disclosure, hairline, insetSx, type } from './ui'
+import { Disclosure, hairline, insetSx, Segmented, type } from './ui'
 
 type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
 
@@ -401,6 +406,8 @@ function useShareText(props: ShareProps) {
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
+    // (the detailed team card's stat names)
+    'keymap',
   ])
   const locale = i18n.language
   const { gender } = useDBMeta()
@@ -524,11 +531,19 @@ function TeamPicture({
   ...props
 }: ShareProps & { onClose: () => void }) {
   const s = useShareText(props)
+  const database = useDatabase()
   const { result, rotationTime, teamId } = props
   const { setup } = props
+  // (the usual sheet, or with each member's stats; the last pick, in this browser)
+  const [view, setViewState] = useState<KqmCardView>(readKqmCardView)
+  const setView = (v: KqmCardView) => {
+    setViewState(v)
+    writeKqmCardView(v)
+  }
   const data = useMemo((): KqmCardData => {
     // (field time: the ER calculator's, from the rotation or as typed)
     const calc = setup.kqm?.energyCalculator
+    const talent = kqmTalentLevel(setup.kqm)
     return kqmTeamCardData({
       t: s.t,
       gender: s.gender,
@@ -540,6 +555,14 @@ function TeamPicture({
         damage: result.after.members[ck] ?? 0,
         er: result.energyRecharge[ck]?.value,
         fieldTime: calc?.members[ck]?.fieldTime,
+        // (out of combat, as the run had the member: its constellation, the KQM talents)
+        stats:
+          view === 'detailed'
+            ? kqmOutOfCombatStats(database, ck, result.builds[ck]!, {
+                constellation: s.cons(ck),
+                talent,
+              })
+            : undefined,
       })),
       total: result.after.total,
       rotationTime,
@@ -549,9 +572,10 @@ function TeamPicture({
       siteName: shareStamp(s.locale),
       locale: s.locale,
     })
-  }, [s, result, rotationTime, teamId, setup])
+  }, [s, result, rotationTime, teamId, setup, view, database])
   const render = useMemo(() => () => renderKqmCard(data), [data])
-  const watermark = () => shareRecord(props, s, 'team', s.beta)
+  const watermark = () => shareRecord(props, s, 'team', s.beta, { view })
+  const viewLabel = s.t('page_team:teamOpt.card.view.label', 'Card view')
   return (
     <CardImageDialog
       title={s.t('page_team:teamOpt.kqm.share.team', 'Team card')}
@@ -560,9 +584,28 @@ function TeamPicture({
         team: s.teamName,
       })}
       fileName={`${safeName(s.teamName)}-kqm`}
-      aspectRatio={`${KQM_CARD_WIDTH} / ${KQM_CARD_HEIGHT}`}
+      // (the detailed sheet is taller: its own height; the usual one as ever)
+      aspectRatio={`${KQM_CARD_WIDTH} / ${view === 'detailed' ? kqmCardHeight(data) : KQM_CARD_HEIGHT}`}
       render={render}
       watermark={watermark}
+      header={
+        <Segmented<KqmCardView>
+          size="small"
+          value={view}
+          aria-label={viewLabel}
+          options={[
+            {
+              value: 'normal',
+              label: s.t('page_team:teamOpt.card.view.normal', 'Normal'),
+            },
+            {
+              value: 'detailed',
+              label: s.t('page_team:teamOpt.card.view.detailed', 'Detailed'),
+            },
+          ]}
+          onChange={setView}
+        />
+      }
       onClose={onClose}
     />
   )

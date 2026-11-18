@@ -1,12 +1,18 @@
 import { artifactDefIcon, weaponAsset } from '@genshin-optimizer/gi/assets'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
-import type { KqmBuild, KqmCardData } from '@genshin-optimizer/gi/ui'
+import type {
+  KqmBuild,
+  KqmCardData,
+  KqmCardDetails,
+  KqmMemberStats,
+} from '@genshin-optimizer/gi/ui'
 import {
   BETA_KEYS,
   BETA_LABEL,
   currentRelease,
   kqmCardFace,
+  statName,
 } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
 import { formatRateFull, localizeDecimal, secondsText } from './format'
@@ -61,6 +67,105 @@ export interface KqmTeamCardMember {
   er?: number
   /** Its share of the rotation's field time (%), as the ER calculator has it */
   fieldTime?: number
+  /** Its build's stats out of combat (`kqmOutOfCombatStats`); given: the detailed sheet's block */
+  stats?: KqmMemberStats
+}
+
+/** Which sheet the KQM cards draw: the usual one, or with each member's stats */
+export type KqmCardView = 'normal' | 'detailed'
+
+/** The KQM cards' last view, in this browser (a per-viewer convenience) */
+export const KQM_CARD_VIEW_KEY = 'juanlab-kqmCardView'
+
+/** The KQM cards' view last picked in this browser; none (or no storage): the usual one */
+export function readKqmCardView(): KqmCardView {
+  try {
+    return globalThis.localStorage?.getItem(KQM_CARD_VIEW_KEY) === 'detailed'
+      ? 'detailed'
+      : 'normal'
+  } catch {
+    return 'normal'
+  }
+}
+
+/** Remembers the KQM cards' view in this browser (nothing when storage is off) */
+export function writeKqmCardView(view: KqmCardView) {
+  try {
+    globalThis.localStorage?.setItem(KQM_CARD_VIEW_KEY, view)
+  } catch {
+    // (private window, blocked storage: the view is simply not remembered)
+  }
+}
+
+/** A stat's official name in `t`'s language (the `keymap` namespace; else `statName`'s) */
+const statLabel = (t: TFunction, key: string) =>
+  t(`keymap:${key}`, { defaultValue: statName(key) })
+
+/** A main stat's name; HP%, ATK% and DEF% keep their % (their names alone read as flat) */
+const mainLabel = (t: TFunction, key: string) => {
+  const name = statLabel(t, key)
+  return ['hp_', 'atk_', 'def_'].includes(key) && !name.includes('%')
+    ? `${name}%`
+    : name
+}
+
+const statFormats = new Map<string, Intl.NumberFormat>()
+/** A stat's value as written: % (fractions) with one decimal, flat values whole; grouped */
+function statValue(key: string, value: number, locale = 'en') {
+  const percent = key.endsWith('_')
+  const id = `${locale}|${percent}`
+  let format = statFormats.get(id)
+  if (!format) {
+    format = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: percent ? 1 : 0,
+      maximumFractionDigits: percent ? 1 : 0,
+      // (Italian groups 4 digits too: "2.315", as the game writes it; Intl.NumberFormat v3,
+      // not in TypeScript's lib yet; an older browser reads it as `true`: "2315")
+      useGrouping: 'always' as unknown as boolean,
+    })
+    statFormats.set(id, format)
+  }
+  return `${format.format(percent ? value * 100 : value)}${percent ? '%' : ''}`
+}
+
+/**
+ * A member's block on the detailed sheet, from its stats out of combat: the three main stats and
+ * the eight stats, named and written in `locale`'s language. `was`: the stats before a change
+ * (KQM Compare's A); a row whose written value differs carries the one before.
+ */
+export function kqmCardDetails(
+  t: TFunction,
+  stats: KqmMemberStats,
+  locale: string | undefined,
+  was?: KqmMemberStats
+): KqmCardDetails {
+  const before = new Map(
+    was?.stats.map(({ key, value }) => [key, statValue(key, value, locale)])
+  )
+  return {
+    mainsTitle: t('page_team:teamOpt.card.mains', 'Main stats'),
+    statsTitle: t(
+      'page_team:teamOpt.card.outOfCombat',
+      'Stats (out of combat)'
+    ),
+    mains: (['sands', 'goblet', 'circlet'] as const).map((slot) => ({
+      slot: t(`page_team:teamOpt.kqm.${slot}`, {
+        defaultValue: { sands: 'Sands', goblet: 'Goblet', circlet: 'Circlet' }[
+          slot
+        ],
+      }),
+      stat: mainLabel(t, stats.mains[slot]),
+    })),
+    stats: stats.stats.map(({ key, value }) => {
+      const written = statValue(key, value, locale)
+      const old = before.get(key)
+      return {
+        label: statLabel(t, key),
+        value: written,
+        ...(old !== undefined && old !== written ? { was: old } : {}),
+      }
+    }),
+  }
 }
 
 /** The KQM sheet's data: names, icons, figures as the sheet writes them */
@@ -123,6 +228,8 @@ export function kqmTeamCardData({
           ? secondsText(((m.fieldTime / 100) * rotationTime).toFixed(1), locale)
           : undefined,
       er: `${Math.round(m.er ?? 100)}%`,
+      // (the detailed sheet only: the usual one stays as it was)
+      ...(m.stats ? { details: kqmCardDetails(t, m.stats, locale) } : {}),
     })),
     total: formatRateFull(total, undefined, locale),
     dps: rotationTime ? formatRateFull(total, rotationTime, locale) : undefined,
