@@ -28,6 +28,7 @@ import type { TFunction } from 'i18next'
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react'
 import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { siteDecimal } from '../TeamOptimize/format'
 import {
   focusSx,
   hairline,
@@ -273,11 +274,11 @@ export function FightTimeline({
         </Box>
         <Typography sx={{ ...type.stat, fontSize: 17 }}>
           {estimate.seconds !== undefined
-            ? t('enemy.stygian.defeat', {
+            ? t('enemyEditor.stygian.defeat', {
                 defaultValue: '≈ {{time}} to defeat',
                 time: formatDuration(t, estimate.seconds),
               })
-            : t('enemy.stygian.defeatOver', {
+            : t('enemyEditor.stygian.defeatOver', {
                 defaultValue: 'over {{time}} to defeat',
                 time: formatDuration(t, FIGHT_LIMIT),
               })}
@@ -1003,7 +1004,7 @@ function MomentLine({
     ...numSx,
   } as const
   const rate = (r: number) =>
-    `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r) >= 10 ? Math.round(Math.abs(r)) : Math.abs(r).toFixed(1)}`
+    `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r) >= 10 ? Math.round(Math.abs(r)) : siteDecimal(Math.abs(r))}`
   return (
     <>
       <Box sx={item}>
@@ -1026,7 +1027,7 @@ function MomentLine({
       <Box sx={item}>
         {t('enemy.fight.hpAxis', 'HP')}
         <Box component="span" sx={value}>
-          {(moment.hp * 100).toFixed(1)}%
+          {siteDecimal(moment.hp * 100)}%
         </Box>
         <span>{compact(3).format(moment.hp * maxHp)}</span>
       </Box>
@@ -1039,9 +1040,9 @@ function MomentLine({
           {meterLabel}
           <Box component="span" sx={value}>
             {meter.key === 'hornGauge'
-              ? `${moment.meter.toFixed(1)}U`
+              ? `${siteDecimal(moment.meter)}U`
               : meter.key === 'ward'
-                ? moment.meter.toFixed(1)
+                ? siteDecimal(moment.meter)
                 : Math.round(moment.meter)}
           </Box>
           <span>
@@ -1089,13 +1090,13 @@ function MomentLine({
                 defaultValue:
                   '→ {{hp}} off it when the ward breaks ({{pct}}% of its HP)',
                 hp: compact(3).format(moment.backlash),
-                pct: ((moment.backlash / maxHp) * 100).toFixed(1),
+                pct: siteDecimal((moment.backlash / maxHp) * 100),
               })
             : t('enemy.fight.backlashSoFar', {
                 defaultValue:
                   '→ {{hp}} backlash when it ends ({{pct}}% of its HP)',
                 hp: compact(3).format(moment.backlash),
-                pct: ((moment.backlash / maxHp) * 100).toFixed(1),
+                pct: siteDecimal((moment.backlash / maxHp) * 100),
               })}
         </Box>
       )}
@@ -1104,12 +1105,12 @@ function MomentLine({
           {moment.event.kind === 'backlash'
             ? t('enemy.fight.backlashAt', {
                 defaultValue: 'Backlash: −{{hp}}% of its HP',
-                hp: (moment.event.hp * 100).toFixed(1),
+                hp: siteDecimal(moment.event.hp * 100),
               })
             : moment.event.kind === 'wardBreak'
               ? t('enemy.fight.wardBreakAt', {
                   defaultValue: 'Ward broken: −{{hp}}% of its HP',
-                  hp: (moment.event.hp * 100).toFixed(1),
+                  hp: siteDecimal(moment.event.hp * 100),
                 })
               : moment.event.kind === 'blast'
                 ? t(
@@ -1118,7 +1119,7 @@ function MomentLine({
                   )
                 : t('enemy.fight.hornsBreakAt', {
                     defaultValue: 'Horns broken: −{{hp}}% of its HP',
-                    hp: (moment.event.hp * 100).toFixed(1),
+                    hp: siteDecimal(moment.event.hp * 100),
                   })}
         </Box>
       )}
@@ -1156,7 +1157,7 @@ function momentText(
     stateName(moment.seg.state),
     t('enemy.fight.hpText', {
       defaultValue: 'HP {{pct}}% ({{hp}})',
-      pct: (moment.hp * 100).toFixed(1),
+      pct: siteDecimal(moment.hp * 100),
       hp: compact(3).format(moment.hp * maxHp),
     }),
     moment.meter !== undefined &&

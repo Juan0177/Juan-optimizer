@@ -1469,7 +1469,7 @@ function WriterModal({
                               : 'transparent',
                           })}
                         >
-                          {t('teamOpt.writer.syntax', 'How to write it')}
+                          {t('teamOpt.writer.syntaxTitle', 'How to write it')}
                         </Button>
                       </>
                     }
@@ -2175,8 +2175,7 @@ function HitGroup({
   // in another language, the attack's name from the sheet (`HitLabel`): the label is English
   const { i18n } = useTranslation()
   const english = (i18n?.language ?? 'en').startsWith('en') || !info?.name
-  const label = (part: HitPart) =>
-    part.tag ? `${name} (${part.tag})` : name
+  const label = (part: HitPart) => (part.tag ? `${name} (${part.tag})` : name)
   const color = variantColor(info?.element)
   const count = (value: number, quiet?: boolean) => (
     <Box

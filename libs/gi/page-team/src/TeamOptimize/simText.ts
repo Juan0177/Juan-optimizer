@@ -48,6 +48,19 @@ const patterns: {
     values: (m) => ({ who: m[1], raw: m[2], most: m[3] }),
   },
   {
+    re: /^(.+): "(.+)": 1 to (\d+) times \(played once\)$/,
+    key: 'repeatRange',
+    english: '{{who}}: "{{raw}}": 1 to {{most}} times (played once)',
+    values: (m) => ({ who: m[1], raw: m[2], most: m[3] }),
+  },
+  {
+    re: /^(.+): "(.+)" is not a wait: write its length, as W1\.5 or W90f \(skipped\)$/,
+    key: 'notWait',
+    english:
+      '{{who}}: "{{raw}}" is not a wait: write its length, as W1.5 or W90f (skipped)',
+    values: (m) => ({ who: m[1], raw: m[2] }),
+  },
+  {
     re: /^"(.+)": no team member with that name \(step skipped\)$/,
     key: 'noMember',
     english: '"{{word}}": no team member with that name (step skipped)',

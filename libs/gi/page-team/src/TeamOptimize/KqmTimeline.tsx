@@ -18,6 +18,7 @@ import { AttackEditor } from './AttackEditor'
 import { AttackName } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { buffsForAttacker } from './buffs'
+import { siteDecimal } from './format'
 import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
@@ -278,7 +279,7 @@ export function KqmTimeline({
               component="span"
               sx={{ color: 'text.primary', fontWeight: 650 }}
             >
-              {length.toFixed(1)} s
+              {siteDecimal(length)} s
             </Box>
           </Typography>
         }

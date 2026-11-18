@@ -12,7 +12,7 @@ import type { CalcResult } from '@genshin-optimizer/gi/uidata'
 import { Box, Tooltip, Typography } from '@mui/material'
 import { type ReactNode, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatRateFull } from './format'
+import { formatRateFull, siteDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { numSx, SubsectionTitle, tokens, type } from './ui'
 
@@ -279,7 +279,7 @@ function Ring({
         )
       : undefined
   const pct = (v: number) =>
-    total ? `${((v / total) * 100).toFixed(v / total < 0.1 ? 1 : 0)}%` : '–'
+    total ? `${siteDecimal((v / total) * 100, v / total < 0.1 ? 1 : 0)}%` : '–'
   const unit = rotationTime
     ? t('teamOpt.kqm.dps', 'DPS')
     : t('teamOpt.kqm.dmg', 'DMG')

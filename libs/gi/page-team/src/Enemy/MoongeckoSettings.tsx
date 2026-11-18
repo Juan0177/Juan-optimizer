@@ -8,6 +8,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PARTY_HEALERS } from '../TeamOptimize/fightTeam'
+import { siteDecimal } from '../TeamOptimize/format'
 import { focusSx, numSx, quickSx, tokens, type } from '../TeamOptimize/ui'
 
 /** A ward kept past its 35 s, as set: the most it can be given */
@@ -32,10 +33,7 @@ export function MoongeckoSettings({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const settings = team.fightSettings ?? {}
-  const set = (
-    key: 'wardSeconds' | 'healSeconds',
-    value: number | undefined
-  ) =>
+  const set = (key: 'wardSeconds' | 'healSeconds', value: number | undefined) =>
     database.teams.set(teamId, (team) => {
       const next: TeamFightSettings = { ...team.fightSettings }
       if (value === undefined) delete next[key]
@@ -55,7 +53,7 @@ export function MoongeckoSettings({
       : Number.isFinite(estimate) && estimate <= MOONGECKO.window
         ? t('enemy.moongecko.wardRotation', {
             defaultValue: '≈ {{s}} s from the rotation’s Blunt hits',
-            s: estimate.toFixed(1),
+            s: siteDecimal(estimate),
           })
         : t(
             'enemy.moongecko.wardRotationKept',

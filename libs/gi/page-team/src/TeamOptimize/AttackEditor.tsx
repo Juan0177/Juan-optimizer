@@ -87,7 +87,7 @@ import type { BuffEffect, TeamBuff } from './buffs'
 import { buffEffects, useAttackTeamData } from './buffs'
 import { EffectText, useBuffSource } from './buffText'
 import { extraStatKeys } from './ExtraBuffs'
-import { formatHits } from './format'
+import { formatHits, siteDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { basicStats } from './ResultDetails'
 import type { AuraKey } from './timelineModel'
@@ -421,7 +421,7 @@ export function AttackEditor({
                         ...numSx,
                       }}
                     >
-                      {moment.seconds.toFixed(2)} s
+                      {siteDecimal(moment.seconds, 2)} s
                     </Box>
                   </Tooltip>
                 )}

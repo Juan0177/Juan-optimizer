@@ -167,7 +167,13 @@ export function FightBreakdown({
   /** An enemy set by hand (its HP, the user's) */
   custom?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
+  // juanlab: decimals as the site's language writes them ("1,5" in Italian)
+  const dec1 = (n: number) =>
+    n.toLocaleString(i18n?.language, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })
   const pct = (v: number) => `${Math.round(v * 100)}%`
   const lines = estimate.parts.map((part) => {
     switch (part.key) {
@@ -186,7 +192,7 @@ export function FightBreakdown({
                 count: part.count,
                 seconds: Math.round(part.seconds),
                 courage: Math.round(part.courage),
-                stellar: part.stellar.toFixed(1),
+                stellar: dec1(part.stellar),
               })
             : t('enemyEditor.fight.valiantCourage', {
                 defaultValue:
@@ -220,7 +226,7 @@ export function FightBreakdown({
                 '{{count}} pairs of horns (+150% RES), ≈ {{seconds}} s each to break ({{removal}} gauge/s of reactions on their 64U Pyro)',
               count: part.count,
               seconds: Math.round(part.seconds),
-              removal: part.removal.toFixed(1),
+              removal: dec1(part.removal),
             })
           : t('enemyEditor.fight.hornsKept', {
               defaultValue:
