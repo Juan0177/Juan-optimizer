@@ -11,6 +11,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 - Radiant Moongecko's fight is modelled from the game: its Moonstone Anchor's ward (9 layers of 4U Geo, 35 s) takes the team's damage, and breaking it moves 70% of the Geo DMG and 10% of the rest onto the boss (at most 40% of its HP). Radiant Cocoon lowers the team's CRIT Rate and DMG until it is healed to full, then Disentangled buffs it for 15 s.
 - For the Moongecko, the enemy box shows how long the team takes to break the ward (estimated from the rotation's Blunt hits) and when it is healed out of the cocoon; both can be changed.
 - The fight timeline shows the team's DPS over the fight, so you can line up Bursts with the boss's weak moments.
+- Stygian Onslaught fights start with no energy, as in the game: the first rotation is counted without its Bursts. "Energy at the start" in the enemy box switches it to full energy.
 - Wolf's Gravestone's passive (enemies under 30% HP) now counts for the part of the fight it is actually on, in Team optimize and KQM, whenever the enemy has HP.
 - Write a repeated group once with its count: "4[N5 CD]" (KQM's notation) or "4N5CD".
 - Varesa's rotation notes explain why a Burst or Skill waited.
