@@ -18,6 +18,7 @@ import {
   FIGHT_LIMIT,
   formatDuration,
   formatFightTime,
+  DRIFTING_SNOW_BOSS,
   MOONGECKO,
   StygianResSummary,
   stygianBossName,
@@ -64,6 +65,13 @@ function stateColor(theme: Theme, state: FightSegment['state']) {
       return theme.palette.geo.main
     case 'ward':
       return alpha(theme.palette.geo.main, 0.4)
+    case 'warded':
+    case 'barrier':
+      return alpha(theme.palette.cryo.main, 0.45)
+    case 'airborne':
+      return alpha(theme.palette.anemo.main, 0.45)
+    case 'cannon':
+      return alpha(theme.palette.electro.main, 0.45)
     case 'leap':
       return alpha(giTokens.parchment, 0.1)
     case 'disentangled':
@@ -160,6 +168,19 @@ export function FightTimeline({
         )
       case 'disentangled':
         return t('enemy.fight.disentangled', 'Disentangled (team buffed)')
+      case 'warded':
+        return preset?.boss.id === DRIFTING_SNOW_BOSS
+          ? t('enemy.fight.coffin', 'Ice Coffin (its HP untouched)')
+          : t('enemy.fight.warded', 'Electro Ward up (its HP untouched)')
+      case 'barrier':
+        return t(
+          'enemy.fight.barrier',
+          'Coffin turned to a shield (its HP untouched)'
+        )
+      case 'airborne':
+        return t('enemy.fight.airborne', 'Airborne (its flight and vortex)')
+      case 'cannon':
+        return t('enemy.fight.cannon', 'Cannon charging (its mechanisms)')
       default:
         return state === 'shielded' && preset?.boss.id === 1013061
           ? t('enemy.fight.valiantAssault', 'Valiant Assault (shielded)')
@@ -181,7 +202,15 @@ export function FightTimeline({
         })
       ) as StygianRes
     if (state === 'horns') return plus(regular, () => 150)
-    if (state === 'drinking') return regular
+    if (
+      state === 'drinking' ||
+      state === 'warded' ||
+      state === 'barrier' ||
+      state === 'airborne'
+    )
+      return regular
+    if (state === 'cannon')
+      return phases.find((p) => p.key === 'recovered')?.res ?? regular
     const dull = phases.find((p) => p.key === 'dullCarapace')?.res
     if (dull) {
       if (state === 'cocooned')
@@ -205,13 +234,27 @@ export function FightTimeline({
       ? t('enemy.fight.courage', 'Courage')
       : meter?.key === 'ward'
         ? t('enemy.fight.wardLayers', 'Ward layers')
-        : t('enemy.fight.hornGauge', 'Horn gauge')
+        : meter?.key === 'momentum'
+          ? t('enemy.fight.momentum', 'Flow Momentum')
+          : meter?.key === 'stacks'
+            ? t('enemy.fight.stacks', 'RES down stacks')
+            : meter?.key === 'wardGauge'
+              ? t('enemy.fight.wardGauge', 'Ward durability')
+              : meter?.key === 'progress'
+                ? t('enemy.fight.progress', 'Adaptive Countermeasures')
+                : t('enemy.fight.hornGauge', 'Horn gauge')
   const meterColor =
     meter?.key === 'hornGauge'
       ? theme.palette.pyro.main
       : meter?.key === 'ward'
         ? theme.palette.geo.main
-        : theme.palette.anemo.main
+        : meter?.key === 'momentum' || meter?.key === 'wardGauge'
+          ? meter.key === 'wardGauge' && preset?.boss.id !== DRIFTING_SNOW_BOSS
+            ? theme.palette.electro.main
+            : theme.palette.cryo.main
+          : meter?.key === 'progress'
+            ? theme.palette.electro.main
+            : theme.palette.anemo.main
   return (
     <Box
       component="section"
@@ -343,10 +386,16 @@ export function FightTimeline({
                     defaultValue: 'Ward layers left ({{max}} of 4U Geo)',
                     max: meter.max,
                   })
-                : t('enemy.fight.hornGaugeLegend', {
-                    defaultValue: 'Horn gauge ({{max}}U of Pyro)',
-                    max: meter.max,
-                  })}
+                : meter.key !== 'hornGauge'
+                  ? t('enemy.fight.meterLegend', {
+                      defaultValue: '{{label}} (at most {{max}})',
+                      label: meterLabel,
+                      max: meter.max,
+                    })
+                  : t('enemy.fight.hornGaugeLegend', {
+                      defaultValue: 'Horn gauge ({{max}}U of Pyro)',
+                      max: meter.max,
+                    })}
           </Swatch>
         )}
         {view.windowPath ? (
@@ -710,9 +759,13 @@ function FightChart({
                     ? giTokens.panelDark
                     : e.kind === 'backlash'
                       ? theme.palette.electro.main
-                      : e.kind === 'wardBreak'
+                      : e.kind === 'wardBreak' || e.kind === 'hpLoss'
                         ? theme.palette.geo.main
-                        : theme.palette.pyro.main,
+                        : e.kind === 'statue'
+                          ? theme.palette.anemo.main
+                          : e.kind === 'heal'
+                            ? theme.palette.dendro.main
+                            : theme.palette.pyro.main,
                 border:
                   e.kind === 'blast'
                     ? `2px solid ${theme.palette.pyro.main}`
@@ -1187,14 +1240,14 @@ function MomentLine({
           {damageWindow
             ? t(
                 moment.absorbed !== undefined
-                  ? seg.state === 'ward'
+                  ? seg.state === 'ward' || seg.state === 'warded'
                     ? 'enemy.fight.dpsWardWindow'
                     : 'enemy.fight.dpsShieldWindow'
                   : 'enemy.fight.dpsWindow',
                 {
                   defaultValue:
                     moment.absorbed !== undefined
-                      ? seg.state === 'ward'
+                      ? seg.state === 'ward' || seg.state === 'warded'
                         ? 'Into its ward {{from}}–{{to}} s'
                         : 'Into its shield {{from}}–{{to}} s'
                       : 'Team DPS {{from}}–{{to}} s',
@@ -1203,7 +1256,7 @@ function MomentLine({
                 }
               )
             : moment.absorbed !== undefined
-              ? seg.state === 'ward'
+              ? seg.state === 'ward' || seg.state === 'warded'
                 ? t('enemy.fight.dpsWard', 'Into its ward')
                 : t('enemy.fight.dpsShield', 'Into its shield')
               : t('enemy.fight.dpsHere', 'Team DPS here')}
@@ -1220,11 +1273,13 @@ function MomentLine({
         <Box sx={item}>
           {seg.state === 'ward'
             ? t('enemy.fight.anchorTook', 'The Anchor took')
-            : t('enemy.fight.shieldTook', 'Its shield took')}
+            : seg.state === 'warded'
+              ? t('enemy.fight.wardTook', 'Its ward took')
+              : t('enemy.fight.shieldTook', 'Its shield took')}
           <Box component="span" sx={value}>
             {compact(3).format(moment.absorbed)}
           </Box>
-          {seg.state === 'ward'
+          {seg.state === 'ward' || seg.state === 'warded'
             ? t('enemy.fight.wardSoFar', {
                 defaultValue:
                   '→ {{hp}} off it when the ward breaks ({{pct}}% of its HP)',

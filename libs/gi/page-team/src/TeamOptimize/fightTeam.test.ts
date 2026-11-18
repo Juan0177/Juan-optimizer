@@ -49,6 +49,57 @@ describe('a played rotation’s hits, per second', () => {
   })
 })
 
+describe('a played rotation, looped', () => {
+  it('keeps Radiance 6 s after each Stellar-Conduct and 8 s after each Stellar Swirl, wrapping into its start', () => {
+    const hits: SimHit[] = [
+      hit(60, { path: ['_reaction', 'stellarConduct'] }),
+      hit(120, { path: ['_reaction', 'stellarConduct'] }),
+      hit(540, { path: ['_reaction', 'stellarSwirl'] }),
+    ]
+    const { cycle } = applicationsOf(hits, 600)
+    expect(cycle?.seconds).toBe(10)
+    // (1–8 s from the two Stellar-Conducts, the Swirl's 9–17 s wrapping to 0–7)
+    expect(cycle?.radiance).toEqual([
+      [0, 8],
+      [9, 10],
+    ])
+  })
+  it('keeps the active member’s Nightsoul’s Blessing, its Cryo hits and its reactions', () => {
+    const hits: SimHit[] = [
+      hit(30, { element: 'cryo' }),
+      hit(90, { element: 'cryo', weight: 2 }),
+      hit(100, { path: ['_reaction', 'superconduct'] }),
+      hit(110, { path: ['_heal', 'skill'], element: 'cryo' }),
+    ]
+    const windows = [
+      {
+        owner: 'Mavuika',
+        path: ['ObsidianCodex', '2NightsoulBlessing'],
+        value: 'on',
+        start: -60,
+        end: 150,
+      },
+      {
+        owner: 'Mavuika',
+        path: ['ObsidianCodex', '2NightsoulBlessing'],
+        value: '',
+        start: 150,
+        end: 600,
+      },
+    ]
+    const { cycle, reactions } = applicationsOf(hits, 300, 0, {
+      buffWindows: windows as never,
+      actions: [],
+    })
+    expect(cycle?.nightsoul).toEqual([[0, 2.5]])
+    expect(cycle?.cryoHits).toEqual([
+      [0.5, 1],
+      [1.5, 2],
+    ])
+    expect(reactions?.superconduct).toBeCloseTo(0.2, 9)
+  })
+})
+
 describe('attacks entered by hand', () => {
   it('are Stellar Glimmer DMG as the kits deal it, of any element', () => {
     const attack = (path: string[]) =>

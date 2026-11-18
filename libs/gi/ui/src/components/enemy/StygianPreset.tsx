@@ -59,6 +59,7 @@ export function stygianPhaseName(t: TFunction, key: StygianPhaseKey) {
     initial: 'No stacks',
     stacks2: '2 stacks',
     stacks3: '3 stacks',
+    normalMode: 'Normal mode',
   }
   return t(`page_team:enemyEditor.stygian.phase.${key}`, names[key])
 }

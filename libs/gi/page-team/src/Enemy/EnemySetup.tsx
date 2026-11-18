@@ -222,6 +222,40 @@ function mechanicsLine(t: TFunction, estimate: FightEstimate) {
             defaultValue: '{{count}} Anchors, wards not broken in time',
             count: part.count,
           })
+    if (part.key === 'sweeper')
+      return t('enemy.sweeperLine', {
+        defaultValue: '{{count}} Sweeper Modes, stopped {{time}}',
+        count: part.count,
+        time: formatDuration(t, part.stopped),
+      })
+    if (part.key === 'sculptures')
+      return t('enemy.sculpturesLine', {
+        defaultValue:
+          '{{interrupted}} of {{count}} sculptings turned to statues',
+        count: part.count,
+        interrupted: part.interrupted,
+      })
+    if (part.key === 'coffins')
+      return t('enemy.coffinsLine', {
+        defaultValue: '{{broken}} of {{count}} Ice Coffins broken',
+        count: part.count,
+        broken: part.broken,
+      })
+    if (part.key === 'electroWards')
+      return part.broken
+        ? t('enemy.electroWardsLine', {
+            defaultValue: '{{count}} wards broken, ≈ {{time}} each',
+            count: part.broken,
+            time: formatDuration(t, part.seconds),
+          })
+        : t('enemy.electroWardsKeptLine', 'Its Electro Ward never broken')
+    if (part.key === 'countermeasures')
+      return part.seconds !== undefined
+        ? t('enemy.countermeasuresLine', {
+            defaultValue: 'Its shield breaks at {{time}}',
+            time: formatDuration(t, part.seconds),
+          })
+        : t('enemy.countermeasuresKeptLine', 'Its shield never breaks')
   }
   const phase = estimate.parts.find((p) => p.key === 'phase')
   return phase?.key === 'phase'

@@ -71,6 +71,8 @@ export interface SimulationResult {
   rotationFrames?: number[]
   buffWindows: SimBuffWindow[]
   countedBuffs: SimCountedBuff[]
+  /** Each member's Nightsoul's Blessing, on the field or off (its kit's own state), in frames */
+  nightsoulSpans?: { characterKey: CharacterKey; start: number; end: number }[]
   /**
    * The enemy's auras over the kept rotation (with `auraTimeline`): from each frame, the auras
    * there (by aura, their durability) until the next entry
@@ -1197,6 +1199,8 @@ export function simulateRotation({
     CharacterKey,
     { active: boolean; points: number }
   >()
+  const nightsoulSpans: NonNullable<SimulationResult['nightsoulSpans']> = []
+  const openNightsoul = new Map<CharacterKey, (typeof nightsoulSpans)[number]>()
   let resourcePolling = true
   const pollNightsoul = (frame: number) => {
     if (!resourcePolling) return
@@ -1230,6 +1234,19 @@ export function simulateRotation({
         ['ObsidianCodex', '2NightsoulBlessing'],
         next.active && m === onField ? 'on' : ''
       )
+      if (next.active && !previous?.active) {
+        const span = {
+          characterKey: m,
+          start: frame,
+          end: Number.MAX_SAFE_INTEGER,
+        }
+        nightsoulSpans.push(span)
+        openNightsoul.set(m, span)
+      } else if (!next.active && previous?.active) {
+        const open = openNightsoul.get(m)
+        if (open) open.end = frame
+        openNightsoul.delete(m)
+      }
       reportedConsumption.delete(m)
       previousNightsoul.set(m, next)
     }
@@ -1789,6 +1806,7 @@ export function simulateRotation({
     rotationFrames: bounds.slice(1, repeats + 1).map((b, i) => b - bounds[i]),
     buffWindows: windows,
     countedBuffs,
+    nightsoulSpans,
     hitlagEvents: all.filter((h) => h.path.join('.') === '_marker.hitlag'),
     notes: [...notes],
     warnings,
