@@ -21,6 +21,15 @@ describe('an optional action’s alternative', () => {
     })
     const [skill] = parseRotation('Bennett E?/N2CA', names).steps[0].actions
     expect(skill.otherwise?.map((a) => a.kind)).toEqual(['normal', 'charged'])
+    // (without the "?" too: an alternative makes a Skill or Burst optional)
+    expect(
+      parseRotation('Bennett E Q/N3', names).steps[0].actions[1]
+    ).toMatchObject({
+      kind: 'burst',
+      optional: true,
+      text: 'Q/N3',
+      otherwise: [{ kind: 'normal', count: 3 }],
+    })
     // (a plain alternative still keeps only its first one)
     expect(parseRotation('Bennett N2/N3', names).steps[0].actions).toEqual([
       expect.objectContaining({ kind: 'normal', count: 2 }),

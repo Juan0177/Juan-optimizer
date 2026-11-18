@@ -232,6 +232,9 @@ export function expandRepeats(
     .replace(/(^|\s)(\d+)([a-z]\S*)/gi, repeat)
 }
 
+/** A Skill or Burst with an alternative after "/" ("Q?/N3", "Q/N3", "hE/N2CA"): the alternative is played when it is not ready */
+const SKILL_BURST_ALT = /^(?:[ht]?e|q)\??\/./i
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
@@ -240,11 +243,12 @@ function parseActions(
   characterKey?: CharacterKey
 ): RotationAction[] {
   const actions: RotationAction[] = []
-  // alternatives: the first one, unless it is an optional action's ("Q?/N3": N3 when Q is not ready)
+  // alternatives: the first one, unless it is a Skill's or Burst's ("Q?/N3" or "Q/N3": N3 when Q
+  // is not ready)
   const cleaned = text
     .replace(/\([^)]*\)/g, ' ')
     .split(/\s+/)
-    .map((word) => (/^[a-z]*\?\//i.test(word) ? word : word.split('/')[0]))
+    .map((word) => (SKILL_BURST_ALT.test(word) ? word : word.split('/')[0]))
     .join(' ')
   const token =
     /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
@@ -285,10 +289,12 @@ function parseActions(
           `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
         )
     } else if (m[4] || m[6]) {
-      const optional = !!(m[4] ? m[5] : m[7])
-      // its alternative: what follows "/" up to the next space ("Q?/N3", "E?/N2CA")
+      // its alternative: what follows "/" up to the next space ("Q?/N3", "E?/N2CA"; without the "?"
+      // too, "Q/N3": an alternative makes it optional)
+      const hasAlt = s[i] === '/'
+      const optional = !!(m[4] ? m[5] : m[7]) || hasAlt
       let otherwise: RotationAction[] | undefined
-      if (optional && s[i] === '/') {
+      if (hasAlt) {
         const end = s.indexOf(' ', i)
         const alt = s.slice(i + 1, end < 0 ? s.length : end)
         i = end < 0 ? s.length : end
@@ -494,7 +500,7 @@ export function rotationSpans(
       } else {
         // (an alternative: the first one is played, the rest is a note; an optional action's
         // alternative, "Q?/N3", is played too)
-        const optionalAlt = /^[a-z]*\?\//i.test(w.word)
+        const optionalAlt = SKILL_BURST_ALT.test(w.word)
         const slash = optionalAlt ? -1 : w.word.indexOf('/')
         const played = slash > 0 ? w.word.slice(0, slash) : w.word
         const problems: string[] = []
