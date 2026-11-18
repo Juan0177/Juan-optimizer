@@ -60,7 +60,9 @@ export function Overview({
   // (the swapped slot's constellation on each side: tells the same member re-entering apart)
   const consOut = a.members.find((m) => m.key === out)?.constellation ?? 0
   const consIn = b.members.find((m) => m.key === inKey)?.constellation ?? 0
-  const byCons = nameOf(out) === nameOf(inKey) && consOut !== consIn
+  // (the same member by key: Travelers of different elements share a name)
+  const same = out === inKey
+  const byCons = same && consOut !== consIn
   const headA = byCons ? `${nameOf(out)} C${consOut}` : nameOf(out)
   const headB = byCons ? `${nameOf(inKey)} C${consIn}` : nameOf(inKey)
   const head = {
@@ -127,7 +129,7 @@ export function Overview({
           {pairs.map(({ a: ma, b: mb }) => {
             const swapped = ma.key === out
             const name = swapped
-              ? swapLabel(nameOf(ma.key), nameOf(inKey), consOut, consIn)
+              ? swapLabel(nameOf(ma.key), nameOf(inKey), consOut, consIn, same)
               : nameOf(ma.key)
             return (
               <MemberRows

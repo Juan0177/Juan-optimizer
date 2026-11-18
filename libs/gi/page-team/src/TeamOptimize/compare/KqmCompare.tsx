@@ -281,13 +281,15 @@ export default function KqmCompare({
   const chooseIn = (key: CharacterKey | null) => {
     if (key === inKey) return
     setInKey(key)
-    const own = key && key === out ? teamKqm : undefined
+    const same = !!key && key === out
+    const own = same ? teamKqm : undefined
+    // (A's result's, as A's members show it, also for a run saved without KQM settings)
     setConstellation(
       !key
         ? 0
-        : own
+        : same
           ? (run?.result?.constellations?.[key] ??
-            kqmMemberConstellation(key, own))
+            kqmMemberConstellation(key, teamKqm))
           : kqmMemberConstellation(key, undefined)
     )
     setWeapon('')
@@ -307,8 +309,7 @@ export default function KqmCompare({
           )
         : {}
     )
-    const actions =
-      key && key === out ? memberActions(text, opener, namesA, key) : undefined
+    const actions = same ? memberActions(text, opener, namesA, key) : undefined
     if (!fragment.trim() || fragment === prefilled) {
       setFragment(actions ?? '')
       setPrefilled(actions)
@@ -412,6 +413,7 @@ export default function KqmCompare({
       out,
       inName: nameOf(inKey),
       fragment,
+      same: inKey === out,
     })
   }, [out, inKey, text, opener, namesA, fragment, nameOf])
   const warnings = useMemo(() => {
@@ -474,6 +476,8 @@ export default function KqmCompare({
             count: swapped.count,
           })
       : undefined
+  // (a refused fragment before an empty one: for the leaving member re-entering, it says why its
+  // fragment was not filled in)
   const problem = !saved
     ? t('kqmCompare.noResult')
     : kqmRunning
@@ -488,10 +492,10 @@ export default function KqmCompare({
               ? t('kqmCompare.need.gear')
               : erInvalid
                 ? t('kqmCompare.need.er')
-                : !fragment.trim()
-                  ? t('kqmCompare.need.fragment', { name: inName })
-                  : fragmentError
-                    ? fragmentError
+                : fragmentError
+                  ? fragmentError
+                  : !fragment.trim()
+                    ? t('kqmCompare.need.fragment', { name: inName })
                     : !confirmed
                       ? t('kqmCompare.need.confirm')
                       : ''

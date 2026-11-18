@@ -88,6 +88,9 @@ function find(c: Cut, out: CharacterKey, names: RotationMember[]) {
  * Replaces the leaving member's single step of a written rotation (the opener counts too) with the
  * entering member's fragment, leaving every other step, separator and space as written. A trailing
  * "-> Leaving" (the loop back to them) becomes "-> Entering".
+ *
+ * `same`: the leaving member re-entering. Its fragment is filled in from that single step, so with
+ * the fragment empty a missing or repeated step is said first (why nothing was filled in).
  */
 export function swapFragment({
   text,
@@ -96,6 +99,7 @@ export function swapFragment({
   out,
   inName,
   fragment,
+  same = false,
 }: {
   text: string
   opener: string
@@ -103,14 +107,17 @@ export function swapFragment({
   out: CharacterKey
   inName: string
   fragment: string
+  same?: boolean
 }): SwapFragmentResult {
   const frag = fragment.trim()
-  if (!frag) return { ok: false, error: 'emptyFragment', count: 0 }
+  if (!frag && !same) return { ok: false, error: 'emptyFragment', count: 0 }
   const t = cut(text, names)
   const o = cut(opener, names)
   const ft = find(t, out, names)
   const fo = find(o, out, names)
   const count = ft.acts.length + fo.acts.length
+  if (!frag && count === 1)
+    return { ok: false, error: 'emptyFragment', count: 0 }
   if (count === 0) return { ok: false, error: 'notFound', count }
   if (count > 1) return { ok: false, error: 'repeated', count }
 

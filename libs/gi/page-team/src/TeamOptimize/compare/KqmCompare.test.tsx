@@ -12,6 +12,7 @@ import {
 } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { Overview } from './CompareOverview'
 import { CompareSwapFailure } from './compareError'
 import { srOnly } from './compareUi'
 import KqmCompare, { savedRunFor } from './KqmCompare'
@@ -528,6 +529,17 @@ describe('KqmCompare', () => {
     expect(
       within(table).getAllByText(/Yae Miko → Mitya/).length
     ).toBeGreaterThan(0)
+    // (the columns: the two members, by name only)
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Yae Miko',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Mitya',
+      })
+    ).toBeTruthy()
     expect(within(table).getAllByText(/^−10(,0)?%$/).length).toBeGreaterThan(0)
     // both ER figures, each with its own label: the target and what the build reaches
     expect(
@@ -1422,6 +1434,103 @@ describe('KqmCompare: the same member re-entering', () => {
     expect(
       within(table).getAllByText(/Yae Miko C1 → C2/).length
     ).toBeGreaterThan(0)
+    // (the columns: the member at each constellation)
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Yae Miko C1',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Yae Miko C2',
+      })
+    ).toBeTruthy()
+  })
+
+  it('starts from A’s result constellation when A’s run has no KQM settings (older saves)', () => {
+    withRun()
+    // (a run without `teamOpt` at all is not offered as A: `savedRunFor`)
+    const saved = mocks.state.saved as { run: { teamOpt: { kqm?: object } } }
+    delete saved.run.teamOpt.kqm
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(
+      screen.getByRole('combobox', { name: /kqmCompare\.constellation/ })
+        .textContent
+    ).toBe('C1')
+  })
+
+  it.each([
+    [
+      'repeated',
+      `${TEXT} -> Yae Miko E`,
+      'kqmCompare.error.repeated name=Yae Miko count=2',
+    ],
+    [
+      'notFound',
+      'Danica E -> Odette E E -> Danica Q',
+      'kqmCompare.error.notFound name=Yae Miko',
+    ],
+  ])('leaves the fragment empty and says why when the leaving member is %s in A’s rotation', (_, rotation, refusal) => {
+    withRun()
+    stored.set('teamOptRotationText_t1', rotation)
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    pickIn('Yae', 'Yae Miko')
+    expect(fragment().value).toBe('')
+    // (the refusal, under the fragment, describing Confronta; not "write its actions")
+    expect(screen.getByText(refusal)).toBeTruthy()
+    expect(screen.queryByText(/kqmCompare\.need\.fragment/)).toBeNull()
+    expect(runButton().getAttribute('aria-describedby')).toMatch(/-refusal$/)
+  })
+})
+
+describe('Overview: two members sharing a name (Travelers)', () => {
+  it('names the swap and the columns as two members, without constellations', () => {
+    const member = (key: string, constellation: number) => ({
+      key,
+      damage: 250,
+      share: 0.5,
+      er: 120,
+      erValue: 125,
+      constellation,
+      fixed: key === 'Danica',
+    })
+    const side = (traveler: string, cons: number) => ({
+      dpr: 1000,
+      dps: 50,
+      rotationTime: 20,
+      rotation: TEXT,
+      members: [member('Danica', 6), member(traveler, cons)],
+    })
+    render(
+      <ThemeProvider theme={theme}>
+        <Overview
+          a={side('TravelerAnemo', 0) as never}
+          b={side('TravelerDendro', 6) as never}
+          out={'TravelerAnemo' as never}
+          inKey={'TravelerDendro' as never}
+          nameOf={(k) => (k.startsWith('Traveler') ? 'Lumine' : k)}
+          language="it"
+        />
+      </ThemeProvider>
+    )
+    const table = screen.getByRole('table')
+    expect(
+      within(table).getAllByText('Lumine → Lumine').length
+    ).toBeGreaterThan(0)
+    expect(within(table).queryByText(/C0|C6/)).toBeNull()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.a name=Lumine',
+      })
+    ).toBeTruthy()
+    expect(
+      within(table).getByRole('columnheader', {
+        name: 'kqmCompare.table.b name=Lumine',
+      })
+    ).toBeTruthy()
   })
 })
 

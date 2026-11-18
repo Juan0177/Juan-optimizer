@@ -74,6 +74,26 @@ describe('swapFragment', () => {
       error: 'emptyFragment',
     })
   })
+  it('emptyFragment before the count, unless the leaving member re-enters', () => {
+    const twice = `${text} -> Yae Miko E`
+    const empty = { ...base, fragment: '', inName: 'Yae Miko' }
+    // (another member: an empty fragment is asked for first, as before)
+    expect(swapFragment({ ...empty, text: twice })).toMatchObject({
+      error: 'emptyFragment',
+    })
+    // (the same member: why its fragment was not filled in)
+    expect(swapFragment({ ...empty, text: twice, same: true })).toEqual({
+      ok: false,
+      error: 'repeated',
+      count: 2,
+    })
+    expect(
+      swapFragment({ ...empty, text: 'Danica E -> Odette E', same: true })
+    ).toEqual({ ok: false, error: 'notFound', count: 0 })
+    expect(swapFragment({ ...empty, same: true })).toMatchObject({
+      error: 'emptyFragment',
+    })
+  })
   it('cuts at arrows other than ->', () => {
     const r = swapFragment({
       ...base,

@@ -234,13 +234,42 @@ describe('compareCardData', () => {
 
 describe('swapLabel', () => {
   it('names both members when they differ', () => {
-    expect(swapLabel('Yae Miko', 'Mitya', 0, 1)).toBe('Yae Miko → Mitya')
+    expect(swapLabel('Yae Miko', 'Mitya', 0, 1, false)).toBe('Yae Miko → Mitya')
   })
   it('gives the constellation change when the same member re-enters', () => {
-    expect(swapLabel('Yae Miko', 'Yae Miko', 0, 1)).toBe('Yae Miko C0 → C1')
+    expect(swapLabel('Yae Miko', 'Yae Miko', 0, 1, true)).toBe(
+      'Yae Miko C0 → C1'
+    )
   })
   it('names it twice when the constellation is the same too', () => {
-    expect(swapLabel('Yae Miko', 'Yae Miko', 2, 2)).toBe('Yae Miko → Yae Miko')
+    expect(swapLabel('Yae Miko', 'Yae Miko', 2, 2, true)).toBe(
+      'Yae Miko → Yae Miko'
+    )
+  })
+  it('names both when two members share a name (Travelers): not the same member', () => {
+    expect(swapLabel('Lumine', 'Lumine', 0, 6, false)).toBe('Lumine → Lumine')
+  })
+})
+
+describe('compareCardData: two members sharing a name (Travelers)', () => {
+  const aT = side({ turn: 1 }, [
+    ['Danica', 60000],
+    ['TravelerAnemo', 40000, { constellation: 0 }],
+  ])
+  const bT = side({ dpr: 110000, turn: 1 }, [
+    ['Danica', 50000],
+    ['TravelerDendro', 60000, { constellation: 6 }],
+  ])
+  const d = compareCardData(aT, bT, {
+    ...ctx,
+    out: 'TravelerAnemo' as never,
+    in: 'TravelerDendro' as never,
+    t: ((k: string) =>
+      k === 'charNames_gen:TravelerF' ? 'Lumine' : ctx.t(k)) as never,
+  })
+  it('badges and heads the swap as two members, as before', () => {
+    expect(d.b.marks.changed).toEqual({ index: 1, badge: 'Lumine → Lumine' })
+    expect(d.swap).toEqual({ out: 'Lumine', in: 'Lumine' })
   })
 })
 

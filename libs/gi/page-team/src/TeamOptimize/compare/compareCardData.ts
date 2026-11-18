@@ -39,7 +39,8 @@ export interface CompareCardContext {
 }
 
 /**
- * The swap's two sides as named: the two members; the same member re-entering, its name and the
+ * The swap's two sides as named: the two members; the same member re-entering (`same`: the same
+ * key, not just the same name, which Travelers of different elements share), its name and the
  * constellation change ("Yae Miko C0", "C1"); at the same constellation too, its name twice (what
  * differs is its weapon or sets)
  */
@@ -47,9 +48,10 @@ export function swapSides(
   outName: string,
   inName: string,
   consOut: number,
-  consIn: number
+  consIn: number,
+  same: boolean
 ): { out: string; in: string } {
-  return outName === inName && consOut !== consIn
+  return same && consOut !== consIn
     ? { out: `${outName} C${consOut}`, in: `C${consIn}` }
     : { out: outName, in: inName }
 }
@@ -59,9 +61,10 @@ export function swapLabel(
   outName: string,
   inName: string,
   consOut: number,
-  consIn: number
+  consIn: number,
+  same: boolean
 ): string {
-  const sides = swapSides(outName, inName, consOut, consIn)
+  const sides = swapSides(outName, inName, consOut, consIn, same)
   return `${sides.out} → ${sides.in}`
 }
 
@@ -229,6 +232,7 @@ export function compareCardData(
   // (the swapped slot's constellation on each side: A's leaving member, B's entering one)
   const consOut = a.members[outIndex]?.constellation ?? 0
   const consIn = b.members[inIndex]?.constellation ?? 0
+  const same = ctx.out === ctx.in
   const dpr = gainOf(a.dpr, b.dpr, locale)
   const dps = a.dps > 0 && b.dps > 0 ? gainOf(a.dps, b.dps, locale) : undefined
   const timeChange =
@@ -241,7 +245,7 @@ export function compareCardData(
     ...(inIndex >= 0 && {
       changed: {
         index: inIndex,
-        badge: swapLabel(outName, inName, consOut, consIn),
+        badge: swapLabel(outName, inName, consOut, consIn, same),
       },
     }),
     rotationTurn: turnOf(cardB, b),
@@ -273,7 +277,7 @@ export function compareCardData(
     secondsText(`${Math.round(s * 10) / 10}`, locale)
   return {
     name: ctx.teamName || label('title'),
-    swap: swapSides(outName, inName, consOut, consIn),
+    swap: swapSides(outName, inName, consOut, consIn, same),
     siteName,
     beta: beta ? BETA_LABEL : undefined,
     labels: {
