@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.17.0",
+    "date": "2026-11-18",
+    "new": [
+      "\"If ready, else\" in written rotations: \"Q?/N3\" uses the Burst when it is ready and N3 when it is not (\"E?/N2CA\" does the same for a Skill on cooldown). The rotation's notes say when the alternative was played.",
+      "KQM Theorycrafting keeps its own rotation, apart from Team optimize's, and plays it at the constellations set in its Setup. The first time, it starts as a copy of Team optimize's.",
+      "Changing a constellation plays the written rotation again by itself (your own on Team optimize, the Setup ones on KQM), and a notice says how the rotation time and attacks changed. For example, Zibai's C1 fifth Stride no longer doubles the rotation time.",
+      "Against the Radiant Moongecko, Team optimize picks builds with Disentangled's CRIT Rate and DMG Bonus in mind, so it no longer caps CRIT Rate without them."
+    ]
+  },
+  {
     "version": "1.16.0",
     "date": "2026-11-18",
     "new": [
