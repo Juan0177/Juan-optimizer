@@ -1253,8 +1253,17 @@ export function simulateRotation({
     | { start: number; result: ActionResult; actor: CharacterKey }
     | undefined
   // one written action: the opener's (played once before the loops) or the loop's
-  const play = (list: typeof flat, i: number, r: number, opener: boolean) => {
+  const play = (
+    list: typeof flat,
+    i: number,
+    r: number,
+    opener: boolean,
+    /** An optional action's alternative: what comes after it (the action after the optional) */
+    alternative?: { next: (typeof flat)[number] | undefined }
+  ) => {
     const { characterKey, action } = list[i]
+    // (an alternative's own frames and timeline place: none of the written list's)
+    const own = !opener && !alternative
     const kit = kits[characterKey]
     // (a triggered hitlag on the acting character can lengthen the previous action: settle it)
     for (let settled = -1; settled !== now; ) {
@@ -1364,15 +1373,15 @@ export function simulateRotation({
       const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
       // (a length that is not a number would never end the wait: 0 instead)
       const frames = finiteFrames(
-        Math.max(0, (opener ? undefined : frameOverrides[i]) ?? defaultFrames)
+        Math.max(0, (own ? frameOverrides[i] : undefined) ?? defaultFrames)
       )
       waits.push({
         characterKey,
         text: action.text,
         start: now,
         frames,
-        index: opener ? undefined : i,
-        ...(opener && { openerIndex: i }),
+        index: own ? i : undefined,
+        ...(opener && !alternative && { openerIndex: i }),
         defaultFrames,
       })
       kit.onWait?.(ctxAt(now, characterKey), states.get(characterKey), frames)
@@ -1415,6 +1424,26 @@ export function simulateRotation({
       if (readyAt <= now) break
       // an optional action ("E?"): used when ready, else left out (as a sim's "if .skill.ready")
       if (action.optional) {
+        if (action.otherwise?.length) {
+          // its alternative instead ("Q?/N3"), then on to what follows it
+          if (r === Math.min(1, repeats - 1) || keep !== 'middle')
+            notes.add(
+              `${characterKey}'s ${action.text}: ${action.otherwise.map((a) => a.text).join(' ')} was played when it was not ready.`
+            )
+          const after =
+            list[i + 1] ??
+            (alternative
+              ? alternative.next
+              : opener
+                ? flat[0]
+                : loopTo
+                  ? { characterKey: loopTo, action: flat[0]?.action }
+                  : undefined)
+          const alt = action.otherwise.map((a) => ({ characterKey, action: a }))
+          for (const j of alt.keys())
+            play(alt, j, r, opener, { next: alt[j + 1] ?? after })
+          return
+        }
         if (r === Math.min(1, repeats - 1) || keep !== 'middle')
           notes.add(
             `${characterKey}'s ${action.text} was left out when it was not ready.`
@@ -1558,11 +1587,13 @@ export function simulateRotation({
     }
     const next =
       list[i + 1] ??
-      (opener
-        ? flat[0]
-        : loopTo
-          ? { characterKey: loopTo, action: flat[0]?.action }
-          : undefined)
+      (alternative
+        ? alternative.next
+        : opener
+          ? flat[0]
+          : loopTo
+            ? { characterKey: loopTo, action: flat[0]?.action }
+            : undefined)
     const nextKind =
       next && next.characterKey !== characterKey ? 'swap' : next?.action?.kind
     gearFx.onAction(
@@ -1613,7 +1644,7 @@ export function simulateRotation({
       }
     }
     const defaultFrames = frames
-    const edited = opener ? undefined : frameOverrides[i]
+    const edited = own ? frameOverrides[i] : undefined
     if (edited !== undefined && Number.isFinite(edited))
       frames = Math.max(1, Math.round(edited))
     actions.push({
@@ -1621,8 +1652,8 @@ export function simulateRotation({
       text: action.text,
       start: now,
       frames,
-      index: opener ? undefined : i,
-      ...(opener && { openerIndex: i }),
+      index: own ? i : undefined,
+      ...(opener && !alternative && { openerIndex: i }),
       defaultFrames,
       frameKey,
       ...(variant && { variant }),

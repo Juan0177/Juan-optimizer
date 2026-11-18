@@ -384,13 +384,17 @@ export function RotationInline({
   )
 }
 
+/** An optional action's alternative, as written ("/N3") */
+const otherwiseCode = (a: RotationAction): string =>
+  a.otherwise?.length ? `/${a.otherwise.map(actionCode).join('')}` : ''
+
 /** An action as the writer's short code */
-const actionCode = (a: RotationAction) => {
+const actionCode = (a: RotationAction): string => {
   switch (a.kind) {
     case 'skill':
-      return `${a.hold ? 'hE' : 'E'}${a.optional ? '?' : ''}`
+      return `${a.hold ? 'hE' : 'E'}${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'burst':
-      return a.optional ? 'Q?' : 'Q'
+      return `${a.optional ? 'Q?' : 'Q'}${otherwiseCode(a)}`
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':

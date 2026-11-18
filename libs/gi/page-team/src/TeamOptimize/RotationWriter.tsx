@@ -2720,6 +2720,13 @@ function SyntaxSheet() {
       ),
     ],
     [
+      'Q?/N3 · E?/N2CA',
+      t(
+        'teamOpt.writer.syntax.otherwise',
+        'Only when ready, otherwise the actions after "/" (no spaces inside)'
+      ),
+    ],
+    [
       'entry',
       t(
         'teamOpt.writer.syntax.entry',

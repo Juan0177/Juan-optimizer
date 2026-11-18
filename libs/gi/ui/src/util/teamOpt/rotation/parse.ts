@@ -42,6 +42,8 @@ export interface RotationAction {
   count?: number
   /** Used only when ready ("E?", "Q?"): left out, not waited for, when it is not */
   optional?: boolean
+  /** An optional action's alternative ("Q?/N3", "E?/N2 CA"): played instead when it is not ready */
+  otherwise?: RotationAction[]
   /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
   beams?: number
   /** Charged: Mavuika's Flamestrider spins held ("C3": 3) */
@@ -238,11 +240,11 @@ function parseActions(
   characterKey?: CharacterKey
 ): RotationAction[] {
   const actions: RotationAction[] = []
-  // alternatives: the first one
+  // alternatives: the first one, unless it is an optional action's ("Q?/N3": N3 when Q is not ready)
   const cleaned = text
     .replace(/\([^)]*\)/g, ' ')
     .split(/\s+/)
-    .map((word) => word.split('/')[0])
+    .map((word) => (/^[a-z]*\?\//i.test(word) ? word : word.split('/')[0]))
     .join(' ')
   const token =
     /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
@@ -282,20 +284,33 @@ function parseActions(
         warnings.push(
           `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
         )
-    } else if (m[4])
+    } else if (m[4] || m[6]) {
+      const optional = !!(m[4] ? m[5] : m[7])
+      // its alternative: what follows "/" up to the next space ("Q?/N3", "E?/N2CA")
+      let otherwise: RotationAction[] | undefined
+      if (optional && s[i] === '/') {
+        const end = s.indexOf(' ', i)
+        const alt = s.slice(i + 1, end < 0 ? s.length : end)
+        i = end < 0 ? s.length : end
+        otherwise = parseActions(alt, warnings, who, characterKey)
+        if (!otherwise.length) {
+          warnings.push(
+            `${who}: "${raw}/${alt}": no action after "/" (skipped)`
+          )
+          otherwise = undefined
+        }
+      }
       actions.push({
-        kind: 'skill',
-        hold: m[3]?.toLowerCase() === 'h',
-        text: raw,
-        ...(m[5] && { optional: true }),
+        ...(m[4]
+          ? { kind: 'skill' as const, hold: m[3]?.toLowerCase() === 'h' }
+          : { kind: 'burst' as const }),
+        text: otherwise
+          ? `${raw}/${otherwise.map((a) => a.text).join(' ')}`
+          : raw,
+        ...(optional && { optional: true }),
+        ...(otherwise && { otherwise }),
       })
-    else if (m[6])
-      actions.push({
-        kind: 'burst',
-        text: raw,
-        ...(m[7] && { optional: true }),
-      })
-    else if (m[8])
+    } else if (m[8])
       actions.push({ kind: 'normal', count: Number(m[9]), text: raw })
     else if (m[10] && (m[11] !== undefined || m[12])) {
       // (KQM's held Charged Attack: "C3F" spins 3 times, then its finisher)
@@ -477,8 +492,10 @@ export function rotationSpans(
         }
         spans.push({ from: w.from, to: w.to, kind: group.kind })
       } else {
-        // (an alternative: the first one is played, the rest is a note)
-        const slash = w.word.indexOf('/')
+        // (an alternative: the first one is played, the rest is a note; an optional action's
+        // alternative, "Q?/N3", is played too)
+        const optionalAlt = /^[a-z]*\?\//i.test(w.word)
+        const slash = optionalAlt ? -1 : w.word.indexOf('/')
         const played = slash > 0 ? w.word.slice(0, slash) : w.word
         const problems: string[] = []
         parseActions(played, problems, '', key)
