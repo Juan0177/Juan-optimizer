@@ -51,7 +51,8 @@ import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Componen
 import { SettingsCard } from '../CharacterDisplay/Tabs/TabOptimize/Components/SettingsCard'
 import StatFilterCard from '../CharacterDisplay/Tabs/TabOptimize/Components/StatFilterCard'
 import { ExcludedArtsTile } from './ExcludedArtifacts'
-import { DialogHead, floatSx, OptionTile, stackedBackdrop } from './OptionTile'
+import { DialogHead, floatSx, stackedBackdrop } from './OptionTile'
+import { OtherCharsSettings } from './OtherCharsChooser'
 import {
   FieldLabel,
   focusSx,
@@ -157,15 +158,12 @@ export function PoolSettings({
           },
         }}
       >
-        <OptionTile
-          label={t('teamOpt.pool.others', 'Other characters’ artifacts')}
-          checked={teamOpt.useOtherChars}
+        {/* other characters' artifacts: whether, and from whom */}
+        <OtherCharsSettings
+          members={members}
+          teamOpt={teamOpt}
+          setTeamOpt={setTeamOpt}
           disabled={disabled}
-          onChange={() =>
-            setTeamOpt((o) => {
-              o.useOtherChars = !o.useOtherChars
-            })
-          }
         />
         <ExcludedArtsTile
           members={members}

@@ -33,7 +33,9 @@ const normals: NormalHit[] = [
 const spear: NormalHit[] = [
   { hitmarks: [16], toNormal: 26, toCharged: 26, toAbil: 16, frames: 26 },
   { hitmarks: [13, 19], toNormal: 33, toCharged: 33, toAbil: 19, frames: 33 },
-  { hitmarks: [21], toNormal: 36, toCharged: 37, toAbil: 21, frames: 37 },
+  // (N3 is dash-, Skill- and swap-cancelled almost at once; its thrust still lands at 21: N3 D
+  // spam in footage takes 80 f a round at best, here 82 with 2 f of buffer: 26 + 33 + 2 + 21)
+  { hitmarks: [21], toNormal: 36, toCharged: 37, toAbil: 2, frames: 37 },
   {
     hitmarks: [16, 20, 25],
     toNormal: 30,

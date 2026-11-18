@@ -206,11 +206,13 @@ export function RunDialog({
           <Button
             variant="contained"
             startIcon={<TrendingUpIcon />}
+            // (no member switched on: nothing to optimize yet)
+            disabled={!optimized}
             onClick={() => {
               onClose()
               onStart()
             }}
-            sx={{ ...giCtaSx, px: 2.25 }}
+            sx={[{ px: 2.25 }, !!optimized && giCtaSx]}
           >
             {t('teamOpt.runDialog.start', 'Start')}
           </Button>
@@ -242,7 +244,7 @@ function MemberRunRow({
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'artifact'])
   const database = useDatabase()
   const { gender } = useDBMeta()
   const team = useTeam(teamId)
@@ -260,8 +262,8 @@ function MemberRunRow({
     [members]
   )
   // its search: the builds of its artifacts these settings allow (sets not counted)
-  const size = useMemo(() => {
-    if (!optConfig || kept) return 0
+  const { size, emptySlots } = useMemo(() => {
+    if (!optConfig || kept) return { size: 0, emptySlots: [] }
     const pool = teamOptPool(
       database.arts.values,
       member,
@@ -274,7 +276,11 @@ function MemberRunRow({
       allArtifactSlotKeys.map((s) => [s, 0])
     ) as Record<ArtifactSlotKey, number>
     for (const art of pool) perSlot[art.slotKey]++
-    return Object.values(perSlot).reduce((a, b) => a * b, 1)
+    return {
+      size: Object.values(perSlot).reduce((a, b) => a * b, 1),
+      // (a slot with nothing to choose from: no build can be made for it)
+      emptySlots: allArtifactSlotKeys.filter((slot) => !perSlot[slot]),
+    }
   }, [database, member, optConfig, teamOpt, locations, kept])
 
   const [open, setOpen] = useState(false)
@@ -378,10 +384,27 @@ function MemberRunRow({
             ? t('teamOpt.member.tc', 'TC build: kept as it is')
             : kept
               ? t('teamOpt.member.kept', 'Keeps its build')
-              : t('teamOpt.runDialog.size', {
-                  defaultValue: '≈ {{size}} builds to search',
-                  size: formatDamage(size),
-                })}
+              : emptySlots.length
+                ? null
+                : t('teamOpt.runDialog.size', {
+                    defaultValue: '≈ {{size}} builds to search',
+                    size: formatDamage(size),
+                  })}
+          {/* nothing to choose from in a slot: what to change (else the run keeps its build) */}
+          {!kept && !isTc && !!emptySlots.length && (
+            <Box
+              component="span"
+              sx={{ color: 'warning.main', whiteSpace: 'normal' }}
+            >
+              {t('teamOpt.runDialog.emptySlots', {
+                defaultValue:
+                  'No artifacts to choose from for: {{slots}}. Turn on Other characters’ artifacts or allow lower levels.',
+                slots: emptySlots
+                  .map((slot) => t(`artifact:slotName.${slot}`, slot))
+                  .join(', '),
+              })}
+            </Box>
+          )}
         </Typography>
         {!kept && (
           <Box

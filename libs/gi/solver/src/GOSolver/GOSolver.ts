@@ -45,7 +45,14 @@ type Status = Record<
   | 'testedPerSecond'
   | 'skippedPerSecond',
   number
->
+> & {
+  /**
+   * Every combination of the slots' artifacts, set rules not yet applied: the GPU sweeps that many
+   * until the lead knows `total` (the builds the set rules allow, the count other optimizers show).
+   * Progress then reads against it as a share only, never as a count of builds to check.
+   */
+  upper?: number
+}
 
 // Workers are pooled across runs: no startup cost on re-runs, and their compiled kernels and
 // JIT state stay warm (re-running the same character/settings skips the kernel warm-up).
@@ -312,8 +319,9 @@ export class GOSolver {
       fullTotal: number
     ) => {
       gpuRacing = true
-      // the progress bar follows the GPU (until the lead knows the exact total)
-      if (!Number.isFinite(status.total)) status.total = fullTotal
+      // the progress bar follows the GPU (as a share of every combination, until the lead knows
+      // the exact total)
+      status.upper = fullTotal
       const started = performance.now()
       try {
         const gpu = await GPUSolver.create(
@@ -329,7 +337,10 @@ export class GOSolver {
           plotMode ? Number.NEGATIVE_INFINITY : threshold,
           (fraction) => {
             if (this.finished || cpuHedge) return
-            status.tested = Math.round(Math.min(1, fraction) * status.total)
+            status.tested = Math.round(
+              Math.min(1, fraction) *
+                (Number.isFinite(status.total) ? status.total : fullTotal)
+            )
             const elapsed = performance.now() - started
             if (elapsed > 3000 && elapsed / fraction > GPU_HEDGE_MS)
               startCPU(true)

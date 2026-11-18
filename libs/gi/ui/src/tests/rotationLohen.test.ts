@@ -1,11 +1,8 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { ArtCharDatabase, type TeamOptAttack } from '@genshin-optimizer/gi/db'
-import {
-  KQM_SUBSTAT_ROLLS,
-  kqmConstellation,
-  kqmRollCaps,
-} from '../util/teamOpt/kqm'
+import { getCharStat } from '@genshin-optimizer/gi/stats'
+import { KQM_SUBSTAT_ROLLS, kqmRollCaps } from '../util/teamOpt/kqm'
 import { attackHitData } from '../util/teamOpt/objective'
 import { kitModels } from '../util/teamOpt/rotation/kits'
 import { lohenWillAfterHit } from '../util/teamOpt/rotation/kits/Lohen'
@@ -43,7 +40,10 @@ it('uses rolled damage at both strict thresholds and clips each Will outcome bef
 it('uses KQM constellations, talents and legal artifact roll budgets in the missing-kit fixture', () => {
   for (const team of fixtures.teams)
     for (const build of team.members) {
-      expect(build.cons).toBe(kqmConstellation(build.key as CharacterKey))
+      // (KQM's reference sheets: 4★ C6, 5★ C0)
+      expect(build.cons).toBe(
+        getCharStat(build.key as CharacterKey).rarity === 4 ? 6 : 0
+      )
       expect(build.talent).toEqual([10, 10, 10])
       expect(
         Object.values(build.liquidRolls).reduce((sum, n) => sum + n, 0)

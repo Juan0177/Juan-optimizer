@@ -68,6 +68,11 @@ export function localizeDecimal(text: string, locale?: string) {
   return text.replace('.', sep)
 }
 
+/** juanlab: a number with `digits` decimals, written as the site's language writes it ("1.5", "1,5") */
+export function siteDecimal(value: number, digits = 1) {
+  return localizeDecimal(value.toFixed(digits), siteLocale())
+}
+
 /** A length of time in seconds, `text` its number: "19.4s"; in other languages "19,4 s" */
 export function secondsText(text: string, locale?: string) {
   return isEnglish(locale) ? `${text}s` : `${localizeDecimal(text, locale)} s`

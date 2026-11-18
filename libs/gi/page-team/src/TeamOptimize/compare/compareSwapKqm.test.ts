@@ -12,12 +12,18 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
-import type { KqmBuild, KqmResult } from '@genshin-optimizer/gi/ui'
+import type {
+  KqmBuild,
+  KqmResult,
+  RunAttackState,
+} from '@genshin-optimizer/gi/ui'
 import {
   defaultEnergyCalculator,
   kqmWeapons,
   optimizeTeamKqm,
+  playedAttackStates,
   teamOptMembers,
+  wolfsGravestoneStates,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -120,7 +126,9 @@ const storageKeys = (teamId: string) => [
 /** A 4-member team with a KQM run saved in `teamKqmResults` (its builds given, not searched) */
 async function setup(
   kqm: Partial<TeamOptKqm> = {},
-  ownOverride: Partial<typeof OWN> = {}
+  ownOverride: Partial<typeof OWN> = {},
+  /** As KQM Theorycrafting's run against the team's enemy (Wolf's Gravestone's uptime) */
+  attackStates?: readonly RunAttackState[]
 ) {
   const database = new ArtCharDatabase(1, new SandboxStorage({}))
   for (const key of MEMBERS)
@@ -179,6 +187,7 @@ async function setup(
     gender: 'F',
     teamOpt,
     replay: kqmReplayOf(database, 'F', fakeI18n, teamId, teamOpt),
+    attackStates,
     from: builds,
     only: [],
   })
@@ -462,6 +471,53 @@ describe('compareSwapKqm', () => {
     const s = await setup({}, { YaeMiko: { ...found_, weapon: weapon.key } })
     const out = await compareSwapKqm({ ...argsOf(s), ...args })
     if ('error' in out) throw new Error(out.error)
+    expect(Math.abs(out.b.dpr - out.a.dpr) / out.a.dpr).toBeLessThan(0.005)
+    for (const k of MEMBERS) {
+      const [a, b] = [out.a, out.b].map(
+        (side) => side.members.find((m) => m.key === k)!
+      )
+      expect(b.build).toEqual(a.build)
+      expect(Math.abs(b.damage - a.damage) / a.damage).toBeLessThan(0.005)
+    }
+  }, 600_000)
+
+  it('plays B with A’s Wolf’s Gravestone uptime against the enemy', async () => {
+    // (Danica holds Wolf's Gravestone; A ran with its passive at 60% uptime, as KQM
+    // Theorycrafting runs it against an enemy with HP)
+    const kqm = {
+      excludedWeapons: allWeaponKeys.filter(
+        (k) =>
+          (!WEAPONS.includes(k) && k !== 'WolfsGravestone') ||
+          k === 'WanderingEvenstar'
+      ),
+    }
+    const danica = { Danica: { ...OWN['Danica'], weapon: 'WolfsGravestone' } }
+    const states = wolfsGravestoneStates(MEMBERS, '60')
+    const er = { energyRecharge: { YaeMiko: 130 } } as Partial<TeamOptKqm>
+    const args = { fragment: 'E E E', swapIn: { ...YAE, kqm: er } }
+    // (A's Yae Miko is the build KQM finds for her, as in the swap that changes nothing)
+    const first = await setup(kqm, danica, states)
+    const found = await compareSwapKqm({ ...argsOf(first), ...args })
+    if ('error' in found) throw new Error(found.error)
+    const { weapon, ...found_ } = found.b.members.find(
+      (m) => m.key === 'YaeMiko'
+    )!.build!
+    const s = await setup(
+      kqm,
+      { ...danica, YaeMiko: { ...found_, weapon: weapon.key } },
+      states
+    )
+    const savedA = s.saved.run.result as unknown as KqmResult
+    const byOwner = (list: RunAttackState[] | undefined) =>
+      [...(list ?? [])].sort((x, y) => `${x.owner}`.localeCompare(`${y.owner}`))
+    expect(byOwner(playedAttackStates(savedA.played))).toEqual(byOwner(states))
+    const out = await compareSwapKqm({ ...argsOf(s), ...args })
+    if ('error' in out) throw new Error(out.error)
+    // B plays the same uptime (its members', the entering one's included)
+    expect(byOwner(playedAttackStates(out.resultB.played))).toEqual(
+      byOwner(states)
+    )
+    // and the same team with the same gear gives A's damage
     expect(Math.abs(out.b.dpr - out.a.dpr) / out.a.dpr).toBeLessThan(0.005)
     for (const k of MEMBERS) {
       const [a, b] = [out.a, out.b].map(

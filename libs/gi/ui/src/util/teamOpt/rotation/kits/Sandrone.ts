@@ -295,6 +295,10 @@ function playAction(
         }
       }
       const channel = sandroneChannel(s.decode, c >= 1, action.beams)
+      if (!action.beams)
+        ctx.note(
+          `Sandrone: a plain "CA" releases her charge after ${DEFAULT_BEAMS} condensed beams; write "CA[beams=N]" for another number (1 to ${maxBeams(c >= 1)}${c >= 1 ? '' : `, up to ${maxBeams(true)} from C1`}).`
+        )
       if (action.beams && channel.beams.length < action.beams)
         ctx.note(
           action.beams > maxBeams(c >= 1)

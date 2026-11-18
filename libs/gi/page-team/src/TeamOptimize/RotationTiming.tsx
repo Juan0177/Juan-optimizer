@@ -506,6 +506,8 @@ export function actionName(
       return t('teamOpt.timing.kind.jump', 'Jump')
     case 'wait':
       return t('teamOpt.timing.kind.wait', 'Wait')
+    case 'swap':
+      return t('teamOpt.timing.kind.swap', 'Swap in')
   }
 }
 

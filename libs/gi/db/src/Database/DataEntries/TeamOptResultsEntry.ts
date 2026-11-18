@@ -1,5 +1,6 @@
 import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataEntry } from '../DataEntry'
+import type { Team } from '../DataManagers/TeamDataManager'
 import type { TeamOpt } from '../DataManagers/TeamOpt'
 import { validateTeamOpt } from '../DataManagers/TeamOpt'
 
@@ -15,6 +16,8 @@ export interface TeamOptSavedRun {
   seconds: number
   /** The settings it was found with: its rotation (the result's attack indices follow it) */
   teamOpt: TeamOpt
+  /** The enemy it was found for (the team's then: level, RES, DEF, the preset it was) */
+  enemy?: Pick<Team, 'enemyOverride' | 'enemyPreset'>
   result: {
     builds: Record<string, Record<string, string | undefined>>
     weapons: Record<string, string>
@@ -39,6 +42,16 @@ export interface ITeamOptResultsEntry {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null
 
+/** A run's enemy: numbers only, and a preset's name */
+const validEnemy = (
+  enemy: unknown
+): enemy is Pick<Team, 'enemyOverride' | 'enemyPreset'> =>
+  isObject(enemy) &&
+  isObject(enemy['enemyOverride']) &&
+  Object.values(enemy['enemyOverride']).every((v) => typeof v === 'number') &&
+  (enemy['enemyPreset'] === undefined ||
+    typeof enemy['enemyPreset'] === 'string')
+
 export class TeamOptResultsEntry extends DataEntry<
   'teamOptResults',
   'teamOptResults',
@@ -55,7 +68,7 @@ export class TeamOptResultsEntry extends DataEntry<
       isObject(obj['runs']) ? obj['runs'] : {}
     )) {
       if (!isObject(run)) continue
-      const { savedAt, seconds, teamOpt, result, sensitivity } = run
+      const { savedAt, seconds, teamOpt, result, sensitivity, enemy } = run
       const settings = validateTeamOpt(teamOpt)
       if (!settings || !isObject(result)) continue
       if (!isObject(result['builds']) || !isObject(result['weapons'])) continue
@@ -77,6 +90,7 @@ export class TeamOptResultsEntry extends DataEntry<
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
         seconds: typeof seconds === 'number' ? seconds : 0,
         teamOpt: settings,
+        ...(validEnemy(enemy) ? { enemy } : {}),
         result: result as TeamOptSavedRun['result'],
         ...(Object.keys(sensitivities).length
           ? { sensitivity: sensitivities }

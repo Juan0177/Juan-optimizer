@@ -30,6 +30,7 @@ import {
   kqmSandsKeys,
   kqmTalentLevel,
   optimizeTeamKqm,
+  playedAttackStates,
   TeamOptCancelled,
   teamOptMembers,
   withRotationEnergy,
@@ -626,12 +627,18 @@ export async function compareSwapKqm({
     // (a fixed member's build changed: the comparison fails at the end, no headline)
     if (onPreview && !changedBuild(p)) onPreview(viewOf(p))
   }
+  // A's run states (Wolf's Gravestone's uptime against the team's enemy, as KQM Theorycrafting
+  // ran it), the entering member's in the leaving member's place: B plays the fight A did
+  const attackStates = playedAttackStates(run.result.played)?.map((s) =>
+    s.owner === args.out ? { ...s, owner: key } : s
+  )
   const common = {
     database: sandbox,
     teamId,
     gender,
     teamOpt,
     replay,
+    attackStates,
     onStep,
     isCancelled,
   }

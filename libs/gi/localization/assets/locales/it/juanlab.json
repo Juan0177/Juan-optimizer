@@ -91,6 +91,7 @@
   },
   "kqmCompare": {
     "tab": "KQM Compare",
+    "shortTab": "Compare",
     "tabAlpha": "KQM Compare (alpha)",
     "title": "KQM Compare",
     "alpha": "Alpha",

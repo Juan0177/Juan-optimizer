@@ -1,5 +1,5 @@
 /**
- * Waits as a player reads them (Discord reports): a rotation that starts by waiting for a cooldown
+ * Waits as a player reads them (user reports): a rotation that starts by waiting for a cooldown
  * left from the one before is shown from its first action, the wait at its end ("Odette EE" alone
  * put her E 13 s in); and Mitya's second tap E, pushed past his 6 s window to switch the Detection
  * Core, says why it waits for the 18 s cooldown.

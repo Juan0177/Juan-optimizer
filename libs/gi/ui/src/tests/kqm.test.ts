@@ -622,22 +622,40 @@ describe('KQM Standards builds', () => {
       expect(passives[path[0]]?.[path[path.length - 1]]).toBeUndefined()
   }, 300_000)
 
-  it('builds at 9/9/9 talents by default (KQM’s guides), 10/10/10 when chosen', async () => {
+  it("builds for the team's enemy: its level and RES", async () => {
+    const { database, teamId, teamOpt } = setup()
+    const base = (await run(database, teamId, teamOpt))!.after.total
+    // Cryo RES 10% -> 70% (the team deals Cryo DMG; Shenhe's burst shreds 15% at KQM's talent
+    // 10): from -5% (halved: x1.025) to 55% (x0.45), the same builds
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.cryo_enemyRes_ = 70
+    })
+    const resisted = (await run(database, teamId, teamOpt))!.after.total
+    expect(resisted / base).toBeCloseTo(0.45 / 1.025, 6)
+    database.teams.set(teamId, (team) => {
+      team.enemyOverride.enemyLevel = 110
+    })
+    expect((await run(database, teamId, teamOpt))!.after.total).toBeLessThan(
+      resisted
+    )
+  }, 300_000)
+
+  it('builds at 10/10/10 talents by default (KQM Standards), 9/9/9 when chosen', async () => {
     const { database, teamId, teamOpt } = setup()
     const { talents: _, ...standard } = teamOpt.kqm!
-    const nine = (await run(database, teamId, { ...teamOpt, kqm: standard }))!
-    const ten = (await run(database, teamId, {
+    const nine = (await run(database, teamId, {
       ...teamOpt,
-      kqm: { ...standard, talents: 10 },
+      kqm: { ...standard, talents: 9 },
     }))!
-    expect(kqmTalentLevel(standard)).toBe(9)
+    const ten = (await run(database, teamId, { ...teamOpt, kqm: standard }))!
+    expect(kqmTalentLevel(standard)).toBe(10)
     expect(ten.after.total).toBeGreaterThan(nine.after.total * 1.03)
     // per member too: talents are every member's
     for (const k of [ayaka, shenhe])
       expect(ten.after.members[k]!).toBeGreaterThan(nine.after.members[k]!)
   }, 300_000)
 
-  it('uses C6 for 4★ and C0 for 5★ and the chosen talents (10/10/10) in search, rankings and evaluation without changing saved characters', async () => {
+  it("uses C6 for 4★, C1 for the free constellation event's limited 5★ (C2 standard, else C0) and the chosen talents (10/10/10) in search, rankings and evaluation without changing saved characters", async () => {
     const { database, teamId, teamOpt } = setup()
     database.chars.set(ayaka, { constellation: 6, level: 40, ascension: 2 })
     const fischl: CharacterKey = 'Fischl'
@@ -667,16 +685,21 @@ describe('KQM Standards builds', () => {
     const snapshot = JSON.stringify(database.chars.values)
     const result = (await run(database, teamId, teamOpt))!
     expect(result.after.members[fischl]).toBeGreaterThan(0)
-    expect(kqmConstellation(ayaka)).toBe(0)
+    // (Ayaka and Shenhe are in the free constellation event: C1; standard 5★ C2; others C0)
+    expect(kqmConstellation(ayaka)).toBe(1)
     expect(kqmConstellation(fischl)).toBe(6)
+    expect(kqmConstellation('Diluc')).toBe(2)
+    expect(kqmConstellation('YumemizukiMizuki')).toBe(2)
+    expect(kqmConstellation('Furina')).toBe(0)
     expect(result.constellations).toEqual({
-      [ayaka]: 0,
-      [shenhe]: 0,
+      [ayaka]: 1,
+      [shenhe]: 1,
       [fischl]: 6,
     })
     expect(JSON.stringify(database.chars.values)).toBe(snapshot)
     // The same run with the saved characters already at the standards gives identical output.
-    database.chars.set(ayaka, { constellation: 0, level: 90, ascension: 6 })
+    database.chars.set(ayaka, { constellation: 1, level: 90, ascension: 6 })
+    database.chars.set(shenhe, { constellation: 1 })
     database.chars.set(fischl, {
       constellation: 6,
       talent: { auto: 10, skill: 10, burst: 10 },
@@ -697,7 +720,7 @@ describe('KQM Standards builds', () => {
     expect(chosen.after.members[ayaka]).toBeGreaterThan(
       standard.after.members[ayaka]
     )
-    expect(database.chars.get(ayaka)?.constellation).toBe(0)
+    expect(database.chars.get(ayaka)?.constellation).toBe(1)
     expect(
       kqmMemberConstellation(ayaka, { constellations: { [ayaka]: 2 } })
     ).toBe(2)
@@ -706,7 +729,7 @@ describe('KQM Standards builds', () => {
     // Team optimize's kept members still get a KQM build, at the KQM constellation
     database.chars.set(ayaka, { constellation: 6 })
     const kept = (await run(database, teamId, { ...teamOpt, keep: [ayaka] }))!
-    expect(kept.constellations[ayaka]).toBe(0)
+    expect(kept.constellations[ayaka]).toBe(1)
     expect(kept.builds[ayaka]).toBeDefined()
   }, 300_000)
 

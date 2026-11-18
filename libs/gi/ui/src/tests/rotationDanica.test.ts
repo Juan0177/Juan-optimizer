@@ -140,6 +140,26 @@ describe('Danica', () => {
     ])
   })
 
+  it('notes that her E ended Royal Guard and its party ATK, and that "Danica Q" keeps it', () => {
+    const members: CharacterKey[] = ['Danica', 'Kaeya', 'Lisa']
+    const ended = (sim: ReturnType<typeof run>) =>
+      sim.notes.some((n) => n.includes('her E ended Maid: Royal Guard'))
+    // (the E after the Entry ends Royal Guard)
+    expect(
+      ended(run('Danica E -> Kaeya E -> Lisa E -> Danica E Q W2', members))
+    ).toBe(true)
+    // (a first E has no form to end)
+    expect(ended(run('Danica E Q W2', members))).toBe(false)
+    // (the advice: the Entry's Royal Guard with a Q and no E lights the party ATK)
+    const kept = run('Danica E -> Kaeya E -> Lisa E -> Danica Q W2', members)
+    expect(ended(kept)).toBe(false)
+    expect(
+      kept.buffWindows.some(
+        (w) => w.path.join('.') === 'Danica.burstEnhanced' && w.value === 'on'
+      )
+    ).toBe(true)
+  })
+
   it('Scouring Anchor clears Will to Protect’s cooldown: a second Entry within 16 s', () => {
     // (Lisa's Normal Attacks fill Will off the field; the second E waits out its own 18 s)
     const sim = run(
@@ -174,12 +194,12 @@ describe('Danica', () => {
     expect(sim.notes.some((n) => n.includes('Waited'))).toBe(false)
   })
 
-  it('uses 18 s Burst CD and 16 s Will to Protect CD', () => {
+  it('uses 18 s Burst CD (from 0.4 s into the cast: 18.4 s press to press) and 16 s Will to Protect CD', () => {
     const burst = run('Danica Q Q', ['Danica'])
     const qs = burst.actions.filter(
       (a) => a.characterKey === 'Danica' && a.text === 'Q'
     )
-    expect(qs[1].start - qs[0].start).toBeGreaterThanOrEqual(1080)
+    expect(qs[1].start - qs[0].start).toBe(1104)
 
     const early = run(
       'Danica E -> Kaeya E -> Lisa E -> Danica N1 W6 -> Kaeya E -> Lisa E -> Danica N1',
@@ -363,5 +383,42 @@ describe('Danica', () => {
     expect(
       c2Lit['skill']['decreeDmg'].value / c2Lit['skill']['onFieldDmg'].value
     ).toBeCloseTo(1.5, 4)
+  })
+
+  it('a swap-only step plays the Entry Skill and swaps out ("Danica", "Danica entry", "Danica W1")', () => {
+    const members: CharacterKey[] = ['Danica', 'Fischl', 'Kaeya', 'Bennett']
+    for (const step of ['Danica', 'Danica entry', 'Danica swap', 'Danica W1']) {
+      const sim = run(
+        `Danica E -> Fischl E N2 -> Kaeya E N2 -> ${step} -> Bennett E N2 -> Danica`,
+        members
+      )
+      expect(sim.warnings).toEqual([])
+      const entry = sim.actions.findIndex(
+        (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+      )
+      expect(entry).toBeGreaterThan(0)
+      // straight out to Bennett after it: no other Danica action between
+      expect(sim.actions[entry + 1].characterKey).toBe('Bennett')
+    }
+  })
+
+  it('says why a swap-only step played no Entry Skill', () => {
+    const noAnchor = run('Fischl E -> Danica entry -> Fischl N2 -> Danica', [
+      'Danica',
+      'Fischl',
+    ])
+    expect(noAnchor.actions.some((a) => a.text === 'Entry')).toBe(false)
+    expect(noAnchor.notes.join(' ')).toContain('her Anchor was not out')
+    const notFull = run(
+      'Danica E -> Bennett E N2 -> Danica -> Bennett N2 -> Danica',
+      ['Danica', 'Bennett']
+    )
+    expect(notFull.notes.join(' ')).toContain('Will to Cleanse was not full')
+    // an ordinary step is not noted
+    const plain = run('Danica E -> Bennett E -> Danica E W1', [
+      'Danica',
+      'Bennett',
+    ])
+    expect(plain.notes.join(' ')).not.toContain('no entry action')
   })
 })

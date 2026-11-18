@@ -20,6 +20,7 @@ import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
 import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
 import { teamOptBonusStats, teamOptMembers } from './data'
+import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import {
   canWield,
@@ -220,6 +221,7 @@ export function evaluateTeamRotation(
     bonusStats,
     characters,
     conditionalOverrides,
+    enemyOverride,
   }: {
     /** Builds of the members: real artifacts or data (missing: their loadout's) */
     arts: Partial<Record<CharacterKey, ICachedArtifact[] | Data>>
@@ -238,6 +240,8 @@ export function evaluateTeamRotation(
     conditionalOverrides?: Partial<
       Record<CharacterKey, Record<string, Record<string, string>>>
     >
+    /** The enemy's stats over the team's own (another RES, as a boss's fight changes it) */
+    enemyOverride?: Partial<Record<string, number>>
   }
 ): TeamOptEvaluation | undefined {
   const nodes = teamRotationNodes(database, teamId, gender, {
@@ -251,6 +255,7 @@ export function evaluateTeamRotation(
     onField,
     bonusStats,
     characters,
+    enemyOverride,
   })
   if (!nodes) return undefined
   return evaluateTeamNodes(database, teamId, attacks, nodes)
@@ -334,6 +339,8 @@ export function teamOptPool(
   teamLocations: ReadonlySet<string>,
   taken: ReadonlySet<string>
 ): ICachedArtifact[] {
+  // (characters outside the team whose artifacts are not taken)
+  const notFrom = new Set<string>(teamOpt.excludedLocations ?? [])
   return arts.filter((art) => {
     if (taken.has(art.id)) return false
     if (art.level < teamOpt.levelLow || art.level > teamOpt.levelHigh)
@@ -349,7 +356,7 @@ export function teamOptPool(
       art.location &&
       art.location !== member.location &&
       !teamLocations.has(art.location) &&
-      !teamOpt.useOtherChars
+      (!teamOpt.useOtherChars || notFrom.has(art.location))
     )
       return false
     return true
@@ -494,6 +501,7 @@ export async function optimizeTeam({
   isCancelled = () => false,
   maxRounds = 4,
   builds = 1,
+  attackStates,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -505,6 +513,11 @@ export async function optimizeTeam({
   maxRounds?: number
   /** Team builds to find (the best, and `builds` − 1 alternatives) */
   builds?: number
+  /**
+   * States every attack gets in this run (not saved with the rotation): e.g. Wolf's Gravestone's
+   * passive at its uptime against the team's enemy
+   */
+  attackStates?: readonly RunAttackState[]
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -619,7 +632,7 @@ export async function optimizeTeam({
     ])
   ) as Partial<Record<CharacterKey, StatFilters>>
   const mainStatAssumptionLevel = teamOpt.assumeMaxMain ? 20 : 0
-  const { attacks } = teamOpt
+  const attacks = withAttackStates(teamOpt.attacks, attackStates)
   // the extra buffs (food, an Abyss blessing...) of each member
   const bonusStats = teamOptBonusStats(
     teamOpt,

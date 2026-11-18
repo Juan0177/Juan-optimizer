@@ -6,20 +6,29 @@ import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
+  RunEnemy,
+  SimGear,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import {
+  appliedStygianPreset,
   CharacterName,
+  enemyFight,
   evaluateTeamRotation,
   kqmTeamOverrides,
+  MOONGECKO_BOSS,
+  sameEnemy,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
   teamOptPool,
+  teamOptResultGear,
   teamStatFilters,
+  wolfsGravestoneStates,
+  wolfsGravestoneUptime,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
@@ -46,17 +55,29 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
+import { EnemySetup } from '../Enemy/EnemySetup'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
 import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
+import {
+  fightTeamOf,
+  useCocoonEvaluations,
+  useRotationApplications,
+} from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
+import { KqmTimeline } from './KqmTimeline'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { RotationTransfer } from './RotationTransfer'
-import { RotationConfigureButton, useRotationWriter } from './RotationWriter'
+import {
+  RotationConfigureButton,
+  useRotationText,
+  useRotationWriter,
+} from './RotationWriter'
 import { RunDialog } from './RunDialog'
+import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
@@ -68,6 +89,8 @@ import {
   quickSx,
   Segmented,
   StatTile,
+  StepTitle,
+  stepSurfaceSx,
   tokens,
   type,
   VDivider,
@@ -110,6 +133,10 @@ export default function TeamBuildWorkspace({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
+  // a result found for another enemy than the team's now (one found before enemies were kept with
+  // results: not known, not flagged)
+  const enemyChanged = (enemy?: RunEnemy) =>
+    !!enemy && !!team && !sameEnemy(enemy.enemyOverride, team.enemyOverride)
   const [teamOpt, setTeamOpt] = useTeamOpt(teamId)
   // `teamData` is recomputed whenever a member, a build or a conditional changes
   const members = useMemo(
@@ -119,7 +146,7 @@ export default function TeamBuildWorkspace({
   const buffs = useTeamBuffs(teamId, teamData)
   // the rotation with the builds equipped now: Team optimize's only (KQM theorycrafting never
   // counts or shows the members' own builds)
-  const evaluation = useCurrentEvaluation(
+  const [evaluation, evaluationSettings] = useCurrentEvaluation(
     teamId,
     teamOpt,
     mode === 'inventory' ? teamData : undefined
@@ -143,6 +170,11 @@ export default function TeamBuildWorkspace({
     (n, m) => n + (teamOpt.attacks[m.characterKey]?.length ?? 0),
     0
   )
+  // the first visit (no attacks, no written rotation, no choice made yet): the start screen
+  const { applied: writtenRotation } = useRotationText(teamId)
+  const { manual, chooseManual } = useManualStart(teamId)
+  // (both tabs: the rotation is shared by Team Optimize and KQM Theorycrafting)
+  const showStart = !attackCount && !writtenRotation && !manual
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
   )
@@ -150,6 +182,14 @@ export default function TeamBuildWorkspace({
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
   const [rotationExpanded, setRotationExpanded] = useState(() => !attackCount)
+  // a written rotation just applied to an empty team: its members' long attack lists fold away
+  // (the written rotation says it all; a click opens them)
+  const hadAttacks = useRef(attackCount > 0)
+  useEffect(() => {
+    if (!hadAttacks.current && attackCount > 0 && writtenRotation)
+      setRotationExpanded(false)
+    hadAttacks.current = attackCount > 0
+  }, [attackCount, writtenRotation])
   // Extra buffs: their count, and the section open when there are some
   const extraCount = Object.values(teamOpt.bonusStats ?? {}).reduce(
     (n, stats) => n + Object.values(stats ?? {}).filter((v) => !!v).length,
@@ -193,7 +233,8 @@ export default function TeamBuildWorkspace({
   const kqmRotation =
     mode === 'kqm' &&
     kqmResult &&
-    kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt)
+    kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt) &&
+    !enemyChanged(kqmResult.enemy)
       ? kqmResult
       : undefined
   // the builds shown in the KQM results (the run's, or other equipment picked there): the rotation
@@ -229,7 +270,89 @@ export default function TeamBuildWorkspace({
     kqm: mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
     kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
+    kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
   })
+  // how long the team takes to defeat the enemy: a Stygian Onslaught boss, its fight's mechanics
+  // counted where they are known (with the written rotation's element applications); an enemy set
+  // by hand, its HP ÷ the team's DPS
+  const stygian = team && appliedStygianPreset(team)
+  const applications = useRotationApplications(
+    teamId,
+    members,
+    !!stygian,
+    mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
+    mode === 'kqm' ? kqmShown?.builds : undefined
+  )
+  // the Moongecko's Radiant Cocoon and Disentangled: the damage shown evaluated in them too (the
+  // equipped builds', or the KQM builds' played)
+  const cocoonSettings = useMemo(
+    () =>
+      !stygian
+        ? undefined
+        : mode === 'kqm'
+          ? kqmOverrides && kqmAttacks
+            ? {
+                ...kqmOverrides,
+                arts: kqmOverrides.arts ?? {},
+                attacks: kqmAttacks,
+              }
+            : undefined
+          : evaluationSettings,
+    [stygian, mode, kqmOverrides, kqmAttacks, evaluationSettings]
+  )
+  const cocoonNow = useCocoonEvaluations(teamId, cocoonSettings, {
+    cocoon: stygian?.boss.id === MOONGECKO_BOSS,
+    opening: applications?.opening?.attacks,
+  })
+  const fightNow = useMemo(
+    () =>
+      team && (stygian || team.enemyHp)
+        ? fightTeamOf({
+            members: members.map((m) => m.characterKey),
+            // (the damage shown: the equipped builds', or the KQM builds' played)
+            evaluation: mode === 'kqm' ? kqmShown?.after : evaluation,
+            attacks: (mode === 'kqm' ? kqmAttacks : teamOpt.attacks) ?? {},
+            teamData,
+            rotationTime:
+              mode === 'kqm' ? (kqmRotationTime ?? rotationTime) : rotationTime,
+            enemyOverride: team.enemyOverride,
+            applications,
+            cocoon: cocoonNow,
+          })
+        : undefined,
+    [
+      team,
+      stygian,
+      members,
+      mode,
+      kqmShown,
+      evaluation,
+      kqmAttacks,
+      teamOpt.attacks,
+      teamData,
+      kqmRotationTime,
+      rotationTime,
+      applications,
+      cocoonNow,
+    ]
+  )
+  // Wolf's Gravestone's passive (enemies under 30% HP) for the share of the fight it is on against
+  // the team's enemy, from the fight shown (the equipped builds', or the KQM result's): every
+  // attack of a run gets it. Without HP its member's own switch stays (KQM: off).
+  const lowHp = useMemo(() => {
+    const wolf = wolfsGravestoneUptime(
+      team && fightNow ? enemyFight(team, fightNow) : undefined
+    )
+    return wolf
+      ? {
+          wolf,
+          states: wolfsGravestoneStates(
+            members.map((m) => m.characterKey),
+            wolf.state
+          ),
+        }
+      : undefined
+  }, [team, fightNow, members])
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
@@ -265,6 +388,55 @@ export default function TeamBuildWorkspace({
   const builds = result ? teamBuilds(result.result) : []
   const shown = builds[Math.min(pick, builds.length - 1)]
   useEffect(() => setPick(0), [result?.result])
+  // the shown builds' rotation timeline: the written rotation played with their weapons and sets,
+  // an attack's figures read with their builds (as the run counted them)
+  const shownGear = useMemo(
+    () => (shown ? teamOptResultGear(database, teamId, shown) : undefined),
+    [database, teamId, shown]
+  )
+  const shownSimGear = useMemo(() => {
+    if (!shownGear) return undefined
+    const gear: Partial<Record<CharacterKey, SimGear>> = {}
+    for (const [ck, arts] of Object.entries(shownGear.arts)) {
+      const sets: Record<string, number> = {}
+      for (const art of arts ?? [])
+        sets[art.setKey] = (sets[art.setKey] ?? 0) + 1
+      const weapon = shownGear.weapons[ck as CharacterKey]
+      gear[ck as CharacterKey] = {
+        sets,
+        weapon: weapon?.key,
+        refinement: weapon?.refinement,
+      }
+    }
+    return gear
+  }, [shownGear])
+  const shownTeamOpt = result?.teamOpt ?? teamOpt
+  const shownOverrides = useMemo(
+    () =>
+      shownGear && {
+        ...shownGear,
+        mainStatAssumptionLevel: shownTeamOpt.assumeMaxMain ? 20 : 0,
+        bonusStats: teamOptBonusStats(
+          shownTeamOpt,
+          members.map((m) => m.characterKey)
+        ),
+      },
+    [shownGear, shownTeamOpt, members]
+  )
+  // the shown builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
+  const resultCocoonSettings = useMemo(
+    () =>
+      shownOverrides && result?.enemy && appliedStygianPreset(result.enemy)
+        ? { ...shownOverrides, attacks: shownTeamOpt.attacks }
+        : undefined,
+    [shownOverrides, result?.enemy, shownTeamOpt.attacks]
+  )
+  const resultCocoon = useCocoonEvaluations(teamId, resultCocoonSettings, {
+    cocoon:
+      !!result?.enemy &&
+      appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS,
+    opening: applications?.opening?.attacks,
+  })
   // a new result: the rotation folds away (it opens again with a click) and the result, below it,
   // comes into view
   useEffect(() => {
@@ -289,8 +461,14 @@ export default function TeamBuildWorkspace({
   if (!members.length) return <EmptyTeam teamId={teamId} />
 
   return (
-    // each section is its own panel on the page, 16 px apart
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+    // each section is its own panel on the page; KQM's are steps (rotation, setup, builds), further apart
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: mode === 'kqm' ? { xs: 2.5, sm: 3.5 } : 2,
+      }}
+    >
       {/* the rotation: what it is with its actions and figures, then its settings, then the team */}
       <Box
         component="section"
@@ -311,43 +489,61 @@ export default function TeamBuildWorkspace({
             rowGap: 1.25,
           }}
         >
-          <Box
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}
-          >
-            <Typography
-              id={rotationTitleId}
-              component="h2"
-              sx={{ ...type.section, whiteSpace: 'nowrap' }}
+          {mode === 'kqm' ? (
+            <Box sx={{ mr: 1 }}>
+              <StepTitle
+                step={1}
+                id={rotationTitleId}
+                info={t(
+                  'teamOpt.rotation.info',
+                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                )}
+              >
+                {t('teamOpt.rotation.title', 'Rotation')}
+              </StepTitle>
+            </Box>
+          ) : (
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}
             >
-              {t('teamOpt.rotation.title', 'Rotation')}
-            </Typography>
-            <InfoTooltipInline
-              title={t(
-                'teamOpt.rotation.info',
-                'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
-              )}
-            />
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: 0.75,
-            }}
-          >
-            <RotationConfigureButton
-              teamId={teamId}
-              writer={writer}
-              disabled={running}
-            />
-            <RotationTransfer
-              members={members}
-              teamOpt={teamOpt}
-              setTeamOpt={setTeamOpt}
-              disabled={running}
-            />
-          </Box>
+              <Typography
+                id={rotationTitleId}
+                component="h2"
+                sx={{ ...type.section, whiteSpace: 'nowrap' }}
+              >
+                {t('teamOpt.rotation.title', 'Rotation')}
+              </Typography>
+              <InfoTooltipInline
+                title={t(
+                  'teamOpt.rotation.info',
+                  'Add each member’s attacks and hits for one rotation. This rotation is shared by Team Optimize and KQM Theorycrafting.'
+                )}
+              />
+            </Box>
+          )}
+          {/* (the start screen has its own ways in: write, add attacks, import) */}
+          {!showStart && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 0.75,
+              }}
+            >
+              <RotationConfigureButton
+                teamId={teamId}
+                writer={writer}
+                disabled={running}
+              />
+              <RotationTransfer
+                members={members}
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
+                disabled={running}
+              />
+            </Box>
+          )}
           <Box sx={{ flexGrow: 1 }} />
           {!!attackCount && mode === 'inventory' && (
             <HeaderStats
@@ -357,166 +553,216 @@ export default function TeamBuildWorkspace({
             />
           )}
         </Box>
-        {/* the rotation as text: read as its steps, edited in place */}
-        <RotationInline
-          teamId={teamId}
-          members={members}
-          setTeamOpt={setTeamOpt}
-          writer={writer}
-          replaces={!!attackCount}
-          disabled={running}
-          kqm={mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined}
-          kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
-        />
         {writer.element}
-        {/* the rotation's settings, in one row of labelled controls */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            columnGap: 2,
-            rowGap: 1,
-            minHeight: 34,
-          }}
-        >
-          <RotationTimeInput
-            // (KQM's: the time of the rotation it played, which it counts)
-            value={
-              kqmRotation?.rotation === 'played'
-                ? (kqmRotationTime ?? rotationTime)
-                : rotationTime
-            }
-            disabled={running || kqmRotation?.rotation === 'played'}
-            onChange={(seconds) =>
-              setTeamOpt((o) => {
-                if (seconds && seconds !== defaultRotationTime)
-                  o.rotationTime = seconds
-                else delete o.rotationTime
-              })
-            }
-          />
-          <RotationsSetting
-            teamId={teamId}
-            members={members}
-            setTeamOpt={setTeamOpt}
-            writer={writer}
+        {showStart ? (
+          // the first visit: how to start (write the rotation, or enter attacks by hand)
+          <TeamOptimizeStart
+            members={members.map((m) => m.characterKey)}
+            onWrite={writer.openWriter}
+            onManual={chooseManual}
             disabled={running}
-          />
-          {onField && members.length > 1 && (
-            <OnFieldPicker
-              members={members}
-              value={onField}
-              disabled={running}
-              onChange={(characterKey) =>
-                setTeamOpt((o) => {
-                  if (characterKey === members[0]?.characterKey)
-                    delete o.onField
-                  else o.onField = characterKey
-                })
-              }
-            />
-          )}
-          <Box sx={{ flexGrow: 1 }} />
-          {rotationExpanded && !!attackCount && (
-            <FormControlLabel
-              sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
-              control={
-                <Switch
-                  size="small"
-                  checked={showConditions}
-                  onChange={toggleConditions}
-                />
-              }
-              label={
-                <Typography component="span" sx={type.label}>
-                  {t('teamOpt.rotation.showConditions', 'Show buff conditions')}
-                </Typography>
-              }
-            />
-          )}
-        </Box>
-        {/* one panel for the team: folded, a line per member; open, a column per member with
-            hairlines between them */}
-        <Box
-          sx={{
-            ...insetSx,
-            overflow: 'hidden',
-            containerType: 'inline-size',
-          }}
-        >
-          <Box
-            id={rotationBodyId}
-            sx={{
-              minWidth: 0,
-              display: 'grid',
-              gap: '1px',
-              // (the hairlines between the members: the grid's gaps over this colour)
-              bgcolor: tokens.hairline,
-              gridTemplateColumns: 'minmax(0, 1fr)',
-              '@container (min-width: 520px)': {
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-              },
-              '@container (min-width: 1040px)': {
-                gridTemplateColumns: `repeat(${Math.min(4, members.length)}, minmax(0, 1fr))`,
-              },
-            }}
-          >
-            {members.map((member) => (
-              <MemberRotation
-                key={member.characterKey}
-                teamId={teamId}
-                member={member}
-                teamData={teamData}
-                attacks={
-                  (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
-                }
-                setAttacks={setAttacks(member.characterKey)}
-                evaluation={mode === 'inventory' ? evaluation : kqmShown?.after}
-                figures={mode === 'inventory'}
-                played={kqmPlayed}
-                overrides={kqmOverrides}
-                buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
-                mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
+            footer={
+              <RotationTransfer
+                importOnly
                 members={members}
-                onField={onField ?? member.characterKey}
-                rotationTime={kqmRotationTime ?? rotationTime}
-                showConditions={showConditions}
-                expanded={rotationExpanded}
-                onToggle={
-                  attackCount ? () => setRotationExpanded((o) => !o) : undefined
-                }
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
                 disabled={running}
               />
-            ))}
-          </Box>
-        </Box>
-        {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
-        <Disclosure
-          label={t('teamOpt.bonus.advanced', 'Extra buffs (food, blessings…)')}
-          count={
-            extraCount > 0
-              ? t('teamOpt.extra.count', {
-                  defaultValue: '{{count}} buffs',
-                  count: extraCount,
-                })
-              : undefined
-          }
-          info={t(
-            'teamOpt.extra.info',
-            'Buffs the game data does not have, like food, an Abyss blessing or your own numbers. For the whole team or one member: they count on its hits and in its stats and requirements.'
-          )}
-          open={extraOpen}
-          onToggle={() => setExtraOpen((open) => !open)}
-          sx={{ ml: -0.25, pt: 1.25, mt: 0.25, borderTop: hairline }}
-        >
-          <ExtraBuffs
-            members={members}
-            teamOpt={teamOpt}
-            setTeamOpt={setTeamOpt}
-            disabled={running}
+            }
           />
-        </Disclosure>
+        ) : (
+          <>
+            {/* the rotation as text: read as its steps, edited in place */}
+            <RotationInline
+              teamId={teamId}
+              members={members}
+              setTeamOpt={setTeamOpt}
+              writer={writer}
+              replaces={!!attackCount}
+              disabled={running}
+              kqm={
+                mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined
+              }
+              kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
+            />
+            {/* the rotation's settings, in one row of labelled controls */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                columnGap: 2,
+                rowGap: 1,
+                minHeight: 34,
+              }}
+            >
+              <RotationTimeInput
+                // (KQM's: the time of the rotation it played, which it counts)
+                value={
+                  kqmRotation?.rotation === 'played'
+                    ? (kqmRotationTime ?? rotationTime)
+                    : rotationTime
+                }
+                disabled={running || kqmRotation?.rotation === 'played'}
+                onChange={(seconds) =>
+                  setTeamOpt((o) => {
+                    if (seconds && seconds !== defaultRotationTime)
+                      o.rotationTime = seconds
+                    else delete o.rotationTime
+                  })
+                }
+              />
+              <RotationsSetting
+                teamId={teamId}
+                members={members}
+                setTeamOpt={setTeamOpt}
+                writer={writer}
+                disabled={running}
+              />
+              {/* (a written rotation says who is on the field for each of its attacks: only
+                  attacks entered by hand use this) */}
+              {onField &&
+                members.length > 1 &&
+                members.some((m) =>
+                  teamOpt.attacks[m.characterKey]?.some((a) => !a.onField)
+                ) && (
+                  <OnFieldPicker
+                    members={members}
+                    value={onField}
+                    disabled={running}
+                    onChange={(characterKey) =>
+                      setTeamOpt((o) => {
+                        if (characterKey === members[0]?.characterKey)
+                          delete o.onField
+                        else o.onField = characterKey
+                      })
+                    }
+                  />
+                )}
+              <Box sx={{ flexGrow: 1 }} />
+              {rotationExpanded && !!attackCount && (
+                <FormControlLabel
+                  sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
+                  control={
+                    <Switch
+                      size="small"
+                      checked={showConditions}
+                      onChange={toggleConditions}
+                    />
+                  }
+                  label={
+                    <Typography component="span" sx={type.label}>
+                      {t(
+                        'teamOpt.rotation.showConditions',
+                        'Show buff conditions'
+                      )}
+                    </Typography>
+                  }
+                />
+              )}
+            </Box>
+            {/* one panel for the team: folded, a line per member; open, a column per member with
+              hairlines between them */}
+            <Box
+              sx={{
+                ...insetSx,
+                overflow: 'hidden',
+                containerType: 'inline-size',
+              }}
+            >
+              <Box
+                id={rotationBodyId}
+                sx={{
+                  minWidth: 0,
+                  display: 'grid',
+                  gap: '1px',
+                  // (the hairlines between the members: the grid's gaps over this colour)
+                  bgcolor: tokens.hairline,
+                  gridTemplateColumns: 'minmax(0, 1fr)',
+                  '@container (min-width: 520px)': {
+                    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  },
+                  '@container (min-width: 1040px)': {
+                    gridTemplateColumns: `repeat(${Math.min(4, members.length)}, minmax(0, 1fr))`,
+                  },
+                }}
+              >
+                {members.map((member) => (
+                  <MemberRotation
+                    key={member.characterKey}
+                    teamId={teamId}
+                    member={member}
+                    teamData={teamData}
+                    attacks={
+                      (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
+                    }
+                    setAttacks={setAttacks(member.characterKey)}
+                    evaluation={
+                      mode === 'inventory' ? evaluation : kqmShown?.after
+                    }
+                    figures={mode === 'inventory'}
+                    played={kqmPlayed}
+                    overrides={kqmOverrides}
+                    buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
+                    mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
+                    members={members}
+                    onField={onField ?? member.characterKey}
+                    rotationTime={kqmRotationTime ?? rotationTime}
+                    showConditions={showConditions}
+                    expanded={rotationExpanded}
+                    onToggle={
+                      attackCount
+                        ? () => setRotationExpanded((o) => !o)
+                        : undefined
+                    }
+                    disabled={running}
+                  />
+                ))}
+              </Box>
+            </Box>
+            {/* the enemy the damage is for (the team's), as KQM's setup shows it: above the extra
+                buffs, in the footer (KQM: in its setup, beside the members) */}
+            {mode !== 'kqm' && (
+              <Box sx={{ pt: 1.25, mt: 0.25, borderTop: hairline }}>
+                <EnemySetup
+                  teamId={teamId}
+                  fight={fightNow}
+                  disabled={running}
+                />
+              </Box>
+            )}
+            {/* buffs the game data does not have (food, an Abyss blessing…): the panel's footer */}
+            <Disclosure
+              label={t(
+                'teamOpt.bonus.advanced',
+                'Extra buffs (food, blessings…)'
+              )}
+              count={
+                extraCount > 0
+                  ? t('teamOpt.extra.count', {
+                      defaultValue: '{{count}} buffs',
+                      count: extraCount,
+                    })
+                  : undefined
+              }
+              info={t(
+                'teamOpt.extra.info',
+                'Buffs the game data does not have, like food, an Abyss blessing or your own numbers. For the whole team or one member: they count on its hits and in its stats and requirements.'
+              )}
+              open={extraOpen}
+              onToggle={() => setExtraOpen((open) => !open)}
+              sx={{ ml: -0.25, pt: 1.25, mt: 0.25, borderTop: hairline }}
+            >
+              <ExtraBuffs
+                members={members}
+                teamOpt={teamOpt}
+                setTeamOpt={setTeamOpt}
+                disabled={running}
+              />
+            </Disclosure>
+          </>
+        )}
       </Box>
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
@@ -527,12 +773,13 @@ export default function TeamBuildWorkspace({
             hasResult={!!kqmResult}
             disabled={running}
             canRun={!!attackCount}
-            onStart={kqm.run}
+            onStart={(settings) => kqm.run(settings, lowHp?.states)}
             teamId={teamId}
             members={members}
             teamData={teamData}
             teamOpt={teamOpt}
             setTeamOpt={setTeamOpt}
+            fight={fightNow}
           />
         </Box>
       )}
@@ -541,7 +788,7 @@ export default function TeamBuildWorkspace({
         <RunDialog
           open
           onClose={() => setRunDialog(false)}
-          onStart={run}
+          onStart={() => run(lowHp?.states)}
           teamId={teamId}
           members={members}
           teamData={teamData}
@@ -560,7 +807,7 @@ export default function TeamBuildWorkspace({
         // (one run's early builds and its result: the same results, updated in place)
         <Box
           key={kqmResult.startTime ?? kqmResult.seconds}
-          sx={{ ...revealSx, ...sectionSx, p: 0 }}
+          sx={{ ...revealSx, ...stepSurfaceSx(true), p: 0 }}
         >
           <KqmResults
             teamId={teamId}
@@ -578,9 +825,31 @@ export default function TeamBuildWorkspace({
               (kqmResult.runTeamOpt ?? kqmResult.teamOpt).rotationTime ??
               rotationTime
             }
-            stale={kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt)}
+            stale={
+              kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+              enemyChanged(kqmResult.enemy)
+            }
             now={teamOpt}
+            enemy={kqmResult.enemy}
+            enemyNow={enemyChanged(kqmResult.enemy) ? team : undefined}
+            applications={applications}
             onView={setKqmView}
+            teamData={teamData}
+            timeline={
+              <KqmTimeline
+                teamId={teamId}
+                members={members}
+                teamData={teamData}
+                kqm={teamOpt.kqm ?? defaultTeamOptKqm}
+                kqmBuilds={kqmShown?.builds}
+                kqmBuffs={kqmBuffs}
+                kqmAttacks={kqmAttacks}
+                kqmDamage={kqmShown?.after.attacks}
+                overrides={kqmOverrides}
+                onField={onField}
+                mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
+              />
+            }
             onDiscard={() => {
               kqm.clear()
               setRotationExpanded(true)
@@ -623,8 +892,29 @@ export default function TeamBuildWorkspace({
             rotationTime={rotationTime}
             onDiscard={clear}
             teamData={teamData}
-            stale={teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt)}
+            stale={
+              teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt) ||
+              enemyChanged(result.enemy)
+            }
+            enemy={result.enemy}
+            enemyNow={enemyChanged(result.enemy) ? team : undefined}
+            applications={applications}
+            cocoon={resultCocoon}
             onRunAgain={() => setRunDialog(true)}
+            timeline={
+              <KqmTimeline
+                teamId={teamId}
+                members={members}
+                teamData={teamData}
+                gear={shownSimGear}
+                kqmBuffs={rotationBuffs}
+                kqmAttacks={result.teamOpt.attacks}
+                kqmDamage={shown.after.attacks}
+                overrides={shownOverrides}
+                onField={onField}
+                mainStatAssumptionLevel={result.teamOpt.assumeMaxMain ? 20 : 0}
+              />
+            }
           />
         </Box>
       )}
@@ -641,7 +931,7 @@ export default function TeamBuildWorkspace({
         />
       )}
       {/* last on the page: it stays pinned to the window's foot while anything above scrolls */}
-      {(mode === 'inventory' || running) && (
+      {((mode === 'inventory' && !showStart) || running) && (
         <RunBar
           teamId={teamId}
           state={state}
@@ -933,12 +1223,23 @@ function RunBar({
   const { gender } = useDBMeta()
   const kqmRunning = kqmState.type === 'running'
   const running = state.type === 'running' || kqmRunning
+  // (members on a TC build are kept as they are: Team optimize picks real artifacts)
+  const tcCount = members.filter((m) => m.isTc).length
+  // can't run at all: nothing to play, or nothing it could ever optimize
   const blocked = !attackCount
     ? t('teamOpt.run.noAttacks', 'Add the rotation’s attacks first.')
-    : !optimizable.length
+    : tcCount === members.length
       ? t(
-          'teamOpt.run.allKept',
-          'Every member’s build is kept: nothing to optimize.'
+          'teamOpt.run.allTc',
+          'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
+        )
+      : undefined
+  // every member switched off: the button still opens Optimize team, where they are switched on
+  const allOff =
+    !blocked && !optimizable.length
+      ? t(
+          'teamOpt.run.allSwitchedOff',
+          'Every member is switched off: turn members on in Optimize team.'
         )
       : undefined
 
@@ -1011,18 +1312,20 @@ function RunBar({
               sx={{
                 ...type.body,
                 ...numSx,
-                fontWeight: blocked ? 400 : 500,
-                color: blocked ? 'text.secondary' : 'text.primary',
+                fontWeight: blocked || allOff ? 400 : 500,
+                color: blocked || allOff ? 'text.secondary' : 'text.primary',
                 fontSize: { xs: 13.5, sm: 14 },
                 lineHeight: 1.35,
-                // (one line; a reason may take two on phones)
+                // (one line; a reason it can't run may take more)
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: { xs: 2, sm: 1 },
+                WebkitLineClamp:
+                  blocked || allOff ? { xs: 4, sm: 2 } : { xs: 2, sm: 1 },
                 overflow: 'hidden',
               }}
             >
               {blocked ??
+                allOff ??
                 t('teamOpt.run.toOptimize', {
                   defaultValue: '{{count}} of {{total}} to optimize',
                   count: optimizable.length,
@@ -1127,6 +1430,8 @@ function RunProgress({
   const step = status.step ?? state.step
   const seconds = (performance.now() - state.startTime) / 1000
   const total = Number.isFinite(status.total) ? status.total : 0
+  // (the GPU's sweep before the exact total: a share of every combination, not a count of builds)
+  const upper = status.upper && Number.isFinite(status.upper) ? status.upper : 0
   const done = status.tested + status.skipped
   return (
     <>
@@ -1168,18 +1473,23 @@ function RunProgress({
             seconds: Math.round(seconds),
           })}
           {' · '}
-          {!total
-            ? t('teamOpt.run.setup', 'setting up the search')
-            : !done
-              ? t('teamOpt.run.searching', {
-                  defaultValue: 'searching {{total}} builds',
-                  total: formatDamage(total),
-                })
-              : t('teamOpt.run.builds', {
-                  defaultValue: '{{done}} of {{total}} builds',
-                  done: formatDamage(done),
-                  total: formatDamage(total),
-                })}
+          {!total && upper
+            ? t('teamOpt.run.share', {
+                defaultValue: 'searching · {{percent}}%',
+                percent: Math.floor(Math.min(1, done / upper) * 100),
+              })
+            : !total
+              ? t('teamOpt.run.setup', 'setting up the search')
+              : !done
+                ? t('teamOpt.run.searching', {
+                    defaultValue: 'searching {{total}} builds',
+                    total: formatDamage(total),
+                  })
+                : t('teamOpt.run.builds', {
+                    defaultValue: '{{done}} of {{total}} builds',
+                    done: formatDamage(done),
+                    total: formatDamage(total),
+                  })}
         </Box>
       </Typography>
       <ProgressLine
@@ -1197,7 +1507,10 @@ function useCurrentEvaluation(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const [evaluation, setEvaluation] = useState<TeamOptEvaluation>()
+  const [current, setCurrent] = useState<{
+    evaluation: TeamOptEvaluation | undefined
+    settings: Parameters<typeof evaluateTeamRotation>[3]
+  }>()
   useEffect(() => {
     if (!teamData) return undefined
     const timer = setTimeout(() => {
@@ -1213,23 +1526,26 @@ function useCurrentEvaluation(
         teamOptCurrentWeapons(database, members),
         teamOpt
       )
-      setEvaluation(
-        evaluateTeamRotation(database, teamId, gender, {
-          arts: {},
-          attacks: teamOpt.attacks,
-          mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
-          statFilters,
-          onField: teamOpt.onField,
-          bonusStats: teamOptBonusStats(
-            teamOpt,
-            members.map((m) => m.characterKey)
-          ),
-        })
-      )
+      const settings = {
+        arts: {},
+        attacks: teamOpt.attacks,
+        mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
+        statFilters,
+        onField: teamOpt.onField,
+        bonusStats: teamOptBonusStats(
+          teamOpt,
+          members.map((m) => m.characterKey)
+        ),
+      }
+      setCurrent({
+        evaluation: evaluateTeamRotation(database, teamId, gender, settings),
+        settings,
+      })
     }, 120)
     return () => clearTimeout(timer)
   }, [database, teamId, gender, teamOpt, teamData])
-  return evaluation
+  // (and the settings it was found with: the Moongecko's cocoon evaluates the same)
+  return [current?.evaluation, current?.settings] as const
 }
 
 /** How many artifacts the team may use (any member, before main-stat filters) */

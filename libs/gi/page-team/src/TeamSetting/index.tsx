@@ -9,7 +9,6 @@ import {
   CharacterMultiSelectionModal,
   CharacterName,
   CharacterSingleSelectionModal,
-  EnemyExpandCard,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
@@ -31,6 +30,7 @@ import { Suspense, useEffect, useId, useMemo, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
 import { useLocation, useNavigate } from 'react-router-dom'
 import BuildDropdown from '../BuildDropdown'
+import { EnemyCard } from '../Enemy/EnemyCard'
 import { ellipsisSx, fieldButtonSx } from '../fieldButtonSx'
 import { LoadoutDropdown } from '../LoadoutDropdown'
 import { ResonanceDisplay } from './ResonanceDisplay'
@@ -248,7 +248,7 @@ function TeamEditor({
             gap: 1.5,
           }}
         >
-          <EnemyExpandCard teamId={teamId} />
+          <EnemyCard teamId={teamId} />
           <SectionTitle
             id={membersTitleId}
             info={

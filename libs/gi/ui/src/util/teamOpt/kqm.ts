@@ -80,6 +80,11 @@ import {
   KQM_THREE_STARS,
   kqmWeaponSource,
 } from './kqmWeaponSources'
+import {
+  playedAttackStates,
+  type RunAttackState,
+  withAttackStates,
+} from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
 import type { SimGear } from './rotation/types'
@@ -104,17 +109,72 @@ export {
   kqmRollCaps,
 } from '@genshin-optimizer/gi/solver'
 
-/** The KQM standard constellation (4★ C6, 5★ C0), independent of the saved character. */
-export const kqmConstellation = (key: CharacterKey): 0 | 6 =>
-  getCharStat(key).rarity === 4 ? 6 : 0
+/**
+ * The standard (Wanderlust Invocation) 5★ characters: most players have a few of their
+ * constellations, from lost 50/50s and the free constellation event
+ */
+const STANDARD_FIVE_STARS: ReadonlySet<CharacterKey> = new Set([
+  'Jean',
+  'Diluc',
+  'Mona',
+  'Keqing',
+  'Qiqi',
+  'Tighnari',
+  'Dehya',
+  'YumemizukiMizuki',
+])
+/**
+ * The limited 5★ characters of the free constellation event ("To Temper Thyself and Journey Far",
+ * its Season 5 roster from Version 7.0): one constellation of one of them is free
+ */
+const FREE_CONSTELLATION_FIVE_STARS: ReadonlySet<CharacterKey> = new Set([
+  'Klee',
+  'Albedo',
+  'Nilou',
+  'Baizhu',
+  'HuTao',
+  'YaeMiko',
+  'Xiao',
+  'KamisatoAyaka',
+  'Shenhe',
+  'Ganyu',
+  'Wanderer',
+  'Cyno',
+  'AratakiItto',
+  'SangonomiyaKokomi',
+  'KamisatoAyato',
+  'Yoimiya',
+  'Tartaglia',
+  'Eula',
+  'Lyney',
+  'Wriothesley',
+  'Navia',
+  'Xianyun',
+  'Chiori',
+  'Sigewinne',
+  'Clorinde',
+  'Emilie',
+])
+/**
+ * The constellation a KQM build uses unless the team sets one, independent of the saved
+ * character: 4★ C6; standard 5★ C2; the free constellation event's limited 5★ C1; other 5★ C0
+ */
+export const kqmConstellation = (key: CharacterKey): 0 | 1 | 2 | 6 =>
+  getCharStat(key).rarity === 4
+    ? 6
+    : STANDARD_FIVE_STARS.has(key)
+      ? 2
+      : FREE_CONSTELLATION_FIVE_STARS.has(key)
+        ? 1
+        : 0
 /** The constellation a KQM build uses: the team's own choice, else the KQM standard */
 export const kqmMemberConstellation = (
   key: CharacterKey,
   kqm: Pick<TeamOptKqm, 'constellations'> | undefined
 ): number => kqm?.constellations?.[key] ?? kqmConstellation(key)
 
-/** The members' talent levels: as set, else 9/9/9 (KQM's guides; 10 is the other choice) */
-export const KQM_TALENT_DEFAULT = 9
+/** The members' talent levels: as set, else 10/10/10 (KQM Standards since 2026-11; 9 is the other choice) */
+export const KQM_TALENT_DEFAULT = 10
 export const kqmTalentLevel = (
   kqm: Pick<TeamOptKqm, 'talents'> | undefined
 ): 9 | 10 => kqm?.talents ?? KQM_TALENT_DEFAULT
@@ -1116,6 +1176,11 @@ interface KqmRunArgs {
    */
   replay?: (input: KqmReplayInput) => KqmPlayed | undefined
   /**
+   * States every attack of the played rotation gets in this run (not saved with the rotation): e.g.
+   * Wolf's Gravestone's passive at its uptime against the team's enemy
+   */
+  attackStates?: readonly RunAttackState[]
+  /**
    * The builds found so far, with their rankings, when a ranking finds a better build and the run
    * goes on to take it: shown while the run improves on them (its result replaces them)
    */
@@ -1204,7 +1269,8 @@ async function runKqm({
   onStep,
   isCancelled = () => false,
   maxRounds = 3,
-  replay,
+  replay: replayRaw,
+  attackStates,
   onEarly,
   from,
   only,
@@ -1220,6 +1286,17 @@ async function runKqm({
     onPreview?: (preview: KqmResult) => void
   }
 }): Promise<KqmResult | undefined> {
+  // (the played attacks carry the run's own states, and so does its result; a gear pick plays with
+  // its result's)
+  const states = attackStates ?? playedAttackStates(comparison?.result.played)
+  const replay: KqmRunArgs['replay'] =
+    replayRaw &&
+    ((input) => {
+      const played = replayRaw(input)
+      return played && states?.length
+        ? { ...played, attacks: withAttackStates(played.attacks, states) }
+        : played
+    })
   const tick = ticker(isCancelled)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
   /** The artifact standard's distributed rolls (KQMS: 20) */

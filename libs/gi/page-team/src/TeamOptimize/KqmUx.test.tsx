@@ -39,6 +39,8 @@ const mocks = vi.hoisted(() => {
       weapons: { get: () => ({ key: 'AmenomaKageuchi', refinement: 5 }) },
       chars: { get: () => ({ constellation: 0 }) },
       buildTcs: { get: () => undefined },
+      // (no team: a run keeps no enemy)
+      teams: { get: () => undefined },
       teamKqmResults: {
         get: () => saved,
         getRun: (teamId: string) =>
@@ -61,6 +63,8 @@ vi.mock('@genshin-optimizer/gi/db-ui', async () => {
     DatabaseContext,
     useDatabase: () => useContext(DatabaseContext).database,
     useDBMeta: () => ({ gender: 'F' }),
+    // (no team: the setup's enemy shows nothing)
+    useTeam: () => undefined,
   }
 })
 vi.mock('@genshin-optimizer/gi/db', () => ({
@@ -133,13 +137,13 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   quickTooltipProps: {},
   weaponSheetNs: (key: string) => `weapon_${key}_gen`,
   kqmConstellation: (key: string) => (key === 'Bennett' ? 6 : 0),
-  KQM_TALENT_DEFAULT: 9,
+  KQM_TALENT_DEFAULT: 10,
   kqmBuildThreads: () => undefined,
   kqmBuildThreadsAuto: () => 4,
   kqmBuildThreadsMax: () => 7,
   setKqmBuildThreads: () => undefined,
   teamOptMembers: () => [],
-  kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 9,
+  kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 10,
   kqmMemberConstellation: (
     key: string,
     kqm?: { constellations?: Record<string, number> }
@@ -158,6 +162,9 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
       : 100
   },
   kqmWeapons: () => [{ key: 'AmenomaKageuchi', refinement: 5 }],
+  // (the run's weapons as KQM mode picks them: the default list, nothing left out by hand)
+  kqmExcludedWeapons: () => new Set<string>(),
+  kqmDefaultExcludedWeapons: () => [],
   kqmSetsId: (sets: object) =>
     Object.entries(sets)
       .map(([key, n]) => `${key}:${n}`)
@@ -229,7 +236,7 @@ vi.mock('./buffs', () => ({
 // (the writer's timeline figures bring the attack editor's whole module graph)
 vi.mock('./TimelineFigures', () => ({
   useTimelineFigures: () => ({}),
-  useMomentStats: () => undefined,
+  useMomentFigures: () => ({}),
   TimelineHitStats: () => null,
 }))
 vi.mock('./KqmChoosers', () => ({

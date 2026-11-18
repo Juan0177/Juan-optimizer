@@ -217,6 +217,8 @@ export interface TeamDataOverrides {
   conditionalOverrides?: Partial<
     Record<CharacterKey, Record<string, Record<string, string>>>
   >
+  /** The enemy's stats over the team's own (e.g. a boss's RES in another phase of its fight) */
+  enemyOverride?: Partial<Record<string, number>>
 }
 
 /** Character assumptions for a calculation, without changing the saved character. */
@@ -241,11 +243,12 @@ export function getTeamDataWith(
     bonusStats: extraBonusStats = {},
     characters = {},
     conditionalOverrides = {},
+    enemyOverride: enemyExtra,
   }: TeamDataOverrides
 ): Partial<Record<CharacterKey, Data[]>> | undefined {
   const team = database.teams.get(teamId)
   if (!team) return undefined
-  const { enemyOverride } = team
+  const enemyOverride = { ...team.enemyOverride, ...enemyExtra }
   const teamConditional = withoutPaths(
     withValues(
       team.conditional,
@@ -359,12 +362,13 @@ export function getTeamDataSelect(
     bonusStats: extraBonusStats = {},
     characters = {},
     conditionalOverrides = {},
+    enemyOverride: enemyExtra,
   }: Omit<TeamDataOverrides, 'excluded' | 'states'>,
   contexts: readonly BuffContext[]
 ): TeamDataSelect | undefined {
   const team = database.teams.get(teamId)
   if (!team || !contexts.length) return undefined
-  const { enemyOverride } = team
+  const enemyOverride = { ...team.enemyOverride, ...enemyExtra }
   const contextKeys = contexts.map(buffContextKey)
   const switches: Record<string, number>[] = contexts.map(() => ({}))
   const flat = (conditional: object) => {

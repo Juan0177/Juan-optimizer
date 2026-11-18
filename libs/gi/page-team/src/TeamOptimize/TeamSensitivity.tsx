@@ -253,7 +253,8 @@ export function TeamSensitivity({
     rows: { id: RowId; label: ReactNode }[]
   }[] = [
     {
-      label: t('teamOpt.sens.substats', '+1 substat roll'),
+      // (an average 5★ roll, as the Improve tab's: said in the label, not only in the ⓘ)
+      label: t('teamOpt.sens.substatsAverage', '+1 average substat roll'),
       rows: sensitivitySubstats.map((key) => ({
         id: `sub:${key}` as const,
         label: `${t(`statKey_gen:${key}`)}${percentKeys.includes(key) ? '%' : ''}`,

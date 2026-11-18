@@ -640,10 +640,11 @@ function MobileHeader({
           <Brand />
           <Box flexGrow={1} />
           <IconButton
-            color="inherit"
             aria-label={t('openMenu')}
             edge="end"
             onClick={toggle}
+            // (the menu's one way in on phones: as bright as the title)
+            sx={{ color: 'text.primary' }}
           >
             <MenuIcon />
           </IconButton>

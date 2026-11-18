@@ -195,6 +195,11 @@ interface VaresaState {
   /** Rush charges, and when the next one comes back */
   charges: number
   restoreAt?: number
+  /**
+   * When Apex Drive last ended without its Kablam, and why (a Rush, or its 2.3 s ran out): what a
+   * full Flying Kick right after it is explained by
+   */
+  apexLost?: { at: number; why: 'rush' | 'expired' }
 }
 
 /** Charges come back one at a time, RUSH_CD frames each */
@@ -240,10 +245,25 @@ function gainPoints(
 /** Apex Drive: from a plunge at C2+, or in the blessing */
 function startApex(ctx: SimContext, s: VaresaState) {
   s.apex = true
+  s.apexLost = undefined
   const token = ++s.apexToken
-  ctx.at(APEX, () => {
-    if (s.apexToken === token) s.apex = false
+  ctx.at(APEX, (c2) => {
+    if (s.apexToken !== token) return
+    s.apex = false
+    s.apexLost = { at: c2.now, why: 'expired' }
   })
+}
+
+/**
+ * Why a Q is her full Flying Kick when a Volcanic Kablam may have been meant: its Apex Drive came
+ * from a Fiery Passion plunge, lasts 2.3 s, and a Rush ends it
+ */
+function kablamMissed(s: VaresaState, now: number): string | undefined {
+  const lost = s.apexLost
+  if (!lost || now - lost.at > 4 * 60) return undefined
+  return lost.why === 'rush'
+    ? 'Varesa: her Q was the full Flying Kick (70 Energy, 18 s cooldown), not the Volcanic Kablam (30 Energy, no wait): a Rush after her Fiery Passion plunge ended Apex Drive. Use the Q before that Rush.'
+    : 'Varesa: her Q was the full Flying Kick (70 Energy, 18 s cooldown), not the Volcanic Kablam (30 Energy, no wait): Apex Drive lasts 2.3 s after her Fiery Passion plunge and ran out first. Use the Q sooner after the plunge.'
 }
 
 /**
@@ -375,6 +395,8 @@ function chargedAttack(ctx: SimContext, s: VaresaState): ActionResult {
 }
 
 export const kit: KitModel = {
+  // its short Burst: the Volcanic Kablam (30 Energy, in Apex Drive) still plays in a copy without its full Burst
+  shortBurstVariant: 'apex',
   characterKey: 'Varesa',
   element: 'electro',
   source: `${GCSIM}/varesa`,
@@ -489,11 +511,18 @@ export const kit: KitModel = {
         else {
           settleCharges(s, ctx.now)
           if (s.charges <= 0)
-            return { frames: 0, failed: 'Varesa: no Rush charge ready' }
+            return {
+              frames: 0,
+              failed:
+                'Varesa: no Rush charge ready (2 charges, 9 s each; only her first Rush in Fiery Passion is free)',
+            }
           s.charges--
           if (s.restoreAt === undefined) s.restoreAt = ctx.now + RUSH_CD
         }
-        if (s.apex) endApex(s)
+        if (s.apex) {
+          endApex(s)
+          s.apexLost = { at: ctx.now, why: 'rush' }
+        }
         s.followUntil = ctx.now + FOLLOW_UP
         ctx.hit(fiery ? 2 : 5, {
           path: ['skill', fiery ? 'fpRushDmg' : 'rushDmg'],
@@ -544,6 +573,9 @@ export const kit: KitModel = {
         // (15 s, spent by the next plunge impact); with either, this burst deals +100% DMG
         const c4Boost = c >= 4 && (fiery || s.apex)
         if (c >= 4 && !fiery && !s.apex) s.c4Until = ctx.now + 900
+        // (a full Flying Kick right after Apex Drive was lost: why it is not the Kablam)
+        const missed = !s.apex && kablamMissed(s, ctx.now)
+        if (missed) ctx.note(missed)
         if (s.apex) {
           // Volcanic Kablam (a short burst, no cooldown): plunge damage at 42 frames, ends the apex.
           // C1: it gains Rainbow Crash itself (and spends it on its impact)
@@ -640,6 +672,14 @@ export const kit: KitModel = {
         return { frames: 30 }
     }
   },
+  // Why a Q or E waited: her Flying Kick's cooldown (and what the Kablam needs), or a Rush charge
+  waitNote: (s: VaresaState, action, now) =>
+    action.kind === 'burst'
+      ? (kablamMissed(s, now) ??
+        "Varesa: her Q waited for the Flying Kick's 18 s cooldown. The Volcanic Kablam (30 Energy) does not wait: it needs Apex Drive, from a Fiery Passion plunge in the 2.3 s before it (a Rush in between ends it).")
+      : action.kind === 'skill'
+        ? 'Varesa: her E waited for a Rush charge. She has 2, each back 9 s after use, and only her first Rush in Fiery Passion is free.'
+        : undefined,
   cooldownKey: (s: VaresaState, action) => {
     // the Volcanic Kablam (Apex Drive) is not on the burst's cooldown
     if (action.kind === 'burst') return s.apex ? undefined : 'burst'

@@ -5,6 +5,7 @@ import type {
   SimHit,
   SimulationResult,
 } from '@genshin-optimizer/gi/ui'
+import type { BuffEffect } from './buffs'
 
 /** One stretch of a track: its value from `start` to `end` (frames) */
 export interface TrackSegment {
@@ -94,6 +95,16 @@ export function timelineTracks(sim: SimulationResult): TimelineTrack[] {
   }
   return tracks
 }
+
+/** A buff's key among a moment's effects: its owner, its conditional and its state */
+export const momentBuffKey = (buff: {
+  owner: string
+  path: readonly string[]
+  value: string
+}) => `${buff.owner}|${buff.path.join('.')}|${buff.value}`
+
+/** What each buff up at a moment gives, by `momentBuffKey` */
+export type MomentEffects = ReadonlyMap<string, BuffEffect[]>
 
 /** A track's value at a frame ('' when it is off) */
 export const trackValueAt = (track: TimelineTrack, frame: number) =>

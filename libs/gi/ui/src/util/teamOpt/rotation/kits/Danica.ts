@@ -64,6 +64,9 @@ const ENTRY_CD = 960
 /** C2 Toast: 10 stacks per member; Danica consumes up to 2 of hers in Battle Maid */
 const TOAST_STACKS = 10
 const TOAST_SELF_MAX = 2
+/** Noted when her E ends Royal Guard: the in-game behaviour players don't expect */
+const E_ENDS_ROYAL_GUARD =
+  'Danica: her E ended Maid: Royal Guard and with it her Burst\'s party ATK bonus, as in the game (her E re-summons the Anchor, which ends either Maid form and the Burst\'s form effects). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so "Danica Q" is enough.'
 
 type Maid = '' | 'defense' | 'battle'
 interface State {
@@ -331,6 +334,7 @@ export const kit: KitModel = {
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
         // (kqmsim keeps the forms)
         ctx.at(22, (c) => {
+          if (s.maid === 'defense') c.note(E_ENDS_ROYAL_GUARD)
           endMaid(c, s)
           s.excite = 0
           s.entryReady = -1
@@ -373,7 +377,11 @@ export const kit: KitModel = {
         s.burstEnd = ctx.now + 1200
         syncMaid(ctx, s)
         ctx.at(1200, (c) => syncMaid(c, s))
-        return { frames: 100, cooldown: { key: 'burst', frames: 1080 } }
+        // (the 18 s cooldown starts 0.4 s into the cast: 18.4 s from press to press, tested in game)
+        return {
+          frames: 100,
+          cooldown: { key: 'burst', frames: 1080, delay: 24 },
+        }
       case 'normal':
         if (ctx.now < s.anchorEnd)
           return anchorString(ctx, s, action.count ?? 1)
@@ -459,6 +467,16 @@ export const kit: KitModel = {
   onSwapOut(ctx, s: State) {
     if (s.maid === 'battle') aegisOff(ctx, s)
   },
+  noEntryReason: (s: State, now) =>
+    now >= s.anchorEnd
+      ? 'her Anchor was not out (her E summons it for 25 s)'
+      : s.maid === 'battle'
+        ? 'she was still in Maid: Cleaner'
+        : s.excite < 100
+          ? "Will to Cleanse was not full (the on-field member's Electro or Cryo hits fill it while her Anchor is out, 50 each)"
+          : now < s.entryReady
+            ? `Will to Protect was on its 16 s cooldown (${((s.entryReady - now) / 60).toFixed(1)} s left)`
+            : undefined,
   onSwapIn(ctx, s: State) {
     if (
       ctx.now >= s.anchorEnd ||
