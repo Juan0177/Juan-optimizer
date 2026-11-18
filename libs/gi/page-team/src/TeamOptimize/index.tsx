@@ -16,6 +16,7 @@ import type {
 import {
   appliedStygianPreset,
   CharacterName,
+  enemyFight,
   evaluateTeamRotation,
   kqmTeamOverrides,
   sameEnemy,
@@ -26,6 +27,8 @@ import {
   teamOptPool,
   teamOptResultGear,
   teamStatFilters,
+  wolfsGravestoneStates,
+  wolfsGravestoneUptime,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
@@ -306,6 +309,23 @@ export default function TeamBuildWorkspace({
       applications,
     ]
   )
+  // Wolf's Gravestone's passive (enemies under 30% HP) for the share of the fight it is on against
+  // the team's enemy, from the fight shown (the equipped builds', or the KQM result's): every
+  // attack of a run gets it. Without HP its member's own switch stays (KQM: off).
+  const lowHp = useMemo(() => {
+    const wolf = wolfsGravestoneUptime(
+      team && fightNow ? enemyFight(team, fightNow) : undefined
+    )
+    return wolf
+      ? {
+          wolf,
+          states: wolfsGravestoneStates(
+            members.map((m) => m.characterKey),
+            wolf.state
+          ),
+        }
+      : undefined
+  }, [team, fightNow, members])
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
@@ -712,7 +732,7 @@ export default function TeamBuildWorkspace({
             hasResult={!!kqmResult}
             disabled={running}
             canRun={!!attackCount}
-            onStart={kqm.run}
+            onStart={(settings) => kqm.run(settings, lowHp?.states)}
             teamId={teamId}
             members={members}
             teamData={teamData}
@@ -727,7 +747,7 @@ export default function TeamBuildWorkspace({
         <RunDialog
           open
           onClose={() => setRunDialog(false)}
-          onStart={run}
+          onStart={() => run(lowHp?.states)}
           teamId={teamId}
           members={members}
           teamData={teamData}

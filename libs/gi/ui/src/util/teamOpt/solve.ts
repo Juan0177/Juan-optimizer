@@ -20,6 +20,7 @@ import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
 import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
 import { teamOptBonusStats, teamOptMembers } from './data'
+import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import {
   canWield,
@@ -496,6 +497,7 @@ export async function optimizeTeam({
   isCancelled = () => false,
   maxRounds = 4,
   builds = 1,
+  attackStates,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -507,6 +509,11 @@ export async function optimizeTeam({
   maxRounds?: number
   /** Team builds to find (the best, and `builds` − 1 alternatives) */
   builds?: number
+  /**
+   * States every attack gets in this run (not saved with the rotation): e.g. Wolf's Gravestone's
+   * passive at its uptime against the team's enemy
+   */
+  attackStates?: readonly RunAttackState[]
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -621,7 +628,7 @@ export async function optimizeTeam({
     ])
   ) as Partial<Record<CharacterKey, StatFilters>>
   const mainStatAssumptionLevel = teamOpt.assumeMaxMain ? 20 : 0
-  const { attacks } = teamOpt
+  const attacks = withAttackStates(teamOpt.attacks, attackStates)
   // the extra buffs (food, an Abyss blessing...) of each member
   const bonusStats = teamOptBonusStats(
     teamOpt,

@@ -80,6 +80,11 @@ import {
   KQM_THREE_STARS,
   kqmWeaponSource,
 } from './kqmWeaponSources'
+import {
+  playedAttackStates,
+  type RunAttackState,
+  withAttackStates,
+} from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
 import type { SimGear } from './rotation/types'
@@ -1171,6 +1176,11 @@ interface KqmRunArgs {
    */
   replay?: (input: KqmReplayInput) => KqmPlayed | undefined
   /**
+   * States every attack of the played rotation gets in this run (not saved with the rotation): e.g.
+   * Wolf's Gravestone's passive at its uptime against the team's enemy
+   */
+  attackStates?: readonly RunAttackState[]
+  /**
    * The builds found so far, with their rankings, when a ranking finds a better build and the run
    * goes on to take it: shown while the run improves on them (its result replaces them)
    */
@@ -1248,7 +1258,8 @@ async function runKqm({
   onStep,
   isCancelled = () => false,
   maxRounds = 3,
-  replay,
+  replay: replayRaw,
+  attackStates,
   onEarly,
   from,
   only,
@@ -1262,6 +1273,17 @@ async function runKqm({
     onPreview?: (preview: KqmResult) => void
   }
 }): Promise<KqmResult | undefined> {
+  // (the played attacks carry the run's own states, and so does its result; a gear pick plays with
+  // its result's)
+  const states = attackStates ?? playedAttackStates(comparison?.result.played)
+  const replay: KqmRunArgs['replay'] =
+    replayRaw &&
+    ((input) => {
+      const played = replayRaw(input)
+      return played && states?.length
+        ? { ...played, attacks: withAttackStates(played.attacks, states) }
+        : played
+    })
   const tick = ticker(isCancelled)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
   /** The artifact standard's distributed rolls (KQMS: 20) */
