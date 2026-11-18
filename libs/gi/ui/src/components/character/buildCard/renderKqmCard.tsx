@@ -32,6 +32,21 @@ export type KqmCardMember = {
   field?: string
   /** its Energy Recharge ("111%") */
   er: string
+  /** its main stats and out-of-combat stats (the detailed sheet), formatted */
+  details?: KqmCardDetails
+}
+
+/**
+ * A member's block on the detailed sheet, under its weapon and sets: its artifacts' main stats and
+ * its stats out of combat, as written (the site's language)
+ */
+export interface KqmCardDetails {
+  mainsTitle: string
+  statsTitle: string
+  /** sands, goblet, circlet: the slot's name and its main stat */
+  mains: { slot: string; stat: string }[]
+  /** HP … the element's DMG Bonus; `was`: A's value where it differs (drawn "was → value") */
+  stats: { label: string; value: string; was?: string }[]
 }
 
 /** A number written with a point, in the language's decimal separator; English (or none): as is */
@@ -212,10 +227,82 @@ export async function loadKqmCardImages(
 const TOP = M + 50
 const BLOCK_H = PORTRAIT + 2 * ITEM_ROW
 const ROT_H = 84
+// (the detailed block under each member's gear: a title, the three main stats, a rule, a title,
+// the eight stats)
+const DETAILS_PAD = 10
+const DETAILS_X = 12
+const DETAILS_TITLE = 20
+const DETAILS_ROW = 19
+const DETAILS_RULE = 12
+const DETAILS_SIZE = 14
+/** The detailed block's height (the sheet grows by it) */
+export const KQM_CARD_DETAILS_H =
+  2 * DETAILS_PAD + 2 * DETAILS_TITLE + 11 * DETAILS_ROW + DETAILS_RULE
+/** a changed stat's tint, under its row */
+const CHANGED_TINT = 'rgba(37, 87, 167, 0.12)'
+/** the block's titles: small, secondary */
+const SECONDARY = '#4a5568'
+const CELL = '#f8f9fc'
+
+/** The detailed block's height on this sheet: none unless a member has details */
+const detailsHeight = (data?: KqmCardData) =>
+  data?.members.some((m) => m.details) ? KQM_CARD_DETAILS_H : 0
 
 /** The sheet's height (its margins included) */
-export function kqmCardHeight(_data?: KqmCardData) {
-  return TOP + BLOCK_H + GAP + ROT_H + ITEM_ROW + M
+export function kqmCardHeight(data?: KqmCardData) {
+  return TOP + BLOCK_H + detailsHeight(data) + GAP + ROT_H + ITEM_ROW + M
+}
+
+const DIGITS = '0123456789'
+type FitOpts = {
+  size: number
+  weight: number
+  maxWidth: number
+  minSize: number
+}
+/**
+ * Figures in even slots (tabular, so a column's digits line up: the font's are proportional), as
+ * large as fits `maxWidth` down to `minSize`: its runs (each digit apart) and their widths; the
+ * font left set to its size
+ */
+function tabularFit(
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  opts: FitOpts
+) {
+  const runs = value.match(/\d|\D+/g) ?? []
+  const measure = (px: number) => {
+    ctx.font = `${opts.weight} ${px}px ${FONT}`
+    const slot = Math.max(...[...DIGITS].map((d) => ctx.measureText(d).width))
+    const widths = runs.map((r) =>
+      DIGITS.includes(r) ? slot : ctx.measureText(r).width
+    )
+    return { runs, widths, width: widths.reduce((a, b) => a + b, 0) }
+  }
+  let px = opts.size
+  let m = measure(px)
+  while (px > opts.minSize && m.width > opts.maxWidth) m = measure(--px)
+  return m
+}
+/** `tabularFit`'s figures drawn, their right end at `x`; returns their width */
+function tabularInk(
+  ctx: CanvasRenderingContext2D,
+  value: string,
+  x: number,
+  y: number,
+  opts: FitOpts & { color: string }
+) {
+  const m = tabularFit(ctx, value, opts)
+  ctx.fillStyle = opts.color
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  let cx = x - m.width
+  m.runs.forEach((r, k) => {
+    const own = DIGITS.includes(r) ? ctx.measureText(r).width : m.widths[k]
+    ctx.fillText(r, cx + (m.widths[k] - own) / 2, y)
+    cx += m.widths[k]
+  })
+  return m.width
 }
 
 /**
@@ -255,10 +342,11 @@ export function drawKqmCard(
   const field = data.members.some((m) => m.field)
   const top = y0 + TOP
   const blockH = BLOCK_H
+  const detailsH = detailsHeight(data)
   const leftW = n * COL
   const tableX = M + leftW + GAP
   const tableW = W - M - tableX
-  const rotY = top + blockH + GAP
+  const rotY = top + blockH + detailsH + GAP
   const rotH = ROT_H
   const notesY = rotY + rotH
   const changed = marks.changed
@@ -436,6 +524,95 @@ export function drawKqmCard(
     itemText(value, x + used, y, COL - used)
   }
 
+  /** a text's width as `ink` draws it in `maxWidth` (smaller down to `minSize`, else cut short) */
+  const fitWidth = (value: string, opts: FitOpts) => {
+    let px = opts.size
+    const at = (size: number) => {
+      ctx.font = `${opts.weight} ${size}px ${FONT}`
+      return ctx.measureText(value).width
+    }
+    while (px > opts.minSize && at(px) > opts.maxWidth) px--
+    return Math.min(at(px), opts.maxWidth)
+  }
+  /**
+   * A member's detailed block (its top at `y`): the main stats' title and rows, a rule, the stats'
+   * title and rows; each row its label at the left and its value at the right, the label made to
+   * fit beside the value
+   */
+  const detailsBlock = (d: KqmCardDetails, x: number, y: number) => {
+    const avail = COL - 2 * DETAILS_X
+    const left = x + DETAILS_X
+    const right = x + COL - DETAILS_X
+    const title = (text: string, ty: number) =>
+      say(text, left, ty, DETAILS_TITLE, {
+        size: 12,
+        weight: 600,
+        color: SECONDARY,
+        align: 'left',
+        maxWidth: avail,
+      })
+    /** a row: its value first measured (at most most of the row), then its label in the rest */
+    const row = (
+      label: string,
+      value: string,
+      ry: number,
+      { figures, changed }: { figures: boolean; changed?: boolean }
+    ) => {
+      const base = mid(ry, DETAILS_ROW, DETAILS_SIZE)
+      if (changed) fillCell(x + 6, ry, COL - 12, DETAILS_ROW, CHANGED_TINT)
+      const valueOpts = {
+        size: DETAILS_SIZE,
+        weight: changed ? 700 : 600,
+        color: changed ? KQM_CHANGED : TEXT,
+        maxWidth: avail * 0.62,
+        minSize: 11,
+      }
+      // (the value's width, to leave the label the rest: measured as it will be drawn)
+      const valueW = figures
+        ? tabularFit(ctx, value, valueOpts).width
+        : fitWidth(value, valueOpts)
+      ink(ctx, label, left, base, {
+        size: DETAILS_SIZE,
+        weight: 400,
+        color: TEXT,
+        maxWidth: avail - valueW - 10,
+        minSize: 11,
+      })
+      if (figures) tabularInk(ctx, value, right, base, valueOpts)
+      else ink(ctx, value, right, base, { ...valueOpts, align: 'right' })
+    }
+    let ry = y + DETAILS_PAD
+    title(d.mainsTitle, ry)
+    ry += DETAILS_TITLE
+    for (const main of d.mains) {
+      row(main.slot, main.stat, ry, { figures: false })
+      ry += DETAILS_ROW
+    }
+    fillCell(
+      left,
+      ry + DETAILS_RULE / 2 - 0.5,
+      avail,
+      1,
+      'rgba(78, 96, 128, 0.28)'
+    )
+    ry += DETAILS_RULE
+    title(d.statsTitle, ry)
+    ry += DETAILS_TITLE
+    for (const stat of d.stats) {
+      const changed = stat.was !== undefined
+      row(
+        stat.label,
+        changed ? `${stat.was} → ${stat.value}` : stat.value,
+        ry,
+        {
+          figures: true,
+          changed,
+        }
+      )
+      ry += DETAILS_ROW
+    }
+  }
+
   // ── the team's name (after its tag), the site
   let nameX = M
   if (marks.tag) {
@@ -500,6 +677,12 @@ export function drawKqmCard(
     frame(x, top, COL, PORTRAIT)
     frame(x, wy, COL, ITEM_ROW)
     frame(x, wy + ITEM_ROW, COL, ITEM_ROW)
+    if (detailsH) {
+      // (the detailed sheet: the member's block under its gear; none, an empty cell)
+      fillCell(x, top + blockH, COL, detailsH, CELL)
+      if (m.details) detailsBlock(m.details, x, top + blockH)
+      frame(x, top + blockH, COL, detailsH)
+    }
   })
   if (changed) {
     // (the changing member: its column outlined, a badge at the top of its face)
