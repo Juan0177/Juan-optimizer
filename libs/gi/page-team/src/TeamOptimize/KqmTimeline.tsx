@@ -22,7 +22,7 @@ import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
   kqmBurstEvery,
-  kqmRotationId,
+  rotationIdOf,
   simulateWritten,
   useMemberNames,
   useRotationSettings,
@@ -123,11 +123,10 @@ export function KqmTimeline({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
-  // (the KQM tab's own rotation)
-  const { applied } = useRotationText(kqmRotationId(teamId))
-  const { opener, timing, frameData } = useRotationSettings(
-    kqmRotationId(teamId)
-  )
+  // (the tab's own rotation: the KQM tab's, or Team optimize's)
+  const rotationId = rotationIdOf(teamId, kqm)
+  const { applied } = useRotationText(rotationId)
+  const { opener, timing, frameData } = useRotationSettings(rotationId)
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
   const burstEvery = useMemo(() => kqmBurstEvery(kqm), [kqm])
   const team = useMemo(
@@ -137,10 +136,12 @@ export function KqmTimeline({
   const names = useMemberNames(members)
   // (a heavy team's play takes a moment: the page first, the timeline once it is played)
   const deferredTeam = useDeferredValue(team)
+  const isKqm = !!kqm
   const result = useMemo(
     () =>
       applied.trim()
         ? simulateWritten({
+            kqm: isKqm,
             text: applied,
             opener,
             timing,
@@ -159,6 +160,7 @@ export function KqmTimeline({
           })
         : undefined,
     [
+      isKqm,
       applied,
       opener,
       timing,

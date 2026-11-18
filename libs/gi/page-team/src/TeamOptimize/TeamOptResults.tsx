@@ -86,6 +86,7 @@ import {
   numSx,
   Panel,
   quickSx,
+  stepAccentSx,
   tokens,
   type,
 } from './ui'
@@ -218,7 +219,7 @@ export function TeamOptResults({
   const discardLabel = t('teamOpt.result.discard', 'Discard')
 
   return (
-    <Panel>
+    <Panel sx={stepAccentSx('result')}>
       {/* the headline (the rotation's damage), the actions, and discard in the corner */}
       <Box
         sx={(theme) => ({

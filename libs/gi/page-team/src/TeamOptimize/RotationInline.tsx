@@ -1,7 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import { giCtaSx } from '@genshin-optimizer/gi/theme'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmBuild,
   RotationAction,
@@ -10,18 +10,27 @@ import type {
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
 import { parseRotation } from '@genshin-optimizer/gi/ui'
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
+import RepeatRoundedIcon from '@mui/icons-material/RepeatRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
 import {
+  alpha,
   Box,
   Button,
   ButtonBase,
   Checkbox,
   Collapse,
+  Divider,
+  ListSubheader,
+  Menu,
+  MenuItem,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
+import type { ReactNode } from 'react'
 import {
   Fragment,
   startTransition,
@@ -44,13 +53,14 @@ import {
   exampleRotation,
   insertWord,
   type RotationWriterHandle,
+  rotationIdOf,
   saveRotationTiming,
   simulateWritten,
   useMemberNames,
   useRotationSettings,
   useRotationText,
-  rotationIdOf,
   useSimTeam,
+  useWriterOpen,
   WriterQuickRow,
   type WrittenRotation,
   writtenHits,
@@ -59,6 +69,7 @@ import {
 import {
   FieldLabel,
   focusSx,
+  hairline,
   insetSx,
   numSx,
   quickSx,
@@ -77,9 +88,9 @@ const shortcut =
     : 'Ctrl+Enter'
 
 /**
- * The rotation as text, on the page: read as the members' steps, a click to edit it in place, and
- * "Use this rotation" turns it into the team's attacks (the same as the writer dialog, which
- * `writer` opens for the timeline and frame data).
+ * The rotation as text, on the page: read as the members' steps, a click opens the writer dialog
+ * (`writer`) to change it; before there is one, typed here and "Use this rotation" turns it into
+ * the team's attacks.
  */
 export function RotationInline({
   teamId,
@@ -90,7 +101,10 @@ export function RotationInline({
   disabled,
   kqm,
   kqmBuilds,
+  trailing,
 }: {
+  /** At the line's right end, beside the rotation (its time) */
+  trailing?: ReactNode
   /** KQM theorycrafting's settings, on its tab: previewed at its constellations, no own gear */
   kqm?: TeamOptKqm
   /** With KQM: the shown result's builds, whose weapon and set effects the preview plays */
@@ -117,15 +131,15 @@ export function RotationInline({
   const ownTeam = useSimTeam(members, kqm)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const [focused, setFocused] = useState(false)
-  // read as steps while it is the rotation in use; a text field while it is written or changed
-  const editing = focused || isDraft || !applied.trim()
+  // read as steps once there is a rotation (a click opens the writer); a text field before
+  const editing = focused || !applied.trim()
   // typed and not used yet: played as it is typed (behind the typing)
   const pending = isDraft && !!text.trim()
   // (played once typing pauses: a play takes tens of ms, too long to run on every key)
   const typed = pending ? text : ''
   const [settled, setSettled] = useState(typed)
   // (not while the writer is open: it plays the same text, and this panel is behind it)
-  const writing = writer.open
+  const writing = useWriterOpen(writer)
   useEffect(() => {
     if (writing) return
     const timer = setTimeout(
@@ -135,12 +149,14 @@ export function RotationInline({
     return () => clearTimeout(timer)
   }, [typed, writing])
   const { opener, timing, frameData } = settings
+  const isKqm = !!kqm
   const play = useMemo(
     () =>
       (value: string, as: typeof team = team) => {
         try {
           return {
             result: simulateWritten({
+              kqm: isKqm,
               text: value,
               opener,
               timing,
@@ -163,6 +179,7 @@ export function RotationInline({
         }
       },
     [
+      isKqm,
       opener,
       timing,
       frameData,
@@ -185,15 +202,6 @@ export function RotationInline({
     ]),
   ]
 
-  const edit = () => {
-    if (disabled) return
-    setFocused(true)
-    requestAnimationFrame(() => {
-      const el = inputRef.current
-      el?.focus()
-      el?.setSelectionRange(el.value.length, el.value.length)
-    })
-  }
   const submit = () => {
     if (disabled || !pending) return
     const now = kqm
@@ -229,52 +237,75 @@ export function RotationInline({
 
   if (!editing)
     return (
-      <ButtonBase
-        component="div"
-        onClick={edit}
-        disabled={disabled}
-        aria-label={`${t('teamOpt.writer.edit', 'Edit rotation')}: ${applied}`}
+      <Box
         sx={{
           ...insetSx,
           ...quickSx,
-          ...focusSx,
-          width: '100%',
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          gap: 1,
-          px: 1.5,
-          py: 1,
+          alignItems: 'stretch',
           minHeight: 44,
-          textAlign: 'left',
-          cursor: 'text',
           '&:hover': { borderColor: tokens.hairlineStrong },
-          '&:hover .rotation-edit, &.Mui-focusVisible .rotation-edit': {
-            opacity: 1,
-          },
         }}
       >
-        <RotationReadout
-          text={applied}
-          opener={opener}
-          first={firstRotations(timing)}
-          counted={openerCounted(timing)}
-          names={names}
-        />
-        <EditRoundedIcon
-          className="rotation-edit"
+        <ButtonBase
+          component="div"
+          onClick={writer.openWriter}
+          disabled={disabled}
+          aria-label={`${t('teamOpt.writer.edit', 'Edit rotation')}: ${applied}`}
           sx={{
-            ml: 'auto',
-            alignSelf: 'flex-start',
-            mt: 0.25,
-            fontSize: 16,
-            color: 'text.secondary',
-            opacity: 0.45,
-            flexShrink: 0,
-            transition: 'opacity .12s',
+            ...focusSx,
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: 1,
+            px: 1.5,
+            py: 1,
+            borderRadius: 'inherit',
+            textAlign: 'left',
+            cursor: 'pointer',
+            '&:hover .rotation-edit, &.Mui-focusVisible .rotation-edit': {
+              opacity: 1,
+            },
           }}
-        />
-      </ButtonBase>
+        >
+          <RotationReadout
+            text={applied}
+            opener={opener}
+            first={firstRotations(timing)}
+            counted={openerCounted(timing)}
+            names={names}
+          />
+          <EditRoundedIcon
+            className="rotation-edit"
+            sx={{
+              ml: 'auto',
+              alignSelf: 'flex-start',
+              mt: 0.25,
+              fontSize: 16,
+              color: 'text.secondary',
+              opacity: 0.45,
+              flexShrink: 0,
+              transition: 'opacity .12s',
+            }}
+          />
+        </ButtonBase>
+        {/* (beside the line, not in it: setting it does not open the writer) */}
+        {trailing && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+              px: 1,
+              borderLeft: hairline,
+            }}
+          >
+            {trailing}
+          </Box>
+        )}
+      </Box>
     )
 
   return (
@@ -645,6 +676,7 @@ export function RotationsSetting({
   writer,
   disabled,
   kqm,
+  compact,
 }: {
   /** KQM theorycrafting's settings, on its tab: its own rotation, at its constellations */
   kqm?: TeamOptKqm
@@ -653,8 +685,11 @@ export function RotationsSetting({
   setTeamOpt: (update: TeamOptUpdate) => void
   writer: RotationWriterHandle
   disabled?: boolean
+  /** A chip at the end of the rotation's line, its choices in a menu */
+  compact?: boolean
 }) {
   const { t } = useTranslation('page_team')
+  const [menu, setMenu] = useState<HTMLElement | null>(null)
   const database = useDatabase()
   const { gender } = useDBMeta()
   const rid = rotationIdOf(teamId, kqm)
@@ -678,6 +713,7 @@ export function RotationsSetting({
     if (applied.trim()) {
       try {
         const result = simulateWritten({
+          kqm: !!kqm,
           text: applied,
           opener,
           timing: next,
@@ -713,14 +749,138 @@ export function RotationsSetting({
     }
     saveRotationTiming(rid, next)
   }
+  const tip = t(
+    'teamOpt.timing.rotationsTip',
+    'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Each tab keeps its own.'
+  )
+  const firstLabel = (n: number) =>
+    n === 1
+      ? t('teamOpt.timing.firstOne', 'First rotation')
+      : t('teamOpt.timing.firstN', {
+          defaultValue: 'First {{count}} rotations',
+          count: n,
+        })
+  if (compact) {
+    const choose = (rotations: number | undefined) => {
+      setMenu(null)
+      if (rotations !== first) set(rotations)
+    }
+    const check = (on: boolean) => (
+      <CheckRoundedIcon
+        sx={{ fontSize: 16, mr: 1, opacity: on ? 1 : 0, color: tokens.gold }}
+      />
+    )
+    return (
+      <>
+        <Tooltip arrow title={tip} placement="top">
+          <ButtonBase
+            onClick={(e) => setMenu(e.currentTarget)}
+            disabled={disabled}
+            aria-haspopup="menu"
+            aria-expanded={!!menu}
+            aria-label={`${t('teamOpt.timing.rotations', 'Rotations')}: ${
+              first === undefined
+                ? t('teamOpt.timing.repeating', 'Repeating')
+                : firstLabel(first)
+            }`}
+            sx={{
+              ...quickSx,
+              ...focusSx,
+              height: 28,
+              pl: 0.875,
+              pr: 0.5,
+              gap: 0.5,
+              borderRadius: 999,
+              border: '1px solid transparent',
+              fontSize: 13,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              color: 'text.primary',
+              '&:hover': {
+                bgcolor: alpha(giTokens.parchment, 0.05),
+                borderColor: tokens.hairlineStrong,
+              },
+              '&.Mui-disabled': { opacity: 0.5 },
+            }}
+          >
+            <RepeatRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+            {first === undefined
+              ? t('teamOpt.timing.repeating', 'Repeating')
+              : firstLabel(first)}
+            <ExpandMoreRoundedIcon
+              sx={{ fontSize: 16, color: 'text.secondary' }}
+            />
+          </ButtonBase>
+        </Tooltip>
+        <Menu
+          anchorEl={menu}
+          open={!!menu}
+          onClose={() => setMenu(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{ paper: { sx: { minWidth: 200, mt: 0.5 } } }}
+        >
+          <MenuItem
+            selected={first === undefined}
+            onClick={() => choose(undefined)}
+            sx={{ fontSize: 13.5 }}
+          >
+            {check(first === undefined)}
+            {t('teamOpt.timing.repeating', 'Repeating')}
+          </MenuItem>
+          <ListSubheader
+            sx={{
+              ...type.label,
+              lineHeight: '28px',
+              bgcolor: 'transparent',
+            }}
+          >
+            {t('teamOpt.timing.fromStart', 'From the start')}
+          </ListSubheader>
+          {FIRST_ROTATIONS.map((n) => (
+            <MenuItem
+              key={n}
+              selected={first === n}
+              onClick={() => choose(n)}
+              sx={{ fontSize: 13.5, ...numSx }}
+            >
+              {check(first === n)}
+              {firstLabel(n)}
+            </MenuItem>
+          ))}
+          {first !== undefined &&
+            !!opener.trim() && [
+              <Divider key="divider" />,
+              <Tooltip
+                key="opener"
+                arrow
+                placement="left"
+                title={t(
+                  'teamOpt.timing.openerCountedTip',
+                  'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+                )}
+              >
+                <MenuItem
+                  onClick={() => setOpenerCounted(!!timing.openerSetup)}
+                  sx={{ fontSize: 13.5 }}
+                >
+                  <Checkbox
+                    size="small"
+                    checked={!timing.openerSetup}
+                    sx={{ p: 0, mr: 1 }}
+                    tabIndex={-1}
+                  />
+                  {t('teamOpt.timing.openerCounted', 'Opener counted')}
+                </MenuItem>
+              </Tooltip>,
+            ]}
+        </Menu>
+      </>
+    )
+  }
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <FieldLabel
-        tip={t(
-          'teamOpt.timing.rotationsTip',
-          'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Each tab keeps its own.'
-        )}
-      >
+      <FieldLabel tip={tip}>
         {t('teamOpt.timing.rotations', 'Rotations')}
       </FieldLabel>
       <Segmented

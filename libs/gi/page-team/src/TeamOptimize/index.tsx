@@ -6,6 +6,7 @@ import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
+  RunAttackState,
   RunEnemy,
   SimGear,
   TeamData,
@@ -17,8 +18,8 @@ import {
   appliedStygianPreset,
   CharacterName,
   enemyFight,
-  fightBuffShare,
   evaluateTeamRotation,
+  fightBuffShare,
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameEnemy,
@@ -28,11 +29,13 @@ import {
   teamOptPool,
   teamOptResultGear,
   teamStatFilters,
+  withAttackStates,
   wolfsGravestoneStates,
   wolfsGravestoneUptime,
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
+import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
   Alert,
@@ -43,6 +46,7 @@ import {
   InputBase,
   LinearProgress,
   Switch,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -57,8 +61,14 @@ import {
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { EnemySetup } from '../Enemy/EnemySetup'
+import { kqmEnemyTeam } from '../Enemy/enemyScope'
 import { kqmTheorycraftingEnabled } from '../featureFlags'
-import { buffsForAttacker, useKqmTeamBuffs, useTeamBuffs } from './buffs'
+import {
+  buffsForAttacker,
+  useKqmSwitchBuffs,
+  useKqmTeamBuffs,
+  useTeamBuffs,
+} from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
 import {
   fightTeamOf,
@@ -68,6 +78,7 @@ import {
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { KqmTimeline } from './KqmTimeline'
+import { kqmOwnSetUp } from './kqmOwn'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
@@ -94,6 +105,7 @@ import {
   Segmented,
   StatTile,
   StepTitle,
+  stepAccentSx,
   stepSurfaceSx,
   tokens,
   type,
@@ -106,8 +118,8 @@ import {
   kqmRotationUpdate,
   kqmRotationView,
   kqmRunKey,
-  teamOptRunKey,
   type TeamOptUpdate,
+  teamOptRunKey,
   useTeamOpt,
 } from './useTeamOpt'
 import type { TeamOptRunState, TeamOptStatus } from './useTeamOptRun'
@@ -145,10 +157,17 @@ export default function TeamBuildWorkspace({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
-  // a result found for another enemy than the team's now (one found before enemies were kept with
+  // the enemy the tab is for: the team's, or the KQM tab's own
+  const enemyTeam = useMemo(
+    () => team && (mode === 'kqm' ? kqmEnemyTeam(team) : team),
+    [team, mode]
+  )
+  // a result found for another enemy than the tab's now (one found before enemies were kept with
   // results: not known, not flagged)
   const enemyChanged = (enemy?: RunEnemy) =>
-    !!enemy && !!team && !sameEnemy(enemy.enemyOverride, team.enemyOverride)
+    !!enemy &&
+    !!enemyTeam &&
+    !sameEnemy(enemy.enemyOverride, enemyTeam.enemyOverride)
   const [storedTeamOpt, setStoredTeamOpt] = useTeamOpt(teamId)
   // Each tab has its own rotation: on the KQM tab the page reads and changes KQM's (its attacks
   // and rotation time), at its constellations; the rest of the settings are shared
@@ -174,13 +193,29 @@ export default function TeamBuildWorkspace({
     copyRotationToKqm(teamId, ownConstellations)
     setStoredTeamOpt(kqmRotationSetUp)
   }, [mode, kqmSetUp, teamId, setStoredTeamOpt, ownConstellations])
+  // (its own switches and enemy too, once: a copy of the team's)
+  const kqmOwnReady =
+    storedTeamOpt.kqm?.teamConditional !== undefined &&
+    storedTeamOpt.kqm?.enemy !== undefined
+  useEffect(() => {
+    if (mode !== 'kqm' || !kqmSetUp || kqmOwnReady) return
+    kqmOwnSetUp(database, teamId)
+  }, [mode, kqmSetUp, kqmOwnReady, database, teamId])
   const buffs = useTeamBuffs(teamId, teamData)
+  const kqmSwitchBuffs = useKqmSwitchBuffs(
+    teamId,
+    teamData,
+    mode === 'kqm' ? storedTeamOpt.kqm : undefined
+  )
   // the rotation with the builds equipped now: Team optimize's only (KQM theorycrafting never
   // counts or shows the members' own builds)
+  // (Wolf's Gravestone's uptime against the enemy, as a run counts it: from the fight below)
+  const [wolfStates, setWolfStates] = useState<RunAttackState[]>()
   const [evaluation, evaluationSettings] = useCurrentEvaluation(
     teamId,
     teamOpt,
-    mode === 'inventory' ? teamData : undefined
+    mode === 'inventory' ? teamData : undefined,
+    wolfStates
   )
   const { state, status, run, cancel, clear } = useTeamOptRun(teamId)
   const kqm = useKqmRun(teamId)
@@ -305,14 +340,42 @@ export default function TeamBuildWorkspace({
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
     kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
   })
+  // (the rotation's time: at the end of the written rotation's line; without one, attacks entered by
+  // hand, in the row below)
+  // attacks entered by hand: who is on the field for them, by default
+  const handOnField =
+    !!onField &&
+    members.length > 1 &&
+    members.some((m) =>
+      teamOpt.attacks[m.characterKey]?.some((a) => !a.onField)
+    )
+  const rotationTimeInput = (compact: boolean) => (
+    <RotationTimeInput
+      compact={compact}
+      // (KQM's: the time of the rotation it played, which it counts)
+      value={
+        kqmRotation?.rotation === 'played'
+          ? (kqmRotationTime ?? rotationTime)
+          : rotationTime
+      }
+      disabled={running || kqmRotation?.rotation === 'played'}
+      onChange={(seconds) =>
+        setTeamOpt((o) => {
+          if (seconds && seconds !== defaultRotationTime)
+            o.rotationTime = seconds
+          else delete o.rotationTime
+        })
+      }
+    />
+  )
   // how long the team takes to defeat the enemy: a Stygian Onslaught boss, its fight's mechanics
   // counted where they are known (with the written rotation's element applications); an enemy set
   // by hand, its HP ÷ the team's DPS
-  const stygian = team && appliedStygianPreset(team)
+  const stygian = enemyTeam && appliedStygianPreset(enemyTeam)
   const applications = useRotationApplications(
     teamId,
     members,
-    !!stygian,
+    !!stygian || !!enemyTeam?.enemyHp,
     mode === 'kqm' ? (teamOpt.kqm ?? defaultTeamOptKqm) : undefined,
     mode === 'kqm' ? kqmShown?.builds : undefined
   )
@@ -339,7 +402,7 @@ export default function TeamBuildWorkspace({
   })
   const fightNow = useMemo(
     () =>
-      team && (stygian || team.enemyHp)
+      team && enemyTeam && (stygian || enemyTeam.enemyHp)
         ? fightTeamOf({
             members: members.map((m) => m.characterKey),
             // (the damage shown: the equipped builds', or the KQM builds' played)
@@ -348,13 +411,15 @@ export default function TeamBuildWorkspace({
             teamData,
             rotationTime:
               mode === 'kqm' ? (kqmRotationTime ?? rotationTime) : rotationTime,
-            enemyOverride: team.enemyOverride,
+            enemyOverride: enemyTeam.enemyOverride,
+            dataEnemy: team.enemyOverride,
             applications,
             cocoon: cocoonNow,
           })
         : undefined,
     [
       team,
+      enemyTeam,
       stygian,
       members,
       mode,
@@ -374,7 +439,7 @@ export default function TeamBuildWorkspace({
   // attack of a run gets it. Without HP its member's own switch stays (KQM: off).
   const lowHp = useMemo(() => {
     const wolf = wolfsGravestoneUptime(
-      team && fightNow ? enemyFight(team, fightNow) : undefined
+      enemyTeam && fightNow ? enemyFight(enemyTeam, fightNow) : undefined
     )
     return wolf
       ? {
@@ -385,30 +450,38 @@ export default function TeamBuildWorkspace({
           ),
         }
       : undefined
-  }, [team, fightNow, members])
+  }, [enemyTeam, fightNow, members])
+  // the equipped builds' figures with that uptime too, as a run's: the fight they make sets it, so
+  // it settles in a step or two (two states taking turns: the first kept)
+  const wolfHistory = useRef<string[]>([])
+  useEffect(() => {
+    const next = lowHp?.states
+    const key = JSON.stringify(next ?? null)
+    const history = wolfHistory.current
+    if (key === history[history.length - 1]) return
+    if (key === history[history.length - 2]) return
+    history.push(key)
+    if (history.length > 4) history.shift()
+    setWolfStates(next)
+  }, [lowHp])
   // the Moongecko's Disentangled (+15% CRIT Rate, +50% DMG Bonus) averaged over the fight's damage
   // time, added while a run ranks builds: a build then leaves room for its CRIT Rate
   const fightBuffs = useMemo(() => {
     const share = fightBuffShare(
-      team && fightNow ? enemyFight(team, fightNow) : undefined
+      enemyTeam && fightNow ? enemyFight(enemyTeam, fightNow) : undefined
     )
     return share
       ? Object.fromEntries(
           members.map((m) => [m.characterKey, { ...share.bonus }])
         )
       : undefined
-  }, [team, fightNow, members])
+  }, [enemyTeam, fightNow, members])
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
   const rotationBuffs = useMemo(
-    () =>
-      mode === 'kqm'
-        ? kqmRotation
-          ? kqmBuffs
-          : buffs.filter((b) => b.inactive !== 'gear')
-        : buffs,
-    [mode, kqmRotation, kqmBuffs, buffs]
+    () => (mode === 'kqm' ? (kqmRotation ? kqmBuffs : kqmSwitchBuffs) : buffs),
+    [mode, kqmRotation, kqmBuffs, kqmSwitchBuffs, buffs]
   )
   const setAttacks = useCallback(
     (characterKey: CharacterKey) =>
@@ -520,9 +593,10 @@ export default function TeamBuildWorkspace({
         aria-labelledby={rotationTitleId}
         sx={{
           ...sectionSx,
+          ...stepAccentSx('rotation'),
           display: 'flex',
           flexDirection: 'column',
-          gap: 1.5,
+          gap: 2,
         }}
       >
         <Box
@@ -530,14 +604,16 @@ export default function TeamBuildWorkspace({
             display: 'flex',
             alignItems: 'center',
             flexWrap: 'wrap',
-            columnGap: 1,
+            columnGap: 1.5,
             rowGap: 1.25,
+            minHeight: 36,
           }}
         >
           {mode === 'kqm' ? (
-            <Box sx={{ mr: 1 }}>
+            <Box sx={{ mr: 0.25 }}>
               <StepTitle
                 step={1}
+                accent="rotation"
                 id={rotationTitleId}
                 info={t(
                   'teamOpt.rotation.info',
@@ -568,26 +644,11 @@ export default function TeamBuildWorkspace({
           )}
           {/* (the start screen has its own ways in: write, add attacks, import) */}
           {!showStart && (
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 0.75,
-              }}
-            >
-              <RotationConfigureButton
-                teamId={teamId}
-                writer={writer}
-                disabled={running}
-              />
-              <RotationTransfer
-                members={members}
-                teamOpt={teamOpt}
-                setTeamOpt={setTeamOpt}
-                disabled={running}
-              />
-            </Box>
+            <RotationConfigureButton
+              teamId={teamId}
+              writer={writer}
+              disabled={running}
+            />
           )}
           <Box sx={{ flexGrow: 1 }} />
           {!!attackCount && mode === 'inventory' && (
@@ -595,6 +656,15 @@ export default function TeamBuildWorkspace({
               total={evaluation?.total}
               rotationTime={rotationTime}
               equipped={!!result && !!shown}
+            />
+          )}
+          {/* (moving the rotation in and out: at the right end, apart from writing it) */}
+          {!showStart && (
+            <RotationTransfer
+              members={members}
+              teamOpt={teamOpt}
+              setTeamOpt={setTeamOpt}
+              disabled={running}
             />
           )}
         </Box>
@@ -618,8 +688,27 @@ export default function TeamBuildWorkspace({
           />
         ) : (
           <>
-            {/* the rotation as text: read as its steps, edited in place */}
+            {/* the rotation as text: read as its steps (a click opens the writer), its time at
+                the end */}
             <RotationInline
+              trailing={
+                <>
+                  <RotationsSetting
+                    compact
+                    teamId={teamId}
+                    members={members}
+                    setTeamOpt={setTeamOpt}
+                    writer={writer}
+                    disabled={running}
+                    kqm={
+                      mode === 'kqm'
+                        ? (teamOpt.kqm ?? defaultTeamOptKqm)
+                        : undefined
+                    }
+                  />
+                  {rotationTimeInput(true)}
+                </>
+              }
               teamId={teamId}
               members={members}
               setTeamOpt={setTeamOpt}
@@ -631,52 +720,25 @@ export default function TeamBuildWorkspace({
               }
               kqmBuilds={mode === 'kqm' ? kqmShown?.builds : undefined}
             />
-            {/* the rotation's settings, in one row of labelled controls */}
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                flexWrap: 'wrap',
-                columnGap: 2,
-                rowGap: 1,
-                minHeight: 34,
-              }}
-            >
-              <RotationTimeInput
-                // (KQM's: the time of the rotation it played, which it counts)
-                value={
-                  kqmRotation?.rotation === 'played'
-                    ? (kqmRotationTime ?? rotationTime)
-                    : rotationTime
-                }
-                disabled={running || kqmRotation?.rotation === 'played'}
-                onChange={(seconds) =>
-                  setTeamOpt((o) => {
-                    if (seconds && seconds !== defaultRotationTime)
-                      o.rotationTime = seconds
-                    else delete o.rotationTime
-                  })
-                }
-              />
-              <RotationsSetting
-                teamId={teamId}
-                members={members}
-                setTeamOpt={setTeamOpt}
-                writer={writer}
-                disabled={running}
-                kqm={
-                  mode === 'kqm'
-                    ? (teamOpt.kqm ?? defaultTeamOptKqm)
-                    : undefined
-                }
-              />
-              {/* (a written rotation says who is on the field for each of its attacks: only
+            {/* the rotation's settings, in one row of labelled controls (with a written rotation its
+                time and count are on its line: only what is left, if anything) */}
+            {(!writtenRotation.trim() ||
+              handOnField ||
+              (rotationExpanded && !!attackCount)) && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  columnGap: 2,
+                  rowGap: 1,
+                  minHeight: 34,
+                }}
+              >
+                {!writtenRotation.trim() && rotationTimeInput(false)}
+                {/* (a written rotation says who is on the field for each of its attacks: only
                   attacks entered by hand use this) */}
-              {onField &&
-                members.length > 1 &&
-                members.some((m) =>
-                  teamOpt.attacks[m.characterKey]?.some((a) => !a.onField)
-                ) && (
+                {handOnField && onField && (
                   <OnFieldPicker
                     members={members}
                     value={onField}
@@ -690,28 +752,29 @@ export default function TeamBuildWorkspace({
                     }
                   />
                 )}
-              <Box sx={{ flexGrow: 1 }} />
-              {rotationExpanded && !!attackCount && (
-                <FormControlLabel
-                  sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
-                  control={
-                    <Switch
-                      size="small"
-                      checked={showConditions}
-                      onChange={toggleConditions}
-                    />
-                  }
-                  label={
-                    <Typography component="span" sx={type.label}>
-                      {t(
-                        'teamOpt.rotation.showConditions',
-                        'Show buff conditions'
-                      )}
-                    </Typography>
-                  }
-                />
-              )}
-            </Box>
+                <Box sx={{ flexGrow: 1 }} />
+                {rotationExpanded && !!attackCount && (
+                  <FormControlLabel
+                    sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
+                    control={
+                      <Switch
+                        size="small"
+                        checked={showConditions}
+                        onChange={toggleConditions}
+                      />
+                    }
+                    label={
+                      <Typography component="span" sx={type.label}>
+                        {t(
+                          'teamOpt.rotation.showConditions',
+                          'Show buff conditions'
+                        )}
+                      </Typography>
+                    }
+                  />
+                )}
+              </Box>
+            )}
             {/* one panel for the team: folded, a line per member; open, a column per member with
               hairlines between them */}
             <Box
@@ -802,7 +865,7 @@ export default function TeamBuildWorkspace({
               )}
               open={extraOpen}
               onToggle={() => setExtraOpen((open) => !open)}
-              sx={{ ml: -0.25, pt: 1.25, mt: 0.25, borderTop: hairline }}
+              sx={{ ml: -0.25, pt: 1.5, borderTop: hairline }}
             >
               <ExtraBuffs
                 members={members}
@@ -817,7 +880,7 @@ export default function TeamBuildWorkspace({
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
       {kqmTheorycraftingEnabled && mode === 'kqm' && (
-        <Box sx={{ ...sectionSx, p: 0 }}>
+        <Box sx={{ ...sectionSx, ...stepAccentSx('setup'), p: 0 }}>
           <KqmSettings
             active={mode === 'kqm'}
             hasResult={!!kqmResult}
@@ -881,7 +944,7 @@ export default function TeamBuildWorkspace({
             }
             now={teamOpt}
             enemy={kqmResult.enemy}
-            enemyNow={enemyChanged(kqmResult.enemy) ? team : undefined}
+            enemyNow={enemyChanged(kqmResult.enemy) ? enemyTeam : undefined}
             applications={applications}
             onView={setKqmView}
             teamData={teamData}
@@ -1067,10 +1130,13 @@ function RotationTimeInput({
   value,
   onChange,
   disabled,
+  compact,
 }: {
   value: number
   onChange: (seconds: number | undefined) => void
   disabled?: boolean
+  /** A chip at the end of the rotation's line: its icon for the label, the help on hover */
+  compact?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const [text, setText] = useState(`${value}`)
@@ -1084,17 +1150,69 @@ function RotationTimeInput({
     setText(`${next ?? defaultRotationTime}`)
     if (next !== value) onChange(next)
   }
+  const info = t(
+    'teamOpt.rotationTime.info',
+    'How long one rotation takes, for the DPS. Saved for this team.'
+  )
+  if (compact)
+    return (
+      <Tooltip arrow title={info} placement="top">
+        <InputBase
+          value={text}
+          placeholder={`${defaultRotationTime}`}
+          disabled={disabled}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+          }}
+          inputProps={{
+            inputMode: 'decimal',
+            'aria-label': t('teamOpt.rotationTime.label', 'Rotation time'),
+          }}
+          startAdornment={
+            <TimerOutlinedIcon
+              sx={{ fontSize: 15, color: 'text.secondary', mr: 0.5 }}
+            />
+          }
+          endAdornment={
+            <Typography
+              component="span"
+              sx={{ ...type.label, ml: 0.25, pointerEvents: 'none' }}
+            >
+              s
+            </Typography>
+          }
+          sx={{
+            height: 28,
+            pl: 0.875,
+            pr: 1,
+            borderRadius: 999,
+            border: '1px solid transparent',
+            fontSize: 13.5,
+            fontWeight: 600,
+            ...numSx,
+            ...quickSx,
+            '&:hover': {
+              bgcolor: alpha(giTokens.parchment, 0.05),
+              borderColor: tokens.hairlineStrong,
+            },
+            '&.Mui-focused': {
+              borderColor: tokens.gold,
+              bgcolor: tokens.inset,
+            },
+            '&.Mui-disabled': { opacity: 0.5 },
+            '& input': { width: '2.4em', textAlign: 'right', p: 0 },
+          }}
+        />
+      </Tooltip>
+    )
   return (
     <Box
       component="label"
       sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
     >
-      <FieldLabel
-        tip={t(
-          'teamOpt.rotationTime.info',
-          'How long one rotation takes, for the DPS. Saved for this team.'
-        )}
-      >
+      <FieldLabel tip={info}>
         {t('teamOpt.rotationTime.label', 'Rotation time')}
       </FieldLabel>
       <InputBase
@@ -1553,7 +1671,9 @@ function RunProgress({
 function useCurrentEvaluation(
   teamId: string,
   teamOpt: TeamOpt,
-  teamData: TeamData | undefined
+  teamData: TeamData | undefined,
+  /** States every attack gets, as a run sets them (Wolf's Gravestone's uptime) */
+  attackStates?: readonly RunAttackState[]
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -1578,7 +1698,7 @@ function useCurrentEvaluation(
       )
       const settings = {
         arts: {},
-        attacks: teamOpt.attacks,
+        attacks: withAttackStates(teamOpt.attacks, attackStates),
         mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
         statFilters,
         onField: teamOpt.onField,
@@ -1593,7 +1713,7 @@ function useCurrentEvaluation(
       })
     }, 120)
     return () => clearTimeout(timer)
-  }, [database, teamId, gender, teamOpt, teamData])
+  }, [database, teamId, gender, teamOpt, teamData, attackStates])
   // (and the settings it was found with: the Moongecko's cocoon evaluates the same)
   return [current?.evaluation, current?.settings] as const
 }
