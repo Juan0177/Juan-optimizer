@@ -25,7 +25,7 @@ import { constValue, teamRotationNodes } from './objective'
 import {
   canWield,
   hasEnergyRequirement,
-  teamEnergyRelief,
+  teamEnergyNeeds,
   teamOptUntickedWeapons,
   teamOptWeaponCandidates,
   teamStatFilters,
@@ -1371,7 +1371,7 @@ export async function optimizeTeam({
         // A build with an empty slot (a piece went to a member optimized before) takes any full one
         const full = isFull(state, characterKey)
         // what the team's energy weapons lower each member's Energy Recharge requirement by, now
-        const relief = teamEnergyRelief(weaponsIn(state), teamOpt)
+        const need = teamEnergyNeeds(statFilters, weaponsIn(state), teamOpt)
         let unmetNow: ReadonlySet<CharacterKey> | undefined
         const unmetBefore = () =>
           (unmetNow ??= new Set(
@@ -1447,7 +1447,8 @@ export async function optimizeTeam({
           const beat = beatOf(floor)
           // The other members whose Energy Recharge requirement this weapon changes (it is an
           // energy weapon, or it replaces one)
-          const reliefWith = teamEnergyRelief(
+          const needWith = teamEnergyNeeds(
+            statFilters,
             weaponsIn(state, characterKey, weapon),
             teamOpt
           )
@@ -1455,9 +1456,7 @@ export async function optimizeTeam({
             (m) =>
               !m.isTc &&
               m.characterKey !== characterKey &&
-              (reliefWith[m.characterKey] ?? 0) !==
-                (relief[m.characterKey] ?? 0) &&
-              hasEnergyRequirement(statFilters[m.characterKey])
+              needWith[m.characterKey] !== need[m.characterKey]
           )
           // a kept member's build stays as it is: the weapon must not break its requirement
           if (
@@ -1496,8 +1495,7 @@ export async function optimizeTeam({
             // needs first). When they only lose, this member must first beat the floor on its own.
             const gains = affected.some(
               (m) =>
-                (reliefWith[m.characterKey] ?? 0) >
-                (relief[m.characterKey] ?? 0)
+                (needWith[m.characterKey] ?? 0) < (need[m.characterKey] ?? 0)
             )
             if (!gains && Number.isFinite(beat) && !(await solve(input)))
               continue
@@ -1760,7 +1758,12 @@ export async function optimizeTeam({
   ]
   const energy: NonNullable<TeamOptResult['energy']> = {}
   for (const { characterKey, isTc } of members) {
-    if (isTc || !hasEnergyRequirement(statFilters[characterKey])) continue
+    if (
+      isTc ||
+      teamOpt.energySource === 'calculator' ||
+      !hasEnergyRequirement(statFilters[characterKey])
+    )
+      continue
     const weaponIds = teamWeaponIds.filter(
       (id) => (teamOpt.weaponEnergy[id]?.[characterKey] ?? 0) > 0
     )

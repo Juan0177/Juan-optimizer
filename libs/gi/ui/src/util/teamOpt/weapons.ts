@@ -7,6 +7,7 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type { TeamOptMember } from './data'
+import { calculateEnergyRecharge } from './energyCalc'
 
 /** Whether a weapon can be wielded by `characterKey` */
 export function canWield(characterKey: CharacterKey, weapon: ICachedWeapon) {
@@ -197,15 +198,86 @@ export function teamEnergyRelief(
   return relief
 }
 
+const ER_FILTER = JSON.stringify(['basic', 'enerRech_'])
+
+/**
+ * The members' Energy Recharge targets from the team's ER calculator, for the weapons they hold
+ * (Favonius particles and energy weapons count for their wielders). Undefined: the requirements are
+ * the members' own (`TeamOpt.energySource`), or the calculator cannot tell.
+ */
+export function teamCalculatorTargets(
+  keys: readonly CharacterKey[],
+  weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
+  teamOpt: Pick<TeamOpt, 'energySource' | 'energyCalculator'>
+): Partial<Record<CharacterKey, number>> | undefined {
+  const calculator = teamOpt.energyCalculator
+  if (teamOpt.energySource !== 'calculator' || !calculator) return undefined
+  const held = keys.filter((k) => weapons[k])
+  const result = calculateEnergyRecharge(
+    keys,
+    calculator,
+    Object.fromEntries(held.map((k) => [k, weapons[k]!.key])),
+    Object.fromEntries(held.map((k) => [k, weapons[k]!.refinement]))
+  )
+  return result.errors.length ? undefined : result.targets
+}
+
+/** `statFilters` with its Energy Recharge requirement set to `target` (undefined: none) */
+function withErTarget(statFilters: StatFilters, target: number | undefined) {
+  const rest = Object.fromEntries(
+    Object.entries(statFilters).filter(([path]) => !isErFilter(path))
+  )
+  return target === undefined
+    ? rest
+    : { ...rest, [ER_FILTER]: [{ value: target, disabled: false }] }
+}
+
+/**
+ * Each member's minimum Energy Recharge with these weapons, as `teamStatFilters` sets it (absent:
+ * none): what a weapon changes for the others
+ */
+export function teamEnergyNeeds(
+  base: Partial<Record<CharacterKey, StatFilters>>,
+  weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
+  teamOpt: TeamOpt
+): Partial<Record<CharacterKey, number>> {
+  const needs: Partial<Record<CharacterKey, number>> = {}
+  for (const [ck, filters] of Object.entries(
+    teamStatFilters(base, weapons, teamOpt)
+  ))
+    for (const [path, settings] of Object.entries(filters ?? {}))
+      if (isErFilter(path))
+        for (const s of settings)
+          if (!s.disabled)
+            needs[ck as CharacterKey] = Math.max(
+              needs[ck as CharacterKey] ?? Number.NEGATIVE_INFINITY,
+              s.value
+            )
+  return needs
+}
+
 /**
  * Each member's constraints: its optimizer's, with its Energy Recharge requirement lowered by
- * what the team's energy weapons are worth to it (`teamEnergyRelief`).
+ * what the team's energy weapons are worth to it (`teamEnergyRelief`); with the ER calculator,
+ * the calculator's target for the weapons held instead.
  */
 export function teamStatFilters(
   base: Partial<Record<CharacterKey, StatFilters>>,
   weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
   teamOpt: TeamOpt
 ): Partial<Record<CharacterKey, StatFilters>> {
+  const targets = teamCalculatorTargets(
+    Object.keys(base) as CharacterKey[],
+    weapons,
+    teamOpt
+  )
+  if (targets)
+    return Object.fromEntries(
+      Object.entries(base).map(([characterKey, filters]) => [
+        characterKey,
+        withErTarget(filters ?? {}, targets[characterKey as CharacterKey]),
+      ])
+    ) as Partial<Record<CharacterKey, StatFilters>>
   const relief = teamEnergyRelief(weapons, teamOpt)
   return Object.fromEntries(
     Object.entries(base).map(([characterKey, filters]) => [
