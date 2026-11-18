@@ -399,10 +399,12 @@ function Swatch({
 /** The fight laid out once: its length, its HP and meter lines, and its moments */
 function fightView(estimate: FightEstimate) {
   const { segments, events, meter } = estimate.timeline
-  const end = Math.max(
-    1,
-    estimate.seconds ?? segments[segments.length - 1]?.end ?? FIGHT_LIMIT
-  )
+  // (a little room after its end: a drop to 0 there is not cut off at the edge)
+  const end =
+    Math.max(
+      1,
+      estimate.seconds ?? segments[segments.length - 1]?.end ?? FIGHT_LIMIT
+    ) * 1.015
   const sx = (s: number) => ((Math.min(s, end) / end) * W).toFixed(2)
   // the HP line: each stretch, then each moment's drop
   const points: [number, number][] = []
