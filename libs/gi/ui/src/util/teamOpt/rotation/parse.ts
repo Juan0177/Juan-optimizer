@@ -230,14 +230,19 @@ function parseActions(
     }
     i = token.lastIndex
     const raw = m[0].trim()
-    if (m[1])
-      actions.push({
-        kind: 'wait',
-        // seconds, or frames with an "f" (W1.5 = W90f)
-        count: /f$/i.test(m[2]) ? Number(m[2].slice(0, -1)) / 60 : Number(m[2]),
-        text: raw,
-      })
-    else if (m[4])
+    if (m[1]) {
+      // seconds, or frames with an "f" (W1.5 = W90f)
+      const count = /f$/i.test(m[2])
+        ? Number(m[2].slice(0, -1)) / 60
+        : Number(m[2])
+      // ("W." or "W1..5" while typing: no length, not a wait; it never reaches the simulation)
+      if (Number.isFinite(count) && count >= 0)
+        actions.push({ kind: 'wait', count, text: raw })
+      else
+        warnings.push(
+          `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
+        )
+    } else if (m[4])
       actions.push({
         kind: 'skill',
         hold: m[3]?.toLowerCase() === 'h',
