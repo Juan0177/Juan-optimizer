@@ -4,6 +4,25 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.16.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.16.0) (2026-11-18)
+
+### New
+
+- Radiant Moongecko's fight is modelled from the game: its Moonstone Anchor's ward (9 layers of 4U Geo, 35 s) takes the team's damage, and breaking it moves 70% of the Geo DMG and 10% of the rest onto the boss (at most 40% of its HP). Radiant Cocoon lowers the team's CRIT Rate and DMG until it is healed to full, then Disentangled buffs it for 15 s.
+- For the Moongecko, the enemy box shows how long the team takes to break the ward (estimated from the rotation's Blunt hits) and when it is healed out of the cocoon; both can be changed.
+- The fight timeline shows the team's DPS over the fight, so you can line up Bursts with the boss's weak moments.
+- Wolf's Gravestone's passive (enemies under 30% HP) now counts for the part of the fight it is actually on, in Team optimize and KQM, whenever the enemy has HP.
+- Write a repeated group once with its count: "4[N5 CD]" (KQM's notation) or "4N5CD".
+- Varesa's rotation notes explain why a Burst or Skill waited.
+
+### Fixed
+
+- The ER calculator updates by itself when the opener or timing settings change, not only the rotation text, and no longer assumes an energy weapon the build may not hold (Sandrone showed 100%).
+- With a Burst every 2nd or 3rd rotation, the other rotations still play short Bursts like Varesa's Volcanic Kablam and Flins' Thunderous Symphony.
+- Boss descriptions show the right element and reaction icons.
+- While the GPU optimizer runs, progress shows as a share instead of a huge combination count.
+- "What raises team damage" says its rows are one average substat roll.
+
 ## [v1.15.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.15.0) (2026-11-18)
 
 ### New
