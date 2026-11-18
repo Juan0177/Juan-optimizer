@@ -579,7 +579,9 @@ export function everyNthBursts(
         i++
       }
       // (a step left with nothing but such Bursts is left out, its swap too)
-      if (actions.some((a) => !a.onlyShort)) steps.push({ ...step, actions })
+      // (an alternative, "Q/N1", is played instead: the step stays)
+      if (actions.some((a) => !a.onlyShort || a.otherwise?.length))
+        steps.push({ ...step, actions })
       else index.splice(index.length - actions.length, actions.length)
     }
   }

@@ -118,6 +118,19 @@ export const kqmRotationId = (teamId: string) => `${teamId}_kqm`
 /** The saved rotation's id for a tab: the team's (Team optimize), or `kqmRotationId` */
 export const rotationIdOf = (teamId: string, kqm?: unknown) =>
   kqm ? kqmRotationId(teamId) : teamId
+/**
+ * The ER calculator's "Burst: Every 2nd": that member's Burst in one of every 2 rotations (KQM's
+ * runs, its timeline); none unless the ER comes from the calculator
+ */
+export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
+  const calculator =
+    kqm?.energySource === 'calculator' ? kqm.energyCalculator : undefined
+  if (!calculator) return undefined
+  const every = Object.fromEntries(
+    Object.entries(calculator.members).map(([k, m]) => [k, m?.burstEvery ?? 1])
+  ) as Partial<Record<CharacterKey, number>>
+  return Object.values(every).some((n) => n !== 1) ? every : undefined
+}
 /** The KQM tab's rotation set up from Team optimize's the first time (a copy) */
 export function copyRotationToKqm(
   teamId: string,
@@ -623,19 +636,7 @@ export function kqmRotationReplay({
   }
   const keys = members.map((m) => m.characterKey)
   const elements = simTeamOf(members, database).elements
-  // (the ER calculator's "Burst: Every 2nd": that member's Burst in one of every 2 rotations)
-  const calculator =
-    teamOpt.kqm?.energySource === 'calculator'
-      ? teamOpt.kqm.energyCalculator
-      : undefined
-  const burstEvery = calculator
-    ? (Object.fromEntries(
-        Object.entries(calculator.members).map(([k, m]) => [
-          k,
-          m?.burstEvery ?? 1,
-        ])
-      ) as Partial<Record<CharacterKey, number>>)
-    : undefined
+  const burstEvery = kqmBurstEvery(teamOpt.kqm)
   return ({ constellations, gear, overrides }) => {
     // the state where no attack sets one, as KQM counts it: KQM's own weapon and set effects
     // ('' off), else the member's, else the rule's

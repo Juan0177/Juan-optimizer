@@ -5,7 +5,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { describe, expect, it } from 'vitest'
-import { parseRotation } from '../util/teamOpt/rotation/parse'
+import { everyNthBursts, parseRotation } from '../util/teamOpt/rotation/parse'
 import { simulateRotation } from '../util/teamOpt/rotation/simulate'
 
 const team: CharacterKey[] = ['Bennett', 'Xiangling']
@@ -75,5 +75,29 @@ describe('an optional action’s alternative', () => {
       .map((a) => a.text)
     expect(texts.filter((t) => t.startsWith('E')).length).toBe(1)
     expect(texts).toContain('N2')
+  })
+  it('plays the alternative in the rotations without the Burst (every 2nd)', () => {
+    const nth = everyNthBursts(
+      parseRotation('Bennett E Q/N3 -> Xiangling N1', names),
+      { Bennett: 2 }
+    )!
+    const sim = simulateRotation({
+      rotation: nth.rotation,
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      repeats: 1,
+      keep: 'all',
+    })
+    const texts = sim.actions
+      .filter((a) => a.characterKey === 'Bennett')
+      .map((a) => a.text)
+    expect(texts.filter((t) => t === 'Q').length).toBe(1)
+    expect(texts).toContain('N3')
+    expect(sim.notes.some((n) => /rotations without the Burst/.test(n))).toBe(
+      true
+    )
   })
 })

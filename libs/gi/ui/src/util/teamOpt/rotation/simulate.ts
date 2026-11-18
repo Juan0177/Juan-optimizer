@@ -1265,6 +1265,21 @@ export function simulateRotation({
     // (an alternative's own frames and timeline place: none of the written list's)
     const own = !opener && !alternative
     const kit = kits[characterKey]
+    // an action's alternative ("Q/N3": N3 when Q is not played), then on to what follows it
+    const playOtherwise = (otherwise: RotationAction[]) => {
+      const after =
+        list[i + 1] ??
+        (alternative
+          ? alternative.next
+          : opener
+            ? flat[0]
+            : loopTo
+              ? { characterKey: loopTo, action: flat[0]?.action }
+              : undefined)
+      const alt = otherwise.map((a) => ({ characterKey, action: a }))
+      for (const j of alt.keys())
+        play(alt, j, r, opener, { next: alt[j + 1] ?? after })
+    }
     // (a triggered hitlag on the acting character can lengthen the previous action: settle it)
     for (let settled = -1; settled !== now; ) {
       settled = now
@@ -1400,7 +1415,17 @@ export function simulateRotation({
             action
           )
         : undefined
-      if (!short || variant?.key !== short) return
+      if (!short || variant?.key !== short) {
+        // (its alternative, "Q/N1", instead: the Burst is not used in this rotation)
+        if (action.otherwise?.length) {
+          if (r === Math.min(1, repeats - 1) || keep !== 'middle')
+            notes.add(
+              `${characterKey}'s ${action.text}: ${action.otherwise.map((a) => a.text).join(' ')} was played in the rotations without the Burst.`
+            )
+          playOtherwise(action.otherwise)
+        }
+        return
+      }
     }
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
@@ -1430,18 +1455,7 @@ export function simulateRotation({
             notes.add(
               `${characterKey}'s ${action.text}: ${action.otherwise.map((a) => a.text).join(' ')} was played when it was not ready.`
             )
-          const after =
-            list[i + 1] ??
-            (alternative
-              ? alternative.next
-              : opener
-                ? flat[0]
-                : loopTo
-                  ? { characterKey: loopTo, action: flat[0]?.action }
-                  : undefined)
-          const alt = action.otherwise.map((a) => ({ characterKey, action: a }))
-          for (const j of alt.keys())
-            play(alt, j, r, opener, { next: alt[j + 1] ?? after })
+          playOtherwise(action.otherwise)
           return
         }
         if (r === Math.min(1, repeats - 1) || keep !== 'middle')

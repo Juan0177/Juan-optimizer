@@ -21,6 +21,7 @@ import { buffsForAttacker } from './buffs'
 import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
+  kqmBurstEvery,
   kqmRotationId,
   simulateWritten,
   useMemberNames,
@@ -128,6 +129,7 @@ export function KqmTimeline({
     kqmRotationId(teamId)
   )
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
+  const burstEvery = useMemo(() => kqmBurstEvery(kqm), [kqm])
   const team = useMemo(
     () => (gear ? { ...simTeam, gear: { ...simTeam.gear, ...gear } } : simTeam),
     [simTeam, gear]
@@ -152,6 +154,8 @@ export function KqmTimeline({
             // (the enemy's auras: an attack's window says which were on when it hit)
             auraTimeline: true,
             openerWarning: (warning) => warning,
+            // (a Burst every 2nd rotation, as the run plays it)
+            ...(burstEvery && { burstEvery }),
           })
         : undefined,
     [
@@ -160,6 +164,7 @@ export function KqmTimeline({
       timing,
       frameData,
       deferredTeam,
+      burstEvery,
       names,
       members,
       database,
