@@ -11,6 +11,7 @@ import {
 } from '@genshin-optimizer/gi/solver'
 import { compactArtifacts } from '@genshin-optimizer/gi/solver-tc'
 import type {
+  RunAttackState,
   RunEnemy,
   TeamOptResult,
   TeamOptSolver,
@@ -162,130 +163,138 @@ export function useTeamOptRun(teamId: string) {
   // load a solver worker while the user sets things up
   useEffect(() => prewarmSolver(), [])
 
-  const run = useCallback(async () => {
-    let cancelled = false
-    let stopSolver: (() => void) | undefined
-    cancelRef.current = () => {
-      cancelled = true
-      stopSolver?.()
-    }
-    const startTime = performance.now()
-    let lastPaint = startTime
-    status.current.step = undefined
-    setState({ type: 'running', startTime })
-    try {
-      await nextPaint()
-      const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
-      // (the enemy its damage is for, as it is now)
-      const team = database.teams.get(teamId)
-      const enemy = team && runEnemyOf(team)
-      const solve: TeamOptSolver = async ({
-        arts,
-        objective,
-        constraints,
-        exclusion,
-        mainStatAssumptionLevel,
-        topN = 1,
-        onWork,
-      }) => {
-        const problem: OptProblemInput = {
-          arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
-          optimizationTarget: objective,
+  const run = useCallback(
+    async (
+      /** States every attack gets (e.g. Wolf's Gravestone's uptime against the enemy) */
+      attackStates?: readonly RunAttackState[]
+    ) => {
+      let cancelled = false
+      let stopSolver: (() => void) | undefined
+      cancelRef.current = () => {
+        cancelled = true
+        stopSolver?.()
+      }
+      const startTime = performance.now()
+      let lastPaint = startTime
+      status.current.step = undefined
+      setState({ type: 'running', startTime })
+      try {
+        await nextPaint()
+        const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
+        // (the enemy its damage is for, as it is now)
+        const team = database.teams.get(teamId)
+        const enemy = team && runEnemyOf(team)
+        const solve: TeamOptSolver = async ({
+          arts,
+          objective,
           constraints,
           exclusion,
-          topN,
-        }
-        Object.assign(status.current, initStatus())
-        // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
-        // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches)
-        const solver = new GOSolver(problem, status.current, maxWorkers, {
-          gpu: true,
-        })
-        stopSolver = () => solver.cancel(new TeamOptCancelled())
-        const t0 = performance.now()
-        try {
-          const results = await solver.solve()
-          onWork?.({
-            tested: status.current.tested,
-            total: Number.isFinite(status.current.total)
-              ? status.current.total
-              : 0,
+          mainStatAssumptionLevel,
+          topN = 1,
+          onWork,
+        }) => {
+          const problem: OptProblemInput = {
+            arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
+            optimizationTarget: objective,
+            constraints,
+            exclusion,
+            topN,
+          }
+          Object.assign(status.current, initStatus())
+          // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
+          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches)
+          const solver = new GOSolver(problem, status.current, maxWorkers, {
+            gpu: true,
           })
-          const [best, ...next] = mergeBuilds(
-            results.map((r) => r.builds),
-            topN
-          )
-          if (process.env['NODE_ENV'] === 'development')
-            console.log('[TeamOpt] solve', {
-              arts: arts.length,
-              total: status.current.total,
+          stopSolver = () => solver.cancel(new TeamOptCancelled())
+          const t0 = performance.now()
+          try {
+            const results = await solver.solve()
+            onWork?.({
               tested: status.current.tested,
-              skipped: status.current.skipped,
-              ms: Math.round(performance.now() - t0),
-              found: !!best,
+              total: Number.isFinite(status.current.total)
+                ? status.current.total
+                : 0,
             })
-          return (
-            best && {
-              value: best.value,
-              artifactIds: best.artifactIds,
-              ...(next.length
-                ? {
-                    more: next.map(({ value, artifactIds }) => ({
-                      value,
-                      artifactIds,
-                    })),
-                  }
-                : {}),
-            }
-          )
-        } finally {
-          stopSolver = undefined
-          solver.cancel()
+            const [best, ...next] = mergeBuilds(
+              results.map((r) => r.builds),
+              topN
+            )
+            if (process.env['NODE_ENV'] === 'development')
+              console.log('[TeamOpt] solve', {
+                arts: arts.length,
+                total: status.current.total,
+                tested: status.current.tested,
+                skipped: status.current.skipped,
+                ms: Math.round(performance.now() - t0),
+                found: !!best,
+              })
+            return (
+              best && {
+                value: best.value,
+                artifactIds: best.artifactIds,
+                ...(next.length
+                  ? {
+                      more: next.map(({ value, artifactIds }) => ({
+                        value,
+                        artifactIds,
+                      })),
+                    }
+                  : {}),
+              }
+            )
+          } finally {
+            stopSolver = undefined
+            solver.cancel()
+          }
         }
-      }
-      const result = await optimizeTeam({
-        database,
-        teamId,
-        gender,
-        teamOpt,
-        solve,
-        builds: teamOpt.topN ?? 1,
-        isCancelled: () => cancelled,
-        onStep: async (step) => {
-          status.current.step = step
-          // let the page show the step, at most every 100 ms: a step the memo answers takes no
-          // time, and a paint after each (up to 50 ms) added up to seconds per run
-          if (performance.now() - lastPaint < 100) return
-          await nextPaint()
-          lastPaint = performance.now()
-        },
-      })
-      if (cancelled) throw new TeamOptCancelled()
-      setState(
-        result
-          ? {
-              type: 'done',
-              result,
-              seconds: (performance.now() - startTime) / 1000,
-              teamOpt,
-              ...(enemy ? { enemy } : {}),
-            }
-          : { type: 'error', message: 'The team could not be computed.' }
-      )
-    } catch (e) {
-      if (cancelled || e instanceof TeamOptCancelled)
-        setState(lastRun(database, teamId))
-      else if (e instanceof TeamOptSetRulesUnmet)
-        setState({
-          type: 'error',
-          message: e.message,
-          setRulesUnmet: e.characterKeys,
+        const result = await optimizeTeam({
+          database,
+          teamId,
+          gender,
+          teamOpt,
+          solve,
+          builds: teamOpt.topN ?? 1,
+          attackStates,
+          isCancelled: () => cancelled,
+          onStep: async (step) => {
+            status.current.step = step
+            // let the page show the step, at most every 100 ms: a step the memo answers takes no
+            // time, and a paint after each (up to 50 ms) added up to seconds per run
+            if (performance.now() - lastPaint < 100) return
+            await nextPaint()
+            lastPaint = performance.now()
+          },
         })
-      else setState({ type: 'error', message: (e as Error)?.message ?? `${e}` })
-    } finally {
-      cancelRef.current = () => {}
-    }
-  }, [database, teamId, gender, maxWorkers, setState])
+        if (cancelled) throw new TeamOptCancelled()
+        setState(
+          result
+            ? {
+                type: 'done',
+                result,
+                seconds: (performance.now() - startTime) / 1000,
+                teamOpt,
+                ...(enemy ? { enemy } : {}),
+              }
+            : { type: 'error', message: 'The team could not be computed.' }
+        )
+      } catch (e) {
+        if (cancelled || e instanceof TeamOptCancelled)
+          setState(lastRun(database, teamId))
+        else if (e instanceof TeamOptSetRulesUnmet)
+          setState({
+            type: 'error',
+            message: e.message,
+            setRulesUnmet: e.characterKeys,
+          })
+        else
+          setState({ type: 'error', message: (e as Error)?.message ?? `${e}` })
+      } finally {
+        cancelRef.current = () => {}
+      }
+    },
+    [database, teamId, gender, maxWorkers, setState]
+  )
 
   const cancel = useCallback(() => cancelRef.current(), [])
   const clear = useCallback(() => {

@@ -3,7 +3,12 @@ import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { nextPaint } from '@genshin-optimizer/gi/solver'
-import type { KqmResult, KqmStep, RunEnemy } from '@genshin-optimizer/gi/ui'
+import type {
+  KqmResult,
+  KqmStep,
+  RunAttackState,
+  RunEnemy,
+} from '@genshin-optimizer/gi/ui'
 import {
   optimizeTeamKqm,
   runEnemyOf,
@@ -220,7 +225,9 @@ async function startKqmRun(
   gender: GenderKey,
   i18n: i18n,
   teamId: string,
-  teamOpt: TeamOpt
+  teamOpt: TeamOpt,
+  /** States every played attack gets (e.g. Wolf's Gravestone's uptime against the enemy) */
+  attackStates?: readonly RunAttackState[]
 ) {
   // (a run already going for the team is replaced)
   const previous = jobs.get(teamId)
@@ -271,6 +278,7 @@ async function startKqmRun(
       gender,
       teamOpt,
       replay,
+      attackStates,
       isCancelled: () => job.cancelled,
       onStep: (step) => setProgress(teamId, step),
       onEarly: (early) => {
@@ -322,7 +330,8 @@ export function useKqmRun(teamId: string) {
   }, [database, teamId])
 
   const run = useCallback(
-    (teamOpt: TeamOpt) => startKqmRun(database, gender, i18n, teamId, teamOpt),
+    (teamOpt: TeamOpt, attackStates?: readonly RunAttackState[]) =>
+      startKqmRun(database, gender, i18n, teamId, teamOpt, attackStates),
     [database, gender, i18n, teamId]
   )
   const cancel = useCallback(() => {
