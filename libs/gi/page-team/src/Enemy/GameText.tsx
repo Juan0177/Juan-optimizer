@@ -4,15 +4,36 @@ import { giTokens } from '@genshin-optimizer/gi/theme'
 import { Box } from '@mui/material'
 import { Fragment, type ReactNode } from 'react'
 
-/** The game's sprite presets for elements (its ElementType: 1 Fire … 8 Rock) */
-const SPRITE_ELEMENTS: Record<string, ElementKey> = {
-  '11001': 'pyro',
-  '11002': 'hydro',
-  '11003': 'dendro',
-  '11004': 'electro',
-  '11005': 'cryo',
-  '11007': 'anemo',
-  '11008': 'geo',
+/**
+ * The game's sprite presets for elements, and for reactions (two elements' icons): its
+ * SpriteTagExcelConfigData's sprites (UI_Buff_Element02_Frost, …_Roach: Rock; the Stygian
+ * Onslaught icons UI_LeyLineChallenge_Icon_ElectIce, …)
+ */
+const SPRITE_ELEMENTS: Record<string, ElementKey[]> = {
+  '11001': ['cryo'],
+  '11002': ['hydro'],
+  '11003': ['pyro'],
+  '11004': ['electro'],
+  '11005': ['anemo'],
+  '11006': ['geo'],
+  '11007': ['dendro'],
+  '11021': ['electro', 'dendro'],
+  '11022': ['electro', 'cryo'],
+  '11023': ['electro', 'geo'],
+  '11024': ['electro', 'anemo'],
+  '11025': ['pyro', 'electro'],
+  '11026': ['pyro', 'dendro'],
+  '11027': ['pyro', 'cryo'],
+  '11028': ['pyro', 'anemo'],
+  '11029': ['dendro', 'hydro'],
+  '11030': ['cryo', 'geo'],
+  '11031': ['cryo', 'hydro'],
+  '11032': ['cryo', 'anemo'],
+  '11033': ['geo', 'pyro'],
+  '11034': ['hydro', 'electro'],
+  '11035': ['hydro', 'pyro'],
+  '11036': ['hydro', 'geo'],
+  '11037': ['anemo', 'hydro'],
 }
 
 /** One line of the game's text: its element icons, and its highlights in gold */
@@ -36,18 +57,21 @@ function line(text: string, key: string): ReactNode[] {
         </Box>
       )
     else {
-      const element = SPRITE_ELEMENTS[m[2]]
-      if (element)
+      const elements = SPRITE_ELEMENTS[m[2]]
+      if (elements)
         out.push(
           <Box
             component="span"
             key={`${key}.${i++}`}
             sx={{ display: 'inline-flex', verticalAlign: '-0.2em' }}
           >
-            <ElementIcon
-              ele={element}
-              iconProps={{ sx: { fontSize: '1.15em' } }}
-            />
+            {elements.map((element) => (
+              <ElementIcon
+                key={element}
+                ele={element}
+                iconProps={{ sx: { fontSize: '1.15em' } }}
+              />
+            ))}
           </Box>
         )
     }
