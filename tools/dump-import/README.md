@@ -107,9 +107,6 @@ Reference characters:
 - **WR `infoMut` mutates the node**: never `infoMut` the same node twice with different paths, and don't spread-copy
   (`{...node}`) for display — the copy loses its label/units. Use a factory (`const mk = () => …`) per use.
 - **List conditionals** use the state string as their value.
-- Community datamine notes (ICDs, particles, hidden numbers like Sealing meters / Accolades split) are in the
-  JSM Faucet Discord (#genshin-updates, #genshin-theorycrafting, off-topic leak discussion). **Read-only.**
-  Server search + reading `[id^="message-content"]` innerText via the Chrome extension works well.
 
 ## 6. Verify
 

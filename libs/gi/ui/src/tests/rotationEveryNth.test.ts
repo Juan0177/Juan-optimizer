@@ -44,7 +44,7 @@ describe('a Burst every Nth rotation (KQM ER calculator)', () => {
     expect(everyNthBursts(rotation, { Sucrose: 1, Flins: 0 })).toBeUndefined()
     expect(everyNthBursts(parse('Sucrose E'), { Sucrose: 2 })).toBeUndefined()
   })
-  it("no longer waits for the Burst it doesn't use (Discord report: Sucrose's Q every 2nd)", () => {
+  it("no longer waits for the Burst it doesn't use (user report: Sucrose's Q every 2nd)", () => {
     const text =
       'Ineffa Q E -> Columbina E Q -> Sucrose E Q -> Flins E E N4 Q N4 E Q N3'
     const play = (rotation: ReturnType<typeof parse>) =>

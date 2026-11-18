@@ -62,7 +62,7 @@ const particleMarkers = (
   )
 
 const members: CharacterKey[] = ['Emilie', 'Nicole', 'Durin', 'Kinich']
-// (a Discord report's team and rotation: the in-game ER need for Durin was about 130%)
+// (a user report's team and rotation: the in-game ER need for Durin was about 130%)
 const text =
   'Emilie N1 E -> Nicole N2 E -> Durin E E Q -> Kinich E N2 hE N2 hE N2 hE N2 hE N2 hE Q'
 const play = (rotation = text) =>

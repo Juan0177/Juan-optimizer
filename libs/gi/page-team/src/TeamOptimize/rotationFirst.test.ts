@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The writer can count the first few rotations from the start instead of the repeating pace (a
- * Discord request: is skipping a Burst better in a timed challenge's first rotation?). With every
+ * user request: is skipping a Burst better in a timed challenge's first rotation?). With every
  * cooldown ready at the start, nothing waits; the time and hits are per rotation of those played;
  * KQM's replay counts the same rotations.
  */
@@ -146,7 +146,7 @@ describe('the first rotations from the start', () => {
 })
 
 /**
- * A Discord report: the first rotation written apart ("First rotation only") was played before the
+ * A user report: the first rotation written apart ("First rotation only") was played before the
  * rotations counted from the start, so First 1 counted the repeating rotation instead (its time,
  * none of the opener's hits). Counted from the start, the opener is the first rotation.
  */
