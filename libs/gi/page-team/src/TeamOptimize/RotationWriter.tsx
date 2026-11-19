@@ -105,6 +105,9 @@ import {
   frameOverrides,
   openerCounted as openerIsCounted,
   type RotationTimingSettings,
+  STEADY_COUNTED,
+  STEADY_RANGE,
+  STEADY_REPEATS,
   timingPing,
 } from './RotationTiming'
 import {
@@ -707,9 +710,6 @@ export function simulateWritten({
   }
 }
 
-/** Played the writer's way (default `repeats`): 4 rotations in a row, the last 2 counted */
-const STEADY_REPEATS = 4
-const STEADY_COUNTED = 2
 /** Attacks of `rotations` rotations, per rotation */
 function perRotation(
   attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>,
@@ -2150,10 +2150,11 @@ function WriterModal({
                           'teamOpt.writer.opener',
                           'First rotation only'
                         )}
-                        info={t(
-                          'teamOpt.writer.openerTip',
-                          'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. Counted from the start, it is the first rotation; repeating, it only sets up cooldowns, summons and auras and is not counted.'
-                        )}
+                        info={t('teamOpt.writer.openerTip', {
+                          defaultValue:
+                            'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. Counted from the start, it is the first rotation; counting rotations {{from}}–{{to}}, it only sets up cooldowns, summons and auras and is not counted.',
+                          ...STEADY_RANGE,
+                        })}
                         aside={
                           <>
                             {/* (counted from the start: the first rotation, or a setup before the start) */}
@@ -2361,17 +2362,23 @@ function WriterModal({
                         edited={timing.swapFrames !== undefined}
                         onClick={() => toggleTiming(true)}
                       />
-                      {/* (the Rotations setting is on the page, beside the rotation: shown, not set) */}
-                      {firstRotations(timing) !== undefined && (
-                        <SettingChip
-                          label={t('teamOpt.timing.rotations', 'Rotations')}
-                          value={t('teamOpt.timing.firstN', {
-                            defaultValue: 'First {{count}}',
-                            count: firstRotations(timing),
-                          })}
-                          edited
-                        />
-                      )}
+                      {/* (the rotations counted are set on the page, beside the rotation: shown, not set) */}
+                      <SettingChip
+                        label={t('teamOpt.timing.counted', 'Counted')}
+                        value={
+                          firstRotations(timing) === undefined
+                            ? t('teamOpt.timing.steady', {
+                                defaultValue:
+                                  'Steady DPS (rot {{from}}–{{to}})',
+                                ...STEADY_RANGE,
+                              })
+                            : t('teamOpt.timing.firstN', {
+                                defaultValue: 'First {{count}}',
+                                count: firstRotations(timing),
+                              })
+                        }
+                        edited={firstRotations(timing) !== undefined}
+                      />
                     </Box>
                   </Box>
                   <RotationTimeline
@@ -2701,7 +2708,7 @@ function WaitsChip({
           <Box sx={{ opacity: 0.75 }}>
             {t(
               'teamOpt.writer.waitedTip',
-              'Played over and over, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
+              'Played several times in a row, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
             )}
           </Box>
         </Box>

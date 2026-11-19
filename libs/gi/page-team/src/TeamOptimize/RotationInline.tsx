@@ -23,7 +23,6 @@ import {
   Checkbox,
   Collapse,
   Divider,
-  ListSubheader,
   Menu,
   MenuItem,
   TextField,
@@ -46,6 +45,7 @@ import {
   FIRST_ROTATIONS,
   firstRotations,
   openerCounted,
+  STEADY_RANGE,
 } from './RotationTiming'
 import {
   applyWritten,
@@ -713,9 +713,9 @@ function Step({
 }
 
 /**
- * The rotations a tab counts (Team optimize's, or KQM's own), on the page beside the rotation: the pace it keeps
- * repeating, or the first 1–6 from the start. Changing it plays the rotation in use again with it
- * (Undo as for using a rotation).
+ * The rotations a tab counts (Team optimize's, or KQM's own), on the page beside the rotation: the
+ * steady pace (the default), or the first 1–6 from the start. Changing it plays the rotation in
+ * use again with it (Undo as for using a rotation).
  */
 export function RotationsSetting({
   teamId,
@@ -747,6 +747,7 @@ export function RotationsSetting({
   // (the tab's: the members' own constellations, or KQM's)
   const ownTeam = useSimTeam(members, kqm)
   const first = firstRotations(timing)
+  // (undefined: the steady pace)
   const set = (rotations: number | undefined) => {
     const { rotations: _previous, ...rest } = timing
     apply(rotations === undefined ? rest : { ...rest, rotations })
@@ -797,9 +798,32 @@ export function RotationsSetting({
     }
     saveRotationTiming(database, rid, next)
   }
-  const tip = t(
-    'teamOpt.timing.rotationsTip',
-    'Repeating: the pace the rotation keeps when played over and over, as KQM counts it (a cooldown not ready in time waits). From the start: only the first 1 to 6 rotations, with every cooldown ready at the start, as in a timed challenge. Each tab keeps its own.'
+  const steadyLabel = t('teamOpt.timing.steady', {
+    defaultValue: 'Steady DPS (rot {{from}}–{{to}})',
+    ...STEADY_RANGE,
+  })
+  const tip = (
+    <Box component="span" sx={{ display: 'grid', gap: 1 }}>
+      <span>
+        <Box component="strong" sx={{ display: 'block' }}>
+          {steadyLabel}
+        </Box>
+        {t('teamOpt.timing.steadyTip', {
+          defaultValue:
+            'The default. Played {{to}} times in a row, rotations {{from}}–{{to}} averaged: the pace once cooldowns carry over.',
+          ...STEADY_RANGE,
+        })}
+      </span>
+      <span>
+        <Box component="strong" sx={{ display: 'block' }}>
+          {t('teamOpt.timing.firstTipTitle', 'First 1–6 rotations')}
+        </Box>
+        {t(
+          'teamOpt.timing.firstTip',
+          'Counted from the start, every cooldown ready, like a timed challenge.'
+        )}
+      </span>
+    </Box>
   )
   const firstLabel = (n: number) =>
     n === 1
@@ -826,10 +850,8 @@ export function RotationsSetting({
             disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={!!menu}
-            aria-label={`${t('teamOpt.timing.rotations', 'Rotations')}: ${
-              first === undefined
-                ? t('teamOpt.timing.repeating', 'Repeating')
-                : firstLabel(first)
+            aria-label={`${t('teamOpt.timing.counted', 'Counted')}: ${
+              first === undefined ? steadyLabel : firstLabel(first)
             }`}
             sx={{
               ...quickSx,
@@ -852,9 +874,7 @@ export function RotationsSetting({
             }}
           >
             <RepeatRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-            {first === undefined
-              ? t('teamOpt.timing.repeating', 'Repeating')
-              : firstLabel(first)}
+            {first === undefined ? steadyLabel : firstLabel(first)}
             <ExpandMoreRoundedIcon
               sx={{ fontSize: 16, color: 'text.secondary' }}
             />
@@ -871,20 +891,15 @@ export function RotationsSetting({
           <MenuItem
             selected={first === undefined}
             onClick={() => choose(undefined)}
-            sx={{ fontSize: 13.5 }}
+            sx={{ fontSize: 13.5, ...numSx }}
           >
             {check(first === undefined)}
-            {t('teamOpt.timing.repeating', 'Repeating')}
+            {steadyLabel}
+            <Box component="span" sx={{ ...type.label, ml: 1 }}>
+              {t('teamOpt.timing.default', 'default')}
+            </Box>
           </MenuItem>
-          <ListSubheader
-            sx={{
-              ...type.label,
-              lineHeight: '28px',
-              bgcolor: 'transparent',
-            }}
-          >
-            {t('teamOpt.timing.fromStart', 'From the start')}
-          </ListSubheader>
+          <Divider sx={{ my: '4px !important' }} />
           {FIRST_ROTATIONS.map((n) => (
             <MenuItem
               key={n}
@@ -929,17 +944,17 @@ export function RotationsSetting({
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <FieldLabel tip={tip}>
-        {t('teamOpt.timing.rotations', 'Rotations')}
+        {t('teamOpt.timing.counted', 'Counted')}
       </FieldLabel>
       <Segmented
         size="small"
-        aria-label={t('teamOpt.timing.rotations', 'Rotations')}
+        aria-label={t('teamOpt.timing.counted', 'Counted')}
         value={first === undefined ? 'repeat' : 'start'}
         onChange={(key) => set(key === 'repeat' ? undefined : (first ?? 1))}
         options={[
           {
             value: 'repeat',
-            label: t('teamOpt.timing.repeating', 'Repeating'),
+            label: steadyLabel,
             disabled,
           },
           {

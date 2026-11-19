@@ -1398,7 +1398,7 @@ export function KqmSetupSummary({
             arrow
             title={t(
               'teamOpt.kqm.rotationPlayedTip',
-              'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, 4 rotations in a row with the last 2 averaged, at the pace it can keep.'
+              'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, counting the rotations chosen beside it (Steady DPS unless you chose others).'
             )}
           >
             <Box sx={{ display: 'grid', cursor: 'help' }}>
