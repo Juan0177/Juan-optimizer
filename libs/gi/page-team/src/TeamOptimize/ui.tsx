@@ -555,8 +555,8 @@ export function Segmented<T extends string | number>({
   fullWidth?: boolean
   'aria-label'?: string
 }) {
-  // the chosen option's thumb: under it, sliding to the next one chosen (placed at once the
-  // first time, and whenever the track changes size)
+  // the chosen option's thumb: under it, sliding to the next one chosen (placed once the track
+  // is laid out, and whenever it changes size)
   const track = useRef<HTMLDivElement>(null)
   const active = options.findIndex((o) => o.value === value)
   const [thumb, setThumb] = useState<{
@@ -566,10 +566,12 @@ export function Segmented<T extends string | number>({
     h: number
   }>()
   const [sliding, setSliding] = useState(false)
+  const placed = useRef(false)
   useLayoutEffect(() => {
     const el = track.current
     if (!el) return undefined
     const place = () => {
+      placed.current = true
       const button = el.querySelectorAll<HTMLElement>('[role="radio"]')[active]
       setThumb(
         button?.offsetWidth
@@ -582,11 +584,12 @@ export function Segmented<T extends string | number>({
           : undefined
       )
     }
-    place()
+    // (the first time by the observer, after the page's layout: measuring here forces one)
     const observer =
       typeof ResizeObserver === 'undefined'
         ? undefined
         : new ResizeObserver(place)
+    if (placed.current || !observer) place()
     observer?.observe(el)
     const id = requestAnimationFrame(() => setSliding(true))
     return () => {

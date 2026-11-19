@@ -24,6 +24,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import TuneIcon from '@mui/icons-material/Tune'
+import type { ButtonBaseProps } from '@mui/material'
 import {
   alpha,
   Box,
@@ -35,23 +36,26 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import type { ButtonBaseProps } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
 import type { HTMLAttributes, ReactNode } from 'react'
 import {
   Fragment,
   forwardRef,
+  memo,
+  startTransition,
+  useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TargetSelectorModal } from '../CharacterDisplay/Tabs/TabOptimize/Components/TargetSelectorModal'
 import { AttackEditor, AttackFiguresContext } from './AttackEditor'
-import type { ExpandStore } from './expandStore'
 import { AttackName } from './AttackName'
 import type { TeamBuff } from './buffs'
+import type { ExpandStore } from './expandStore'
 import { formatDamage, formatHits, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import {
@@ -171,6 +175,23 @@ export function MemberRotation({
     setSelecting(false)
     setSelected(new Set())
   }
+  // (the same handlers every render: a click re-renders only the rows it changes)
+  const latest = useRef({ selecting, remove })
+  latest.current = { selecting, remove }
+  const onRowClick = useCallback((i: number) => {
+    if (!latest.current.selecting) return setEditing(i)
+    // (from the latest selection: clicks may come faster than renders)
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }, [])
+  const onRowRemove = useCallback(
+    (i: number) => latest.current.remove(new Set([i])),
+    []
+  )
 
   const damage = evaluation?.members[characterKey]
   const share =
@@ -380,6 +401,7 @@ export function MemberRotation({
               <AttackRow
                 // biome-ignore lint/suspicious/noArrayIndexKey: attacks are a list without ids
                 key={i}
+                index={i}
                 data={data}
                 attack={attack}
                 buffs={buffs}
@@ -390,17 +412,8 @@ export function MemberRotation({
                 selecting={selecting}
                 selected={selected.has(i)}
                 readOnly={played}
-                onClick={() => {
-                  if (!selecting) return setEditing(i)
-                  // (from the latest selection: clicks may come faster than renders)
-                  setSelected((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(i)) next.delete(i)
-                    else next.add(i)
-                    return next
-                  })
-                }}
-                onRemove={() => remove(new Set([i]))}
+                onClick={onRowClick}
+                onRemove={onRowRemove}
               />
             ))}
             {!attacks.length && (
@@ -768,7 +781,11 @@ function FoldChevron({
   )
 }
 
-/** The member's attacks, folded or shown: re-rendered alone when the flag flips */
+/**
+ * The member's attacks, folded or shown: re-rendered alone when the flag flips. Folded, they
+ * mount once the page is idle (they are most of a tab's elements), so a tab opens without them
+ * and the first unfold is still instant
+ */
 function Fold({
   store,
   expanded,
@@ -779,9 +796,24 @@ function Fold({
   children: ReactNode
 }) {
   const open = useFoldOpen(store, expanded)
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => {
+    if (mounted) return undefined
+    if (open) {
+      setMounted(true)
+      return undefined
+    }
+    const mount = () => startTransition(() => setMounted(true))
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(mount, { timeout: 1500 })
+      return () => cancelIdleCallback(id)
+    }
+    const id = setTimeout(mount, 300)
+    return () => clearTimeout(id)
+  }, [open, mounted])
   return (
     <Collapse in={open} timeout={180}>
-      {children}
+      {mounted || open ? children : null}
     </Collapse>
   )
 }
@@ -790,7 +822,8 @@ function Fold({
  * An attack of the rotation, on one line: what it is (with its reaction, crit mode, own on-field
  * member and buff conditions as small marks), its damage over the rotation and how often it hits
  */
-function AttackRow({
+const AttackRow = memo(function AttackRow({
+  index,
   data,
   attack,
   buffs,
@@ -804,6 +837,7 @@ function AttackRow({
   figures,
   readOnly = false,
 }: {
+  index: number
   data: UIData | undefined
   attack: TeamOptAttack
   showConditions: boolean
@@ -818,8 +852,8 @@ function AttackRow({
   /** Picking attacks to remove: a click toggles this one */
   selecting: boolean
   selected: boolean
-  onClick: () => void
-  onRemove: () => void
+  onClick: (index: number) => void
+  onRemove: (index: number) => void
 }) {
   const { t } = useTranslation('page_team')
   const { t: tSheet } = useTranslation('sheet_gen')
@@ -883,7 +917,7 @@ function AttackRow({
       })}
     >
       <ButtonBase
-        onClick={onClick}
+        onClick={() => onClick(index)}
         aria-pressed={selecting ? selected : undefined}
         sx={{
           display: 'flex',
@@ -1063,7 +1097,7 @@ function AttackRow({
             className="attack-remove"
             size="small"
             aria-label={t('teamOpt.rotation.remove', 'Remove')}
-            onClick={onRemove}
+            onClick={() => onRemove(index)}
             sx={{
               opacity: 0,
               mr: 0.25,
@@ -1081,7 +1115,7 @@ function AttackRow({
       )}
     </Box>
   )
-}
+})
 
 /** A small mark on an attack: its reaction, crit mode, or a buff state or limit (off: struck) */
 const Tag = forwardRef<
