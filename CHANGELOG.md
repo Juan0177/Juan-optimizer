@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.19.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.2) (2026-11-19)
+
+### Fixed
+
+- KQM Theorycrafting's Damage share follows the rotation that was played and counts each hit under the element it actually dealt, so the split by element and by attack matches the result.
+- Hovering a passive, buff, attack or weapon on Team optimize and KQM Theorycrafting while its text is still loading no longer blanks the page: the tooltip shows a placeholder until the text arrives.
+
 ## [v1.19.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.1) (2026-11-19)
 
 ### Fixed

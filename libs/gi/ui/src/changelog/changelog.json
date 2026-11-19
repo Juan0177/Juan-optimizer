@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.19.2",
+    "date": "2026-11-19",
+    "fixed": [
+      "KQM Theorycrafting's Damage share follows the rotation that was played and counts each hit under the element it actually dealt, so the split by element and by attack matches the result.",
+      "Hovering a passive, buff, attack or weapon on Team optimize and KQM Theorycrafting while its text is still loading no longer blanks the page: the tooltip shows a placeholder until the text arrives."
+    ]
+  },
+  {
     "version": "1.19.1",
     "date": "2026-11-19",
     "fixed": [
