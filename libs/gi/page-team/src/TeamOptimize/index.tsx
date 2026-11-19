@@ -91,11 +91,13 @@ import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { RotationTransfer } from './RotationTransfer'
 import {
+  copyRotationFromKqm,
   copyRotationToKqm,
   RotationConfigureButton,
   rotationIdOf,
   useRotationText,
   useRotationWriter,
+  useSameRotations,
   useSimTeam,
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
@@ -272,18 +274,43 @@ export default function TeamBuildWorkspace({
       if (document.Text) document.UseAttacks = '1'
     })
   }
+  // (each tab can take the other's rotation, when the other has one and it is not the same)
+  const sameRotations = useSameRotations(teamId)
+  const hasAttacks = (attacks: TeamOpt['attacks'] | undefined) =>
+    members.some(({ characterKey }) => !!attacks?.[characterKey]?.length)
   const canCopyInventoryRotation =
-    mode === 'kqm' &&
-    members.some(
-      ({ characterKey }) => storedTeamOpt.attacks[characterKey]?.length
+    mode === 'kqm' && !sameRotations && hasAttacks(storedTeamOpt.attacks)
+  const canCopyKqmRotation =
+    mode !== 'kqm' && !sameRotations && hasAttacks(storedTeamOpt.kqm?.attacks)
+  const copyKqmRotation = () => {
+    if (
+      (attackCount || writtenRotation) &&
+      !window.confirm(
+        t(
+          'teamOpt.replaceWithKqmRotation',
+          'Replace the Team optimize rotation with the KQM Theorycrafting rotation?'
+        )
+      )
     )
+      return
+    copyRotationFromKqm(database, teamId)
+    setStoredTeamOpt((draft) => {
+      const kqm = draft.kqm
+      if (!kqm?.attacks) return
+      draft.attacks = structuredClone(kqm.attacks)
+      if (kqm.rotationTime === undefined) delete draft.rotationTime
+      else draft.rotationTime = kqm.rotationTime
+      if (kqm.onField === undefined) delete draft.onField
+      else draft.onField = kqm.onField
+    })
+  }
   const copyInventoryRotation = () => {
     if (
       (attackCount || writtenRotation || team?.rotationDocuments?.kqm?.Draft) &&
       !window.confirm(
         t(
           'teamOpt.kqm.replaceRotation',
-          'Replace the KQM rotation with the current Team Optimize rotation?'
+          'Replace the KQM rotation with the current Team optimize rotation?'
         )
       )
     )
@@ -736,7 +763,9 @@ export default function TeamBuildWorkspace({
           )}
         </Box>
         {writer.element}
-        {mode === 'kqm' && (showStart || canCopyInventoryRotation) && (
+        {((mode === 'kqm' && showStart) ||
+          canCopyInventoryRotation ||
+          canCopyKqmRotation) && (
           <Box
             sx={{
               display: 'flex',
@@ -745,11 +774,11 @@ export default function TeamBuildWorkspace({
               gap: 1,
             }}
           >
-            {showStart && (
+            {mode === 'kqm' && showStart && (
               <Typography variant="body2" color="text.secondary">
                 {t(
                   'teamOpt.kqm.separateRotation',
-                  'KQM uses its own rotation. You can copy the current Team Optimize rotation here.'
+                  'KQM uses its own rotation. You can copy the current Team optimize rotation here.'
                 )}
               </Typography>
             )}
@@ -759,7 +788,12 @@ export default function TeamBuildWorkspace({
                 onClick={copyInventoryRotation}
                 disabled={running}
               >
-                {t('teamOpt.kqm.copyRotation', 'Copy from Team Optimize')}
+                {t('teamOpt.kqm.copyRotation', 'Copy from Team optimize')}
+              </Button>
+            )}
+            {canCopyKqmRotation && (
+              <Button size="small" onClick={copyKqmRotation} disabled={running}>
+                {t('teamOpt.copyKqmRotation', 'Copy from KQM Theorycrafting')}
               </Button>
             )}
           </Box>

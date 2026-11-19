@@ -171,7 +171,13 @@ export function copyRotationToKqm(
     )
     writeStored(database, copiedKey(kqmId), '1')
   }
-  for (const key of [storageKey, openerKey, timingKey, manualAttacksKey]) {
+  for (const key of [
+    storageKey,
+    openerKey,
+    timingKey,
+    manualAttacksKey,
+    playedKey,
+  ]) {
     const source = readStored(database, key(teamId))
     if (
       replace ||
@@ -179,6 +185,59 @@ export function copyRotationToKqm(
     )
       writeStored(database, key(kqmId), source)
   }
+}
+/**
+ * Team optimize's rotation replaced by the KQM tab's: its text, opener and timing (the caller
+ * copies the attacks). A written one is played again at the members' own constellations, which
+ * also turns on the buffs it times for the team, and the toast says it was copied.
+ */
+export function copyRotationFromKqm(database: Database, teamId: string) {
+  const kqmId = kqmRotationId(teamId)
+  for (const key of [draftKey, openerDraftKey])
+    writeStored(database, key(teamId), null)
+  for (const key of [
+    storageKey,
+    openerKey,
+    timingKey,
+    manualAttacksKey,
+    playedKey,
+  ])
+    writeStored(database, key(teamId), readStored(database, key(kqmId)))
+  if (readStored(database, storageKey(kqmId))?.trim()) {
+    // (no constellations recorded: the tab plays it again at its own)
+    writeStored(database, consKey(teamId), '{}')
+    writeStored(database, copiedKey(teamId), '1')
+  }
+}
+/** Both tabs hold the same rotation: the same written text, opener and timing, or the same attacks */
+export function useSameRotations(teamId: string) {
+  const kqmId = kqmRotationId(teamId)
+  const own = useRotationDocument(teamId)
+  const kqm = useRotationDocument(kqmId)
+  const teamOpt = useTeam(teamId)?.teamOpt
+  return useMemo(() => {
+    if (own.text || kqm.text)
+      return (
+        own.text === kqm.text &&
+        own.opener === kqm.opener &&
+        own.timing === kqm.timing
+      )
+    return (
+      JSON.stringify(teamOpt?.attacks ?? {}) ===
+      JSON.stringify(teamOpt?.kqm?.attacks ?? {})
+    )
+  }, [own, kqm, teamOpt])
+}
+/** A tab's written rotation as saved: its text (none when attacks are entered by hand), opener, timing */
+function useRotationDocument(rid: string) {
+  const text = useStored(storageKey(rid))
+  const manual = useStored(manualAttacksKey(rid)) === '1'
+  const opener = useStored(openerKey(rid)) ?? ''
+  const timing = useStored(timingKey(rid)) ?? ''
+  return useMemo(
+    () => ({ text: manual ? '' : (text ?? '').trim(), opener, timing }),
+    [text, manual, opener, timing]
+  )
 }
 /** The constellations the written rotation was last played at (its tab's: own, or KQM's) */
 const consKey = (teamId: string) => `teamOptRotationCons_${teamId}`
@@ -1268,17 +1327,23 @@ export function useRotationWriter({
       writeStored(database, copiedKey(rid), null)
       setReplayed(
         copied
-          ? t('teamOpt.writer.replayedKqm', {
-              defaultValue:
-                'Rotation copied from Team optimize, played at the KQM constellations ({{cons}}) · {{changes}}',
-              cons: members
-                .map(
-                  (m) =>
-                    `${names.find((n) => n.characterKey === m.characterKey)?.name ?? m.characterKey} C${ownTeam.constellations[m.characterKey] ?? 0}`
-                )
-                .join(', '),
-              changes: changed,
-            })
+          ? t(
+              isKqm
+                ? 'teamOpt.writer.replayedKqm'
+                : 'teamOpt.writer.replayedFromKqm',
+              {
+                defaultValue: isKqm
+                  ? 'Rotation copied from Team optimize, played at the KQM constellations ({{cons}}) · {{changes}}'
+                  : 'Rotation copied from KQM Theorycrafting, played at your constellations ({{cons}}) · {{changes}}',
+                cons: members
+                  .map(
+                    (m) =>
+                      `${names.find((n) => n.characterKey === m.characterKey)?.name ?? m.characterKey} C${ownTeam.constellations[m.characterKey] ?? 0}`
+                  )
+                  .join(', '),
+                changes: changed,
+              }
+            )
           : t('teamOpt.writer.replayedCons', {
               defaultValue: '{{cons}}: rotation played again · {{changes}}',
               cons: changedCons.join(', '),
