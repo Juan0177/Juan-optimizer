@@ -95,7 +95,7 @@ import {
   copyRotationToKqm,
   RotationConfigureButton,
   rotationIdOf,
-  useRotationText,
+  useAppliedRotation,
   useRotationWriter,
   useSameRotations,
   useSimTeam,
@@ -251,7 +251,7 @@ export default function TeamBuildWorkspace({
     0
   )
   // the first visit (no attacks, no written rotation, no choice made yet): the start screen
-  const { applied: writtenRotation } = useRotationText(
+  const writtenRotation = useAppliedRotation(
     rotationIdOf(teamId, mode === 'kqm')
   )
   const { manual, chooseManual } = useManualStart(teamId, mode === 'kqm')

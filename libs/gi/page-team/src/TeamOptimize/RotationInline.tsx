@@ -56,6 +56,7 @@ import {
   rotationIdOf,
   saveRotationTiming,
   simulateWritten,
+  useAppliedRotation,
   useEditedByHand,
   useMemberNames,
   useRotationSettings,
@@ -741,7 +742,7 @@ export function RotationsSetting({
   const database = useDatabase()
   const { gender } = useDBMeta()
   const rid = rotationIdOf(teamId, kqm)
-  const { applied } = useRotationText(rid)
+  const applied = useAppliedRotation(rid)
   const { opener, timing, frameData } = useRotationSettings(rid)
   const names = useMemberNames(members)
   // (the tab's: the members' own constellations, or KQM's)

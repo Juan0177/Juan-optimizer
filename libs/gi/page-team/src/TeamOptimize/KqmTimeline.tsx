@@ -24,9 +24,9 @@ import {
   kqmBurstEvery,
   rotationIdOf,
   simulateWritten,
+  useAppliedRotation,
   useMemberNames,
   useRotationSettings,
-  useRotationText,
   useSimTeam,
   writtenSeconds,
 } from './RotationWriter'
@@ -125,7 +125,7 @@ export function KqmTimeline({
   const { gender } = useDBMeta()
   // (the tab's own rotation: the KQM tab's, or Team optimize's)
   const rotationId = rotationIdOf(teamId, kqm)
-  const { applied } = useRotationText(rotationId)
+  const applied = useAppliedRotation(rotationId)
   const { opener, timing, frameData } = useRotationSettings(rotationId)
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
   const burstEvery = useMemo(() => kqmBurstEvery(kqm), [kqm])

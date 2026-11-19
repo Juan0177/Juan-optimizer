@@ -24,9 +24,9 @@ import type { EnergyGear } from './KqmEnergyCalculator'
 import { energyEstimate, KqmEnergyCalculator } from './KqmEnergyCalculator'
 import {
   teamRotationEnergy,
+  useAppliedRotation,
   useMemberNames,
   useRotationSettings,
-  useRotationText,
   useSimTeam,
 } from './RotationWriter'
 import { focusSx, hairline, quickSx, tokens, type } from './ui'
@@ -97,7 +97,7 @@ export function useTeamEnergy(
   }, [database, members, own, teamOpt])
 
   // the written rotation's inputs, worked out after the page shows (it is a full replay)
-  const { applied: text } = useRotationText(teamId)
+  const text = useAppliedRotation(teamId)
   const { opener, timing, frameData } = useRotationSettings(teamId)
   const names = useMemberNames(members)
   const written = text.trim()

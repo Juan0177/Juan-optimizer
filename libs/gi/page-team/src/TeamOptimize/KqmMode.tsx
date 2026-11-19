@@ -110,8 +110,8 @@ import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
 import {
   kqmRotationId,
+  useAppliedRotation,
   useRotationSettings,
-  useRotationText,
 } from './RotationWriter'
 import { elementColor } from './TeamOptResults'
 import {
@@ -237,7 +237,7 @@ function useRotationEnergy(
   const [worked, setWorked] = useState<RotationWorked>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
-  const text = useRotationText(kqmRotationId(teamId)).applied
+  const text = useAppliedRotation(kqmRotationId(teamId))
   const constellations = JSON.stringify(
     members.map((m) => kqmMemberConstellation(m.characterKey, teamOpt.kqm))
   )

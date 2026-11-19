@@ -33,9 +33,9 @@ import { attackElement } from './DamageShare'
 import {
   rotationIdOf,
   simulateWritten,
+  useAppliedRotation,
   useMemberNames,
   useRotationSettings,
-  useRotationText,
   useSimTeam,
 } from './RotationWriter'
 
@@ -363,7 +363,7 @@ export function useRotationApplications(
   const { gender } = useDBMeta()
   // (the tab's own rotation: Team optimize's, or KQM's)
   const rid = rotationIdOf(teamId, kqm)
-  const { applied } = useRotationText(rid)
+  const applied = useAppliedRotation(rid)
   const { opener, timing, frameData } = useRotationSettings(rid)
   const team = useSimTeam(members, kqm, kqmBuilds)
   const names = useMemberNames(members)

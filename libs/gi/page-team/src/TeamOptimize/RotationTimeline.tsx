@@ -43,6 +43,7 @@ import type { Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
 import {
   createContext,
+  memo,
   Suspense,
   useCallback,
   useContext,
@@ -182,9 +183,10 @@ export interface TimelinePin {
  * mark under it (as tall as its damage, when there are figures), on a seconds ruler. Pointing at
  * a moment reads it out (who is on the field, the enemy's auras, stacks, the hit there); a click
  * pins it. The detailed view adds the enemy's auras, every resource, stack and buff the
- * simulation follows, and the damage as it adds up. A block opens its step's timing.
+ * simulation follows, and the damage as it adds up. A block opens its step's timing. Memoized: the
+ * writer re-renders on every key typed, the timeline only once the rotation is played again.
  */
-export function RotationTimeline({
+export const RotationTimeline = memo(function RotationTimeline({
   members,
   rotation,
   sim,
@@ -1203,7 +1205,7 @@ export function RotationTimeline({
       </Box>
     </SizeContext.Provider>
   )
-}
+})
 
 /* ---------- rows of the detailed view ---------- */
 

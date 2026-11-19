@@ -346,7 +346,39 @@ function rotationField(key: string) {
   return match && { field: match[1] as RotationDocumentField, id: match[2]! }
 }
 
+/**
+ * Drafts as they are typed, saved to the team when the writer closes, the page is left or typing
+ * stops for a while: saving one changes the team, which re-renders its whole page, so a keystroke must
+ * not save it. Read and followed as if saved.
+ */
+const pendingDrafts = new Map<
+  string,
+  { database: Database; value: string | null }
+>()
+const draftListeners = new Set<() => void>()
+let draftTimer: ReturnType<typeof setTimeout> | undefined
+const DRAFT_SAVE_MS = 30_000
+export function saveDrafts() {
+  clearTimeout(draftTimer)
+  const drafts = [...pendingDrafts]
+  pendingDrafts.clear()
+  for (const [key, { database, value }] of drafts) {
+    const rotation = rotationField(key)!
+    database.teams.setRotationField(rotation.id, rotation.field, value)
+  }
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', saveDrafts)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveDrafts()
+  })
+}
+const isDraftField = (rotation: ReturnType<typeof rotationField>) =>
+  rotation?.field === 'Draft' || rotation?.field === 'OpenerDraft'
+
 function readStored(database: Database, key: string): string | null {
+  const pending = pendingDrafts.get(key)
+  if (pending) return pending.value
   const rotation = rotationField(key)
   return rotation
     ? (database.teams.getRotationField(rotation.id, rotation.field) ?? null)
@@ -355,6 +387,13 @@ function readStored(database: Database, key: string): string | null {
 
 function writeStored(database: Database, key: string, value: string | null) {
   const rotation = rotationField(key)
+  if (rotation && isDraftField(rotation)) {
+    pendingDrafts.set(key, { database, value })
+    for (const listener of draftListeners) listener()
+    clearTimeout(draftTimer)
+    draftTimer = setTimeout(saveDrafts, DRAFT_SAVE_MS)
+    return
+  }
   if (rotation) {
     database.teams.setRotationField(rotation.id, rotation.field, value)
     return
@@ -378,8 +417,18 @@ function useStored(key: string) {
   const subscribe = useCallback(
     (onChange: () => void) => {
       const rotation = rotationField(key)
-      if (rotation)
-        return database.teams.follow(rotation.id.replace(/_kqm$/, ''), onChange)
+      if (rotation) {
+        const unfollow = database.teams.follow(
+          rotation.id.replace(/_kqm$/, ''),
+          onChange
+        )
+        if (!isDraftField(rotation)) return unfollow
+        draftListeners.add(onChange)
+        return () => {
+          unfollow()
+          draftListeners.delete(onChange)
+        }
+      }
       window.addEventListener(storageEvent, onChange)
       return () => window.removeEventListener(storageEvent, onChange)
     },
@@ -406,12 +455,21 @@ const parseFrameData = (raw: string | null): FrameData => {
   return {}
 }
 
+/**
+ * The rotation in use, not what is typed since: for what only plays it (the page, its fight and
+ * energy), which then does not re-render on every key typed in the writer
+ */
+export function useAppliedRotation(teamId: string) {
+  const savedText = useStored(storageKey(teamId)) ?? ''
+  const useAttacks = useStored(manualAttacksKey(teamId)) === '1'
+  return useAttacks ? '' : savedText
+}
+
 /** The rotation in use, and what was typed since (a draft, kept until it is used or reverted) */
 export function useRotationText(teamId: string) {
   const database = useDatabase()
   const savedText = useStored(storageKey(teamId)) ?? ''
-  const useAttacks = useStored(manualAttacksKey(teamId)) === '1'
-  const applied = useAttacks ? '' : savedText
+  const applied = useAppliedRotation(teamId)
   const draft = useStored(draftKey(teamId))
   const text = draft ?? savedText
   const setText = useCallback(
@@ -1222,7 +1280,7 @@ export function useRotationWriter({
   const ownTeam = useSimTeam(members, kqm)
   const names = useMemberNames(members)
   const rid = rotationIdOf(teamId, kqm)
-  const { applied: appliedText } = useRotationText(rid)
+  const appliedText = useAppliedRotation(rid)
   const { opener, timing, frameData } = useRotationSettings(rid)
   const consSig = JSON.stringify(ownTeam.constellations)
   // (another tab's rotation: what was said about this one's goes)
@@ -1661,6 +1719,8 @@ function WriterModal({
   // the tab's own (Team optimize's, or KQM's)
   const rid = rotationIdOf(teamId, kqm)
   const { applied, text, setText, isDraft: changed } = useRotationText(rid)
+  // (what was typed is saved with the team once the writer closes)
+  useEffect(() => saveDrafts, [])
   const savedOpener = useStored(openerKey(rid)) ?? ''
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const openerRef = useRef<HTMLTextAreaElement | null>(null)
@@ -1835,7 +1895,8 @@ function WriterModal({
     rotation: NonNullable<typeof result>['rotation'],
     sim: NonNullable<NonNullable<typeof result>['sim']>
   ) => ({
-    members: keys,
+    // (each the same object while nothing changes: the timeline is memoized)
+    members: memberKeys,
     rotation,
     sim,
     edited: editedSteps,
@@ -1844,35 +1905,8 @@ function WriterModal({
     // (on the KQM tab, the KQM builds' effects: never the members' own)
     buffs: figures ? teamBuffs : kqmBuffs,
     damage: timelineFigures.damage,
-    renderHit: (hit: SimHit) => {
-      // (the KQM tab before its first builds: nothing to work a hit's damage out with)
-      if (!figures && !kqmOverrides)
-        return (
-          <Typography sx={type.label}>
-            {t(
-              'teamOpt.writer.hitNeedsBuilds',
-              'Its damage shows once KQM builds are generated.'
-            )}
-          </Typography>
-        )
-      const found = timelineFigures.attackOf?.(hit)
-      return (
-        found && (
-          <TimelineHitStats
-            teamId={teamId}
-            characterKey={found.characterKey}
-            attack={found.attack}
-            overrides={figures ? undefined : kqmOverrides}
-          />
-        )
-      )
-    },
-    onSelect: (i: number) => {
-      setDetailOpen(false)
-      setSelectedStep(i)
-      setInspectorTab('steps')
-      toggleTiming(true)
-    },
+    renderHit,
+    onSelect: selectStep,
   })
   // the members' stats at the timeline's moment and what each buff up then gives: their own
   // builds; on the KQM tab the shown result's (none before a result)
@@ -1898,6 +1932,42 @@ function WriterModal({
     figures || !!kqmOverrides,
     figures ? undefined : kqmOverrides
   )
+  const renderHit = useCallback(
+    (hit: SimHit) => {
+      // (the KQM tab before its first builds: nothing to work a hit's damage out with)
+      if (!figures && !kqmOverrides)
+        return (
+          <Typography sx={type.label}>
+            {t(
+              'teamOpt.writer.hitNeedsBuilds',
+              'Its damage shows once KQM builds are generated.'
+            )}
+          </Typography>
+        )
+      const found = timelineFigures.attackOf?.(hit)
+      return (
+        found && (
+          <TimelineHitStats
+            teamId={teamId}
+            characterKey={found.characterKey}
+            attack={found.attack}
+            overrides={figures ? undefined : kqmOverrides}
+          />
+        )
+      )
+    },
+    [figures, kqmOverrides, timelineFigures, teamId, t]
+  )
+  // (a step's block: its timing opened; the latest toggle, which reads the panel's state)
+  const toggleTimingRef = useRef(toggleTiming)
+  toggleTimingRef.current = toggleTiming
+  const selectStep = useCallback((i: number) => {
+    setDetailOpen(false)
+    setSelectedStep(i)
+    setInspectorTab('steps')
+    toggleTimingRef.current(true)
+  }, [])
+  const openDetail = useCallback(() => setDetailOpen(true), [])
   // a mode or stance's version of an action (Zibai's Spirit Steed's Stride) has its own frame data:
   // the versions this rotation played join each member's defaults
   const frameDefaultsWithVersions = useMemo(() => {
@@ -1968,7 +2038,15 @@ function WriterModal({
   const overrides = result?.rotation
     ? frameOverrides(result.rotation, timing.edits)
     : {}
-  const editedSteps = new Set(Object.keys(overrides).map(Number))
+  const editedSteps = useMemo(
+    () =>
+      new Set(
+        Object.keys(
+          result?.rotation ? frameOverrides(result.rotation, timing.edits) : {}
+        ).map(Number)
+      ),
+    [result?.rotation, timing.edits]
+  )
   const warnings = [
     ...new Set([...(result?.sim?.warnings ?? result?.rotation.warnings ?? [])]),
   ]
@@ -2399,7 +2477,7 @@ function WriterModal({
                     stats={detailOpen ? undefined : momentStats}
                     effects={detailOpen ? undefined : momentEffects}
                     onMoment={momentOn && !detailOpen ? setMoment : undefined}
-                    onOpenDetail={() => setDetailOpen(true)}
+                    onOpenDetail={openDetail}
                     pinned={timelinePin}
                     onPin={setTimelinePin}
                   />
