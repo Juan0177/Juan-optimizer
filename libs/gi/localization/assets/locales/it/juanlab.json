@@ -123,6 +123,7 @@
     "noResultTip": "KQM Compare parte dall'ultimo risultato di KQM Theorycrafting per questa squadra: genera prima le build lì.",
     "openKqm": "Apri KQM Theorycrafting",
     "resultOf": "A: risultato di KQM Theorycrafting del {{date}}",
+    "withPicks": "Con le armi e i set scelti nei risultati di KQM Theorycrafting: {{names}}",
     "out": "Esce",
     "fixed": "Restano",
     "fixedTip": "Restano bloccati: in B hanno le stesse build, costellazioni e impostazioni di A.",

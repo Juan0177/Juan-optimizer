@@ -39,7 +39,15 @@ const mocks = vi.hoisted(() => {
     kqmRunning: boolean
     /** The saved results as the database entry gives them (a new object on each save) */
     results: object
-  } = { saved: undefined, members: [], kqmRunning: false, results: {} }
+    /** The team as KQM Theorycrafting's results show it, with picks (its saved run's) */
+    shown: Record<string, unknown> | undefined
+  } = {
+    saved: undefined,
+    members: [],
+    kqmRunning: false,
+    results: {},
+    shown: undefined,
+  }
   const listeners = new Set<() => void>()
   const resultListeners = new Set<(reason: string) => void>()
   return {
@@ -103,6 +111,10 @@ vi.mock('../useKqmRun', async () => {
         () => mocks.state.kqmRunning
       ),
     kqmReplayOf: mocks.replay,
+    kqmShownView: (_teamId: string, savedAt: number) =>
+      mocks.state.saved?.['savedAt'] === savedAt
+        ? mocks.state.shown
+        : undefined,
   }
 })
 vi.mock('../RotationWriter', () => ({
@@ -358,6 +370,7 @@ afterEach(() => {
   mocks.state.saved = undefined
   mocks.state.members = []
   mocks.state.kqmRunning = false
+  mocks.state.shown = undefined
 })
 
 const theme = createTheme({ palette: { mode: 'dark' } })
@@ -762,6 +775,42 @@ describe('KqmCompare', () => {
       WintersHeavyHeart: { Mitya: 20 },
     })
     mocks.settings.mockReset()
+  })
+
+  it('A is the team as KQM Theorycrafting shows it: the weapons and sets picked there', async () => {
+    withRun()
+    const own = (
+      mocks.state.saved as {
+        run: { result: { builds: Record<string, unknown> } }
+      }
+    ).run.result
+    // (Odette with another weapon picked in the inspector: the team as it plays with it)
+    const shown = {
+      ...own,
+      builds: { ...own.builds, Odette: build('StarcallersWatch') },
+      after: { total: 980, members: {} },
+    }
+    mocks.state.shown = shown
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    show()
+    expect(screen.getByText(/kqmCompare\.withPicks/).textContent).toContain(
+      'Odette'
+    )
+    chooseSwap()
+    fireEvent.click(confirmBox())
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(1))
+    const { saved } = mocks.compare.mock.calls[0][0]
+    expect(saved.run.result).toBe(shown)
+    expect(saved.savedAt).toBe(mocks.state.saved!['savedAt'])
+  })
+
+  it('A without picks: the saved run, no line about them', () => {
+    withRun()
+    show()
+    expect(screen.queryByText(/kqmCompare\.withPicks/)).toBeNull()
   })
 
   it('while running: the form locked, the progress bar silent, A’s date in the confirmation', async () => {

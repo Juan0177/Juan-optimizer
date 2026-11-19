@@ -127,7 +127,13 @@ import {
   tokens,
   type,
 } from './ui'
-import { type KqmRotation, kqmReplayOf, useKqmProgress } from './useKqmRun'
+import {
+  type KqmRotation,
+  kqmReplayOf,
+  kqmShownFor,
+  setKqmShownView,
+  useKqmProgress,
+} from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 /** A member row's columns: name, build, constellation, minimum ER (one line from `sm`) */
@@ -2257,7 +2263,10 @@ function KqmResultsView({
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   // other equipment picked in the inspector: the team as it plays with it (the figures above follow)
-  const [comparing, setComparing] = useState<KqmResult>()
+  // (back on the page: as it was left, its picks included)
+  const [comparing, setComparing] = useState<KqmResult | undefined>(() =>
+    readOnly ? undefined : kqmShownFor(teamId, result)
+  )
   // a top team picked: its inspector compares on the run's own team (not on other picks), while
   // the figures shown stay until its team is worked out
   const [fromRun, setFromRun] = useState(false)
@@ -2266,8 +2275,18 @@ function KqmResultsView({
     setComparing(next)
   }, [])
   // (a new run starts from its own builds)
-  useEffect(() => setComparing(undefined), [result])
+  const shownResult = useRef(result)
+  useEffect(() => {
+    if (shownResult.current === result) return
+    shownResult.current = result
+    setComparing(undefined)
+  }, [result])
   const view = comparing ?? result
+  // the team's own results (not KQM Compare's B): the team as shown, with its picks, is KQM
+  // Compare's A
+  useEffect(() => {
+    if (!readOnly) setKqmShownView(teamId, result, comparing)
+  }, [readOnly, teamId, result, comparing])
   // the enemy the builds are for: the team's now while it takes the same damage (its preset and
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(

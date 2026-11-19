@@ -85,7 +85,12 @@ import {
   tokens,
   type,
 } from '../ui'
-import { type KqmRotation, kqmReplayOf, useKqmRunning } from '../useKqmRun'
+import {
+  type KqmRotation,
+  kqmReplayOf,
+  kqmShownView,
+  useKqmRunning,
+} from '../useKqmRun'
 import { CompareCardButton } from './CompareCardButton'
 import { Overview } from './CompareOverview'
 import { compareFailureText } from './compareError'
@@ -134,6 +139,47 @@ function readStored(key: string) {
   } catch {
     return ''
   }
+}
+
+/**
+ * The saved run as KQM Theorycrafting's results show it: with the weapons and sets picked in its
+ * inspector (in this visit), the team as it plays with them (its damage, ER, rotation played)
+ */
+export function withShownPicks(
+  teamId: string,
+  saved: TeamKqmSavedRun | undefined
+): TeamKqmSavedRun | undefined {
+  if (!saved) return saved
+  const view = kqmShownView(teamId, saved.savedAt)
+  if (!view) return saved
+  return { ...saved, run: { ...saved.run, result: view } as never }
+}
+
+const setsId = (sets: KqmSets) =>
+  Object.entries(sets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([k, n]) => `${k}:${n}`)
+    .join('+')
+
+/** The members whose weapon or sets A has as picked in KQM Theorycrafting, not as its run found */
+export function pickedMembers(
+  saved: TeamKqmSavedRun | undefined,
+  original: TeamKqmSavedRun | undefined
+): CharacterKey[] {
+  const picked = saved && savedRunOf(saved).result
+  const own = original && savedRunOf(original).result
+  if (!picked || !own || picked === own) return []
+  return (Object.keys(picked.builds) as CharacterKey[]).filter((k) => {
+    const a = picked.builds[k]
+    const b = own.builds[k]
+    return (
+      !!a &&
+      !!b &&
+      (a.weapon.key !== b.weapon.key ||
+        a.weapon.refinement !== b.weapon.refinement ||
+        setsId(a.sets) !== setsId(b.sets))
+    )
+  })
 }
 
 /**
@@ -222,9 +268,19 @@ export default function KqmCompare({
   const kqmRunning = useKqmRunning(teamId)
   const results = useDataEntryBase(database.teamKqmResults)
   const [reread, setReread] = useState(0)
-  const saved = useMemo(
+  // (A: the team as KQM Theorycrafting's results show it, the weapons and sets picked there
+  // included)
+  const original = useMemo(
     () => savedRunFor(database, teamId),
     [database, teamId, kqmRunning, results, reread]
+  )
+  const saved = useMemo(
+    () => withShownPicks(teamId, original),
+    [teamId, original]
+  )
+  const picked = useMemo(
+    () => pickedMembers(saved, original),
+    [saved, original]
   )
   const run: SavedKqmRun | undefined = saved && savedRunOf(saved)
   const teamKqm: TeamOptKqm | undefined = run?.teamOpt?.kqm
@@ -767,6 +823,15 @@ export default function KqmCompare({
         ) : (
           <Typography sx={{ ...type.label, mb: 2 }}>
             {t('kqmCompare.resultOf', { date: savedAt })}
+            {/* (the weapons or sets picked in KQM Theorycrafting's results: A plays with them) */}
+            {picked.length > 0 && (
+              <>
+                <br />
+                {t('kqmCompare.withPicks', {
+                  names: picked.map(nameOf).join(', '),
+                })}
+              </>
+            )}
           </Typography>
         )}
 
