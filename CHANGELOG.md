@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.19.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.1) (2026-11-19)
+
+### Fixed
+
+- A fight that starts with no energy no longer waits, in its first rotation, for what the Bursts would have made ready (Anastasya's Skills after her Burst, for example). What isn't ready is left out and the rotation goes on, as a player would, so teams like that defeat Stygian bosses much sooner in the estimate.
+- The fight timeline names the Domovoy Sculptor's statue blasts, Lysis Shears' cannon HP loss and the Guardian Blade's heal, which read "Horns broken".
+
 ## [v1.19.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.0) (2026-11-19)
 
 ### New
