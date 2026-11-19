@@ -1,5 +1,28 @@
 [
   {
+    "version": "1.21.0",
+    "date": "2026-11-19",
+    "new": [
+      "Undo equip on Team optimize puts back the equipment and saved builds the team had before the last Equip.",
+      "Export attacks and Import attacks move a rotation's attacks as JSON, and KQM Theorycrafting can copy Team optimize's current rotation into its own.",
+      "Team export can download the team as a JSON file, and the export now includes both of the team's written rotations."
+    ],
+    "improved": [
+      "Written rotations are saved with their team: duplicating a team keeps them, with their opener and timing, and deleting a team removes them.",
+      "When no team matches the search on the Teams page, a Clear filters button brings them back, and an imported team opens right away.",
+      "The rotation writer's revert button just says Undo."
+    ],
+    "fixed": [
+      "KQM Theorycrafting counts the Energy restored by Bloodsoaked Ruins, Jadefall's Splendor, Lumidouce Elegy and Amenoma Kageuchi, so a member holding one of them needs less Energy Recharge.",
+      "A new team no longer opens with the rotation of a team deleted before it, and deleting a team from its own page no longer shows an error.",
+      "A Team optimize or KQM result is shown as out of date once the team's members or a member's requirements change.",
+      "Importing a file that doesn't hold a valid team shows an error instead of adding an empty team.",
+      "When copying to the clipboard fails, a message says so and the JSON can be downloaded instead.",
+      "Team optimize says to add artifacts first when there are none to choose from, instead of running without any.",
+      "Opening a team no longer counts as an edit in the Teams page's Last edit order."
+    ]
+  },
+  {
     "version": "1.20.0",
     "date": "2026-11-19",
     "new": [
