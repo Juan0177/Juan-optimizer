@@ -1311,10 +1311,28 @@ function MomentLine({
                     'enemy.fight.blastAt',
                     'Ward not broken: the Anchor blasts the team (200% ATK Geo DMG)'
                   )
-                : t('enemy.fight.hornsBreakAt', {
-                    defaultValue: 'Horns broken: −{{hp}}% of its HP',
-                    hp: (moment.event.hp * 100).toFixed(1),
-                  })}
+                : moment.event.kind === 'statue'
+                  ? t('enemy.fight.statueAt', {
+                      defaultValue:
+                        'Statues explode on it: −{{hp}}% of its HP, its RES down',
+                      hp: (moment.event.hp * 100).toFixed(1),
+                    })
+                  : moment.event.kind === 'hpLoss'
+                    ? t('enemy.fight.hpLossAt', {
+                        defaultValue:
+                          'Its cannon interrupted: −{{hp}}% of its HP, paralyzed',
+                        hp: (moment.event.hp * 100).toFixed(1),
+                      })
+                    : moment.event.kind === 'heal'
+                      ? t('enemy.fight.healAt', {
+                          defaultValue:
+                            'Its Ice Coffin held: +{{hp}}% of its HP back',
+                          hp: (-moment.event.hp * 100).toFixed(1),
+                        })
+                      : t('enemy.fight.hornsBreakAt', {
+                          defaultValue: 'Horns broken: −{{hp}}% of its HP',
+                          hp: (moment.event.hp * 100).toFixed(1),
+                        })}
         </Box>
       )}
       {pinned && (

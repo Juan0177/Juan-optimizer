@@ -444,11 +444,15 @@ export function simulateWritten({
     rotation.warnings.push(...parsed.warnings.map(openerWarning))
   }
   if (withoutBursts) {
-    // (a step that was only a Burst is left out: the member is not swapped in for nothing)
+    // (a step that was only a Burst is left out: the member is not swapped in for nothing; a
+    // Burst's alternative, "Q/N1", is played instead. What is not ready without the Bursts, a
+    // Skill their Burst would have reset, is left out rather than waited for, as a player would)
     const strip = (steps: typeof rotation.steps) =>
       steps.flatMap((step) => {
         if (!step.actions.length) return [step]
-        const actions = step.actions.filter((a) => a.kind !== 'burst')
+        const actions = step.actions
+          .flatMap((a) => (a.kind === 'burst' ? (a.otherwise ?? []) : [a]))
+          .map((a) => ({ ...a, optional: true }))
         return actions.length ? [{ ...step, actions }] : []
       })
     rotation.steps = strip(rotation.steps)
