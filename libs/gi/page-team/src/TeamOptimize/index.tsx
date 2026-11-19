@@ -445,7 +445,8 @@ export default function TeamBuildWorkspace({
           ? (kqmRotationTime ?? rotationTime)
           : rotationTime
       }
-      disabled={running || kqmRotation?.rotation === 'played'}
+      disabled={running}
+      played={kqmRotation?.rotation === 'played'}
       onChange={(seconds) =>
         setTeamOpt((o) => {
           if (seconds && seconds !== defaultRotationTime)
@@ -1236,11 +1237,14 @@ function RotationTimeInput({
   value,
   onChange,
   disabled,
+  played,
   compact,
 }: {
   value: number
   onChange: (seconds: number | undefined) => void
   disabled?: boolean
+  /** The time the rotation took as played (KQM's): shown, not edited */
+  played?: boolean
   /** A chip at the end of the rotation's line: its icon for the label, the help on hover */
   compact?: boolean
 }) {
@@ -1260,6 +1264,53 @@ function RotationTimeInput({
     'teamOpt.rotationTime.info',
     'How long one rotation takes, for the DPS. Saved for this team.'
   )
+  const unit = (
+    <Typography
+      component="span"
+      sx={{ ...type.label, ml: 0.25, pointerEvents: 'none' }}
+    >
+      s
+    </Typography>
+  )
+  if (played) {
+    const readout = (
+      <Box
+        component="span"
+        aria-label={`${t('teamOpt.rotationTime.label', 'Rotation time')}: ${value} s`}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          height: 28,
+          px: compact ? 0.875 : 0,
+          ...timeSx,
+        }}
+      >
+        {compact && (
+          <TimerOutlinedIcon
+            sx={{ fontSize: 15, color: 'text.secondary', mr: 0.5 }}
+          />
+        )}
+        {value}
+        {unit}
+      </Box>
+    )
+    const playedInfo = t(
+      'teamOpt.rotationTime.playedInfo',
+      'How long one rotation takes as played, for the DPS.'
+    )
+    return compact ? (
+      <Tooltip arrow title={playedInfo} placement="top">
+        {readout}
+      </Tooltip>
+    ) : (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <FieldLabel tip={playedInfo}>
+          {t('teamOpt.rotationTime.label', 'Rotation time')}
+        </FieldLabel>
+        {readout}
+      </Box>
+    )
+  }
   if (compact)
     return (
       <Tooltip arrow title={info} placement="top">
@@ -1281,23 +1332,14 @@ function RotationTimeInput({
               sx={{ fontSize: 15, color: 'text.secondary', mr: 0.5 }}
             />
           }
-          endAdornment={
-            <Typography
-              component="span"
-              sx={{ ...type.label, ml: 0.25, pointerEvents: 'none' }}
-            >
-              s
-            </Typography>
-          }
+          endAdornment={unit}
           sx={{
             height: 28,
             pl: 0.875,
             pr: 1,
             borderRadius: 999,
             border: '1px solid transparent',
-            fontSize: 13.5,
-            fontWeight: 600,
-            ...numSx,
+            ...timeSx,
             ...quickSx,
             '&:hover': {
               bgcolor: alpha(giTokens.parchment, 0.05),
@@ -1307,7 +1349,7 @@ function RotationTimeInput({
               borderColor: tokens.gold,
               bgcolor: tokens.inset,
             },
-            '&.Mui-disabled': { opacity: 0.5 },
+            '&.Mui-disabled': { opacity: 0.7 },
             '& input': { width: '2.4em', textAlign: 'right', p: 0 },
           }}
         />
@@ -1334,14 +1376,7 @@ function RotationTimeInput({
           inputMode: 'decimal',
           'aria-label': t('teamOpt.rotationTime.label', 'Rotation time'),
         }}
-        endAdornment={
-          <Typography
-            component="span"
-            sx={{ ...type.label, ml: 0.25, pointerEvents: 'none' }}
-          >
-            s
-          </Typography>
-        }
+        endAdornment={unit}
         sx={{
           height: 30,
           pl: 1,
@@ -1349,19 +1384,26 @@ function RotationTimeInput({
           borderRadius: tokens.radius.control,
           border: `1px solid ${tokens.hairlineStrong}`,
           bgcolor: tokens.inset,
-          fontSize: 13.5,
-          fontWeight: 600,
-          ...numSx,
+          ...timeSx,
           ...quickSx,
           '&:hover': { borderColor: alpha(giTokens.parchment, 0.3) },
           '&.Mui-focused': { borderColor: tokens.gold },
-          '&.Mui-disabled': { opacity: 0.5 },
+          '&.Mui-disabled': { opacity: 0.7 },
           '& input': { width: '2.5em', textAlign: 'right', p: 0 },
         }}
       />
     </Box>
   )
 }
+
+/** A rotation time's figures: bright and tabular, the unit beside them quiet */
+const timeSx = {
+  fontSize: 14,
+  fontWeight: 650,
+  color: 'text.primary',
+  ...numSx,
+  '& input.Mui-disabled': { WebkitTextFillColor: 'currentColor' },
+} as const
 
 /** The rotation's damage and its DPS, side by side */
 function HeaderStats({
