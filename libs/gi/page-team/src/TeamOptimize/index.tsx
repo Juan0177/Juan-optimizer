@@ -676,6 +676,7 @@ export default function TeamBuildWorkspace({
           <TeamOptimizeStart
             members={members.map((m) => m.characterKey)}
             onWrite={writer.openWriter}
+            onTemplate={writer.openTemplate}
             onManual={chooseManual}
             disabled={running}
             footer={

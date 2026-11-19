@@ -1,12 +1,22 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import {
+  type RotationTemplate,
+  templatesForTeam,
+} from '@genshin-optimizer/gi/ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
 import { alpha, Box, ButtonBase, Typography } from '@mui/material'
-import { type ReactNode, useCallback, useSyncExternalStore } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
+import { TemplateCards } from './RotationTemplates'
 import { focusSx, hairline, quickSx, tokens, type } from './ui'
 
 /** The first visit's choice, per team: attacks entered by hand (the start screen is then left out) */
@@ -36,22 +46,26 @@ const PREVIEW_HEIGHT = { xs: 92, sm: 112 }
 /**
  * The rotation before it has anything in it: two ways to start, each a tile with a small picture
  * of what it gives (a written line of the team's actions; the members' attack rows). Writing opens
- * the writer; adding attacks shows the members' attack lists (remembered). `footer`: Import.
+ * the writer; adding attacks shows the members' attack lists (remembered). Under them, the built-in
+ * templates for the team's main DPS (one opens in the writer). `footer`: Import.
  */
 export function TeamOptimizeStart({
   members,
   onWrite,
+  onTemplate,
   onManual,
   footer,
   disabled,
 }: {
   members: CharacterKey[]
   onWrite: () => void
+  onTemplate: (template: RotationTemplate) => void
   onManual: () => void
   footer?: ReactNode
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
+  const templates = useMemo(() => templatesForTeam(members), [members])
   return (
     <Box
       sx={{
@@ -107,6 +121,13 @@ export function TeamOptimizeStart({
           <AttackRows members={members} />
         </Tile>
       </Box>
+      {!disabled && (
+        <TemplateCards
+          templates={templates}
+          team={members}
+          onPick={onTemplate}
+        />
+      )}
       {footer && <Box sx={{ mt: 2 }}>{footer}</Box>}
     </Box>
   )

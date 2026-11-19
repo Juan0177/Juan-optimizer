@@ -435,21 +435,35 @@ const actionCode = (a: RotationAction): string => {
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':
-      return a.beams
-        ? `CA[beams=${a.beams}]`
-        : a.spins
-          ? `C${a.spins}${a.final ? 'F' : ''}`
-          : 'CA'
+      return a.cancel
+        ? 'CA[cancel]'
+        : a.beams
+          ? `CA[beams=${a.beams}]`
+          : a.bullets
+            ? `CA[bullets=${a.bullets}]`
+            : a.spins
+              ? `C${a.spins}${a.final ? 'F' : ''}`
+              : 'CA'
     case 'plunge':
-      return 'P'
+      return `${a.height === 'high' ? 'HP' : a.height === 'low' ? 'LP' : 'P'}${
+        a.collision
+          ? a.collision === 1
+            ? '[collision]'
+            : `[collision=${a.collision}]`
+          : ''
+      }`
     case 'dash':
-      return 'D'
+      return `D${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'jump':
       return 'J'
     case 'wait': {
       // (as written when it reads well: W90f, W1.5; else seconds to 2 decimals, never 0.0166…)
       const seconds = a.count ?? 0
       const frames = Math.round(seconds * 60)
+      if (a.walk)
+        return /^WK(\d+(\.\d{1,2})?f?)?$/i.test(a.text ?? '')
+          ? a.text
+          : `WK${frames}f`
       return /^W\d+(\.\d{1,2})?f?$/i.test(a.text ?? '')
         ? a.text
         : Math.abs(frames - seconds * 60) < 1e-6 && frames % 6

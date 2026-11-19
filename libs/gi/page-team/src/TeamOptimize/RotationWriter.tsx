@@ -24,6 +24,7 @@ import type {
   KqmPlayed,
   KqmReplayInput,
   RotationEnergy,
+  RotationTemplate,
   SimGear,
   TeamData,
   TeamDataOverrides,
@@ -51,6 +52,7 @@ import {
   type SimBuffOwner,
   type SimHit,
   simulateRotationSamples,
+  templatesForTeam,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
@@ -92,6 +94,7 @@ import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import { RotationCode } from './RotationCode'
+import { templateText, TemplatesButton } from './RotationTemplates'
 import type { TimelineMoment, TimelinePin } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
@@ -191,12 +194,22 @@ const TOKENS: { text: string; key: string; label: string }[] = [
     text: 'CA',
     key: 'charged',
     label:
-      'Charged Attack (Sandrone: 3 condensed beams, CA[beams=2] for 2, up to 6 from C1; Mavuika: C3F spins 3 times, then the finisher)',
+      'Charged Attack (Sandrone: 3 condensed beams, CA[beams=2] for 2, up to 6 from C1; Mavuika: C3F spins 3 times, then the finisher; Arlecchino: CA[cancel] absorbs the Blood-Debt Directive without the hit; Chasca: CA[bullets=4] fires after 4 bullets)',
   },
-  { text: 'P', key: 'plunge', label: 'Plunging Attack' },
+  {
+    text: 'P',
+    key: 'plunge',
+    label:
+      'Plunging Attack (HP: high plunge, LP: low plunge; HP[collision] adds the hit on the way down)',
+  },
   { text: 'D', key: 'dash', label: 'Dash' },
   { text: 'J', key: 'jump', label: 'Jump' },
-  { text: 'W1', key: 'wait', label: 'Wait: W1.5 is 1.5 s, W90f is 90 frames' },
+  {
+    text: 'W1',
+    key: 'wait',
+    label:
+      'Wait: W1.5 is 1.5 s, W90f is 90 frames; WK is a walk (WK11f: 11 frames)',
+  },
   {
     text: 'entry',
     key: 'swap',
@@ -481,7 +494,7 @@ export function simulateWritten({
   const sim = simulateRotationSamples(
     {
       ...team,
-      calculate: needsRotationCalculation(team.members)
+      calculate: needsRotationCalculation(team.members, team.gear)
         ? rotationCalculation(database, teamId, gender, calculation)
         : undefined,
       rotation: nth?.rotation ?? rotation,
@@ -1239,6 +1252,8 @@ export function useRotationWriter({
     /** Whether the writer is open (`useWriterOpen` to follow it) */
     openStore,
     openWriter: openStore.open,
+    /** Opens the writer with a template in its boxes (used once the player applies it) */
+    openTemplate: openStore.openTemplate,
     onApplied: setApplied,
     element,
     /** The tab's saved rotation (`rotationIdOf`) */
@@ -1250,6 +1265,7 @@ export type RotationWriterHandle = ReturnType<typeof useRotationWriter>
 /** Whether a writer is open, as a store: the page does not draw again when it opens or closes */
 function writerOpenStore() {
   let open = false
+  let template: RotationTemplate | undefined
   const listeners = new Set<() => void>()
   const set = (next: boolean) => {
     if (next === open) return
@@ -1264,8 +1280,20 @@ function writerOpenStore() {
         listeners.delete(listener)
       }
     },
-    open: () => set(true),
-    close: () => set(false),
+    open: () => {
+      template = undefined
+      set(true)
+    },
+    openTemplate: (next: RotationTemplate) => {
+      template = next
+      set(true)
+    },
+    /** The template it was opened with (until it closes) */
+    takeTemplate: () => template,
+    close: () => {
+      template = undefined
+      set(false)
+    },
   }
 }
 type WriterOpenStore = ReturnType<typeof writerOpenStore>
@@ -1281,10 +1309,16 @@ function WriterHost({
   ...props
 }: { store: WriterOpenStore } & Omit<
   Parameters<typeof WriterModal>[0],
-  'onClose'
+  'onClose' | 'takeTemplate'
 >) {
   const open = useSyncExternalStore(store.subscribe, store.get)
-  return open ? <WriterModal {...props} onClose={store.close} /> : null
+  return open ? (
+    <WriterModal
+      {...props}
+      takeTemplate={store.takeTemplate}
+      onClose={store.close}
+    />
+  ) : null
 }
 
 /**
@@ -1410,6 +1444,7 @@ function WriterModal({
   setTeamOpt,
   onClose,
   onApplied,
+  takeTemplate,
 }: {
   teamId: string
   members: TeamOptMember[]
@@ -1421,6 +1456,8 @@ function WriterModal({
   setTeamOpt: (update: TeamOptUpdate) => void
   onClose: () => void
   onApplied: (undo: WriterUndo) => void
+  /** The template it opens with, if any */
+  takeTemplate?: () => RotationTemplate | undefined
 }) {
   const { t } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
@@ -1437,11 +1474,30 @@ function WriterModal({
   // (the last play's time: a slow one waits for typing to pause)
   const playMs = useRef(0)
   const deferred = useSettled(text, playMs)
-  const [openerText, setOpenerText] = useState(
-    () => localStorage.getItem(openerKey(rid)) ?? ''
+  const names = useMemberNames(members)
+  const memberKeys = useMemo(
+    () => members.map((m) => m.characterKey),
+    [members]
+  )
+  const templates = useMemo(() => templatesForTeam(memberKeys), [memberKeys])
+  const [startTemplate] = useState(() => takeTemplate?.())
+  const [openerText, setOpenerText] = useState(() =>
+    startTemplate
+      ? templateText(startTemplate.opener ?? '', names)
+      : (localStorage.getItem(openerKey(rid)) ?? '')
   )
   const deferredOpener = useSettled(openerText, playMs)
   const [openerShown, setOpenerShown] = useState(() => !!openerText.trim())
+  const pickTemplate = (template: RotationTemplate) => {
+    setText(templateText(template.text, names))
+    setOpenerText(templateText(template.opener ?? '', names))
+    setOpenerShown(!!template.opener)
+  }
+  // (a template chosen on the start screen: its rotation is the draft, used once it is applied)
+  useEffect(() => {
+    if (startTemplate) setText(templateText(startTemplate.text, names))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // the box the quick row inserts into: the one typed in last
   const [target, setTarget] = useState<'loop' | 'opener'>('loop')
   const insert = (word: string) =>
@@ -1484,7 +1540,6 @@ function WriterModal({
   // without the shown builds' gear)
   const ownTeam = useSimTeam(members, kqm)
   const figures = !kqm
-  const names = useMemberNames(members)
   // each member's own frame data for every action (shown as the defaults), once the panel opens
   const frameDefaults = useMemo(
     () =>
@@ -1836,6 +1891,11 @@ function WriterModal({
                             )}
                           </Button>
                         )}
+                        <TemplatesButton
+                          templates={templates}
+                          team={memberKeys}
+                          onPick={pickTemplate}
+                        />
                         <Button
                           size="small"
                           color="inherit"
@@ -3112,6 +3172,27 @@ function SyntaxSheet() {
       ),
     ],
     [
+      'CA[cancel]',
+      t(
+        'teamOpt.writer.syntax.cancel',
+        'Arlecchino: cancel the Charged Attack before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), but the attack never lands, so it doesn’t use up the aura for Melt'
+      ),
+    ],
+    [
+      'CA[bullets=4]',
+      t(
+        'teamOpt.writer.syntax.bullets',
+        'Chasca: fire after loading 4 bullets (6 by default)'
+      ),
+    ],
+    [
+      'HP · LP',
+      t(
+        'teamOpt.writer.syntax.plunge',
+        'A high or low plunge (P alone: the character’s usual one). HP[collision] adds the collision hit on the way down; HP[collision=0.5] counts it on half of them'
+      ),
+    ],
+    [
       'C3F · C2D',
       t(
         'teamOpt.writer.syntax.spins',
@@ -3128,6 +3209,13 @@ function SyntaxSheet() {
     ],
     ['W1.5 · W90f', t('teamOpt.writer.syntax.wait', 'Wait 1.5 s · 90 frames')],
     [
+      'WK · WK11f',
+      t(
+        'teamOpt.writer.syntax.walk',
+        'Walk 1 frame · 11 frames (an action: Tartaglia’s next Skill is his walking one)'
+      ),
+    ],
+    [
       'E? · Q?',
       t(
         'teamOpt.writer.syntax.ready',
@@ -3139,6 +3227,13 @@ function SyntaxSheet() {
       t(
         'teamOpt.writer.syntax.otherwise',
         'Only when ready, otherwise the actions after "/" (no spaces inside)'
+      ),
+    ],
+    [
+      'D?/CA',
+      t(
+        'teamOpt.writer.syntax.dashReady',
+        'Wanderer: dash only with Descent, otherwise a Charged Attack'
       ),
     ],
     [
