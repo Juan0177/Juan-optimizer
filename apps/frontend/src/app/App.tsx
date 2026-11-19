@@ -1,5 +1,4 @@
 import {
-  downloadJson,
   NavigationProgress,
   ScrollTop,
   useTitle,
@@ -10,7 +9,6 @@ import { preloadNamespaces } from '@genshin-optimizer/gi/i18n' // also initializ
 import { theme } from '@genshin-optimizer/gi/theme'
 import { SnowContext, useSnow } from '@genshin-optimizer/gi/ui'
 import {
-  Alert,
   Box,
   Button,
   Container,
@@ -190,24 +188,13 @@ function App() {
   )
 
   const database = databases[dbIndex - 1]
-  const [legacyRecovery, setLegacyRecovery] = useState<string>()
   useLayoutEffect(() => {
     const storage = getAppStorage()
-    const { migrated, unresolved, destinations } =
-      database.teams.migrateLocalRotations(
-        localStorage,
-        databases
-          .filter((candidate) => candidate !== database)
-          .map((candidate) => candidate.teams)
-      )
-    setLegacyRecovery(
-      unresolved.length
-        ? JSON.stringify(
-            unresolved.map(({ key, raw }) => ({ key, value: raw })),
-            null,
-            2
-          )
-        : undefined
+    const { migrated, destinations } = database.teams.migrateLocalRotations(
+      localStorage,
+      databases
+        .filter((candidate) => candidate !== database)
+        .map((candidate) => candidate.teams)
     )
     if (!migrated.length) return
     const commit = async () => {
@@ -251,28 +238,6 @@ function App() {
                   renders (clicked tabs and nav items show at once, see useOptimisticValue) */}
               <HashRouter basename="/" future={{ v7_startTransition: true }}>
                 <NavigationProgress />
-                {legacyRecovery && (
-                  <Alert
-                    severity="info"
-                    action={
-                      <Button
-                        color="inherit"
-                        onClick={() =>
-                          downloadJson(
-                            'stellar-legacy-rotations.json',
-                            legacyRecovery
-                          )
-                        }
-                      >
-                        Download rotations
-                      </Button>
-                    }
-                  >
-                    Some saved rotations need to be assigned to a team. Download
-                    them and paste the rotation text into the team’s rotation
-                    writer.
-                  </Alert>
-                )}
                 <Content />
                 <ScrollTop />
                 <FeedbackButton />

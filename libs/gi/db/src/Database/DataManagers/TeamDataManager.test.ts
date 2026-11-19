@@ -109,14 +109,13 @@ describe('export and import test', () => {
     expect(migration.migrated.map(({ key }) => key)).toContain(
       'teamOptRotationText_team_0'
     )
-    expect(migration.unresolved.map(({ key }) => key)).toContain(
+    // (a deleted team's rotation is dropped, not left for the user to assign)
+    expect(migration.migrated.map(({ key }) => key)).toContain(
       'teamOptRotationText_team_9'
     )
+    expect(migration.unresolved).toEqual([])
     expect(localStorage.getItem('teamOptRotationText_team_0')).toBe(
       'Bennett E N3'
-    )
-    expect(localStorage.getItem('teamOptRotationText_team_9')).toBe(
-      'Deleted team'
     )
     database.teams.setRotationField(legacyId, 'Draft', 'Bennett E')
 
@@ -140,6 +139,27 @@ describe('export and import test', () => {
     expect(
       database.teams.getRotationField(database.teams.new(), 'Text')
     ).toBeUndefined()
+  })
+
+  test('gives a team its rotation after a member change, and keeps what the team already has', () => {
+    const teamCharId = database.teamChars.new('Bennett')
+    database.teams.set('team_0', {
+      loadoutData: [{ teamCharId } as LoadoutDatum],
+    })
+    database.teams.setRotationField('team_0_kqm', 'Text', 'Bennett Q')
+    localStorage.setItem('teamOptRotationText_team_0', 'Xiangling E Q')
+    localStorage.setItem('teamOptRotationText_team_0_kqm', 'Bennett E')
+    localStorage.setItem('teamOptRotationOpener_team_0', 'swap')
+
+    const migration = database.teams.migrateLocalRotations(localStorage)
+    expect(migration.unresolved).toEqual([])
+    expect(database.teams.getRotationField('team_0', 'Text')).toBe(
+      'Xiangling E Q'
+    )
+    expect(database.teams.getRotationField('team_0', 'Opener')).toBe('swap')
+    expect(database.teams.getRotationField('team_0_kqm', 'Text')).toBe(
+      'Bennett Q'
+    )
   })
 
   test('uses the legacy roster evidence to resolve a team ID shared by two slots', () => {

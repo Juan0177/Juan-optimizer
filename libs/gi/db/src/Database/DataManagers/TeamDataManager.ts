@@ -415,9 +415,14 @@ export class TeamDataManager extends DataManager<
     for (const [id, group] of groups) {
       const teamId = group[0]!.teamId
       const members = legacyRotationMembers(group)
-      const candidates = managers.filter((manager) => {
-        const team = manager.get(teamId)
-        if (!team) return false
+      const slots = managers.filter((manager) => manager.get(teamId))
+      // (no slot has the team: it was deleted, and its rotation went with it)
+      if (!slots.length) {
+        migrated.push(...group)
+        continue
+      }
+      const candidates = slots.filter((manager) => {
+        const team = manager.get(teamId)!
         const roster = new Set(
           team.loadoutData.flatMap((datum) => {
             const key =
@@ -434,10 +439,14 @@ export class TeamDataManager extends DataManager<
             (field === 'Text' || field === 'Draft' || field === 'Opener') &&
             !!raw.trim()
         )
+      // (one slot has the team: its rotation, whatever members it names now; the roster only
+      // tells apart slots that share the team ID)
       const owner =
-        candidates.length === 1 && !hasUnrecognizedText
-          ? candidates[0]
-          : undefined
+        slots.length === 1
+          ? slots[0]
+          : candidates.length === 1 && !hasUnrecognizedText
+            ? candidates[0]
+            : undefined
       if (!owner) {
         unresolved.push(...group)
         continue
@@ -446,23 +455,15 @@ export class TeamDataManager extends DataManager<
         const { field, raw, character } = entry
         const existing = owner.getRotationField(id, field)
         let value = raw
+        // (what the team already has is newer than the old copy: it stays)
         if (character) {
-          const all = readRotationObject(existing)
+          const all = readRotationObject(existing) ?? {}
           const rotation = readRotationObject(raw)
-          if (
-            !all ||
-            !rotation ||
-            (all[character] !== undefined &&
-              JSON.stringify(all[character]) !== JSON.stringify(rotation))
-          ) {
-            unresolved.push(entry)
-            continue
-          }
-          value = JSON.stringify({ ...all, [character]: rotation })
-        } else if (existing !== undefined && existing !== raw) {
-          unresolved.push(entry)
-          continue
-        }
+          value =
+            !rotation || all[character] !== undefined
+              ? (existing ?? '{}')
+              : JSON.stringify({ ...all, [character]: rotation })
+        } else if (existing !== undefined) value = existing
         if (existing !== value) owner.setRotationField(id, field, value)
         destinations.add(owner)
         migrated.push(entry)
