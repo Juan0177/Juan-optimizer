@@ -11,6 +11,7 @@ import {
   charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type {
+  RotationDocumentField,
   TeamOpt,
   TeamOptAttack,
   TeamOptKqm,
@@ -115,6 +116,7 @@ import type { TeamOptUpdate } from './useTeamOpt'
 import { kqmRotationView } from './useTeamOpt'
 
 const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
+const useAttacksKey = (teamId: string) => `teamOptRotationUseAttacks_${teamId}`
 /** What was typed but not used yet (kept when the writer closes) */
 const draftKey = (teamId: string) => `teamOptRotationDraft_${teamId}`
 const openerKey = (teamId: string) => `teamOptRotationOpener_${teamId}`
@@ -141,26 +143,36 @@ export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
 }
 /** The KQM tab's rotation set up from Team optimize's the first time (a copy) */
 export function copyRotationToKqm(
+  database: Database,
   teamId: string,
   /** The members' own constellations (Team optimize's attacks were played at them) */
-  own: Partial<Record<CharacterKey, number>>
+  own: Partial<Record<CharacterKey, number>>,
+  replace = false
 ) {
   const kqmId = kqmRotationId(teamId)
   // (the copied attacks were played at the members' own constellations: at KQM's, the KQM tab
   // plays the rotation again and says what changed)
-  if (localStorage.getItem(storageKey(teamId))?.trim()) {
-    localStorage.setItem(
-      consKey(kqmId),
-      localStorage.getItem(consKey(teamId)) ?? JSON.stringify(own)
-    )
-    localStorage.setItem(copiedKey(kqmId), '1')
+  if (replace) {
+    writeStored(database, draftKey(kqmId), null)
+    writeStored(database, consKey(kqmId), null)
+    writeStored(database, copiedKey(kqmId), null)
   }
-  for (const key of [storageKey, openerKey, timingKey])
-    if (
-      localStorage.getItem(key(kqmId)) === null &&
-      localStorage.getItem(key(teamId)) !== null
+  if (readStored(database, storageKey(teamId))?.trim()) {
+    writeStored(
+      database,
+      consKey(kqmId),
+      readStored(database, consKey(teamId)) ?? JSON.stringify(own)
     )
-      writeStored(key(kqmId), localStorage.getItem(key(teamId)))
+    writeStored(database, copiedKey(kqmId), '1')
+  }
+  for (const key of [storageKey, openerKey, timingKey, useAttacksKey]) {
+    const source = readStored(database, key(teamId))
+    if (
+      replace ||
+      (readStored(database, key(kqmId)) === null && source !== null)
+    )
+      writeStored(database, key(kqmId), source)
+  }
 }
 /** The constellations the written rotation was last played at (its tab's: own, or KQM's) */
 const consKey = (teamId: string) => `teamOptRotationCons_${teamId}`
@@ -221,24 +233,54 @@ const TOKENS: { text: string; key: string; label: string }[] = [
 
 /** The writer's saved state, with a signal so every view of it (the inline field, the writer) follows */
 const storageEvent = 'teamOpt.rotationStorage'
-function writeStored(key: string, value: string | null) {
+function rotationField(key: string) {
+  const match =
+    /^teamOptRotation(Text|Draft|Opener|Timing|Cons|Copied|UseAttacks)_(.+)$/.exec(
+      key
+    )
+  return match && { field: match[1] as RotationDocumentField, id: match[2]! }
+}
+
+function readStored(database: Database, key: string): string | null {
+  const rotation = rotationField(key)
+  return rotation
+    ? (database.teams.getRotationField(rotation.id, rotation.field) ?? null)
+    : (globalThis.localStorage?.getItem(key) ?? null)
+}
+
+function writeStored(database: Database, key: string, value: string | null) {
+  const rotation = rotationField(key)
+  if (rotation) {
+    database.teams.setRotationField(rotation.id, rotation.field, value)
+    return
+  }
   if (value === null) localStorage.removeItem(key)
   else localStorage.setItem(key, value)
   window.dispatchEvent(new Event(storageEvent))
 }
+
 /** Saves the rotation's timing settings (the page's Rotations setting writes it directly) */
 export function saveRotationTiming(
+  database: Database,
   teamId: string,
   timing: RotationTimingSettings
 ) {
-  writeStored(timingKey(teamId), JSON.stringify(timing))
+  writeStored(database, timingKey(teamId), JSON.stringify(timing))
 }
-function subscribeStored(onChange: () => void) {
-  window.addEventListener(storageEvent, onChange)
-  return () => window.removeEventListener(storageEvent, onChange)
-}
+
 function useStored(key: string) {
-  return useSyncExternalStore(subscribeStored, () => localStorage.getItem(key))
+  const database = useDatabase()
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const rotation = rotationField(key)
+      if (rotation)
+        return database.teams.follow(rotation.id.replace(/_kqm$/, ''), onChange)
+      window.addEventListener(storageEvent, onChange)
+      return () => window.removeEventListener(storageEvent, onChange)
+    },
+    [database, key]
+  )
+  return useSyncExternalStore(subscribe, () => readStored(database, key))
 }
 const parseTiming = (raw: string | null): RotationTimingSettings => {
   try {
@@ -261,13 +303,20 @@ const parseFrameData = (raw: string | null): FrameData => {
 
 /** The rotation in use, and what was typed since (a draft, kept until it is used or reverted) */
 export function useRotationText(teamId: string) {
-  const applied = useStored(storageKey(teamId)) ?? ''
+  const database = useDatabase()
+  const savedText = useStored(storageKey(teamId)) ?? ''
+  const useAttacks = useStored(useAttacksKey(teamId)) === '1'
+  const applied = useAttacks ? '' : savedText
   const draft = useStored(draftKey(teamId))
-  const text = draft ?? applied
+  const text = draft ?? savedText
   const setText = useCallback(
     (value: string) =>
-      writeStored(draftKey(teamId), value === applied ? null : value),
-    [teamId, applied]
+      writeStored(
+        database,
+        draftKey(teamId),
+        value === savedText ? null : value
+      ),
+    [database, teamId, savedText]
   )
   return { applied, text, setText, isDraft: text !== applied }
 }
@@ -675,13 +724,17 @@ export function kqmRotationReplay({
   | ((input: KqmReplayInput) => KqmPlayed & { energy?: RotationEnergy })
   | undefined {
   const kqmId = kqmRotationId(teamId)
-  const text = given ?? localStorage.getItem(storageKey(kqmId)) ?? ''
+  const useAttacks = readStored(database, useAttacksKey(kqmId)) === '1'
+  const text =
+    given ?? (useAttacks ? '' : (readStored(database, storageKey(kqmId)) ?? ''))
   if (!text.trim()) return undefined
   const common = {
     text,
-    opener: localStorage.getItem(openerKey(kqmId)) ?? '',
-    timing: parseTiming(localStorage.getItem(timingKey(kqmId))),
-    frameData: parseFrameData(localStorage.getItem(frameDataKey)),
+    opener: useAttacks ? '' : (readStored(database, openerKey(kqmId)) ?? ''),
+    timing: parseTiming(
+      useAttacks ? null : readStored(database, timingKey(kqmId))
+    ),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
     names,
     members,
     database,
@@ -781,13 +834,14 @@ export function teamRotationEnergy({
   names: RotationMember[]
   team: SimTeam
 }): { energy: RotationEnergy; rotationTime: number } | undefined {
-  const text = localStorage.getItem(storageKey(teamId)) ?? ''
+  if (readStored(database, useAttacksKey(teamId)) === '1') return undefined
+  const text = readStored(database, storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
   const played = simulateWritten({
     text,
-    opener: localStorage.getItem(openerKey(teamId)) ?? '',
-    timing: parseTiming(localStorage.getItem(timingKey(teamId))),
-    frameData: parseFrameData(localStorage.getItem(frameDataKey)),
+    opener: readStored(database, openerKey(teamId)) ?? '',
+    timing: parseTiming(readStored(database, timingKey(teamId))),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
     names,
     members,
     database,
@@ -876,12 +930,13 @@ export function applyWritten({
     storage: Object.fromEntries(
       [
         storageKey(rid),
+        useAttacksKey(rid),
         draftKey(rid),
         openerKey(rid),
         timingKey(rid),
         consKey(rid),
         frameDataKey,
-      ].map((k) => [k, localStorage.getItem(k)])
+      ].map((k) => [k, readStored(database, k)])
     ),
     replaced: Object.values(attacksNow()).some((a) => !!a?.length),
   }
@@ -951,12 +1006,13 @@ export function applyWritten({
   }
   // (the setter is the tab's: on the KQM tab it changes KQM's rotation, `kqmRotationUpdate`)
   setTeamOpt(update)
-  writeStored(storageKey(rid), text)
-  writeStored(draftKey(rid), null)
-  writeStored(openerKey(rid), opener)
-  writeStored(timingKey(rid), JSON.stringify(timing))
-  writeStored(frameDataKey, JSON.stringify(frameData))
-  localStorage.setItem(consKey(rid), JSON.stringify(constellations))
+  writeStored(database, storageKey(rid), text)
+  writeStored(database, useAttacksKey(rid), null)
+  writeStored(database, draftKey(rid), null)
+  writeStored(database, openerKey(rid), opener)
+  writeStored(database, timingKey(rid), JSON.stringify(timing))
+  writeStored(database, frameDataKey, JSON.stringify(frameData))
+  writeStored(database, consKey(rid), JSON.stringify(constellations))
   return {
     ...snapshot,
     kqm: !!kqm,
@@ -997,7 +1053,7 @@ function restoreWriterUndo(
       teamChar.conditional = conditional as typeof teamChar.conditional
     })
   for (const [key, value] of Object.entries(undo.storage))
-    writeStored(key, value)
+    writeStored(database, key, value)
 }
 
 /**
@@ -1066,20 +1122,20 @@ export function useRotationWriter({
   useEffect(() => {
     const key = consKey(rid)
     if (!appliedText.trim()) return
-    const stored = localStorage.getItem(key)
+    const stored = readStored(database, key)
     // (one used before this was kept: taken as used at these constellations)
     if (stored === null) {
-      localStorage.setItem(key, consSig)
+      writeStored(database, key, consSig)
       return
     }
     if (stored === consSig) {
       // (a copy at the same constellations: nothing to say)
-      localStorage.removeItem(copiedKey(rid))
+      writeStored(database, copiedKey(rid), null)
       return
     }
     // (marked as played at these only once it is: a render before then cancels and starts over)
     const id = setTimeout(() => {
-      localStorage.setItem(key, consSig)
+      writeStored(database, key, consSig)
       const savedBefore = database.teams.get(teamId)?.teamOpt
       const before =
         savedBefore && (kqm ? kqmRotationView(savedBefore) : savedBefore)
@@ -1158,8 +1214,8 @@ export function useRotationWriter({
         : t('teamOpt.writer.replayedHits', 'its hits changed')
       // (the KQM tab's copy of Team optimize's rotation, played at KQM's constellations the first
       // time: nothing was changed by the user)
-      const copied = localStorage.getItem(copiedKey(rid)) !== null
-      localStorage.removeItem(copiedKey(rid))
+      const copied = readStored(database, copiedKey(rid)) !== null
+      writeStored(database, copiedKey(rid), null)
       setReplayed(
         copied
           ? t('teamOpt.writer.replayedKqm', {
@@ -1484,7 +1540,7 @@ function WriterModal({
   const [openerText, setOpenerText] = useState(() =>
     startTemplate
       ? templateText(startTemplate.opener ?? '', names)
-      : (localStorage.getItem(openerKey(rid)) ?? '')
+      : (readStored(database, openerKey(rid)) ?? '')
   )
   const deferredOpener = useSettled(openerText, playMs)
   const [openerShown, setOpenerShown] = useState(() => !!openerText.trim())
@@ -1506,11 +1562,11 @@ function WriterModal({
       : insertWord(inputRef.current, text, word, setText)
   const [syntaxOpen, setSyntaxOpen] = useState(false)
   const [timing, setTiming] = useState(() =>
-    parseTiming(localStorage.getItem(timingKey(rid)))
+    parseTiming(readStored(database, timingKey(rid)))
   )
   const deferredTiming = useDeferredValue(timing)
   const [frameData, setFrameData] = useState(() =>
-    parseFrameData(localStorage.getItem(frameDataKey))
+    parseFrameData(readStored(database, frameDataKey))
   )
   const deferredFrameData = useDeferredValue(frameData)
   const [timingOpen, setTimingOpen] = useState(

@@ -98,6 +98,9 @@ import {
   teamOptEnergyRotationFields,
   validateTeamOpt,
 } from './TeamOpt'
+
+export type { RotationDocumentField } from './TeamDataManager'
+
 import type { TeamRotation } from './TeamRotation'
 import {
   applyTeamRotation,

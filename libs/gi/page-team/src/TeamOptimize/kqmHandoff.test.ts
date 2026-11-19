@@ -83,7 +83,7 @@ describe('KQM set hand-off', () => {
       excludedSets: allArtifactSetKeys.filter((k) => !SETS.includes(k)),
       weaponList: 2,
     }
-    localStorage.setItem(`teamOptRotationText_${teamId}_kqm`, TEXT)
+    database.teams.setRotationField(`${teamId}_kqm`, 'Text', TEXT)
     const members = teamOptMembers(database, teamId)
     const replay = kqmRotationReplay({
       database: database as never,

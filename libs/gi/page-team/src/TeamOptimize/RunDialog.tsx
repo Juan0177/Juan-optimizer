@@ -1,3 +1,7 @@
+import {
+  useDataManagerEntries,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import type { ArtifactSlotKey } from '@genshin-optimizer/gi/consts'
 import {
@@ -21,16 +25,17 @@ import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
+  Alert,
   Box,
   Button,
-  Collapse,
   InputAdornment,
+  Skeleton,
   Switch,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Components/MainStatSelectionCard'
 import { formatDamage, mainStatLabel } from './format'
@@ -80,9 +85,35 @@ export function RunDialog({
 }) {
   const { t } = useTranslation('page_team')
   const builds = teamOpt.topN ?? 1
-  const optimized = members.filter(
+  const database = useDatabase()
+  const artifacts = useDataManagerValues(database.arts)
+  const configs = new Map(useDataManagerEntries(database.optConfigs))
+  const toOptimize = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
-  ).length
+  )
+  const locations = new Set(members.map((member) => member.location as string))
+  const reserved = new Set(
+    members
+      .filter((m) => !toOptimize.includes(m))
+      .flatMap((m) => Object.values(m.artifactIds))
+      .filter((id): id is string => !!id)
+  )
+  const eligible = toOptimize.every((member) => {
+    const config = configs.get(member.teamChar.optConfigId)
+    if (!config) return false
+    const pool = teamOptPool(
+      artifacts,
+      member,
+      config,
+      teamOpt,
+      locations,
+      reserved
+    )
+    return allArtifactSlotKeys.every((slot) =>
+      pool.some((art) => art.slotKey === slot)
+    )
+  })
+  const canStart = toOptimize.length > 0 && eligible
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   return (
     <ModalWrapper
@@ -150,7 +181,7 @@ export function RunDialog({
                   <Typography sx={{ ...type.label, ...numSx }}>
                     {t('teamOpt.run.summary', {
                       defaultValue: '{{count}} of {{total}} members optimized',
-                      count: optimized,
+                      count: toOptimize.length,
                       total: members.length,
                     })}
                   </Typography>
@@ -231,6 +262,19 @@ export function RunDialog({
               }))}
             />
           </Box>
+          {!!toOptimize.length && !eligible && (
+            <Alert severity="info" role="status">
+              {artifacts.length
+                ? t(
+                    'teamOpt.runDialog.incompleteInventory',
+                    'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
+                  )
+                : t(
+                    'teamOpt.runDialog.emptyInventory',
+                    'Add or import artifacts before optimizing the team.'
+                  )}
+            </Alert>
+          )}
           <Box sx={{ flexGrow: 1 }} />
           {/* (phones: the title bar's close is the cancel) */}
           <Button
@@ -244,12 +288,12 @@ export function RunDialog({
             variant="contained"
             startIcon={<TrendingUpIcon />}
             // (no member switched on: nothing to optimize yet)
-            disabled={!optimized}
+            disabled={!canStart}
             onClick={() => {
               onClose()
               onStart()
             }}
-            sx={[{ px: 2.25 }, !!optimized && giCtaSx]}
+            sx={[{ px: 2.25 }, canStart && giCtaSx]}
           >
             {t('teamOpt.runDialog.start', 'Start')}
           </Button>
@@ -509,8 +553,8 @@ function MemberRunRow({
           </Button>
         )}
       </Box>
-      <Collapse in={expanded} timeout={180} unmountOnExit>
-        {teamCharContext && (
+      {expanded && teamCharContext && (
+        <Suspense fallback={<Skeleton height={120} />}>
           <MemberCustomize
             teamId={teamId}
             member={member}
@@ -520,8 +564,8 @@ function MemberRunRow({
             teamCharContext={teamCharContext}
             locations={locations}
           />
-        )}
-      </Collapse>
+        </Suspense>
+      )}
     </Box>
   )
 }

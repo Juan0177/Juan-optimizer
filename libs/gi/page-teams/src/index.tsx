@@ -102,8 +102,11 @@ export default function PageTeams() {
       return
     }
     try {
-      if (database.teams.import(dataObj as never)) {
+      const imported = database.teams.import(dataObj)
+      if (imported) {
+        setData('')
         onHideImport()
+        navigate(imported)
         return
       }
     } catch (e) {
@@ -300,6 +303,26 @@ export default function PageTeams() {
                 {t('page_teams:empty.import')}
               </Button>
             </>
+          }
+        />
+      )}
+      {totalTeamNum > 0 && filteredTeamIds.length === 0 && (
+        <EmptyState
+          icon={<SearchIcon />}
+          title={t('page_teams:empty.noMatches', 'No matching teams')}
+          description={t(
+            'page_teams:empty.noMatchesDesc',
+            'Try a different name or clear the selected characters.'
+          )}
+          actions={
+            <Button
+              onClick={() => {
+                setSearchTerm('')
+                database.displayTeam.set({ searchTerm: '', charKeys: [] })
+              }}
+            >
+              {t('page_teams:empty.clear', 'Clear filters')}
+            </Button>
           }
         />
       )}

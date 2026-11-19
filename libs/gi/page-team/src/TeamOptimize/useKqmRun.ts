@@ -26,6 +26,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { kqmEnemyTeam } from '../Enemy/enemyScope'
 import { kqmRotationReplay } from './RotationWriter'
+import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
 
 export type KqmRunState =
   | { type: 'idle' }
@@ -41,6 +42,7 @@ export type KqmRunState =
 export interface KqmDoneRun {
   type: 'done'
   result: KqmResult
+  roster?: string
   seconds: number
   /** The settings it was run with, as set (what "changed since" compares with) */
   teamOpt: TeamOpt
@@ -76,28 +78,34 @@ const memberKeys = (database: ArtCharDatabase, teamId: string) =>
  * team has the same members. One that no longer fits is forgotten.
  */
 function lastRun(database: ArtCharDatabase, teamId: string): KqmRunState {
-  if (!lastRuns[teamId]) {
+  const key = teamRunKey(database, teamId)
+  const members = memberKeys(database, teamId)
+  const fits = (run: KqmDone) =>
+    sameBuildRoster(run.result.builds, members) &&
+    (run.roster === undefined || run.roster === teamRoster(database, teamId))
+  const cached = lastRuns[key]
+  if (cached?.type === 'done' && !fits(cached)) delete lastRuns[key]
+  if (!lastRuns[key]) {
     const saved = database.teamKqmResults.getRun(teamId)
-    if (saved) {
-      const members = memberKeys(database, teamId)
-      const run = saved.run as unknown as Partial<KqmDone>
-      if (
-        run.type === 'done' &&
-        run.result &&
-        run.teamOpt &&
-        saved.members.length === members.length &&
-        saved.members.every((key) => members.includes(key))
-      )
-        lastRuns[teamId] = {
-          ...(run as KqmDone),
-          runTeamOpt: run.runTeamOpt ?? run.teamOpt,
-          rotation: run.rotation ?? 'entered',
-          savedAt: saved.savedAt,
-        }
-      else database.teamKqmResults.setRun(teamId, undefined)
-    }
+    const run = saved?.run as unknown as Partial<KqmDone> | undefined
+    if (
+      saved &&
+      run?.type === 'done' &&
+      run.result &&
+      run.teamOpt &&
+      saved.members.length === members.length &&
+      saved.members.every((member) => members.includes(member)) &&
+      fits(run as KqmDone)
+    )
+      lastRuns[key] = {
+        ...(run as KqmDone),
+        runTeamOpt: run.runTeamOpt ?? run.teamOpt,
+        rotation: run.rotation ?? 'entered',
+        savedAt: saved.savedAt,
+      }
+    else if (saved) database.teamKqmResults.setRun(teamId, undefined)
   }
-  return lastRuns[teamId] ?? { type: 'idle' }
+  return lastRuns[key] ?? { type: 'idle' }
 }
 
 /*
@@ -122,17 +130,18 @@ function setProgress(teamId: string, step: KqmStep | undefined) {
  * store's update renders at once, and would restart the page's render of new results every time
  */
 export function useKqmProgress(teamId: string) {
-  const [step, setStep] = useState(() => progress.get(teamId))
+  const key = teamRunKey(useDatabase(), teamId)
+  const [step, setStep] = useState(() => progress.get(key))
   useEffect(() => {
-    const onChange = () => setStep(progress.get(teamId))
+    const onChange = () => setStep(progress.get(key))
     onChange()
-    const set = listeners.get(teamId) ?? new Set()
-    listeners.set(teamId, set)
+    const set = listeners.get(key) ?? new Set()
+    listeners.set(key, set)
     set.add(onChange)
     return () => {
       set.delete(onChange)
     }
-  }, [teamId])
+  }, [key])
   return step
 }
 
@@ -159,7 +168,7 @@ function subscribeRun(teamId: string, onChange: () => void) {
 }
 /** The team's run in progress, else its last result */
 const runState = (database: ArtCharDatabase, teamId: string): KqmRunState =>
-  jobs.get(teamId)?.state ?? lastRun(database, teamId)
+  jobs.get(teamRunKey(database, teamId))?.state ?? lastRun(database, teamId)
 
 /** Keeps a finished run's state: the last result (saved once the page shows it), or its error */
 function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
@@ -168,7 +177,8 @@ function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
     s.type === 'done' && s.savedAt === undefined
       ? { ...s, savedAt: Date.now() }
       : s
-  lastRuns[teamId] = next
+  const key = teamRunKey(database, teamId)
+  lastRuns[key] = next
   // a new result replaces the saved one (an error keeps it), after the page shows it: saving
   // copies the whole result
   if (
@@ -177,7 +187,12 @@ function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
   )
     setTimeout(() => {
       // (discarded or replaced meanwhile: not saved)
-      if (lastRuns[teamId] !== next) return
+      if (
+        lastRuns[key] !== next ||
+        !database.teams.get(teamId) ||
+        next.roster !== teamRoster(database, teamId)
+      )
+        return
       const { savedAt, ...run } = next
       database.teamKqmResults.setRun(teamId, {
         savedAt: savedAt!,
@@ -233,21 +248,28 @@ async function startKqmRun(
   /** States every played attack gets (e.g. Wolf's Gravestone's uptime against the enemy) */
   attackStates?: readonly RunAttackState[]
 ) {
+  const key = teamRunKey(database, teamId)
+  const roster = teamRoster(database, teamId)
   // (a run already going for the team is replaced)
-  const previous = jobs.get(teamId)
+  const previous = jobs.get(key)
   if (previous) previous.cancelled = true
   const job: KqmJob = {
     state: { type: 'running', startTime: performance.now() },
     cancelled: false,
   }
-  jobs.set(teamId, job)
-  setProgress(teamId, undefined)
-  notifyRun(teamId)
+  jobs.set(key, job)
+  setProgress(key, undefined)
+  notifyRun(key)
+  const isCancelled = () => job.cancelled
+  const stopFollowing = database.teams.follow(teamId, () => {
+    if (teamRoster(database, teamId) !== roster) job.cancelled = true
+  })
   const end = (s?: KqmRunState) => {
-    if (jobs.get(teamId) !== job) return
+    stopFollowing()
+    if (jobs.get(key) !== job) return
     if (s) keep(database, teamId, s)
-    jobs.delete(teamId)
-    notifyRun(teamId)
+    jobs.delete(key)
+    notifyRun(key)
   }
   // (the enemy its damage is for, as it is now)
   const team = database.teams.get(teamId)
@@ -256,6 +278,7 @@ async function startKqmRun(
     const { played } = result
     return {
       type: 'done',
+      roster,
       result,
       seconds: (performance.now() - job.state.startTime) / 1000,
       teamOpt,
@@ -275,6 +298,7 @@ async function startKqmRun(
   // (the running state paints before the first problem is built; a hidden page goes on at once)
   await nextPaint()
   try {
+    if (isCancelled()) return end()
     const replay = kqmReplayOf(database, gender, i18n, teamId, teamOpt)
     const result = await optimizeTeamKqm({
       database,
@@ -283,15 +307,17 @@ async function startKqmRun(
       teamOpt,
       replay,
       attackStates,
-      isCancelled: () => job.cancelled,
-      onStep: (step) => setProgress(teamId, step),
+      isCancelled,
+      onStep: (step) => {
+        if (jobs.get(key) === job && !isCancelled()) setProgress(key, step)
+      },
       onEarly: (early) => {
-        if (job.cancelled || jobs.get(teamId) !== job) return
+        if (isCancelled() || jobs.get(key) !== job) return
         job.state = { ...job.state, early: doneOf(early) }
-        notifyRun(teamId)
+        notifyRun(key)
       },
     })
-    if (job.cancelled) return end()
+    if (isCancelled() || teamRoster(database, teamId) !== roster) return end()
     if (!result)
       return end({
         type: 'error',
@@ -307,31 +333,35 @@ async function startKqmRun(
 
 /** Whether a KQM run of the team is in progress (also while another page is shown) */
 export function useKqmRunning(teamId: string) {
+  const key = teamRunKey(useDatabase(), teamId)
   const subscribe = useCallback(
-    (onChange: () => void) => subscribeRun(teamId, onChange),
-    [teamId]
+    (onChange: () => void) => subscribeRun(key, onChange),
+    [key]
   )
-  return useSyncExternalStore(subscribe, () => jobs.has(teamId))
+  return useSyncExternalStore(subscribe, () => jobs.has(key))
 }
 
 /** A KQM mode run of the team (`optimizeTeamKqm`): its state, start, cancel and discard */
 export function useKqmRun(teamId: string) {
   const database = useDatabase()
+  const key = teamRunKey(database, teamId)
   const { gender } = useDBMeta()
   const { i18n } = useTranslation('charNames_gen')
   const [state, setState] = useState<KqmRunState>(() =>
     runState(database, teamId)
   )
+  const activeRoster = teamRoster(database, teamId)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a roster change also invalidates the mounted result
   useEffect(() => {
     setState(runState(database, teamId))
-    return subscribeRun(teamId, () => {
+    return subscribeRun(key, () => {
       const next = runState(database, teamId)
       // (the results are a big render: interruptible, so the page does not freeze)
       if (next.type === 'done' || (next.type === 'running' && next.early))
         startTransition(() => setState(next))
       else setState(next)
     })
-  }, [database, teamId])
+  }, [database, teamId, key, activeRoster])
 
   const run = useCallback(
     (teamOpt: TeamOpt, attackStates?: readonly RunAttackState[]) =>
@@ -339,15 +369,15 @@ export function useKqmRun(teamId: string) {
     [database, gender, i18n, teamId]
   )
   const cancel = useCallback(() => {
-    const job = jobs.get(teamId)
+    const job = jobs.get(key)
     if (job) job.cancelled = true
-  }, [teamId])
+  }, [key])
   const clear = useCallback(() => {
-    delete lastRuns[teamId]
+    delete lastRuns[key]
     database.teamKqmResults.setRun(teamId, undefined)
-    notifyRun(teamId)
-  }, [database, teamId])
-  const previous = lastRuns[teamId]
+    notifyRun(key)
+  }, [database, teamId, key])
+  const previous = lastRuns[key]
   const lastResult = previous?.type === 'done' ? previous : undefined
   return { state, run, cancel, clear, lastResult }
 }

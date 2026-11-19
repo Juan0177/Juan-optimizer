@@ -108,7 +108,11 @@ import {
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
-import { kqmRotationId, useRotationSettings } from './RotationWriter'
+import {
+  kqmRotationId,
+  useRotationSettings,
+  useRotationText,
+} from './RotationWriter'
 import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
@@ -233,13 +237,7 @@ function useRotationEnergy(
   const [worked, setWorked] = useState<RotationWorked>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
-  let text = ''
-  try {
-    text =
-      localStorage.getItem(`teamOptRotationText_${kqmRotationId(teamId)}`) ?? ''
-  } catch {
-    // (no storage: nothing written)
-  }
+  const text = useRotationText(kqmRotationId(teamId)).applied
   const constellations = JSON.stringify(
     members.map((m) => kqmMemberConstellation(m.characterKey, teamOpt.kqm))
   )
@@ -2386,7 +2384,7 @@ export function KqmResults({
             members={members}
             characterKey={compared}
             rotationTime={rotationTime}
-            disabled={running}
+            disabled={running || stale}
           />
           <Tooltip arrow title={t('teamOpt.result.discard', 'Discard')}>
             <span>

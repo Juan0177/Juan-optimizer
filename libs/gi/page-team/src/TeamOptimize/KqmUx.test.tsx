@@ -39,8 +39,11 @@ const mocks = vi.hoisted(() => {
       weapons: { get: () => ({ key: 'AmenomaKageuchi', refinement: 5 }) },
       chars: { get: () => ({ constellation: 0 }) },
       buildTcs: { get: () => undefined },
-      // (no team: a run keeps no enemy)
-      teams: { get: () => undefined },
+      teams: {
+        get: () => ({ loadoutData: [] }),
+        getRotationField: () => undefined,
+        follow: () => () => {},
+      },
       teamKqmResults: {
         get: () => saved,
         getRun: (teamId: string) =>
@@ -135,7 +138,8 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   kqmBuildThreadsAuto: () => 4,
   kqmBuildThreadsMax: () => 7,
   setKqmBuildThreads: () => undefined,
-  teamOptMembers: () => [],
+  teamOptMembers: () => [{ characterKey: 'KamisatoAyaka' }],
+  runEnemyOf: () => undefined,
   kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 10,
   kqmMemberConstellation: (
     key: string,

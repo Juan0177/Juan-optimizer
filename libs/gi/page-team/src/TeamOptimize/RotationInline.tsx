@@ -761,7 +761,7 @@ export function RotationsSetting({
         // (a rotation that does not play: the setting is still saved)
       }
     }
-    saveRotationTiming(rid, next)
+    saveRotationTiming(database, rid, next)
   }
   const tip = t(
     'teamOpt.timing.rotationsTip',

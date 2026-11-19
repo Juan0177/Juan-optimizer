@@ -1,16 +1,13 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
 import {
   CardThemed,
+  downloadJson,
   InfoTooltipInline,
   ModalWrapper,
 } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt } from '@genshin-optimizer/gi/db'
-import {
-  applyTeamRotation,
-  parseTeamRotation,
-  teamRotationExport,
-} from '@genshin-optimizer/gi/db'
+import type { TeamOpt, TeamRotation } from '@genshin-optimizer/gi/db'
+import { parseTeamRotation, teamRotationExport } from '@genshin-optimizer/gi/db'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { TeamOptMember } from '@genshin-optimizer/gi/ui'
@@ -18,6 +15,7 @@ import { CharacterName } from '@genshin-optimizer/gi/ui'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import {
+  Alert,
   Box,
   Button,
   CardContent,
@@ -29,7 +27,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
 import { focusSx, quickSx, tokens, type } from './ui'
-import type { TeamOptUpdate } from './useTeamOpt'
 
 /**
  * Export (to the clipboard) and import (pasted) the team's whole rotation as one JSON: every
@@ -50,13 +47,15 @@ const transferSx = {
 export function RotationTransfer({
   members,
   teamOpt,
-  setTeamOpt,
+  onImport,
+  hasWrittenRotation,
   disabled,
   importOnly,
 }: {
   members: TeamOptMember[]
   teamOpt: TeamOpt
-  setTeamOpt: (update: TeamOptUpdate) => void
+  onImport: (rotation: TeamRotation) => void
+  hasWrittenRotation: boolean
   disabled?: boolean
   /** Only the import, as a quiet text link (the empty rotation's start screen) */
   importOnly?: boolean
@@ -73,27 +72,24 @@ export function RotationTransfer({
   }, [note])
   const [show, onShow, onHide] = useBoolState()
 
-  const copy = () =>
-    navigator.clipboard
-      .writeText(JSON.stringify(teamRotationExport(teamOpt, keys)))
-      .then(() =>
-        setNote(t('teamOpt.transfer.copied', 'Rotation copied as JSON'))
-      )
-      .catch((e) =>
-        setNote(
-          `${t('teamOpt.transfer.copyFailed', 'Could not copy')}: ${e?.message ?? e}`
-        )
-      )
+  const [downloadFallback, setDownloadFallback] = useState<string>()
+  const copy = async () => {
+    const json = JSON.stringify(teamRotationExport(teamOpt, keys))
+    try {
+      await navigator.clipboard.writeText(json)
+      setDownloadFallback(undefined)
+      setNote(t('teamOpt.transfer.copied', 'Rotation copied as JSON'))
+    } catch {
+      setDownloadFallback(json)
+    }
+  }
 
   const importModal = show && (
     <ImportModal
       members={members}
       onClose={onHide}
-      onImport={(rotation) =>
-        setTeamOpt((o) => {
-          applyTeamRotation(o, rotation, keys)
-        })
-      }
+      onImport={onImport}
+      hasWrittenRotation={hasWrittenRotation}
     />
   )
   if (importOnly)
@@ -131,7 +127,7 @@ export function RotationTransfer({
       </>
     )
   return (
-    <Box sx={{ display: 'flex', gap: 0.75 }}>
+    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
       <Tooltip
         open={!!note}
         title={note ?? ''}
@@ -147,10 +143,10 @@ export function RotationTransfer({
             color="inherit"
             startIcon={<FileUploadIcon />}
             onClick={copy}
-            disabled={!hasAttacks}
+            disabled={disabled || !hasAttacks}
             sx={transferSx}
           >
-            {t('teamOpt.transfer.export', 'Export')}
+            {t('teamOpt.transfer.exportAttacks', 'Export attacks')}
           </Button>
         </span>
       </Tooltip>
@@ -163,8 +159,27 @@ export function RotationTransfer({
         disabled={disabled}
         sx={transferSx}
       >
-        {t('teamOpt.transfer.import', 'Import')}
+        {t('teamOpt.transfer.importAttacks', 'Import attacks')}
       </Button>
+      {downloadFallback && (
+        <Alert
+          severity="info"
+          action={
+            <Button
+              onClick={() =>
+                downloadJson('stellar-attacks.json', downloadFallback)
+              }
+            >
+              {t('teamOpt.transfer.download', 'Download JSON')}
+            </Button>
+          }
+        >
+          {t(
+            'teamOpt.transfer.noClipboard',
+            'Could not copy the attacks to the clipboard.'
+          )}
+        </Alert>
+      )}
       {importModal}
     </Box>
   )
@@ -174,12 +189,12 @@ function ImportModal({
   members,
   onClose,
   onImport,
+  hasWrittenRotation,
 }: {
   members: TeamOptMember[]
   onClose: () => void
-  onImport: (
-    rotation: NonNullable<ReturnType<typeof parseTeamRotation>>
-  ) => void
+  onImport: (rotation: TeamRotation) => void
+  hasWrittenRotation: boolean
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -220,8 +235,8 @@ function ImportModal({
             {t('teamOpt.transfer.title', 'Import a team rotation')}
             <InfoTooltipInline
               title={t(
-                'teamOpt.transfer.desc',
-                'Paste a rotation exported from Team optimize. The members in it get its attacks; the others keep theirs.'
+                'teamOpt.transfer.attackDesc',
+                'Paste attack JSON to update the matching members, rotation time, and on-field member. Use Export Team to share the editable written rotations.'
               )}
             />
           </Typography>
@@ -284,6 +299,14 @@ function ImportModal({
               )}
             </Box>
           )}
+          {hasWrittenRotation && usable && (
+            <Alert severity="info">
+              {t(
+                'teamOpt.transfer.switchSource',
+                'This tab will calculate from the imported attacks. The written rotation stays available in the writer for you to reapply.'
+              )}
+            </Alert>
+          )}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
             <Button variant="text" color="inherit" onClick={onClose}>
               {t('teamOpt.transfer.cancel', 'Cancel')}
@@ -299,7 +322,9 @@ function ImportModal({
                 onClose()
               }}
             >
-              {t('teamOpt.transfer.import', 'Import')}
+              {hasWrittenRotation
+                ? t('teamOpt.transfer.useImported', 'Use imported attacks')
+                : t('teamOpt.transfer.import', 'Import')}
             </Button>
           </Box>
         </CardContent>

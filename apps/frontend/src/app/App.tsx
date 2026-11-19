@@ -1,4 +1,5 @@
 import {
+  downloadJson,
   NavigationProgress,
   ScrollTop,
   useTitle,
@@ -9,7 +10,9 @@ import { preloadNamespaces } from '@genshin-optimizer/gi/i18n' // also initializ
 import { theme } from '@genshin-optimizer/gi/theme'
 import { SnowContext, useSnow } from '@genshin-optimizer/gi/ui'
 import {
+  Alert,
   Box,
+  Button,
   Container,
   CssBaseline,
   Skeleton,
@@ -17,10 +20,22 @@ import {
   ThemeProvider,
 } from '@mui/material'
 import type { ComponentType } from 'react'
-import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import './App.scss'
-import { getAppStorage } from '@genshin-optimizer/common/database'
+import {
+  DBCachedStorage,
+  flushAppStorage,
+  getAppStorage,
+} from '@genshin-optimizer/common/database'
 import { useDatabases } from '@genshin-optimizer/common/database-ui'
 import ErrorBoundary from './ErrorBoundary'
 import { FeedbackButton } from './Feedback'
@@ -175,6 +190,49 @@ function App() {
   )
 
   const database = databases[dbIndex - 1]
+  const [legacyRecovery, setLegacyRecovery] = useState<string>()
+  useLayoutEffect(() => {
+    const storage = getAppStorage()
+    const { migrated, unresolved, destinations } =
+      database.teams.migrateLocalRotations(
+        localStorage,
+        databases
+          .filter((candidate) => candidate !== database)
+          .map((candidate) => candidate.teams)
+      )
+    setLegacyRecovery(
+      unresolved.length
+        ? JSON.stringify(
+            unresolved.map(({ key, raw }) => ({ key, value: raw })),
+            null,
+            2
+          )
+        : undefined
+    )
+    if (!migrated.length) return
+    const commit = async () => {
+      // Inactive slots live in memory until their compressed backup is written.
+      for (const destination of destinations)
+        if (destination !== database.teams)
+          destination.database.toExtraLocalDB()
+      // These removals share the destination write's IndexedDB transaction.
+      for (const { key, raw, local } of migrated)
+        if (!local && storage.getString(key) === raw) storage.remove(key)
+      await flushAppStorage()
+      if (
+        storage instanceof DBCachedStorage &&
+        (storage.error || storage.stopped)
+      )
+        return
+      for (const { key, raw, local } of migrated)
+        if (local && localStorage.getItem(key) === raw)
+          localStorage.removeItem(key)
+    }
+    void commit().catch((error: unknown) => {
+      // Keep the legacy keys available if the backup could not be written.
+      console.error('Could not save migrated rotations', error)
+    })
+  }, [database, databases])
   const dbContextObj = useMemo(
     () => ({ databases, setDatabases, database, setDatabase }),
     [databases, setDatabases, database, setDatabase]
@@ -193,6 +251,28 @@ function App() {
                   renders (clicked tabs and nav items show at once, see useOptimisticValue) */}
               <HashRouter basename="/" future={{ v7_startTransition: true }}>
                 <NavigationProgress />
+                {legacyRecovery && (
+                  <Alert
+                    severity="info"
+                    action={
+                      <Button
+                        color="inherit"
+                        onClick={() =>
+                          downloadJson(
+                            'stellar-legacy-rotations.json',
+                            legacyRecovery
+                          )
+                        }
+                      >
+                        Download rotations
+                      </Button>
+                    }
+                  >
+                    Some saved rotations need to be assigned to a team. Download
+                    them and paste the rotation text into the team’s rotation
+                    writer.
+                  </Alert>
+                )}
                 <Content />
                 <ScrollTop />
                 <FeedbackButton />

@@ -6,6 +6,7 @@ import type { TeamOptSavedRun } from './TeamOptResultsEntry'
 const run = (): TeamOptSavedRun => ({
   savedAt: 1_700_000_000_000,
   seconds: 4.2,
+  requirementsKey: '[{"statFilters":{}}]',
   teamOpt: { ...initTeamOpt(), rotationTime: 21, topN: 3 },
   result: {
     builds: { Mitya: { flower: 'artifact_1', plume: undefined } },

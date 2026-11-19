@@ -1,5 +1,6 @@
 import { characterAsset } from '@genshin-optimizer/gi/assets'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
+import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { parseRotation } from '@genshin-optimizer/gi/ui'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
@@ -28,36 +29,50 @@ export const CONSTELLATIONS = [0, 1, 2, 3, 4, 5, 6] as const
 /** The rotations written for a member's constellations (one text each; absent: the team's) */
 export type ConsRotationTexts = Partial<Record<number, string>>
 
-const consRotationsKey = (teamId: string, ck: CharacterKey) =>
-  `kqmConsRotations_${teamId}_${ck}`
-export function readConsRotations(
-  teamId: string,
-  ck: CharacterKey
-): ConsRotationTexts {
+function allConsRotations(database: ArtCharDatabase, teamId: string) {
   try {
-    const saved = JSON.parse(
-      globalThis.localStorage?.getItem(consRotationsKey(teamId, ck)) ?? '{}'
+    const data = JSON.parse(
+      database.teams.getRotationField(
+        `${teamId}_kqm`,
+        'ConstellationRotations'
+      ) ?? '{}'
     )
-    return saved && typeof saved === 'object' ? saved : {}
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Partial<Record<CharacterKey, ConsRotationTexts>>)
+      : {}
   } catch {
     return {}
   }
 }
+
+export function readConsRotations(
+  database: ArtCharDatabase,
+  teamId: string,
+  ck: CharacterKey
+): ConsRotationTexts {
+  const rotations = allConsRotations(database, teamId)[ck]
+  return Object.fromEntries(
+    CONSTELLATIONS.flatMap((cons) => {
+      const text = rotations?.[cons]
+      return typeof text === 'string' ? [[cons, text]] : []
+    })
+  )
+}
+
 export function writeConsRotations(
+  database: ArtCharDatabase,
   teamId: string,
   ck: CharacterKey,
   rotations: ConsRotationTexts
 ) {
-  try {
-    if (Object.keys(rotations).length)
-      globalThis.localStorage?.setItem(
-        consRotationsKey(teamId, ck),
-        JSON.stringify(rotations)
-      )
-    else globalThis.localStorage?.removeItem(consRotationsKey(teamId, ck))
-  } catch {
-    // (no storage: kept until the page closes)
-  }
+  const all = allConsRotations(database, teamId) ?? {}
+  if (Object.keys(rotations).length) all[ck] = rotations
+  else delete all[ck]
+  database.teams.setRotationField(
+    `${teamId}_kqm`,
+    'ConstellationRotations',
+    Object.keys(all).length ? JSON.stringify(all) : null
+  )
 }
 
 /**
@@ -400,33 +415,42 @@ export interface ComboRotation {
   cons: Partial<Record<CharacterKey, number>>
   text: string
 }
-const comboRotationsKey = (teamId: string) => `kqmComboRotations_${teamId}`
-export function readComboRotations(teamId: string): ComboRotation[] {
+export function readComboRotations(
+  database: ArtCharDatabase,
+  teamId: string
+): ComboRotation[] {
   try {
     const saved = JSON.parse(
-      globalThis.localStorage?.getItem(comboRotationsKey(teamId)) ?? '[]'
+      database.teams.getRotationField(
+        `${teamId}_kqm`,
+        'CombinationRotations'
+      ) ?? '[]'
     )
     return Array.isArray(saved)
       ? saved.filter(
           (x): x is ComboRotation =>
-            !!x && typeof x === 'object' && typeof x.text === 'string'
+            !!x &&
+            typeof x === 'object' &&
+            typeof x.text === 'string' &&
+            !!x.cons &&
+            typeof x.cons === 'object' &&
+            !Array.isArray(x.cons)
         )
       : []
   } catch {
     return []
   }
 }
-export function writeComboRotations(teamId: string, combos: ComboRotation[]) {
-  try {
-    if (combos.length)
-      globalThis.localStorage?.setItem(
-        comboRotationsKey(teamId),
-        JSON.stringify(combos)
-      )
-    else globalThis.localStorage?.removeItem(comboRotationsKey(teamId))
-  } catch {
-    // (no storage: kept until the page closes)
-  }
+export function writeComboRotations(
+  database: ArtCharDatabase,
+  teamId: string,
+  combos: ComboRotation[]
+) {
+  database.teams.setRotationField(
+    `${teamId}_kqm`,
+    'CombinationRotations',
+    combos.length ? JSON.stringify(combos) : null
+  )
 }
 /** A combination's members raised above the run's constellations */
 const raisedOf = (

@@ -12,6 +12,9 @@ import { validateTeamOpt } from '../DataManagers/TeamOpt'
 export interface TeamOptSavedRun {
   /** When it was found (ms since 1970) */
   savedAt: number
+  roster?: string
+  /** The character optimization requirements used for this run. */
+  requirementsKey?: string
   /** How long the run took (seconds) */
   seconds: number
   /** The settings it was found with: its rotation (the result's attack indices follow it) */
@@ -68,7 +71,16 @@ export class TeamOptResultsEntry extends DataEntry<
       isObject(obj['runs']) ? obj['runs'] : {}
     )) {
       if (!isObject(run)) continue
-      const { savedAt, seconds, teamOpt, result, sensitivity, enemy } = run
+      const {
+        savedAt,
+        seconds,
+        teamOpt,
+        result,
+        sensitivity,
+        enemy,
+        roster,
+        requirementsKey,
+      } = run
       const settings = validateTeamOpt(teamOpt)
       if (!settings || !isObject(result)) continue
       if (!isObject(result['builds']) || !isObject(result['weapons'])) continue
@@ -88,6 +100,8 @@ export class TeamOptResultsEntry extends DataEntry<
           }
       runs[teamId] = {
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
+        ...(typeof roster === 'string' ? { roster } : {}),
+        ...(typeof requirementsKey === 'string' ? { requirementsKey } : {}),
         seconds: typeof seconds === 'number' ? seconds : 0,
         teamOpt: settings,
         ...(validEnemy(enemy) ? { enemy } : {}),

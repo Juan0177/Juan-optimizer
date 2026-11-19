@@ -82,7 +82,7 @@ import {
 } from './consInvestment'
 import { formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
-import { kqmRotationId, useMemberNames } from './RotationWriter'
+import { useMemberNames } from './RotationWriter'
 import { Disclosure, hairline, insetSx, type } from './ui'
 
 type Picture = 'team' | 'weapons' | 'sets' | 'constellations'
@@ -480,10 +480,7 @@ function useShareText(props: ShareProps) {
 }
 
 /** The written rotation, its members' turns apart */
-function rotationTurns(teamId: string) {
-  const text = globalThis.localStorage?.getItem(
-    `teamOptRotationText_${kqmRotationId(teamId)}`
-  )
+function rotationTurns(text: string | undefined) {
   return (text ?? '')
     .split(/\s*(?:->|→|\n)+\s*/)
     .map((turn) => turn.replace(/^>\s*/, '').trim())
@@ -497,6 +494,7 @@ function rotationTurns(teamId: string) {
  * count per member.
  */
 function shareRecord(
+  database: ReturnType<typeof useDatabase>,
   props: ShareProps,
   s: ReturnType<typeof useShareText>,
   picture: Picture,
@@ -504,16 +502,8 @@ function shareRecord(
   extra?: Record<string, unknown>
 ) {
   const { teamId, result, setup, members, rotationTime, characterKey } = props
-  const stored = (key: string) => {
-    try {
-      return (
-        globalThis.localStorage?.getItem(`${key}_${kqmRotationId(teamId)}`) ??
-        undefined
-      )
-    } catch {
-      return undefined
-    }
-  }
+  const document = database.teams.get(teamId)?.rotationDocuments?.kqm
+  const rotation = document?.UseAttacks === '1' ? undefined : document
   const { attacks, excludedArts: _, ...settings } = setup
   const count = (a: TeamOpt['attacks'] | undefined) =>
     Object.fromEntries(
@@ -536,9 +526,9 @@ function shareRecord(
     },
     rotationTime,
     rotation: {
-      text: stored('teamOptRotationText'),
-      opener: stored('teamOptRotationOpener'),
-      timing: stored('teamOptRotationTiming'),
+      text: rotation?.Text,
+      opener: rotation?.Opener,
+      timing: rotation?.Timing,
     },
     settings: { ...settings, attacks: count(attacks) },
     result: {
@@ -565,8 +555,11 @@ function TeamPicture({
   ...props
 }: ShareProps & { onClose: () => void }) {
   const s = useShareText(props)
+  const database = useDatabase()
   const { result, rotationTime, teamId } = props
   const { setup } = props
+  const rotation = useTeam(teamId)?.rotationDocuments?.kqm
+  const rotationText = rotation?.UseAttacks === '1' ? undefined : rotation?.Text
   const data = useMemo((): KqmCardData => {
     const { total } = result.after
     // (field time: the ER calculator's, from the rotation or as typed)
@@ -607,7 +600,7 @@ function TeamPicture({
             seconds: rotationTime,
           })
         : undefined,
-      rotation: rotationTurns(teamId),
+      rotation: rotationTurns(rotationText),
       notes: s.standard,
       beta: s.beta.length ? BETA_LABEL : undefined,
       labels: {
@@ -624,9 +617,9 @@ function TeamPicture({
         siteName: shareStamp(),
       },
     }
-  }, [s, result, rotationTime, teamId, setup])
+  }, [s, result, rotationTime, rotationText, setup])
   const render = useMemo(() => () => renderKqmCard(data), [data])
-  const watermark = () => shareRecord(props, s, 'team', s.beta)
+  const watermark = () => shareRecord(database, props, s, 'team', s.beta)
   return (
     <CardImageDialog
       title={s.t('page_team:teamOpt.kqm.share.team', 'Team card')}
@@ -714,6 +707,7 @@ function ComparePicture({
   onClose: () => void
 }) {
   const s = useShareText(props)
+  const database = useDatabase()
   const { result, characterKey: ck } = props
   const own = result.builds[ck]
   const rows = useMemo((): CompareRow[] | undefined => {
@@ -792,7 +786,7 @@ function ComparePicture({
   const { data, beta } = useCompareChart(props, title, rows, rowKeys)
   const render = useMemo(() => data && (() => renderCompareChart(data)), [data])
   const watermark = () =>
-    shareRecord(props, s, kind, beta, {
+    shareRecord(database, props, s, kind, beta, {
       rows: rows?.map(({ label, value, base, unmet }) => ({
         label,
         value,
@@ -847,31 +841,31 @@ function ConstellationPicture({
   const { result, setup, teamId, members } = props
   const keys = s.keys
   const names = useMemberNames(members)
-  const teamText =
-    globalThis.localStorage?.getItem(
-      `teamOptRotationText_${kqmRotationId(teamId)}`
-    ) ?? ''
+  const rotation = useTeam(teamId)?.rotationDocuments?.kqm
+  const teamText = rotation?.UseAttacks === '1' ? '' : (rotation?.Text ?? '')
   const [view, setView] = useState<CharacterKey | 'team'>('team')
   // each member's rotation at each constellation (kept per team and member)
   const [rotationsOf, setRotationsOf] = useState<
     Partial<Record<CharacterKey, ConsRotationTexts>>
   >(() =>
-    Object.fromEntries(keys.map((k) => [k, readConsRotations(teamId, k)]))
+    Object.fromEntries(
+      keys.map((k) => [k, readConsRotations(database, teamId, k)])
+    )
   )
   const setRotations = (ck: CharacterKey, next: ConsRotationTexts) => {
     setRotationsOf((r) => ({ ...r, [ck]: next }))
-    writeConsRotations(teamId, ck, next)
+    writeConsRotations(database, teamId, ck, next)
   }
   // (a constellation's own, else the nearest lower one's, else the team's: absent)
   const textOf = (ck: CharacterKey, cons: number) =>
     consRotationOf(rotationsOf[ck] ?? {}, cons, s.cons(ck)).text
   // (advanced) rotations written for combinations of constellations, for the team's chart
   const [combos, setCombosState] = useState<ComboRotation[]>(() =>
-    readComboRotations(teamId)
+    readComboRotations(database, teamId)
   )
   const setCombos = (next: ComboRotation[]) => {
     setCombosState(next)
-    writeComboRotations(teamId, next)
+    writeComboRotations(database, teamId, next)
   }
   const [advancedOpen, setAdvancedOpen] = useState(() => combos.length > 0)
   const runCons = useMemo(
@@ -1154,6 +1148,7 @@ function ConstellationPicture({
   }, [view, teamData, compare.data])
   const watermark = () =>
     shareRecord(
+      database,
       { ...props, characterKey: ck ?? props.characterKey },
       s,
       'constellations',

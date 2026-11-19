@@ -1,4 +1,8 @@
-import type { TeamOpt, TeamOptKqm } from '@genshin-optimizer/gi/db'
+import type {
+  ArtCharDatabase,
+  TeamOpt,
+  TeamOptKqm,
+} from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { useCallback, useMemo } from 'react'
@@ -39,6 +43,24 @@ export function useTeamOpt(teamId: string) {
 export function teamOptRunKey(teamOpt: TeamOpt): string {
   const { rotationTime: _shownOnly, kqm: _kqmOnly, ...rest } = teamOpt
   return sortedJson(rest)
+}
+
+/** The per-member settings read by the inventory solver outside TeamOpt. */
+export function inventoryRequirementsKey(
+  database: ArtCharDatabase,
+  teamId: string
+) {
+  const roster = database.teams.get(teamId)?.loadoutData ?? []
+  return sortedJson(
+    roster.map((datum) => {
+      const member = database.teamChars.get(datum?.teamCharId)
+      const config = database.optConfigs.get(member?.optConfigId)
+      if (!config) return null
+      const { mainStatKeys, artSetExclusion, artExclusion, statFilters } =
+        config
+      return { mainStatKeys, artSetExclusion, artExclusion, statFilters }
+    })
+  )
 }
 
 /** `teamOptRunKey` for a KQM mode run: the settings it uses (the inventory's are not) */

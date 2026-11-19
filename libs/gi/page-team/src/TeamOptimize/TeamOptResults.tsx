@@ -70,7 +70,12 @@ import type { ReactNode } from 'react'
 import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
-import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
+import {
+  changedMembers,
+  equipTeamResult,
+  saveTeamResult,
+  undoTeamEquip,
+} from './apply'
 import type { CocoonEvaluations, FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
@@ -183,7 +188,9 @@ export function TeamOptResults({
     [database, teamId, result, team]
   )
   const [confirm, setConfirm] = useState(false)
-  const [applied, setApplied] = useState<'equip' | 'save'>()
+  const [application, setApplied] = useState<'equip' | 'save'>()
+  const applied =
+    application === 'equip' && !team?.equipmentUndo ? undefined : application
   // artifacts excluded from this team's optimization (from here or the settings)
   const [liveTeamOpt, setTeamOpt] = useTeamOpt(teamId)
   const excludedArts = useMemo(
@@ -427,7 +434,7 @@ export function TeamOptResults({
                       variant="contained"
                       color="secondary"
                       startIcon={<SaveIcon />}
-                      disabled={noChange}
+                      disabled={noChange || stale}
                       onClick={() => {
                         saveTeamResult(
                           database,
@@ -449,7 +456,7 @@ export function TeamOptResults({
                   variant="contained"
                   color="secondary"
                   startIcon={<CheckroomIcon />}
-                  disabled={noChange}
+                  disabled={noChange || stale}
                   aria-expanded={confirm}
                   onClick={() => setConfirm((c) => !c)}
                 >
@@ -527,7 +534,11 @@ export function TeamOptResults({
           )}
         </Notice>
       )}
-      <Collapse in={confirm && !applied} timeout={COLLAPSE_MS} unmountOnExit>
+      <Collapse
+        in={confirm && !applied && !stale}
+        timeout={COLLAPSE_MS}
+        unmountOnExit
+      >
         <Notice
           icon={<CheckroomIcon />}
           actions={
@@ -559,9 +570,14 @@ export function TeamOptResults({
             defaultValue:
               'Equips the new builds on {{count}} members (saved builds are updated instead). Artifacts move from whoever wears them now.',
             count: changed.length,
-          })}
+          })}{' '}
+          <Names
+            keys={changed.map((member) => member.characterKey)}
+            gender={gender}
+          />
         </Notice>
       </Collapse>
+      <TeamEquipUndo teamId={teamId} />
       {noChange && !applied && (
         <Typography
           sx={{
@@ -695,6 +711,34 @@ export function TeamOptResults({
         </Box>
       </Snackbar>
     </Panel>
+  )
+}
+
+export function TeamEquipUndo({ teamId }: { teamId: string }) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const undo = useTeam(teamId)?.equipmentUndo
+  const [failed, setFailed] = useState(false)
+  if (!undo) return null
+  return (
+    <Notice
+      icon={<CheckroomIcon />}
+      actions={
+        <Button onClick={() => setFailed(!undoTeamEquip(database, teamId))}>
+          {t('teamOpt.result.undoEquip', 'Undo equip')}
+        </Button>
+      }
+    >
+      {failed
+        ? t(
+            'teamOpt.result.undoEquipConflict',
+            'Gear or saved builds changed since equipping. Review the affected equipment before restoring it.'
+          )
+        : t(
+            'teamOpt.result.undoEquipHelp',
+            'Restore the equipment and saved builds from before the last Equip action on this team.'
+          )}
+    </Notice>
   )
 }
 

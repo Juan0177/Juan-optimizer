@@ -35,7 +35,7 @@ export function kqmOwnSetUp(database: ArtCharDatabase, teamId: string) {
           if (values[cond] === undefined) values[cond] = value
         }
       }
-  database.teams.set(teamId, (t) => {
+  database.teams.initializeSettings(teamId, (t) => {
     const settings = t.teamOpt?.kqm
     if (!t.teamOpt || !settings) return
     t.teamOpt = {

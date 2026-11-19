@@ -1,5 +1,6 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import {
   type RotationTemplate,
   templatesForTeam,
@@ -8,36 +9,25 @@ import { giTokens } from '@genshin-optimizer/gi/theme'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
 import { alpha, Box, ButtonBase, Typography } from '@mui/material'
-import {
-  type ReactNode,
-  useCallback,
-  useMemo,
-  useSyncExternalStore,
-} from 'react'
+import { type ReactNode, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
 import { TemplateCards } from './RotationTemplates'
 import { focusSx, hairline, quickSx, tokens, type } from './ui'
 
-/** The first visit's choice, per team: attacks entered by hand (the start screen is then left out) */
-const manualKey = (teamId: string) => `teamOpt.start.manual_${teamId}`
-const startEvent = 'teamOpt.startChoice'
-const subscribe = (onChange: () => void) => {
-  window.addEventListener(startEvent, onChange)
-  return () => window.removeEventListener(startEvent, onChange)
-}
-
-/** Whether the team chose to enter its attacks by hand, and the setter */
-export function useManualStart(teamId: string) {
-  const manual = useSyncExternalStore(
-    subscribe,
-    () => localStorage.getItem(manualKey(teamId)) === '1'
-  )
+/** Whether this tab has moved from the start screen to manual attack entry. */
+export function useManualStart(teamId: string, kqm: boolean) {
+  const database = useDatabase()
+  const document =
+    useTeam(teamId)?.rotationDocuments?.[kqm ? 'kqm' : 'inventory']
   const chooseManual = useCallback(() => {
-    localStorage.setItem(manualKey(teamId), '1')
-    window.dispatchEvent(new Event(startEvent))
-  }, [teamId])
-  return { manual, chooseManual }
+    database.teams.setRotationField(
+      kqm ? `${teamId}_kqm` : teamId,
+      'Manual',
+      '1'
+    )
+  }, [database, kqm, teamId])
+  return { manual: document?.Manual === '1', chooseManual }
 }
 
 /** The tiles' picture area (shorter on phones, where the tiles stack) */

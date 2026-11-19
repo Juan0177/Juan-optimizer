@@ -1,4 +1,5 @@
 export * from './components'
+export * from './downloadJson'
 export * from './hooks'
 export * from './theme'
 

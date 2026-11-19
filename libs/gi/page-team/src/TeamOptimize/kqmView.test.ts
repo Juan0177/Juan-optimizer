@@ -1,6 +1,12 @@
-import { initTeamOpt } from '@genshin-optimizer/gi/db'
+import { SandboxStorage } from '@genshin-optimizer/common/database'
+import {
+  ArtCharDatabase,
+  initTeamOpt,
+  type LoadoutDatum,
+} from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
 import {
+  inventoryRequirementsKey,
   kqmRotationSetUp,
   kqmRotationUpdate,
   kqmRotationView,
@@ -39,4 +45,25 @@ describe("the KQM tab's own settings", () => {
       onField: 'Diluc',
     })
   })
+})
+
+it('tracks changes to the requirements the inventory solver reads', () => {
+  const database = new ArtCharDatabase(1, new SandboxStorage())
+  const teamCharId = database.teamChars.new('Bennett')
+  const teamId = database.teams.new({
+    loadoutData: [{ teamCharId } as LoadoutDatum],
+  })
+  const configId = database.teamChars.get(teamCharId)!.optConfigId
+  const before = inventoryRequirementsKey(database, teamId)
+  database.optConfigs.set(configId, { optimizationTarget: ['test'] })
+  expect(inventoryRequirementsKey(database, teamId)).toBe(before)
+  database.optConfigs.set(configId, {
+    statFilters: { '["basic","enerRech_"]': [{ value: 500, disabled: false }] },
+  })
+  const withEr = inventoryRequirementsKey(database, teamId)
+  expect(withEr).not.toBe(before)
+  database.optConfigs.set(configId, {
+    artSetExclusion: { NoblesseOblige: [4] },
+  })
+  expect(inventoryRequirementsKey(database, teamId)).not.toBe(withEr)
 })

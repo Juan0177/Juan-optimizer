@@ -41,33 +41,45 @@ export function TeamDelModal({
   const database = useDatabase()
   const team = useTeam(teamId)!
   const { name, description, loadoutData } = team
+  const teams = database.teams.values
 
   const inTeamsData = useMemo(
     () =>
       loadoutData.map((loadoutDatum) => {
         if (!loadoutDatum) return []
         const { teamCharId } = loadoutDatum
-        return database.teams.values.filter(({ loadoutData: data }) =>
+        return teams.filter(({ loadoutData: data }) =>
           data.find((datum) => datum?.teamCharId === teamCharId)
         )
       }),
-    [database, loadoutData]
+    [teams, loadoutData]
   )
-  const [delArr, setDelArry] = useState(() =>
+  const [selection, setSelection] = useState<number[]>()
+  const delArr =
+    selection ??
     inTeamsData
       .map((teams, i) => (teams.length === 1 ? i : undefined))
       .filter(notEmpty)
-  )
+  const close = () => {
+    setSelection(undefined)
+    onHide()
+  }
   const onDelete = () => {
     database.teams.remove(teamId)
     loadoutData.forEach((loadoutDatum, i) => {
       if (!loadoutDatum || !delArr.includes(i)) return
-      database.teamChars.remove(loadoutDatum.teamCharId)
+      const { teamCharId } = loadoutDatum
+      if (
+        !database.teams.values.some((team) =>
+          team.loadoutData.some((datum) => datum?.teamCharId === teamCharId)
+        )
+      )
+        database.teamChars.remove(teamCharId)
     })
     onDel()
   }
   return (
-    <ModalWrapper open={show} onClose={onHide}>
+    <ModalWrapper open={show} onClose={close}>
       <CardThemed>
         <CardHeader
           title={
@@ -88,7 +100,7 @@ export function TeamDelModal({
             </Box>
           }
           action={
-            <IconButton onClick={onHide}>
+            <IconButton onClick={close}>
               <CloseIcon />
             </IconButton>
           }
@@ -108,7 +120,7 @@ export function TeamDelModal({
                 key={i}
                 teamCharId={loadoutDatum.teamCharId}
                 selected={delArr.includes(i)}
-                onClick={() => setDelArry((arr) => toggleArr(arr, i))}
+                onClick={() => setSelection(toggleArr(delArr, i))}
                 inTeams={inTeamsData[i]}
               />
             ) : null
@@ -163,6 +175,8 @@ function LoadoutDisplay({
         <Button
           fullWidth
           onClick={onClick}
+          disabled={inTeams.length !== 1}
+          aria-pressed={selected}
           variant="outlined"
           color="neutral100"
           sx={{ p: 0 }}

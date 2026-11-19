@@ -1,7 +1,15 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt, TeamOptAttack } from '@genshin-optimizer/gi/db'
-import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
+import type {
+  TeamOpt,
+  TeamOptAttack,
+  TeamRotation,
+} from '@genshin-optimizer/gi/db'
+import {
+  applyTeamRotation,
+  defaultTeamOptKqm,
+  initTeamOpt,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
@@ -93,8 +101,9 @@ import {
   useSimTeam,
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
+import { sameBuildRoster, teamRoster } from './runScope'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
-import { TeamOptResults } from './TeamOptResults'
+import { TeamEquipUndo, TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -191,9 +200,12 @@ export default function TeamBuildWorkspace({
   const ownConstellations = useSimTeam(members).constellations
   useEffect(() => {
     if (mode !== 'kqm' || kqmSetUp) return
-    copyRotationToKqm(teamId, ownConstellations)
-    setStoredTeamOpt(kqmRotationSetUp)
-  }, [mode, kqmSetUp, teamId, setStoredTeamOpt, ownConstellations])
+    copyRotationToKqm(database, teamId, ownConstellations)
+    database.teams.initializeSettings(teamId, (team) => {
+      team.teamOpt ??= initTeamOpt()
+      kqmRotationSetUp(team.teamOpt)
+    })
+  }, [database, mode, kqmSetUp, teamId, ownConstellations])
   // (its own switches and enemy too, once: a copy of the team's)
   const kqmOwnReady =
     storedTeamOpt.kqm?.teamConditional !== undefined &&
@@ -218,7 +230,8 @@ export default function TeamBuildWorkspace({
     mode === 'inventory' ? teamData : undefined,
     wolfStates
   )
-  const { state, status, run, cancel, clear } = useTeamOptRun(teamId)
+  const { state, status, run, cancel, clear, requirementsKey } =
+    useTeamOptRun(teamId)
   const kqm = useKqmRun(teamId)
   const kqmRunning = kqm.state.type === 'running'
   // either run in progress: the settings stay as they are
@@ -241,9 +254,54 @@ export default function TeamBuildWorkspace({
   const { applied: writtenRotation } = useRotationText(
     rotationIdOf(teamId, mode === 'kqm')
   )
-  const { manual, chooseManual } = useManualStart(teamId)
+  const { manual, chooseManual } = useManualStart(teamId, mode === 'kqm')
   // (each tab: its own rotation)
   const showStart = !attackCount && !writtenRotation && !manual
+  const importAttacks = (rotation: TeamRotation) => {
+    if (running) return
+    database.teams.set(teamId, (team) => {
+      const draft = structuredClone(team.teamOpt ?? initTeamOpt())
+      const update: TeamOptUpdate = (view) => {
+        applyTeamRotation(
+          view,
+          rotation,
+          members.map((member) => member.characterKey)
+        )
+      }
+      const updateTab = mode === 'kqm' ? kqmRotationUpdate(update) : update
+      team.teamOpt = updateTab(draft) ?? draft
+      const document = ((team.rotationDocuments ??= {})[mode] ??= {})
+      if (document.Text) document.UseAttacks = '1'
+    })
+  }
+  const canCopyInventoryRotation =
+    mode === 'kqm' &&
+    members.some(
+      ({ characterKey }) => storedTeamOpt.attacks[characterKey]?.length
+    )
+  const copyInventoryRotation = () => {
+    if (
+      (attackCount || writtenRotation || team?.rotationDocuments?.kqm?.Draft) &&
+      !window.confirm(
+        t(
+          'teamOpt.kqm.replaceRotation',
+          'Replace the KQM rotation with the current Team Optimize rotation?'
+        )
+      )
+    )
+      return
+    copyRotationToKqm(database, teamId, ownConstellations, true)
+    setStoredTeamOpt((draft) => {
+      draft.kqm = {
+        ...defaultTeamOptKqm,
+        ...draft.kqm,
+        attacks: structuredClone(draft.attacks),
+        rotationTime: draft.rotationTime,
+        onField: draft.onField,
+      }
+    })
+  }
+
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
   )
@@ -267,6 +325,8 @@ export default function TeamBuildWorkspace({
   )
   const [extraOpen, setExtraOpen] = useState(() => extraCount > 0)
   // (while it runs: its builds so far once it has some, else the last result)
+  const roster = teamRoster(database, teamId)
+  const memberKeys = members.map((m) => m.characterKey)
   const kqmEarly = kqm.state.type === 'running' ? kqm.state.early : undefined
   const kqmDone =
     kqm.state.type === 'done'
@@ -276,9 +336,8 @@ export default function TeamBuildWorkspace({
         : undefined
   const kqmResult =
     kqmDone &&
-    Object.keys(kqmDone.result.builds).every((ck) =>
-      members.some((m) => m.characterKey === ck)
-    )
+    sameBuildRoster(kqmDone.result.builds, memberKeys) &&
+    (kqmDone.roster === undefined || kqmDone.roster === roster)
       ? kqmDone
       : undefined
   // the results shown when they come (a run's early builds, else its result), once a run
@@ -304,6 +363,7 @@ export default function TeamBuildWorkspace({
     mode === 'kqm' &&
     kqmResult &&
     kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt) &&
+    (kqmResult.rotation === 'played') === !!writtenRotation.trim() &&
     !enemyChanged(kqmResult.enemy)
       ? kqmResult
       : undefined
@@ -498,9 +558,8 @@ export default function TeamBuildWorkspace({
   // a result for another line-up is of no use
   const result =
     state.type === 'done' &&
-    Object.keys(state.result.builds).every((ck) =>
-      members.some((m) => m.characterKey === ck)
-    )
+    sameBuildRoster(state.result.builds, memberKeys) &&
+    (state.roster === undefined || state.roster === roster)
       ? state
       : undefined
   // which of the result's team builds is shown (the best, or one of the next ones)
@@ -665,12 +724,41 @@ export default function TeamBuildWorkspace({
             <RotationTransfer
               members={members}
               teamOpt={teamOpt}
-              setTeamOpt={setTeamOpt}
+              onImport={importAttacks}
+              hasWrittenRotation={!!writtenRotation}
               disabled={running}
             />
           )}
         </Box>
         {writer.element}
+        {mode === 'kqm' && (showStart || canCopyInventoryRotation) && (
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            {showStart && (
+              <Typography variant="body2" color="text.secondary">
+                {t(
+                  'teamOpt.kqm.separateRotation',
+                  'KQM uses its own rotation. You can copy the current Team Optimize rotation here.'
+                )}
+              </Typography>
+            )}
+            {canCopyInventoryRotation && (
+              <Button
+                size="small"
+                onClick={copyInventoryRotation}
+                disabled={running}
+              >
+                {t('teamOpt.kqm.copyRotation', 'Copy from Team Optimize')}
+              </Button>
+            )}
+          </Box>
+        )}
         {showStart ? (
           // the first visit: how to start (write the rotation, or enter attacks by hand)
           <TeamOptimizeStart
@@ -684,7 +772,8 @@ export default function TeamBuildWorkspace({
                 importOnly
                 members={members}
                 teamOpt={teamOpt}
-                setTeamOpt={setTeamOpt}
+                onImport={importAttacks}
+                hasWrittenRotation={false}
                 disabled={running}
               />
             }
@@ -943,6 +1032,7 @@ export default function TeamBuildWorkspace({
             }
             stale={
               kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+              (kqmResult.rotation === 'played') !== !!writtenRotation.trim() ||
               enemyChanged(kqmResult.enemy)
             }
             now={teamOpt}
@@ -974,6 +1064,7 @@ export default function TeamBuildWorkspace({
         </Box>
       )}
       {/* the run's result, below what it was run with (the rotation) */}
+      {mode === 'inventory' && !result && <TeamEquipUndo teamId={teamId} />}
       {mode === 'inventory' && state.type === 'error' && (
         <Alert severity="error" onClose={clear}>
           {state.setRulesUnmet?.length ? (
@@ -1009,6 +1100,7 @@ export default function TeamBuildWorkspace({
             onDiscard={clear}
             teamData={teamData}
             stale={
+              result.requirementsKey !== requirementsKey ||
               teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt) ||
               enemyChanged(result.enemy)
             }
