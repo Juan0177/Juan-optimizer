@@ -50,10 +50,8 @@ import {
   alpha,
   Box,
   Button,
-  FormControlLabel,
   InputBase,
   LinearProgress,
-  Switch,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -78,7 +76,7 @@ import {
   useTeamBuffs,
 } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
-import { Expanded, expandStore } from './expandStore'
+import { expandStore } from './expandStore'
 import {
   fightTeamOf,
   useCocoonEvaluations,
@@ -635,15 +633,6 @@ export default function TeamBuildWorkspace({
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     )
   }, [mode, result, teamId, rotationOpen])
-  // power users can show each attack's buff states and limits inline
-  const [showConditions, setShowConditions] = useState(
-    () => localStorage.getItem('teamOpt.showConditions') === '1'
-  )
-  const toggleConditions = () =>
-    setShowConditions((on) => {
-      localStorage.setItem('teamOpt.showConditions', on ? '0' : '1')
-      return !on
-    })
 
   if (!members.length) return <EmptyTeam teamId={teamId} />
 
@@ -830,63 +819,36 @@ export default function TeamBuildWorkspace({
             />
             {/* the rotation's settings, in one row of labelled controls (with a written rotation its
                 time and count are on its line: only what is left, if anything) */}
-            <Expanded store={rotationOpen}>
-              {(rotationExpanded) =>
-                (!writtenRotation.trim() ||
-                  handOnField ||
-                  (rotationExpanded && !!attackCount)) && (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      flexWrap: 'wrap',
-                      columnGap: 2,
-                      rowGap: 1,
-                      minHeight: 34,
-                    }}
-                  >
-                    {!writtenRotation.trim() && rotationTimeInput(false)}
-                    {/* (a written rotation says who is on the field for each of its attacks: only
-                  attacks entered by hand use this) */}
-                    {handOnField && onField && (
-                      <OnFieldPicker
-                        members={members}
-                        value={onField}
-                        disabled={running}
-                        onChange={(characterKey) =>
-                          setTeamOpt((o) => {
-                            if (characterKey === members[0]?.characterKey)
-                              delete o.onField
-                            else o.onField = characterKey
-                          })
-                        }
-                      />
-                    )}
-                    <Box sx={{ flexGrow: 1 }} />
-                    {rotationExpanded && !!attackCount && (
-                      <FormControlLabel
-                        sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
-                        control={
-                          <Switch
-                            size="small"
-                            checked={showConditions}
-                            onChange={toggleConditions}
-                          />
-                        }
-                        label={
-                          <Typography component="span" sx={type.label}>
-                            {t(
-                              'teamOpt.rotation.showConditions',
-                              'Show buff conditions'
-                            )}
-                          </Typography>
-                        }
-                      />
-                    )}
-                  </Box>
-                )
-              }
-            </Expanded>
+            {(!writtenRotation.trim() || handOnField) && (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  columnGap: 2,
+                  rowGap: 1,
+                  minHeight: 34,
+                }}
+              >
+                {!writtenRotation.trim() && rotationTimeInput(false)}
+                {/* (a written rotation says who is on the field for each of its attacks: only
+                    attacks entered by hand use this) */}
+                {handOnField && onField && (
+                  <OnFieldPicker
+                    members={members}
+                    value={onField}
+                    disabled={running}
+                    onChange={(characterKey) =>
+                      setTeamOpt((o) => {
+                        if (characterKey === members[0]?.characterKey)
+                          delete o.onField
+                        else o.onField = characterKey
+                      })
+                    }
+                  />
+                )}
+              </Box>
+            )}
             {/* one panel for the team: folded, a line per member; open, a column per member with
               hairlines between them */}
             <Box
@@ -934,7 +896,6 @@ export default function TeamBuildWorkspace({
                     members={members}
                     onField={onField ?? member.characterKey}
                     rotationTime={kqmRotationTime ?? rotationTime}
-                    showConditions={showConditions}
                     expandStore={rotationOpen}
                     onToggle={attackCount ? rotationOpen.toggle : undefined}
                     disabled={running}
