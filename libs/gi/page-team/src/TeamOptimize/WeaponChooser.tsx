@@ -5,6 +5,7 @@ import {
   ImgIcon,
   ModalWrapper,
   NumberInputLazy,
+  SuspenseTooltip,
 } from '@genshin-optimizer/common/ui'
 import {
   deepClone,
@@ -935,7 +936,7 @@ function MemberEnergy({
       component="label"
       sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
     >
-      <Tooltip
+      <SuspenseTooltip
         title={
           <>
             <CharacterName characterKey={characterKey} gender={gender} />
@@ -956,7 +957,7 @@ function MemberEnergy({
         >
           <MemberAvatar characterKey={characterKey} size={22} />
         </Box>
-      </Tooltip>
+      </SuspenseTooltip>
       <NumberInputLazy
         size="small"
         float
@@ -1153,7 +1154,7 @@ function PassiveAvatarToggle({
   const stateKey = line.states[0]?.[0]
   const on = !!stateKey && value === stateKey
   return (
-    <Tooltip
+    <SuspenseTooltip
       arrow
       title={
         <>
@@ -1190,7 +1191,7 @@ function PassiveAvatarToggle({
       >
         <MemberAvatar characterKey={member.characterKey} size={22} />
       </ButtonBase>
-    </Tooltip>
+    </SuspenseTooltip>
   )
 }
 
@@ -1492,7 +1493,7 @@ function RemoveWeaponButton({
   }
   return (
     <>
-      <Tooltip
+      <SuspenseTooltip
         title={
           blocked ? (
             <>
@@ -1525,7 +1526,7 @@ function RemoveWeaponButton({
             <DeleteOutlineIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </span>
-      </Tooltip>
+      </SuspenseTooltip>
       <Dialog
         open={asking}
         onClose={() => setAsking(false)}

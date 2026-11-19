@@ -4,7 +4,10 @@
  * what floats or is selected. Gold marks the one main action, a selection, an edited value and focus;
  * element hues mark character data. Labels are sentence case; details live in ⓘ tooltips.
  */
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
+import {
+  InfoTooltipInline,
+  SuspenseTooltip,
+} from '@genshin-optimizer/common/ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import {
@@ -13,7 +16,6 @@ import {
   ButtonBase,
   Collapse,
   Skeleton,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
@@ -428,9 +430,9 @@ export function FieldLabel({
     </Typography>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       {label}
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     label
   )
@@ -529,9 +531,9 @@ export function Pill({
     </ButtonBase>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       <span style={{ display: 'inline-flex' }}>{pill}</span>
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     pill
   )
@@ -663,9 +665,9 @@ export function Segmented<T extends string | number>({
           </ButtonBase>
         )
         return o.tip ? (
-          <Tooltip key={String(o.value)} arrow title={o.tip}>
+          <SuspenseTooltip key={String(o.value)} arrow title={o.tip}>
             <span style={{ display: 'grid' }}>{button}</span>
-          </Tooltip>
+          </SuspenseTooltip>
         ) : (
           button
         )
@@ -853,9 +855,9 @@ export function BetaBadge({
     </Box>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       {badge}
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     badge
   )

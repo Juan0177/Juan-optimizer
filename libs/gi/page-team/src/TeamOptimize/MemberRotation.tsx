@@ -1,5 +1,5 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
-import { DropdownButton } from '@genshin-optimizer/common/ui'
+import { DropdownButton, SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
 import {
@@ -872,7 +872,7 @@ function AttackRow({
               </Tag>
             )}
             {ownOnField && (
-              <Tooltip
+              <SuspenseTooltip
                 placement="top"
                 title={
                   <>
@@ -887,10 +887,10 @@ function AttackRow({
                 >
                   <MemberAvatar characterKey={ownOnField} size={18} />
                 </Box>
-              </Tooltip>
+              </SuspenseTooltip>
             )}
             {!showConditions && conditionCount > 0 && (
-              <Tooltip
+              <SuspenseTooltip
                 placement="bottom-start"
                 // (in place: a portal re-rendered the translated names in a loop on resize)
                 PopperProps={{ disablePortal: true }}
@@ -918,7 +918,7 @@ function AttackRow({
                   <TuneIcon sx={{ fontSize: 13 }} />
                   {conditionCount}
                 </Tag>
-              </Tooltip>
+              </SuspenseTooltip>
             )}
           </Box>
           {/* power users: each buff state and limit, listed under the attack */}

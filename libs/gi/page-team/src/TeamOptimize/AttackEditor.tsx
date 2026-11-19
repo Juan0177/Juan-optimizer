@@ -3,6 +3,7 @@ import {
   InfoTooltipInline,
   ModalWrapper,
   NumberInputLazy,
+  SuspenseTooltip,
 } from '@genshin-optimizer/common/ui'
 import { getUnitStr } from '@genshin-optimizer/common/util'
 import type {
@@ -1564,7 +1565,7 @@ function BuffRow({
           lineHeight: 1.45,
         }}
       >
-        <Tooltip
+        <SuspenseTooltip
           arrow
           placement="top-start"
           enterDelay={300}
@@ -1601,7 +1602,7 @@ function BuffRow({
           >
             {source(buff)}
           </Typography>
-        </Tooltip>
+        </SuspenseTooltip>
         {effects === undefined ? (
           <Skeleton variant="rounded" width={120} height={18} />
         ) : (

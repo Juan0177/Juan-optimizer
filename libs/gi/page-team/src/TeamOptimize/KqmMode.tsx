@@ -1,4 +1,7 @@
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
+import {
+  InfoTooltipInline,
+  SuspenseTooltip,
+} from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   TeamOpt,
@@ -1201,7 +1204,7 @@ export function KqmSetupSummary({
           const er = kqmEnergyRequirement(kqm, characterKey)
           const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
           return (
-            <Tooltip
+            <SuspenseTooltip
               key={characterKey}
               arrow
               title={
@@ -1240,7 +1243,7 @@ export function KqmSetupSummary({
                 </Box>
                 {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
               </Box>
-            </Tooltip>
+            </SuspenseTooltip>
           )
         })}
       </Box>

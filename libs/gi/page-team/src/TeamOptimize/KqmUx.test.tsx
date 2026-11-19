@@ -101,6 +101,7 @@ vi.mock('@genshin-optimizer/common/ui', () => ({
   InfoTooltipInline: () => <span role="img" aria-label="Info" />,
   SolidToggleButtonGroup: (props: object) => <ToggleButtonGroup {...props} />,
   BootstrapTooltip: (props: object) => <Tooltip {...props} />,
+  SuspenseTooltip: Tooltip,
 }))
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({

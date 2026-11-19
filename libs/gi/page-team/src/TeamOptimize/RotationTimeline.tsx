@@ -1,3 +1,4 @@
+import { SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import type {
   ArtifactSetKey,
   CharacterKey,
@@ -784,7 +785,7 @@ export function RotationTimeline({
                         />
                       ))}
                       {(swaps.get(characterKey) ?? []).map((w) => (
-                        <Tooltip
+                        <SuspenseTooltip
                           key={`swap-${w.start}`}
                           arrow
                           disableInteractive
@@ -856,7 +857,7 @@ export function RotationTimeline({
                               <SwapHorizIcon />
                             </Box>
                           </Box>
-                        </Tooltip>
+                        </SuspenseTooltip>
                       ))}
                       {(blocks.get(characterKey) ?? []).map((a) => {
                         const index = a.index
@@ -1365,7 +1366,7 @@ function TrackGroup({
           height={Math.max(TRACK, buffs.length * 5 + 9)}
           label={
             // (its lines named, top to bottom: hover the label)
-            <Tooltip
+            <SuspenseTooltip
               arrow
               placement="right-start"
               title={
@@ -1392,7 +1393,7 @@ function TrackGroup({
               >
                 {t('teamOpt.timeline.buffsRow', 'Buffs')}
               </Box>
-            </Tooltip>
+            </SuspenseTooltip>
           }
           value={<BuffsUp tracks={buffs} store={store} pin={pin} />}
         >

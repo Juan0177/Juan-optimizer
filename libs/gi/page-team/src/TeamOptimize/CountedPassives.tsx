@@ -1,3 +1,4 @@
+import { SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import { objPathValue } from '@genshin-optimizer/common/util'
 import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt } from '@genshin-optimizer/gi/db'
@@ -11,7 +12,7 @@ import {
   quickTooltipProps,
   WOLFS_GRAVESTONE,
 } from '@genshin-optimizer/gi/ui'
-import { Box, Tooltip, Typography } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -124,7 +125,7 @@ export function PassiveTag({ passives }: { passives: CountedPassive[] }) {
         ? t('teamOpt.kqm.passiveRule', 'on by rule')
         : t('teamOpt.kqm.passiveSwitch', 'on by your switch')
   return (
-    <Tooltip
+    <SuspenseTooltip
       arrow
       placement="left"
       {...quickTooltipProps}
@@ -179,6 +180,6 @@ export function PassiveTag({ passives }: { passives: CountedPassive[] }) {
             })
           : t('teamOpt.kqm.passiveOn', 'Passive on')}
       </Box>
-    </Tooltip>
+    </SuspenseTooltip>
   )
 }
