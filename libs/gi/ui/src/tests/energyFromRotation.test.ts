@@ -14,6 +14,7 @@ import {
   energyCalcData,
   energyFromRotation,
   type RotationEnergy,
+  shortBurstOf,
   withRotationEnergy,
 } from '../util/teamOpt/energyCalc'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
@@ -212,6 +213,37 @@ describe('energy inputs: Sandrone', () => {
     expect(energy.members.Sandrone!.flatEnergy).toBeCloseTo(attack, 1)
     expect(attack).toBeGreaterThan(3)
     expect(attack).toBeLessThan(8)
+  })
+})
+
+describe('energy inputs: Flins C0, a third Spearstorm written (the calculator warns)', () => {
+  // (a user report: ER about 335%; at C0 the third E comes after Manifest Flame has ended, so
+  // the Q after it is his full Burst, beside the Symphonies)
+  const team: CharacterKey[] = ['Columbina', 'Ineffa', 'Jahoda', 'Flins']
+  const cons = { Flins: 0, Columbina: 2, Ineffa: 0, Jahoda: 6 }
+  const flins = (rotation: string) =>
+    energyFromRotation(
+      playTeam(
+        team,
+        `Columbina E Q? -> Ineffa E Q? -> Jahoda E Q? -> ${rotation}`,
+        cons
+      ),
+      team,
+      2,
+      cons
+    ).members.Flins!
+  const short = shortBurstOf('Flins')!
+  it('fills in both the full Burst and Thunderous Symphony (the warning’s case)', () => {
+    const m = flins('Flins Q? E E Q N3 E Q N3 E Q')
+    expect(m.burstEvery).toBeGreaterThan(0)
+    expect(m.secondaryMode).toBe(short.index)
+    expect(m.secondaryUses).toBeGreaterThan(0)
+  })
+  it('two Spearstorms at C0: only the Symphonies, no warning', () => {
+    const m = flins('Flins E E Q N3 E Q N3')
+    expect(m.burstEvery).toBe(0)
+    expect(m.secondaryMode).toBe(short.index)
+    expect(m.secondaryUses).toBe(2)
   })
 })
 
