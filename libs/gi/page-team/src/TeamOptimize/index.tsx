@@ -70,6 +70,7 @@ import {
   useTeamBuffs,
 } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
+import { Expanded, expandStore } from './expandStore'
 import {
   fightTeamOf,
   useCocoonEvaluations,
@@ -249,15 +250,16 @@ export default function TeamBuildWorkspace({
   const poolSize = usePoolSize(members, teamOpt)
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
-  const [rotationExpanded, setRotationExpanded] = useState(() => !attackCount)
+  // (the members' attacks shown: a flag of its own, so flipping it doesn't re-render the page)
+  const [rotationOpen] = useState(() => expandStore(!attackCount))
   // a written rotation just applied to an empty team: its members' long attack lists fold away
   // (the written rotation says it all; a click opens them)
   const hadAttacks = useRef(attackCount > 0)
   useEffect(() => {
     if (!hadAttacks.current && attackCount > 0 && writtenRotation)
-      setRotationExpanded(false)
+      rotationOpen.set(false)
     hadAttacks.current = attackCount > 0
-  }, [attackCount, writtenRotation])
+  }, [attackCount, writtenRotation, rotationOpen])
   // Extra buffs: their count, and the section open when there are some
   const extraCount = Object.values(teamOpt.bonusStats ?? {}).reduce(
     (n, stats) => n + Object.values(stats ?? {}).filter((v) => !!v).length,
@@ -288,14 +290,14 @@ export default function TeamBuildWorkspace({
       if (revealedRun.current === shown.startTime) return
       revealedRun.current = shown.startTime
     }
-    setRotationExpanded(false)
+    rotationOpen.set(false)
     if (mode === 'kqm')
       requestAnimationFrame(() =>
         document
           .getElementById(`kqm-results-${teamId}`)
           ?.scrollIntoView({ block: 'start' })
       )
-  }, [kqm.state, kqmEarly, mode, teamId])
+  }, [kqm.state, kqmEarly, mode, teamId, rotationOpen])
   // KQM theorycrafting's own rotation, while its result is for the rotation as it is: the attacks
   // it played for its builds (at its constellations, with their gear), with their damage
   const kqmRotation =
@@ -559,13 +561,13 @@ export default function TeamBuildWorkspace({
   // comes into view
   useEffect(() => {
     if (mode !== 'inventory' || !result) return
-    setRotationExpanded(false)
+    rotationOpen.set(false)
     requestAnimationFrame(() =>
       document
         .getElementById(`teamopt-results-${teamId}`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     )
-  }, [mode, result, teamId])
+  }, [mode, result, teamId, rotationOpen])
   // power users can show each attack's buff states and limits inline
   const [showConditions, setShowConditions] = useState(
     () => localStorage.getItem('teamOpt.showConditions') === '1'
@@ -722,59 +724,63 @@ export default function TeamBuildWorkspace({
             />
             {/* the rotation's settings, in one row of labelled controls (with a written rotation its
                 time and count are on its line: only what is left, if anything) */}
-            {(!writtenRotation.trim() ||
-              handOnField ||
-              (rotationExpanded && !!attackCount)) && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  columnGap: 2,
-                  rowGap: 1,
-                  minHeight: 34,
-                }}
-              >
-                {!writtenRotation.trim() && rotationTimeInput(false)}
-                {/* (a written rotation says who is on the field for each of its attacks: only
+            <Expanded store={rotationOpen}>
+              {(rotationExpanded) =>
+                (!writtenRotation.trim() ||
+                  handOnField ||
+                  (rotationExpanded && !!attackCount)) && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      columnGap: 2,
+                      rowGap: 1,
+                      minHeight: 34,
+                    }}
+                  >
+                    {!writtenRotation.trim() && rotationTimeInput(false)}
+                    {/* (a written rotation says who is on the field for each of its attacks: only
                   attacks entered by hand use this) */}
-                {handOnField && onField && (
-                  <OnFieldPicker
-                    members={members}
-                    value={onField}
-                    disabled={running}
-                    onChange={(characterKey) =>
-                      setTeamOpt((o) => {
-                        if (characterKey === members[0]?.characterKey)
-                          delete o.onField
-                        else o.onField = characterKey
-                      })
-                    }
-                  />
-                )}
-                <Box sx={{ flexGrow: 1 }} />
-                {rotationExpanded && !!attackCount && (
-                  <FormControlLabel
-                    sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
-                    control={
-                      <Switch
-                        size="small"
-                        checked={showConditions}
-                        onChange={toggleConditions}
+                    {handOnField && onField && (
+                      <OnFieldPicker
+                        members={members}
+                        value={onField}
+                        disabled={running}
+                        onChange={(characterKey) =>
+                          setTeamOpt((o) => {
+                            if (characterKey === members[0]?.characterKey)
+                              delete o.onField
+                            else o.onField = characterKey
+                          })
+                        }
                       />
-                    }
-                    label={
-                      <Typography component="span" sx={type.label}>
-                        {t(
-                          'teamOpt.rotation.showConditions',
-                          'Show buff conditions'
-                        )}
-                      </Typography>
-                    }
-                  />
-                )}
-              </Box>
-            )}
+                    )}
+                    <Box sx={{ flexGrow: 1 }} />
+                    {rotationExpanded && !!attackCount && (
+                      <FormControlLabel
+                        sx={{ mr: 0, ml: -0.5, gap: 0.5 }}
+                        control={
+                          <Switch
+                            size="small"
+                            checked={showConditions}
+                            onChange={toggleConditions}
+                          />
+                        }
+                        label={
+                          <Typography component="span" sx={type.label}>
+                            {t(
+                              'teamOpt.rotation.showConditions',
+                              'Show buff conditions'
+                            )}
+                          </Typography>
+                        }
+                      />
+                    )}
+                  </Box>
+                )
+              }
+            </Expanded>
             {/* one panel for the team: folded, a line per member; open, a column per member with
               hairlines between them */}
             <Box
@@ -823,12 +829,8 @@ export default function TeamBuildWorkspace({
                     onField={onField ?? member.characterKey}
                     rotationTime={kqmRotationTime ?? rotationTime}
                     showConditions={showConditions}
-                    expanded={rotationExpanded}
-                    onToggle={
-                      attackCount
-                        ? () => setRotationExpanded((o) => !o)
-                        : undefined
-                    }
+                    expandStore={rotationOpen}
+                    onToggle={attackCount ? rotationOpen.toggle : undefined}
                     disabled={running}
                   />
                 ))}
@@ -965,7 +967,7 @@ export default function TeamBuildWorkspace({
             }
             onDiscard={() => {
               kqm.clear()
-              setRotationExpanded(true)
+              rotationOpen.set(true)
             }}
           />
         </Box>

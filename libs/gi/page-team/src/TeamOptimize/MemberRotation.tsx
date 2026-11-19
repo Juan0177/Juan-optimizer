@@ -35,12 +35,21 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
+import type { ButtonBaseProps } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { Fragment, forwardRef, useEffect, useMemo, useState } from 'react'
+import {
+  Fragment,
+  forwardRef,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { TargetSelectorModal } from '../CharacterDisplay/Tabs/TabOptimize/Components/TargetSelectorModal'
 import { AttackEditor, AttackFiguresContext } from './AttackEditor'
+import type { ExpandStore } from './expandStore'
 import { AttackName } from './AttackName'
 import type { TeamBuff } from './buffs'
 import { formatDamage, formatHits, formatRate } from './format'
@@ -71,6 +80,7 @@ export function MemberRotation({
   footer,
   showConditions = false,
   expanded = true,
+  expandStore,
   onToggle,
   disabled,
   figures = true,
@@ -98,6 +108,8 @@ export function MemberRotation({
   showConditions?: boolean
   /** Its attacks are shown (the header opens and closes them, for every member at once) */
   expanded?: boolean
+  /** …read from this shared flag instead: flipping it re-renders the header and the fold only */
+  expandStore?: ExpandStore
   onToggle?: () => void
   /** A run is going: its attacks can't be edited */
   disabled?: boolean
@@ -239,11 +251,13 @@ export function MemberRotation({
     >
       {/* the member, its attacks and its share of the rotation: also the button that shows or
           hides every member's attacks (a chevron says which) */}
-      <ButtonBase
+      <FoldButton
+        store={expandStore}
+        expanded={expanded}
+        foldable={!!onToggle}
         component="div"
         role="button"
         tabIndex={onToggle ? 0 : -1}
-        aria-expanded={onToggle ? expanded : undefined}
         disabled={!onToggle}
         onClick={onToggle}
         onKeyDown={(e) => {
@@ -334,25 +348,10 @@ export function MemberRotation({
             characterKey={characterKey}
           />
         </Box>
-        {onToggle && (
-          <ExpandMoreIcon
-            className="member-chevron"
-            aria-hidden
-            sx={{
-              position: 'absolute',
-              top: 14,
-              right: 10,
-              fontSize: 20,
-              color: 'text.secondary',
-              transition: `transform .18s ${tokens.ease}, color .12s`,
-              transform: expanded ? 'rotate(180deg)' : 'none',
-              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-            }}
-          />
-        )}
-      </ButtonBase>
+        {onToggle && <FoldChevron store={expandStore} expanded={expanded} />}
+      </FoldButton>
 
-      <Collapse in={expanded} timeout={180}>
+      <Fold store={expandStore} expanded={expanded}>
         <Box
           component="fieldset"
           disabled={disabled}
@@ -568,7 +567,7 @@ export function MemberRotation({
           {/* the member's settings, at the bottom: in line with the other members' */}
           <Box sx={{ mt: 'auto' }}>{footer}</Box>
         </Box>
-      </Collapse>
+      </Fold>
 
       {dataContextValue && (
         <DataContext.Provider value={dataContextValue}>
@@ -714,6 +713,76 @@ function sameAttack(a: TeamOptAttack, b: TeamOptAttack) {
     (a.reaction ?? '') === (b.reaction ?? '') &&
     (a.infusionAura ?? '') === (b.infusionAura ?? '') &&
     a.hitMode === b.hitMode
+  )
+}
+
+const noSubscribe = () => () => {}
+/** Whether the member's attacks are shown: the shared flag's, else the prop's */
+function useFoldOpen(store: ExpandStore | undefined, expanded: boolean) {
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    store?.get ?? (() => expanded),
+    store?.get ?? (() => expanded)
+  )
+}
+
+/** The member's header: the button that opens and closes the attacks (its content is the card's) */
+function FoldButton({
+  store,
+  expanded,
+  foldable,
+  ...props
+}: ButtonBaseProps & {
+  store: ExpandStore | undefined
+  expanded: boolean
+  foldable: boolean
+  role?: string
+}) {
+  const open = useFoldOpen(store, expanded)
+  return <ButtonBase {...props} aria-expanded={foldable ? open : undefined} />
+}
+
+function FoldChevron({
+  store,
+  expanded,
+}: {
+  store: ExpandStore | undefined
+  expanded: boolean
+}) {
+  const open = useFoldOpen(store, expanded)
+  return (
+    <ExpandMoreIcon
+      className="member-chevron"
+      aria-hidden
+      sx={{
+        position: 'absolute',
+        top: 14,
+        right: 10,
+        fontSize: 20,
+        color: 'text.secondary',
+        transition: `transform .18s ${tokens.ease}, color .12s`,
+        transform: open ? 'rotate(180deg)' : 'none',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+      }}
+    />
+  )
+}
+
+/** The member's attacks, folded or shown: re-rendered alone when the flag flips */
+function Fold({
+  store,
+  expanded,
+  children,
+}: {
+  store: ExpandStore | undefined
+  expanded: boolean
+  children: ReactNode
+}) {
+  const open = useFoldOpen(store, expanded)
+  return (
+    <Collapse in={open} timeout={180}>
+      {children}
+    </Collapse>
   )
 }
 
