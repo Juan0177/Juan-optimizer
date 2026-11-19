@@ -410,7 +410,6 @@ export class TeamDataManager extends DataManager<
       for (const key of this.database.storage.keys) add(key, false)
 
     const migrated: Entry[] = []
-    const unresolved: Entry[] = []
     const destinations = new Set<TeamDataManager>()
     for (const [id, group] of groups) {
       const teamId = group[0]!.teamId
@@ -432,44 +431,30 @@ export class TeamDataManager extends DataManager<
         )
         return [...members].every((member) => roster.has(member))
       })
-      const hasUnrecognizedText =
-        !members.size &&
-        group.some(
-          ({ field, raw }) =>
-            (field === 'Text' || field === 'Draft' || field === 'Opener') &&
-            !!raw.trim()
-        )
-      // (one slot has the team: its rotation, whatever members it names now; the roster only
-      // tells apart slots that share the team ID)
-      const owner =
-        slots.length === 1
-          ? slots[0]
-          : candidates.length === 1 && !hasUnrecognizedText
-            ? candidates[0]
-            : undefined
-      if (!owner) {
-        unresolved.push(...group)
-        continue
-      }
+      // The old keys were shared by every database slot, so each slot with this team ID showed
+      // the rotation: it goes to the ones whose roster has the members it names, or else to them all
+      const owners = members.size && candidates.length ? candidates : slots
       for (const entry of group) {
         const { field, raw, character } = entry
-        const existing = owner.getRotationField(id, field)
-        let value = raw
-        // (what the team already has is newer than the old copy: it stays)
-        if (character) {
-          const all = readRotationObject(existing) ?? {}
-          const rotation = readRotationObject(raw)
-          value =
-            !rotation || all[character] !== undefined
-              ? (existing ?? '{}')
-              : JSON.stringify({ ...all, [character]: rotation })
-        } else if (existing !== undefined) value = existing
-        if (existing !== value) owner.setRotationField(id, field, value)
-        destinations.add(owner)
+        for (const owner of owners) {
+          const existing = owner.getRotationField(id, field)
+          let value = raw
+          // (what the team already has is newer than the old copy: it stays)
+          if (character) {
+            const all = readRotationObject(existing) ?? {}
+            const rotation = readRotationObject(raw)
+            value =
+              !rotation || all[character] !== undefined
+                ? (existing ?? '{}')
+                : JSON.stringify({ ...all, [character]: rotation })
+          } else if (existing !== undefined) value = existing
+          if (existing !== value) owner.setRotationField(id, field, value)
+          destinations.add(owner)
+        }
         migrated.push(entry)
       }
     }
-    return { migrated, unresolved, destinations }
+    return { migrated, destinations }
   }
 
   override remove(key: string, notify = true) {

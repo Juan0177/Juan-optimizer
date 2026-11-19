@@ -113,7 +113,6 @@ describe('export and import test', () => {
     expect(migration.migrated.map(({ key }) => key)).toContain(
       'teamOptRotationText_team_9'
     )
-    expect(migration.unresolved).toEqual([])
     expect(localStorage.getItem('teamOptRotationText_team_0')).toBe(
       'Bennett E N3'
     )
@@ -151,8 +150,7 @@ describe('export and import test', () => {
     localStorage.setItem('teamOptRotationText_team_0_kqm', 'Bennett E')
     localStorage.setItem('teamOptRotationOpener_team_0', 'swap')
 
-    const migration = database.teams.migrateLocalRotations(localStorage)
-    expect(migration.unresolved).toEqual([])
+    database.teams.migrateLocalRotations(localStorage)
     expect(database.teams.getRotationField('team_0', 'Text')).toBe(
       'Xiangling E Q'
     )
@@ -162,7 +160,7 @@ describe('export and import test', () => {
     )
   })
 
-  test('uses the legacy roster evidence to resolve a team ID shared by two slots', () => {
+  test('a team ID shared by two slots: a rotation naming members goes to the slot that has them, one naming nobody to both', () => {
     const backup = new ArtCharDatabase(2, new SandboxStorage())
     const legacyId = 'team_0'
     const bennett = database.teamChars.new('Bennett')
@@ -181,10 +179,15 @@ describe('export and import test', () => {
     const migration = database.teams.migrateLocalRotations(localStorage, [
       backup.teams,
     ])
-    expect([...migration.destinations]).toEqual([backup.teams])
-    expect(migration.unresolved.map(({ key }) => key)).toEqual([ambiguousKey])
+    expect(migration.migrated.map(({ key }) => key).sort()).toEqual(
+      [ambiguousKey, textKey].sort()
+    )
     expect(backup.teams.getRotationField(legacyId, 'Text')).toBe('Xiangling E')
     expect(database.teams.getRotationField(legacyId, 'Text')).toBeUndefined()
+    for (const teams of [database.teams, backup.teams])
+      expect(teams.getRotationField(`${legacyId}_kqm`, 'Timing')).toBe(
+        '{"edits":{}}'
+      )
     expect(localStorage.getItem(textKey)).toBe('Xiangling E')
     expect(localStorage.getItem(ambiguousKey)).toBe('{"edits":{}}')
   })
