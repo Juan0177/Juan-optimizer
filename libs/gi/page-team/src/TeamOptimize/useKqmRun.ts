@@ -100,6 +100,36 @@ function lastRun(database: ArtCharDatabase, teamId: string): KqmRunState {
   return lastRuns[teamId] ?? { type: 'idle' }
 }
 
+/**
+ * Per team, the team as KQM Theorycrafting's results show it with other equipment picked in the
+ * inspector (in this visit): KQM Compare's A is the team as shown, not the run's own builds
+ */
+const shownViews: Record<string, { result: KqmResult; view: KqmResult }> = {}
+
+/** The team as its results show it now: `result` with the picks (undefined: the run's own) */
+export function setKqmShownView(
+  teamId: string,
+  result: KqmResult,
+  view: KqmResult | undefined
+) {
+  if (view && view !== result) shownViews[teamId] = { result, view }
+  else if (shownViews[teamId]?.result === result) delete shownViews[teamId]
+}
+
+/**
+ * The team with the picks made in KQM Theorycrafting's results, while they are for its last run
+ * (the one saved at `savedAt`); undefined: no picks, or another run's
+ */
+export function kqmShownView(
+  teamId: string,
+  savedAt: number
+): KqmResult | undefined {
+  const last = lastRuns[teamId]
+  const shown = shownViews[teamId]
+  if (last?.type !== 'done' || last.savedAt !== savedAt) return undefined
+  return shown && shown.result === last.result ? shown.view : undefined
+}
+
 /*
  * A run's progress, per team, outside React state: a run reports many times a second, and only
  * the progress line reads it (at most every `PROGRESS_MS`), not the whole page

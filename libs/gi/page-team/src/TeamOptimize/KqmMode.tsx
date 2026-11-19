@@ -127,7 +127,12 @@ import {
   tokens,
   type,
 } from './ui'
-import { type KqmRotation, kqmReplayOf, useKqmProgress } from './useKqmRun'
+import {
+  type KqmRotation,
+  kqmReplayOf,
+  setKqmShownView,
+  useKqmProgress,
+} from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 /** A member row's columns: name, build, constellation, minimum ER (one line from `sm`) */
@@ -2268,6 +2273,11 @@ function KqmResultsView({
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
+  // the team's own results (not KQM Compare's B): the team as shown, with its picks, is KQM
+  // Compare's A
+  useEffect(() => {
+    if (!readOnly) setKqmShownView(teamId, result, comparing)
+  }, [readOnly, teamId, result, comparing])
   // the enemy the builds are for: the team's now while it takes the same damage (its preset and
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(

@@ -123,6 +123,7 @@
     "noResultTip": "KQM Compare starts from this team's last KQM Theorycrafting result: generate builds there first.",
     "openKqm": "Open KQM Theorycrafting",
     "resultOf": "A: KQM Theorycrafting result of {{date}}",
+    "withPicks": "With the weapons and sets picked in the KQM Theorycrafting results: {{names}}",
     "out": "Leaves",
     "fixed": "Stay",
     "fixedTip": "Locked: in B they keep A's builds, constellations and settings.",
