@@ -4,6 +4,22 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.22.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.22.0) (2026-11-19)
+
+### Improved
+
+- The setting beside the rotation now says what it counts: Steady DPS (rot 3–4), the default, plays the rotation 4 times in a row and averages the last 2; First 1 to 6 rotations count from the start.
+- The parts of a grouped attack name what sets them apart: who is on the field, then the buffs that differ, each with its owner's picture and the characters' own buffs first. The Show buff conditions switch is gone.
+- Team optimize can copy the KQM Theorycrafting rotation, as KQM can copy Team optimize's, played at your own constellations. Neither button shows when the two rotations are already the same.
+- The team page header is more compact, with a back arrow to your teams.
+- KQM Theorycrafting: the passive switches in the weapon and artifact set choosers line up in columns.
+
+### Fixed
+
+- stellaroptimizer.com: Polestar Field, Radiance and other reaction buffs showed internal names instead of their text, in Team settings and when editing an attack.
+- Team settings: buff descriptions no longer overlap the next column on wide screens.
+- A member's Overview no longer shows an empty card when there is nothing in it.
+
 ## [v1.21.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.21.1) (2026-11-19)
 
 ### Improved
