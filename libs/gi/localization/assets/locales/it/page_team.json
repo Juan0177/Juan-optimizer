@@ -406,6 +406,8 @@
         "flatTip": "Energia per rotazione da abilità del personaggio o da effetti comuni a tutte le build. Da una rotazione scritta include l'energia casuale dei colpi di Attacco normale e Attacco caricato del membro.",
         "fromRotation": "Dalla rotazione",
         "fromRotationTip": "Tempo in campo, usi dell'abilità, frequenza del Tripudio e raccoglitore delle particelle vengono dalla rotazione scritta (le particelle contano quando arrivano, circa 1,7 s dopo il colpo). Cambiane uno per impostarlo tu.",
+        "fullWithShort": "Tripudio completo + {{name}}",
+        "fullWithShortTip": "Questa rotazione usa il Tripudio completo oltre a {{name}}, quindi l'ER richiesto conta anche tutta la sua energia. Di solito si gioca solo {{name}}: se quel Tripudio completo non è voluto, metti Tripudio su «Non usato» (per Flins, una Q prima della sua E o dopo la fine di Manifest Flame).",
         "globalHelp": "Le particelle dei nemici sono il totale delle particelle neutre che cadono nel tempo di completamento della sala. Le particelle della risonanza Electro richiedono due compagni Electro; il loro intervallo è di almeno 5 secondi.",
         "groupExtra": "Energia extra",
         "groupField": "Campo e particelle",

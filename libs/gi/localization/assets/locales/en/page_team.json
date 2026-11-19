@@ -800,6 +800,8 @@
         "unusedTip": "The burst is not used",
         "burstEveryTip": "Burst used every {{n}} rotation(s)",
         "shortBurstTip": "{{name}} per rotation: a Burst that spends 30 Energy.",
+        "fullWithShort": "Full Burst + {{name}}",
+        "fullWithShortTip": "This rotation uses the full Burst as well as {{name}}, so the ER needed counts its full Energy cost too. Usually only {{name}} is played: set Burst to Unused if that full Burst is not meant (for Flins, a Q before his E or after Manifest Flame has ended).",
         "groupField": "Field and particles",
         "fieldTimeTip": "Share of the rotation this member is on the field (the others share the rest). Turret particles and catching follow it.",
         "catcherTip": "Who is on the field when this member’s skill particles arrive; the % beside it is how many go there (Fed to catcher), the rest to this member.",

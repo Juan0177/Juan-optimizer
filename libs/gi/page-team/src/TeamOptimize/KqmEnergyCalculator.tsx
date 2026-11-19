@@ -1217,7 +1217,35 @@ export function MemberEnergy({
           }}
         >
           <Box sx={{ minWidth: 0 }}>
-            <Label>{t('teamOpt.kqm.calc.burst', 'Burst')}</Label>
+            <Label
+              aside={
+                // (the full Burst and the partial ones in one rotation: Flins' first Q before his
+                // E, or an E after Manifest Flame ended; the ER it needs jumps by the full 80)
+                !!short &&
+                shortUses > 0 &&
+                member.burstEvery > 0 && (
+                  <Tooltip
+                    arrow
+                    title={t('teamOpt.kqm.calc.fullWithShortTip', {
+                      defaultValue:
+                        'This rotation uses the full Burst as well as {{name}}, so the ER needed counts its full Energy cost too. Usually only {{name}} is played: set Burst to Unused if that full Burst is not meant (for Flins, a Q before his E or after Manifest Flame has ended).',
+                      name: short.label,
+                    })}
+                  >
+                    <Box component="span" sx={{ cursor: 'help' }}>
+                      <Tag tone="warning">
+                        {t('teamOpt.kqm.calc.fullWithShort', {
+                          defaultValue: 'Full Burst + {{name}}',
+                          name: short.label,
+                        })}
+                      </Tag>
+                    </Box>
+                  </Tooltip>
+                )
+              }
+            >
+              {t('teamOpt.kqm.calc.burst', 'Burst')}
+            </Label>
             <Box sx={{ overflowX: 'auto' }}>
               <Segmented
                 size="small"
