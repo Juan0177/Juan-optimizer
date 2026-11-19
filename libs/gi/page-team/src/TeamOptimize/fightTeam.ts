@@ -398,12 +398,13 @@ export function useRotationApplications(
           hits: playedHits(sim.hits, sim.start, sim.frames),
         },
       }
-      // (a fight from no energy: its first rotation without Bursts)
+      // (a fight from no energy: its first rotation without Bursts, whatever the tab counts; not
+      // counted from the start, so `repeats` is what plays)
       const opening = simulateWritten({
         kqm: isKqm,
         text: applied,
         opener,
-        timing,
+        timing: { ...timing, rotations: 0 },
         frameData,
         team: deferredTeam,
         names,
