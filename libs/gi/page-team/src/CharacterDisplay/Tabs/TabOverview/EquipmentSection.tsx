@@ -49,8 +49,12 @@ export default function EquipmentSection() {
     () =>
       weaponSheet &&
       weaponSheet.document.length > 0 && (
-        <CardThemed bgt="light">
-          <Box p={1}>
+        // (no frame when the weapon has nothing to show, as a weapon without a passive)
+        <CardThemed
+          bgt="light"
+          sx={{ '&:has(> .weapon-doc:empty)': { display: 'none' } }}
+        >
+          <Box className="weapon-doc" p={1}>
             <DocumentDisplay sections={weaponSheet.document} />
           </Box>
         </CardThemed>
@@ -168,6 +172,18 @@ function ArtifactSectionCard() {
   }
 
   const setEffects = useMemo(() => dataSetEffects(data), [data])
+  const effects = Object.entries(setEffects ?? {}).flatMap(
+    ([setKey, setNumKeyArr]) =>
+      setNumKeyArr.map((setNumKey) => (
+        <SetEffectDisplay
+          key={setKey + setNumKey}
+          setKey={setKey}
+          setNumKey={setNumKey}
+        />
+      ))
+  )
+  // (nothing equipped and no set effects: no empty card)
+  if (!hasEquipped && !effects.length) return null
 
   return (
     <CardThemed bgt="light">
@@ -181,20 +197,11 @@ function ArtifactSectionCard() {
           {t('tabEquip.unequipArts')}
         </Button>
       )}
-      <Box p={1}>
-        <Stack spacing={1}>
-          {setEffects &&
-            Object.entries(setEffects).flatMap(([setKey, setNumKeyArr]) =>
-              setNumKeyArr.map((setNumKey) => (
-                <SetEffectDisplay
-                  key={setKey + setNumKey}
-                  setKey={setKey}
-                  setNumKey={setNumKey}
-                />
-              ))
-            )}
-        </Stack>
-      </Box>
+      {!!effects.length && (
+        <Box p={1}>
+          <Stack spacing={1}>{effects}</Stack>
+        </Box>
+      )}
     </CardThemed>
   )
 }
