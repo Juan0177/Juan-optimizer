@@ -1,4 +1,4 @@
-import type { KitModel, SimContext } from '../types'
+import type { ActionResult, KitModel, SimContext } from '../types'
 import { GCSIM, type NormalHit, normalString, templateJump } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/xiao, main as of 2026-11-10. */
@@ -57,6 +57,65 @@ const xiaoNormals: NormalHit[] = [
 /** Bane of All Evil: 15 s, plus its 57-frame start */
 const BANE_FRAMES = 957
 
+type Plunge = {
+  hitmark: number
+  collision: number
+  frames: number
+  into: ActionResult['framesInto']
+}
+/**
+ * gcsim's plunge tables: in Bane of All Evil, from Xianyun's airborne jump, or both. (gcsim's low
+ * plunge in the burst lands at the high plunge's 46 frames; the collision hit comes 6 frames before
+ * the low plunge's hitmark.)
+ */
+const PLUNGES: Record<
+  'burst' | 'xianyun' | 'xianyunBurst',
+  Record<'low' | 'high', Plunge>
+> = {
+  burst: {
+    low: {
+      hitmark: 46,
+      collision: 38,
+      frames: 62,
+      into: { normal: 60, skill: 59, dash: 60, jump: 61 },
+    },
+    high: {
+      hitmark: 46,
+      collision: 38,
+      frames: 66,
+      into: { normal: 61, jump: 65, swap: 64 },
+    },
+  },
+  xianyun: {
+    low: {
+      hitmark: 45,
+      collision: 39,
+      frames: 73,
+      into: { normal: 59, skill: 58, burst: 58, dash: 58, jump: 58, swap: 62 },
+    },
+    high: {
+      hitmark: 46,
+      collision: 39,
+      frames: 75,
+      into: { normal: 60, skill: 60, burst: 61, dash: 62, jump: 60, swap: 63 },
+    },
+  },
+  xianyunBurst: {
+    low: {
+      hitmark: 46,
+      collision: 40,
+      frames: 73,
+      into: { normal: 59, skill: 58, burst: 58, dash: 59, jump: 60, swap: 62 },
+    },
+    high: {
+      hitmark: 47,
+      collision: 40,
+      frames: 75,
+      into: { normal: 61, skill: 62, burst: 62, dash: 62, jump: 62, swap: 64 },
+    },
+  },
+}
+
 interface XiaoState {
   /** Bane of All Evil (Q) is up: its normals, charged and plunge are Anemo */
   inQ: boolean
@@ -76,6 +135,7 @@ function endBurst(ctx: SimContext, s: XiaoState) {
 export const kit: KitModel = {
   characterKey: 'Xiao',
   element: 'anemo',
+  plungeHeights: true,
   source: `${GCSIM}/xiao`,
   init: (): XiaoState => ({
     inQ: false,
@@ -200,31 +260,29 @@ export const kit: KitModel = {
       }
       case 'plunge': {
         const assisted = ctx.hasBuff('Xianyun', ['Xianyun', '_airborne'])
-        // Xiao's plunge without Xianyun (gcsim's default table): the low plunge hits at 46 frames
-        ctx.hit(46, {
-          path: ['plunging', 'low'],
+        const high = action.height === 'high'
+        const p =
+          PLUNGES[assisted ? (inQ ? 'xianyunBurst' : 'xianyun') : 'burst'][
+            high ? 'high' : 'low'
+          ]
+        ctx.hit(p.hitmark, {
+          path: ['plunging', high ? 'high' : 'low'],
           tag: 'plunge',
           element,
           applies: true,
           icd: 'none',
-          label: 'Low Plunge',
+          label: high ? 'High Plunge' : 'Low Plunge',
         })
-        if (assisted)
-          return {
-            frames: 73,
-            framesInto: {
-              normal: 59,
-              skill: 58,
-              burst: 58,
-              dash: 59,
-              jump: 60,
-              swap: 62,
-            },
-          }
-        return {
-          frames: 62,
-          framesInto: { normal: 60, skill: 59, dash: 60, jump: 61 },
-        }
+        if (action.collision)
+          ctx.hit(p.collision, {
+            path: ['plunging', 'dmg'],
+            tag: 'plunge',
+            element,
+            icd: 'none',
+            label: 'Plunge Collision',
+            weight: action.collision,
+          })
+        return { frames: p.frames, framesInto: p.into }
       }
       case 'dash':
         // a Boy's dash (gcsim's template by body type)

@@ -114,6 +114,8 @@ interface FurinaState {
   debounceFrom: number
   debounceEnd: number
   waltzEnd: number
+  /** The running Endless Waltz's start: a new one replaces its ticks (gcsim's a1src) */
+  waltzSrc: number
   fanfare: number
   /** The Fanfare is up until this frame (-1: not up) */
   fanfareEnd: number
@@ -359,6 +361,7 @@ export const kit: KitModel = {
     debounceFrom: -1,
     debounceEnd: -2,
     waltzEnd: -1,
+    waltzSrc: -1,
     fanfareEnd: -1,
     fanfareSrc: 0,
     arkhe: 'ousia',
@@ -403,8 +406,9 @@ export const kit: KitModel = {
     )
       return
     if (ctx.now > s.waltzEnd) {
+      const src = (s.waltzSrc = ctx.now)
       const tick = (c: SimContext) => {
-        if (c.now > s.waltzEnd) return
+        if (c.now > s.waltzEnd || s.waltzSrc !== src) return
         c.healPercent('Furina', 0.02)
         c.at(120, tick)
       }

@@ -187,7 +187,8 @@ export const actionFrameKey = (
 /**
  * Members whose kits need the team's stats while the rotation plays (`calculate`): HP drains and
  * heals (Furina, Dahlia, Vodyanitsa, Wriothesley's Revelation and A1, Hydro Traveler's Suffusion,
- * Hu Tao, Gaming, Kuki), teammates' damage (Lohen), stat thresholds (Chongyun) and expected crits
+ * Hu Tao, Gaming, Kuki, Lyney's Prop Arrows down to 60% and his Marechaussee stacks), teammates'
+ * damage (Lohen), stat thresholds (Chongyun) and expected crits
  * (Xinyan, Dehya), heal chances (Noelle), Max HP (Kirara C1) and talent-scaled ATK SPD (Mika).
  */
 export const ROTATION_CALCULATION_MEMBERS: readonly CharacterKey[] = [
@@ -206,9 +207,19 @@ export const ROTATION_CALCULATION_MEMBERS: readonly CharacterKey[] = [
   'Noelle',
   'Kirara',
   'Mika',
+  'Lyney',
 ]
-export const needsRotationCalculation = (members: readonly CharacterKey[]) =>
-  members.some((m) => ROTATION_CALCULATION_MEMBERS.includes(m))
+/** Weapons whose effects need the calculation (Finale of the Deep's Bond: Max HP, heals) */
+const ROTATION_CALCULATION_WEAPONS: readonly string[] = ['FinaleOfTheDeep']
+export const needsRotationCalculation = (
+  members: readonly CharacterKey[],
+  gear?: Partial<Record<CharacterKey, SimGear>>
+) =>
+  members.some(
+    (m) =>
+      ROTATION_CALCULATION_MEMBERS.includes(m) ||
+      ROTATION_CALCULATION_WEAPONS.includes(gear?.[m]?.weapon ?? '')
+  )
 
 /** Native queues run enemy tasks, character tasks, then core tasks each frame. */
 type Event = { t: number; priority: number; seq: number; run: () => void }
@@ -466,6 +477,64 @@ export function simulateRotation({
         w.start <= t &&
         t < w.end
     )
+  // The player's own auras (gcsim's ApplySelfInfusion): durability decaying over its frames; a
+  // refill tops it up at the same rate
+  const playerAuras = new Map<
+    HitElement,
+    { durability: number; rate: number; at: number }
+  >()
+  const playerAura = (element: HitElement, t: number) => {
+    const a = playerAuras.get(element)
+    return a ? a.durability - a.rate * (t - a.at) : 0
+  }
+  const selfInfuse = (
+    element: HitElement,
+    durability: number,
+    frames: number,
+    t: number
+  ) => {
+    const left = playerAura(element, t)
+    const a = playerAuras.get(element)
+    if (a && left > 0) {
+      if (left < durability) Object.assign(a, { durability, at: t })
+      return
+    }
+    playerAuras.set(element, {
+      durability,
+      rate: durability / Math.max(1, frames),
+      at: t,
+    })
+  }
+  /** When a member's action is ready: its cooldown and its kit's resources */
+  /** An optional action already found not ready when the action before it was cancelled */
+  let decidedNotReady: RotationAction | undefined
+  const actionReadyAt = (
+    characterKey: CharacterKey,
+    action: RotationAction,
+    t: number
+  ) => {
+    const kit = kits[characterKey]
+    if (!kit) return t
+    const cdKey = kit.cooldownKey
+      ? kit.cooldownKey(states.get(characterKey), action, t)
+      : action.kind === 'skill' || action.kind === 'burst'
+        ? action.kind
+        : undefined
+    const cooldownReady = cdKey
+      ? cooldowns.readyAt(`${characterKey}.${cdKey}`, t)
+      : t
+    const resourceReady =
+      kit.actionReadyAt?.(
+        ctxAt(t, characterKey),
+        states.get(characterKey),
+        action
+      ) ?? t
+    return Math.max(cooldownReady, resourceReady)
+  }
+  const linkedCooldowns = (k: CharacterKey, key: string) => [
+    key,
+    ...(kits[k]?.linkedCooldowns?.[key] ?? []),
+  ]
   // set effects the simulation plays (gearEffects.ts)
   const gearFx = gearEffects({
     members,
@@ -476,8 +545,10 @@ export function simulateRotation({
     window: (owner, path, value, start, end) =>
       addWindow({ owner, path, value, start, end, late: true }),
     reduceCooldown: (k, key, frames, t) => {
-      cooldowns.reduce(`${k}.${key}`, t, frames)
+      for (const linked of linkedCooldowns(k, key))
+        cooldowns.reduce(`${k}.${linked}`, t, frames)
     },
+    onShield: (t) => refreshGeoResonance(t),
   })
   let now = 0
   /** The action being played (its actor and start), for triggered hitlag that lengthens it */
@@ -487,17 +558,20 @@ export function simulateRotation({
     (m) => getCharStat(m).region === 'natlan'
   ).length
   const nightsoulInterval = [0, 1080, 720, 540, 540][natlan] ?? 540
-  const geoFromMoondrifts =
-    members.filter((m) => elements[m] === 'geo').length >= 2 &&
-    members.some((m) => reactionEnablers.lunarCrystallize.includes(m))
+  // Enduring Rock (gcsim): while the member on the field is shielded or Moondrifts are near,
+  // checked every 1 s and on each swap and shield
+  const geoTeam =
+    members.length === 4 &&
+    members.filter((m) => elements[m] === 'geo').length >= 2
   let geoResonance = false
   let geoResonanceToken = 0
   const refreshGeoResonance = (frame: number) => {
-    if (!geoFromMoondrifts) return
+    if (!geoTeam) return
     const token = ++geoResonanceToken
     const tick = (t: number) => {
       if (token !== geoResonanceToken) return
-      geoResonance = (reactions?.moondriftsAt?.(t) ?? 0) > 0
+      geoResonance =
+        gearFx.shieldedAt(onField, t) || (reactions?.moondriftsAt?.(t) ?? 0) > 0
       ctxAt(t, onField).state(
         'team',
         ['resonance', 'EnduringRock'],
@@ -706,6 +780,7 @@ export function simulateRotation({
       return first
     },
     target,
+    swapFrames,
     attackSpeed: speedWindows
       .filter(
         (w) =>
@@ -750,7 +825,15 @@ export function simulateRotation({
       ) ??
       NORMAL_START_DELAYS[member]?.[kind === 'xingqiu' ? 0 : 1] ??
       0,
-    absorb: (priority) => reactions?.absorbAt?.(t, priority),
+    absorb: (priority, opts) => {
+      if (!opts?.player) return reactions?.absorbAt?.(t, priority)
+      // (gcsim's AbsorbCheck: for each element in turn, the enemy's aura, then the player's)
+      return (priority ?? ['pyro', 'hydro', 'electro', 'cryo']).find(
+        (e) => reactions?.absorbAt?.(t, [e]) === e || playerAura(e, t) > 1e-9
+      )
+    },
+    selfInfuse: (element, durability, frames) =>
+      selfInfuse(element, durability, frames, t),
     nightsoulBurst() {
       push(t, () => {
         hits.push({
@@ -924,10 +1007,14 @@ export function simulateRotation({
       })
     },
     reduceCooldown(key, frames, ck) {
-      cooldowns.reduce(`${ck ?? actor}.${key}`, t, frames)
+      for (const linked of linkedCooldowns(ck ?? actor, key))
+        cooldowns.reduce(`${ck ?? actor}.${linked}`, t, frames)
     },
-    resetCooldown: (key, count, ck) =>
-      cooldowns.reset(`${ck ?? actor}.${key}`, t, count),
+    resetCooldown: (key, count, ck) => {
+      for (const linked of linkedCooldowns(ck ?? actor, key))
+        cooldowns.reset(`${ck ?? actor}.${linked}`, t, count)
+    },
+    takeShards: (arrive) => gearFx.takeShards(ctxAt(t, actor), actor, arrive),
     consumeNightsoul(amount, member = actor) {
       if (amount <= 0) return
       reportedConsumption.set(
@@ -1103,7 +1190,7 @@ export function simulateRotation({
     }
     gearFx.onHit(ctxAt(hit.t, hit.characterKey), hit)
     if (
-      geoFromMoondrifts &&
+      geoTeam &&
       geoResonance &&
       hit.characterKey === hit.onField &&
       !hit.path[0].startsWith('_')
@@ -1257,7 +1344,7 @@ export function simulateRotation({
       ctxAt(0, m).buff(m, ['ObsidianCodex', '4NightsoulConsume'], '', 0, 0)
     push(0, () => pollNightsoul(0))
   }
-  if (geoFromMoondrifts) refreshGeoResonance(0)
+  if (geoTeam) refreshGeoResonance(0)
   const actions: SimulationResult['actions'] = []
   const skillUses: NonNullable<SimulationResult['skillUses']> = []
   const waits: SimulationResult['actions'] = []
@@ -1447,22 +1534,12 @@ export function simulateRotation({
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
     const waitStart = now
+    const decided = decidedNotReady === action
+    decidedNotReady = undefined
     for (;;) {
-      const cdKey = kit.cooldownKey
-        ? kit.cooldownKey(states.get(characterKey), action, now)
-        : action.kind === 'skill' || action.kind === 'burst'
-          ? action.kind
-          : undefined
-      const cooldownReady = cdKey
-        ? cooldowns.readyAt(`${characterKey}.${cdKey}`, now)
-        : now
-      const resourceReady =
-        kit.actionReadyAt?.(
-          ctxAt(now, characterKey),
-          states.get(characterKey),
-          action
-        ) ?? now
-      const readyAt = Math.max(cooldownReady, resourceReady)
+      const readyAt = decided
+        ? Number.POSITIVE_INFINITY
+        : actionReadyAt(characterKey, action, now)
       if (readyAt <= now) break
       // an optional action ("E?"): used when ready, else left out (as a sim's "if .skill.ready")
       if (action.optional) {
@@ -1520,6 +1597,14 @@ export function simulateRotation({
     const frameKey = actionFrameKey(action, variant)
     const edit = frameData[characterKey]?.[frameKey]
     gearFx.beforeAction(actCtx, characterKey, action)
+    if (
+      action.kind === 'plunge' &&
+      (action.height || action.collision) &&
+      !kit.plungeHeights
+    )
+      notes.add(
+        `${characterKey}: high and low plunges and the collision hit are not modelled for this character; "${action.text}" played as the kit's usual plunge.`
+      )
     const kitResult = kit.act(
       edit?.hitDelay
         ? {
@@ -1637,10 +1722,13 @@ export function simulateRotation({
     let stateFrames = frames
     // gcsim queues the next item once the action reaches its earliest cancel (CanQueueAfter):
     // a written wait starts there, and the action after it is held until this one allows it
-    if (nextKind === 'wait' && result.walkFrames !== undefined) {
+    if (
+      nextKind === 'wait' &&
+      (next?.action?.walk || result.walkFrames !== undefined)
+    ) {
       // (a wait that is a walk: it starts at the action's walk cancel and ends it there, as an
       // action of its own)
-      frames = result.walkFrames
+      frames = result.walkFrames ?? result.frames
       stateFrames = frames
     } else if (nextKind === 'wait' && !result.duration) {
       frames = Math.min(
@@ -1672,6 +1760,24 @@ export function simulateRotation({
         const updated = result.duration(nextKind)
         if (updated <= frames) break
         frames = updated
+      }
+    }
+    // the next action is optional and has an alternative ("N2 D?/CA"): gcsim decides it when this
+    // one can be cancelled, then cancels into what is played (the Charged Attack's frames)
+    const alt = next?.action?.otherwise?.[0]
+    if (
+      next?.action?.optional &&
+      alt &&
+      nextKind === next.action.kind &&
+      !result.duration
+    ) {
+      runUntil(now + frames, true)
+      if (
+        actionReadyAt(characterKey, next.action, now + frames) >
+        now + frames
+      ) {
+        frames = kitFramesInto(result, alt.kind)
+        decidedNotReady = next.action
       }
     }
     const defaultFrames = frames

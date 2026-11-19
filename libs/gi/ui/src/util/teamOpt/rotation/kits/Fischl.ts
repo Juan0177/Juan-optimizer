@@ -66,6 +66,27 @@ function startOz(
   ozTicks(ctx, s, firstTick)
 }
 
+/**
+ * The stats Oz took at its spawn or recast, which his hits, A4 and C6 use (gcsim's ozSnapshot:
+ * stat buffs such as Electro DMG% from Scroll or Hakushin Ring; attack modifiers stay live)
+ */
+const ozStats = (s: FischlState) =>
+  s.ozSnapshot
+    ? [
+        { stat: 'atk' as const, path: ['total', 'atk'], ...s.ozSnapshot },
+        {
+          stat: 'critDMG_' as const,
+          path: ['total', 'critDMG_'],
+          ...s.ozSnapshot,
+        },
+        {
+          stat: 'electro_dmg_' as const,
+          path: ['total', 'electro_dmg_'],
+          ...s.ozSnapshot,
+        },
+      ]
+    : undefined
+
 /** Oz's attack timer (restarted by a recast): ticks every 59 frames from `firstTick` */
 function ozTicks(ctx: SimContext, s: FischlState, firstTick: number) {
   const id = ++s.ozId
@@ -81,12 +102,7 @@ function ozTicks(ctx: SimContext, s: FischlState, firstTick: number) {
       icd: 'skill',
       icdGroup: 'Fischl',
       label: 'Oz',
-      statSnapshots: s.ozSnapshot
-        ? [
-            { stat: 'atk', path: ['total', 'atk'], ...s.ozSnapshot },
-            { stat: 'critDMG_', path: ['total', 'critDMG_'], ...s.ozSnapshot },
-          ]
-        : undefined,
+      statSnapshots: ozStats(s),
     })
     c.at(59, tick)
   }
@@ -101,8 +117,8 @@ const ozActive = (s: FischlState, t: number) => s.ozPending || ozUp(s, t)
 
 /**
  * E recalls Oz (the recast) only while the skill is still on cooldown and Oz is out. With the
- * skill ready, E summons a new Oz even if one is out (gcsim/kqmsim: `fischl skill` is the summon;
- * the recast only on request), e.g. after a Sacrificial reset or with the Burst's Oz still up.
+ * skill ready, E summons a new Oz once the one out has left (gcsim's ActionReady: no summon
+ * while ozActive), e.g. after a Sacrificial reset or with the Burst's Oz still up.
  */
 const recastMode = (ctx: SimContext, s: FischlState) =>
   ozActive(s, ctx.now) && ctx.cooldownReadyAt('skill', 'Fischl') > ctx.now
@@ -123,13 +139,17 @@ export const kit: KitModel = {
     ozPending: false,
   }),
   // The skill's wait is in actionReadyAt (it needs the cooldown): the summon once the skill is
-  // ready; before that, with Oz out, the recast (its own 92-frame CD); else the skill's cooldown
+  // ready and Oz has left (his last frame, when gcsim's removeOz runs); before that, with Oz out,
+  // the recast (its own 92-frame CD); else the skill's cooldown
   cooldownKey: (_s: FischlState, action) =>
     action.kind === 'burst' ? 'burst' : undefined,
   actionReadyAt: (ctx, s: FischlState, action) => {
     if (action.kind !== 'skill') return ctx.now
     const skillReady = ctx.cooldownReadyAt('skill', 'Fischl')
-    if (skillReady <= ctx.now) return ctx.now
+    if (skillReady <= ctx.now) {
+      if (s.ozPending) return ctx.now + 1
+      return ozUp(s, ctx.now) ? Math.max(ctx.now, s.ozEnd - 1) : ctx.now
+    }
     return ozActive(s, ctx.now)
       ? Math.min(skillReady, Math.max(ctx.now, s.recastReady))
       : skillReady
@@ -166,16 +186,7 @@ export const kit: KitModel = {
             icd: 'skill',
             icdGroup: 'Fischl',
             label: 'Evernight Raven (C6)',
-            statSnapshots: s.ozSnapshot
-              ? [
-                  { stat: 'atk', path: ['total', 'atk'], ...s.ozSnapshot },
-                  {
-                    stat: 'critDMG_',
-                    path: ['total', 'critDMG_'],
-                    ...s.ozSnapshot,
-                  },
-                ]
-              : undefined,
+            statSnapshots: ozStats(s),
           })
         },
       },
@@ -357,19 +368,16 @@ export const kit: KitModel = {
       icd: 'none',
       icdGroup: 'Fischl',
       label: 'Thundering Retribution (A4)',
-      statSnapshots: s.ozSnapshot
-        ? [
-            { stat: 'atk', path: ['total', 'atk'], ...s.ozSnapshot },
-            { stat: 'critDMG_', path: ['total', 'critDMG_'], ...s.ozSnapshot },
-          ]
-        : undefined,
+      statSnapshots: ozStats(s),
     })
   },
   onSwapOut(ctx, s: FischlState) {
-    // a swap cut the burst before its Oz came: the Oz spawns 2 frames after the swap (swap delay
-    // 1 frame), its first tick 64 frames after that
+    // a swap cut the burst before its Oz came: the Oz spawns 1 frame after the swap, its first
+    // tick 63 frames plus the swap delay after that (gcsim's burstShortOz, from the swap's start)
     if (s.burstOz === 0) return
     s.burstOz = 0
-    ctx.at(2, (c) => startOz(c, s, 64, ozFrames(c.constellation('Fischl'))))
+    ctx.at(1, (c) =>
+      startOz(c, s, 63 + c.swapFrames, ozFrames(c.constellation('Fischl')))
+    )
   },
 }

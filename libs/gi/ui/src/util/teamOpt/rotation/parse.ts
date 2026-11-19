@@ -9,13 +9,22 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   E / tE  Elemental Skill, tapped          hE   Elemental Skill, held
  *   Q       Elemental Burst                  N1–N6  a Normal Attack string of that many hits
  *   CA / C  Charged Attack                   P    Plunging Attack
+ *   HP / LP  a high or low plunge (P: the kit's usual one); HP[collision] adds the hit on the way
+ *                down (HP[collision=0.5]: on half of them, as gcsim's collision=rand()>0.5)
  *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default; up to 6 from C1)
+ *   CA[bullets=4]  Chasca's Shadowhunt fired after loading 4 bullets (6 by default)
+ *   CA[weakspot]  an aimed shot that hits a weak point (Prototype Crescent's passive)
+ *   CA[cancel]  Arlecchino's Charged Attack cancelled early: she absorbs the Blood-Debt Directive
+ *                and the attack never hits (gcsim's charge[early_cancel=1], also accepted)
  *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
  *                its finisher waited for (F): KQM's "C3FD C3FD CF"
  *   D       dash                             J    jump
  *   4[N5 CD] / 4N5CD  a group written once with how many times (1 to 20)
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
+ *   WK / WK11f  walk (gcsim's walk: 1 frame by default; Tartaglia's next Skill is his walking one)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
+ *   D? / D?/CA  a dash only when the kit allows it (Wanderer: Descent up), else left out or the
+ *                alternative
  *   entry / swap  swap in and straight out again (a name alone mid-rotation is the same): her
  *                swap-in effects only, e.g. Danica's Entry Skill once Will to Cleanse is full
  * A trailing step with no actions ("-> bina") marks the swap back to that member: where the
@@ -40,16 +49,28 @@ export interface RotationAction {
   hold?: boolean
   /** Normal: how many hits of the string (N4 = 4); wait: seconds */
   count?: number
+  /** Wait: a walk ("WK", gcsim's walk), not idle time */
+  walk?: boolean
   /** Used only when ready ("E?", "Q?"): left out, not waited for, when it is not */
   optional?: boolean
   /** An optional action's alternative ("Q?/N3", "E?/N2 CA"): played instead when it is not ready */
   otherwise?: RotationAction[]
   /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
   beams?: number
+  /** Charged: Chasca's Shadowhunt bullets loaded before she fires ("CA[bullets=4]") */
+  bullets?: number
   /** Charged: Mavuika's Flamestrider spins held ("C3": 3) */
   spins?: number
   /** Charged: Mavuika's Flamestrider finisher, waited for ("C3F", "CF") */
   final?: boolean
+  /** Charged: Arlecchino's cancelled before it hits ("CA[cancel]"): only its directive absorption */
+  cancel?: boolean
+  /** Charged: an aimed shot at a weak point ("CA[weakspot]", gcsim's aim[weakspot=1]) */
+  weakspot?: boolean
+  /** Plunge: high or low ("HP", "LP"; a plain "P" is the kit's usual one) */
+  height?: 'high' | 'low'
+  /** Plunge: its collision hit on the way down, the share of plunges that get one ("HP[collision]": 1) */
+  collision?: number
   /** As written (for messages) */
   text: string
   /**
@@ -195,8 +216,12 @@ export function matchMember(
 
 /** Members whose Charged Attack takes a number of beams ("CA[beams=2]"), and the most it can take */
 const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
+/** Members whose Charged Attack loads a number of bullets ("CA[bullets=4]"), and the most */
+const CHARGE_BULLETS: Partial<Record<CharacterKey, number>> = { Chasca: 6 }
 /** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
 const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
+/** Members whose Charged Attack can be cancelled before it hits ("CA[cancel]") */
+const CHARGE_CANCEL: Partial<Record<CharacterKey, true>> = { Arlecchino: true }
 
 /** The most times one group is repeated ("4[N5CD]", "4N5CD") */
 const MAX_REPEAT = 20
@@ -225,15 +250,37 @@ export function expandRepeats(
     )
     return before + group.trim()
   }
-  return text
-    .replace(/(^|\s)(\d+)\s*\[([^[\]]+)\]/g, (m, before, times, group) =>
-      /^\s*beams\s*=/i.test(group) ? m : repeat(m, before, times, group)
-    )
-    .replace(/(^|\s)(\d+)([a-z]\S*)/gi, repeat)
+  // ("12[J HP[collision]]": a group's own brackets are matched, not the first "]")
+  const bracketed = (s: string): string => {
+    const open = /(^|\s)(\d+)\s*\[/g
+    let out = ''
+    let at = 0
+    for (let m = open.exec(s); m; m = open.exec(s)) {
+      let depth = 1
+      let end = open.lastIndex
+      for (; end < s.length && depth; end++)
+        if (s[end] === '[') depth++
+        else if (s[end] === ']') depth--
+      if (depth) break
+      const group = s.slice(open.lastIndex, end - 1)
+      const whole = s.slice(m.index, end)
+      out +=
+        s.slice(at, m.index) +
+        (/^\s*(?:beams\s*=|bullets\s*=|cancel\s*$|early_cancel\s*=|collision\b|weakspot\b)/i.test(
+          group
+        )
+          ? whole
+          : repeat(whole, m[1], m[2], bracketed(group)))
+      at = end
+      open.lastIndex = end
+    }
+    return out + s.slice(at)
+  }
+  return bracketed(text).replace(/(^|\s)(\d+)([a-z]\S*)/gi, repeat)
 }
 
 /** A Skill or Burst with an alternative after "/" ("Q?/N3", "Q/N3", "hE/N2CA"): the alternative is played when it is not ready */
-const SKILL_BURST_ALT = /^(?:[ht]?e|q)\??\/./i
+const SKILL_BURST_ALT = /^(?:(?:[ht]?e|q)\??|d\?)\/./i
 
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
@@ -251,7 +298,7 @@ function parseActions(
     .map((word) => (SKILL_BURST_ALT.test(word) ? word : word.split('/')[0]))
     .join(' ')
   const token =
-    /\s*(?:(w)\s*([\d.]+f?)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*beams\s*=\s*(\d+)\s*\])?|(p)|(d)|(j))/iy
+    /\s*(?:(w)\s*((?:k\s*)?[\d.]+f?|k)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*(?:((?:beams|bullets)\s*=\s*\d+)|(cancel|early_cancel\s*=\s*1)|(weakspot(?:\s*=\s*1)?))\s*\])?|([hl])?(p)(\[\s*collision(?:\s*=\s*([\d.]+))?\s*\])?|(d)(\?)?|(j))/iy
   let i = 0
   const s = expandRepeats(cleaned, warnings, who).trim()
   while (i < s.length) {
@@ -276,14 +323,34 @@ function parseActions(
     }
     i = token.lastIndex
     const raw = m[0].trim()
+    /** What follows "/" up to the next space, as actions (undefined: none) */
+    const takeAlternative = () => {
+      const end = s.indexOf(' ', i)
+      const alt = s.slice(i + 1, end < 0 ? s.length : end)
+      i = end < 0 ? s.length : end
+      const otherwise = parseActions(alt, warnings, who, characterKey)
+      if (otherwise.length) return otherwise
+      warnings.push(`${who}: "${raw}/${alt}": no action after "/" (skipped)`)
+      return undefined
+    }
     if (m[1]) {
-      // seconds, or frames with an "f" (W1.5 = W90f)
-      const count = /f$/i.test(m[2])
-        ? Number(m[2].slice(0, -1)) / 60
-        : Number(m[2])
+      // seconds, or frames with an "f" (W1.5 = W90f); a walk ("WK") is 1 frame unless given
+      const walk = /^k/i.test(m[2])
+      const length = m[2].replace(/^k\s*/i, '')
+      const count =
+        walk && !length
+          ? 1 / 60
+          : /f$/i.test(length)
+            ? Number(length.slice(0, -1)) / 60
+            : Number(length)
       // ("W." or "W1..5" while typing: no length, not a wait; it never reaches the simulation)
       if (Number.isFinite(count) && count >= 0)
-        actions.push({ kind: 'wait', count, text: raw })
+        actions.push({
+          kind: 'wait',
+          count,
+          ...(walk && { walk: true }),
+          text: raw,
+        })
       else
         warnings.push(
           `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
@@ -293,19 +360,7 @@ function parseActions(
       // too, "Q/N3": an alternative makes it optional)
       const hasAlt = s[i] === '/'
       const optional = !!(m[4] ? m[5] : m[7]) || hasAlt
-      let otherwise: RotationAction[] | undefined
-      if (hasAlt) {
-        const end = s.indexOf(' ', i)
-        const alt = s.slice(i + 1, end < 0 ? s.length : end)
-        i = end < 0 ? s.length : end
-        otherwise = parseActions(alt, warnings, who, characterKey)
-        if (!otherwise.length) {
-          warnings.push(
-            `${who}: "${raw}/${alt}": no action after "/" (skipped)`
-          )
-          otherwise = undefined
-        }
-      }
+      const otherwise = hasAlt ? takeAlternative() : undefined
       actions.push({
         ...(m[4]
           ? { kind: 'skill' as const, hold: m[3]?.toLowerCase() === 'h' }
@@ -339,24 +394,65 @@ function parseActions(
           ...(m[12] && { final: true }),
           text: raw,
         })
+    } else if (m[10] && m[15])
+      actions.push({ kind: 'charged', weakspot: true, text: raw })
+    else if (m[10] && m[14]) {
+      if (characterKey && CHARGE_CANCEL[characterKey])
+        actions.push({ kind: 'charged', cancel: true, text: raw })
+      else {
+        warnings.push(
+          `${who}: "${raw}": only Arlecchino's Charged Attack is cancelled early (played as a plain Charged Attack)`
+        )
+        actions.push({ kind: 'charged', text: raw })
+      }
     } else if (m[10]) {
-      const beams = m[13] !== undefined ? Number(m[13]) : undefined
-      const most = characterKey && CHARGE_BEAMS[characterKey]
-      if (beams === undefined) actions.push({ kind: 'charged', text: raw })
+      const [, option, n] = /^(\w+)\s*=\s*(\d+)$/.exec(m[13] ?? '') ?? []
+      const bullets = option?.toLowerCase() === 'bullets'
+      const count = n !== undefined ? Number(n) : undefined
+      const most =
+        characterKey && (bullets ? CHARGE_BULLETS : CHARGE_BEAMS)[characterKey]
+      const what = bullets ? 'bullets' : 'beams'
+      if (count === undefined) actions.push({ kind: 'charged', text: raw })
       else if (!most) {
         warnings.push(
-          `${who}: "${raw}": only Sandrone's Charged Attack has beams (played as a plain Charged Attack)`
+          `${who}: "${raw}": only ${bullets ? "Chasca's" : "Sandrone's"} Charged Attack has ${what} (played as a plain Charged Attack)`
         )
         actions.push({ kind: 'charged', text: raw })
-      } else if (beams < 1 || beams > most) {
+      } else if (count < 1 || count > most) {
         warnings.push(
-          `${who}: "${raw}": 1 to ${most} beams (played as a plain Charged Attack)`
+          `${who}: "${raw}": 1 to ${most} ${what} (played as a plain Charged Attack)`
         )
         actions.push({ kind: 'charged', text: raw })
-      } else actions.push({ kind: 'charged', beams, text: raw })
-    } else if (m[14]) actions.push({ kind: 'plunge', text: raw })
-    else if (m[15]) actions.push({ kind: 'dash', text: raw })
-    else if (m[16]) actions.push({ kind: 'jump', text: raw })
+      } else
+        actions.push({
+          kind: 'charged',
+          ...(bullets ? { bullets: count } : { beams: count }),
+          text: raw,
+        })
+    } else if (m[17]) {
+      const collision = m[18]
+        ? Math.min(1, Math.max(0, m[19] !== undefined ? Number(m[19]) : 1))
+        : undefined
+      actions.push({
+        kind: 'plunge',
+        ...(m[16] && {
+          height: m[16].toLowerCase() === 'h' ? 'high' : 'low',
+        }),
+        ...(collision ? { collision } : {}),
+        text: raw,
+      })
+    } else if (m[20]) {
+      // "D?": only when the kit allows it (Wanderer: Descent up), "D?/CA": else a Charged Attack
+      const otherwise = m[21] && s[i] === '/' ? takeAlternative() : undefined
+      actions.push({
+        kind: 'dash',
+        text: otherwise
+          ? `${raw}/${otherwise.map((a) => a.text).join(' ')}`
+          : raw,
+        ...(m[21] && { optional: true }),
+        ...(otherwise && { otherwise }),
+      })
+    } else if (m[22]) actions.push({ kind: 'jump', text: raw })
   }
   return actions
 }
@@ -389,6 +485,15 @@ export function parseRotation(
       return
     }
     const actions = parseActions(rest, warnings, words[0], characterKey)
+    // (gcsim's charge[early_cancel=1]: only a dash or jump cancels it)
+    actions.forEach((action, i) => {
+      const next = actions[i + 1]?.kind
+      if (!action.cancel || next === 'dash' || next === 'jump') return
+      warnings.push(
+        `${words[0]}: "${action.text}": a dash or jump cancels it, as "CA[cancel] D" (played as a plain Charged Attack)`
+      )
+      delete action.cancel
+    })
     if (!actions.length) {
       if (index === parts.length - 1) {
         loopsTo = characterKey

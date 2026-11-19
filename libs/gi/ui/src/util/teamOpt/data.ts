@@ -180,8 +180,10 @@ function withValues<T extends object>(
 ): T {
   if (!values.length) return conditional
   const result = deepClone(conditional) as unknown as Record<string, unknown>
+  // (an off state is no state: a sheet testing `unequal(cond, undefined, …)` reads '' as on)
   for (const { path, value } of values)
-    layeredAssignment(result, path as string[], value)
+    if (value === '') deletePropPath(result, path as string[])
+    else layeredAssignment(result, path as string[], value)
   return result as unknown as T
 }
 

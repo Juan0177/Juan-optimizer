@@ -32,6 +32,8 @@ type Converted = {
   sets: Record<string, number>
   mains: Record<'sands' | 'goblet' | 'circlet', string>
   subs: Record<string, number>
+  /** Stats no substat can carry (a 4★ main stat's shortfall, a main left in the totals) */
+  bonus?: Record<string, number>
   params: string
 }
 
@@ -49,6 +51,8 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
         text: string
         /** Played once before the loops (a first-rotation-only opener) */
         opener?: string
+        /** The opener is the first loop (a script's `if i == 0` rotation), not a setup before them */
+        openerCounted?: boolean
         loops?: number
         conditional?: Record<string, Record<string, Record<string, string>>>
       } = JSON.parse(readFileSync(`${team}.spec.json`, 'utf8'))
@@ -87,7 +91,10 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
           ...(hexerei ? { [b.key]: { lockHomework: 'on' } } : {}),
           ...(spec.conditional?.[b.key] ?? {}),
         }
-        const teamCharId = db.teamChars.new(b.key, { conditional } as never)
+        const teamCharId = db.teamChars.new(b.key, {
+          conditional,
+          ...(b.bonus && { bonusStats: b.bonus }),
+        } as never)
         const buildTcId = db.buildTcs.new({
           characterKey: b.key,
           character: {
@@ -125,10 +132,16 @@ describe.skipIf(!teams.length).each(teams.length ? teams : [''])(
       const auraTrace: unknown[] = []
       const sim = simulateRotationSamples({
         auraTrace: process.env['TRACE'] ? (e) => auraTrace.push(e) : undefined,
-        calculate: needsRotationCalculation(members)
+        calculate: needsRotationCalculation(
+          members,
+          Object.fromEntries(
+            builds.map((b) => [b.key, { weapon: b.weapon[0] }])
+          )
+        )
           ? rotationCalculation(db, teamId, 'F')
           : undefined,
         repeats: spec.loops ?? 4,
+        openerCounted: spec.openerCounted,
         keep: 'all',
         rotation: (() => {
           const names = members.map((characterKey) => ({

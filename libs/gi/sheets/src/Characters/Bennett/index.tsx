@@ -108,8 +108,17 @@ const burstAddlAtk = prod(sum(burstAtkRatio, c1AtkRatio), input.base.atk)
 const [condInAreaPath, condInArea] = cond(key, 'activeInArea')
 const [, condTimeline] = cond(key, 'timeline')
 const [, condFieldRecipient] = cond(key, 'fieldRecipient')
+// (in the rotation's timeline the field gives its buffs to the member on the field at each tick)
 const activeInArea = sum(
-  equal(condTimeline, 'on', equal(condFieldRecipient, 'on', 1)),
+  equal(
+    condTimeline,
+    'on',
+    equal(
+      condFieldRecipient,
+      'on',
+      equal(input.activeCharKey, target.charKey, 1)
+    )
+  ),
   unequal(
     condTimeline,
     'on',

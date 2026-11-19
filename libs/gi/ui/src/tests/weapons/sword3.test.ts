@@ -321,8 +321,33 @@ describe('Finale of the Deep', () => {
       [0, 900],
       [1620, 2520],
     ])
-    // (its Bond of Life ATK is left to its switch)
-    expect(declared(sim, 'FinaleOfTheDeep.bond')).toBe(false)
+    // (no heal: its Bond of Life is never cleared)
+    expect(declared(sim, 'FinaleOfTheDeep.bond')).toBe(true)
+    expect(windows(sim, 'FinaleOfTheDeep.bond')).toEqual([])
+  })
+
+  it('the first heal after the Skill clears its Bond: flat ATK for 15 s, once per Bond', () => {
+    const sim = play(
+      'Xiangling E N1 N1 W20',
+      {
+        Xiangling: kit('Xiangling', 'pyro', {
+          skill: { hits: [], frames: 60 },
+          normal: {
+            hits: [
+              {
+                at: 5,
+                path: ['_heal', 'burst', 'heal'],
+                tag: 'other',
+                healTargets: ['Xiangling'],
+              },
+            ],
+            frames: 20,
+          },
+        }),
+      },
+      { Xiangling: wear('FinaleOfTheDeep') }
+    )
+    expect(windows(sim, 'FinaleOfTheDeep.bond')).toEqual([[65, 965]])
   })
 })
 

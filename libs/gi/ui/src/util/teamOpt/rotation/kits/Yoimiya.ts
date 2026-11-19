@@ -76,7 +76,8 @@ function normal(
         tag: 'normal',
         element: infused ? 'pyro' : 'physical',
         applies: true,
-        icd: 'normal',
+        // (gcsim: the Normal Attack ICD tag only in Niwabi Fire-Dance; her Physical arrows have none)
+        icd: infused ? 'normal' : 'none',
         label: `N${i + 1}`,
         snapshotDelay: d,
       })

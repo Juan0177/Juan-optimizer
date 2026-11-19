@@ -33,7 +33,8 @@ export type WeaponTrigger =
       tags: readonly HitTag[]
       elements?: readonly HitElement[]
       field?: 'on' | 'off'
-      /** A Skill hit only from a hold (`hold: true`) or a press (`false`) */
+      /** Only a hit on a weak point (an aimed shot written `CA[weakspot]`) */
+      weakspot?: boolean
     }
   /** A reaction the wielder triggers (all reactions, or these: 'swirl', 'hyperbloom'…) */
   | { kind: 'reaction'; reactions?: readonly string[] }
@@ -191,7 +192,8 @@ export function hitTriggers(
         trigger.tags.includes(hit.tag) &&
         (!trigger.elements || trigger.elements.includes(hit.element)) &&
         (!trigger.field ||
-          (trigger.field === 'on' ? hit.onField === k : hit.onField !== k))
+          (trigger.field === 'on' ? hit.onField === k : hit.onField !== k)) &&
+        (!trigger.weakspot || !!hit.weakspot)
       )
     case 'reaction':
       return (
@@ -357,7 +359,7 @@ function timedHandlers(
       ctx.buff(k, path, '1', delay, duration, { max: timed.stacks.max })
       return
     }
-    if (delay > 0) ctx.atCharacter(k, delay, (c) => open(c, k, duration))
+    if (delay > 0) ctx.at(delay, (c) => open(c, k, duration))
     else open(ctx, k, duration)
   }
   return {

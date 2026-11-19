@@ -1,12 +1,6 @@
 import { REACTION_MARK } from '../lunarCrystallize'
 import type { KitModel, SimContext } from '../types'
-import {
-  GCSIM,
-  type NormalHit,
-  normalString,
-  shieldMarker,
-  templateJump,
-} from './common'
+import { GCSIM, type NormalHit, normalString, templateJump } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/navia, main as of 2026-11-10. */
 
@@ -57,8 +51,8 @@ interface NaviaState {
   arkheUntil: number
   /** A1: Geo infusion and +40% NA/CA/plunge DMG until this frame (Navia's clock, inclusive) */
   a1Until: number
-  /** Crystallize shards on the field (any member's Crystallize): spawn frame and expiry */
-  shards: { t: number; end: number }[]
+  /** The latest Crystalshot fired 3 or more Shrapnel */
+  firedMany: boolean
 }
 
 /** Shrapnel lasts 300 s from its last gain */
@@ -77,6 +71,7 @@ function gainShrapnel(s: NaviaState, t: number) {
 function naviaFire(c: SimContext, s: NaviaState) {
   if (c.now - s.lastGain > SHRAPNEL_DURATION) s.shrapnel = 0
   const n = s.shrapnel
+  s.firedMany = n >= 3
   const shots = 5 + Math.min(n, 3) * 2
   const states = [
     {
@@ -147,7 +142,7 @@ const a1Geo = (ctx: SimContext, s: NaviaState, d: number) =>
   ctx.characterFrame('Navia') + d <= s.a1Until
 
 // Not modelled: C1's energy (no energy simulation) and her Charged Attack (gcsim has none).
-// Crystallize shards are collected only by her held skill (gcsim needs an explicit pick-up too).
+// Crystallize shards are picked up by her held skill and by the party's dashes (the engine's).
 export const kit: KitModel = {
   characterKey: 'Navia',
   element: 'geo',
@@ -155,7 +150,7 @@ export const kit: KitModel = {
   init: (): NaviaState => ({
     shrapnel: 0,
     lastGain: -1e9,
-    shards: [],
+    firedMany: false,
     burstIcdEnd: -1e9,
     lcrIcdEnd: -1e9,
     arkheFrom: -1e9,
@@ -198,61 +193,60 @@ export const kit: KitModel = {
         // two charges, 9 s each, recovering one after the other (gcsim's charge queue)
         ctx.atCharacter('Navia', firing, (c) => naviaFire(c, s))
         // the hold pulls in Crystallize shards within 12 m (checks every 30 frames from 12;
-        // ~9 frames' travel; a shard can be picked up 31 frames after it spawns), each a Shrapnel
+        // ~9 frames' travel), those that arrive before the firing
         if (action.hold)
-          for (let at = 12; at < firing; at += 30)
-            ctx.at(at, (c) => {
-              const arrive = c.now + 9
-              const fire = c.now - at + firing
-              if (arrive >= fire) return
-              s.shards = s.shards.filter((shard) => {
-                if (shard.end <= c.now) return false
-                if (shard.t + 31 > arrive) return true
-                c.at(9, (c2) => {
-                  gainShrapnel(s, c2.now)
-                  // (the shard's Crystallize shield, 15.1 s: kqmsim crystallize/shard.go)
-                  shieldMarker(c2, 0, 906, 'Crystallize shard', {
-                    kind: 'crystallize',
-                  })
-                })
-                return false
-              })
-            })
+          for (let at = 12; at + 9 < firing; at += 30)
+            ctx.at(at, (c) => c.takeShards(9))
         const cooldown = { key: 'skill', frames: 540, delay: firing }
-        // gcsim's frames: the Shrapnel count at the press picks the table (3+ stacks: longer)
-        const many = s.shrapnel >= 3
-        if (!action.hold)
-          return many
-            ? {
-                cooldown,
-                frames: 41,
-                framesInto: { normal: 40, dash: 26, jump: 24, swap: 40 },
-              }
-            : {
-                cooldown,
-                frames: 40,
-                framesInto: { normal: 38, dash: 24, jump: 24, swap: 38 },
-              }
-        return many
+        // gcsim's frames: the Shrapnel fired picks the table (3+: longer), known at the firing
+        const tables = action.hold
           ? {
-              cooldown,
-              frames: 73 + extra,
-              framesInto: {
-                dash: 56 + extra,
-                jump: 56 + extra,
-                swap: 71 + extra,
+              many: {
+                frames: 73 + extra,
+                framesInto: {
+                  dash: 56 + extra,
+                  jump: 56 + extra,
+                  swap: 71 + extra,
+                },
+              },
+              few: {
+                frames: 71 + extra,
+                framesInto: {
+                  normal: 70 + extra,
+                  dash: 54 + extra,
+                  jump: 54 + extra,
+                  swap: 69 + extra,
+                },
               },
             }
           : {
-              cooldown,
-              frames: 71 + extra,
-              framesInto: {
-                normal: 70 + extra,
-                dash: 54 + extra,
-                jump: 54 + extra,
-                swap: 69 + extra,
+              many: {
+                frames: 41,
+                framesInto: { normal: 40, dash: 26, jump: 24, swap: 40 },
+              },
+              few: {
+                frames: 40,
+                framesInto: { normal: 38, dash: 24, jump: 24, swap: 38 },
               },
             }
+        if (s.shrapnel >= 3) return { cooldown, ...tables.many }
+        s.firedMany = false
+        // (a wait queues at gcsim's CanQueueAfter, whatever was fired)
+        const wait = tables.few.framesInto.jump
+        return {
+          cooldown,
+          frames: tables.few.frames,
+          framesInto: { ...tables.few.framesInto, wait },
+          duration: (next) => {
+            if (next === 'wait') return wait
+            const t = s.firedMany ? tables.many : tables.few
+            return (
+              (next
+                ? (t.framesInto as Record<string, number>)[next]
+                : undefined) ?? t.frames
+            )
+          },
+        }
       }
       case 'burst': {
         // the initial shot (104 frames), then Cannon Fire Support (gcsim's ticks: 154 frames in,
@@ -358,8 +352,12 @@ export const kit: KitModel = {
       gainShrapnel(s, hit.t)
       s.lcrIcdEnd = hit.t + 60
     }
-    // a Crystallize leaves a shard (15 s) for her hold to collect
-    if (hit.path[0] === '_reaction' && hit.path[1] === 'crystallize')
-      s.shards.push({ t: hit.t, end: hit.t + 900 })
+    // any member picking up a Crystallize shard (its shield): gcsim's OnShielded, Crystallize
+    if (
+      hit.path[0] === '_marker' &&
+      hit.path[1] === 'shield' &&
+      hit.path[4] === 'crystallize'
+    )
+      gainShrapnel(s, hit.t)
   },
 }

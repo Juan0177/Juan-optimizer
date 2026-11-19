@@ -84,11 +84,12 @@ function absorbChecks(
   from: number,
   count: number,
   set: (ele: Absorbed) => void,
-  live: () => boolean
+  live: () => boolean,
+  player: boolean
 ) {
   const check = (c: SimContext, n: number) => {
     if (!live() || n >= count) return
-    const ele = c.absorb(ABSORB) as Absorbed | undefined
+    const ele = c.absorb(ABSORB, { player }) as Absorbed | undefined
     if (ele && ABSORB.includes(ele)) set(ele)
     else c.at(18, (c2) => check(c2, n + 1))
   }
@@ -198,7 +199,8 @@ export const kit: KitModel = {
             32,
             Math.trunc(116 / 18),
             (ele) => (s.eAbsorb = ele),
-            () => s.eCast === cast
+            () => s.eCast === cast,
+            true
           )
           const absorbed = (c2: SimContext, path: string[], label: string) => {
             const ele = s.eCast === cast ? s.eAbsorb : undefined
@@ -281,7 +283,8 @@ export const kit: KitModel = {
           39,
           Math.trunc(last / 18),
           (ele) => (s.qAbsorb = ele),
-          () => s.qCast === cast
+          () => s.qCast === cast,
+          false
         )
         let absorbedFrom: number | undefined
         for (let i = 0; i < 9; i++) {

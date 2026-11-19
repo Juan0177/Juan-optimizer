@@ -576,6 +576,7 @@ export const kit: KitModel = {
       : action.kind === 'burst'
         ? 'burst'
         : undefined,
+  linkedCooldowns: { skill: ['skillB'] },
   onHit(ctx, s: CynoState, hit) {
     ctx.state(
       'Cyno',

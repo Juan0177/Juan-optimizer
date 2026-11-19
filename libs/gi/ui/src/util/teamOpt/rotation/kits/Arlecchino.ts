@@ -232,6 +232,7 @@ export const kit: KitModel = {
         const w =
           own?.kind === 'normal' && ctx.now < (s.normalAnimEnd ?? -1) ? 12 : 0
         ctx.at(12 - w, (c2) => absorbDirective(c2, s))
+        if (action.cancel) return { frames: 13 - w }
         ctx.at(37 - w, (c2) => {
           // the sheet's Pyro infusion follows the Bond of Life state (Masque of the Red Death)
           const masque = s.debt >= MASQUE
