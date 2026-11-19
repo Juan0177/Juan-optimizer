@@ -4,6 +4,30 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.21.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.21.1) (2026-11-19)
+
+### Improved
+
+- Team optimize: an attack the rotation plays with different members on the field or different buffs up is now one row with its total. Open it to see each part, named by who is on the field.
+- Each member's rotation header counts its hits, as the rotation writer does, and its damage says DPS.
+- Attacks changed by hand after a rotation was played are marked "Attacks edited", and when playing the rotation again replaces those changes, the message says so (Undo is still there).
+- Rotation text: names that aren't in the team are listed in one warning, warnings name members in full, and full-width commas and semicolons work as step breaks. "Hits per rotation" explains why some hits are fractions.
+- Loadouts the app named itself show the character's name, as "Raiden Shogun Loadout".
+- Deleting a team says that its rotations and its Team optimize and KQM results go with it.
+- On phones, the button that leaves an artifact out of a team's runs is easier to tap.
+
+### Fixed
+
+- The Feedback button and pop-up messages no longer cover the Optimize team button.
+- On phones, the written rotation uses the whole width of the screen.
+- KQM Theorycrafting: the setup's time to defeat the Radiant Moongecko now matches the results.
+- Closing the rotation writer keeps a "First rotation only" you haven't used yet, as it keeps the rotation, and Undo reverts both.
+- Closing the team name window with Esc keeps the name you typed.
+- An attack's buff conditions no longer show internal names.
+- When the team uses saved builds, Team optimize's header says Current DPS instead of Equipped DPS.
+- The "Could not copy" message can be closed, and goes away once the attacks change.
+- Importing text that isn't a team shows a plain message.
+
 ## [v1.21.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.21.0) (2026-11-19)
 
 ### New
