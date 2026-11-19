@@ -203,6 +203,7 @@ export function RotationTimeline({
   pinned,
   onPin,
   onAction,
+  onHit,
 }: {
   /**
    * The detailed view (its own large window): the enemy's auras, every stack, resource and timed
@@ -225,6 +226,11 @@ export function RotationTimeline({
     /** The action as written (E, tE, N4, CA, Q…) */
     text: string
   }) => void
+  /**
+   * A hit clicked (its mark under the lane: an off-field member's too, which has no bar to press),
+   * after it is pinned
+   */
+  onHit?: (hit: SimHit) => void
   members: CharacterKey[]
   rotation: ParsedRotation
   sim: SimulationResult
@@ -368,6 +374,7 @@ export function RotationTimeline({
   const store = useMemo(createMomentStore, [])
   const plotRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLDivElement>(null)
   // whether the strip goes on past either side of its box (it scrolls sideways)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ left: false, right: false })
@@ -408,7 +415,8 @@ export function RotationTimeline({
   const hitAt = useCallback(
     (moment: Moment) => {
       const width = plotRef.current?.getBoundingClientRect().width ?? 800
-      const reach = Math.max(2, (5 / width) * length)
+      // (a mark is 2 px wide: a click a little beside it still finds it)
+      const reach = Math.max(2, (8 / width) * length)
       let found: SimHit | undefined
       let best = Number.POSITIVE_INFINITY
       for (const h of hits) {
@@ -447,10 +455,13 @@ export function RotationTimeline({
     cancelAnimationFrame(raf.current)
     raf.current = requestAnimationFrame(() => {
       store.set(moment)
+      // (near a hit's mark: the line snaps onto it and a click picks it)
+      const hit = moment && hitAt(moment)
+      if (areaRef.current) areaRef.current.style.cursor = hit ? 'pointer' : ''
       const line = lineRef.current
       if (!line) return
       line.style.opacity = moment ? '1' : '0'
-      if (moment) line.style.left = pct(moment.frame)
+      if (moment) line.style.left = pct(hit ? hit.t : moment.frame)
     })
   }
   const onPointerLeave = () => {
@@ -477,9 +488,10 @@ export function RotationTimeline({
     })
   }, [pinFrame, nameColumn, start, length])
   const pinAt = (moment: Moment | undefined) => {
-    if (!moment) return
+    if (!moment) return undefined
     const hit = hitAt(moment)
     setPin({ frame: hit?.t ?? moment.frame, hit })
+    return hit
   }
   const onKeyDown = (e: React.KeyboardEvent) => {
     // (Escape unpins first; the detailed window closes on the next one)
@@ -648,6 +660,7 @@ export function RotationTimeline({
             })}
           >
             <Box
+              ref={areaRef}
               role="application"
               tabIndex={0}
               aria-label={t('teamOpt.timeline.label', 'Rotation timeline')}
@@ -656,7 +669,8 @@ export function RotationTimeline({
               onClick={(e) => {
                 // (a block opens its step: not a pin)
                 if ((e.target as HTMLElement).closest('button')) return
-                pinAt(momentOf(e))
+                const hit = pinAt(momentOf(e))
+                if (hit) onHit?.(hit)
               }}
               onKeyDown={onKeyDown}
               sx={{
