@@ -1049,8 +1049,11 @@ function SetRow({
 }
 
 /** How many weapons (of the optimized members' types) and sets KQM mode may choose from */
-export function kqmChooserCounts(members: TeamOptMember[], teamOpt: TeamOpt) {
-  const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+export function kqmChooserCounts(
+  members: TeamOptMember[],
+  settings: TeamOptKqm | undefined
+) {
+  const kqm = settings ?? defaultTeamOptKqm
   const weapons = kqmTeamWeapons(members, kqm)
   const excluded = kqmExcludedWeapons(kqm)
   const sets = kqmSets()
@@ -1289,7 +1292,10 @@ export function KqmPool({
   const { t } = useTranslation('page_team')
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
   const groupDefs = useKqmWeaponGroups()
-  const counts = kqmChooserCounts(members, teamOpt)
+  const counts = useMemo(
+    () => kqmChooserCounts(members, teamOpt.kqm),
+    [members, teamOpt.kqm]
+  )
   const groups = useMemo(() => {
     const all = kqmTeamWeapons(members, kqm).map((w) => w.key)
     const excluded = kqmExcludedWeapons(kqm)

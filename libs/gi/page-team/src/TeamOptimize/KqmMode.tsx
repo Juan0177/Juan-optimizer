@@ -4,6 +4,7 @@ import {
 } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
+  ArtCharDatabase,
   TeamOpt,
   TeamOptEnergyCalculator,
   TeamOptKqm,
@@ -45,6 +46,7 @@ import {
   sameEnemy,
   setKqmBuildThreads,
   syncEnergyCalculator,
+  teamOptMembers,
   withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
@@ -173,6 +175,35 @@ function teamCalculator(
   )
 }
 
+type RotationWorked = {
+  for: string
+  energy?: RotationEnergy
+  rotationTime?: number
+}
+const workedReplays = new WeakMap<
+  ArtCharDatabase,
+  Map<string, { key: string; sources: unknown[]; worked: RotationWorked }>
+>()
+const replaySources = (database: ArtCharDatabase, teamId: string) => [
+  database.teams.get(teamId),
+  ...teamOptMembers(database, teamId).flatMap((m) => [
+    m.teamChar,
+    database.weapons.get(m.weaponId),
+    ...Object.values(m.artifactIds).map((id) =>
+      id ? database.arts.get(id) : undefined
+    ),
+  ]),
+]
+function cachedReplay(database: ArtCharDatabase, teamId: string, key: string) {
+  const hit = workedReplays.get(database)?.get(teamId)
+  if (!hit || hit.key !== key) return undefined
+  const sources = replaySources(database, teamId)
+  return sources.length === hit.sources.length &&
+    sources.every((s, i) => s === hit.sources[i])
+    ? hit.worked
+    : undefined
+}
+
 /**
  * The ER calculator's inputs as KQM plays the written rotation (at its constellations, see
  * `energyFromRotation`): worked out after the panel shows (it is a full replay), again when the
@@ -199,11 +230,7 @@ function useRotationEnergy(
   const { gender } = useDBMeta()
   const { i18n } = useTranslation()
   // (with the rotation text it was worked out for: a newer text's is still on its way)
-  const [worked, setWorked] = useState<{
-    for: string
-    energy?: RotationEnergy
-    rotationTime?: number
-  }>()
+  const [worked, setWorked] = useState<RotationWorked>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
   let text = ''
@@ -229,13 +256,31 @@ function useRotationEnergy(
   )
   const played = JSON.stringify([opener, timing, frameData])
   const rotation = text.trim() ? `${text.trim()}|${played}` : ''
+  const replayKey = JSON.stringify([
+    gender,
+    i18n?.language,
+    rotation,
+    constellations,
+    cadence,
+    keys,
+  ])
+  // (shown again with nothing it reads changed: the last replay at once)
+  const [cached] = useState(() =>
+    rotation ? cachedReplay(database, teamId, replayKey) : undefined
+  )
+  const shown = rotation ? (worked ?? cached) : undefined
   useEffect(() => {
     if (!text.trim()) {
       setWorked(undefined)
       return
     }
+    const hit = cachedReplay(database, teamId, replayKey)
+    if (hit) {
+      setWorked(hit)
+      return
+    }
     let cancelled = false
-    const id = setTimeout(() => {
+    const run = () => {
       let next: RotationEnergy | undefined
       let seconds: number | undefined
       try {
@@ -262,9 +307,26 @@ function useRotationEnergy(
         next = undefined
         seconds = undefined
       }
-      if (!cancelled)
-        setWorked({ for: rotation, energy: next, rotationTime: seconds })
-    }, 0)
+      if (cancelled) return
+      const result = { for: rotation, energy: next, rotationTime: seconds }
+      const byTeam = workedReplays.get(database) ?? new Map()
+      workedReplays.set(database, byTeam)
+      byTeam.set(teamId, {
+        key: replayKey,
+        sources: replaySources(database, teamId),
+        worked: result,
+      })
+      setWorked(result)
+    }
+    // (after the page paints: a full replay)
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 1000 })
+      return () => {
+        cancelled = true
+        cancelIdleCallback(id)
+      }
+    }
+    const id = setTimeout(run, 50)
     return () => {
       cancelled = true
       clearTimeout(id)
@@ -280,13 +342,14 @@ function useRotationEnergy(
     cadence,
     keys,
     played,
+    replayKey,
   ])
   return {
     text,
     rotation,
-    energy: worked?.energy,
-    for: worked?.for,
-    rotationTime: worked?.energy ? worked.rotationTime : undefined,
+    energy: shown?.energy,
+    for: shown?.for,
+    rotationTime: shown?.energy ? shown.rotationTime : undefined,
   }
 }
 
@@ -353,7 +416,10 @@ export function KqmSettings({
       if (settings.talents === undefined) settings.talents = last
     })
   }, [unsetTalents, disabled, setTeamOpt])
-  const counts = kqmChooserCounts(members, teamOpt)
+  const counts = useMemo(
+    () => kqmChooserCounts(members, teamOpt.kqm),
+    [members, teamOpt.kqm]
+  )
   // every member gets a KQM build (the KQM standard is for the whole team)
   const optimized = members
   const [calculatorInputs, setCalculatorDraft] = useState(() =>
@@ -410,8 +476,9 @@ export function KqmSettings({
     setCalculatorDirty(false)
     setTab(0)
   }
-  const missingWeapons = optimized.filter(
-    (m) => !kqmWeapons(m.characterKey, kqm).length
+  const missingWeapons = useMemo(
+    () => optimized.filter((m) => !kqmWeapons(m.characterKey, kqm).length),
+    [optimized, kqm]
   )
   const [erText, setErText] = useState<Partial<Record<CharacterKey, string>>>(
     () =>

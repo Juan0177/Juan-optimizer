@@ -117,20 +117,23 @@ function setProgress(teamId: string, step: KqmStep | undefined) {
     for (const l of listeners.get(teamId) ?? []) l()
   }, PROGRESS_MS)
 }
-/** The team's KQM run progress (updated a few times a second) */
+/**
+ * The team's KQM run progress (updated a few times a second). State, not an external store: a
+ * store's update renders at once, and would restart the page's render of new results every time
+ */
 export function useKqmProgress(teamId: string) {
-  const subscribe = useCallback(
-    (onChange: () => void) => {
-      const set = listeners.get(teamId) ?? new Set()
-      listeners.set(teamId, set)
-      set.add(onChange)
-      return () => {
-        set.delete(onChange)
-      }
-    },
-    [teamId]
-  )
-  return useSyncExternalStore(subscribe, () => progress.get(teamId))
+  const [step, setStep] = useState(() => progress.get(teamId))
+  useEffect(() => {
+    const onChange = () => setStep(progress.get(teamId))
+    onChange()
+    const set = listeners.get(teamId) ?? new Set()
+    listeners.set(teamId, set)
+    set.add(onChange)
+    return () => {
+      set.delete(onChange)
+    }
+  }, [teamId])
+  return step
 }
 
 /*
