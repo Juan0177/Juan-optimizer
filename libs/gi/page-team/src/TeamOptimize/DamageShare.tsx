@@ -53,12 +53,17 @@ const ELEMENTS = [
   'physical',
 ] as const
 
-/** An attack's element, from its member's data (its talent's own, an infusion, or its reaction's) */
+/** Use the played hit's element when the attack came from a simulation. */
 export function attackElement(
   teamData: TeamData | undefined,
   characterKey: CharacterKey,
   attack: TeamOptAttack
 ): string {
+  if (attack.element)
+    return attack.element === 'physical'
+      ? (attack.infusionAura ?? attack.element)
+      : attack.element
+
   const data = teamData?.[characterKey]?.target
   const node = data
     ? (objPathValue(data.getDisplay(), attack.path) as CalcResult | undefined)
@@ -70,7 +75,11 @@ export function attackElement(
   if (variant === 'physical' && attack.infusionAura) return attack.infusionAura
   if (variant === 'swirl')
     return sub && (ELEMENTS as readonly string[]).includes(sub) ? sub : 'anemo'
-  if (variant === 'stellarconduct' && sub === 'cryo') return 'cryo'
+  if (
+    (variant === 'stellarconduct' || variant === 'stellarswirl') &&
+    sub === 'cryo'
+  )
+    return 'cryo'
   if ((ELEMENTS as readonly string[]).includes(variant)) return variant
   return REACTION_ELEMENT[variant] ?? 'physical'
 }

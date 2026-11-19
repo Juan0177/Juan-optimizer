@@ -2275,6 +2275,7 @@ export function rotationAttacks(
       hit.characterKey,
       hit.path.join('.'),
       hit.label,
+      hit.element,
       JSON.stringify(hit.contributors ?? []),
       hit.onField,
       hit.reaction ?? '',
@@ -2407,6 +2408,7 @@ export function rotationAttacks(
       path: hit.path,
       hits: Math.round(count * 100) / 100,
       hitMode: 'avgHit',
+      element: hit.element,
       ...(hit.talentMultiplier !== undefined
         ? { talentMultiplier: hit.talentMultiplier }
         : {}),

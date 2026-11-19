@@ -2574,9 +2574,9 @@ export function KqmResults({
         <DamageShare
           members={members.map((m) => m.characterKey)}
           evaluation={view.after}
-          attacks={runSettings.attacks}
+          attacks={view.played?.attacks ?? runSettings.attacks}
           teamData={teamData}
-          rotationTime={rotationTime}
+          rotationTime={view.played?.rotationTime ?? rotationTime}
         />
       </Box>
       {timeline}

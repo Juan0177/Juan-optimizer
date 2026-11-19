@@ -16,6 +16,7 @@ function teamOpt(): TeamOpt {
         {
           ...initTeamOptAttack(['burst', 'dmg'], 12),
           hitMode: 'critHit',
+          element: 'electro',
           onField: 'Odette',
           bonusStats: { atk_: 20 },
           limits: [{ owner: 'Odette', path: ['Odette', 'buff'], hits: 3 }],

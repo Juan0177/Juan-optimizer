@@ -9,6 +9,7 @@ import type {
   AmpReactionKey,
   ArtifactSetKey,
   CharacterKey,
+  ElementWithPhyKey,
   InfusionAuraElementKey,
   LocationCharacterKey,
   MultiOptHitModeKey,
@@ -19,6 +20,7 @@ import {
   allAmpReactionKeys,
   allArtifactSetKeys,
   allCharacterKeys,
+  allElementWithPhyKeys,
   allInfusionAuraElementKeys,
   allLocationCharacterKeys,
   allMultiOptHitModeKeys,
@@ -69,6 +71,8 @@ export interface TeamOptAttack {
   /** Hits per rotation (may be fractional: an average) */
   hits: number
   hitMode: MultiOptHitModeKey
+  /** Damage element recorded by the rotation simulator. */
+  element?: ElementWithPhyKey
   reaction?: AmpReactionKey | AdditiveReactionKey
   infusionAura?: InfusionAuraElementKey
   bonusStats?: Partial<Record<InputPremodKey, number>>
@@ -355,6 +359,7 @@ const attackSchema = z.object({
   path: z.array(z.string()).min(1).max(6),
   hits: z.number().finite().min(0).catch(1),
   hitMode: zodEnumWithDefault(allMultiOptHitModeKeys, 'avgHit'),
+  element: z.enum(allElementWithPhyKeys).optional().catch(undefined),
   reaction: z.enum(reactionKeys).optional().catch(undefined),
   infusionAura: z.enum(allInfusionAuraElementKeys).optional().catch(undefined),
   bonusStats: bonusStatsSchema.catch(undefined),

@@ -645,7 +645,31 @@ describe('KQM focused results', () => {
     mocks.compare.mockImplementation(async ({ weapon, sets }) => ({
       ...result,
       builds: { KamisatoAyaka: { ...build, weapon, sets } },
-      after: { ...result.after, total: 900 },
+      after: {
+        ...result.after,
+        total: 900,
+        members: { KamisatoAyaka: 900 },
+        attacks: { KamisatoAyaka: [810, 90] },
+      },
+      played: {
+        rotationTime: 18,
+        attacks: {
+          KamisatoAyaka: [
+            {
+              path: ['burst', 'dmg'],
+              hits: 1,
+              hitMode: 'avgHit',
+              element: 'cryo',
+            },
+            {
+              path: ['normal', '0'],
+              hits: 1,
+              hitMode: 'avgHit',
+              element: 'physical',
+            },
+          ],
+        },
+      },
     }))
     render(
       <KqmResults
@@ -685,6 +709,11 @@ describe('KQM focused results', () => {
     expect(
       screen.getByRole('combobox', { name: 'Weapon' }).textContent
     ).toContain('TheBlackSword')
+    expect(
+      screen.getByRole('img', { name: 'By element: Cryo 90%, Physical 10%' })
+    ).toBeTruthy()
+    const physical = screen.getByText('Physical').closest('li')!
+    expect(within(physical).getByText('5')).toBeTruthy()
     // back to the best team
     fireEvent.click(
       within(screen.getByRole('region', { name: 'Top builds' })).getAllByRole(
