@@ -1941,10 +1941,7 @@ function WriterModal({
                               fontSize: 12.5,
                             }}
                           >
-                            {t(
-                              'teamOpt.writer.revert',
-                              'Not used yet · Revert'
-                            )}
+                            {t('teamOpt.writer.revert', 'Undo')}
                           </Button>
                         )}
                         <TemplatesButton
