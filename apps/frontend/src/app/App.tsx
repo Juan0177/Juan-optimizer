@@ -25,7 +25,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useState,
 } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import './App.scss'
