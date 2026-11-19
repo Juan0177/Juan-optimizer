@@ -250,6 +250,13 @@ function useRotationEnergy(
       : []
   )
   const keys = members.map((m) => m.characterKey).join()
+  // (each member's KQM weapons as candidates, as a run plays them: an energy weapon's refunds are
+  // counted for the weapon a build holds)
+  const weapons = JSON.stringify(
+    members.map((m) =>
+      kqmWeapons(m.characterKey, teamOpt.kqm).map((w) => w.key)
+    )
+  )
   // (the opener and the timing settings too: the replay plays them)
   const { opener, timing, frameData } = useRotationSettings(
     kqmRotationId(teamId)
@@ -263,6 +270,7 @@ function useRotationEnergy(
     constellations,
     cadence,
     keys,
+    weapons,
   ])
   // (shown again with nothing it reads changed: the last replay at once)
   const [cached] = useState(() =>
@@ -298,7 +306,18 @@ function useRotationEnergy(
               kqmMemberConstellation(m.characterKey, teamOpt.kqm),
             ])
           ),
-          gear: {},
+          gear: Object.fromEntries(
+            members.map((m) => [
+              m.characterKey,
+              {
+                candidates: {
+                  weapons: kqmWeapons(m.characterKey, teamOpt.kqm).map(
+                    (w) => w.key
+                  ),
+                },
+              },
+            ])
+          ),
           overrides: {},
         })
         next = played?.energy

@@ -329,6 +329,36 @@ describe('energy inputs: Flins (two Bursts)', () => {
     expect(at(4) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
     expect(at(6) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
   })
+  it('Bloodsoaked Ruins played as a KQM candidate: its Energy counts for the build that holds it', () => {
+    const rotation =
+      'Columbina E -> Ineffa E Q -> Sucrose E -> Flins E N4 N2 E Q N4 E Q'
+    const candidate = simulateRotation({
+      rotation: parseRotation(
+        rotation,
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      gear: {
+        Flins: { candidates: { weapons: ['BloodsoakedRuins', 'Deathmatch'] } },
+      },
+      repeats: 4,
+      keep: 'last2',
+    })
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team, candidate.frames / 120),
+      team,
+      energyFromRotation(candidate, team, 2)
+    )
+    expect(filled.members.Flins!.weaponTriggers?.BloodsoakedRuins).toBe(1)
+    const target = (weapon: 'BloodsoakedRuins' | 'Deathmatch') =>
+      calculateEnergyRecharge(team, filled, { Flins: weapon }, { Flins: 1 })
+        .targets.Flins!
+    expect(target('BloodsoakedRuins')).toBeLessThan(target('Deathmatch') - 20)
+  })
 })
 
 describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
