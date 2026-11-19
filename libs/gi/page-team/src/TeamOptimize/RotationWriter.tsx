@@ -1845,6 +1845,16 @@ function WriterModal({
     buffs: figures ? teamBuffs : kqmBuffs,
     damage: timelineFigures.damage,
     renderHit: (hit: SimHit) => {
+      // (the KQM tab before its first builds: nothing to work a hit's damage out with)
+      if (!figures && !kqmOverrides)
+        return (
+          <Typography sx={type.label}>
+            {t(
+              'teamOpt.writer.hitNeedsBuilds',
+              'Its damage shows once KQM builds are generated.'
+            )}
+          </Typography>
+        )
       const found = timelineFigures.attackOf?.(hit)
       return (
         found && (
@@ -1852,6 +1862,7 @@ function WriterModal({
             teamId={teamId}
             characterKey={found.characterKey}
             attack={found.attack}
+            overrides={figures ? undefined : kqmOverrides}
           />
         )
       )
@@ -1878,12 +1889,14 @@ function WriterModal({
   )
   // (the members' own weapon and set effects: listed on the timeline, never on the KQM tab)
   const teamBuffs = useTeamBuffs(teamId, teamData)
-  // the timeline's damage and stats, with the members' own builds
+  // the timeline's damage and stats: with the members' own builds; on the KQM tab the shown
+  // result's (none before a result)
   const timelineFigures = useTimelineFigures(
     teamId,
     result?.sim,
     result?.own,
-    figures
+    figures || !!kqmOverrides,
+    figures ? undefined : kqmOverrides
   )
   // a mode or stance's version of an action (Zibai's Spirit Steed's Stride) has its own frame data:
   // the versions this rotation played join each member's defaults
