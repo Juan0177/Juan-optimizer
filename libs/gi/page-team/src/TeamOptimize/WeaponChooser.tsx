@@ -1064,7 +1064,6 @@ export function PassiveLines({
           }}
         >
           <Typography
-            // (the members' switches go under it when they don't fit beside it)
             sx={{
               flex: '1 1 150px',
               minWidth: 0,
@@ -1075,20 +1074,36 @@ export function PassiveLines({
           >
             {line.label}
           </Typography>
-          {wielders.map((member) =>
-            line.states.length <= 1 ? (
-              <PassiveAvatarToggle
-                key={member.characterKey}
-                member={member}
-                line={line}
-              />
-            ) : (
-              <PassiveAvatarStates
-                key={member.characterKey}
-                member={member}
-                line={line}
-              />
-            )
+          {line.states.length <= 1 ? (
+            // (the members' switches stay together: beside it, or all under it)
+            <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, ml: 'auto' }}>
+              {wielders.map((member) => (
+                <PassiveAvatarToggle
+                  key={member.characterKey}
+                  member={member}
+                  line={line}
+                />
+              ))}
+            </Box>
+          ) : (
+            // (choices of a state: a row of their own under it, in even columns)
+            <Box
+              sx={{
+                flexBasis: '100%',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                columnGap: 1.5,
+                rowGap: 0.5,
+              }}
+            >
+              {wielders.map((member) => (
+                <PassiveAvatarStates
+                  key={member.characterKey}
+                  member={member}
+                  line={line}
+                />
+              ))}
+            </Box>
           )}
         </Box>
       ))}
@@ -1211,7 +1226,7 @@ function PassiveAvatarStates({
         display: 'flex',
         alignItems: 'center',
         gap: 0.5,
-        flexShrink: 0,
+        minWidth: 0,
         opacity: value ? 1 : 0.55,
       }}
     >
@@ -1229,6 +1244,7 @@ function PassiveAvatarStates({
         sx={{
           fontSize: 13,
           minWidth: 48,
+          flex: '0 1 auto',
           color: value ? 'text.primary' : 'text.secondary',
           ...quickSx,
           '&:hover': { color: 'text.primary' },
