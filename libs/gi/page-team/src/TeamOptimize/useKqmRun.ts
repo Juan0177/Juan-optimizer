@@ -116,6 +116,15 @@ export function setKqmShownView(
   else if (shownViews[teamId]?.result === result) delete shownViews[teamId]
 }
 
+/** The team as `result`'s results were last shown, with picks (undefined: the run's own) */
+export function kqmShownFor(
+  teamId: string,
+  result: KqmResult
+): KqmResult | undefined {
+  const shown = shownViews[teamId]
+  return shown?.result === result ? shown.view : undefined
+}
+
 /**
  * The team with the picks made in KQM Theorycrafting's results, while they are for its last run
  * (the one saved at `savedAt`); undefined: no picks, or another run's

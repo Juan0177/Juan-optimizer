@@ -26,7 +26,12 @@ import { useState } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { KqmCompare } from './KqmComparison'
 import { KqmResults, KqmSettings } from './KqmMode'
-import { kqmShownView, setKqmShownView, useKqmRun } from './useKqmRun'
+import {
+  kqmShownFor,
+  kqmShownView,
+  setKqmShownView,
+  useKqmRun,
+} from './useKqmRun'
 
 const mocks = vi.hoisted(() => {
   // the saved last runs (`database.teamKqmResults`), as the browser's storage keeps them
@@ -886,6 +891,9 @@ describe('KQM focused results', () => {
     const view = { ...last.result, builds: { ...last.result.builds } }
     setKqmShownView('ui-picks', last.result, view)
     expect(kqmShownView('ui-picks', savedAt)).toBe(view)
+    // (the page shown again: as it was left)
+    expect(kqmShownFor('ui-picks', last.result)).toBe(view)
+    expect(kqmShownFor('ui-picks', view)).toBeUndefined()
     // (another saved run's: not these picks)
     expect(kqmShownView('ui-picks', savedAt + 1)).toBeUndefined()
     // back to the run's own builds

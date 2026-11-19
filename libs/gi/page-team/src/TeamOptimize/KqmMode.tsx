@@ -130,6 +130,7 @@ import {
 import {
   type KqmRotation,
   kqmReplayOf,
+  kqmShownFor,
   setKqmShownView,
   useKqmProgress,
 } from './useKqmRun'
@@ -2262,7 +2263,10 @@ function KqmResultsView({
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   // other equipment picked in the inspector: the team as it plays with it (the figures above follow)
-  const [comparing, setComparing] = useState<KqmResult>()
+  // (back on the page: as it was left, its picks included)
+  const [comparing, setComparing] = useState<KqmResult | undefined>(() =>
+    readOnly ? undefined : kqmShownFor(teamId, result)
+  )
   // a top team picked: its inspector compares on the run's own team (not on other picks), while
   // the figures shown stay until its team is worked out
   const [fromRun, setFromRun] = useState(false)
@@ -2271,7 +2275,12 @@ function KqmResultsView({
     setComparing(next)
   }, [])
   // (a new run starts from its own builds)
-  useEffect(() => setComparing(undefined), [result])
+  const shownResult = useRef(result)
+  useEffect(() => {
+    if (shownResult.current === result) return
+    shownResult.current = result
+    setComparing(undefined)
+  }, [result])
   const view = comparing ?? result
   // the team's own results (not KQM Compare's B): the team as shown, with its picks, is KQM
   // Compare's A

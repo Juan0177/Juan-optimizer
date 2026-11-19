@@ -96,7 +96,7 @@ import {
   VDivider,
 } from './ui'
 import type { KqmRunState } from './useKqmRun'
-import { useKqmRun } from './useKqmRun'
+import { kqmShownFor, useKqmRun } from './useKqmRun'
 import { kqmRunKey, teamOptRunKey, useTeamOpt } from './useTeamOpt'
 import type { TeamOptRunState, TeamOptStatus } from './useTeamOptRun'
 import { useTeamOptRun } from './useTeamOptRun'
@@ -239,8 +239,16 @@ export default function TeamBuildWorkspace({
       : undefined
   // the builds shown in the KQM results (the run's, or other equipment picked there): the rotation
   // they played, its damage, and each attack's buffs, read with those builds
-  const [kqmView, setKqmView] = useState<KqmResult>()
-  useEffect(() => setKqmView(undefined), [kqmResult?.result])
+  // (back on the page: as they were left, the picks included)
+  const [kqmView, setKqmView] = useState<KqmResult | undefined>(() =>
+    kqmResult ? kqmShownFor(teamId, kqmResult.result) : undefined
+  )
+  const viewedResult = useRef(kqmResult?.result)
+  useEffect(() => {
+    if (viewedResult.current === kqmResult?.result) return
+    viewedResult.current = kqmResult?.result
+    setKqmView(undefined)
+  }, [kqmResult?.result])
   const kqmShown = kqmRotation ? (kqmView ?? kqmRotation.result) : undefined
   const kqmPlayed = kqmRotation?.rotation === 'played'
   const kqmAttacks =
