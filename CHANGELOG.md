@@ -4,6 +4,24 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.20.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.20.0) (2026-11-19)
+
+### New
+
+- Built-in rotations: "Templates" in the rotation writer, and the start screen of an empty rotation, list standard rotations for the main DPS characters (your team's own first). Picking one opens it in the writer.
+- New rotation words: "WK" walks ("WK11f": 11 frames; Tartaglia's next Skill is his walking one), "HP" and "LP" are high and low plunges with "HP[collision]" for the hit on the way down (Xiao, Diluc), "CA[cancel]" cancels Arlecchino's Charged Attack before it hits, "CA[bullets=4]" fires Chasca's Shadowhunt after 4 bullets, "CA[weakspot]" aims at a weak point (Lyney, Prototype Crescent), and "D?/CA" dashes only when Wanderer's Descent is up, else a Charged Attack.
+
+### Improved
+
+- Rotation damage: Geo resonance now comes from shields, and Crystallize shards are picked up on dashes (Itto and Navia teams); Kazuha absorbs Pyro inside Bennett's field and his Burst's damage over time keeps the stats it was cast with; Bennett's field ATK goes only to the member standing in it.
+- Finale of the Deep tracks its Bond of Life: heals wear it down, Fragment of Harmonic Whimsy stacks on each change, and Clorinde clearing her own Bond gives the full ATK bonus. Furina's Endless Waltz no longer heals twice when it is set off again.
+- Kit fixes: Cyno's Mortuary Rite with Thundering Fury, Fischl's Oz after a cut-short Burst and her Skill waiting for Oz to leave, Clorinde's Night Vigil, Navia's Crystal Shrapnel, Itto's Superlative Superstrength before his Burst, Wanderer's Windfavored, Xiao's and Diluc's plunges, Chasca's Shadowhunt and Tartaglia's walking Skill.
+- Team optimize and KQM respond faster: opening a member's attacks, switching to the KQM tab, and clicks while builds generate.
+
+### Fixed
+
+- Mitya's Talent tab shows the total of a Gradient Detonation.
+
 ## [v1.19.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.19.2) (2026-11-19)
 
 ### Fixed
