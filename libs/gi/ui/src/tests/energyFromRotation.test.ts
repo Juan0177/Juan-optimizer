@@ -134,6 +134,24 @@ describe('energy inputs from the rotation', () => {
     )
     expect(result.targets.Durin!).toBeLessThan(150)
   })
+  it('rounds field times to a tenth that still add up to 100%, so a run is not stopped', () => {
+    // (three equal shares, rounded one by one, made 33.3% each: 99.9%)
+    const team: CharacterKey[] = ['Bennett', 'Xingqiu', 'Xiangling']
+    const thirds = {
+      members: Object.fromEntries(team.map((k) => [k, { fieldTime: 1 }])),
+    } as unknown as RotationEnergy
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team, 20),
+      team,
+      thirds
+    )
+    const fields = team.map((k) => filled.members[k]!.fieldTime)
+    expect(fields.map((f) => Math.round(f * 10)).sort()).toEqual([
+      333, 333, 334,
+    ])
+    expect(fields.reduce((n, f) => n + f, 0)).toBeCloseTo(100, 6)
+    expect(calculateEnergyRecharge(team, filled).errors).toEqual([])
+  })
 })
 
 describe('energy inputs: Varesa Overload (KQM quick guide)', () => {
