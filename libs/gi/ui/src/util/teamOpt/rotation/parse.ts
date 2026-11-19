@@ -3,7 +3,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 /**
  * A rotation written the way players write them:
  *   "bina EQ -> illuga EQ -> linnea E -> Zibai E N1 E N4 E N4 Q E N2 E -> bina"
- * Steps are separated by `->` (also `→`, `>`, `,`, `;` or a new line); each starts with who acts
+ * Steps are separated by `->` (also `→`, `>`, `,`, `;`, `，`, `；` or a new line); each starts with who acts
  * (a member's name, a nickname, or the start of either) and lists that member's actions, with or
  * without spaces between them:
  *   E / tE  Elemental Skill, tapped          hE   Elemental Skill, held
@@ -457,15 +457,20 @@ function parseActions(
   return actions
 }
 
+/** Between steps: `->`, `→`, `=>`, `>`, `,`, `;` (or their full-width forms) or a new line */
+const SEPARATOR = /->|→|=>|>|,|;|，|；|\n/
+
 export function parseRotation(
   text: string,
   members: readonly RotationMember[]
 ): ParsedRotation {
   const warnings: string[] = []
   const steps: RotationStep[] = []
+  // steps naming no member: said once, with every name that was not found
+  const unknown: string[] = []
   let loopsTo: CharacterKey | undefined
   const parts = text
-    .split(/->|→|=>|>|,|;|\n/)
+    .split(SEPARATOR)
     .map((p) => p.trim())
     .filter(Boolean)
     .flatMap((p) => splitOnNames(p, members))
@@ -473,24 +478,27 @@ export function parseRotation(
     // the name is the first word, or the longest start of the part that names a member
     const words = part.split(/\s+/)
     let characterKey: CharacterKey | undefined
+    let name = ''
     let rest = ''
     for (let n = Math.min(words.length, 3); n >= 1 && !characterKey; n--) {
       const candidate = words.slice(0, n).join(' ')
       characterKey = matchMember(candidate, members)
-      if (characterKey) rest = words.slice(n).join(' ')
+      if (characterKey) {
+        name = candidate
+        rest = words.slice(n).join(' ')
+      }
     }
     if (!characterKey) {
-      // "Zibai" glued to actions is not supported: say which step was skipped
-      warnings.push(`"${part}": no team member with that name (step skipped)`)
+      unknown.push(words[0])
       return
     }
-    const actions = parseActions(rest, warnings, words[0], characterKey)
+    const actions = parseActions(rest, warnings, name, characterKey)
     // (gcsim's charge[early_cancel=1]: only a dash or jump cancels it)
     actions.forEach((action, i) => {
       const next = actions[i + 1]?.kind
       if (!action.cancel || next === 'dash' || next === 'jump') return
       warnings.push(
-        `${words[0]}: "${action.text}": a dash or jump cancels it, as "CA[cancel] D" (played as a plain Charged Attack)`
+        `${name}: "${action.text}": a dash or jump cancels it, as "CA[cancel] D" (played as a plain Charged Attack)`
       )
       delete action.cancel
     })
@@ -504,12 +512,20 @@ export function parseRotation(
     }
     steps.push({ characterKey, actions })
   })
+  if (unknown.length) {
+    const names = [...new Set(unknown)].map((n) => `"${n}"`).join(', ')
+    warnings.unshift(
+      unknown.length === 1
+        ? `${names}: no team member with that name (step skipped)`
+        : `${names}: no team member with that name (${unknown.length} steps skipped)`
+    )
+  }
   return { steps, loopsTo, warnings }
 }
 
 /** What a piece of rotation text is, as the writer colours it */
 export type RotationSpanKind =
-  /** `->`, `→`, `>`, `,`, `;` or a new line */
+  /** `SEPARATOR`: `->`, `→`, `>`, `,`, `;` (or full-width) or a new line */
   | 'separator'
   /** A member's name (its `characterKey`) */
   | 'member'
@@ -626,7 +642,7 @@ export function rotationSpans(
     })
   }
   let at = 0
-  for (const m of text.matchAll(/->|→|=>|>|,|;|\n/g)) {
+  for (const m of text.matchAll(new RegExp(SEPARATOR.source, 'g'))) {
     const index = m.index ?? 0
     part(at, index)
     spans.push({ from: index, to: index + m[0].length, kind: 'separator' })

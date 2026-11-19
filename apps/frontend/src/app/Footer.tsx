@@ -31,7 +31,9 @@ function FooterContent() {
     >
       <Box
         sx={{
-          px: 2,
+          pl: 2,
+          // (the floating Feedback button sits over the footer's right end on larger screens)
+          pr: { xs: 2, sm: 19 },
           py: 1,
           display: 'flex',
           flexWrap: 'wrap',

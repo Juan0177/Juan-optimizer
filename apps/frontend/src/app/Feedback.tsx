@@ -1,3 +1,4 @@
+import { aboveBottomBar } from '@genshin-optimizer/common/ui'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import { currentRelease } from '@genshin-optimizer/gi/ui'
@@ -228,7 +229,7 @@ export function FeedbackButton() {
           sx={(theme) => ({
             position: 'fixed',
             right: 16,
-            bottom: 20,
+            bottom: aboveBottomBar(20),
             zIndex: theme.zIndex.speedDial,
             display: { xs: 'none', sm: 'inline-flex' },
             alignItems: 'center',

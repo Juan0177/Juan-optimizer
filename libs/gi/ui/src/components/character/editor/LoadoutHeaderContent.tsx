@@ -8,6 +8,7 @@ import { Box, CardContent, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OptimizationIcon } from '../../../consts'
+import { LoadoutName } from '../LoadoutName'
 import { OptimizationTargetDisplay } from './OptimizationTargetDisplay'
 export function LoadoutHeaderContent({
   teamCharId,
@@ -20,8 +21,13 @@ export function LoadoutHeaderContent({
 }) {
   const { t } = useTranslation('loadout')
   const database = useDatabase()
-  const { name, description, optConfigId, customMultiTargets } =
-    database.teamChars.get(teamCharId)!
+  const {
+    key: characterKey,
+    name,
+    description,
+    optConfigId,
+    customMultiTargets,
+  } = database.teamChars.get(teamCharId)!
   const { optimizationTarget } = useOptConfig(optConfigId)!
 
   return (
@@ -30,7 +36,9 @@ export function LoadoutHeaderContent({
     >
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
         <PersonIcon />
-        <Typography variant="h6">{name}</Typography>
+        <Typography variant="h6">
+          <LoadoutName name={name} characterKey={characterKey} />
+        </Typography>
         {!!description && (
           <BootstrapTooltip title={<Typography>{description}</Typography>}>
             <InfoIcon />

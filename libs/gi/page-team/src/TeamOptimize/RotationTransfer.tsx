@@ -12,6 +12,7 @@ import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { TeamOptMember } from '@genshin-optimizer/gi/ui'
 import { CharacterName } from '@genshin-optimizer/gi/ui'
+import CloseIcon from '@mui/icons-material/Close'
 import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import {
@@ -19,6 +20,7 @@ import {
   Box,
   Button,
   CardContent,
+  IconButton,
   TextField,
   Tooltip,
   Typography,
@@ -72,7 +74,9 @@ export function RotationTransfer({
   }, [note])
   const [show, onShow, onHide] = useBoolState()
 
+  // (the attacks as they were when copying failed: gone once they change, or the tab does)
   const [downloadFallback, setDownloadFallback] = useState<string>()
+  useEffect(() => setDownloadFallback(undefined), [teamOpt])
   const copy = async () => {
     const json = JSON.stringify(teamRotationExport(teamOpt, keys))
     try {
@@ -165,13 +169,24 @@ export function RotationTransfer({
         <Alert
           severity="info"
           action={
-            <Button
-              onClick={() =>
-                downloadJson('stellar-attacks.json', downloadFallback)
-              }
-            >
-              {t('teamOpt.transfer.download', 'Download JSON')}
-            </Button>
+            <>
+              <Button
+                onClick={() => {
+                  downloadJson('stellar-attacks.json', downloadFallback)
+                  setDownloadFallback(undefined)
+                }}
+              >
+                {t('teamOpt.transfer.download', 'Download JSON')}
+              </Button>
+              <IconButton
+                size="small"
+                color="inherit"
+                aria-label={t('teamOpt.editor.close', 'Close')}
+                onClick={() => setDownloadFallback(undefined)}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </>
           }
         >
           {t(

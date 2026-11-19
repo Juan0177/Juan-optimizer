@@ -1,5 +1,6 @@
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp'
 import { Box, Fab, useScrollTrigger, Zoom } from '@mui/material'
+import { aboveBottomBar } from '../hooks/useBottomBar'
 
 export function ScrollTop() {
   const trigger = useScrollTrigger({
@@ -29,7 +30,7 @@ export function ScrollTop() {
         // (not on phones: it covered rows and the pages' own bottom bars there)
         sx={{
           position: 'fixed',
-          bottom: 100,
+          bottom: aboveBottomBar(76),
           right: 16,
           display: { xs: 'none', sm: 'block' },
         }}

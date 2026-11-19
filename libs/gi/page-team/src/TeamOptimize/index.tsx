@@ -1,4 +1,4 @@
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
+import { InfoTooltipInline, useBottomBar } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   TeamOpt,
@@ -433,7 +433,11 @@ export default function TeamBuildWorkspace({
   // how long the team takes to defeat the enemy: a Stygian Onslaught boss, its fight's mechanics
   // counted where they are known (with the written rotation's element applications); an enemy set
   // by hand, its HP ÷ the team's DPS
-  const stygian = enemyTeam && appliedStygianPreset(enemyTeam)
+  // (one object while the enemy stays: the fight's evaluations are kept for the settings they ran with)
+  const stygian = useMemo(
+    () => enemyTeam && appliedStygianPreset(enemyTeam),
+    [enemyTeam]
+  )
   const applications = useRotationApplications(
     teamId,
     members,
@@ -464,7 +468,11 @@ export default function TeamBuildWorkspace({
   })
   const fightNow = useMemo(
     () =>
-      team && enemyTeam && (stygian || enemyTeam.enemyHp)
+      team &&
+      enemyTeam &&
+      (stygian || enemyTeam.enemyHp) &&
+      // (the Moongecko's fight needs its cocoon evaluations: no estimate without them)
+      (stygian?.boss.id !== MOONGECKO_BOSS || cocoonNow)
         ? fightTeamOf({
             members: members.map((m) => m.characterKey),
             // (the damage shown: the equipped builds', or the KQM builds' played)
@@ -716,7 +724,15 @@ export default function TeamBuildWorkspace({
             <HeaderStats
               total={evaluation?.total}
               rotationTime={rotationTime}
-              equipped={!!result && !!shown}
+              current={
+                !result || !shown
+                  ? undefined
+                  : members.every(
+                        (m) => m.loadoutDatum.buildType === 'equipped'
+                      )
+                    ? 'equipped'
+                    : 'builds'
+              }
             />
           )}
           {/* (moving the rotation in and out: at the right end, apart from writing it) */}
@@ -1356,24 +1372,32 @@ function RotationTimeInput({
 function HeaderStats({
   total,
   rotationTime,
-  equipped,
+  current,
 }: {
   total: number | undefined
   rotationTime: number
-  /** A result is on screen too: say these are the equipped builds' numbers */
-  equipped?: boolean
+  /**
+   * A result is on screen too: say these are the members' builds now (all equipped, or some saved
+   * builds, as after Save as builds)
+   */
+  current?: 'equipped' | 'builds'
 }) {
   const { t } = useTranslation('page_team')
-  const tip = t('teamOpt.header.equippedTip', 'With the builds equipped now')
+  const tip =
+    current === 'builds'
+      ? t('teamOpt.header.currentTip', 'With the builds the team uses now')
+      : t('teamOpt.header.equippedTip', 'With the builds equipped now')
   // (the figures keep their width while they change: nothing beside them moves)
   const valueSx = { '& .MuiTypography-root': { minWidth: '7.5ch' } } as const
   return (
     <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 2 }}>
       <StatTile
         label={
-          equipped
-            ? t('teamOpt.header.equippedTotal', 'Equipped DMG')
-            : t('teamOpt.header.total', 'Rotation DMG')
+          current === 'builds'
+            ? t('teamOpt.header.currentTotal', 'Current DMG')
+            : current
+              ? t('teamOpt.header.equippedTotal', 'Equipped DMG')
+              : t('teamOpt.header.total', 'Rotation DMG')
         }
         tip={tip}
         value={formatDamage(total, true)}
@@ -1382,9 +1406,11 @@ function HeaderStats({
       <VDivider />
       <StatTile
         label={
-          equipped
-            ? t('teamOpt.header.equippedDps', 'Equipped DPS')
-            : t('teamOpt.header.dps', 'DPS')
+          current === 'builds'
+            ? t('teamOpt.header.currentDps', 'Current DPS')
+            : current
+              ? t('teamOpt.header.equippedDps', 'Equipped DPS')
+              : t('teamOpt.header.dps', 'DPS')
         }
         tip={tip}
         value={formatRate(total, rotationTime, true)}
@@ -1484,6 +1510,7 @@ function RunBar({
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const barRef = useBottomBar<HTMLDivElement>()
   const kqmRunning = kqmState.type === 'running'
   const running = state.type === 'running' || kqmRunning
   // (members on a TC build are kept as they are: Team optimize picks real artifacts)
@@ -1508,6 +1535,7 @@ function RunBar({
 
   return (
     <Box
+      ref={barRef}
       sx={{
         position: 'sticky',
         bottom: { xs: 8, sm: 12 },

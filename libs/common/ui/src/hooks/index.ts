@@ -1,3 +1,4 @@
+export * from './useBottomBar'
 export * from './useConstObj'
 export * from './useInfScroll'
 export * from './useOnScreen'

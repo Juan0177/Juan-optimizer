@@ -1,4 +1,4 @@
-import { BootstrapTooltip } from '@genshin-optimizer/common/ui'
+import { aboveBottomBar, BootstrapTooltip } from '@genshin-optimizer/common/ui'
 import { clamp, getUnitStr, objPathValue } from '@genshin-optimizer/common/util'
 import { artifactAsset, weaponAsset } from '@genshin-optimizer/gi/assets'
 import type {
@@ -651,8 +651,7 @@ export function TeamOptResults({
       <Snackbar
         open={!!lastExcluded}
         autoHideDuration={8000}
-        // above the page's run bar (it sticks to the bottom)
-        sx={{ bottom: { xs: 132, sm: 96 } }}
+        sx={{ bottom: { xs: aboveBottomBar(8), sm: aboveBottomBar(24) } }}
         onClose={(_, reason) =>
           reason !== 'clickaway' && setLastExcluded(undefined)
         }
@@ -1236,6 +1235,15 @@ function MemberResult({
                         ...focusSx,
                         '@media (prefers-reduced-motion: reduce)': {
                           transition: 'none',
+                        },
+                        // (a finger needs about 40 px: the button stays small, its touch area not)
+                        '@media (pointer: coarse)': {
+                          p: 0.5,
+                          '&::after': {
+                            content: '""',
+                            position: 'absolute',
+                            inset: -8,
+                          },
                         },
                       }}
                     >

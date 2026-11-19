@@ -1,14 +1,13 @@
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import {
   type RotationTemplate,
   templatesForTeam,
 } from '@genshin-optimizer/gi/ui'
-import { giTokens } from '@genshin-optimizer/gi/theme'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
-import { alpha, Box, ButtonBase, Typography } from '@mui/material'
+import { alpha, Box, ButtonBase, Tooltip, Typography } from '@mui/material'
 import { type ReactNode, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
@@ -65,24 +64,6 @@ export function TeamOptimizeStart({
         py: { xs: 2.5, sm: 5 },
       }}
     >
-      <Typography
-        component="h3"
-        sx={{
-          ...type.step,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          mb: 2.5,
-        }}
-      >
-        {t('teamOpt.start.heading', 'Set up the rotation')}
-        <InfoTooltipInline
-          title={t(
-            'teamOpt.start.info',
-            'Write rotation: type it the way players do ("Bennett E Q -> …"); the attacks, hits and timing come from each kit. Add attacks: pick each member’s talents and hits by hand.'
-          )}
-        />
-      </Typography>
       <Box
         sx={{
           display: 'grid',
@@ -98,6 +79,10 @@ export function TeamOptimizeStart({
         <Tile
           main
           label={t('teamOpt.start.write', 'Write rotation')}
+          tip={t(
+            'teamOpt.start.writeTip',
+            'Type it the way players do ("Bennett E Q -> …"): the attacks, hits and timing come from each kit.'
+          )}
           onClick={onWrite}
           disabled={disabled}
         >
@@ -105,6 +90,10 @@ export function TeamOptimizeStart({
         </Tile>
         <Tile
           label={t('teamOpt.start.manual', 'Add attacks')}
+          tip={t(
+            'teamOpt.start.manualTip',
+            'Pick each member’s talents and how often they hit, by hand.'
+          )}
           onClick={onManual}
           disabled={disabled}
         >
@@ -126,76 +115,80 @@ export function TeamOptimizeStart({
 function Tile({
   main,
   label,
+  tip,
   onClick,
   disabled,
   children,
 }: {
   main?: boolean
   label: string
+  tip: string
   onClick: () => void
   disabled?: boolean
   children: ReactNode
 }) {
   const gold = giTokens.gold
   return (
-    <ButtonBase
-      onClick={onClick}
-      disabled={disabled}
-      focusRipple
-      aria-label={label}
-      sx={{
-        ...quickSx,
-        ...focusSx,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        justifyContent: 'flex-start',
-        overflow: 'hidden',
-        textAlign: 'left',
-        borderRadius: tokens.radius.inset,
-        bgcolor: tokens.inset,
-        border: hairline,
-        borderColor: main ? alpha(gold, 0.4) : tokens.hairline,
-        '&:hover': {
-          bgcolor: alpha(giTokens.parchment, 0.025),
-          borderColor: main ? alpha(gold, 0.75) : tokens.hairlineStrong,
-        },
-        '&:hover .tile-arrow': { color: main ? gold : 'text.primary' },
-        '&.Mui-disabled': { opacity: 0.5 },
-      }}
-    >
-      <Box
-        aria-hidden
+    <Tooltip arrow title={tip} placement="top" enterDelay={400}>
+      <ButtonBase
+        onClick={onClick}
+        disabled={disabled}
+        focusRipple
+        aria-label={label}
         sx={{
-          height: PREVIEW_HEIGHT,
-          display: 'grid',
-          placeItems: 'center',
-          px: 2,
-          borderBottom: hairline,
-        }}
-      >
-        {children}
-      </Box>
-      <Box
-        sx={{
+          ...quickSx,
+          ...focusSx,
           display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          px: 2,
-          py: 1.5,
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          justifyContent: 'flex-start',
+          overflow: 'hidden',
+          textAlign: 'left',
+          borderRadius: tokens.radius.inset,
+          bgcolor: tokens.inset,
+          border: hairline,
+          borderColor: main ? alpha(gold, 0.4) : tokens.hairline,
+          '&:hover': {
+            bgcolor: alpha(giTokens.parchment, 0.025),
+            borderColor: main ? alpha(gold, 0.75) : tokens.hairlineStrong,
+          },
+          '&:hover .tile-arrow': { color: main ? gold : 'text.primary' },
+          '&.Mui-disabled': { opacity: 0.5 },
         }}
       >
-        <Typography sx={{ ...type.title, flexGrow: 1 }}>{label}</Typography>
-        <ArrowForwardRoundedIcon
-          className="tile-arrow"
+        <Box
+          aria-hidden
           sx={{
-            ...quickSx,
-            fontSize: 18,
-            color: main ? gold : 'text.secondary',
+            height: PREVIEW_HEIGHT,
+            display: 'grid',
+            placeItems: 'center',
+            px: 2,
+            borderBottom: hairline,
           }}
-        />
-      </Box>
-    </ButtonBase>
+        >
+          {children}
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 2,
+            py: 1.5,
+          }}
+        >
+          <Typography sx={{ ...type.title, flexGrow: 1 }}>{label}</Typography>
+          <ArrowForwardRoundedIcon
+            className="tile-arrow"
+            sx={{
+              ...quickSx,
+              fontSize: 18,
+              color: main ? gold : 'text.secondary',
+            }}
+          />
+        </Box>
+      </ButtonBase>
+    </Tooltip>
   )
 }
 

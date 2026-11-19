@@ -21,7 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { dataContextObj } from '../../context/DataContext'
 import { DataContext } from '../../context/DataContext'
 import { useCharData } from '../../hooks/useCharData'
@@ -79,7 +79,11 @@ export function TeamDelModal({
     onDel()
   }
   return (
-    <ModalWrapper open={show} onClose={close}>
+    <ModalWrapper
+      open={show}
+      onClose={close}
+      aria-label={`${t('teamDelModal.teamName')} ${name}`}
+    >
       <CardThemed>
         <CardHeader
           title={
@@ -100,7 +104,10 @@ export function TeamDelModal({
             </Box>
           }
           action={
-            <IconButton onClick={close}>
+            <IconButton
+              onClick={close}
+              aria-label={t('teamOpt.editor.close', 'Close')}
+            >
               <CloseIcon />
             </IconButton>
           }
@@ -108,11 +115,10 @@ export function TeamDelModal({
         <Divider />
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Alert severity="info">
-            <Trans t={t} i18nKey={'teamDelModal.alert'}>
-              Removing the team will remove: resonance buffs, and enemy configs
-              stored in the team. Loadouts that are only in this team are also
-              selected by default for deletion.
-            </Trans>
+            {t(
+              'teamDelModal.alert',
+              'Deleting the team also deletes its rotations, its Team optimize and KQM results, and its buffs and enemy settings. Loadouts used only by this team are ticked to be deleted too: untick any you want to keep.'
+            )}
           </Alert>
           {loadoutData.map((loadoutDatum, i) =>
             loadoutDatum ? (

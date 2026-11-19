@@ -359,15 +359,28 @@ function TeamEditorModal({
   const handleDesc = (teamDesc: string): void => {
     database.teams.set(teamId, { description: teamDesc })
   }
+  // (the fields save when they lose focus: closing with Escape or ✕ keeps what was typed)
+  const close = () => {
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur()
+    onClose()
+  }
   return (
-    <ModalWrapper open={show} onClose={onClose}>
+    <ModalWrapper
+      open={show}
+      onClose={close}
+      aria-label={t('team.editNameDesc')}
+    >
       <CardThemed>
         <CardHeader
           title={t('team.editNameDesc')}
           avatar={<TeamIcon />}
           titleTypographyProps={{ variant: 'h6' }}
           action={
-            <IconButton onClick={onClose}>
+            <IconButton
+              onClick={close}
+              aria-label={t('teamOpt.editor.close', 'Close')}
+            >
               <CloseIcon />
             </IconButton>
           }

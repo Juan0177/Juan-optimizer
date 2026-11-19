@@ -2210,8 +2210,10 @@ export function KqmResults({
         : undefined,
     [enemy, database, teamId, runSettings, result]
   )
+  const moongecko =
+    !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS
   const cocoon = useCocoonEvaluations(teamId, cocoonSettings, {
-    cocoon: !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS,
+    cocoon: moongecko,
     opening: applications?.opening?.attacks,
   })
   const compared =
@@ -2242,20 +2244,23 @@ export function KqmResults({
   )
   const fight = useMemo(
     () =>
-      enemy &&
-      fightTeamOf({
-        members: members.map((m) => m.characterKey),
-        evaluation: result.after,
-        attacks: runSettings.attacks,
-        teamData,
-        rotationTime,
-        enemyOverride: enemy.enemyOverride,
-        ...(team ? { dataEnemy: team.enemyOverride } : {}),
-        applications,
-        cocoon,
-      }),
+      // (the Moongecko's fight needs its cocoon evaluations: no estimate without them)
+      enemy && (!moongecko || cocoon)
+        ? fightTeamOf({
+            members: members.map((m) => m.characterKey),
+            evaluation: result.after,
+            attacks: runSettings.attacks,
+            teamData,
+            rotationTime,
+            enemyOverride: enemy.enemyOverride,
+            ...(team ? { dataEnemy: team.enemyOverride } : {}),
+            applications,
+            cocoon,
+          })
+        : undefined,
     [
       enemy,
+      moongecko,
       members,
       result.after,
       runSettings.attacks,

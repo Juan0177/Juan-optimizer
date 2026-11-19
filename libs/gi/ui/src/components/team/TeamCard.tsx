@@ -45,6 +45,7 @@ import {
   ArtifactSlotName,
   quickTooltipProps,
 } from '../artifact'
+import { defaultLoadoutNumber, LoadoutName } from '../character/LoadoutName'
 import { CharacterName } from '../character/Trans'
 import { WeaponDetails } from '../weapon/WeaponDetails'
 import { TeamDelModal } from './TeamDelModal'
@@ -428,8 +429,7 @@ function Member({
   const element = getCharEle(characterKey)
   const rarity = getCharStat(characterKey).rarity
   // a loadout keeps its default name ("Mitya Loadout") unless the user renamed it
-  const customLoadout =
-    loadoutName !== `${characterKey} Loadout` ? loadoutName : undefined
+  const customLoadout = defaultLoadoutNumber(loadoutName, characterKey) !== 0
   const sets = setsOf(artifactData)
 
   return (
@@ -569,7 +569,9 @@ function Member({
           noWrap
           sx={{ fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.3 }}
         >
-          {customLoadout ?? (
+          {customLoadout ? (
+            <LoadoutName name={loadoutName} characterKey={characterKey} />
+          ) : (
             <CharacterName characterKey={characterKey} gender={gender} />
           )}
         </Typography>
@@ -801,7 +803,10 @@ function MemberSummary({
           )}
         </>
       )}
-      {row(t('card.loadout', 'Loadout'), loadoutName)}
+      {row(
+        t('card.loadout', 'Loadout'),
+        <LoadoutName name={loadoutName} characterKey={characterKey} />
+      )}
       {row(t('card.build', 'Build'), buildName)}
     </Box>
   )

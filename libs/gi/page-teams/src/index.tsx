@@ -98,7 +98,13 @@ export default function PageTeams() {
     try {
       dataObj = JSON.parse(data)
     } catch (e) {
-      setImportError(`${t('importForm.error.import')} ${e}`)
+      console.error(e)
+      setImportError(
+        t(
+          'importForm.error.json',
+          'This is not a team’s JSON: paste the whole text that Export team copied.'
+        )
+      )
       return
     }
     try {
@@ -184,10 +190,11 @@ export default function PageTeams() {
           </>
         }
       />
-      {/* one quiet row: find a team by name or by who is in it, then order the list */}
+      {/* one quiet row: find a team by name or by who is in it, then order the list (once there
+          are teams to find) */}
       <Box
         sx={{
-          display: 'flex',
+          display: totalTeamNum ? 'flex' : 'none',
           flexWrap: 'wrap',
           alignItems: 'center',
           gap: 1,

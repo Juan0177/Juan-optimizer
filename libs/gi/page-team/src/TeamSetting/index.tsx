@@ -395,6 +395,11 @@ function AddMemberButton({
     >
       <AddIcon />
       {t('teamSettings.addCharBtn')}
+      {disabled && (
+        <Box component="span" sx={{ fontSize: 12, fontWeight: 400 }}>
+          {t('teamSettings.addFirstChar', 'After the first character')}
+        </Box>
+      )}
     </Button>
   )
 }

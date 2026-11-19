@@ -120,6 +120,7 @@ export function RunDialog({
       open={open}
       onClose={onClose}
       containerProps={{ maxWidth: 'lg' }}
+      aria-label={t('teamOpt.runDialog.title', 'Optimize team')}
     >
       <CardThemed>
         <DialogHead

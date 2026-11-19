@@ -163,7 +163,11 @@ export function TemplateCards({
           display: 'grid',
           gridTemplateColumns: {
             xs: 'minmax(0, 1fr)',
-            sm: 'repeat(2, minmax(0, 1fr))',
+            // (one template takes the row: its name and source are not cut short)
+            sm:
+              templates.length > 1
+                ? 'repeat(2, minmax(0, 1fr))'
+                : 'minmax(0, 1fr)',
           },
           gap: 1,
         }}

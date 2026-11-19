@@ -94,10 +94,17 @@ vi.mock('@genshin-optimizer/common/ui', () => ({
   ModalWrapper: ({
     open,
     children,
+    'aria-label': label,
   }: {
     open: boolean
     children: React.ReactNode
-  }) => (open ? <div>{children}</div> : null),
+    'aria-label'?: string
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={label}>
+        {children}
+      </div>
+    ) : null,
   CardThemed: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),

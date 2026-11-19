@@ -56,6 +56,7 @@ import {
   rotationIdOf,
   saveRotationTiming,
   simulateWritten,
+  useEditedByHand,
   useMemberNames,
   useRotationSettings,
   useRotationText,
@@ -124,6 +125,7 @@ export function RotationInline({
   const rid = rotationIdOf(teamId, kqm)
   const { applied, text, setText, isDraft } = useRotationText(rid)
   const settings = useRotationSettings(rid)
+  const editedByHand = useEditedByHand(teamId, !!kqm)
   const names = useMemberNames(members)
   const team = useSimTeam(members, kqm, kqmBuilds)
   // (the attacks a rotation leaves are the tab's: at the members' own constellations, or KQM's
@@ -242,6 +244,7 @@ export function RotationInline({
           ...insetSx,
           ...quickSx,
           display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
           alignItems: 'stretch',
           minHeight: 44,
           '&:hover': { borderColor: tokens.hairlineStrong },
@@ -277,10 +280,38 @@ export function RotationInline({
             counted={openerCounted(timing)}
             names={names}
           />
+          {editedByHand && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.writer.handEditedTip',
+                'Its attacks were changed by hand after the rotation was played. Changing the rotation or how many rotations count plays it again and replaces those changes (Undo stays possible for a few seconds).'
+              )}
+            >
+              <Box
+                component="span"
+                sx={{
+                  alignSelf: 'flex-start',
+                  flexShrink: 0,
+                  ml: 'auto',
+                  px: 0.75,
+                  borderRadius: 999,
+                  fontSize: 11.5,
+                  fontWeight: 600,
+                  lineHeight: '20px',
+                  whiteSpace: 'nowrap',
+                  color: tokens.gold,
+                  border: `1px solid ${alpha(tokens.gold, 0.4)}`,
+                }}
+              >
+                {t('teamOpt.writer.handEdited', 'Attacks edited')}
+              </Box>
+            </Tooltip>
+          )}
           <EditRoundedIcon
             className="rotation-edit"
             sx={{
-              ml: 'auto',
+              ml: editedByHand ? 0 : 'auto',
               alignSelf: 'flex-start',
               mt: 0.25,
               fontSize: 16,
@@ -297,9 +328,12 @@ export function RotationInline({
             sx={{
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'flex-end',
               flexShrink: 0,
               px: 1,
-              borderLeft: hairline,
+              py: { xs: 0.5, sm: 0 },
+              borderLeft: { xs: 0, sm: hairline },
+              borderTop: { xs: hairline, sm: 0 },
             }}
           >
             {trailing}

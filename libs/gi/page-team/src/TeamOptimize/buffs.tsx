@@ -74,6 +74,11 @@ export interface TeamBuff {
   /** Buffs the team (not only its owner) */
   teamBuff: boolean
   /**
+   * No sheet section describes it (a switch the rotation sets for itself, as Bennett's field
+   * recipient, or a leftover of a sheet that changed): named by its path only
+   */
+  unnamed?: true
+  /**
    * The member's talent it comes from (`skill`, `burst`, `passive1`, `constellation2`…, or
    * `moonsign`): a character's buff is named by it ("Elemental Skill", "A1", "C2")
    */
@@ -194,7 +199,7 @@ export function describe(
     return describeFromSheets(ref, value, teamData)
   } catch {
     // a sheet that cannot describe it: still listed, by its path
-    return { name: ref.path.join(' · '), teamBuff: false }
+    return { name: ref.path.join(' · '), teamBuff: false, unnamed: true }
   }
 }
 
@@ -266,7 +271,7 @@ function describeFromSheets(
         }
   }
   // not found in the sheets (e.g. a leftover of a sheet that changed): its path is all there is
-  return { name: ref.path.join(' · '), teamBuff: false }
+  return { name: ref.path.join(' · '), teamBuff: false, unnamed: true }
 }
 
 /** Every conditional that is on in the team, with its name */
