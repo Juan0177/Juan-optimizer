@@ -46,8 +46,11 @@ const mocks = vi.hoisted(() => {
       weapons: { get: () => ({ key: 'AmenomaKageuchi', refinement: 5 }) },
       chars: { get: () => ({ constellation: 0 }) },
       buildTcs: { get: () => undefined },
-      // (no team: a run keeps no enemy)
-      teams: { get: () => undefined },
+      teams: {
+        get: () => ({ loadoutData: [] }),
+        getRotationField: () => undefined,
+        follow: () => () => {},
+      },
       teamKqmResults: {
         get: () => saved,
         getRun: (teamId: string) =>
@@ -106,17 +109,26 @@ vi.mock('@genshin-optimizer/common/ui', () => ({
   ModalWrapper: ({
     open,
     children,
+    'aria-label': label,
   }: {
     open: boolean
     children: React.ReactNode
-  }) => (open ? <div>{children}</div> : null),
+    'aria-label'?: string
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={label}>
+        {children}
+      </div>
+    ) : null,
   CardThemed: ({ children }: { children: React.ReactNode }) => (
     <div>{children}</div>
   ),
   InfoTooltipInline: () => <span role="img" aria-label="Info" />,
   SolidToggleButtonGroup: (props: object) => <ToggleButtonGroup {...props} />,
   BootstrapTooltip: (props: object) => <Tooltip {...props} />,
+  SuspenseTooltip: Tooltip,
 }))
+const fakeI18n = { language: 'en', t: (key: string) => key.split(':').at(-1) }
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: string | Record<string, unknown>) => {
@@ -129,6 +141,8 @@ vi.mock('react-i18next', () => ({
           text = text.replaceAll(`{{${k}}}`, String(v))
       return text
     },
+    // (names as KQM plays the rotation: the key; one object, as react-i18next gives)
+    i18n: fakeI18n,
   }),
 }))
 vi.mock('@genshin-optimizer/gi/ui', () => ({
@@ -149,7 +163,11 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   kqmBuildThreadsAuto: () => 4,
   kqmBuildThreadsMax: () => 7,
   setKqmBuildThreads: () => undefined,
-  teamOptMembers: () => [],
+  // (with no artifacts: KQM Compare's B plays its rotation on them)
+  teamOptMembers: () => [
+    { characterKey: 'KamisatoAyaka', artifactIds: {}, loadoutDatum: {} },
+  ],
+  runEnemyOf: () => undefined,
   kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 10,
   kqmMemberConstellation: (
     key: string,
@@ -280,6 +298,10 @@ vi.mock('./KqmChoosers', () => ({
     </>
   ),
   KqmSetChooser: () => <div>Set options</div>,
+}))
+vi.mock('./CountedPassives', () => ({
+  PassiveTag: () => null,
+  useCountedPassives: () => () => [],
 }))
 vi.mock('./KqmEnergyCalculator', () => ({
   KqmEnergyCalculator: () => <div>Team ER calculator</div>,
@@ -713,7 +735,31 @@ describe('KQM focused results', () => {
     mocks.compare.mockImplementation(async ({ weapon, sets }) => ({
       ...result,
       builds: { KamisatoAyaka: { ...build, weapon, sets } },
-      after: { ...result.after, total: 900 },
+      after: {
+        ...result.after,
+        total: 900,
+        members: { KamisatoAyaka: 900 },
+        attacks: { KamisatoAyaka: [810, 90] },
+      },
+      played: {
+        rotationTime: 18,
+        attacks: {
+          KamisatoAyaka: [
+            {
+              path: ['burst', 'dmg'],
+              hits: 1,
+              hitMode: 'avgHit',
+              element: 'cryo',
+            },
+            {
+              path: ['normal', '0'],
+              hits: 1,
+              hitMode: 'avgHit',
+              element: 'physical',
+            },
+          ],
+        },
+      },
     }))
     render(
       <KqmResults
@@ -753,6 +799,11 @@ describe('KQM focused results', () => {
     expect(
       screen.getByRole('combobox', { name: 'Weapon' }).textContent
     ).toContain('TheBlackSword')
+    expect(
+      screen.getByRole('img', { name: 'By element: Cryo 90%, Physical 10%' })
+    ).toBeTruthy()
+    const physical = screen.getByText('Physical').closest('li')!
+    expect(within(physical).getByText('5')).toBeTruthy()
     // back to the best team
     fireEvent.click(
       within(screen.getByRole('region', { name: 'Top builds' })).getAllByRole(

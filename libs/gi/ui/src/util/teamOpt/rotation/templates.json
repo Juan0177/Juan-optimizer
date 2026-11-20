@@ -1,0 +1,2335 @@
+{
+  "Mavuika": {
+    "Mavuika-Bennett-Citlali-Rosaria": {
+      "kind": "melt",
+      "members": ["Mavuika", "Bennett", "Citlali", "Rosaria"],
+      "text": "Mavuika E -> Bennett E Q -> Citlali E Q -> Rosaria E N1 Q -> Mavuika Q 6[C2D] -> Mavuika",
+      "seconds": 18.4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/NBhBNjRHr7Cp"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Rosaria": 6
+        },
+        "gear": {
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "WanderingEvenstar",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Rosaria": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "Instructor": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    },
+    "Mavuika-Bennett-Citlali-Rosaria-optimized": {
+      "kind": "melt",
+      "members": ["Mavuika", "Bennett", "Citlali", "Rosaria"],
+      "text": "Mavuika E -> Bennett E D Q -> Citlali E Q -> Rosaria E N1 Q -> Mavuika Q 6[C2D] -> Mavuika",
+      "seconds": 18.4,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Rosaria": 6
+        },
+        "gear": {
+          "Mavuika": {
+            "weapon": "MailedFlower",
+            "refinement": 5,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "ExaiphanesBlade",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Rosaria": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "Instructor": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Skirk": {
+    "Skirk-Furina-Shenhe-Escoffier": {
+      "kind": "freeze",
+      "members": ["Skirk", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D Q -> Escoffier E Q -> Shenhe hE Q -> Skirk E N2 Q 3[N5 D] N2 CA D N5 D N2 -> Furina",
+      "opener": "Furina E D Q -> Escoffier E Q -> Shenhe hE Q -> Skirk Q E N5 D N2 CA D 2[N5 D] N2 CA D N5 D N1",
+      "seconds": 20.9,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/RkGfNtLCnQQQ"
+      },
+      "checked": {
+        "gear": {
+          "Skirk": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          }
+        }
+      }
+    },
+    "Skirk-Furina-Citlali-Escoffier": {
+      "kind": "freeze",
+      "members": ["Skirk", "Furina", "Citlali", "Escoffier"],
+      "text": "Furina N1 E D N1 Q -> Citlali E N2 -> Escoffier E Q N1 -> Skirk E N2 Q 3[N5 D] N2 CA D N5 D N2 -> Furina",
+      "opener": "Furina N1 E D N1 Q -> Citlali E N2 -> Escoffier E Q N1 -> Skirk Q E N5 D N2 CA D 2[N5 D] N2 CA D N5 D N1",
+      "seconds": 20.9,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/FKTJnwQMRCWJ"
+      },
+      "checked": {
+        "gear": {
+          "Skirk": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "ThrillingTalesOfDragonSlayers",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Wriothesley": {
+    "Wriothesley-Furina-Shenhe-Escoffier": {
+      "kind": "freeze",
+      "members": ["Wriothesley", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D N1 Q -> Escoffier E Q -> Shenhe hE N1 Q -> Wriothesley E 5[N3 CA J] N3 Q -> Furina E D N1 Q -> Escoffier E Q -> Shenhe hE N1 Q -> Wriothesley E 5[N3 CA J] N3 CA -> Furina",
+      "seconds": 41.1,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/jTfftRBTKFRb"
+      },
+      "checked": {
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 3,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    },
+    "Wriothesley-Furina-Shenhe-Escoffier-optimized": {
+      "kind": "freeze",
+      "members": ["Wriothesley", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D Q -> Escoffier E Q -> Shenhe hE Q -> Wriothesley E 5[N3 CA J] N3 Q -> Furina E D Q -> Escoffier E Q -> Shenhe E N1 Q hE -> Wriothesley E 5[N3 CA J] N3 CA D -> Furina",
+      "seconds": 40.4,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Wriothesley": 1,
+          "Shenhe": 1
+        },
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "HarbingerOfDawn",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "MissiveWindspear",
+            "refinement": 5,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    },
+    "Wriothesley-Furina-Bennett-Xiangling": {
+      "kind": "vapeMelt",
+      "members": ["Wriothesley", "Furina", "Bennett", "Xiangling"],
+      "text": "Furina E D Q -> Bennett Q E -> Xiangling Q E D -> Wriothesley E 5[N3 CA J] N3 Q -> Bennett E -> Xiangling N1 -> Furina E D Q -> Bennett Q E -> Xiangling Q E D -> Wriothesley E 5[N3 CA J] N3 -> Bennett E -> Xiangling N1 -> Furina",
+      "seconds": 42.1,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/z97P8BJz9dWP"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Xiangling": 6
+        },
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 3,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "TheCatch",
+            "refinement": 5,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "Instructor": 4
+            }
+          }
+        }
+      }
+    },
+    "Wriothesley-Furina-Bennett-Xiangling-optimized": {
+      "kind": "vapeMelt",
+      "members": ["Wriothesley", "Furina", "Bennett", "Xiangling"],
+      "text": "Furina E D Q -> Bennett Q E -> Xiangling Q E D -> Wriothesley D E 4[N3 CA J] N3 Q -> Bennett E -> Xiangling N1 N1 -> Furina E D Q -> Bennett Q E -> Xiangling Q N1 E D -> Wriothesley E 4[N3 CA J] N3 Q -> Bennett E -> Xiangling N1 N1 -> Furina",
+      "seconds": 40.6,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Wriothesley": 1,
+          "Bennett": 6,
+          "Xiangling": 6
+        },
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "HarbingerOfDawn",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "ExaiphanesBlade",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Cyno": {
+    "Cyno-Fischl-Zhongli-Nahida": {
+      "kind": "aggravate",
+      "members": ["Cyno", "Fischl", "Zhongli", "Nahida"],
+      "text": "Fischl N1 E -> Zhongli N1 hE D W45f -> Nahida E Q N1 -> Fischl N2 Q -> Cyno E Q 6[N2 E N3 D] N2 E -> Fischl N1 E -> Zhongli N1 hE D -> Nahida E Q N1 -> Fischl N2 Q -> Cyno E Q 6[N2 E N3 D] N2 E -> Fischl",
+      "seconds": 52.9,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/HghTKgpgwrHN"
+      },
+      "checked": {
+        "constellations": {
+          "Fischl": 6
+        },
+        "gear": {
+          "Cyno": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "ThunderingFury": 4
+            }
+          },
+          "Fischl": {
+            "weapon": "TheStringless",
+            "refinement": 3,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "HakushinRing",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Zhongli": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "ArchaicPetra": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Flins": {
+    "Flins-Ineffa-Columbina-Sucrose": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Columbina", "Sucrose"],
+      "text": "Ineffa Q -> Columbina E N1 -> Sucrose E N2 Q? -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA W8f -> Ineffa E N1 -> Columbina E Q -> Sucrose E N2 Q? -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA W8f -> Ineffa",
+      "seconds": 37.9,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/njT9FjF6wMfB"
+      },
+      "checked": {
+        "constellations": {
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "PrimordialJadeWingedSpear",
+            "refinement": 2,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "StaffOfTheScarletSands",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "NocturnesCurtainCall",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "SacrificialFragments",
+            "refinement": 5,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    },
+    "Flins-Ineffa-Columbina-Sucrose-optimized": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Columbina", "Sucrose"],
+      "text": "Ineffa Q -> Columbina E N1 -> Sucrose N2 E Q? -> Flins E E N4 D N3 Q N4 E N4 Q D N4 -> Sucrose N2 CA W8f -> Ineffa E N1 Q -> Columbina E Q -> Sucrose E Q? N2 -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA D W8f -> Ineffa",
+      "seconds": 40.0,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "ProspectorsShovel",
+            "refinement": 5,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    },
+    "Flins-Ineffa-Aino-Sucrose": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Aino", "Sucrose"],
+      "text": "Ineffa E N1 -> Aino E Q -> Sucrose Q N1 E D -> Flins E N1 E N1 Q N4 D N4 D N2 E N1 Q N4 -> Sucrose N1 CA -> Ineffa E Q -> Aino E Q -> Sucrose N1 E D -> Flins E N1 E N1 Q N4 D N4 D N2 E N1 Q N4 -> Sucrose N1 CA -> Ineffa",
+      "seconds": 33.7,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/TkkH796Tw6mh"
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6,
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Aino": {
+            "weapon": "MakhairaAquamarine",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "WanderingEvenstar",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    },
+    "Flins-Ineffa-Aino-Sucrose-optimized": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Aino", "Sucrose"],
+      "text": "Ineffa E -> Aino Q E -> Sucrose N1 Q E D -> Flins E E Q N4 D N4 D N2 E Q N4 -> Sucrose N1 CA -> Aino E Q -> Ineffa E Q -> Sucrose N1 E D -> Flins E N1 E N1 Q N4 D N4 D N2 E N1 Q N4 -> Sucrose N1 CA -> Ineffa",
+      "seconds": 33.2,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6,
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Aino": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Nefer": {
+    "Nefer-Columbina-Nahida-Lauma": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Columbina", "Nahida", "Lauma"],
+      "text": "Columbina E Q -> Nahida E Q -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q? -> Columbina",
+      "opener": "Nefer E -> Columbina E Q -> Nahida E Q -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q?",
+      "seconds": 19.3,
+      "source": {
+        "name": "KQM Lauma quick guide",
+        "url": "https://keqingmains.com/q/lauma-quickguide/"
+      }
+    },
+    "Nefer-Columbina-Nahida-Lauma-optimized": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Columbina", "Nahida", "Lauma"],
+      "text": "Columbina E Q -> Nahida Q E -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q? -> Columbina",
+      "opener": "Nefer E -> Columbina E Q -> Nahida E Q -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q?",
+      "seconds": 19.2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "gear": {
+          "Nefer": {
+            "weapon": "ClashOfKings",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "DeepwoodMemories": 4
+            }
+          },
+          "Lauma": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "WanderersTroupe": 2,
+              "GildedDreams": 2
+            }
+          }
+        }
+      }
+    },
+    "Nefer-Aino-Nahida-Lauma": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Aino", "Nahida", "Lauma"],
+      "text": "Aino E Q -> Nahida E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD -> Aino",
+      "opener": "Nefer E -> Aino E Q -> Nahida E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD",
+      "seconds": 18.6,
+      "source": {
+        "name": "KQM Nefer and Lauma quick guides",
+        "url": "https://keqingmains.com/q/nefer-quickguide/"
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6
+        }
+      }
+    },
+    "Nefer-Aino-Nahida-Lauma-optimized": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Aino", "Nahida", "Lauma"],
+      "text": "Nahida Q E -> Aino E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD -> Aino",
+      "opener": "Nefer E -> Aino E Q -> Nahida E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD",
+      "seconds": 18.4,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6
+        },
+        "gear": {
+          "Nefer": {
+            "weapon": "ClashOfKings",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Aino": {
+            "weapon": "ForestRegalia",
+            "refinement": 5,
+            "sets": {
+              "Instructor": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Lauma": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "DeepwoodMemories": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Zibai": {
+    "Zibai-Illuga-Linnea-Columbina": {
+      "kind": "lunarCrystallize",
+      "members": ["Zibai", "Illuga", "Linnea", "Columbina"],
+      "text": "Linnea E -> Columbina E Q -> Illuga Q E -> Zibai E N1 Q N4 E N4 E N4 E N4 E -> Linnea",
+      "seconds": 20.3,
+      "source": {
+        "name": "KQM Zibai quick guide",
+        "url": "https://keqingmains.com/q/zibai-quickguide/"
+      }
+    },
+    "Zibai-Gorou-Linnea-Columbina": {
+      "kind": "lunarCrystallize",
+      "members": ["Zibai", "Gorou", "Linnea", "Columbina"],
+      "text": "Columbina E Q? -> Linnea E -> Gorou Q? E -> Zibai E N1 Q N4 E N4 E N4 E N4 E -> Columbina",
+      "seconds": 20.3,
+      "source": {
+        "name": "KQM Zibai quick guide",
+        "url": "https://keqingmains.com/q/zibai-quickguide/"
+      },
+      "checked": {
+        "constellations": {
+          "Gorou": 6
+        }
+      }
+    },
+    "Zibai-Illuga-Zhongli-Columbina": {
+      "kind": "lunarCrystallize",
+      "members": ["Zibai", "Illuga", "Zhongli", "Columbina"],
+      "text": "Columbina E Q? -> Illuga E Q -> Zhongli hE D N1 -> Zibai E N1 Q N4 E N4 E N4 E N4 E -> Columbina",
+      "seconds": 20.8,
+      "source": {
+        "name": "KQM Zibai quick guide",
+        "url": "https://keqingmains.com/q/zibai-quickguide/"
+      }
+    }
+  },
+  "Sandrone": {
+    "Sandrone-YaeMiko-Odette-Escoffier": {
+      "kind": "stellarConduct",
+      "members": ["Sandrone", "YaeMiko", "Odette", "Escoffier"],
+      "text": "YaeMiko E E E -> Odette E E -> Escoffier Q? E -> Sandrone CA E CA E CA E Q -> YaeMiko",
+      "seconds": 20.4,
+      "source": {
+        "name": "KQM Sandrone quick guide",
+        "url": "https://keqingmains.com/q/sandrone-quickguide/"
+      }
+    },
+    "Sandrone-Alyosha-Odette-Vodyanitsa": {
+      "kind": "stellarConduct",
+      "members": ["Sandrone", "Alyosha", "Odette", "Vodyanitsa"],
+      "text": "Odette E E -> Alyosha E Q -> Vodyanitsa E -> Sandrone CA E Q CA E CA E -> Odette",
+      "seconds": 19,
+      "source": {
+        "name": "KQM Sandrone quick guide",
+        "url": "https://keqingmains.com/q/sandrone-quickguide/"
+      }
+    },
+    "Sandrone-Odette-YaeMiko-Mitya": {
+      "kind": "stellarConduct",
+      "members": ["Sandrone", "Odette", "YaeMiko", "Mitya"],
+      "text": "Odette E E -> YaeMiko E E E -> Mitya E -> Sandrone CA E CA E CA E Q -> Odette",
+      "opener": "YaeMiko E E E -> Odette E E -> Mitya E -> Sandrone CA E CA E CA E Q",
+      "seconds": 19,
+      "source": {
+        "name": "Mobalytics Sandrone teams",
+        "url": "https://mobalytics.gg/genshin-impact/teams/sandrone-sc"
+      }
+    }
+  },
+  "Mitya": {
+    "Mitya-Odette-Valeriy-Sucrose": {
+      "kind": "stellarConduct",
+      "members": ["Mitya", "Odette", "Valeriy", "Sucrose"],
+      "text": "Odette E E -> Valeriy E CA Q -> Sucrose E?/N1 Q? -> Mitya hE CA Q CA -> Sucrose E?/N1 Q? -> Mitya CA -> Odette",
+      "seconds": 19.2,
+      "source": {
+        "name": "Mobalytics Mitya guide",
+        "url": "https://mobalytics.gg/genshin-impact/characters/mitya-build-guide"
+      }
+    }
+  },
+  "Anastasya": {
+    "Anastasya-Mitya-Danica-Odette": {
+      "kind": "stellarConduct",
+      "members": ["Anastasya", "Mitya", "Danica", "Odette"],
+      "text": "Mitya E -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E -> Mitya",
+      "opener": "Danica E -> Mitya E -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E",
+      "seconds": 19.2,
+      "source": {
+        "name": "Community calcs (beta)",
+        "url": "https://gwisted.com/games/genshin-impact/characters/tsaritsa"
+      }
+    },
+    "Anastasya-YaeMiko-Danica-Odette": {
+      "kind": "stellarConduct",
+      "members": ["Anastasya", "YaeMiko", "Danica", "Odette"],
+      "text": "YaeMiko E E E -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E -> YaeMiko",
+      "opener": "Danica E -> YaeMiko E E E -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E",
+      "seconds": 19.8,
+      "source": {
+        "name": "Community calcs (beta)",
+        "url": "https://gwisted.com/games/genshin-impact/characters/tsaritsa"
+      },
+      "checked": {
+        "constellations": {
+          "YaeMiko": 1
+        }
+      }
+    },
+    "Anastasya-Alyosha-Danica-Odette": {
+      "kind": "stellarConduct",
+      "members": ["Anastasya", "Alyosha", "Danica", "Odette"],
+      "text": "Alyosha E Q -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E -> Alyosha",
+      "opener": "Danica E -> Alyosha E Q -> Danica Q -> Odette E E -> Tsaritsa hE Q 2[N5 D] E E E",
+      "seconds": 19.6,
+      "source": {
+        "name": "Community calcs (beta)",
+        "url": "https://gwisted.com/games/genshin-impact/characters/tsaritsa"
+      },
+      "checked": {
+        "constellations": {
+          "Alyosha": 6
+        }
+      }
+    }
+  },
+  "Neuvillette": {
+    "Neuvillette-Furina-Zhongli-KaedeharaKazuha": {
+      "kind": "hypercarry",
+      "members": ["Neuvillette", "Furina", "Zhongli", "KaedeharaKazuha"],
+      "text": "Neuvillette E -> Furina N1 E D N1 -> Kazuha E P Q -> Zhongli N1 hE D -> Furina Q -> Neuvillette CA E CA Q -> Kazuha E P -> Neuvillette CA CA -> Neuvillette",
+      "seconds": 25.9,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/gf89kmTD9Kht"
+      },
+      "checked": {
+        "gear": {
+          "Neuvillette": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "WolfFang",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "Zhongli": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "ArchaicPetra": 4
+            }
+          },
+          "KaedeharaKazuha": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    },
+    "Neuvillette-Columbina-Ineffa-KaedeharaKazuha": {
+      "kind": "lunarCharged",
+      "members": ["Neuvillette", "Columbina", "Ineffa", "KaedeharaKazuha"],
+      "text": "Neuvillette E -> Ineffa E N1 -> Columbina Q E -> Kazuha E P Q -> Neuvillette CA Q E CA -> Ineffa Q? -> Kazuha E P -> Neuvillette CA CA -> Neuvillette",
+      "seconds": 27.2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/MRpbTjWhfR7G"
+      },
+      "checked": {
+        "gear": {
+          "Neuvillette": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "BalladOfTheFjords",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "KaedeharaKazuha": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Arlecchino": {
+    "Arlecchino-Yelan-Xilonen-Bennett": {
+      "kind": "vaporize",
+      "members": ["Arlecchino", "Yelan", "Xilonen", "Bennett"],
+      "text": "Arlecchino E -> Bennett E -> Xilonen E N2 -> Yelan E Q -> Bennett Q N1 -> Arlecchino 5[N3 CA] N1 CA N2 -> Arlecchino",
+      "opener": "Arlecchino E -> Xilonen E N2 -> Yelan E Q -> Bennett Q N1 -> Arlecchino CA 5[N3 CA] N1 CA N2",
+      "seconds": 18.6,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/mDrfLMzjjJJp"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6
+        },
+        "gear": {
+          "Arlecchino": {
+            "weapon": "BalladOfTheFjords",
+            "refinement": 1,
+            "sets": {
+              "FragmentOfHarmonicWhimsy": 4
+            }
+          },
+          "Yelan": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 5,
+            "sets": {
+              "ArchaicPetra": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "RaidenShogun": {
+    "RaidenShogun-Bennett-Xingqiu-Xiangling": {
+      "kind": "national",
+      "members": ["RaidenShogun", "Bennett", "Xingqiu", "Xiangling"],
+      "text": "Xingqiu E D Q N1 -> Bennett Q N1 E -> Xiangling N1 Q N1 E D -> Bennett N1 E -> Raiden N1 Q N4 E N4 D N4 D N4 -> Bennett N2 E -> Xingqiu",
+      "opener": "Raiden E -> Xingqiu E D Q N1 -> Bennett Q N1 E -> Xiangling N1 Q N1 E D -> Bennett N1 E -> Raiden N1 Q N4 E N4 D N4 D N4 -> Bennett N2 E",
+      "seconds": 21.2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/hcC8GQfrNFN8"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Xingqiu": 6,
+          "Xiangling": 6
+        },
+        "gear": {
+          "RaidenShogun": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Xingqiu": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "TheCatch",
+            "refinement": 5,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          }
+        }
+      }
+    },
+    "RaidenShogun-Columbina-Durin-Ineffa": {
+      "kind": "lunarCharged",
+      "members": ["RaidenShogun", "Columbina", "Durin", "Ineffa"],
+      "text": "Columbina E Q -> Ineffa E Q -> Durin E E Q -> Raiden Q N4 E N4 D N4 D N4 -> Columbina",
+      "opener": "Raiden E -> Columbina E Q -> Ineffa E Q -> Durin E E Q -> Raiden Q N4 E N4 D N4 D N4",
+      "seconds": 18.5,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/887WTBbK6QMC"
+      },
+      "checked": {
+        "gear": {
+          "RaidenShogun": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Durin": {
+            "weapon": "LionsRoar",
+            "refinement": 3,
+            "sets": {
+              "ADayCarvedFromRisingWinds": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "HuTao": {
+    "HuTao-Yelan-Columbina-Ineffa": {
+      "kind": "lunarCharged",
+      "members": ["HuTao", "Yelan", "Columbina", "Ineffa"],
+      "text": "Ineffa N1 E -> Columbina E Q -> Yelan E Q N2 -> Hu Tao E 8[N2 CA J] N1 Q -> Ineffa E Q -> Columbina E N1 -> Yelan E Q N2 -> Hu Tao E 8[N2 CA J] N2 CA J -> Ineffa",
+      "seconds": 37.8,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/HgKTQhd7kMgq"
+      },
+      "checked": {
+        "gear": {
+          "HuTao": {
+            "weapon": "DragonsBane",
+            "refinement": 3,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Yelan": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 4,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "KamisatoAyaka": {
+    "KamisatoAyaka-Furina-Shenhe-Escoffier": {
+      "kind": "freeze",
+      "members": ["KamisatoAyaka", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D Q -> Escoffier E Q -> Shenhe Q E -> Ayaka E D N1 Q N1 CA D N2 CA N2 CA -> Shenhe N2 E -> Ayaka E D N1 CA -> Furina",
+      "seconds": 20.1,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/7CczW6q8QphG"
+      },
+      "checked": {
+        "gear": {
+          "KamisatoAyaka": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Yoimiya": {
+    "Yoimiya-Yelan-Ineffa-Bennett": {
+      "kind": "vaporize",
+      "members": ["Yoimiya", "Yelan", "Ineffa", "Bennett"],
+      "text": "Yelan N1 E N1 Q N1 -> Bennett E Q -> Ineffa N1 D E -> Yoimiya E 3[N5 D] N1 Q -> Yelan N1 E N1 Q N1 -> Bennett E Q -> Ineffa Q E -> Yoimiya E 3[N5 D] N1 -> Bennett N1 E N1 -> Yelan N1 E N1 Q N1 -> Bennett E Q -> Ineffa N1 D E -> Yoimiya E 3[N5 D] N1 -> Bennett N1 E N1 -> Yelan",
+      "seconds": 56,
+      "rotations": 3,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/KnTjDpzLcfFg"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6
+        },
+        "gear": {
+          "Yoimiya": {
+            "weapon": "Rust",
+            "refinement": 3,
+            "sets": {
+              "ShimenawasReminiscence": 4
+            }
+          },
+          "Yelan": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 4,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "BalladOfTheFjords",
+            "refinement": 1,
+            "sets": {
+              "GildedDreams": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Ganyu": {
+    "Ganyu-Shenhe-Furina-Escoffier": {
+      "kind": "freeze",
+      "members": ["Ganyu", "Shenhe", "Furina", "Escoffier"],
+      "text": "Ganyu E -> Furina E D N1 Q -> Shenhe Q E -> Escoffier E Q -> Ganyu CA E Q CA -> Shenhe D N1 E N1 -> Ganyu 2[CA] -> Ganyu",
+      "seconds": 20.6,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/PpMwnLLhTDLK"
+      },
+      "checked": {
+        "gear": {
+          "Ganyu": {
+            "weapon": "SongOfStillness",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    },
+    "Ganyu-Durin-Emilie-Nicole": {
+      "kind": "melt",
+      "members": ["Ganyu", "Durin", "Emilie", "Nicole"],
+      "text": "Emilie E N1 -> Nicole N2 E -> Durin E E Q N1 -> Ganyu E 5[CA] N1 E Q -> Emilie Q -> Nicole Q E -> Durin E E Q N1 -> Ganyu E 5[CA] N1 E 2[CA] N1 -> Emilie",
+      "seconds": 41.1,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/ftd87C7G6MfC"
+      },
+      "checked": {
+        "gear": {
+          "Ganyu": {
+            "weapon": "ChainBreaker",
+            "refinement": 5,
+            "sets": {
+              "UnfinishedReverie": 4
+            }
+          },
+          "Durin": {
+            "weapon": "WolfFang",
+            "refinement": 1,
+            "sets": {
+              "ADayCarvedFromRisingWinds": 4
+            }
+          },
+          "Emilie": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "UnfinishedReverie": 4
+            }
+          },
+          "Nicole": {
+            "weapon": "OathswornEye",
+            "refinement": 5,
+            "sets": {
+              "CelestialGift": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Mualani": {
+    "Mualani-Mavuika-Citlali-Xilonen": {
+      "kind": "natlan",
+      "members": ["Mualani", "Mavuika", "Citlali", "Xilonen"],
+      "text": "Mualani D N2 -> Citlali E N1 -> Xilonen E N2 -> Mavuika Q CA E D -> Mualani E 3[W90f N1] Q -> Mualani D N2 -> Citlali E N1 -> Xilonen E N2 -> Mavuika Q CA E D -> Mualani E 3[W90f N1] W1f -> Xilonen Q -> Mualani N2 -> Mualani",
+      "seconds": 36.2,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/BfR7kkFQBkCz"
+      },
+      "checked": {
+        "gear": {
+          "Mualani": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "WanderingEvenstar",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "Instructor": 4
+            }
+          }
+        }
+      }
+    },
+    "Mualani-Mona-Sucrose-Mavuika": {
+      "kind": "vaporize",
+      "members": ["Mualani", "Mona", "Sucrose", "Mavuika"],
+      "text": "Mona N1 E -> Mavuika Q CA D CA D CA E -> Mona Q N1 -> Sucrose E D Q? -> Mualani E Q 2[W90f N1] W1f -> Mona N1 E -> Mavuika Q CA D CA D CA E -> Mona Q N1 -> Sucrose E D Q? -> Mualani E 3[W90f N1] W1f -> Mona",
+      "seconds": 36.1,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/9WNdj8phntJT"
+      },
+      "checked": {
+        "constellations": {
+          "Sucrose": 6
+        },
+        "gear": {
+          "Mualani": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Mona": {
+            "weapon": "PrototypeAmber",
+            "refinement": 5,
+            "sets": {
+              "CelestialGift": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "WanderingEvenstar",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Chasca": {
+    "Chasca-Ineffa-Columbina-Mavuika": {
+      "kind": "lunarCharged",
+      "members": ["Chasca", "Ineffa", "Columbina", "Mavuika"],
+      "text": "Ineffa E N1 -> Columbina E Q -> Mavuika E Q CA D -> Chasca E 4[CA] CA[bullets=4] Q -> Ineffa E Q -> Columbina E N2 -> Mavuika E Q CA D -> Chasca E 4[CA] CA[bullets=4] -> Ineffa",
+      "seconds": 38.4,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/GWtDtNKJbccb"
+      },
+      "checked": {
+        "gear": {
+          "Chasca": {
+            "weapon": "ChainBreaker",
+            "refinement": 5,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          }
+        }
+      }
+    },
+    "Chasca-Ororon-Furina-Bennett": {
+      "kind": "vaporize",
+      "members": ["Chasca", "Ororon", "Furina", "Bennett"],
+      "text": "Furina E D Q -> Bennett Q E -> Ororon Q E N1 -> Chasca E 4[CA] CA[bullets=4] Q -> Bennett E -> Furina E D Q -> Bennett Q E -> Ororon Q E N1 -> Chasca E 4[CA] CA[bullets=4] N2 -> Bennett E -> Furina",
+      "seconds": 40.5,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/NH9gCzpwCKFr"
+      },
+      "checked": {
+        "constellations": {
+          "Ororon": 6,
+          "Bennett": 6
+        },
+        "gear": {
+          "Chasca": {
+            "weapon": "ChainBreaker",
+            "refinement": 5,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Ororon": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Varesa": {
+    "Varesa-Ororon-Mavuika-Chevreuse": {
+      "kind": "overloaded",
+      "members": ["Varesa", "Ororon", "Mavuika", "Chevreuse"],
+      "text": "Chevreuse hE Q?/N1 -> Ororon E Q -> Mavuika Q E D -> Varesa E CA P E CA P Q E CA P E CA P Q CA P CA P -> Chevreuse hE Q?/N1 -> Ororon E Q -> Mavuika Q E D -> Varesa E CA P Q E CA P E CA P Q E CA P E CA P Q CA P -> Chevreuse",
+      "seconds": 37.1,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/pRgWgfqjpjNn"
+      },
+      "checked": {
+        "constellations": {
+          "Ororon": 6,
+          "Chevreuse": 6
+        },
+        "gear": {
+          "Varesa": {
+            "weapon": "TheWidsith",
+            "refinement": 3,
+            "sets": {
+              "LongNightsOath": 4
+            }
+          },
+          "Ororon": {
+            "weapon": "ChainBreaker",
+            "refinement": 5,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "MakhairaAquamarine",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Chevreuse": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "SongOfDaysPast": 4
+            }
+          }
+        }
+      }
+    },
+    "Varesa-Chevreuse-Durin-Nicole": {
+      "kind": "overloaded",
+      "members": ["Varesa", "Chevreuse", "Durin", "Nicole"],
+      "text": "Nicole Q E -> Chevreuse hE Q -> Durin E E Q -> Varesa E CA P E CA P Q E CA P E CA P Q CA P CA P -> Nicole Q E -> Chevreuse hE Q -> Durin E E Q -> Varesa E CA P Q E CA P E CA P Q E CA P E CA P Q CA P -> Nicole",
+      "seconds": 39.5,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/bgCqJPJhrCf9"
+      },
+      "checked": {
+        "constellations": {
+          "Chevreuse": 6
+        },
+        "gear": {
+          "Varesa": {
+            "weapon": "TheWidsith",
+            "refinement": 3,
+            "sets": {
+              "LongNightsOath": 4
+            }
+          },
+          "Chevreuse": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Durin": {
+            "weapon": "WolfFang",
+            "refinement": 1,
+            "sets": {
+              "ADayCarvedFromRisingWinds": 4
+            }
+          },
+          "Nicole": {
+            "weapon": "OathswornEye",
+            "refinement": 5,
+            "sets": {
+              "CelestialGift": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Clorinde": {
+    "Clorinde-Columbina-Durin-Ineffa": {
+      "kind": "lunarCharged",
+      "members": ["Clorinde", "Columbina", "Durin", "Ineffa"],
+      "text": "Columbina E Q -> Ineffa E N1 -> Durin E E Q -> Clorinde E E 5[N3 E] N3 E? Q N1 -> Columbina E -> Ineffa E Q -> Durin E E Q -> Clorinde E E 5[N3 E] N3 E? Q N1 -> Columbina E Q -> Ineffa E N1 -> Durin E E Q -> Clorinde E E 5[N3 E] N3 E? Q N1 -> Columbina E -> Ineffa E Q -> Durin E E Q -> Clorinde E E 5[N3 E] N3 E? Q N1 -> Columbina",
+      "opener": "Columbina E -> Ineffa E Q -> Durin E E Q -> Clorinde E 5[N3 E] N3 E? N1 Q N1",
+      "seconds": 72,
+      "rotations": 4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/fkBrcJTcD6pQ"
+      },
+      "checked": {
+        "gear": {
+          "Clorinde": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "FragmentOfHarmonicWhimsy": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Durin": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          }
+        }
+      }
+    },
+    "Clorinde-Fischl-KaedeharaKazuha-Nahida": {
+      "kind": "aggravate",
+      "members": ["Clorinde", "Fischl", "KaedeharaKazuha", "Nahida"],
+      "text": "Kazuha E P -> Clorinde Q -> Nahida E -> Fischl N2 Q -> Kazuha N1 Q -> Clorinde E E 5[N3 E] N3 E? -> Kazuha E P -> Clorinde Q -> Nahida E -> Fischl N1 E N1 -> Kazuha E P -> Clorinde E E 5[N3 E] N3 E? -> Kazuha",
+      "opener": "Fischl Q -> Kazuha Q -> Nahida E N1 -> Clorinde E 5[N3 E] N3 E? N1 -> Kazuha E P -> Clorinde Q -> Nahida E -> Fischl N1 E N1 -> Kazuha E P -> Clorinde E E 5[N3 E] N3 E?",
+      "seconds": 33.2,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/L6pm7kgMJFLm"
+      },
+      "checked": {
+        "constellations": {
+          "Fischl": 6
+        },
+        "gear": {
+          "Clorinde": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "FragmentOfHarmonicWhimsy": 4
+            }
+          },
+          "Fischl": {
+            "weapon": "TheStringless",
+            "refinement": 3,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "KaedeharaKazuha": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "WanderingEvenstar",
+            "refinement": 1,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Wanderer": {
+    "Wanderer-Furina-Faruzan-Bennett": {
+      "kind": "hypercarry",
+      "members": ["Wanderer", "Furina", "Faruzan", "Bennett"],
+      "text": "Furina E D Q -> Bennett Q E -> Faruzan Q E -> Wanderer N2 Q N1 E N1 CA 4[N2 D N2 CA] E? -> Furina",
+      "opener": "Furina E D Q -> Bennett E Q -> Faruzan Q E -> Wanderer N2 Q N1 E N1 CA 4[N2 D N2 CA] E?",
+      "seconds": 20.7,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/gFJbjGwqG9TQ"
+      },
+      "checked": {
+        "constellations": {
+          "Faruzan": 6,
+          "Bennett": 6
+        },
+        "gear": {
+          "Wanderer": {
+            "weapon": "TheWidsith",
+            "refinement": 3,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Faruzan": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 4,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Tighnari": {
+    "Tighnari-Furina-KukiShinobu-Nahida": {
+      "kind": "quickbloom",
+      "members": ["Tighnari", "Furina", "KukiShinobu", "Nahida"],
+      "text": "Kuki E?/N2E D N1 -> Nahida E Q -> Furina E D Q -> Tighnari E CA Q 2[CA] -> Nahida N2 E N2 CA D N2 CA -> Kuki E?/N2E D N1 Q -> Nahida N1 E N2 CA -> Tighnari E CA Q 2[CA] -> Nahida N2 E N2 CA D N2 CA D N2 CA -> Kuki",
+      "seconds": 30.5,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/6WD6dDGGHLQ8"
+      },
+      "checked": {
+        "constellations": {
+          "KukiShinobu": 6
+        },
+        "gear": {
+          "Tighnari": {
+            "weapon": "SongOfStillness",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FesteringDesire",
+            "refinement": 5,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "KukiShinobu": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "FlowerOfParadiseLost": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "DeepwoodMemories": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Keqing": {
+    "Keqing-Fischl-Nahida-Xilonen": {
+      "kind": "aggravate",
+      "members": ["Keqing", "Fischl", "Nahida", "Xilonen"],
+      "text": "Fischl N2 Q -> Nahida E N1 CA -> Xilonen E N2 -> Keqing E N2 Q E N1 CA N1 CA N1 E N1 CA N1 -> Nahida E N1 CA -> Fischl E N1 -> Xilonen E N2 Q -> Keqing E Q E N1 CA N1 CA N1 E N1 CA N2 CA -> Fischl",
+      "opener": "Fischl Q -> Nahida E N1 CA -> Xilonen E N2 -> Keqing E N2 Q E N1 CA N1 CA N1 E N1 CA N1 -> Nahida E N1 CA -> Fischl E N1 -> Xilonen E N2 Q -> Keqing E Q E N1 CA N1 CA N1 E N1 CA N2 CA",
+      "seconds": 25.7,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/Bc8FFhCJ87dh"
+      },
+      "checked": {
+        "constellations": {
+          "Fischl": 6
+        },
+        "gear": {
+          "Keqing": {
+            "weapon": "HarbingerOfDawn",
+            "refinement": 5,
+            "sets": {
+              "ThunderingFury": 4
+            }
+          },
+          "Fischl": {
+            "weapon": "TheStringless",
+            "refinement": 3,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "HakushinRing",
+            "refinement": 5,
+            "sets": {
+              "Instructor": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          }
+        }
+      }
+    },
+    "Keqing-Chevreuse-Ororon-Mavuika": {
+      "kind": "overloaded",
+      "members": ["Keqing", "Chevreuse", "Ororon", "Mavuika"],
+      "text": "Ororon Q E -> Chevreuse Q hE -> Mavuika Q CA E CA D -> Keqing E Q E 5[N1 CA] N1 E E 2[N1 CA] -> Ororon",
+      "seconds": 18.4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/7zMWLRMFWJCq"
+      },
+      "checked": {
+        "constellations": {
+          "Chevreuse": 6,
+          "Ororon": 6
+        },
+        "gear": {
+          "Keqing": {
+            "weapon": "FinaleOfTheDeep",
+            "refinement": 5,
+            "sets": {
+              "FragmentOfHarmonicWhimsy": 4
+            }
+          },
+          "Chevreuse": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Ororon": {
+            "weapon": "ChainBreaker",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Tartaglia": {
+    "Tartaglia-Xiangling-Furina-Bennett": {
+      "kind": "vaporize",
+      "members": ["Tartaglia", "Xiangling", "Furina", "Bennett"],
+      "text": "Furina E D Q -> Bennett Q E -> Xiangling Q E D -> Bennett E -> Tartaglia N1 Q E 5[N2 CA D] N1 CA D -> Bennett E -> Xiangling N2 -> Tartaglia CA -> Bennett E -> Furina",
+      "seconds": 22.8,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/qhpmCMqcFcNz"
+      },
+      "checked": {
+        "constellations": {
+          "Xiangling": 6,
+          "Bennett": 6
+        },
+        "gear": {
+          "Tartaglia": {
+            "weapon": "SongOfStillness",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "TheCatch",
+            "refinement": 5,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FesteringDesire",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "Instructor": 4
+            }
+          }
+        }
+      }
+    },
+    "Tartaglia-Bennett-Xiangling-KaedeharaKazuha": {
+      "kind": "vaporize",
+      "members": ["Tartaglia", "Bennett", "Xiangling", "KaedeharaKazuha"],
+      "text": "Tartaglia WK E N1 -> Bennett Q -> Kazuha E P Q -> Xiangling Q E D -> Tartaglia WK Q WK11f E N2 CA J N2 CA D N1 CA D N2 CA D N2 CA D N1 CA D -> Kazuha E P -> Bennett E -> Xiangling N1 E D -> Tartaglia CA -> Bennett E -> Kazuha E P -> Tartaglia CA -> Bennett E -> Xiangling N1 -> Tartaglia",
+      "seconds": 29.1,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/dcRK6ggKGmzd"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Xiangling": 6
+        },
+        "gear": {
+          "Tartaglia": {
+            "weapon": "TheViridescentHunt",
+            "refinement": 1,
+            "sets": {
+              "NymphsDream": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "Instructor": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "TheCatch",
+            "refinement": 5,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          },
+          "KaedeharaKazuha": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Eula": {
+    "Eula-RaidenShogun-Rosaria-Zhongli": {
+      "kind": "physical",
+      "members": ["Eula", "RaidenShogun", "Rosaria", "Zhongli"],
+      "text": "Raiden E -> Rosaria E -> Eula E N1 -> Zhongli hE D -> Rosaria Q -> Eula Q N4 hE N4 -> Rosaria E -> Eula N2 -> Raiden Q N3 CA N3 CA N2 -> Raiden",
+      "seconds": 26,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/F9dBrbFWjFw7"
+      },
+      "checked": {
+        "constellations": {
+          "Rosaria": 6
+        },
+        "gear": {
+          "Eula": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "PaleFlame": 4
+            }
+          },
+          "RaidenShogun": {
+            "weapon": "TheCatch",
+            "refinement": 5,
+            "sets": {
+              "EmblemOfSeveredFate": 4
+            }
+          },
+          "Rosaria": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Zhongli": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          }
+        }
+      }
+    },
+    "Eula-Furina-Shenhe-Escoffier": {
+      "kind": "freeze",
+      "members": ["Eula", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D N1 Q -> Escoffier E Q -> Shenhe Q E -> Eula E N1 Q E N4 D N2 hE W11f N2 -> Shenhe E N2 -> Eula N2 -> Furina",
+      "opener": "Furina E D N1 Q -> Escoffier E Q -> Shenhe Q E -> Eula E Q E N4 D N2 hE W11f N2 -> Shenhe E N2 -> Eula N2",
+      "seconds": 22.4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/DFJLPthcR9L8"
+      },
+      "checked": {
+        "gear": {
+          "Eula": {
+            "weapon": "UltimateOverlordsMegaMagicSword",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Freminet": {
+    "Freminet-Furina-Shenhe-Escoffier": {
+      "kind": "freeze",
+      "members": ["Freminet", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D Q -> Escoffier E Q -> Shenhe E Q -> Freminet E E Q E E N2 E E N1 -> Shenhe E N1 -> Freminet E E N3 -> Furina",
+      "seconds": 20.1,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/LKgMkHQ9jwMk"
+      },
+      "checked": {
+        "constellations": {
+          "Freminet": 6
+        },
+        "gear": {
+          "Freminet": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FesteringDesire",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Razor": {
+    "Razor-Chevreuse-Durin-Nicole": {
+      "kind": "overloaded",
+      "members": ["Razor", "Chevreuse", "Durin", "Nicole"],
+      "text": "Chevreuse Q hE hE -> Durin E E Q -> Nicole E Q -> Razor E D N1 Q N1 E D 2[N3 D] N3 E D 2[N3 D] N2 E D -> Chevreuse",
+      "opener": "Razor E D -> Chevreuse Q hE hE -> Durin E E Q -> Nicole E Q -> Razor E D N1 Q N1 E D 2[N3 D] N3 E D 2[N3 D] N2 E D",
+      "seconds": 23,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/KCKW6LmfDCkz"
+      },
+      "checked": {
+        "constellations": {
+          "Razor": 6,
+          "Chevreuse": 6
+        },
+        "gear": {
+          "Razor": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ADayCarvedFromRisingWinds": 4
+            }
+          },
+          "Chevreuse": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Durin": {
+            "weapon": "WolfFang",
+            "refinement": 1,
+            "sets": {
+              "ADayCarvedFromRisingWinds": 4
+            }
+          },
+          "Nicole": {
+            "weapon": "OathswornEye",
+            "refinement": 5,
+            "sets": {
+              "CelestialGift": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "AratakiItto": {
+    "AratakiItto-Xilonen-Furina-Mavuika": {
+      "kind": "doubleGeo",
+      "members": ["AratakiItto", "Xilonen", "Furina", "Mavuika"],
+      "text": "Xilonen E N2 Q -> Furina E D Q -> Mavuika E Q CA D -> Xilonen E N2 -> Itto N1 Q N1 E 4[CA] N3 4[CA] D N3 E 4[CA] -> Xilonen",
+      "opener": "Mavuika E -> Xilonen E N2 Q -> Furina E D Q -> Mavuika Q CA D -> Xilonen E N2 -> Itto N1 Q N1 E N2 5[CA] D N4 5[CA] E CA W21f",
+      "seconds": 26.2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/d9M87gKDc8Mm"
+      },
+      "checked": {
+        "gear": {
+          "AratakiItto": {
+            "weapon": "Whiteblind",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          },
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Lyney": {
+    "Lyney-Xiangling-KaedeharaKazuha-Bennett": {
+      "kind": "monoPyro",
+      "members": ["Lyney", "Xiangling", "KaedeharaKazuha", "Bennett"],
+      "text": "Lyney CA[weakspot] -> Bennett E W1.1 Q -> Kazuha E P -> Xiangling Q E D -> Lyney CA[weakspot] 2[CA] Q W11f E E -> Lyney CA[weakspot] -> Bennett E W1.1 Q -> Kazuha Q -> Xiangling N1 E D N1 -> Lyney CA[weakspot] 3[CA] E -> Lyney",
+      "opener": "Bennett Q -> Kazuha Q -> Xiangling Q E D -> Lyney CA[weakspot] 2[CA] Q W11f E E -> Lyney CA[weakspot] -> Bennett E W1.1 Q -> Kazuha E P -> Xiangling N1 E D N1 -> Lyney CA[weakspot] 2[CA] Q W11f E E",
+      "seconds": 32.8,
+      "rotations": 2,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/B8H76PTTRrNq"
+      },
+      "checked": {
+        "constellations": {
+          "Xiangling": 6,
+          "Bennett": 6
+        },
+        "gear": {
+          "Lyney": {
+            "weapon": "PrototypeCrescent",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "FavoniusLance",
+            "refinement": 3,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "KaedeharaKazuha": {
+            "weapon": "XiphosMoonlight",
+            "refinement": 1,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Navia": {
+    "Navia-Xilonen-Bennett-Furina": {
+      "kind": "crystallize",
+      "members": ["Navia", "Xilonen", "Bennett", "Furina"],
+      "text": "Xilonen Q -> Furina E D Q -> Xilonen E N2 -> Navia Q -> Bennett E D Q -> Navia hE N3 D N2 -> Xilonen E N2 -> Navia hE N3 D N2 hE N1 -> Xilonen Q -> Furina E D Q -> Xilonen E N2 -> Navia Q -> Bennett E D Q -> Navia hE N3 D N2 -> Xilonen E N2 -> Navia hE N3 D N2 -> Xilonen Q -> Furina E D Q -> Xilonen E N2 -> Navia Q -> Bennett E D Q -> Navia hE N3 D N2 -> Xilonen E N2 -> Navia hE N3 D N2 -> Xilonen Q -> Furina E D Q -> Xilonen E N2 -> Navia Q -> Bennett E D Q -> Navia hE N3 D N2 -> Xilonen E N2 -> Navia hE N3 D N2 -> Xilonen",
+      "seconds": 82.6,
+      "rotations": 4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/F9bct8c6TWKN"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6
+        },
+        "gear": {
+          "Navia": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Furina": {
+            "weapon": "FesteringDesire",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          }
+        }
+      }
+    }
+  },
+  "Xiao": {
+    "Xiao-Faruzan-Durin-Nicole": {
+      "kind": "hexerei",
+      "members": ["Xiao", "Faruzan", "Durin", "Nicole"],
+      "text": "Faruzan Q -> Durin E E Q -> Nicole E N1 -> Xiao E E Q 12[J HP[collision]] -> Faruzan",
+      "seconds": 21.4,
+      "source": {
+        "name": "KQM sim database",
+        "url": "https://db.kqm.gg/Kw9k9FDGDg8b"
+      },
+      "checked": {
+        "constellations": {
+          "Faruzan": 6
+        },
+        "gear": {
+          "Xiao": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "LongNightsOath": 4
+            }
+          },
+          "Faruzan": {
+            "weapon": "FavoniusWarbow",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Durin": {
+            "weapon": "WolfFang",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Nicole": {
+            "weapon": "ThrillingTalesOfDragonSlayers",
+            "refinement": 5,
+            "sets": {
+              "CelestialGift": 4
+            }
+          }
+        }
+      }
+    }
+  }
+}

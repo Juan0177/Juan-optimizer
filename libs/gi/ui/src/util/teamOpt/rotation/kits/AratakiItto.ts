@@ -377,6 +377,7 @@ export const kit: KitModel = {
           ctx.attackSpeed +
           (previous?.kind === 'charged' ? 0.1 * s.a1Stacks : 0) +
           (previous?.kind === 'normal' && burst ? 0.1 : 0)
+        // (nothing follows before the hit, gcsim's CanQueueAfter, however fast the slash)
         const finish = (result: ActionResult) =>
           withHitlag(
             {
@@ -384,7 +385,10 @@ export const kit: KitModel = {
               framesInto: {
                 ...Object.fromEntries(
                   Object.entries(result.framesInto ?? {}).map(
-                    ([kind, frames]) => [kind, atkSpdAdjust(frames!, speed)]
+                    ([kind, frames]) => [
+                      kind,
+                      Math.max(hitAt, atkSpdAdjust(frames!, speed)),
+                    ]
                   )
                 ),
                 // a wait queues at the hit (CanQueueAfter, not sped up), before its hitlag
@@ -518,6 +522,9 @@ export const kit: KitModel = {
         // Royal Descent: the Raging Oni King state for 795 frames of Itto's clock (ATK from DEF
         // at the cast, Geo infusion, ATK SPD). It has no hit of its own
         const c = ctx.constellation('AratakiItto')
+        // N1 -> Q (KQM's N1 Burst cancel, gcsim's prestack): a Superlative Superstrength stack
+        if (previous?.kind === 'normal' && ctx.normalSequence(4, 0) === 1)
+          addStacks(s, 1)
         s.burstEnd = ctx.characterFrame('AratakiItto') + BURST_DURATION
         s.burstSnapshotAt = ctx.now
         const id = ++s.burstSeq

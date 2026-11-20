@@ -180,6 +180,7 @@ describe('Anastasya', () => {
     const attack = rotationAttacks(sim).Anastasya!.find(
       (a) => a.path.join('.') === 'constellation6.triumphSc'
     )!
+    expect(attack.element).toBe('cryo')
     expect(attack.states).toContainEqual({
       owner: 'Anastasya',
       path: ['Anastasya', 'blessing'],

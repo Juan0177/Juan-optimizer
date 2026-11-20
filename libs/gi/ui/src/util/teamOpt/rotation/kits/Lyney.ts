@@ -87,6 +87,15 @@ const addProp = (s: LyneyState) => {
   s.prop = Math.min(5, s.prop + 1)
 }
 
+/** Without HP tracking, his own HP changes still mark Marechaussee Hunter's stacks */
+const hpChanged = (c: SimContext) =>
+  c.hit(0, {
+    path: ['_marker', 'hpChange'],
+    tag: 'other',
+    element: 'pyro',
+    label: 'HP changed',
+  })
+
 /** His HP ratio: the party's tracked HP, or the kit's own */
 const hpRatio = (c: SimContext, s: LyneyState) =>
   c.healthTracked ? (c.hpRatio('Lyney') ?? 1) : s.hp
@@ -97,7 +106,10 @@ function drainHp(c: SimContext, s: LyneyState): boolean {
   if (ratio <= 0.6 + 1e-7) return false
   const amount = Math.min(0.2, ratio - 0.6)
   if (c.healthTracked) c.drainHp('Lyney', amount)
-  else s.hp = Math.max(0.6, s.hp - amount)
+  else {
+    s.hp = Math.max(0.6, s.hp - amount)
+    hpChanged(c)
+  }
   return true
 }
 
@@ -185,6 +197,7 @@ export const kit: KitModel = {
             element: 'pyro',
             applies: true,
             icd: 'none',
+            weakspot: action.weakspot,
             label: 'Fully-Charged Aimed Shot (Prop Arrow)',
           })
           c4(c1, 10)
@@ -268,8 +281,10 @@ export const kit: KitModel = {
           ctx.at(18, (c) => {
             if (c.healthTracked)
               c.healPercent('Lyney', 0.2 * stacks, [c.onField])
-            else if (c.onField === 'Lyney')
+            else if (c.onField === 'Lyney' && s.hp < 1) {
               s.hp = Math.min(1, s.hp + 0.2 * stacks)
+              hpChanged(c)
+            }
           })
         return {
           cooldown: { key: 'skill', frames: 900, delay: 15 },

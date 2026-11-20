@@ -1,10 +1,14 @@
+import {
+  useDataManagerEntries,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import type { ArtifactSlotKey } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSlotKeys,
   artSlotMainKeys,
 } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt } from '@genshin-optimizer/gi/db'
+import type { StatFilters, TeamOpt } from '@genshin-optimizer/gi/db'
 import type { TeamCharacterContextObj } from '@genshin-optimizer/gi/db-ui'
 import {
   TeamCharacterContext,
@@ -17,22 +21,28 @@ import { SlotIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { TeamData, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import { CharacterName, teamOptPool } from '@genshin-optimizer/gi/ui'
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
+  Alert,
   Box,
   Button,
-  Collapse,
+  InputAdornment,
+  Skeleton,
   Switch,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Components/MainStatSelectionCard'
 import { formatDamage, mainStatLabel } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
+import type { TeamEnergy } from './TeamEnergy'
+import { setOptConfigEr, TeamEnergyDrawer, useTeamEnergy } from './TeamEnergy'
 import { MemberSettings, PoolSettings } from './TeamOptSettings'
 import {
   FieldLabel,
@@ -75,14 +85,42 @@ export function RunDialog({
 }) {
   const { t } = useTranslation('page_team')
   const builds = teamOpt.topN ?? 1
-  const optimized = members.filter(
+  const database = useDatabase()
+  const artifacts = useDataManagerValues(database.arts)
+  const configs = new Map(useDataManagerEntries(database.optConfigs))
+  const toOptimize = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
-  ).length
+  )
+  const locations = new Set(members.map((member) => member.location as string))
+  const reserved = new Set(
+    members
+      .filter((m) => !toOptimize.includes(m))
+      .flatMap((m) => Object.values(m.artifactIds))
+      .filter((id): id is string => !!id)
+  )
+  const eligible = toOptimize.every((member) => {
+    const config = configs.get(member.teamChar.optConfigId)
+    if (!config) return false
+    const pool = teamOptPool(
+      artifacts,
+      member,
+      config,
+      teamOpt,
+      locations,
+      reserved
+    )
+    return allArtifactSlotKeys.every((slot) =>
+      pool.some((art) => art.slotKey === slot)
+    )
+  })
+  const canStart = toOptimize.length > 0 && eligible
+  const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   return (
     <ModalWrapper
       open={open}
       onClose={onClose}
       containerProps={{ maxWidth: 'lg' }}
+      aria-label={t('teamOpt.runDialog.title', 'Optimize team')}
     >
       <CardThemed>
         <DialogHead
@@ -131,13 +169,43 @@ export function RunDialog({
                 </>
               }
               actions={
-                <Typography sx={{ ...type.label, ...numSx }}>
-                  {t('teamOpt.run.summary', {
-                    defaultValue: '{{count}} of {{total}} members optimized',
-                    count: optimized,
-                    total: members.length,
-                  })}
-                </Typography>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    justifyContent: 'flex-end',
+                    columnGap: 1.5,
+                    rowGap: 0.5,
+                  }}
+                >
+                  <Typography sx={{ ...type.label, ...numSx }}>
+                    {t('teamOpt.run.summary', {
+                      defaultValue: '{{count}} of {{total}} members optimized',
+                      count: toOptimize.length,
+                      total: members.length,
+                    })}
+                  </Typography>
+                  {energy.calculated && (
+                    <FieldLabel
+                      tip={t(
+                        'teamOpt.energy.active',
+                        'Calculator targets applied. ER is recalculated for the weapons each build holds during optimization. Editing a member’s minimum switches back to the members’ own ER requirements.'
+                      )}
+                    >
+                      {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
+                    </FieldLabel>
+                  )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="inherit"
+                    startIcon={<CalculateOutlinedIcon />}
+                    onClick={energy.openCalculator}
+                  >
+                    {t('teamOpt.kqm.calc.open', 'Calculate ER')}
+                  </Button>
+                </Box>
               }
               // (a gap between the title and its ⓘ)
               sx={{ mb: 1, '& h3': { gap: '6px' } }}
@@ -152,6 +220,7 @@ export function RunDialog({
                   teamData={teamData}
                   teamOpt={teamOpt}
                   setTeamOpt={setTeamOpt}
+                  energy={energy}
                 />
               ))}
             </Box>
@@ -194,6 +263,19 @@ export function RunDialog({
               }))}
             />
           </Box>
+          {!!toOptimize.length && !eligible && (
+            <Alert severity="info" role="status">
+              {artifacts.length
+                ? t(
+                    'teamOpt.runDialog.incompleteInventory',
+                    'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
+                  )
+                : t(
+                    'teamOpt.runDialog.emptyInventory',
+                    'Add or import artifacts before optimizing the team.'
+                  )}
+            </Alert>
+          )}
           <Box sx={{ flexGrow: 1 }} />
           {/* (phones: the title bar's close is the cancel) */}
           <Button
@@ -207,16 +289,17 @@ export function RunDialog({
             variant="contained"
             startIcon={<TrendingUpIcon />}
             // (no member switched on: nothing to optimize yet)
-            disabled={!optimized}
+            disabled={!canStart}
             onClick={() => {
               onClose()
               onStart()
             }}
-            sx={[{ px: 2.25 }, !!optimized && giCtaSx]}
+            sx={[{ px: 2.25 }, canStart && giCtaSx]}
           >
             {t('teamOpt.runDialog.start', 'Start')}
           </Button>
         </Box>
+        <TeamEnergyDrawer members={members} energy={energy} />
       </CardThemed>
     </ModalWrapper>
   )
@@ -236,6 +319,7 @@ function MemberRunRow({
   teamData,
   teamOpt,
   setTeamOpt,
+  energy,
 }: {
   teamId: string
   member: TeamOptMember
@@ -243,6 +327,7 @@ function MemberRunRow({
   teamData: TeamData | undefined
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
+  energy: TeamEnergy
 }) {
   const { t } = useTranslation(['page_team', 'artifact'])
   const database = useDatabase()
@@ -330,11 +415,11 @@ function MemberRunRow({
           minHeight: 52,
           gridTemplateColumns: {
             xs: 'minmax(0, 1fr) auto',
-            md: 'minmax(140px, 180px) auto minmax(150px, 190px) minmax(0, 1fr) auto',
+            md: 'minmax(140px, 180px) auto minmax(150px, 190px) minmax(0, 1fr) auto auto',
           },
           gridTemplateAreas: {
-            xs: '"who toggle" "size size" "mains custom"',
-            md: '"who toggle size mains custom"',
+            xs: '"who toggle" "size size" "mains mains" "er custom"',
+            md: '"who toggle size mains er custom"',
           },
         }}
       >
@@ -427,6 +512,19 @@ function MemberRunRow({
             ))}
           </Box>
         )}
+        {!kept && optConfig && (
+          <MinErField
+            characterKey={characterKey}
+            optConfigId={teamChar.optConfigId}
+            statFilters={optConfig.statFilters}
+            calculated={
+              energy.calculated
+                ? (energy.targets?.[characterKey] ?? 100)
+                : undefined
+            }
+            onCalculatedEdit={(value) => energy.toManual(characterKey, value)}
+          />
+        )}
         {!kept && teamCharContext && (
           <Button
             size="small"
@@ -456,8 +554,8 @@ function MemberRunRow({
           </Button>
         )}
       </Box>
-      <Collapse in={expanded} timeout={180} unmountOnExit>
-        {teamCharContext && (
+      {expanded && teamCharContext && (
+        <Suspense fallback={<Skeleton height={120} />}>
           <MemberCustomize
             teamId={teamId}
             member={member}
@@ -467,9 +565,90 @@ function MemberRunRow({
             teamCharContext={teamCharContext}
             locations={locations}
           />
-        )}
-      </Collapse>
+        </Suspense>
+      )}
     </Box>
+  )
+}
+
+const ER_PATH = JSON.stringify(['basic', 'enerRech_'])
+
+/**
+ * A member's minimum Energy Recharge, on its line: the same requirement as its Optimize settings
+ * (empty: none). Saved when the field is left or Enter is pressed.
+ */
+function MinErField({
+  characterKey,
+  optConfigId,
+  statFilters,
+  calculated,
+  onCalculatedEdit,
+}: {
+  characterKey: TeamOptMember['characterKey']
+  optConfigId: string
+  statFilters: StatFilters
+  /** The ER calculator's target for it (the team's ER from the calculator) */
+  calculated?: number
+  /** A minimum typed over the calculator's: the team's requirements its own from now on */
+  onCalculatedEdit: (value: number | undefined) => void
+}) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const saved = statFilters[ER_PATH]?.find((f) => !f.disabled)?.value
+  const shown =
+    calculated !== undefined
+      ? calculated > 100
+        ? calculated
+        : undefined
+      : saved
+  const shownText = shown === undefined ? '' : `${+shown.toFixed(1)}`
+  const [text, setText] = useState(shownText)
+  useEffect(() => setText(shownText), [shownText])
+  const parsed = text.trim() === '' ? undefined : Number(text)
+  const invalid =
+    parsed !== undefined && !(Number.isFinite(parsed) && parsed >= 0)
+  const commit = () => {
+    if (invalid || text === shownText) return
+    if (calculated !== undefined) onCalculatedEdit(parsed)
+    else setOptConfigEr(database, optConfigId, parsed)
+  }
+  return (
+    <TextField
+      size="small"
+      value={text}
+      error={invalid}
+      placeholder={t('teamOpt.runDialog.erNone', 'None')}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+      }}
+      inputProps={{
+        inputMode: 'decimal',
+        'aria-label': t('teamOpt.kqm.erInput', {
+          defaultValue: '{{character}} minimum ER (%)',
+          character: characterKey,
+        }),
+      }}
+      InputProps={{
+        startAdornment: (
+          <InputAdornment position="start">
+            <Box component="span" sx={type.label}>
+              {t('teamOpt.kqm.minEr', 'Min ER')}
+            </Box>
+          </InputAdornment>
+        ),
+        endAdornment: <InputAdornment position="end">%</InputAdornment>,
+      }}
+      sx={{
+        gridArea: 'er',
+        justifySelf: { xs: 'start', md: 'end' },
+        width: 150,
+        '& .MuiInputBase-root': { fontSize: 14, height: 30, px: 1.25 },
+        '& .MuiInputAdornment-positionStart': { mr: 1 },
+        '& .MuiInputBase-input': { py: 0, textAlign: 'right', ...numSx },
+      }}
+    />
   )
 }
 

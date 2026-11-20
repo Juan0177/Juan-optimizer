@@ -225,6 +225,8 @@ export interface NormalWatcher {
   normalEnd: number
   normalStart: number
   firstNormal: boolean
+  /** The current normal attack's start delay (gcsim reads the active one's at each tick) */
+  startDelay: number
 }
 export const newNormalWatcher = (): NormalWatcher => ({
   last: Number.NEGATIVE_INFINITY,
@@ -232,6 +234,7 @@ export const newNormalWatcher = (): NormalWatcher => ({
   normalEnd: -1,
   normalStart: -1,
   firstNormal: false,
+  startDelay: 0,
 })
 
 export function watchAction(
@@ -270,6 +273,7 @@ export function watchAction(
     ctx.at(offset, (c) => {
       w.normalStart = c.now
       w.firstNormal = index === 0
+      w.startDelay = hooks.delay ?? 0
     })
     ctx.at(offset + (hooks.delay ?? 0), (c) => stateStart(c, w, hooks))
   }
@@ -289,7 +293,7 @@ function stateStart(
   hooks.fire(c)
   const tick = (c2: SimContext) => {
     if (id !== w.tickId || c2.now >= w.normalEnd || !hooks.active(c2)) return
-    if (w.firstNormal && c2.now - w.normalStart < (hooks.delay ?? 0)) return
+    if (w.firstNormal && c2.now - w.normalStart < w.startDelay) return
     w.last = c2.characterFrame(clock)
     hooks.fire(c2)
     c2.atCharacter(clock, hooks.every ?? 60, tick)

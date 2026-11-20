@@ -5,6 +5,7 @@ import {
   layeredAssignment,
   notEmpty,
   objKeyMap,
+  objPathValue,
 } from '@genshin-optimizer/common/util'
 import type {
   ArtifactSlotKey,
@@ -12,7 +13,9 @@ import type {
   LocationCharacterKey,
 } from '@genshin-optimizer/gi/consts'
 import {
+  allArtifactSetKeys,
   allArtifactSlotKeys,
+  allWeaponKeys,
   charKeyToLocCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type {
@@ -20,6 +23,7 @@ import type {
   ICachedArtifact,
   ICachedWeapon,
   LoadoutDatum,
+  Team,
   TeamCharacter,
   TeamOpt,
   TeamOptBuffOwner,
@@ -177,8 +181,12 @@ function withValues<T extends object>(
 ): T {
   if (!values.length) return conditional
   const result = deepClone(conditional) as unknown as Record<string, unknown>
+  // (an off state is no state: a sheet testing `unequal(cond, undefined, …)` reads '' as on)
   for (const { path, value } of values)
-    layeredAssignment(result, path as string[], value)
+    if (value === '') deletePropPath(result, path as string[])
+    // (an 'avg' state, The Widsith's random song, keeps the variant a switch picked)
+    else if (value === 'avg' && objPathValue(result, path as string[])) continue
+    else layeredAssignment(result, path as string[], value)
   return result as unknown as T
 }
 
@@ -219,7 +227,34 @@ export interface TeamDataOverrides {
   >
   /** The enemy's stats over the team's own (e.g. a boss's RES in another phase of its fight) */
   enemyOverride?: Partial<Record<string, number>>
+  /**
+   * Whether the members' own build settings count (default: yes): their weapon and artifact set
+   * switches and their bonus stats. KQM's builds never take them: KQM's own switches and the rules
+   * decide (`conditionalOverrides`, `extraConditionals`), and its extra buffs (`bonusStats`)
+   */
+  ownBuild?: boolean
+  /** Whether the members' own kit switches count (default: yes); KQM's, once it has its own: no */
+  ownKit?: boolean
+  /** The team's switches instead of its own (`Team.conditional`): KQM's `teamConditional` */
+  teamConditional?: Team['conditional']
+  /** The enemy instead of the team's (`Team.enemyOverride`), `enemyOverride` still over it: KQM's */
+  enemy?: Team['enemyOverride']
 }
+
+const GEAR_KEYS = new Set<string>([...allWeaponKeys, ...allArtifactSetKeys])
+/** A member's own conditionals: its gear's unless `ownBuild` is off, its kit's unless `ownKit` is */
+const ownConditionalOf = <T extends object>(
+  conditional: T,
+  ownBuild: boolean,
+  ownKit: boolean
+) =>
+  ownBuild && ownKit
+    ? conditional
+    : (Object.fromEntries(
+        Object.entries(conditional).filter(([key]) =>
+          GEAR_KEYS.has(key) ? ownBuild : ownKit
+        )
+      ) as T)
 
 /** Character assumptions for a calculation, without changing the saved character. */
 export type CharacterOverride = Partial<
@@ -244,14 +279,18 @@ export function getTeamDataWith(
     characters = {},
     conditionalOverrides = {},
     enemyOverride: enemyExtra,
+    ownBuild = true,
+    ownKit = true,
+    teamConditional: teamSwitches,
+    enemy,
   }: TeamDataOverrides
 ): Partial<Record<CharacterKey, Data[]>> | undefined {
   const team = database.teams.get(teamId)
   if (!team) return undefined
-  const enemyOverride = { ...team.enemyOverride, ...enemyExtra }
+  const enemyOverride = { ...(enemy ?? team.enemyOverride), ...enemyExtra }
   const teamConditional = withoutPaths(
     withValues(
-      team.conditional,
+      teamSwitches ?? team.conditional,
       states.filter((s) => s.owner === 'team')
     ),
     excluded.filter((e) => e.owner === 'team').map((e) => e.path)
@@ -288,7 +327,10 @@ export function getTeamDataWith(
     const ownConditional = withoutPaths(
       withValues(
         withOverrides(
-          mergeConditionals(extraConditionals[characterKey], conditional),
+          mergeConditionals(
+            extraConditionals[characterKey],
+            ownConditionalOf(conditional, ownBuild, ownKit)
+          ),
           conditionalOverrides[characterKey]
         ),
         states.filter((s) => s.owner === characterKey)
@@ -308,9 +350,11 @@ export function getTeamDataWith(
         infusionAura,
         customMultiTargets,
         conditional: { ...ownConditional, ...teamConditional },
-        bonusStats: extraBonusStats[characterKey]
-          ? addBonusStats(bonusStats, extraBonusStats[characterKey])
-          : bonusStats,
+        bonusStats: ownBuild
+          ? extraBonusStats[characterKey]
+            ? addBonusStats(bonusStats, extraBonusStats[characterKey])
+            : bonusStats
+          : (extraBonusStats[characterKey] ?? {}),
         enemyOverride,
         hitMode,
         reaction,
@@ -363,12 +407,17 @@ export function getTeamDataSelect(
     characters = {},
     conditionalOverrides = {},
     enemyOverride: enemyExtra,
+    ownBuild = true,
+    ownKit = true,
+    teamConditional: teamSwitches,
+    enemy,
   }: Omit<TeamDataOverrides, 'excluded' | 'states'>,
   contexts: readonly BuffContext[]
 ): TeamDataSelect | undefined {
   const team = database.teams.get(teamId)
   if (!team || !contexts.length) return undefined
-  const enemyOverride = { ...team.enemyOverride, ...enemyExtra }
+  const enemyOverride = { ...(enemy ?? team.enemyOverride), ...enemyExtra }
+  const teamSwitchesNow = teamSwitches ?? team.conditional
   const contextKeys = contexts.map(buffContextKey)
   const switches: Record<string, number>[] = contexts.map(() => ({}))
   const flat = (conditional: object) => {
@@ -412,7 +461,10 @@ export function getTeamDataSelect(
           ).filter(notEmpty) as ICachedArtifact[]))
     // the member's conditionals in each context, as `getTeamDataWith` makes them
     const base = withOverrides(
-      mergeConditionals(extraConditionals[characterKey], conditional),
+      mergeConditionals(
+        extraConditionals[characterKey],
+        ownConditionalOf(conditional, ownBuild, ownKit)
+      ),
       conditionalOverrides[characterKey]
     )
     // (most contexts differ in other members' conditionals only: each distinct one once)
@@ -434,7 +486,7 @@ export function getTeamDataSelect(
             ownOff.map((e) => e.path)
           ),
           ...withoutPaths(
-            withValues(team.conditional, teams),
+            withValues(teamSwitchesNow, teams),
             teamOff.map((e) => e.path)
           ),
         })
@@ -486,9 +538,11 @@ export function getTeamDataSelect(
         customMultiTargets,
         conditional: universal as unknown as TeamCharacter['conditional'] &
           typeof team.conditional,
-        bonusStats: extraBonusStats[characterKey]
-          ? addBonusStats(bonusStats, extraBonusStats[characterKey])
-          : bonusStats,
+        bonusStats: ownBuild
+          ? extraBonusStats[characterKey]
+            ? addBonusStats(bonusStats, extraBonusStats[characterKey])
+            : bonusStats
+          : (extraBonusStats[characterKey] ?? {}),
         enemyOverride,
         hitMode,
         reaction,

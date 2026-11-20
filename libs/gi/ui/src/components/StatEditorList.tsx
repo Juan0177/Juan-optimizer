@@ -10,7 +10,7 @@ import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
-import type { SxProps, TextFieldProps, Theme } from '@mui/material'
+import type { PopperProps, SxProps, TextFieldProps, Theme } from '@mui/material'
 import {
   Box,
   ButtonGroup,
@@ -160,6 +160,14 @@ export function useStatKeyOptions(statKeys: InputPremodKey[]): StatOption[] {
   )
 }
 
+/**
+ * The stat picker's list, wider than its field (`style`, not `sx`). A component of its own: an
+ * inline one is a new component each render, which remounts the open list and its portal
+ */
+function WidePopper(props: PopperProps) {
+  return <Popper {...props} style={{ width: '60%' }} />
+}
+
 /** A stat picker: the options by group (the stat lists' groups), each with its icon */
 export function StatKeyAutocomplete({
   options,
@@ -221,10 +229,7 @@ export function StatKeyAutocomplete({
               : '50% 50%',
         },
       }}
-      // This needs to be done with `style` prop, not `sx` prop, or it doesn't work
-      PopperComponent={(props) => (
-        <Popper {...props} style={{ width: '60%' }} />
-      )}
+      PopperComponent={WidePopper}
       sx={sx}
       textFieldProps={textFieldProps}
       label={label}

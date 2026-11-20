@@ -1,4 +1,4 @@
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
 import type {
   TeamOptEnergyCalculator,
   TeamOptEnergyMember,
@@ -73,8 +73,31 @@ export function kqmEnergyEstimate(
   settings: TeamOptEnergyCalculator,
   kqm: TeamOptKqm | undefined
 ) {
-  const { weapons, refinements } = energyCalcWeapons(keys, settings, (key) =>
-    kqmWeapons(key, kqm)
+  return energyEstimate(keys, settings, kqmEnergyGear(kqm))
+}
+
+/** What the calculator knows of the members: their constellations, the weapons each may hold */
+export interface EnergyGear {
+  constellation: (key: CharacterKey) => number
+  weapons: (
+    key: CharacterKey
+  ) => readonly { key: WeaponKey; refinement: number }[]
+}
+/** KQM's: its constellations and the weapons its builds may take */
+export const kqmEnergyGear = (kqm: TeamOptKqm | undefined): EnergyGear => ({
+  constellation: (key) => kqmMemberConstellation(key, kqm),
+  weapons: (key) => kqmWeapons(key, kqm),
+})
+/** The ER targets before the weapons are picked: Favonius and energy weapons as `energyCalcWeapons` assumes them */
+export function energyEstimate(
+  keys: readonly CharacterKey[],
+  settings: TeamOptEnergyCalculator,
+  gear: EnergyGear
+) {
+  const { weapons, refinements } = energyCalcWeapons(
+    keys,
+    settings,
+    gear.weapons
   )
   return calculateEnergyRecharge(keys, settings, weapons, refinements)
 }
@@ -89,6 +112,7 @@ export function kqmEnergyEstimate(
 export function KqmEnergyCalculator({
   members,
   kqm,
+  gear: gearProp,
   settings,
   setSettings,
   fromRotation = false,
@@ -96,6 +120,8 @@ export function KqmEnergyCalculator({
   members: TeamOptMember[]
   /** KQM's settings: the members' constellations and the weapons they may use */
   kqm: TeamOptKqm | undefined
+  /** Instead of KQM's: the members' constellations and weapons (Team optimize: their own) */
+  gear?: EnergyGear
   /** The written rotation fills in the inputs not set by hand */
   fromRotation?: boolean
   settings: TeamOptEnergyCalculator
@@ -107,14 +133,15 @@ export function KqmEnergyCalculator({
   const keys = members.map((m) => m.characterKey)
   const [chosen, setChosen] = useState<CharacterKey | undefined>(keys[0])
   const shown = chosen && keys.includes(chosen) ? chosen : keys[0]
+  const gear = useMemo(() => gearProp ?? kqmEnergyGear(kqm), [gearProp, kqm])
   const estimate = useMemo(
     () =>
-      kqmEnergyEstimate(
+      energyEstimate(
         members.map((m) => m.characterKey),
         settings,
-        kqm
+        gear
       ),
-    [members, settings, kqm]
+    [members, settings, gear]
   )
   const updateMember = (
     key: CharacterKey,
@@ -180,7 +207,7 @@ export function KqmEnergyCalculator({
           key={shown}
           characterKey={shown}
           keys={keys}
-          kqm={kqm}
+          gear={gear}
           member={settings.members[shown]}
           rotationTime={settings.rotationTime}
           estimate={estimate}
@@ -800,7 +827,7 @@ function EnergyBalance({
 export function MemberEnergy({
   characterKey,
   keys,
-  kqm,
+  gear,
   member,
   rotationTime,
   estimate,
@@ -817,7 +844,7 @@ export function MemberEnergy({
   /** Lets the rotation fill in all of this member's inputs again */
   onUseRotation: () => void
   keys: CharacterKey[]
-  kqm: TeamOptKqm | undefined
+  gear: EnergyGear
   member: TeamOptEnergyMember | undefined
   /** The rotation every count is per (s) */
   rotationTime: number
@@ -848,7 +875,7 @@ export function MemberEnergy({
   const short = shortBurstOf(characterKey)
   const shortUses =
     short && member.secondaryMode === short.index ? member.secondaryUses : 0
-  const cons = kqmMemberConstellation(characterKey, kqm)
+  const cons = gear.constellation(characterKey)
   // the skill's ways (above the KQM build's constellation left out, unless chosen), each with its particles
   const skillOptions = data.skills
     .map((skill, index) => ({ skill, index }))
@@ -860,7 +887,7 @@ export function MemberEnergy({
     )
   // Favonius and energy weapon triggers count only with such a weapon, which KQM picks from these:
   // shown when it may hold one (or something was entered)
-  const allowedWeapons = kqmWeapons(characterKey, kqm)
+  const allowedWeapons = gear.weapons(characterKey)
   const mayFavonius = allowedWeapons.some((w) => isFavonius(w.key))
   const mayEnergyWeapon = allowedWeapons.some((w) => isCalcEnergyWeapon(w.key))
   const showFavonius = mayFavonius || member.favoniusProcs > 0

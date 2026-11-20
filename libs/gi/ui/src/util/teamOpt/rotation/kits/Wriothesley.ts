@@ -76,7 +76,10 @@ const EDICT_MAX = 5
 const C1_ICD = 150
 
 interface WriothesleyState {
-  /** Icefang Rush runs until this frame (the enhanced normal attacks) */
+  /**
+   * Icefang Rush runs until this frame of his own clock (the enhanced normal attacks; gcsim's
+   * status is extended by his hitlag)
+   */
   skillEnd: number
   /** The Prosecution Edict stacks' ATK runs until this frame (it is not cut short by a swap) */
   edictEnd: number
@@ -129,6 +132,9 @@ function extendPenalty(ctx: SimContext, s: WriothesleyState) {
       { hitlag: 'recipient' }
     )
 }
+
+/** His own clock: Icefang Rush's end is on it */
+const clock = (c: SimContext) => c.characterFrame('Wriothesley')
 
 /** Radiance: Stellar-Conduct (in a Polestar Field) */
 const stellar = (ctx: { radiance?: string }) => ctx.radiance === 'conduct'
@@ -188,7 +194,7 @@ export const kit: KitModel = {
     if (
       hit.characterKey !== 'Wriothesley' ||
       !repelling ||
-      ctx.now >= s.skillEnd ||
+      clock(ctx) >= s.skillEnd ||
       ctx.now < s.drainIcd
     )
       return
@@ -225,7 +231,7 @@ export const kit: KitModel = {
       change.characterKey !== 'Wriothesley' ||
       ctx.onField !== 'Wriothesley' ||
       change.amount <= 0 ||
-      ctx.now >= s.skillEnd
+      clock(ctx) >= s.skillEnd
     )
       return
     if (change.kind === 'drain' && change.source === 'Wriothesley') return
@@ -242,15 +248,20 @@ export const kit: KitModel = {
   act(ctx, s: WriothesleyState, action, previous) {
     const c = ctx.constellation('Wriothesley')
     switch (action.kind) {
-      case 'normal':
+      case 'normal': {
+        const start = clock(ctx)
+        let lag = 0
         return normalString(
           wrioNormals,
           action.count ?? 1,
-          (i, d) => {
+          (i, d, j) => {
             const t = ctx.now + d
-            // Icefang Rush enhances the normal attacks (its HP > 50% condition is not tracked)
+            // Icefang Rush enhances the normal attacks (its HP > 50% condition is not tracked),
+            // checked at the hit on his clock (the string's earlier hitlag does not count)
             const enhanced =
-              t < s.skillEnd && (ctx.hpRatio('Wriothesley') ?? 1) > 0.5
+              start + d - lag < s.skillEnd &&
+              (ctx.hpRatio('Wriothesley') ?? 1) > 0.5
+            lag += wrioNormals[i].hitlag?.[j] ?? 0
             // Revelation: in Stellar-Conduct radiance, N3 / N5 become Stellar-Conduct DMG
             if (enhanced && stellar(ctx) && (i === 2 || i === 4)) {
               const n5 = i === 4
@@ -301,17 +312,24 @@ export const kit: KitModel = {
           },
           ctx
         )
+      }
       case 'charged': {
+        const hp = ctx.hpRatio('Wriothesley')
+        const low = hp !== undefined && hp < 0.6
+        // (gcsim: a plain Charged Attack halts 0.09 s, 6 frames; a Rebuke or Luster 0.12 s)
+        const plain =
+          !(stellar(ctx) && low) &&
+          !(c < 1 && low && ctx.now >= s.a1IcdUntil) &&
+          !(s.c1Rebuke && c >= 1)
         ctx.hit(19, {
           path: ['_marker', 'hitlag'],
           tag: 'other',
           element: 'physical',
-          animationPause: 7,
+          animationPause: plain ? 6 : 7,
           label: 'Charged attack hitlag',
         })
-        const hp = ctx.hpRatio('Wriothesley')
         // Revelation (A1, radiance): below 60% HP, Luster: Vaulting Fist (Stellar-Conduct DMG)
-        if (stellar(ctx) && hp !== undefined && hp < 0.6) {
+        if (stellar(ctx) && low) {
           const c15 = c >= 1 && ctx.now + 19 < s.c15HitUntil
           if (c15) s.c15HitUntil = -1
           ctx.hit(19, {
@@ -332,7 +350,7 @@ export const kit: KitModel = {
             ],
           })
           // C6: an extra 60% hit while in Chilling Penalty
-          if (c >= 6 && ctx.now + 19 < s.skillEnd)
+          if (c >= 6 && clock(ctx) + 19 < s.skillEnd)
             ctx.hit(19, {
               path: ['constellation6', 'lusterDmg'],
               tag: 'directStellarConduct',
@@ -351,7 +369,7 @@ export const kit: KitModel = {
             // Penalty, it is extended by 4 s
             if (c >= 1) {
               s.c1LusterUntil = c2.now + 301
-              if (!s.c1Extended && c2.now < s.skillEnd) {
+              if (!s.c1Extended && clock(c2) < s.skillEnd) {
                 s.c1Extended = true
                 extendPenalty(c2, s)
               }
@@ -418,7 +436,7 @@ export const kit: KitModel = {
           // its hit starts the 2.5 s ICD and, once per Icefang Rush, extends it by 4 s
           ctx.at(19, (c2) => {
             s.c1IcdUntil = c2.now + C1_ICD
-            if (!s.c1Extended && c2.now < s.skillEnd) {
+            if (!s.c1Extended && clock(c2) < s.skillEnd) {
               s.c1Extended = true
               extendPenalty(c2, s)
             }
@@ -447,13 +465,13 @@ export const kit: KitModel = {
               swap: 49,
             },
           },
-          { hitmarks: [19], hitlag: [7] }
+          { hitmarks: [19], hitlag: [plain ? 6 : 7] }
         )
       }
       case 'skill': {
         // Icefang Rush: no damage of its own; it enhances the normal attacks, and the Prosecution
         // Edict stacks start over
-        s.skillEnd = ctx.now + SKILL_DURATION
+        s.skillEnd = clock(ctx) + SKILL_DURATION
         s.edictEnd = ctx.now + SKILL_DURATION
         s.edictStacks = 0
         ctx.state('Wriothesley', ['Wriothesley', 'a4EdictStacks'], '')
@@ -474,7 +492,8 @@ export const kit: KitModel = {
         return result
       }
       case 'burst': {
-        // Darkgold Wolfbite: 5 hits, then the Surging Blade (no Durability)
+        // Darkgold Wolfbite: 5 hits, then the Surging Blade (no Durability); all with his stats at
+        // the cast (gcsim's one snapshot)
         for (const d of [99, 104, 109, 114, 119])
           ctx.hit(d, {
             path: ['burst', 'skillDmg'],
@@ -483,6 +502,7 @@ export const kit: KitModel = {
             applies: true,
             icd: 'burst',
             label: 'Darkgold Wolfbite',
+            snapshotDelay: 0,
           })
         ctx.hit(160, {
           path: ['burst', 'bladeDmg'],
@@ -491,6 +511,7 @@ export const kit: KitModel = {
           applies: false,
           icd: 'none',
           label: 'Surging Blade',
+          snapshotDelay: 0,
         })
         return {
           cooldown: { key: 'burst', frames: 15 * 60 },
@@ -541,6 +562,6 @@ export const kit: KitModel = {
   },
   onSwapOut(ctx, s: WriothesleyState) {
     // leaving the field ends Icefang Rush (its enhancement; the Edict ATK stays)
-    s.skillEnd = ctx.now
+    s.skillEnd = clock(ctx)
   },
 }

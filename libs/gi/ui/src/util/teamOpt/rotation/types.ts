@@ -86,6 +86,8 @@ export interface SimHit {
   blunt?: boolean
   /** Native AttackTagNightsoul, independent of the ordinary attack tag. */
   nightsoul?: boolean
+  /** An aimed shot's hit on a weak point (`CA[weakspot]`): Prototype Crescent's trigger */
+  weakspot?: boolean
   /** Sea-Dyed Foam: the healing nodes and how often they contributed to this bubble. */
   healing?: { path: string[]; count: number }[]
   /** Explicit recipients for a heal; otherwise active/whole-party defaults apply. */
@@ -225,8 +227,19 @@ export interface SimContext {
     kind: 'xingqiu' | 'yelan'
   ): number
   readonly target: { radius: number; distance: number; maxHp?: number }
-  /** The enemy's current absorbable aura, in Pyro > Hydro > Electro > Cryo priority. */
-  absorb(priority?: readonly HitElement[]): HitElement | undefined
+  /** A swap's frames (gcsim's swap delay) */
+  readonly swapFrames: number
+  /**
+   * The enemy's current absorbable aura, in Pyro > Hydro > Electro > Cryo priority. With `player`
+   * (an absorb whose area covers the player, gcsim's AbsorbCheck), each element in turn from the
+   * enemy or the player's own aura.
+   */
+  absorb(
+    priority?: readonly HitElement[],
+    opts?: { player?: boolean }
+  ): HitElement | undefined
+  /** An aura on the player (gcsim's ApplySelfInfusion): `durability` decaying over `frames` */
+  selfInfuse(element: HitElement, durability: number, frames: number): void
   hasBuff(owner: SimBuffOwner, path: string[]): boolean
   /** Emit an additional Nightsoul Burst (e.g. Xilonen A4), independent of the team cooldown. */
   nightsoulBurst(): void
@@ -367,6 +380,11 @@ export interface SimContext {
   reduceCooldown(key: string, frames: number, characterKey?: CharacterKey): void
   /** Restore charges immediately (one per consumed Sakura for Yae's A1). */
   resetCooldown(key: string, count?: number, characterKey?: CharacterKey): void
+  /**
+   * The Crystallize shards there now that can be picked up when they reach the actor `arrive`
+   * frames from now (Navia's Skill pulls them): picked up then, with their shields; how many
+   */
+  takeShards(arrive: number): number
   /** A member's artifact set pieces in the build being simulated (empty when not known) */
   readonly sets: (characterKey: CharacterKey) => Partial<Record<string, number>>
   /** Note shown with the result (e.g. an assumption) */
@@ -525,6 +543,13 @@ export interface KitModel {
     /** The frame the action would start */
     now: number
   ) => string | undefined
+  /**
+   * Cooldowns reduced and reset along with another one (gcsim's Cyno: a change to his Skill's
+   * cooldown reaches Mortuary Rite's too, as Thundering Fury's −1 s does)
+   */
+  linkedCooldowns?: Record<string, string[]>
+  /** Its plunge plays "HP" / "LP" (gcsim's high_plunge / low_plunge) and the collision hit */
+  plungeHeights?: boolean
   /** Called when the member swaps out */
   onSwapOut?: (ctx: SimContext, state: any) => void
   /**

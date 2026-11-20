@@ -235,6 +235,7 @@ export const kit: KitModel = {
   act(ctx, s: TartagliaState, action, previous) {
     const c = ctx.constellation('Tartaglia')
     const afterDash = previous?.kind === 'dash'
+    const afterWalk = previous?.kind === 'wait' && !!previous.walk
     switch (action.kind) {
       case 'normal':
         if (s.melee)
@@ -320,46 +321,48 @@ export const kit: KitModel = {
       case 'skill': {
         if (s.melee) {
           // leaving the stance (no damage): its cooldown from the time in it, from the Stance's
-          // delay (11 frames; 0 after a dash)
+          // delay (11 frames; 0 after a dash or a walk)
           const inStance = ctx.now - s.eCast
           s.melee = false
+          const exit = afterWalk
+            ? {
+                frames: 24,
+                framesInto: { normal: 5, burst: 5, dash: 6, jump: 3 },
+              }
+            : afterDash
+              ? {
+                  frames: 23,
+                  framesInto: { normal: 13, burst: 16, dash: 22, jump: 3 },
+                }
+              : {
+                  frames: 18,
+                  framesInto: {
+                    normal: 17,
+                    burst: 18,
+                    dash: 17,
+                    jump: 17,
+                    swap: 16,
+                  },
+                }
           if (s.mlBurst) {
             // C6: Light of Obliteration was used: no cooldown
             s.mlBurst = false
             return {
               cooldown: { key: 'skill', frames: 0, delay: 0, use: false },
-              frames: afterDash ? 23 : 18,
-              framesInto: afterDash
-                ? { normal: 13, burst: 16, dash: 22, jump: 3 }
-                : { normal: 17, burst: 18, dash: 17, jump: 17, swap: 16 },
+              ...exit,
             }
           }
           // (not a new use of the Skill: the stance its entry began ends)
           const cooldown = {
             key: 'skill',
             frames: stanceCooldown(inStance, c),
-            delay: afterDash ? 0 : 11,
+            delay: afterDash || afterWalk ? 0 : 11,
             use: false as const,
           }
-          return afterDash
-            ? {
-                cooldown,
-                frames: 23,
-                framesInto: { normal: 13, burst: 16, dash: 22, jump: 3 },
-              }
-            : {
-                cooldown,
-                frames: 18,
-                framesInto: {
-                  normal: 17,
-                  burst: 18,
-                  dash: 17,
-                  jump: 17,
-                  swap: 16,
-                },
-              }
+          return { cooldown, ...exit }
         }
-        // entering the Melee Stance (for 30 s): the Raging Tide hit (Hydro, 16 frames, 3 after a dash)
+        // entering the Melee Stance (for 30 s): the Raging Tide hit (Hydro, 16 frames, 3 after a
+        // dash or a walk)
         s.melee = true
         s.eCast = ctx.now
         s.mlBurst = false
@@ -369,7 +372,7 @@ export const kit: KitModel = {
         ctx.atCharacter('Tartaglia', 30 * 60, (c2) => {
           if (s.eCast === cast && s.melee) leaveStance(c2, s)
         })
-        ctx.hit(afterDash ? 3 : 16, {
+        ctx.hit(afterDash || afterWalk ? 3 : 16, {
           path: ['skill', 'stanceDmg'],
           tag: 'skill',
           element: 'hydro',
@@ -379,6 +382,12 @@ export const kit: KitModel = {
           label: 'Foul Legacy: Raging Tide',
         })
         // (ranged stance cast: the 1 s cooldown; the stance's own cooldown is set when it is left)
+        if (afterWalk)
+          return {
+            cooldown: { key: 'skill', frames: 60, delay: 0 },
+            frames: 24,
+            framesInto: { normal: 5, burst: 4, dash: 5, jump: 4 },
+          }
         return afterDash
           ? {
               cooldown: { key: 'skill', frames: 60, delay: 0 },

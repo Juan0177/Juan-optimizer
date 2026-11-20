@@ -9,6 +9,7 @@ import type {
   AmpReactionKey,
   ArtifactSetKey,
   CharacterKey,
+  ElementWithPhyKey,
   InfusionAuraElementKey,
   LocationCharacterKey,
   MultiOptHitModeKey,
@@ -19,6 +20,7 @@ import {
   allAmpReactionKeys,
   allArtifactSetKeys,
   allCharacterKeys,
+  allElementWithPhyKeys,
   allInfusionAuraElementKeys,
   allLocationCharacterKeys,
   allMultiOptHitModeKeys,
@@ -28,6 +30,8 @@ import {
 import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import { allInputPremodKeys } from '@genshin-optimizer/gi/wr-types'
 import { z } from 'zod'
+import type { TeamEnemy } from './TeamEnemy'
+import { validateTeamEnemy } from './TeamEnemy'
 
 /**
  * Attacks per member, at most. The rotation writer makes one per group of hits with the same
@@ -67,6 +71,8 @@ export interface TeamOptAttack {
   /** Hits per rotation (may be fractional: an average) */
   hits: number
   hitMode: MultiOptHitModeKey
+  /** Damage element recorded by the rotation simulator. */
+  element?: ElementWithPhyKey
   reaction?: AmpReactionKey | AdditiveReactionKey
   infusionAura?: InfusionAuraElementKey
   bonusStats?: Partial<Record<InputPremodKey, number>>
@@ -150,6 +156,15 @@ export interface TeamOpt {
   rotationTime?: number
   /** How many team builds to find, best first (2 to 5); absent: 1 */
   topN?: number
+  /**
+   * Where the members' Energy Recharge requirements come from: the ER calculator (`energyCalculator`,
+   * worked out for the weapons each build holds), or each member's own Optimize settings
+   * (`manual`); absent: the calculator once a written rotation fills it in
+   */
+  energySource?: 'manual' | 'calculator'
+  energyCalculator?: TeamOptEnergyCalculator
+  /** The written rotation the calculator was last filled in from (text and settings) */
+  energyRotation?: string
   /** KQM mode (KQM Standards artifacts, any weapon): its settings; absent: the defaults */
   kqm?: TeamOptKqm
 }
@@ -212,12 +227,42 @@ export interface TeamOptEnergyCalculator {
 
 /** KQM mode's settings */
 export interface TeamOptKqm {
+  /**
+   * The KQM tab's own rotation: each member's attacks in one rotation (the Team optimize tab's
+   * are `TeamOpt.attacks`). Absent: not set up yet (the tab starts with a copy of those)
+   */
+  attacks?: Partial<Record<CharacterKey, TeamOptAttack[]>>
+  /** The KQM tab's own rotation length (seconds; absent: the default) */
+  rotationTime?: number
+  /** The KQM tab's own extra buffs (food, a blessing...); Team optimize's are `TeamOpt.bonusStats` */
+  bonusStats?: TeamOpt['bonusStats']
+  /** The KQM tab's own default on-field member; Team optimize's is `TeamOpt.onField` */
+  onField?: CharacterKey
+  /**
+   * The KQM tab's own team switches (resonance, reaction states); the team's are `Team.conditional`.
+   * Absent: not set up yet (the tab starts with a copy of the team's)
+   */
+  teamConditional?: {
+    resonance: Record<string, string>
+    reaction: Record<string, string>
+  }
+  /**
+   * The KQM tab's own enemy (its stats, boss, HP and fight settings); the team's are on `Team`.
+   * Absent: not set up yet (the tab starts with a copy of the team's)
+   */
+  enemy?: TeamEnemy
   /** User-entered total ER% per member, before weapon energy adjustments. Required to run. */
   energyRecharge?: Partial<Record<CharacterKey, number>>
   /** A constellation per member over the KQM standard (4★ C6, 5★ C0) */
   constellations?: Partial<Record<CharacterKey, number>>
   /** The members' talent levels (all three; absent: 9, as KQM's guides) */
   talents?: 9 | 10
+  /**
+   * Full search: every allowed weapon and set in every round. Absent: a quick search, where after
+   * the first round each member keeps only the weapons and sets near its best (the rest are listed
+   * as screened out, not ranked)
+   */
+  fullSearch?: boolean
   /**
    * The artifact standard: rolls placed for damage on top of the fixed ones (absent: KQM
    * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
@@ -320,6 +365,7 @@ const attackSchema = z.object({
   path: z.array(z.string()).min(1).max(6),
   hits: z.number().finite().min(0).catch(1),
   hitMode: zodEnumWithDefault(allMultiOptHitModeKeys, 'avgHit'),
+  element: z.enum(allElementWithPhyKeys).optional().catch(undefined),
   reaction: z.enum(reactionKeys).optional().catch(undefined),
   infusionAura: z.enum(allInfusionAuraElementKeys).optional().catch(undefined),
   bonusStats: bonusStatsSchema.catch(undefined),
@@ -439,24 +485,41 @@ const energyCalculatorSchema = z.object({
   }),
 })
 
+const attacksSchema = z
+  .record(z.string(), z.unknown())
+  .catch({})
+  .transform((record) => {
+    const result: Partial<Record<CharacterKey, TeamOptAttack[]>> = {}
+    for (const [key, attacks] of Object.entries(record)) {
+      if (!allCharacterKeys.includes(key as CharacterKey)) continue
+      if (!Array.isArray(attacks)) continue
+      result[key as CharacterKey] = attacks
+        .flatMap((attack) => {
+          const parsed = attackSchema.safeParse(attack)
+          return parsed.success ? [stripUndefined(parsed.data)] : []
+        })
+        .slice(0, TEAM_OPT_MAX_ATTACKS)
+    }
+    return result
+  })
+
+const teamBonusStatsSchema = z
+  .unknown()
+  .optional()
+  .transform((record) => {
+    if (typeof record !== 'object' || record === null) return undefined
+    const result: NonNullable<TeamOpt['bonusStats']> = {}
+    for (const [key, stats] of Object.entries(record)) {
+      if (key !== 'team' && !allCharacterKeys.includes(key as CharacterKey))
+        continue
+      const cleaned = cleanBonusStats(stats)
+      if (cleaned) result[key as CharacterKey | 'team'] = cleaned
+    }
+    return Object.keys(result).length ? result : undefined
+  })
+
 const teamOptSchema = z.object({
-  attacks: z
-    .record(z.string(), z.unknown())
-    .catch({})
-    .transform((record) => {
-      const result: Partial<Record<CharacterKey, TeamOptAttack[]>> = {}
-      for (const [key, attacks] of Object.entries(record)) {
-        if (!allCharacterKeys.includes(key as CharacterKey)) continue
-        if (!Array.isArray(attacks)) continue
-        result[key as CharacterKey] = attacks
-          .flatMap((attack) => {
-            const parsed = attackSchema.safeParse(attack)
-            return parsed.success ? [stripUndefined(parsed.data)] : []
-          })
-          .slice(0, TEAM_OPT_MAX_ATTACKS)
-      }
-      return result
-    }),
+  attacks: attacksSchema,
   keep: zodFilteredArray(allCharacterKeys, []),
   useOtherChars: zodBoolean(false),
   // (absent when empty: a result found before the list existed is not "found with other settings")
@@ -520,8 +583,44 @@ const teamOptSchema = z.object({
     .optional()
     .catch(undefined),
   topN: z.number().int().min(2).max(5).optional().catch(undefined),
+  energySource: z.enum(['manual', 'calculator']).optional().catch(undefined),
+  energyCalculator: energyCalculatorSchema.optional().catch(undefined),
+  energyRotation: z.string().optional().catch(undefined),
   kqm: z
     .object({
+      attacks: z
+        .unknown()
+        .optional()
+        .transform((v) =>
+          v === undefined ? undefined : attacksSchema.parse(v)
+        ),
+      rotationTime: z
+        .number()
+        .finite()
+        .positive()
+        .max(600)
+        .optional()
+        .catch(undefined),
+      bonusStats: teamBonusStatsSchema,
+      onField: z.enum(allCharacterKeys).optional().catch(undefined),
+      teamConditional: z
+        .unknown()
+        .optional()
+        .transform((value) => {
+          if (!value || typeof value !== 'object') return undefined
+          const strings = (record: unknown) => {
+            const out: Record<string, string> = {}
+            if (record && typeof record === 'object')
+              for (const [k, v] of Object.entries(
+                record as Record<string, unknown>
+              ))
+                if (typeof v === 'string' && v.length <= 40) out[k] = v
+            return out
+          }
+          const { resonance, reaction } = value as Record<string, unknown>
+          return { resonance: strings(resonance), reaction: strings(reaction) }
+        }),
+      enemy: z.unknown().optional().transform(validateTeamEnemy),
       refinement5: z.number().int().min(1).max(5).catch(1),
       refinement4: z.number().int().min(1).max(5).catch(5),
       refinementBp: z.number().int().min(1).max(5).optional().catch(undefined),
@@ -561,6 +660,7 @@ const teamOptSchema = z.object({
         .union([z.literal(9), z.literal(10)])
         .optional()
         .catch(undefined),
+      fullSearch: z.boolean().optional().catch(undefined),
       rolls: z.number().int().min(0).max(60).optional().catch(undefined),
       energySource: z
         .enum(['manual', 'calculator'])
@@ -694,20 +794,7 @@ const teamOptSchema = z.object({
     .optional()
     .catch(undefined)
     .transform((kqm) => kqm && (stripUndefined(kqm) as TeamOptKqm)),
-  bonusStats: z
-    .unknown()
-    .optional()
-    .transform((record) => {
-      if (typeof record !== 'object' || record === null) return undefined
-      const result: NonNullable<TeamOpt['bonusStats']> = {}
-      for (const [key, stats] of Object.entries(record)) {
-        if (key !== 'team' && !allCharacterKeys.includes(key as CharacterKey))
-          continue
-        const cleaned = cleanBonusStats(stats)
-        if (cleaned) result[key as CharacterKey | 'team'] = cleaned
-      }
-      return Object.keys(result).length ? result : undefined
-    }),
+  bonusStats: teamBonusStatsSchema,
 })
 
 /** Optional fields are left out rather than stored as `undefined` */

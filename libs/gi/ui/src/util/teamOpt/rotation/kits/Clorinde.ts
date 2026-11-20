@@ -118,7 +118,7 @@ interface ClorindeState {
   shot: number
   /** Night Vigil is on (its end is checked at its end event) */
   vigilOn: boolean
-  /** Night Vigil ends (frame) */
+  /** Night Vigil ends (frame of Clorinde's clock: her hitlag extends it, as gcsim's status) */
   vigilUntil: number
   /** Surging Blade's internal cooldown ends (frame) */
   arkheUntil: number
@@ -259,9 +259,9 @@ function glimbrightShade(ctx: SimContext, s: ClorindeState) {
  */
 function vigil(ctx: SimContext, s: ClorindeState, c: number): ActionResult {
   s.vigilOn = true
-  s.vigilUntil = ctx.now + VIGIL_FRAMES
-  ctx.at(VIGIL_FRAMES, (c2) => {
-    if (s.vigilOn && c2.now >= s.vigilUntil) endVigil(s)
+  s.vigilUntil = ctx.characterFrame('Clorinde') + VIGIL_FRAMES
+  ctx.atCharacter('Clorinde', VIGIL_FRAMES, (c2) => {
+    if (s.vigilOn && c2.characterFrame('Clorinde') >= s.vigilUntil) endVigil(s)
   })
   if (c >= 6) {
     s.c6Stacks = 6
@@ -311,9 +311,10 @@ function impale(ctx: SimContext, s: ClorindeState, c: number): ActionResult {
       const prev = s.bol
       s.bol = 0
       if (prev >= 1) a4Stack(c2, s)
-      // (its heal clears the debt: kqmsim skill.go:182, template heal.go:86)
+      // (its heal clears the debt: kqmsim skill.go:182, template heal.go:86; 'clear': all of it,
+      // Finale of the Deep's Bond too)
       c2.hit(0, {
-        path: ['_marker', 'bondOfLife', 'loss'],
+        path: ['_marker', 'bondOfLife', 'loss', 'clear'],
         tag: 'other',
         element: 'electro',
         label: 'Impale the Night (Bond of Life)',
@@ -518,7 +519,7 @@ export const kit: KitModel = {
       hit.characterKey !== 'Clorinde' ||
       hit.tag !== 'normal' ||
       hit.element !== 'electro' ||
-      hit.t >= s.vigilUntil ||
+      !s.vigilOn ||
       hit.t < s.c1Until
     )
       return

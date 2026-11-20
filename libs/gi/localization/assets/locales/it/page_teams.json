@@ -14,7 +14,10 @@
     "create": "Crea una squadra",
     "description": "Una squadra contiene fino a quattro personaggi, così i loro buff, la risonanza e le reazioni compaiono in ogni valore di danno. Creane una o importa una squadra che qualcuno ha condiviso con te.",
     "import": "Importa una squadra",
-    "title": "Ancora nessuna squadra"
+    "title": "Ancora nessuna squadra",
+    "clear": "Azzera i filtri",
+    "noMatches": "Nessuna squadra corrispondente",
+    "noMatchesDesc": "Prova un altro nome o togli i personaggi selezionati."
   },
   "header": {
     "create": "Crea squadra",

@@ -172,11 +172,13 @@ export function releasedOnlyPlugin(
         .filter((rel) => rel.endsWith('.json'))
         .sort()
       // entries keyed by id, not by name (the game's glossary tooltips): those whose English text
-      // names beta content go, in every language
+      // names beta content go, in every language. (Judged once the beta keys are out: an entry that
+      // only holds a beta key, as sheet.json's reactions hold the Polestar's Anastasya line, stays.)
       const words = [...keys, ...beta.leakNames]
       const byId = new Map<string, Set<string>>()
       for (const rel of files.filter((r) => /^en[/\\]/.test(r))) {
         const data = JSON.parse(readFileSync(join(dir, rel), 'utf8'))
+        stripBetaKeys(data, isBeta)
         const ids = Object.keys(data).filter((id) => {
           const text = JSON.stringify(data[id])
           return words.some((w) => text.includes(w))

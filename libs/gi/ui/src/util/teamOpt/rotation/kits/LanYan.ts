@@ -222,7 +222,7 @@ export const kit: KitModel = {
         s.absorbed = undefined
         ctx.at(detectHitmark, (c) => {
           // A1: the Detect's hit absorbs Pyro > Hydro > Electro > Cryo from the enemy
-          const ele = c.absorb(absorbEles)
+          const ele = c.absorb(absorbEles, { player: true })
           if (s.leapGen === gen && ele) s.absorbed = ele as AbsorbEle
           // the Detect's hit makes the Swallow-Wisp Shield, a party shield (a new one replaces
           // the one up)

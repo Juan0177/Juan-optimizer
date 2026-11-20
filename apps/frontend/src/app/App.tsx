@@ -15,6 +15,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import {
   Box,
+  Button,
   Container,
   CssBaseline,
   Skeleton,
@@ -22,10 +23,21 @@ import {
   ThemeProvider,
 } from '@mui/material'
 import type { ComponentType } from 'react'
-import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+} from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import './App.scss'
-import { getAppStorage } from '@genshin-optimizer/common/database'
+import {
+  DBCachedStorage,
+  flushAppStorage,
+  getAppStorage,
+} from '@genshin-optimizer/common/database'
 import { useDatabases } from '@genshin-optimizer/common/database-ui'
 import ErrorBoundary from './ErrorBoundary'
 import Footer from './Footer'
@@ -179,6 +191,38 @@ function App() {
   )
 
   const database = databases[dbIndex - 1]
+  useLayoutEffect(() => {
+    const storage = getAppStorage()
+    const { migrated, destinations } = database.teams.migrateLocalRotations(
+      localStorage,
+      databases
+        .filter((candidate) => candidate !== database)
+        .map((candidate) => candidate.teams)
+    )
+    if (!migrated.length) return
+    const commit = async () => {
+      // Inactive slots live in memory until their compressed backup is written.
+      for (const destination of destinations)
+        if (destination !== database.teams)
+          destination.database.toExtraLocalDB()
+      // These removals share the destination write's IndexedDB transaction.
+      for (const { key, raw, local } of migrated)
+        if (!local && storage.getString(key) === raw) storage.remove(key)
+      await flushAppStorage()
+      if (
+        storage instanceof DBCachedStorage &&
+        (storage.error || storage.stopped)
+      )
+        return
+      for (const { key, raw, local } of migrated)
+        if (local && localStorage.getItem(key) === raw)
+          localStorage.removeItem(key)
+    }
+    void commit().catch((error: unknown) => {
+      // Keep the legacy keys available if the backup could not be written.
+      console.error('Could not save migrated rotations', error)
+    })
+  }, [database, databases])
   const dbContextObj = useMemo(
     () => ({ databases, setDatabases, database, setDatabase }),
     [databases, setDatabases, database, setDatabase]

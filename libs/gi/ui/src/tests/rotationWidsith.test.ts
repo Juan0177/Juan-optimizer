@@ -3,12 +3,15 @@
  * Elemental DMG or Elemental Mastery), once per 30 s. The optimizer uses their average: a third
  * of each, only in those 10 s.
  */
+import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { ArtCharDatabase, type LoadoutDatum } from '@genshin-optimizer/gi/db'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
-import { computeUIData } from '@genshin-optimizer/gi/uidata'
+import { computeUIData, uiDataForTeam } from '@genshin-optimizer/gi/uidata'
 import type { Data, NumNode } from '@genshin-optimizer/gi/wr'
 import { constant } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
+import { getTeamDataWith } from '../'
 import { itemConditionals } from '../util/teamOpt/itemConditionals'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import { simulateRotation } from '../util/teamOpt/rotation/simulate'
@@ -85,5 +88,45 @@ describe('The Widsith', () => {
       { sets: [], weapons: ['TheWidsith'] }
     )
     expect(picked).toEqual([{ path: ['TheWidsith', 'Debut'], value: 'avg' }])
+  })
+
+  it('the song a switch picked plays in the rotation’s windows, not the average', () => {
+    const db = new ArtCharDatabase(1, new SandboxStorage())
+    db.chars.set('Mona', {
+      key: 'Mona',
+      level: 90,
+      ascension: 6,
+      talent: { auto: 9, skill: 9, burst: 9 },
+      constellation: 0,
+    })
+    db.weapons.new({
+      key: 'TheWidsith',
+      level: 90,
+      ascension: 6,
+      refinement: 5,
+      location: 'Mona',
+      lock: false,
+    })
+    const teamId = db.teams.new({
+      loadoutData: [{ teamCharId: db.teamChars.new('Mona') }] as LoadoutDatum[],
+    })
+    const em = (song: string | undefined, state: string) =>
+      uiDataForTeam(
+        getTeamDataWith(db, teamId, {
+          conditionalOverrides: song
+            ? { Mona: { TheWidsith: { Debut: song } } }
+            : undefined,
+          states: [
+            { owner: 'Mona', path: ['TheWidsith', 'Debut'], value: state },
+          ],
+        })! as never,
+        'F',
+        'Mona'
+      ).Mona!.target.getDisplay()['basic']['eleMas'].value
+    const none = em(undefined, '')
+    expect(em(undefined, 'avg') - none).toBeCloseTo(160)
+    expect(em('interlude', 'avg') - none).toBeCloseTo(480)
+    expect(em('recitative', 'avg') - none).toBeCloseTo(0)
+    expect(em('interlude', '') - none).toBeCloseTo(0)
   })
 })

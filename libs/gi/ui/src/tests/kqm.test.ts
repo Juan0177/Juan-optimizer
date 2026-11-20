@@ -305,6 +305,32 @@ describe('KQM Standards builds', () => {
     expect(result.after.unmet[ayaka] ?? []).toEqual([])
   }, 300_000)
 
+  it('quick search (the default): after round 1 each member keeps its contenders, the rest listed as screened out, about as good as a full search', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const full = (await run(database, teamId, {
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm!, fullSearch: true },
+    }))!
+    const fast = (await run(database, teamId, teamOpt))!
+    expectKqms(fast)
+    expect(full.screenedOut).toBeUndefined()
+    expect(fast.after.total).toBeGreaterThanOrEqual(full.after.total * 0.99)
+    for (const ck of [ayaka, shenhe]) {
+      const out = fast.screenedOut?.[ck]
+      expect(out).toBeTruthy()
+      const ranked = fast.rankings[ck]!
+      // (every weapon the full search ranks: ranked here or screened out, never both)
+      expect(ranked.weapons.length + out!.weapons.length).toBe(
+        full.rankings[ck]!.weapons.length
+      )
+      expect(out!.weapons.length).toBeGreaterThan(0)
+      const build = fast.builds[ck]!
+      expect(out!.weapons.map((w) => w.key)).not.toContain(build.weapon.key)
+      for (const set of Object.keys(build.sets))
+        expect(out!.sets).not.toContain(set)
+    }
+  })
+
   it('pairs two sets with the same 2-piece bonus (2-piece ATK + 2-piece ATK)', async () => {
     const { database, teamId, teamOpt } = setup()
     // (two ATK% 2-pieces and one Cryo DMG 2-piece: one bonus class each, ATK% twice)
@@ -410,11 +436,12 @@ describe('KQM Standards builds', () => {
       })
     ).toEqual([])
     expect(kqmCompareRefinements('PrototypeRancour', kqm)).toEqual([])
-    // the run: each such weapon ranked twice, R1 marked compared; no build takes a compared one
+    // the run (a full search, which ranks every weapon): each such weapon ranked twice, R1 marked
+    // compared; no build takes a compared one
     const { database, teamId, teamOpt } = setup()
     const result = (await run(database, teamId, {
       ...teamOpt,
-      kqm: { ...teamOpt.kqm!, ...kqm },
+      kqm: { ...teamOpt.kqm!, ...kqm, fullSearch: true },
     }))!
     const weapons = result.rankings[ayaka]!.weapons
     const favonius = weapons.filter((o) => o.weapon.key === 'FavoniusSword')
@@ -916,6 +943,35 @@ describe('KQM Standards builds', () => {
     // and its total is the team's with it, as a pick of it shows
     const picked = changed.weapon.key === 'FavoniusLance' ? favonius : other
     expect(changed.total).toBeCloseTo(picked.after.total, -1)
+  }, 300_000)
+
+  it('quick search keeps Favonius among the contenders (what it frees teammates shows only later), and picks as a full search does', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const settings = defaultEnergyCalculator([ayaka, shenhe], 20)
+    settings.members[ayaka]!.skillUses = 2
+    settings.members[shenhe]!.skillUses = 2
+    settings.members[shenhe]!.burstEvery = 0
+    settings.members[shenhe]!.favoniusProcs = 2
+    teamOpt.kqm!.energySource = 'calculator'
+    teamOpt.kqm!.energyCalculator = settings
+    teamOpt.kqm!.energyRecharge = calculateEnergyRecharge(
+      [ayaka, shenhe],
+      settings
+    ).targets
+    teamOpt.kqm!.excludedWeapons = []
+    teamOpt.kqm!.weaponList = 2
+    const full = (await run(database, teamId, {
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm!, fullSearch: true },
+    }))!
+    const fast = (await run(database, teamId, teamOpt))!
+    for (const ck of [ayaka, shenhe])
+      expect(fast.builds[ck]!.weapon.key).toBe(full.builds[ck]!.weapon.key)
+    expect(fast.after.total).toBeGreaterThanOrEqual(full.after.total * 0.99)
+    expect(fast.screenedOut?.[shenhe]?.weapons.length).toBeGreaterThan(0)
+    expect(fast.rankings[shenhe]!.weapons.map((o) => o.weapon.key)).toContain(
+      'FavoniusLance'
+    )
   }, 300_000)
 
   it('gives a page the calculation of a result’s builds (kqmTeamOverrides): the same team total', async () => {

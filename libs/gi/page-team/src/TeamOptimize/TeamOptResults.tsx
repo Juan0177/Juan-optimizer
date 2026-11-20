@@ -1,4 +1,4 @@
-import { BootstrapTooltip } from '@genshin-optimizer/common/ui'
+import { aboveBottomBar, BootstrapTooltip } from '@genshin-optimizer/common/ui'
 import { clamp, getUnitStr, objPathValue } from '@genshin-optimizer/common/util'
 import { artifactAsset, weaponAsset } from '@genshin-optimizer/gi/assets'
 import type {
@@ -70,7 +70,13 @@ import type { ReactNode } from 'react'
 import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
-import { changedMembers, equipTeamResult, saveTeamResult } from './apply'
+import {
+  changedMembers,
+  equipChanges,
+  equipTeamResult,
+  saveTeamResult,
+  undoTeamEquip,
+} from './apply'
 import type { CocoonEvaluations, FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
 import { formatGain, formatRate } from './format'
@@ -86,6 +92,7 @@ import {
   numSx,
   Panel,
   quickSx,
+  stepAccentSx,
   tokens,
   type,
 } from './ui'
@@ -93,6 +100,29 @@ import { useTeamOpt } from './useTeamOpt'
 
 /** Open and close: the design's quick Collapse */
 const COLLAPSE_MS = 180
+
+/** What Equip or Save as builds did, in place of its button */
+function AppliedStatus({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      role="status"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 0.5,
+        minHeight: 36,
+        px: 1,
+        fontSize: 14,
+        fontWeight: 600,
+        color: 'success.main',
+      }}
+    >
+      <CheckIcon sx={{ fontSize: 18 }} />
+      {children}
+    </Typography>
+  )
+}
 
 /** What Team Optimize found: the rotation's damage before and after, and each member's build */
 export function TeamOptResults({
@@ -181,8 +211,15 @@ export function TeamOptResults({
     () => changedMembers(database, teamId, result),
     [database, teamId, result, team]
   )
+  // the members Equip changes (a member on a saved build too, even with the same gear)
+  const toEquip = useMemo(
+    () => equipChanges(database, teamId, result),
+    [database, teamId, result, team]
+  )
   const [confirm, setConfirm] = useState(false)
-  const [applied, setApplied] = useState<'equip' | 'save'>()
+  const [application, setApplied] = useState<'equip' | 'save'>()
+  const applied =
+    application === 'equip' && !team?.equipmentUndo ? undefined : application
   // artifacts excluded from this team's optimization (from here or the settings)
   const [liveTeamOpt, setTeamOpt] = useTeamOpt(teamId)
   const excludedArts = useMemo(
@@ -218,7 +255,7 @@ export function TeamOptResults({
   const discardLabel = t('teamOpt.result.discard', 'Discard')
 
   return (
-    <Panel>
+    <Panel sx={stepAccentSx('result')}>
       {/* the headline (the rotation's damage), the actions, and discard in the corner */}
       <Box
         sx={(theme) => ({
@@ -392,63 +429,53 @@ export function TeamOptResults({
               runTeamOpt={runTeamOpt}
               rotationTime={rotationTime}
             />
-            {applied ? (
-              <Typography
-                role="status"
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 0.5,
-                  minHeight: 36,
-                  px: 1,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: 'success.main',
-                }}
-              >
-                <CheckIcon sx={{ fontSize: 18 }} />
-                {applied === 'equip'
-                  ? t('teamOpt.result.equipped', 'Equipped')
-                  : t('teamOpt.result.saved', 'Saved as builds')}
-              </Typography>
+            {applied === 'equip' ? (
+              <AppliedStatus>
+                {t('teamOpt.result.equipped', 'Equipped')}
+              </AppliedStatus>
             ) : (
               <>
-                <Tooltip
-                  arrow
-                  title={t(
-                    'teamOpt.result.saveHint',
-                    'A new build per member, used by this team. Nothing moves between characters.'
-                  )}
-                >
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      startIcon={<SaveIcon />}
-                      disabled={noChange}
-                      onClick={() => {
-                        saveTeamResult(
-                          database,
-                          teamId,
-                          result,
-                          t('teamOpt.result.buildName', {
-                            defaultValue: '{{team}} (team optimized)',
-                            team: team?.name ?? '',
-                          })
-                        )
-                        setApplied('save')
-                      }}
-                    >
-                      {t('teamOpt.result.save', 'Save as builds')}
-                    </Button>
-                  </span>
-                </Tooltip>
+                {applied === 'save' ? (
+                  <AppliedStatus>
+                    {t('teamOpt.result.saved', 'Saved as builds')}
+                  </AppliedStatus>
+                ) : (
+                  <Tooltip
+                    arrow
+                    title={t(
+                      'teamOpt.result.saveHint',
+                      'A new build per member, used by this team. Nothing moves between characters.'
+                    )}
+                  >
+                    <span>
+                      <Button
+                        variant="contained"
+                        color="secondary"
+                        startIcon={<SaveIcon />}
+                        disabled={noChange || stale}
+                        onClick={() => {
+                          saveTeamResult(
+                            database,
+                            teamId,
+                            result,
+                            t('teamOpt.result.buildName', {
+                              defaultValue: '{{team}} (team optimized)',
+                              team: team?.name ?? '',
+                            })
+                          )
+                          setApplied('save')
+                        }}
+                      >
+                        {t('teamOpt.result.save', 'Save as builds')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
                 <Button
                   variant="contained"
                   color="secondary"
                   startIcon={<CheckroomIcon />}
-                  disabled={noChange}
+                  disabled={!toEquip.length || stale}
                   aria-expanded={confirm}
                   onClick={() => setConfirm((c) => !c)}
                 >
@@ -526,7 +553,11 @@ export function TeamOptResults({
           )}
         </Notice>
       )}
-      <Collapse in={confirm && !applied} timeout={COLLAPSE_MS} unmountOnExit>
+      <Collapse
+        in={confirm && applied !== 'equip' && !stale}
+        timeout={COLLAPSE_MS}
+        unmountOnExit
+      >
         <Notice
           icon={<CheckroomIcon />}
           actions={
@@ -554,13 +585,18 @@ export function TeamOptResults({
             </>
           }
         >
-          {t('teamOpt.result.equipWarn', {
+          {t('teamOpt.result.equipWarnMove', {
             defaultValue:
-              'Equips the new builds on {{count}} members (saved builds are updated instead). Artifacts move from whoever wears them now.',
-            count: changed.length,
-          })}
+              'Equips the new builds on {{count}} members. Artifacts and weapons move from whoever has them now, and a member on a saved build switches to its equipped build.',
+            count: toEquip.length,
+          })}{' '}
+          <Names
+            keys={toEquip.map((member) => member.characterKey)}
+            gender={gender}
+          />
         </Notice>
       </Collapse>
+      <TeamEquipUndo teamId={teamId} />
       {noChange && !applied && (
         <Typography
           sx={{
@@ -634,8 +670,7 @@ export function TeamOptResults({
       <Snackbar
         open={!!lastExcluded}
         autoHideDuration={8000}
-        // above the page's run bar (it sticks to the bottom)
-        sx={{ bottom: { xs: 132, sm: 96 } }}
+        sx={{ bottom: { xs: aboveBottomBar(8), sm: aboveBottomBar(24) } }}
         onClose={(_, reason) =>
           reason !== 'clickaway' && setLastExcluded(undefined)
         }
@@ -694,6 +729,34 @@ export function TeamOptResults({
         </Box>
       </Snackbar>
     </Panel>
+  )
+}
+
+export function TeamEquipUndo({ teamId }: { teamId: string }) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const undo = useTeam(teamId)?.equipmentUndo
+  const [failed, setFailed] = useState(false)
+  if (!undo) return null
+  return (
+    <Notice
+      icon={<CheckroomIcon />}
+      actions={
+        <Button onClick={() => setFailed(!undoTeamEquip(database, teamId))}>
+          {t('teamOpt.result.undoEquip', 'Undo equip')}
+        </Button>
+      }
+    >
+      {failed
+        ? t(
+            'teamOpt.result.undoEquipConflict',
+            'Gear or saved builds changed since equipping. Review the affected equipment before restoring it.'
+          )
+        : t(
+            'teamOpt.result.undoEquipHelp',
+            'Restore the equipment and saved builds from before the last Equip action on this team.'
+          )}
+    </Notice>
   )
 }
 
@@ -1191,6 +1254,15 @@ function MemberResult({
                         ...focusSx,
                         '@media (prefers-reduced-motion: reduce)': {
                           transition: 'none',
+                        },
+                        // (a finger needs about 40 px: the button stays small, its touch area not)
+                        '@media (pointer: coarse)': {
+                          p: 0.5,
+                          '&::after': {
+                            content: '""',
+                            position: 'absolute',
+                            inset: -8,
+                          },
                         },
                       }}
                     >

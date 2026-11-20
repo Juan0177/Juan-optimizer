@@ -4,7 +4,7 @@ import { ReadOnlyTextArea } from '@genshin-optimizer/common/react-util'
 import { CardThemed } from '@genshin-optimizer/common/ui'
 import { isDev } from '@genshin-optimizer/common/util'
 import { theme } from '@genshin-optimizer/gi/theme'
-import { DatabaseCard } from '@genshin-optimizer/gi/ui'
+import { currentRelease, DatabaseCard } from '@genshin-optimizer/gi/ui'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import ErrorIcon from '@mui/icons-material/Error'
 import RefreshIcon from '@mui/icons-material/Refresh'
@@ -23,7 +23,7 @@ import type { ErrorInfo, ReactNode } from 'react'
 import { Component, Suspense } from 'react'
 import type { WithTranslation } from 'react-i18next'
 import { withTranslation } from 'react-i18next'
-import { newerBuild } from '../updateCheck'
+import { currentBuild, newerBuild } from '../updateCheck'
 import SpaghettiCode from './SpaghettiCode.png'
 
 interface Props extends WithTranslation {
@@ -67,7 +67,8 @@ class ErrorBoundary extends Component<Props, State> {
       const t = this.props.t
       const reproStr =
         'Please enter the steps to reproduce this error below:\n1. '
-      const errorStr = `Message: ${this.state.error.message}\nName: ${this.state.error.name}\nStack: ${this.state.error.stack}${this.state.componentStack ? `\nComponents: ${this.state.componentStack}` : ''}`
+      const page = `${window.location.host}${window.location.pathname}${window.location.hash.replace(/\?.*$/, '')}`
+      const errorStr = `Page: ${page}\nVersion: v${currentRelease.version} (build ${currentBuild})\nMessage: ${this.state.error.message}\nName: ${this.state.error.name}\nStack: ${this.state.error.stack}${this.state.componentStack ? `\nComponents: ${this.state.componentStack}` : ''}`
       const uploadStr = "**Don't forget to upload your JSON file!**"
       const textBoxVal = `${reproStr}\n\n${uploadStr}\n\n\`\`\`\n${errorStr}\n\`\`\``
       const onNuke = async () => {

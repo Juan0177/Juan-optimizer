@@ -68,7 +68,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { KqmResults } from '../KqmMode'
 import { MemberAvatar } from '../MemberAvatar'
-import { openerKey, storageKey } from '../RotationWriter'
+import { readKqmRotation } from '../RotationWriter'
 import { useSimText } from '../simText'
 import {
   BetaBadge,
@@ -130,15 +130,6 @@ export function savedRunFor(
   )
     return undefined
   return saved
-}
-
-/** The team's written rotation (KQM Theorycrafting's), read only */
-function readStored(key: string) {
-  try {
-    return globalThis.localStorage?.getItem(key) ?? ''
-  } catch {
-    return ''
-  }
 }
 
 /**
@@ -288,8 +279,11 @@ export default function KqmCompare({
     () => teamOptMembers(database, teamId).map((m) => m.characterKey),
     [database, teamId]
   )
-  const text = useMemo(() => readStored(storageKey(teamId)), [teamId])
-  const opener = useMemo(() => readStored(openerKey(teamId)), [teamId])
+  // (KQM Theorycrafting's written rotation, read only)
+  const { text, opener } = useMemo(
+    () => readKqmRotation(database, teamId),
+    [database, teamId]
+  )
   // (as KQM plays the rotation: the names in the user's language)
   const nameOf = useCallback(
     (ck: CharacterKey) =>

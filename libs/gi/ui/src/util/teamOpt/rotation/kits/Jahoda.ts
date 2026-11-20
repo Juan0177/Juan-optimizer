@@ -59,7 +59,8 @@ function absorbedElement(
   const ele = c.absorb(
     preferred
       ? [preferred, ...absorbEles.filter((e) => e !== preferred)]
-      : absorbEles
+      : absorbEles,
+    { player: true }
   )
   return ele && absorbEles.includes(ele as AbsorbEle)
     ? (ele as AbsorbEle)

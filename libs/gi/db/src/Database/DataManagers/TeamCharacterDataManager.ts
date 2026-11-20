@@ -118,7 +118,12 @@ export class TeamCharacterDataManager extends DataManager<
       .map((cmt) => validateCustomMultiTarget(cmt))
       .filter((t) => t) as CustomMultiTarget[]
 
-    if (!conditional) conditional = {}
+    if (
+      !conditional ||
+      typeof conditional !== 'object' ||
+      Array.isArray(conditional)
+    )
+      conditional = {}
 
     // Resonance/reaction conditionals have been moved to teams
     if ((conditional as any)['resonance'])
@@ -128,6 +133,7 @@ export class TeamCharacterDataManager extends DataManager<
 
     // TODO: validate bonusStats
     if (
+      !bonusStats ||
       typeof bonusStats !== 'object' ||
       !Object.entries(bonusStats).map(([_, num]) => typeof num === 'number')
     )

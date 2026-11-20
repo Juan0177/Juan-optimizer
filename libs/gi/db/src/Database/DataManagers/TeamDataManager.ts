@@ -1,3 +1,4 @@
+import { DBLocalStorage } from '@genshin-optimizer/common/database'
 import {
   deepClone,
   objKeyMap,
@@ -11,7 +12,9 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSlotKeys,
+  allCharacterKeys,
   allElementWithPhyKeys,
+  type CharacterKey,
   charKeyToLocCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type { IGOOD } from '@genshin-optimizer/gi/good'
@@ -20,10 +23,57 @@ import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataManager } from '../DataManager'
 import type { IGO, ImportResult } from '../exim'
 import type { ICachedArtifact } from './ArtifactDataManager'
+import type { TeamFightSettings } from './TeamEnemy'
+import { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
+import {
+  type TeamEquipmentUndo,
+  teamEquipmentUndoSchema,
+} from './TeamEquipmentUndo'
 import type { TeamOpt } from './TeamOpt'
 import { validateTeamOpt } from './TeamOpt'
+import {
+  legacyRotationKey,
+  legacyRotationMembers,
+  readRotationObject,
+} from './TeamRotationMigration'
 import type { ICachedWeapon } from './WeaponDataManager'
 import { defaultInitialWeapon } from './WeaponDataManager'
+
+export const rotationDocumentFields = [
+  'Text',
+  'Draft',
+  'Opener',
+  'OpenerDraft',
+  'Timing',
+  'Cons',
+  'Copied',
+  'Played',
+  'Manual',
+  'UseAttacks',
+  'ConstellationRotations',
+  'CombinationRotations',
+] as const
+export type RotationDocumentField = (typeof rotationDocumentFields)[number]
+type RotationDocument = Partial<Record<RotationDocumentField, string>>
+type RotationDocuments = {
+  inventory?: RotationDocument
+  kqm?: RotationDocument
+}
+
+function validateRotationDocuments(
+  value: RotationDocuments | undefined
+): RotationDocuments {
+  const documents: RotationDocuments = {}
+  for (const mode of ['inventory', 'kqm'] as const) {
+    const document = value?.[mode]
+    if (!document) continue
+    const fields: RotationDocument = {}
+    for (const field of rotationDocumentFields)
+      if (typeof document[field] === 'string') fields[field] = document[field]
+    if (Object.keys(fields).length) documents[mode] = fields
+  }
+  return documents
+}
 
 const buildTypeKeys = ['equipped', 'real', 'tc'] as const
 type BuildTypeKey = (typeof buildTypeKeys)[number]
@@ -53,6 +103,8 @@ export interface Team {
   }
   loadoutData: Array<LoadoutDatum | undefined>
   lastEdit: number
+  rotationDocuments?: RotationDocuments
+  equipmentUndo?: TeamEquipmentUndo
   /** Team Optimize settings: only stored once the user sets something there */
   teamOpt?: TeamOpt
   /**
@@ -68,45 +120,8 @@ export interface Team {
   /** How the team plays a boss's mechanics where its fight cannot tell (the Moongecko's) */
   fightSettings?: TeamFightSettings
 }
-/** The most HP an enemy can be given (a trillion) */
-export const MAX_ENEMY_HP = 1e12
-/**
- * How the team plays a boss's mechanics where its fight cannot tell: seconds to break the Radiant
- * Moongecko's Moonstone Anchor ward (1–60: past its 35 s, not in time), and to be healed to full
- * after its Radiant Cocoon (0–40; -1: never)
- */
-export interface TeamFightSettings {
-  wardSeconds?: number
-  healSeconds?: number
-  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
-  fullEnergy?: boolean
-}
-const MAX_WARD_SECONDS = 60
-const MAX_HEAL_SECONDS = 40
-/** `TeamFightSettings` kept to their ranges (to 0.1 s); none left: undefined */
-export function validateFightSettings(
-  value: unknown
-): TeamFightSettings | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const { wardSeconds, healSeconds, fullEnergy } = value as TeamFightSettings
-  const tenth = (v: number) => Math.round(v * 10) / 10
-  const out: TeamFightSettings = {
-    ...(typeof wardSeconds === 'number' &&
-    Number.isFinite(wardSeconds) &&
-    wardSeconds >= 1 &&
-    wardSeconds <= MAX_WARD_SECONDS
-      ? { wardSeconds: tenth(wardSeconds) }
-      : {}),
-    ...(typeof healSeconds === 'number' &&
-    Number.isFinite(healSeconds) &&
-    (healSeconds === -1 ||
-      (healSeconds >= 0 && healSeconds <= MAX_HEAL_SECONDS))
-      ? { healSeconds: healSeconds === -1 ? -1 : tenth(healSeconds) }
-      : {}),
-    ...(fullEnergy === true ? { fullEnergy } : {}),
-  }
-  return Object.keys(out).length ? out : undefined
-}
+export type { TeamFightSettings } from './TeamEnemy'
+export { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
 export type LoadoutExportSetting = {
   convertEquipped: boolean
   convertbuilds: string[]
@@ -140,7 +155,8 @@ export class TeamDataManager extends DataManager<
     while (names.has(`Team ${num}`)) num++
     return `Team ${num}`
   }
-  override validate(obj: unknown): Team | undefined {
+  override validate(obj: unknown, key = ''): Team | undefined {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return undefined
     let {
       name,
       description,
@@ -152,7 +168,12 @@ export class TeamDataManager extends DataManager<
     if (typeof name !== 'string') name = this.newName()
     if (typeof description !== 'string') description = ''
     // validate enemyOverride
-    if (typeof enemyOverride !== 'object') enemyOverride = {}
+    if (
+      !enemyOverride ||
+      typeof enemyOverride !== 'object' ||
+      Array.isArray(enemyOverride)
+    )
+      enemyOverride = {}
 
     if (typeof enemyOverride.enemyLevel !== 'number')
       enemyOverride.enemyLevel = 100
@@ -168,7 +189,14 @@ export class TeamDataManager extends DataManager<
       if (typeof enemyOverride[key] !== 'number') enemyOverride[key] = 10
     })
 
-    if (!conditional) conditional = { resonance: {}, reaction: {} }
+    const conditions = (value: object | undefined) =>
+      Object.fromEntries(
+        Object.entries(value ?? {}).filter(([, v]) => typeof v === 'string')
+      )
+    conditional = {
+      resonance: conditions(conditional?.resonance),
+      reaction: conditions(conditional?.reaction),
+    }
     // validate teamCharIds
     if (!Array.isArray(loadoutData))
       loadoutData = range(0, 3).map(() => undefined)
@@ -263,7 +291,7 @@ export class TeamDataManager extends DataManager<
     const { enemyPreset, enemyHp } = obj as Team
     const fightSettings = validateFightSettings((obj as Team).fightSettings)
 
-    return {
+    const validated: Team = {
       name,
       description,
       enemyOverride,
@@ -284,11 +312,164 @@ export class TeamDataManager extends DataManager<
         : {}),
       ...(fightSettings ? { fightSettings } : {}),
     }
+    const equipmentUndo = teamEquipmentUndoSchema.safeParse(
+      (obj as Team).equipmentUndo
+    )
+    if (equipmentUndo.success) validated.equipmentUndo = equipmentUndo.data
+    const rotationDocuments = validateRotationDocuments(
+      (obj as Team).rotationDocuments
+    )
+    if (Object.keys(rotationDocuments).length)
+      validated.rotationDocuments = rotationDocuments
+    const previous = this.get(key)
+    if (previous && previous.lastEdit === lastEdit) {
+      const {
+        lastEdit: _,
+        id: _id,
+        rotationDocuments: _documents,
+        ...before
+      } = this.deCache(previous) as Team & { id?: string }
+      const {
+        lastEdit: _next,
+        rotationDocuments: _nextDocuments,
+        ...after
+      } = validated
+      if (JSON.stringify(before) !== JSON.stringify(after))
+        validated.lastEdit = Date.now()
+    }
+    return validated
+  }
+
+  /** Persist defaults filled in when a tab first opens without recording a user edit. */
+  initializeSettings(teamId: string, update: (team: Team) => void) {
+    const current = this.get(teamId)
+    if (!current) return
+    const next = structuredClone(this.deCache(current))
+    update(next)
+    const validated = this.validate(next)
+    const cached = validated && this.toCache(validated, teamId)
+    if (cached) this.setCached(teamId, cached)
+  }
+
+  getRotationField(rotationId: string, field: RotationDocumentField) {
+    const kqm = rotationId.endsWith('_kqm')
+    const teamId = kqm ? rotationId.slice(0, -4) : rotationId
+    return this.get(teamId)?.rotationDocuments?.[kqm ? 'kqm' : 'inventory']?.[
+      field
+    ]
+  }
+
+  setRotationField(
+    rotationId: string,
+    field: RotationDocumentField,
+    value: string | null
+  ) {
+    const kqm = rotationId.endsWith('_kqm')
+    const teamId = kqm ? rotationId.slice(0, -4) : rotationId
+    const mode = kqm ? 'kqm' : 'inventory'
+    if (
+      !this.get(teamId) ||
+      this.getRotationField(rotationId, field) === (value ?? undefined)
+    )
+      return
+    this.set(teamId, (team) => {
+      const document = ((team.rotationDocuments ??= {})[mode] ??= {})
+      if (value === null) delete document[field]
+      else document[field] = value
+    })
+  }
+
+  /** Stage old rotations and report which source entries are ready to delete after saving. */
+  migrateLocalRotations(
+    storage: Storage,
+    extraTeams: readonly TeamDataManager[] = []
+  ) {
+    const managers = [this, ...extraTeams]
+    type Entry = NonNullable<ReturnType<typeof legacyRotationKey>> & {
+      key: string
+      raw: string
+      local: boolean
+    }
+    const groups = new Map<string, Entry[]>()
+    const add = (key: string, local: boolean) => {
+      const rotation = legacyRotationKey(key)
+      if (!rotation) return
+      const raw = local
+        ? storage.getItem(key)
+        : this.database.storage.getString(key)
+      if (raw == null) return
+      const id = rotation.kqm ? `${rotation.teamId}_kqm` : rotation.teamId
+      const group = groups.get(id) ?? []
+      group.push({ ...rotation, key, raw, local })
+      groups.set(id, group)
+    }
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index)
+      if (key) add(key, true)
+    }
+    // Older storage upgrades also moved the legacy constellation keys into the app database.
+    if (!(this.database.storage instanceof DBLocalStorage))
+      for (const key of this.database.storage.keys) add(key, false)
+
+    const migrated: Entry[] = []
+    const destinations = new Set<TeamDataManager>()
+    for (const [id, group] of groups) {
+      const teamId = group[0]!.teamId
+      const members = legacyRotationMembers(group)
+      const slots = managers.filter((manager) => manager.get(teamId))
+      // (no slot has the team: it was deleted, and its rotation went with it)
+      if (!slots.length) {
+        migrated.push(...group)
+        continue
+      }
+      const candidates = slots.filter((manager) => {
+        const team = manager.get(teamId)!
+        const roster = new Set(
+          team.loadoutData.flatMap((datum) => {
+            const key =
+              datum && manager.database.teamChars.get(datum.teamCharId)?.key
+            return key ? [key as string] : []
+          })
+        )
+        return [...members].every((member) => roster.has(member))
+      })
+      // The old keys were shared by every database slot, so each slot with this team ID showed
+      // the rotation: it goes to the ones whose roster has the members it names, or else to them all
+      const owners = members.size && candidates.length ? candidates : slots
+      for (const entry of group) {
+        const { field, raw, character } = entry
+        for (const owner of owners) {
+          const existing = owner.getRotationField(id, field)
+          let value = raw
+          // (what the team already has is newer than the old copy: it stays)
+          if (character) {
+            const all = readRotationObject(existing) ?? {}
+            const rotation = readRotationObject(raw)
+            value =
+              !rotation || all[character] !== undefined
+                ? (existing ?? '{}')
+                : JSON.stringify({ ...all, [character]: rotation })
+          } else if (existing !== undefined) value = existing
+          if (existing !== value) owner.setRotationField(id, field, value)
+          destinations.add(owner)
+        }
+        migrated.push(entry)
+      }
+    }
+    return { migrated, destinations }
+  }
+
+  override remove(key: string, notify = true) {
+    const removed = super.remove(key, notify)
+    if (removed) {
+      this.database.teamOptResults?.setRun(key, undefined)
+      this.database.teamKqmResults?.setRun(key, undefined)
+    }
+    return removed
   }
   new(value: Partial<Team> = {}): string {
-    const id = this.generateKey()
-    this.set(id, value)
-    return id
+    const id = `team_${crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) => n.toString(16).padStart(2, '0')).join('')}`
+    return this.set(id, value) ? id : ''
   }
   override clear(): void {
     super.clear()
@@ -299,6 +480,10 @@ export class TeamDataManager extends DataManager<
     if (!teamRaw) return ''
     const team = deepClone(teamRaw)
     team.name = `${team.name} (duplicated)`
+    team.lastEdit = Date.now()
+    delete team.equipmentUndo
+    for (const document of Object.values(team.rotationDocuments ?? {}))
+      delete document.Draft
     return this.new(team)
   }
   export(
@@ -307,8 +492,17 @@ export class TeamDataManager extends DataManager<
   ): object {
     const team = this.database.teams.get(teamId)
     if (!team) return {}
-    const { loadoutData, ...rest } = team
+    const {
+      loadoutData,
+      rotationDocuments,
+      equipmentUndo: _undo,
+      ...rest
+    } = this.deCache(team)
+    const documents = deepClone(rotationDocuments ?? {})
+    for (const document of Object.values(documents)) delete document.Draft
     return {
+      teamExportVersion: 2,
+      rotationDocuments: documents,
       ...rest,
       loadoutData: loadoutData.map(
         (loadoutData, i) =>
@@ -320,23 +514,66 @@ export class TeamDataManager extends DataManager<
       ),
     }
   }
-  import(data: object): string {
-    const { loadoutData, ...rest } = data as Team & { loadoutData: object[] }
-    const id = this.generateKey()
+  import(data: unknown): string {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return ''
+    const { loadoutData, ...rest } = structuredClone(data) as Omit<
+      Partial<Team>,
+      'loadoutData'
+    > & {
+      loadoutData?: unknown
+      teamExportVersion?: number
+    }
     if (
-      !this.set(id, {
-        ...rest,
-        name: `${rest.name ?? ''} (Imported)`,
-        loadoutData: loadoutData.map(
-          (obj) =>
-            obj && {
-              teamCharId: this.database.teamChars.import(obj),
-            }
-        ),
-      } as Team)
+      !Array.isArray(loadoutData) ||
+      loadoutData.length > 4 ||
+      (rest.teamExportVersion !== undefined && rest.teamExportVersion !== 2)
     )
       return ''
-    return id
+    const roster = new Set<CharacterKey>()
+    for (const entry of loadoutData) {
+      if (entry == null) continue
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return ''
+      const { key, customMultiTargets, buildTcs, optConfig } = entry
+      if (
+        !allCharacterKeys.includes(key) ||
+        roster.has(key) ||
+        (customMultiTargets != null && !Array.isArray(customMultiTargets)) ||
+        (buildTcs != null &&
+          (!Array.isArray(buildTcs) ||
+            buildTcs.some(
+              (build) =>
+                !build ||
+                typeof build !== 'object' ||
+                Array.isArray(build) ||
+                !this.database.buildTcs.validate({
+                  ...build,
+                  characterKey: key,
+                })
+            ))) ||
+        (optConfig != null &&
+          (typeof optConfig !== 'object' || Array.isArray(optConfig)))
+      )
+        return ''
+      roster.add(key)
+    }
+    // Validate the team itself before importing its loadouts, which create database records.
+    const team = this.validate(
+      { ...rest, equipmentUndo: undefined, loadoutData: [] },
+      ''
+    )
+    if (!team) return ''
+    return this.new({
+      ...team,
+      name: `${typeof rest.name === 'string' ? rest.name : team.name} (Imported)`,
+      lastEdit: Date.now(),
+      loadoutData: loadoutData.map((entry) =>
+        entry == null
+          ? undefined
+          : ({
+              teamCharId: this.database.teamChars.import(entry),
+            } as LoadoutDatum)
+      ),
+    })
   }
   override importGOOD(good: IGOOD & IGO, result: ImportResult): void {
     result.teams.beforeImport = this.entries.length

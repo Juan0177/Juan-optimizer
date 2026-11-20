@@ -50,7 +50,7 @@ it('runs Fischl’s A4 ICD on the reaction triggerer’s clock, including their 
   ).toEqual([4, 45])
 })
 
-it('summons a new Oz with the skill ready even while the Burst’s Oz is out; recalls it only on cooldown', () => {
+it('summons a new Oz only once the Burst’s Oz has left (gcsim ActionReady); recalls it only on cooldown', () => {
   const members: CharacterKey[] = ['Fischl', 'Keqing']
   const play = (text: string) =>
     simulateRotation({
@@ -69,13 +69,59 @@ it('summons a new Oz with the skill ready even while the Burst’s Oz is out; re
   // (Keqing only fills the party: no actions)
   const summons = (sim: ReturnType<typeof play>) =>
     sim.hits.filter((h) => h.label === 'Oz (Summon)').length
-  // E, then the Burst 15 s later (its Oz lasts 10 s), then E once the skill is ready (25 s):
-  // the Burst's Oz is still out, and gcsim/kqmsim summon a new one (summon hit, fresh 10 s)
+  // E, then the Burst 15 s later (its Oz comes 113 frames in and lasts 10 s), then E once the
+  // skill is ready (25 s): it waits for the Burst's Oz to leave, then summons (summon hit, 10 s)
   const ready = play('Fischl E W900f Q W630f E W60f')
-  expect(ready.stalls ?? {}).toEqual({})
   expect(summons(ready)).toBe(2)
+  const [, q, e] = ready.actions
+  expect(e.start - q.start).toBe(113 + 600)
   // E again 5 s after the first (skill on cooldown, Oz out): the recall, no summon hit, no wait
   const recall = play('Fischl E W300f E W60f')
   expect(summons(recall)).toBe(1)
   expect(recall.stalls ?? {}).toEqual({})
+})
+
+it('spawns a swap-cut Burst’s Oz a frame after the swap, its first tick 63 frames plus the swap later (gcsim)', () => {
+  const members: CharacterKey[] = ['Fischl', 'Keqing']
+  const sim = simulateRotation({
+    rotation: parseRotation(
+      'Fischl Q -> Keqing W15',
+      members.map((characterKey) => ({ characterKey, name: characterKey }))
+    ),
+    members,
+    elements: { Fischl: 'electro', Keqing: 'electro' },
+    constellations: { Fischl: 6 },
+    repeats: 1,
+    keep: 'all',
+    kits: { Fischl: kitModels.Fischl, Keqing: kitModels.Keqing },
+    reactions: { onHit() {} },
+  })
+  // Q -> swap at 24, 12 frames of swap: Oz at 37, first tick 75 later, each shot 10 frames' travel
+  const oz = sim.hits.filter((h) => h.label === 'Oz').map((h) => h.t)
+  expect(oz[0]).toBe(122)
+  // C6's 12 s: the tick that would come at its expiry does not
+  expect(oz).toHaveLength(11)
+})
+
+it('snapshots Oz’s Electro DMG Bonus with his ATK and CRIT DMG at his spawn (gcsim ozSnapshot)', () => {
+  const members: CharacterKey[] = ['Fischl', 'Keqing']
+  const sim = simulateRotation({
+    rotation: parseRotation(
+      'Fischl E W3',
+      members.map((characterKey) => ({ characterKey, name: characterKey }))
+    ),
+    members,
+    elements: { Fischl: 'electro', Keqing: 'electro' },
+    constellations: {},
+    repeats: 1,
+    keep: 'all',
+    kits: { Fischl: kitModels.Fischl },
+    reactions: { onHit() {} },
+  })
+  const shot = sim.hits.find((h) => h.label === 'Oz')!
+  expect(shot.statSnapshots?.map((s) => [s.stat, s.t])).toEqual([
+    ['atk', 18],
+    ['critDMG_', 18],
+    ['electro_dmg_', 18],
+  ])
 })

@@ -1,3 +1,4 @@
+import { SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import type {
   ArtifactSetKey,
   CharacterKey,
@@ -42,6 +43,7 @@ import type { Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
 import {
   createContext,
+  memo,
   Suspense,
   useCallback,
   useContext,
@@ -183,9 +185,10 @@ export interface TimelinePin {
  * mark under it (as tall as its damage, when there are figures), on a seconds ruler. Pointing at
  * a moment reads it out (who is on the field, the enemy's auras, stacks, the hit there); a click
  * pins it. The detailed view adds the enemy's auras, every resource, stack and buff the
- * simulation follows, and the damage as it adds up. A block opens its step's timing.
+ * simulation follows, and the damage as it adds up. A block opens its step's timing. Memoized: the
+ * writer re-renders on every key typed, the timeline only once the rotation is played again.
  */
-export function RotationTimeline({
+export const RotationTimeline = memo(function RotationTimeline({
   members,
   rotation,
   sim,
@@ -204,6 +207,7 @@ export function RotationTimeline({
   pinned,
   onPin,
   onAction,
+  onHit,
 }: {
   /**
    * The detailed view (its own large window): the enemy's auras, every stack, resource and timed
@@ -226,6 +230,11 @@ export function RotationTimeline({
     /** The action as written (E, tE, N4, CA, Q…) */
     text: string
   }) => void
+  /**
+   * A hit clicked (its mark under the lane: an off-field member's too, which has no bar to press),
+   * after it is pinned
+   */
+  onHit?: (hit: SimHit) => void
   members: CharacterKey[]
   rotation: ParsedRotation
   sim: SimulationResult
@@ -369,6 +378,7 @@ export function RotationTimeline({
   const store = useMemo(createMomentStore, [])
   const plotRef = useRef<HTMLDivElement>(null)
   const lineRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLDivElement>(null)
   // whether the strip goes on past either side of its box (it scrolls sideways)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ left: false, right: false })
@@ -409,7 +419,8 @@ export function RotationTimeline({
   const hitAt = useCallback(
     (moment: Moment) => {
       const width = plotRef.current?.getBoundingClientRect().width ?? 800
-      const reach = Math.max(2, (5 / width) * length)
+      // (a mark is 2 px wide: a click a little beside it still finds it)
+      const reach = Math.max(2, (8 / width) * length)
       let found: SimHit | undefined
       let best = Number.POSITIVE_INFINITY
       for (const h of hits) {
@@ -448,10 +459,13 @@ export function RotationTimeline({
     cancelAnimationFrame(raf.current)
     raf.current = requestAnimationFrame(() => {
       store.set(moment)
+      // (near a hit's mark: the line snaps onto it and a click picks it)
+      const hit = moment && hitAt(moment)
+      if (areaRef.current) areaRef.current.style.cursor = hit ? 'pointer' : ''
       const line = lineRef.current
       if (!line) return
       line.style.opacity = moment ? '1' : '0'
-      if (moment) line.style.left = pct(moment.frame)
+      if (moment) line.style.left = pct(hit ? hit.t : moment.frame)
     })
   }
   const onPointerLeave = () => {
@@ -478,9 +492,10 @@ export function RotationTimeline({
     })
   }, [pinFrame, nameColumn, start, length])
   const pinAt = (moment: Moment | undefined) => {
-    if (!moment) return
+    if (!moment) return undefined
     const hit = hitAt(moment)
     setPin({ frame: hit?.t ?? moment.frame, hit })
+    return hit
   }
   const onKeyDown = (e: React.KeyboardEvent) => {
     // (Escape unpins first; the detailed window closes on the next one)
@@ -649,6 +664,7 @@ export function RotationTimeline({
             })}
           >
             <Box
+              ref={areaRef}
               role="application"
               tabIndex={0}
               aria-label={t('teamOpt.timeline.label', 'Rotation timeline')}
@@ -657,7 +673,8 @@ export function RotationTimeline({
               onClick={(e) => {
                 // (a block opens its step: not a pin)
                 if ((e.target as HTMLElement).closest('button')) return
-                pinAt(momentOf(e))
+                const hit = pinAt(momentOf(e))
+                if (hit) onHit?.(hit)
               }}
               onKeyDown={onKeyDown}
               sx={{
@@ -786,7 +803,7 @@ export function RotationTimeline({
                         />
                       ))}
                       {(swaps.get(characterKey) ?? []).map((w) => (
-                        <Tooltip
+                        <SuspenseTooltip
                           key={`swap-${w.start}`}
                           arrow
                           disableInteractive
@@ -859,7 +876,7 @@ export function RotationTimeline({
                               <SwapHorizIcon />
                             </Box>
                           </Box>
-                        </Tooltip>
+                        </SuspenseTooltip>
                       ))}
                       {(blocks.get(characterKey) ?? []).map((a) => {
                         const index = a.index
@@ -1191,7 +1208,7 @@ export function RotationTimeline({
       </Box>
     </SizeContext.Provider>
   )
-}
+})
 
 /* ---------- rows of the detailed view ---------- */
 
@@ -1368,7 +1385,7 @@ function TrackGroup({
           height={Math.max(TRACK, buffs.length * 5 + 9)}
           label={
             // (its lines named, top to bottom: hover the label)
-            <Tooltip
+            <SuspenseTooltip
               arrow
               placement="right-start"
               title={
@@ -1395,7 +1412,7 @@ function TrackGroup({
               >
                 {t('teamOpt.timeline.buffsRow', 'Buffs')}
               </Box>
-            </Tooltip>
+            </SuspenseTooltip>
           }
           value={<BuffsUp tracks={buffs} store={store} pin={pin} />}
         >

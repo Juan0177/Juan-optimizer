@@ -1,5 +1,5 @@
 import { valueString } from '@genshin-optimizer/common/util'
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
@@ -12,12 +12,14 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   attackHitData,
+  evaluateTeamNodes,
   evaluateTeamRotation,
   getTeamDataWith,
   resolveInfo,
   rotationAttacks,
   teamOptBonusStats,
   teamOptMembers,
+  teamRotationNodes,
 } from '@genshin-optimizer/gi/ui'
 import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -37,8 +39,9 @@ interface Mapped {
 }
 
 /**
- * The timeline's figures with the members' own builds (Team optimize's: never on the KQM tab):
- * each simulated hit's damage, and the attack it belongs to. The rotation's attacks are made from
+ * The timeline's figures: each simulated hit's damage, and the attack it belongs to. With the
+ * members' own builds (Team optimize's), or with `overrides` (KQM theorycrafting's builds, as its
+ * run evaluates them: never the members' own on the KQM tab). The rotation's attacks are made from
  * the simulation shown (its first sample), evaluated once in the background; until then, and
  * when `enabled` is off, there are no figures.
  */
@@ -48,7 +51,8 @@ export function useTimelineFigures(
   own:
     | ((owner: SimBuffOwner, path: string[]) => string | undefined)
     | undefined,
-  enabled: boolean
+  enabled: boolean,
+  overrides?: TeamDataOverrides
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -71,21 +75,37 @@ export function useTimelineFigures(
   }>()
   const assumeMaxMain = !!teamOpt.assumeMaxMain
   const { onField, bonusStats } = teamOpt
+  const kqmOnField = teamOpt.kqm?.onField
   useEffect(() => {
     if (!mapped) return undefined
     const timer = setTimeout(() => {
       const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
-      const evaluation = evaluateTeamRotation(database, teamId, gender, {
-        arts: {},
-        attacks: mapped.attacks,
-        mainStatAssumptionLevel: assumeMaxMain ? 20 : 0,
-        onField,
-        bonusStats: teamOptBonusStats({ bonusStats } as never, keys),
-      })
+      const evaluation = overrides
+        ? kqmEvaluation(database, teamId, gender, overrides, {
+            attacks: mapped.attacks,
+            onField: kqmOnField ?? onField,
+          })
+        : evaluateTeamRotation(database, teamId, gender, {
+            arts: {},
+            attacks: mapped.attacks,
+            mainStatAssumptionLevel: assumeMaxMain ? 20 : 0,
+            onField,
+            bonusStats: teamOptBonusStats({ bonusStats } as never, keys),
+          })
       if (evaluation) setEvaluated({ mapped, evaluation })
     }, 150)
     return () => clearTimeout(timer)
-  }, [mapped, database, teamId, gender, assumeMaxMain, onField, bonusStats])
+  }, [
+    mapped,
+    database,
+    teamId,
+    gender,
+    assumeMaxMain,
+    onField,
+    kqmOnField,
+    bonusStats,
+    overrides,
+  ])
   return useMemo(() => {
     if (!mapped || evaluated?.mapped !== mapped) return {}
     const { evaluation } = evaluated
@@ -109,15 +129,38 @@ export function useTimelineFigures(
   }, [mapped, evaluated])
 }
 
+/**
+ * Attacks evaluated with KQM theorycrafting's builds and settings, as its run does (its own
+ * switches, enemy and rules included, which `evaluateTeamRotation` leaves out)
+ */
+function kqmEvaluation(
+  database: ReturnType<typeof useDatabase>,
+  teamId: string,
+  gender: GenderKey,
+  overrides: TeamDataOverrides,
+  { attacks, onField }: { attacks: Mapped['attacks']; onField?: CharacterKey }
+) {
+  const nodes = teamRotationNodes(database, teamId, gender, {
+    ...overrides,
+    arts: overrides.arts ?? {},
+    attacks,
+    onField,
+  })
+  return nodes && evaluateTeamNodes(database, teamId, attacks, nodes)
+}
+
 /** A pinned hit's stats: the character's and the hit's own, with the buffs up when it landed */
 export function TimelineHitStats({
   teamId,
   characterKey,
   attack,
+  overrides,
 }: {
   teamId: string
   characterKey: CharacterKey
   attack: TeamOptAttack
+  /** KQM theorycrafting's builds (never the members' own on the KQM tab) */
+  overrides?: TeamDataOverrides
 }) {
   const database = useDatabase()
   const { gender } = useDBMeta()
@@ -134,8 +177,9 @@ export function TimelineHitStats({
           attack,
           characterKey,
           mainStatAssumptionLevel: assumeMaxMain ? 20 : 0,
-          onField,
+          onField: (overrides && teamOpt.kqm?.onField) || onField,
           bonusStats: teamOptBonusStats({ bonusStats } as never, keys),
+          overrides,
         }) ?? null
       )
     }, 60)
@@ -148,7 +192,9 @@ export function TimelineHitStats({
     characterKey,
     assumeMaxMain,
     onField,
+    teamOpt.kqm?.onField,
     bonusStats,
+    overrides,
   ])
   return <HitStats hit={hit} />
 }

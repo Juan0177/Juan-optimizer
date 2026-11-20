@@ -168,10 +168,12 @@ async function setup(
     loadoutData: ids.map((teamCharId) => ({ teamCharId })) as LoadoutDatum[],
     teamOpt,
   })
-  stored.set(`teamOptRotationText_${teamId}`, TEXT)
-  stored.set(`teamOptRotationDraft_${teamId}`, 'draft')
-  stored.set(`teamOptRotationOpener_${teamId}`, '')
-  stored.set(`teamOptRotationTiming_${teamId}`, '{}')
+  // (KQM Theorycrafting's own rotation, saved with the team)
+  const kqmId = `${teamId}_kqm`
+  database.teams.setRotationField(kqmId, 'Text', TEXT)
+  database.teams.setRotationField(kqmId, 'Draft', 'draft')
+  database.teams.setRotationField(kqmId, 'Opener', '')
+  database.teams.setRotationField(kqmId, 'Timing', '{}')
   const builds = Object.fromEntries(
     MEMBERS.map((ck) => {
       const own = ownOverride[ck] ?? OWN[ck]
@@ -725,8 +727,9 @@ describe('compareSwapKqm', () => {
     }
     const plain = seconds()
     // (Danica's Q, the 7th action of A's rotation and the 6th of B's: 10 s longer)
-    stored.set(
-      `teamOptRotationTiming_${s.teamId}`,
+    s.database.teams.setRotationField(
+      `${s.teamId}_kqm`,
+      'Timing',
       JSON.stringify({
         edits: { 6: { characterKey: 'Danica', text: 'Q', frames: 600 } },
       })

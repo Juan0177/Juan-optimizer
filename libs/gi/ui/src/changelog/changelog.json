@@ -1,5 +1,183 @@
 [
   {
+    "version": "1.23.0",
+    "date": "2026-11-20",
+    "new": [
+      "KQM Theorycrafting finds builds quicker by default: after the first round, each member only tries the weapons and artifact sets close to its best (and every one that helps the team or its Energy), and the rest are listed as screened out under the rankings. Search: Full in the setup tries every weapon and set in every round, as before."
+    ]
+  },
+  {
+    "version": "1.22.6",
+    "date": "2026-11-20",
+    "fixed": [
+      "KQM Theorycrafting's rotation no longer lists, under an attack's parts, the effects of artifact sets and weapons the builds don't hold, so an attack is split only where something that counts for the builds differs."
+    ]
+  },
+  {
+    "version": "1.22.5",
+    "date": "2026-11-20"
+  },
+  {
+    "version": "1.22.4",
+    "date": "2026-11-20",
+    "improved": [
+      "A rotation note says when Danica's Skill drops no particles: both her Skills share one 14 s particle cooldown."
+    ],
+    "fixed": [
+      "Equip on Team optimize puts the artifacts and weapons on the characters even when a member uses a saved build: that member switches to its equipped build and the saved build stays as it was. Equip is also still offered after Save as builds.",
+      "The Widsith plays the song picked in its switch in the rotation, instead of the average of the three.",
+      "Arlecchino's C2 Balemoon Bloodfire lands right after she absorbs the directive, before her next Normal Attack, so in Melt teams it Melts and no longer takes the Cryo her Normal Attacks need."
+    ]
+  },
+  {
+    "version": "1.22.3",
+    "date": "2026-11-19"
+  },
+  {
+    "version": "1.22.2",
+    "date": "2026-11-19"
+  },
+  {
+    "version": "1.22.1",
+    "date": "2026-11-19"
+  },
+  {
+    "version": "1.22.0",
+    "date": "2026-11-19",
+    "improved": [
+      "The setting beside the rotation now says what it counts: Steady DPS (rot 3–4), the default, plays the rotation 4 times in a row and averages the last 2; First 1 to 6 rotations count from the start.",
+      "The parts of a grouped attack name what sets them apart: who is on the field, then the buffs that differ, each with its owner's picture and the characters' own buffs first. The Show buff conditions switch is gone.",
+      "Team optimize can copy the KQM Theorycrafting rotation, as KQM can copy Team optimize's, played at your own constellations. Neither button shows when the two rotations are already the same.",
+      "The team page header is more compact, with a back arrow to your teams.",
+      "KQM Theorycrafting: the passive switches in the weapon and artifact set choosers line up in columns."
+    ],
+    "fixed": [
+      "stellaroptimizer.com: Polestar Field, Radiance and other reaction buffs showed internal names instead of their text, in Team settings and when editing an attack.",
+      "Team settings: buff descriptions no longer overlap the next column on wide screens.",
+      "A member's Overview no longer shows an empty card when there is nothing in it."
+    ]
+  },
+  {
+    "version": "1.21.1",
+    "date": "2026-11-19",
+    "improved": [
+      "Team optimize: an attack the rotation plays with different members on the field or different buffs up is now one row with its total. Open it to see each part, named by who is on the field.",
+      "Each member's rotation header counts its hits, as the rotation writer does, and its damage says DPS.",
+      "Attacks changed by hand after a rotation was played are marked \"Attacks edited\", and when playing the rotation again replaces those changes, the message says so (Undo is still there).",
+      "Rotation text: names that aren't in the team are listed in one warning, warnings name members in full, and full-width commas and semicolons work as step breaks. \"Hits per rotation\" explains why some hits are fractions.",
+      "Loadouts the app named itself show the character's name, as \"Raiden Shogun Loadout\".",
+      "Deleting a team says that its rotations and its Team optimize and KQM results go with it.",
+      "On phones, the button that leaves an artifact out of a team's runs is easier to tap."
+    ],
+    "fixed": [
+      "The Feedback button and pop-up messages no longer cover the Optimize team button.",
+      "On phones, the written rotation uses the whole width of the screen.",
+      "KQM Theorycrafting: the setup's time to defeat the Radiant Moongecko now matches the results.",
+      "Closing the rotation writer keeps a \"First rotation only\" you haven't used yet, as it keeps the rotation, and Undo reverts both.",
+      "Closing the team name window with Esc keeps the name you typed.",
+      "An attack's buff conditions no longer show internal names.",
+      "When the team uses saved builds, Team optimize's header says Current DPS instead of Equipped DPS.",
+      "The \"Could not copy\" message can be closed, and goes away once the attacks change.",
+      "Importing text that isn't a team shows a plain message."
+    ]
+  },
+  {
+    "version": "1.21.0",
+    "date": "2026-11-19",
+    "new": [
+      "Undo equip on Team optimize puts back the equipment and saved builds the team had before the last Equip.",
+      "Export attacks and Import attacks move a rotation's attacks as JSON, and KQM Theorycrafting can copy Team optimize's current rotation into its own.",
+      "Team export can download the team as a JSON file, and the export now includes both of the team's written rotations."
+    ],
+    "improved": [
+      "Written rotations are saved with their team: duplicating a team keeps them, with their opener and timing, and deleting a team removes them.",
+      "When no team matches the search on the Teams page, a Clear filters button brings them back, and an imported team opens right away.",
+      "The rotation writer's revert button just says Undo."
+    ],
+    "fixed": [
+      "KQM Theorycrafting counts the Energy restored by Bloodsoaked Ruins, Jadefall's Splendor, Lumidouce Elegy and Amenoma Kageuchi, so a member holding one of them needs less Energy Recharge.",
+      "A new team no longer opens with the rotation of a team deleted before it, and deleting a team from its own page no longer shows an error.",
+      "A Team optimize or KQM result is shown as out of date once the team's members or a member's requirements change.",
+      "Importing a file that doesn't hold a valid team shows an error instead of adding an empty team.",
+      "When copying to the clipboard fails, a message says so and the JSON can be downloaded instead.",
+      "Team optimize says to add artifacts first when there are none to choose from, instead of running without any.",
+      "Opening a team no longer counts as an edit in the Teams page's Last edit order."
+    ]
+  },
+  {
+    "version": "1.20.0",
+    "date": "2026-11-19",
+    "new": [
+      "Built-in rotations: \"Templates\" in the rotation writer, and the start screen of an empty rotation, list standard rotations for the main DPS characters (your team's own first). Picking one opens it in the writer.",
+      "New rotation words: \"WK\" walks (\"WK11f\": 11 frames; Tartaglia's next Skill is his walking one), \"HP\" and \"LP\" are high and low plunges with \"HP[collision]\" for the hit on the way down (Xiao, Diluc), \"CA[cancel]\" cancels Arlecchino's Charged Attack before it hits, \"CA[bullets=4]\" fires Chasca's Shadowhunt after 4 bullets, \"CA[weakspot]\" aims at a weak point (Lyney, Prototype Crescent), and \"D?/CA\" dashes only when Wanderer's Descent is up, else a Charged Attack."
+    ],
+    "improved": [
+      "Rotation damage: Geo resonance now comes from shields, and Crystallize shards are picked up on dashes (Itto and Navia teams); Kazuha absorbs Pyro inside Bennett's field and his Burst's damage over time keeps the stats it was cast with; Bennett's field ATK goes only to the member standing in it.",
+      "Finale of the Deep tracks its Bond of Life: heals wear it down, Fragment of Harmonic Whimsy stacks on each change, and Clorinde clearing her own Bond gives the full ATK bonus. Furina's Endless Waltz no longer heals twice when it is set off again.",
+      "Kit fixes: Cyno's Mortuary Rite with Thundering Fury, Fischl's Oz after a cut-short Burst and her Skill waiting for Oz to leave, Clorinde's Night Vigil, Navia's Crystal Shrapnel, Itto's Superlative Superstrength before his Burst, Wanderer's Windfavored, Xiao's and Diluc's plunges, Chasca's Shadowhunt and Tartaglia's walking Skill.",
+      "Team optimize and KQM respond faster: opening a member's attacks, switching to the KQM tab, and clicks while builds generate."
+    ],
+    "fixed": [
+      "Mitya's Talent tab shows the total of a Gradient Detonation."
+    ]
+  },
+  {
+    "version": "1.19.2",
+    "date": "2026-11-19",
+    "fixed": [
+      "KQM Theorycrafting's Damage share follows the rotation that was played and counts each hit under the element it actually dealt, so the split by element and by attack matches the result.",
+      "Hovering a passive, buff, attack or weapon on Team optimize and KQM Theorycrafting while its text is still loading no longer blanks the page: the tooltip shows a placeholder until the text arrives."
+    ]
+  },
+  {
+    "version": "1.19.1",
+    "date": "2026-11-19",
+    "fixed": [
+      "A fight that starts with no energy no longer waits, in its first rotation, for what the Bursts would have made ready (Anastasya's Skills after her Burst, for example). What isn't ready is left out and the rotation goes on, as a player would, so teams like that defeat Stygian bosses much sooner in the estimate.",
+      "The fight timeline names the Domovoy Sculptor's statue blasts, Lysis Shears' cannon HP loss and the Guardian Blade's heal, which read \"Horns broken\"."
+    ]
+  },
+  {
+    "version": "1.19.0",
+    "date": "2026-11-19",
+    "new": [
+      "Time to defeat now follows the mechanics of five more Stygian Onslaught bosses, from the game files: the Battle-Hardened Domovoy Sculptor, the Guardian Blade of Drifting Snow, the Chimeric Winged Lion and both Secret Source Automatons. The fight timeline shows each one's states, wards, shields and backlash.",
+      "Domovoy Sculptor: Radiance: Stellar Glimmer on it as it sculpts turns the sculptures into statues that explode on it and take its RES down, as the game does. Without Radiance it stays at 90% RES.",
+      "Guardian Blade of Drifting Snow: its Ice Coffin at 81% HP is worn down by the team's Pyro, Electro, Anemo and Geo, or turned into a shield by Radiance. A coffin that holds 20 s gives it 10% of its HP back, and a second coffin follows.",
+      "Chimeric Winged Lion: its Electro Ward is worn down by the team's reactions and by its own shockwave under Radiance. Breaking it brings the backlash, paralysis, flight and vortex.",
+      "Secret Source Automatons: the Overseer Device's Sweeper Modes stop under Cryo hits and turn to Forced Counterstrike with Nightsoul's Blessing; Lysis Shears' shield holds until Nightsoul's Blessing fills its Adaptive Countermeasures."
+    ]
+  },
+  {
+    "version": "1.18.0",
+    "date": "2026-11-19",
+    "new": [
+      "Team optimize works out each member's Min ER from the written rotation with the ER calculator, as KQM Theorycrafting does. The run window shows the targets, \"Calculate ER\" opens the same side panel to adjust them, and a run works them out for the weapons each build holds. Typing a member's minimum keeps your own values instead.",
+      "The fight timeline shows the team's damage in every 3 s, into a shield or ward too, and pointing at a bar shows the team's DPS in those 3 s.",
+      "On KQM Theorycrafting, a weapon row says when its passive is counted (\"Passive on\", or the share of the fight it is on), and a pick lists how it changes the teammates' Energy Recharge, for example with Favonius particles."
+    ],
+    "improved": [
+      "KQM Theorycrafting keeps its own enemy, team buffs, kit switches and extra buffs, apart from Team optimize's, and never uses the switches or buffs of your own builds. A weapon passive switched off on Team optimize no longer changes KQM's results. The first time, KQM starts with a copy of Team optimize's.",
+      "Clicking the rotation opens the rotation writer at once, and the rotation time and the number of rotations sit at the end of the rotation's line, in a menu.",
+      "The rotation, setup and result sections each have their own colour, the toggles are redesigned, and Export and Import moved to the right of the header."
+    ],
+    "fixed": [
+      "Switching the enemy from a Stygian boss to Custom no longer keeps the boss's HP.",
+      "The equipped team's DPS counts Wolf's Gravestone's passive as a run does, so it matches the result's DPS.",
+      "On Team optimize, the rotation timeline plays Team optimize's own rotation, not KQM's."
+    ]
+  },
+  {
+    "version": "1.17.0",
+    "date": "2026-11-18",
+    "new": [
+      "\"If ready, else\" in written rotations: \"Q/N3\" (or \"Q?/N3\") uses the Burst when it is ready and N3 when it is not (\"E/N2CA\" does the same for a Skill on cooldown). The rotation's notes say when the alternative was played.",
+      "KQM Theorycrafting keeps its own rotation, apart from Team optimize's, and plays it at the constellations set in its Setup. The first time, it starts as a copy of Team optimize's.",
+      "Changing a constellation plays the written rotation again by itself (your own on Team optimize, the Setup ones on KQM), and a notice says how the rotation time and attacks changed. For example, Zibai's C1 fifth Stride no longer doubles the rotation time.",
+      "Against the Radiant Moongecko, Team optimize picks builds with Disentangled's CRIT Rate and DMG Bonus in mind, so it no longer caps CRIT Rate without them."
+    ]
+  },
+  {
     "version": "1.16.0",
     "date": "2026-11-18",
     "new": [

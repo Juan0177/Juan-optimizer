@@ -1,4 +1,7 @@
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
+import {
+  InfoTooltipInline,
+  SuspenseTooltip,
+} from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
@@ -48,6 +51,7 @@ import {
   sameEnemy,
   setKqmBuildThreads,
   syncEnergyCalculator,
+  teamOptMembers,
   withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
@@ -88,6 +92,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EnemySetup } from '../Enemy/EnemySetup'
+import { EnemyScopeContext, kqmEnemyTeam } from '../Enemy/enemyScope'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import { DamageShare } from './DamageShare'
 import type { FightApplications } from './fightTeam'
@@ -110,7 +115,11 @@ import {
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
-import { useRotationSettings } from './RotationWriter'
+import {
+  kqmRotationId,
+  useAppliedRotation,
+  useRotationSettings,
+} from './RotationWriter'
 import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
@@ -184,6 +193,35 @@ function teamCalculator(
   )
 }
 
+type RotationWorked = {
+  for: string
+  energy?: RotationEnergy
+  rotationTime?: number
+}
+const workedReplays = new WeakMap<
+  ArtCharDatabase,
+  Map<string, { key: string; sources: unknown[]; worked: RotationWorked }>
+>()
+const replaySources = (database: ArtCharDatabase, teamId: string) => [
+  database.teams.get(teamId),
+  ...teamOptMembers(database, teamId).flatMap((m) => [
+    m.teamChar,
+    database.weapons.get(m.weaponId),
+    ...Object.values(m.artifactIds).map((id) =>
+      id ? database.arts.get(id) : undefined
+    ),
+  ]),
+]
+function cachedReplay(database: ArtCharDatabase, teamId: string, key: string) {
+  const hit = workedReplays.get(database)?.get(teamId)
+  if (!hit || hit.key !== key) return undefined
+  const sources = replaySources(database, teamId)
+  return sources.length === hit.sources.length &&
+    sources.every((s, i) => s === hit.sources[i])
+    ? hit.worked
+    : undefined
+}
+
 /**
  * The ER calculator's inputs as KQM plays the written rotation (at its constellations, see
  * `energyFromRotation`): worked out after the panel shows (it is a full replay), again when the
@@ -210,19 +248,10 @@ function useRotationEnergy(
   const { gender } = useDBMeta()
   const { i18n } = useTranslation()
   // (with the rotation text it was worked out for: a newer text's is still on its way)
-  const [worked, setWorked] = useState<{
-    for: string
-    energy?: RotationEnergy
-    rotationTime?: number
-  }>()
+  const [worked, setWorked] = useState<RotationWorked>()
   const latest = useRef(teamOpt)
   latest.current = teamOpt
-  let text = ''
-  try {
-    text = localStorage.getItem(`teamOptRotationText_${teamId}`) ?? ''
-  } catch {
-    // (no storage: nothing written)
-  }
+  const text = useAppliedRotation(kqmRotationId(teamId))
   const constellations = JSON.stringify(
     members.map((m) => kqmMemberConstellation(m.characterKey, teamOpt.kqm))
   )
@@ -233,17 +262,45 @@ function useRotationEnergy(
       : []
   )
   const keys = members.map((m) => m.characterKey).join()
+  // (each member's KQM weapons as candidates, as a run plays them: an energy weapon's refunds are
+  // counted for the weapon a build holds)
+  const weapons = JSON.stringify(
+    members.map((m) =>
+      kqmWeapons(m.characterKey, teamOpt.kqm).map((w) => w.key)
+    )
+  )
   // (the opener and the timing settings too: the replay plays them)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  const { opener, timing, frameData } = useRotationSettings(
+    kqmRotationId(teamId)
+  )
   const played = JSON.stringify([opener, timing, frameData])
   const rotation = text.trim() ? `${text.trim()}|${played}` : ''
+  const replayKey = JSON.stringify([
+    gender,
+    i18n?.language,
+    rotation,
+    constellations,
+    cadence,
+    keys,
+    weapons,
+  ])
+  // (shown again with nothing it reads changed: the last replay at once)
+  const [cached] = useState(() =>
+    rotation ? cachedReplay(database, teamId, replayKey) : undefined
+  )
+  const shown = rotation ? (worked ?? cached) : undefined
   useEffect(() => {
     if (!text.trim()) {
       setWorked(undefined)
       return
     }
+    const hit = cachedReplay(database, teamId, replayKey)
+    if (hit) {
+      setWorked(hit)
+      return
+    }
     let cancelled = false
-    const id = setTimeout(() => {
+    const run = () => {
       let next: RotationEnergy | undefined
       let seconds: number | undefined
       try {
@@ -261,7 +318,18 @@ function useRotationEnergy(
               kqmMemberConstellation(m.characterKey, teamOpt.kqm),
             ])
           ),
-          gear: {},
+          gear: Object.fromEntries(
+            members.map((m) => [
+              m.characterKey,
+              {
+                candidates: {
+                  weapons: kqmWeapons(m.characterKey, teamOpt.kqm).map(
+                    (w) => w.key
+                  ),
+                },
+              },
+            ])
+          ),
           overrides: {},
         })
         next = played?.energy
@@ -270,9 +338,26 @@ function useRotationEnergy(
         next = undefined
         seconds = undefined
       }
-      if (!cancelled)
-        setWorked({ for: rotation, energy: next, rotationTime: seconds })
-    }, 0)
+      if (cancelled) return
+      const result = { for: rotation, energy: next, rotationTime: seconds }
+      const byTeam = workedReplays.get(database) ?? new Map()
+      workedReplays.set(database, byTeam)
+      byTeam.set(teamId, {
+        key: replayKey,
+        sources: replaySources(database, teamId),
+        worked: result,
+      })
+      setWorked(result)
+    }
+    // (after the page paints: a full replay)
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: 1000 })
+      return () => {
+        cancelled = true
+        cancelIdleCallback(id)
+      }
+    }
+    const id = setTimeout(run, 50)
     return () => {
       cancelled = true
       clearTimeout(id)
@@ -288,13 +373,14 @@ function useRotationEnergy(
     cadence,
     keys,
     played,
+    replayKey,
   ])
   return {
     text,
     rotation,
-    energy: worked?.energy,
-    for: worked?.for,
-    rotationTime: worked?.energy ? worked.rotationTime : undefined,
+    energy: shown?.energy,
+    for: shown?.for,
+    rotationTime: shown?.energy ? shown.rotationTime : undefined,
   }
 }
 
@@ -361,7 +447,10 @@ export function KqmSettings({
       if (settings.talents === undefined) settings.talents = last
     })
   }, [unsetTalents, disabled, setTeamOpt])
-  const counts = kqmChooserCounts(members, teamOpt)
+  const counts = useMemo(
+    () => kqmChooserCounts(members, teamOpt.kqm),
+    [members, teamOpt.kqm]
+  )
   // every member gets a KQM build (the KQM standard is for the whole team)
   const optimized = members
   const [calculatorInputs, setCalculatorDraft] = useState(() =>
@@ -418,8 +507,9 @@ export function KqmSettings({
     setCalculatorDirty(false)
     setTab(0)
   }
-  const missingWeapons = optimized.filter(
-    (m) => !kqmWeapons(m.characterKey, kqm).length
+  const missingWeapons = useMemo(
+    () => optimized.filter((m) => !kqmWeapons(m.characterKey, kqm).length),
+    [optimized, kqm]
   )
   const [erText, setErText] = useState<Partial<Record<CharacterKey, string>>>(
     () =>
@@ -661,6 +751,35 @@ export function KqmSettings({
               )}
             </Box>
           )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FieldLabel
+              tip={t(
+                'teamOpt.kqm.searchTipQuick',
+                'Quick tries every allowed weapon and artifact set in the first round, then only the ones near each member’s best, and lists the rest as screened out instead of ranked. Full tries all of them in every round.'
+              )}
+            >
+              {t('teamOpt.kqm.search', 'Search')}
+            </FieldLabel>
+            <Segmented
+              size="small"
+              value={kqm.fullSearch ? 'full' : 'quick'}
+              aria-label={t('teamOpt.kqm.search', 'Search')}
+              options={[
+                {
+                  value: 'quick',
+                  label: t('teamOpt.kqm.searchQuick', 'Quick'),
+                },
+                { value: 'full', label: t('teamOpt.kqm.searchFull', 'Full') },
+              ]}
+              onChange={(search) =>
+                setTeamOpt((o) => {
+                  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+                  if (search === 'full') settings.fullSearch = true
+                  else delete settings.fullSearch
+                })
+              }
+            />
+          </Box>
           <KqmThreads />
           <Button
             variant="contained"
@@ -926,7 +1045,9 @@ export function KqmSettings({
             )
           })}
         </Box>
-        <EnemySetup teamId={teamId} fight={fight} disabled={disabled} />
+        <EnemyScopeContext.Provider value="kqm">
+          <EnemySetup teamId={teamId} fight={fight} disabled={disabled} />
+        </EnemyScopeContext.Provider>
       </Box>
       {/* what the builds may use: the weapon groups, and the drawers that choose one by one */}
       <KqmPool
@@ -1212,7 +1333,7 @@ export function KqmSetupSummary({
           const er = kqmEnergyRequirement(kqm, characterKey)
           const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
           return (
-            <Tooltip
+            <SuspenseTooltip
               key={characterKey}
               arrow
               title={
@@ -1253,7 +1374,7 @@ export function KqmSetupSummary({
                 </Box>
                 {nowEr !== undefined && nowEr !== er && nowIs(`${num(nowEr)}%`)}
               </Box>
-            </Tooltip>
+            </SuspenseTooltip>
           )
         })}
       </Box>
@@ -1271,6 +1392,18 @@ export function KqmSetupSummary({
           },
         }}
       >
+        <SpecStat label={t('teamOpt.kqm.search', 'Search')}>
+          {kqm.fullSearch
+            ? t('teamOpt.kqm.searchFull', 'Full')
+            : t('teamOpt.kqm.searchQuick', 'Quick')}
+          {nowKqm &&
+            !!nowKqm.fullSearch !== !!kqm.fullSearch &&
+            nowIs(
+              nowKqm.fullSearch
+                ? t('teamOpt.kqm.searchFull', 'Full')
+                : t('teamOpt.kqm.searchQuick', 'Quick')
+            )}
+        </SpecStat>
         <SpecStat label={t('teamOpt.kqm.talents', 'Talents')}>
           {`${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}`}
           {nowKqm &&
@@ -1324,7 +1457,7 @@ export function KqmSetupSummary({
             arrow
             title={t(
               'teamOpt.kqm.rotationPlayedTip',
-              'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, 4 rotations in a row with the last 2 averaged, at the pace it can keep.'
+              'The written rotation played for these builds: at these constellations, with their weapons and artifact sets, counting the rotations chosen beside it (Steady DPS unless you chose others).'
             )}
           >
             <Box sx={{ display: 'grid', cursor: 'help' }}>
@@ -2230,6 +2363,7 @@ function KqmResultsView({
   // (KQM Compare's team B: the database the result was computed on, given by KqmResults)
   const database = useDatabase()
   const team = useTeam(teamId)
+  const kqmTeam = useMemo(() => team && kqmEnemyTeam(team), [team])
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
@@ -2253,8 +2387,10 @@ function KqmResultsView({
         : undefined,
     [enemy, database, teamId, runSettings, result]
   )
+  const moongecko =
+    !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS
   const cocoon = useCocoonEvaluations(teamId, cocoonSettings, {
-    cocoon: !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS,
+    cocoon: moongecko,
     opening: applications?.opening?.attacks,
   })
   const compared =
@@ -2291,26 +2427,30 @@ function KqmResultsView({
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(
     () =>
-      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
-        ? team
+      enemy && kqmTeam && sameEnemy(enemy.enemyOverride, kqmTeam.enemyOverride)
+        ? kqmTeam
         : enemy,
-    [enemy, team]
+    [enemy, kqmTeam]
   )
   const fight = useMemo(
     () =>
-      enemy &&
-      fightTeamOf({
-        members: members.map((m) => m.characterKey),
-        evaluation: result.after,
-        attacks: runSettings.attacks,
-        teamData,
-        rotationTime,
-        enemyOverride: enemy.enemyOverride,
-        applications,
-        cocoon,
-      }),
+      // (the Moongecko's fight needs its cocoon evaluations: no estimate without them)
+      enemy && (!moongecko || cocoon)
+        ? fightTeamOf({
+            members: members.map((m) => m.characterKey),
+            evaluation: result.after,
+            attacks: runSettings.attacks,
+            teamData,
+            rotationTime,
+            enemyOverride: enemy.enemyOverride,
+            ...(team ? { dataEnemy: team.enemyOverride } : {}),
+            applications,
+            cocoon,
+          })
+        : undefined,
     [
       enemy,
+      moongecko,
       members,
       result.after,
       runSettings.attacks,
@@ -2459,7 +2599,7 @@ function KqmResultsView({
               members={members}
               characterKey={compared}
               rotationTime={rotationTime}
-              disabled={running}
+              disabled={running || stale}
             />
             {onDiscard && (
               <Tooltip arrow title={t('teamOpt.result.discard', 'Discard')}>
@@ -2791,9 +2931,9 @@ function KqmResultsView({
         <DamageShare
           members={members.map((m) => m.characterKey)}
           evaluation={view.after}
-          attacks={runSettings.attacks}
+          attacks={view.played?.attacks ?? runSettings.attacks}
           teamData={teamData}
-          rotationTime={rotationTime}
+          rotationTime={view.played?.rotationTime ?? rotationTime}
         />
       </Box>
       {timeline}

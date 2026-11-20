@@ -24,6 +24,8 @@ type ModalWrapperProps = ModalProps & {
 export function ModalWrapper({
   children,
   containerProps,
+  'aria-label': label,
+  'aria-labelledby': labelledBy,
   ...props
 }: ModalWrapperProps) {
   return (
@@ -33,7 +35,14 @@ export function ModalWrapper({
       }}
       {...props}
     >
-      <ModalContainer sx={{ p: { xs: 1 } }} {...containerProps}>
+      <ModalContainer
+        role="dialog"
+        aria-modal
+        aria-label={label}
+        aria-labelledby={labelledBy}
+        sx={{ p: { xs: 1 } }}
+        {...containerProps}
+      >
         {children}
       </ModalContainer>
     </Modal>

@@ -12,6 +12,7 @@ import {
 } from '@genshin-optimizer/gi/solver'
 import { compactArtifacts } from '@genshin-optimizer/gi/solver-tc'
 import type {
+  BonusStats,
   RunAttackState,
   RunEnemy,
   TeamOptResult,
@@ -26,7 +27,15 @@ import {
   teamOptMembers,
   useNumWorkers,
 } from '@genshin-optimizer/gi/ui'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
+import { inventoryRequirementsKey } from './useTeamOpt'
 
 export type TeamOptRunState =
   | { type: 'idle' }
@@ -34,6 +43,8 @@ export type TeamOptRunState =
   | {
       type: 'done'
       result: TeamOptResult
+      roster?: string
+      requirementsKey?: string
       seconds: number
       /** The settings it was found with (the rotation its damage is for) */
       teamOpt: TeamOpt
@@ -80,6 +91,26 @@ const initStatus = (): TeamOptStatus => ({
  */
 const lastRuns: Record<string, TeamOptRunState> = {}
 
+function inventoryResultFits(
+  database: ArtCharDatabase,
+  teamId: string,
+  result: {
+    builds: Record<string, Record<string, string | undefined>>
+    weapons: Record<string, string>
+  },
+  roster: string | undefined
+) {
+  const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  return (
+    sameBuildRoster(result.builds, members) &&
+    (roster === undefined || roster === teamRoster(database, teamId)) &&
+    Object.values(result.builds).every((build) =>
+      Object.values(build).every((id) => !id || database.arts.get(id))
+    ) &&
+    Object.values(result.weapons).every((id) => !id || database.weapons.get(id))
+  )
+}
+
 /**
  * A team's saved last result (see `database.teamOptResults`), when it still fits the team: the
  * same members, and every artifact and weapon still there. One that no longer fits is forgotten.
@@ -90,22 +121,13 @@ function savedRun(
 ): TeamOptRunState | undefined {
   const saved = database.teamOptResults.get().runs[teamId]
   if (!saved) return undefined
-  const { builds, weapons } = saved.result
-  const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
-  const keys = Object.keys(builds)
-  const fits =
-    keys.length === members.length &&
-    keys.every((key) => members.includes(key as never)) &&
-    Object.values(builds).every((build) =>
-      Object.values(build).every((id) => !id || database.arts.get(id))
-    ) &&
-    Object.values(weapons).every((id) => !id || database.weapons.get(id))
-  if (!fits) {
+  if (!inventoryResultFits(database, teamId, saved.result, saved.roster)) {
     database.teamOptResults.setRun(teamId, undefined)
     return undefined
   }
   // (the database keeps its copy frozen)
-  const { result, seconds, teamOpt, enemy, savedAt } = structuredClone(saved)
+  const { result, roster, requirementsKey, seconds, teamOpt, enemy, savedAt } =
+    structuredClone(saved)
   return {
     type: 'done',
     result: result as unknown as TeamOptResult,
@@ -113,21 +135,31 @@ function savedRun(
     teamOpt,
     ...(enemy ? { enemy } : {}),
     savedAt,
+    roster,
+    requirementsKey,
   }
 }
 
 /** The team's last result: of this visit, else the saved one */
 function lastRun(database: ArtCharDatabase, teamId: string): TeamOptRunState {
-  if (!lastRuns[teamId]) {
+  const key = teamRunKey(database, teamId)
+  const cached = lastRuns[key]
+  if (
+    cached?.type === 'done' &&
+    !inventoryResultFits(database, teamId, cached.result, cached.roster)
+  )
+    delete lastRuns[key]
+  if (!lastRuns[key]) {
     const saved = savedRun(database, teamId)
-    if (saved) lastRuns[teamId] = saved
+    if (saved) lastRuns[key] = saved
   }
-  return lastRuns[teamId] ?? { type: 'idle' }
+  return lastRuns[key] ?? { type: 'idle' }
 }
 
 /** Runs Team Optimize for a team: one solver run per member and round (see `optimizeTeam`) */
 export function useTeamOptRun(teamId: string) {
   const database = useDatabase()
+  const key = teamRunKey(database, teamId)
   const { gender } = useDBMeta()
   const [maxWorkers] = useNumWorkers()
   const [state, setStateRaw] = useState<TeamOptRunState>(() =>
@@ -141,7 +173,7 @@ export function useTeamOptRun(teamId: string) {
           ? { ...state, savedAt: Date.now() }
           : state
       // a run in progress is not worth keeping: leaving the page cancels it
-      if (next.type !== 'running') lastRuns[teamId] = next
+      if (next.type !== 'running') lastRuns[key] = next
       // a new result replaces the saved one (an error keeps it; the saved one shown again after
       // a cancel stays as it is, with what was computed for it since)
       if (
@@ -151,15 +183,30 @@ export function useTeamOptRun(teamId: string) {
         database.teamOptResults.setRun(teamId, {
           savedAt: next.savedAt!,
           seconds: next.seconds,
+          roster: next.roster,
+          requirementsKey: next.requirementsKey,
           teamOpt: next.teamOpt,
           ...(next.enemy ? { enemy: next.enemy } : {}),
           result: structuredClone(next.result) as never,
         })
       setStateRaw(next)
     },
-    [database, teamId]
+    [database, teamId, key]
   )
-  useEffect(() => setStateRaw(lastRun(database, teamId)), [database, teamId])
+  const activeRoster = teamRoster(database, teamId)
+  const requirementsKey = useSyncExternalStore(
+    useCallback(
+      (onChange) => database.optConfigs.followAny(onChange),
+      [database]
+    ),
+    () => inventoryRequirementsKey(database, teamId)
+  )
+  // A roster edit cancels the active job and rechecks the cached result.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a roster change also invalidates the mounted result
+  useEffect(
+    () => setStateRaw(lastRun(database, teamId)),
+    [database, teamId, activeRoster]
+  )
   const status = useRef<TeamOptStatus>(initStatus())
   const cancelRef = useRef<() => void>(() => {})
   useEffect(() => () => cancelRef.current(), [])
@@ -169,14 +216,20 @@ export function useTeamOptRun(teamId: string) {
   const run = useCallback(
     async (
       /** States every attack gets (e.g. Wolf's Gravestone's uptime against the enemy) */
-      attackStates?: readonly RunAttackState[]
+      attackStates?: readonly RunAttackState[],
+      /** Bonus stats added while builds are ranked (the fight's averaged state buffs) */
+      rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
     ) => {
       let cancelled = false
+      const roster = teamRoster(database, teamId)
       let stopSolver: (() => void) | undefined
       cancelRef.current = () => {
         cancelled = true
         stopSolver?.()
       }
+      const stopFollowing = database.teams.follow(teamId, () => {
+        if (teamRoster(database, teamId) !== roster) cancelRef.current()
+      })
       const startTime = performance.now()
       let lastPaint = startTime
       status.current.step = undefined
@@ -184,6 +237,7 @@ export function useTeamOptRun(teamId: string) {
       try {
         await nextPaint()
         const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
+        const requirementsKey = inventoryRequirementsKey(database, teamId)
         // (the enemy its damage is for, as it is now)
         const team = database.teams.get(teamId)
         const enemy = team && runEnemyOf(team)
@@ -259,6 +313,7 @@ export function useTeamOptRun(teamId: string) {
           solve,
           builds: teamOpt.topN ?? 1,
           attackStates,
+          rankingBonusStats,
           isCancelled: () => cancelled,
           onStep: async (step) => {
             status.current.step = step
@@ -269,11 +324,14 @@ export function useTeamOptRun(teamId: string) {
             lastPaint = performance.now()
           },
         })
-        if (cancelled) throw new TeamOptCancelled()
+        if (cancelled || teamRoster(database, teamId) !== roster)
+          throw new TeamOptCancelled()
         setState(
           result
             ? {
                 type: 'done',
+                roster,
+                requirementsKey,
                 result,
                 seconds: (performance.now() - startTime) / 1000,
                 teamOpt,
@@ -298,6 +356,7 @@ export function useTeamOptRun(teamId: string) {
         else
           setState({ type: 'error', message: (e as Error)?.message ?? `${e}` })
       } finally {
+        stopFollowing()
         cancelRef.current = () => {}
       }
     },
@@ -309,5 +368,5 @@ export function useTeamOptRun(teamId: string) {
     database.teamOptResults.setRun(teamId, undefined)
     setState({ type: 'idle' })
   }, [database, teamId, setState])
-  return { state, status: status.current, run, cancel, clear }
+  return { state, status: status.current, run, cancel, clear, requirementsKey }
 }

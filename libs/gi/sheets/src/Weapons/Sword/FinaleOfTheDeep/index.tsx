@@ -6,6 +6,7 @@ import {
   percent,
   prod,
   subscript,
+  sum,
 } from '@genshin-optimizer/gi/wr'
 import { cond, st, stg, trans } from '../../../SheetUtil'
 import type { IWeaponSheet } from '../../IWeaponSheet'
@@ -28,19 +29,24 @@ const base_atk_ = equal(
 
 const hpConsumed = prod(percent(0.25), input.total.hp)
 const [condBondPath, condBond] = cond(key, 'bond')
+const bond_maxAtk = subscript(input.weapon.refinement, bond_maxAtkArr)
+// (the rotation's 'max': a kit's own Bond of Life cleared, worth the cap: Clorinde's, Arlecchino's)
 const bond_atk = equal(
   input.weapon.key,
   key,
-  equal(
-    condBond,
-    'on',
-    min(
-      prod(
-        hpConsumed,
-        subscript(input.weapon.refinement, bond_atkArr, { unit: '%' })
-      ),
-      subscript(input.weapon.refinement, bond_maxAtkArr)
-    )
+  sum(
+    equal(
+      condBond,
+      'on',
+      min(
+        prod(
+          hpConsumed,
+          subscript(input.weapon.refinement, bond_atkArr, { unit: '%' })
+        ),
+        bond_maxAtk
+      )
+    ),
+    equal(condBond, 'max', bond_maxAtk)
   )
 )
 

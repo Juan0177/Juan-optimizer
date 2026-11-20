@@ -71,6 +71,8 @@ export interface SimulationResult {
   rotationFrames?: number[]
   buffWindows: SimBuffWindow[]
   countedBuffs: SimCountedBuff[]
+  /** Each member's Nightsoul's Blessing, on the field or off (its kit's own state), in frames */
+  nightsoulSpans?: { characterKey: CharacterKey; start: number; end: number }[]
   /**
    * The enemy's auras over the kept rotation (with `auraTimeline`): from each frame, the auras
    * there (by aura, their durability) until the next entry
@@ -185,7 +187,8 @@ export const actionFrameKey = (
 /**
  * Members whose kits need the team's stats while the rotation plays (`calculate`): HP drains and
  * heals (Furina, Dahlia, Vodyanitsa, Wriothesley's Revelation and A1, Hydro Traveler's Suffusion,
- * Hu Tao, Gaming, Kuki), teammates' damage (Lohen), stat thresholds (Chongyun) and expected crits
+ * Hu Tao, Gaming, Kuki, Lyney's Prop Arrows down to 60% and his Marechaussee stacks), teammates'
+ * damage (Lohen), stat thresholds (Chongyun) and expected crits
  * (Xinyan, Dehya), heal chances (Noelle), Max HP (Kirara C1) and talent-scaled ATK SPD (Mika).
  */
 export const ROTATION_CALCULATION_MEMBERS: readonly CharacterKey[] = [
@@ -204,9 +207,19 @@ export const ROTATION_CALCULATION_MEMBERS: readonly CharacterKey[] = [
   'Noelle',
   'Kirara',
   'Mika',
+  'Lyney',
 ]
-export const needsRotationCalculation = (members: readonly CharacterKey[]) =>
-  members.some((m) => ROTATION_CALCULATION_MEMBERS.includes(m))
+/** Weapons whose effects need the calculation (Finale of the Deep's Bond: Max HP, heals) */
+const ROTATION_CALCULATION_WEAPONS: readonly string[] = ['FinaleOfTheDeep']
+export const needsRotationCalculation = (
+  members: readonly CharacterKey[],
+  gear?: Partial<Record<CharacterKey, SimGear>>
+) =>
+  members.some(
+    (m) =>
+      ROTATION_CALCULATION_MEMBERS.includes(m) ||
+      ROTATION_CALCULATION_WEAPONS.includes(gear?.[m]?.weapon ?? '')
+  )
 
 /** Native queues run enemy tasks, character tasks, then core tasks each frame. */
 type Event = { t: number; priority: number; seq: number; run: () => void }
@@ -464,6 +477,64 @@ export function simulateRotation({
         w.start <= t &&
         t < w.end
     )
+  // The player's own auras (gcsim's ApplySelfInfusion): durability decaying over its frames; a
+  // refill tops it up at the same rate
+  const playerAuras = new Map<
+    HitElement,
+    { durability: number; rate: number; at: number }
+  >()
+  const playerAura = (element: HitElement, t: number) => {
+    const a = playerAuras.get(element)
+    return a ? a.durability - a.rate * (t - a.at) : 0
+  }
+  const selfInfuse = (
+    element: HitElement,
+    durability: number,
+    frames: number,
+    t: number
+  ) => {
+    const left = playerAura(element, t)
+    const a = playerAuras.get(element)
+    if (a && left > 0) {
+      if (left < durability) Object.assign(a, { durability, at: t })
+      return
+    }
+    playerAuras.set(element, {
+      durability,
+      rate: durability / Math.max(1, frames),
+      at: t,
+    })
+  }
+  /** When a member's action is ready: its cooldown and its kit's resources */
+  /** An optional action already found not ready when the action before it was cancelled */
+  let decidedNotReady: RotationAction | undefined
+  const actionReadyAt = (
+    characterKey: CharacterKey,
+    action: RotationAction,
+    t: number
+  ) => {
+    const kit = kits[characterKey]
+    if (!kit) return t
+    const cdKey = kit.cooldownKey
+      ? kit.cooldownKey(states.get(characterKey), action, t)
+      : action.kind === 'skill' || action.kind === 'burst'
+        ? action.kind
+        : undefined
+    const cooldownReady = cdKey
+      ? cooldowns.readyAt(`${characterKey}.${cdKey}`, t)
+      : t
+    const resourceReady =
+      kit.actionReadyAt?.(
+        ctxAt(t, characterKey),
+        states.get(characterKey),
+        action
+      ) ?? t
+    return Math.max(cooldownReady, resourceReady)
+  }
+  const linkedCooldowns = (k: CharacterKey, key: string) => [
+    key,
+    ...(kits[k]?.linkedCooldowns?.[key] ?? []),
+  ]
   // set effects the simulation plays (gearEffects.ts)
   const gearFx = gearEffects({
     members,
@@ -474,8 +545,10 @@ export function simulateRotation({
     window: (owner, path, value, start, end) =>
       addWindow({ owner, path, value, start, end, late: true }),
     reduceCooldown: (k, key, frames, t) => {
-      cooldowns.reduce(`${k}.${key}`, t, frames)
+      for (const linked of linkedCooldowns(k, key))
+        cooldowns.reduce(`${k}.${linked}`, t, frames)
     },
+    onShield: (t) => refreshGeoResonance(t),
   })
   let now = 0
   /** The action being played (its actor and start), for triggered hitlag that lengthens it */
@@ -485,17 +558,20 @@ export function simulateRotation({
     (m) => getCharStat(m).region === 'natlan'
   ).length
   const nightsoulInterval = [0, 1080, 720, 540, 540][natlan] ?? 540
-  const geoFromMoondrifts =
-    members.filter((m) => elements[m] === 'geo').length >= 2 &&
-    members.some((m) => reactionEnablers.lunarCrystallize.includes(m))
+  // Enduring Rock (gcsim): while the member on the field is shielded or Moondrifts are near,
+  // checked every 1 s and on each swap and shield
+  const geoTeam =
+    members.length === 4 &&
+    members.filter((m) => elements[m] === 'geo').length >= 2
   let geoResonance = false
   let geoResonanceToken = 0
   const refreshGeoResonance = (frame: number) => {
-    if (!geoFromMoondrifts) return
+    if (!geoTeam) return
     const token = ++geoResonanceToken
     const tick = (t: number) => {
       if (token !== geoResonanceToken) return
-      geoResonance = (reactions?.moondriftsAt?.(t) ?? 0) > 0
+      geoResonance =
+        gearFx.shieldedAt(onField, t) || (reactions?.moondriftsAt?.(t) ?? 0) > 0
       ctxAt(t, onField).state(
         'team',
         ['resonance', 'EnduringRock'],
@@ -704,6 +780,7 @@ export function simulateRotation({
       return first
     },
     target,
+    swapFrames,
     attackSpeed: speedWindows
       .filter(
         (w) =>
@@ -748,7 +825,15 @@ export function simulateRotation({
       ) ??
       NORMAL_START_DELAYS[member]?.[kind === 'xingqiu' ? 0 : 1] ??
       0,
-    absorb: (priority) => reactions?.absorbAt?.(t, priority),
+    absorb: (priority, opts) => {
+      if (!opts?.player) return reactions?.absorbAt?.(t, priority)
+      // (gcsim's AbsorbCheck: for each element in turn, the enemy's aura, then the player's)
+      return (priority ?? ['pyro', 'hydro', 'electro', 'cryo']).find(
+        (e) => reactions?.absorbAt?.(t, [e]) === e || playerAura(e, t) > 1e-9
+      )
+    },
+    selfInfuse: (element, durability, frames) =>
+      selfInfuse(element, durability, frames, t),
     nightsoulBurst() {
       push(t, () => {
         hits.push({
@@ -922,10 +1007,14 @@ export function simulateRotation({
       })
     },
     reduceCooldown(key, frames, ck) {
-      cooldowns.reduce(`${ck ?? actor}.${key}`, t, frames)
+      for (const linked of linkedCooldowns(ck ?? actor, key))
+        cooldowns.reduce(`${ck ?? actor}.${linked}`, t, frames)
     },
-    resetCooldown: (key, count, ck) =>
-      cooldowns.reset(`${ck ?? actor}.${key}`, t, count),
+    resetCooldown: (key, count, ck) => {
+      for (const linked of linkedCooldowns(ck ?? actor, key))
+        cooldowns.reset(`${ck ?? actor}.${linked}`, t, count)
+    },
+    takeShards: (arrive) => gearFx.takeShards(ctxAt(t, actor), actor, arrive),
     consumeNightsoul(amount, member = actor) {
       if (amount <= 0) return
       reportedConsumption.set(
@@ -1101,7 +1190,7 @@ export function simulateRotation({
     }
     gearFx.onHit(ctxAt(hit.t, hit.characterKey), hit)
     if (
-      geoFromMoondrifts &&
+      geoTeam &&
       geoResonance &&
       hit.characterKey === hit.onField &&
       !hit.path[0].startsWith('_')
@@ -1197,6 +1286,8 @@ export function simulateRotation({
     CharacterKey,
     { active: boolean; points: number }
   >()
+  const nightsoulSpans: NonNullable<SimulationResult['nightsoulSpans']> = []
+  const openNightsoul = new Map<CharacterKey, (typeof nightsoulSpans)[number]>()
   let resourcePolling = true
   const pollNightsoul = (frame: number) => {
     if (!resourcePolling) return
@@ -1230,6 +1321,19 @@ export function simulateRotation({
         ['ObsidianCodex', '2NightsoulBlessing'],
         next.active && m === onField ? 'on' : ''
       )
+      if (next.active && !previous?.active) {
+        const span = {
+          characterKey: m,
+          start: frame,
+          end: Number.MAX_SAFE_INTEGER,
+        }
+        nightsoulSpans.push(span)
+        openNightsoul.set(m, span)
+      } else if (!next.active && previous?.active) {
+        const open = openNightsoul.get(m)
+        if (open) open.end = frame
+        openNightsoul.delete(m)
+      }
       reportedConsumption.delete(m)
       previousNightsoul.set(m, next)
     }
@@ -1240,7 +1344,7 @@ export function simulateRotation({
       ctxAt(0, m).buff(m, ['ObsidianCodex', '4NightsoulConsume'], '', 0, 0)
     push(0, () => pollNightsoul(0))
   }
-  if (geoFromMoondrifts) refreshGeoResonance(0)
+  if (geoTeam) refreshGeoResonance(0)
   const actions: SimulationResult['actions'] = []
   const skillUses: NonNullable<SimulationResult['skillUses']> = []
   const waits: SimulationResult['actions'] = []
@@ -1253,9 +1357,33 @@ export function simulateRotation({
     | { start: number; result: ActionResult; actor: CharacterKey }
     | undefined
   // one written action: the opener's (played once before the loops) or the loop's
-  const play = (list: typeof flat, i: number, r: number, opener: boolean) => {
+  const play = (
+    list: typeof flat,
+    i: number,
+    r: number,
+    opener: boolean,
+    /** An optional action's alternative: what comes after it (the action after the optional) */
+    alternative?: { next: (typeof flat)[number] | undefined }
+  ) => {
     const { characterKey, action } = list[i]
+    // (an alternative's own frames and timeline place: none of the written list's)
+    const own = !opener && !alternative
     const kit = kits[characterKey]
+    // an action's alternative ("Q/N3": N3 when Q is not played), then on to what follows it
+    const playOtherwise = (otherwise: RotationAction[]) => {
+      const after =
+        list[i + 1] ??
+        (alternative
+          ? alternative.next
+          : opener
+            ? flat[0]
+            : loopTo
+              ? { characterKey: loopTo, action: flat[0]?.action }
+              : undefined)
+      const alt = otherwise.map((a) => ({ characterKey, action: a }))
+      for (const j of alt.keys())
+        play(alt, j, r, opener, { next: alt[j + 1] ?? after })
+    }
     // (a triggered hitlag on the acting character can lengthen the previous action: settle it)
     for (let settled = -1; settled !== now; ) {
       settled = now
@@ -1364,15 +1492,15 @@ export function simulateRotation({
       const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
       // (a length that is not a number would never end the wait: 0 instead)
       const frames = finiteFrames(
-        Math.max(0, (opener ? undefined : frameOverrides[i]) ?? defaultFrames)
+        Math.max(0, (own ? frameOverrides[i] : undefined) ?? defaultFrames)
       )
       waits.push({
         characterKey,
         text: action.text,
         start: now,
         frames,
-        index: opener ? undefined : i,
-        ...(opener && { openerIndex: i }),
+        index: own ? i : undefined,
+        ...(opener && !alternative && { openerIndex: i }),
         defaultFrames,
       })
       kit.onWait?.(ctxAt(now, characterKey), states.get(characterKey), frames)
@@ -1391,30 +1519,39 @@ export function simulateRotation({
             action
           )
         : undefined
-      if (!short || variant?.key !== short) return
+      if (!short || variant?.key !== short) {
+        // (its alternative, "Q/N1", instead: the Burst is not used in this rotation)
+        if (action.otherwise?.length) {
+          if (r === Math.min(1, repeats - 1) || keep !== 'middle')
+            notes.add(
+              `${characterKey}'s ${action.text}: ${action.otherwise.map((a) => a.text).join(' ')} was played in the rotations without the Burst.`
+            )
+          playOtherwise(action.otherwise)
+        }
+        return
+      }
     }
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
     const waitStart = now
+    const decided = decidedNotReady === action
+    decidedNotReady = undefined
     for (;;) {
-      const cdKey = kit.cooldownKey
-        ? kit.cooldownKey(states.get(characterKey), action, now)
-        : action.kind === 'skill' || action.kind === 'burst'
-          ? action.kind
-          : undefined
-      const cooldownReady = cdKey
-        ? cooldowns.readyAt(`${characterKey}.${cdKey}`, now)
-        : now
-      const resourceReady =
-        kit.actionReadyAt?.(
-          ctxAt(now, characterKey),
-          states.get(characterKey),
-          action
-        ) ?? now
-      const readyAt = Math.max(cooldownReady, resourceReady)
+      const readyAt = decided
+        ? Number.POSITIVE_INFINITY
+        : actionReadyAt(characterKey, action, now)
       if (readyAt <= now) break
       // an optional action ("E?"): used when ready, else left out (as a sim's "if .skill.ready")
       if (action.optional) {
+        if (action.otherwise?.length) {
+          // its alternative instead ("Q?/N3"), then on to what follows it
+          if (r === Math.min(1, repeats - 1) || keep !== 'middle')
+            notes.add(
+              `${characterKey}'s ${action.text}: ${action.otherwise.map((a) => a.text).join(' ')} was played when it was not ready.`
+            )
+          playOtherwise(action.otherwise)
+          return
+        }
         if (r === Math.min(1, repeats - 1) || keep !== 'middle')
           notes.add(
             `${characterKey}'s ${action.text} was left out when it was not ready.`
@@ -1460,6 +1597,14 @@ export function simulateRotation({
     const frameKey = actionFrameKey(action, variant)
     const edit = frameData[characterKey]?.[frameKey]
     gearFx.beforeAction(actCtx, characterKey, action)
+    if (
+      action.kind === 'plunge' &&
+      (action.height || action.collision) &&
+      !kit.plungeHeights
+    )
+      notes.add(
+        `${characterKey}: high and low plunges and the collision hit are not modelled for this character; "${action.text}" played as the kit's usual plunge.`
+      )
     const kitResult = kit.act(
       edit?.hitDelay
         ? {
@@ -1558,11 +1703,13 @@ export function simulateRotation({
     }
     const next =
       list[i + 1] ??
-      (opener
-        ? flat[0]
-        : loopTo
-          ? { characterKey: loopTo, action: flat[0]?.action }
-          : undefined)
+      (alternative
+        ? alternative.next
+        : opener
+          ? flat[0]
+          : loopTo
+            ? { characterKey: loopTo, action: flat[0]?.action }
+            : undefined)
     const nextKind =
       next && next.characterKey !== characterKey ? 'swap' : next?.action?.kind
     gearFx.onAction(
@@ -1575,10 +1722,13 @@ export function simulateRotation({
     let stateFrames = frames
     // gcsim queues the next item once the action reaches its earliest cancel (CanQueueAfter):
     // a written wait starts there, and the action after it is held until this one allows it
-    if (nextKind === 'wait' && result.walkFrames !== undefined) {
+    if (
+      nextKind === 'wait' &&
+      (next?.action?.walk || result.walkFrames !== undefined)
+    ) {
       // (a wait that is a walk: it starts at the action's walk cancel and ends it there, as an
       // action of its own)
-      frames = result.walkFrames
+      frames = result.walkFrames ?? result.frames
       stateFrames = frames
     } else if (nextKind === 'wait' && !result.duration) {
       frames = Math.min(
@@ -1612,17 +1762,38 @@ export function simulateRotation({
         frames = updated
       }
     }
+    // the next action is optional and has an alternative ("N2 D?/CA"): gcsim decides it when this
+    // one can be cancelled, then cancels into what is played (the Charged Attack's frames)
+    const alt = next?.action?.otherwise?.[0]
+    if (
+      next?.action?.optional &&
+      alt &&
+      nextKind === next.action.kind &&
+      !result.duration
+    ) {
+      runUntil(now + frames, true)
+      if (
+        actionReadyAt(characterKey, next.action, now + frames) >
+        now + frames
+      ) {
+        frames = kitFramesInto(result, alt.kind)
+        decidedNotReady = next.action
+      }
+    }
     const defaultFrames = frames
-    const edited = opener ? undefined : frameOverrides[i]
+    const edited = own ? frameOverrides[i] : undefined
     if (edited !== undefined && Number.isFinite(edited))
       frames = Math.max(1, Math.round(edited))
     actions.push({
       characterKey,
-      text: action.text,
+      // (an action with an alternative, "Q/N3", played as itself: shown as what was played, "Q")
+      text: action.otherwise?.length
+        ? action.text.slice(0, action.text.indexOf('/')).replace(/\?$/, '')
+        : action.text,
       start: now,
       frames,
-      index: opener ? undefined : i,
-      ...(opener && { openerIndex: i }),
+      index: own ? i : undefined,
+      ...(opener && !alternative && { openerIndex: i }),
       defaultFrames,
       frameKey,
       ...(variant && { variant }),
@@ -1741,6 +1912,7 @@ export function simulateRotation({
     rotationFrames: bounds.slice(1, repeats + 1).map((b, i) => b - bounds[i]),
     buffWindows: windows,
     countedBuffs,
+    nightsoulSpans,
     hitlagEvents: all.filter((h) => h.path.join('.') === '_marker.hitlag'),
     notes: [...notes],
     warnings,
@@ -2209,6 +2381,7 @@ export function rotationAttacks(
       hit.characterKey,
       hit.path.join('.'),
       hit.label,
+      hit.element,
       JSON.stringify(hit.contributors ?? []),
       hit.onField,
       hit.reaction ?? '',
@@ -2341,6 +2514,7 @@ export function rotationAttacks(
       path: hit.path,
       hits: Math.round(count * 100) / 100,
       hitMode: 'avgHit',
+      element: hit.element,
       ...(hit.talentMultiplier !== undefined
         ? { talentMultiplier: hit.talentMultiplier }
         : {}),

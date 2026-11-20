@@ -21,7 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import { useMemo, useState } from 'react'
-import { Trans, useTranslation } from 'react-i18next'
+import { useTranslation } from 'react-i18next'
 import type { dataContextObj } from '../../context/DataContext'
 import { DataContext } from '../../context/DataContext'
 import { useCharData } from '../../hooks/useCharData'
@@ -41,33 +41,49 @@ export function TeamDelModal({
   const database = useDatabase()
   const team = useTeam(teamId)!
   const { name, description, loadoutData } = team
+  const teams = database.teams.values
 
   const inTeamsData = useMemo(
     () =>
       loadoutData.map((loadoutDatum) => {
         if (!loadoutDatum) return []
         const { teamCharId } = loadoutDatum
-        return database.teams.values.filter(({ loadoutData: data }) =>
+        return teams.filter(({ loadoutData: data }) =>
           data.find((datum) => datum?.teamCharId === teamCharId)
         )
       }),
-    [database, loadoutData]
+    [teams, loadoutData]
   )
-  const [delArr, setDelArry] = useState(() =>
+  const [selection, setSelection] = useState<number[]>()
+  const delArr =
+    selection ??
     inTeamsData
       .map((teams, i) => (teams.length === 1 ? i : undefined))
       .filter(notEmpty)
-  )
+  const close = () => {
+    setSelection(undefined)
+    onHide()
+  }
   const onDelete = () => {
     database.teams.remove(teamId)
     loadoutData.forEach((loadoutDatum, i) => {
       if (!loadoutDatum || !delArr.includes(i)) return
-      database.teamChars.remove(loadoutDatum.teamCharId)
+      const { teamCharId } = loadoutDatum
+      if (
+        !database.teams.values.some((team) =>
+          team.loadoutData.some((datum) => datum?.teamCharId === teamCharId)
+        )
+      )
+        database.teamChars.remove(teamCharId)
     })
     onDel()
   }
   return (
-    <ModalWrapper open={show} onClose={onHide}>
+    <ModalWrapper
+      open={show}
+      onClose={close}
+      aria-label={`${t('teamDelModal.teamName')} ${name}`}
+    >
       <CardThemed>
         <CardHeader
           title={
@@ -88,7 +104,10 @@ export function TeamDelModal({
             </Box>
           }
           action={
-            <IconButton onClick={onHide}>
+            <IconButton
+              onClick={close}
+              aria-label={t('teamOpt.editor.close', 'Close')}
+            >
               <CloseIcon />
             </IconButton>
           }
@@ -96,11 +115,10 @@ export function TeamDelModal({
         <Divider />
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           <Alert severity="info">
-            <Trans t={t} i18nKey={'teamDelModal.alert'}>
-              Removing the team will remove: resonance buffs, and enemy configs
-              stored in the team. Loadouts that are only in this team are also
-              selected by default for deletion.
-            </Trans>
+            {t(
+              'teamDelModal.alert',
+              'Deleting the team also deletes its rotations, its Team optimize and KQM results, and its buffs and enemy settings. Loadouts used only by this team are ticked to be deleted too: untick any you want to keep.'
+            )}
           </Alert>
           {loadoutData.map((loadoutDatum, i) =>
             loadoutDatum ? (
@@ -108,7 +126,7 @@ export function TeamDelModal({
                 key={i}
                 teamCharId={loadoutDatum.teamCharId}
                 selected={delArr.includes(i)}
-                onClick={() => setDelArry((arr) => toggleArr(arr, i))}
+                onClick={() => setSelection(toggleArr(delArr, i))}
                 inTeams={inTeamsData[i]}
               />
             ) : null
@@ -163,6 +181,8 @@ function LoadoutDisplay({
         <Button
           fullWidth
           onClick={onClick}
+          disabled={inTeams.length !== 1}
+          aria-pressed={selected}
           variant="outlined"
           color="neutral100"
           sx={{ p: 0 }}

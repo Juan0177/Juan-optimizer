@@ -158,37 +158,49 @@ function tapString(
   }
 }
 
-/** The charged attack in the blessing: a Shadowhunt (six bullets loaded, then fired from the back) */
+/**
+ * The charged attack in the blessing: a Shadowhunt (six bullets loaded, or `count`: "CA[bullets=4]",
+ * then fired from the back)
+ */
 function aimInBlessing(
   ctx: SimContext,
   s: ChascaState,
-  chained: boolean
+  chained: boolean,
+  count = 6
 ): ActionResult {
   const now = ctx.now
   const c = ctx.constellation('Chasca')
   // gcsim: windup 11 frames, none when chained into a normal attack, aim, skill or burst
   const windup = chained ? 0 : 11
   // C6 Fatal Rounds, consumed by this charge: instant reload, and +120% CRIT DMG on the shells
+  // (gcsim requires all six bullets then)
   const fatal = c >= 6 && now < s.fatalUntil
-  if (fatal) s.fatalUntil = -1
+  if (fatal) {
+    s.fatalUntil = -1
+    if (count < 6)
+      ctx.note(
+        'Chasca: a Shadowhunt during Fatal Rounds loads all six bullets (gcsim requires it).'
+      )
+    count = 6
+  }
   const load = fatal
     ? [1, 2, 2, 3, 3, 4]
     : c >= 6
       ? [14, 28, 42, 55, 69, 83]
       : [21, 38, 56, 70, 91, 108]
-  const bullets = shadowhuntBullets(ctx, c)
+  const bullets = shadowhuntBullets(ctx, c).slice(0, count)
   // C6: A1's Spiritbinding Conversion (the 3rd bullet, and the 2nd at C1) starts Fatal Rounds
   // when the converted bullet loads (3 s, once per 3 s). gcsim starts it on any non-Anemo bullet,
   // including the 4th to 6th; the game text, only on the conversion.
-  if (c >= 6 && bullets[2] !== 'anemo') {
+  if (c >= 6 && bullets[2] !== undefined && bullets[2] !== 'anemo') {
     const t = now + load[c >= 1 ? 1 : 2] + windup
     if (t >= s.fatalIcdUntil) {
       s.fatalIcdUntil = t + 180
       s.fatalUntil = t + 180
     }
   }
-  const fire = load[5] + windup
-  const shots = [4, 7, 10, 13, 16, 19]
+  const fire = load[count - 1] + windup
+  const shots = [4, 7, 10, 13, 16, 19].slice(0, count)
   // This shot's own buffs, fixed at the shot: A1's Shining DMG bonus and C6's +120% CRIT DMG
   // on both kinds of shells (gcsim applies the C6 buff to their snapshot)
   const states = [
@@ -206,7 +218,7 @@ function aimInBlessing(
   let c2Done = false
   shots.forEach((frame, i) => {
     // the last loaded bullet is fired first; the shells count as Charged Attack DMG
-    const el = bullets[5 - i]
+    const el = bullets[count - 1 - i]
     const t = fire + frame
     if (el === 'anemo') {
       ctx.hit(t, {
@@ -247,16 +259,24 @@ function aimInBlessing(
       })
     }
   })
+  // gcsim: when the blessing ends before the next action may start, she falls and the action
+  // runs to its whole length (charge + 19 + 40), the next one starting a frame later
+  const fall = fire + 60
+  const after = (frames: number) =>
+    s.blessingEnd !== undefined && now + frames > s.blessingEnd ? fall : frames
   return {
-    frames: fire + 19,
+    frames: after(fire + 19),
     framesInto: {
-      normal: fire + 19,
-      charged: fire + 18,
-      skill: fire + 19,
-      burst: fire + 14,
-      dash: fire,
-      jump: fire + 19,
-      swap: Math.max(fire + 19, (s.blessingEnd ?? now) - now + 37),
+      normal: after(fire + 19),
+      charged: after(fire + 18),
+      skill: after(fire + 19),
+      burst: after(fire + 14),
+      dash: after(fire),
+      jump: after(fire + 19),
+      swap:
+        after(fire + 19) === fall
+          ? fall
+          : Math.max(fire + 19, (s.blessingEnd ?? now) - now + 37),
     },
   }
 }
@@ -340,7 +360,8 @@ export const kit: KitModel = {
             kind === 'normal' ||
               kind === 'charged' ||
               kind === 'skill' ||
-              kind === 'burst'
+              kind === 'burst',
+            action.bullets
           )
         // not in the blessing: the Fully-Charged Aimed Shot (gcsim's default hold)
         ctx.hit(96, {

@@ -1,6 +1,7 @@
 import {
   BootstrapTooltip,
   CardThemed,
+  downloadJson,
   ModalWrapper,
   SqBadge,
 } from '@genshin-optimizer/common/ui'
@@ -89,14 +90,18 @@ export default function TeamExportModal({
           : defLoadoutExportSetting()
       )
     )
-  const onExport = () => {
-    const data = database.teams.export(teamId, loadoutDataExportSetting)
-    const dataStr = JSON.stringify(data)
-    navigator.clipboard
-      .writeText(dataStr)
-      .then(() => alert(t('exportModal.msg')))
-      .catch(console.error)
+  const exported = () =>
+    JSON.stringify(database.teams.export(teamId, loadoutDataExportSetting))
+  const [copyState, setCopyState] = useState<'copied' | 'failed'>()
+  const onExport = async () => {
+    try {
+      await navigator.clipboard.writeText(exported())
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
   }
+  const download = () => downloadJson('stellar-team.json', exported())
   const [selAll, setSelAll] = useState(true)
 
   const onUnselAll = () => {
@@ -138,12 +143,24 @@ export default function TeamExportModal({
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   return (
-    <ModalWrapper open={show} onClose={onHide}>
+    <ModalWrapper
+      open={show}
+      onClose={() => {
+        setCopyState(undefined)
+        onHide()
+      }}
+    >
       <CardThemed>
         <CardHeader
           title={t('exportModal.title')}
           action={
-            <IconButton onClick={onHide}>
+            <IconButton
+              aria-label={t('teamOpt.editor.close', 'Close')}
+              onClick={() => {
+                setCopyState(undefined)
+                onHide()
+              }}
+            >
               <CloseIcon />
             </IconButton>
           }
@@ -199,9 +216,22 @@ export default function TeamExportModal({
           </Grid>
         </CardContent>
         <Divider />
+        {copyState && (
+          <Alert severity={copyState === 'copied' ? 'success' : 'error'}>
+            {copyState === 'copied'
+              ? t('exportModal.msg')
+              : t(
+                  'exportModal.clipboardFailed',
+                  'Could not copy to the clipboard. Download the team JSON instead.'
+                )}
+          </Alert>
+        )}
         <CardContent
           sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}
         >
+          <Button onClick={download}>
+            {t('exportModal.download', 'Download JSON')}
+          </Button>
           <Button color="success" onClick={onExport}>
             {t('exportModal.export')}
           </Button>

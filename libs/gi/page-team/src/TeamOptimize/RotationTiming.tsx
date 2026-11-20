@@ -39,7 +39,8 @@ export interface RotationTimingSettings {
   pingMs?: number
   /**
    * Rotations counted from the start, nothing waited for from before (a timed challenge's first
-   * rotations): 1 to 6. Undefined: the pace it keeps played over and over (KQM's way)
+   * rotations): 1 to 6. Undefined (or 0): the steady pace, the last STEADY_COUNTED of
+   * STEADY_REPEATS played in a row (by then each waits for what the one before left on cooldown)
    */
   rotations?: number
   /**
@@ -48,9 +49,17 @@ export interface RotationTimingSettings {
    */
   openerSetup?: boolean
 }
-/** The choices for `RotationTimingSettings.rotations` */
+/** The choices for `RotationTimingSettings.rotations` counted from the start */
 export const FIRST_ROTATIONS = [1, 2, 3, 4, 5, 6] as const
-/** The rotations a team's timing counts from the start (undefined: the repeating pace) */
+/** The steady pace, the default: 4 rotations played in a row, the last 2 counted (averaged) */
+export const STEADY_REPEATS = 4
+export const STEADY_COUNTED = 2
+/** The steady pace's rotations counted, as its label names them ("Steady DPS (rot 3–4)") */
+export const STEADY_RANGE = {
+  from: STEADY_REPEATS - STEADY_COUNTED + 1,
+  to: STEADY_REPEATS,
+}
+/** The rotations a team's timing counts from the start (undefined: the steady pace) */
 export const firstRotations = (timing: RotationTimingSettings) =>
   timing.rotations && timing.rotations > 0
     ? Math.min(FIRST_ROTATIONS.length, Math.round(timing.rotations))

@@ -122,9 +122,10 @@ describe('the first rotations from the start', () => {
     expect(firstRotations({ edits: {} })).toBeUndefined()
   })
   it('KQM’s replay counts the same rotations', () => {
-    localStorage.setItem(`teamOptRotationText_${teamId}`, TEXT)
-    localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+    database.teams.setRotationField(`${teamId}_kqm`, 'Text', TEXT)
+    database.teams.setRotationField(
+      `${teamId}_kqm`,
+      'Timing',
       JSON.stringify({ edits: {}, rotations: 1 })
     )
     const replay = kqmRotationReplay({
@@ -142,6 +143,25 @@ describe('the first rotations from the start', () => {
     } as never)
     expect(played.rotationTime).toBeLessThan(10)
     expect(played.stalls).toEqual([])
+  })
+
+  it('uses entered attacks while keeping the saved written rotation available', () => {
+    const { database, teamId, members, names } = setup()
+    const id = `${teamId}_kqm`
+    const input = {
+      database,
+      teamId,
+      members,
+      names,
+      gender: 'F' as const,
+      teamOpt: initTeamOpt(),
+    }
+    database.teams.setRotationField(id, 'Text', TEXT)
+    database.teams.setRotationField(id, 'UseAttacks', '1')
+    expect(kqmRotationReplay(input)).toBeUndefined()
+    expect(database.teams.getRotationField(id, 'Text')).toBe(TEXT)
+    database.teams.setRotationField(id, 'UseAttacks', null)
+    expect(kqmRotationReplay(input)).toBeTypeOf('function')
   })
 })
 
@@ -252,10 +272,11 @@ describe('the first rotation written apart, counted from the start', () => {
     expect(hits(repeating)).toBeCloseTo(hits(play(undefined, '')), 1)
   })
   it('KQM’s replay counts the opener the same way', () => {
-    localStorage.setItem(`teamOptRotationText_${teamId}`, TEXT)
-    localStorage.setItem(`teamOptRotationOpener_${teamId}`, OPENER)
-    localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+    database.teams.setRotationField(`${teamId}_kqm`, 'Text', TEXT)
+    database.teams.setRotationField(`${teamId}_kqm`, 'Opener', OPENER)
+    database.teams.setRotationField(
+      `${teamId}_kqm`,
+      'Timing',
       JSON.stringify({ edits: {}, rotations: 1 })
     )
     const replay = kqmRotationReplay({
@@ -273,8 +294,9 @@ describe('the first rotation written apart, counted from the start', () => {
     } as never)
     expect(played.rotationTime).toBeCloseTo(writtenSeconds(play(1))!, 1)
     // ("Counted" off: the rotation after the setup)
-    localStorage.setItem(
-      `teamOptRotationTiming_${teamId}`,
+    database.teams.setRotationField(
+      `${teamId}_kqm`,
+      'Timing',
       JSON.stringify({ edits: {}, rotations: 1, openerSetup: true })
     )
     // (a replay reads the settings when it is made)
@@ -294,6 +316,6 @@ describe('the first rotation written apart, counted from the start', () => {
       writtenSeconds(play(1, OPENER, TEXT, true))!,
       1
     )
-    localStorage.removeItem(`teamOptRotationOpener_${teamId}`)
+    database.teams.setRotationField(`${teamId}_kqm`, 'Opener', null)
   })
 })

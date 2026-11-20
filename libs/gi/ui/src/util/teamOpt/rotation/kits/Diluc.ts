@@ -82,6 +82,30 @@ const skillCast = [
   },
 ]
 
+/** Xianyun-assisted plunges (gcsim plunge.go); the collision hit lands at 30 for both */
+const PLUNGES: Record<
+  'low' | 'high',
+  {
+    hitmark: number
+    poise: number
+    frames: number
+    into: NonNullable<ActionResult['framesInto']>
+  }
+> = {
+  low: {
+    hitmark: 36,
+    poise: 150,
+    frames: 78,
+    into: { normal: 49, skill: 50, burst: 49, dash: 36, jump: 77, swap: 59 },
+  },
+  high: {
+    hitmark: 40,
+    poise: 200,
+    frames: 81,
+    into: { normal: 51, skill: 53, burst: 51, dash: 40, swap: 63 },
+  },
+}
+
 interface DilucState {
   /** Searing Onslaught casts in the combo so far (the 3rd ends it); token guards stale resets */
   casts: number
@@ -126,6 +150,7 @@ export const kit: KitModel = {
   characterKey: 'Diluc',
   element: 'pyro',
   source: `${GCSIM}/diluc`,
+  plungeHeights: true,
   init: (): DilucState => ({
     casts: 0,
     windowToken: 0,
@@ -301,27 +326,42 @@ export const kit: KitModel = {
           : result
       }
       case 'plunge': {
-        // gcsim's Low Plunge (the collision hit is off by default); gcsim needs the airborne
+        // gcsim's Xianyun-assisted plunges (a plain P is the low one); gcsim needs the airborne
         // state for plunges, which the rotation takes as given
-        ctx.hit(36, {
-          path: ['plunging', 'low'],
+        const high = action.height === 'high'
+        const p = PLUNGES[high ? 'high' : 'low']
+        // the airborne jump allows a low plunge at 4 frames but a high one only at 8 (claymore):
+        // the jump's plunge cancel is the low one's, so the high plunge starts 4 frames late
+        const lead =
+          high &&
+          previous?.kind === 'jump' &&
+          ctx.hasBuff('Xianyun', ['Xianyun', '_airborne'])
+            ? 4
+            : 0
+        if (action.collision)
+          ctx.hit(lead + 30, {
+            path: ['plunging', 'dmg'],
+            tag: 'plunge',
+            element: 'physical',
+            icd: 'none',
+            label: 'Plunge Collision',
+            weight: action.collision,
+          })
+        ctx.hit(lead + p.hitmark, {
+          path: ['plunging', high ? 'high' : 'low'],
           tag: 'plunge',
           element: 'physical',
           applies: true,
           icd: 'none',
-          poiseDamage: 150,
-          label: 'Low Plunge',
+          blunt: true,
+          poiseDamage: p.poise,
+          label: high ? 'High Plunge' : 'Low Plunge',
         })
         return {
-          frames: 78,
-          framesInto: {
-            normal: 49,
-            skill: 50,
-            burst: 49,
-            dash: 36,
-            jump: 77,
-            swap: 59,
-          },
+          frames: lead + p.frames,
+          framesInto: Object.fromEntries(
+            Object.entries(p.into).map(([k, v]) => [k, lead + v])
+          ),
         }
       }
       case 'dash':

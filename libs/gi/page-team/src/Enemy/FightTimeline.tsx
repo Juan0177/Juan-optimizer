@@ -3,6 +3,7 @@ import type { ElementWithPhyKey } from '@genshin-optimizer/gi/consts'
 import { allElementWithPhyKeys } from '@genshin-optimizer/gi/consts'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  DamageTimes,
   FightEnemy,
   FightEstimate,
   FightEvent,
@@ -12,6 +13,7 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
+  DRIFTING_SNOW_BOSS,
   enemyFight,
   enemyHpOf,
   FIGHT_LIMIT,
@@ -65,6 +67,13 @@ function stateColor(theme: Theme, state: FightSegment['state']) {
       return theme.palette.geo.main
     case 'ward':
       return alpha(theme.palette.geo.main, 0.4)
+    case 'warded':
+    case 'barrier':
+      return alpha(theme.palette.cryo.main, 0.45)
+    case 'airborne':
+      return alpha(theme.palette.anemo.main, 0.45)
+    case 'cannon':
+      return alpha(theme.palette.electro.main, 0.45)
     case 'leap':
       return alpha(giTokens.parchment, 0.1)
     case 'disentangled':
@@ -135,8 +144,9 @@ export function FightTimeline({
   )
   const hp = enemyHpOf(enemy)
   const view = useMemo(
-    () => (estimate && hp !== undefined ? fightView(estimate) : undefined),
-    [estimate, hp]
+    () =>
+      estimate && hp !== undefined ? fightView(estimate, team) : undefined,
+    [estimate, hp, team]
   )
   if (!estimate || hp === undefined || !view) return null
   const { segments, events, meter } = estimate.timeline
@@ -159,6 +169,19 @@ export function FightTimeline({
         )
       case 'disentangled':
         return t('enemy.fight.disentangled', 'Disentangled (team buffed)')
+      case 'warded':
+        return preset?.boss.id === DRIFTING_SNOW_BOSS
+          ? t('enemy.fight.coffin', 'Ice Coffin (its HP untouched)')
+          : t('enemy.fight.warded', 'Electro Ward up (its HP untouched)')
+      case 'barrier':
+        return t(
+          'enemy.fight.barrier',
+          'Coffin turned to a shield (its HP untouched)'
+        )
+      case 'airborne':
+        return t('enemy.fight.airborne', 'Airborne (its flight and vortex)')
+      case 'cannon':
+        return t('enemy.fight.cannon', 'Cannon charging (its mechanisms)')
       default:
         return state === 'shielded' && preset?.boss.id === 1013061
           ? t('enemy.fight.valiantAssault', 'Valiant Assault (shielded)')
@@ -180,7 +203,15 @@ export function FightTimeline({
         })
       ) as StygianRes
     if (state === 'horns') return plus(regular, () => 150)
-    if (state === 'drinking') return regular
+    if (
+      state === 'drinking' ||
+      state === 'warded' ||
+      state === 'barrier' ||
+      state === 'airborne'
+    )
+      return regular
+    if (state === 'cannon')
+      return phases.find((p) => p.key === 'recovered')?.res ?? regular
     const dull = phases.find((p) => p.key === 'dullCarapace')?.res
     if (dull) {
       if (state === 'cocooned')
@@ -204,13 +235,27 @@ export function FightTimeline({
       ? t('enemy.fight.courage', 'Courage')
       : meter?.key === 'ward'
         ? t('enemy.fight.wardLayers', 'Ward layers')
-        : t('enemy.fight.hornGauge', 'Horn gauge')
+        : meter?.key === 'momentum'
+          ? t('enemy.fight.momentum', 'Flow Momentum')
+          : meter?.key === 'stacks'
+            ? t('enemy.fight.stacks', 'RES down stacks')
+            : meter?.key === 'wardGauge'
+              ? t('enemy.fight.wardGauge', 'Ward durability')
+              : meter?.key === 'progress'
+                ? t('enemy.fight.progress', 'Adaptive Countermeasures')
+                : t('enemy.fight.hornGauge', 'Horn gauge')
   const meterColor =
     meter?.key === 'hornGauge'
       ? theme.palette.pyro.main
       : meter?.key === 'ward'
         ? theme.palette.geo.main
-        : theme.palette.anemo.main
+        : meter?.key === 'momentum' || meter?.key === 'wardGauge'
+          ? meter.key === 'wardGauge' && preset?.boss.id !== DRIFTING_SNOW_BOSS
+            ? theme.palette.electro.main
+            : theme.palette.cryo.main
+          : meter?.key === 'progress'
+            ? theme.palette.electro.main
+            : theme.palette.anemo.main
   return (
     <Box
       component="section"
@@ -342,15 +387,30 @@ export function FightTimeline({
                     defaultValue: 'Ward layers left ({{max}} of 4U Geo)',
                     max: meter.max,
                   })
-                : t('enemy.fight.hornGaugeLegend', {
-                    defaultValue: 'Horn gauge ({{max}}U of Pyro)',
-                    max: meter.max,
-                  })}
+                : meter.key !== 'hornGauge'
+                  ? t('enemy.fight.meterLegend', {
+                      defaultValue: '{{label}} (at most {{max}})',
+                      label: meterLabel,
+                      max: meter.max,
+                    })
+                  : t('enemy.fight.hornGaugeLegend', {
+                      defaultValue: 'Horn gauge ({{max}}U of Pyro)',
+                      max: meter.max,
+                    })}
           </Swatch>
         )}
-        <Swatch color={alpha(giTokens.parchment, 0.6)} line>
-          {t('enemy.fight.dpsLegend', 'Team DPS (into a shield or ward)')}
-        </Swatch>
+        {view.windowPath ? (
+          <Swatch color={alpha(giTokens.parchment, 0.42)}>
+            {t(
+              'enemy.fight.windowLegend',
+              'Team damage every 3 s (into a shield or ward too)'
+            )}
+          </Swatch>
+        ) : (
+          <Swatch color={alpha(giTokens.parchment, 0.6)} line>
+            {t('enemy.fight.dpsLegend', 'Team DPS (into a shield or ward)')}
+          </Swatch>
+        )}
         {events.length > 0 && (
           <Typography sx={{ ...type.label, fontWeight: 400, ml: 'auto' }}>
             {t(
@@ -397,8 +457,58 @@ function Swatch({
   )
 }
 
+/** Seconds of each damage window */
+const WINDOW = 3
+
+/**
+ * The team's damage in each `WINDOW` of the fight: the written rotation's hits looped from the
+ * start (its opening first, when the fight starts from no energy), each at the fight's damage
+ * there (its state's RES, a shield's take, nothing out of reach)
+ */
+function damageWindows(
+  estimate: FightEstimate,
+  team: FightTeam | undefined,
+  fightEnd: number
+): number[] | undefined {
+  const times = team?.damageTimes
+  const { segments } = estimate.timeline
+  if (!times || !segments.length || !(fightEnd > 0)) return undefined
+  const average = (d: DamageTimes) =>
+    d.hits.reduce((n, [, v]) => n + v, 0) / d.seconds + d.spread
+  const main = times.rotation
+  const mainAverage = average(main)
+  if (!(main.seconds > 0) || !(mainAverage > 0)) return undefined
+  const openSeconds =
+    estimate.notes.includes('opening') && team?.opening
+      ? team.opening.seconds
+      : 0
+  const opening = openSeconds > 0 ? (times.opening ?? main) : undefined
+  const openingAverage = opening ? average(opening) : 0
+  const windows = new Array<number>(Math.ceil(fightEnd / WINDOW)).fill(0)
+  const dpsAt = (t: number) =>
+    (segments.find((g) => t < g.end) ?? segments[segments.length - 1]).dps ?? 0
+  const add = (t: number, value: number, profileAverage: number) => {
+    if (t < 0 || t >= fightEnd || !(profileAverage > 0)) return
+    windows[Math.floor(t / WINDOW)] += (value * dpsAt(t)) / profileAverage
+  }
+  if (opening)
+    for (let start = 0; start < openSeconds; start += opening.seconds)
+      for (const [t, v] of opening.hits)
+        if (start + t < openSeconds) add(start + t, v, openingAverage)
+  for (let start = openSeconds; start < fightEnd; start += main.seconds)
+    for (const [t, v] of main.hits) add(start + t, v, mainAverage)
+  // (the damage tied to no hit: spread over the time, a tenth of a second at a time)
+  for (let t = 0; t < fightEnd; t += 0.1) {
+    const inOpening = t < openSeconds && opening
+    const spread = inOpening ? opening.spread : main.spread
+    if (spread > 0)
+      add(t, spread * 0.1, inOpening ? openingAverage : mainAverage)
+  }
+  return windows
+}
+
 /** The fight laid out once: its length, its HP and meter lines, and its moments */
-function fightView(estimate: FightEstimate) {
+function fightView(estimate: FightEstimate, team?: FightTeam) {
   const { segments, events, meter } = estimate.timeline
   // (a little room after its end: a drop to 0 there is not cut off at the edge)
   const end =
@@ -451,6 +561,26 @@ function fightView(estimate: FightEstimate) {
           )
           .join(' ')
       : undefined
+  // the team's damage in each window of the fight: a bar each, scaled to the highest
+  const fightEnd =
+    estimate.seconds ?? segments[segments.length - 1]?.end ?? FIGHT_LIMIT
+  const windows = damageWindows(estimate, team, fightEnd)
+  const maxWindow = windows ? Math.max(0, ...windows) : 0
+  const windowY = (v: number) =>
+    maxWindow > 0 ? (1 - (0.9 * v) / maxWindow) * H : H
+  const windowPath =
+    windows && maxWindow > 0
+      ? windows
+          .map((v, i) => {
+            const x0 = Number(sx(i * WINDOW)) + 0.6
+            const x1 = Number(sx(Math.min(fightEnd, (i + 1) * WINDOW))) - 0.6
+            const y = windowY(v).toFixed(2)
+            return x1 > x0 && v > 0
+              ? `M${x0.toFixed(2)},${H} L${x0.toFixed(2)},${y} L${x1.toFixed(2)},${y} L${x1.toFixed(2)},${H} Z`
+              : ''
+          })
+          .join(' ')
+      : undefined
   return {
     estimate,
     end,
@@ -460,6 +590,22 @@ function fightView(estimate: FightEstimate) {
     meterArea,
     dpsPath,
     maxDps,
+    windows: windowPath ? windows : undefined,
+    windowPath,
+    maxWindow,
+    /** The damage window at `s` seconds: its start, end and damage */
+    windowAt(s: number) {
+      if (!windows || !windowPath) return undefined
+      const i = Math.min(
+        windows.length - 1,
+        Math.max(0, Math.floor(s / WINDOW))
+      )
+      return {
+        from: i * WINDOW,
+        to: Math.min(fightEnd, (i + 1) * WINDOW),
+        damage: windows[i],
+      }
+    },
     /** The fight at `s` seconds (`maxHp`: its Max HP, for its shield's backlash cap) */
     at(s: number, maxHp: number): Moment {
       const time = Math.min(Math.max(0, s), end)
@@ -614,9 +760,13 @@ function FightChart({
                     ? giTokens.panelDark
                     : e.kind === 'backlash'
                       ? theme.palette.electro.main
-                      : e.kind === 'wardBreak'
+                      : e.kind === 'wardBreak' || e.kind === 'hpLoss'
                         ? theme.palette.geo.main
-                        : theme.palette.pyro.main,
+                        : e.kind === 'statue'
+                          ? theme.palette.anemo.main
+                          : e.kind === 'heal'
+                            ? theme.palette.dendro.main
+                            : theme.palette.pyro.main,
                 border:
                   e.kind === 'blast'
                     ? `2px solid ${theme.palette.pyro.main}`
@@ -683,20 +833,32 @@ function FightChart({
               height: '100%',
             }}
           >
-            <path
-              d={view.dpsPath}
-              fill="none"
-              stroke={alpha(giTokens.parchment, 0.6)}
-              strokeWidth="1.5"
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="round"
-            />
+            {view.windowPath ? (
+              <path
+                d={view.windowPath}
+                fill={alpha(giTokens.parchment, 0.42)}
+              />
+            ) : (
+              <path
+                d={view.dpsPath}
+                fill="none"
+                stroke={alpha(giTokens.parchment, 0.6)}
+                strokeWidth="1.5"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+              />
+            )}
           </Box>
           <LaneLabel>
-            {t('enemy.fight.dpsAxis', {
-              defaultValue: 'DPS (top {{dps}})',
-              dps: compact(3).format(view.maxDps / 0.9),
-            })}
+            {view.windowPath
+              ? t('enemy.fight.windowAxis', {
+                  defaultValue: 'Damage per 3 s (top {{damage}})',
+                  damage: compact(3).format(view.maxWindow),
+                })
+              : t('enemy.fight.dpsAxis', {
+                  defaultValue: 'DPS (top {{dps}})',
+                  dps: compact(3).format(view.maxDps / 0.9),
+                })}
           </LaneLabel>
         </Box>
       )}
@@ -889,7 +1051,12 @@ function FightScrub({
                   HP_H +
                   meterLane +
                   4 +
-                  (1 - (0.9 * (moment.seg.dps ?? 0)) / view.maxDps) * DPS_H
+                  (view.windowPath && view.maxWindow > 0
+                    ? 1 -
+                      (0.9 * (view.windowAt(moment.t)?.damage ?? 0)) /
+                        view.maxWindow
+                    : 1 - (0.9 * (moment.seg.dps ?? 0)) / view.maxDps) *
+                    DPS_H
                 }
                 color={giTokens.parchment}
               />
@@ -916,6 +1083,7 @@ function FightScrub({
         {moment ? (
           <MomentLine
             moment={moment}
+            window={view.windowAt(moment.t)}
             maxHp={maxHp}
             meter={meter}
             meterColor={meterColor}
@@ -971,6 +1139,7 @@ function Dot({ top, color }: { top: number; color: string }) {
 /** The fight at a moment, in a line: its time, state, HP, meter, RES, the DPS there, its shield */
 function MomentLine({
   moment,
+  window: damageWindow,
   maxHp,
   meter,
   meterColor,
@@ -982,6 +1151,8 @@ function MomentLine({
   onUnpin,
 }: {
   moment: Moment
+  /** The damage window at the moment */
+  window?: { from: number; to: number; damage: number }
   maxHp: number
   meter?: FightEstimate['timeline']['meter']
   meterColor: string
@@ -1067,13 +1238,35 @@ function MomentLine({
       </Box>
       {seg.dps !== undefined && (
         <Box sx={item}>
-          {moment.absorbed !== undefined
-            ? seg.state === 'ward'
-              ? t('enemy.fight.dpsWard', 'Into its ward')
-              : t('enemy.fight.dpsShield', 'Into its shield')
-            : t('enemy.fight.dpsHere', 'Team DPS here')}
+          {damageWindow
+            ? t(
+                moment.absorbed !== undefined
+                  ? seg.state === 'ward' || seg.state === 'warded'
+                    ? 'enemy.fight.dpsWardWindow'
+                    : 'enemy.fight.dpsShieldWindow'
+                  : 'enemy.fight.dpsWindow',
+                {
+                  defaultValue:
+                    moment.absorbed !== undefined
+                      ? seg.state === 'ward' || seg.state === 'warded'
+                        ? 'Into its ward {{from}}–{{to}} s'
+                        : 'Into its shield {{from}}–{{to}} s'
+                      : 'Team DPS {{from}}–{{to}} s',
+                  from: +damageWindow.from.toFixed(1),
+                  to: +damageWindow.to.toFixed(1),
+                }
+              )
+            : moment.absorbed !== undefined
+              ? seg.state === 'ward' || seg.state === 'warded'
+                ? t('enemy.fight.dpsWard', 'Into its ward')
+                : t('enemy.fight.dpsShield', 'Into its shield')
+              : t('enemy.fight.dpsHere', 'Team DPS here')}
           <Box component="span" sx={value}>
-            {compact(3).format(seg.dps)}
+            {compact(3).format(
+              damageWindow && damageWindow.to > damageWindow.from
+                ? damageWindow.damage / (damageWindow.to - damageWindow.from)
+                : seg.dps
+            )}
           </Box>
         </Box>
       )}
@@ -1081,11 +1274,13 @@ function MomentLine({
         <Box sx={item}>
           {seg.state === 'ward'
             ? t('enemy.fight.anchorTook', 'The Anchor took')
-            : t('enemy.fight.shieldTook', 'Its shield took')}
+            : seg.state === 'warded'
+              ? t('enemy.fight.wardTook', 'Its ward took')
+              : t('enemy.fight.shieldTook', 'Its shield took')}
           <Box component="span" sx={value}>
             {compact(3).format(moment.absorbed)}
           </Box>
-          {seg.state === 'ward'
+          {seg.state === 'ward' || seg.state === 'warded'
             ? t('enemy.fight.wardSoFar', {
                 defaultValue:
                   '→ {{hp}} off it when the ward breaks ({{pct}}% of its HP)',
@@ -1117,10 +1312,28 @@ function MomentLine({
                     'enemy.fight.blastAt',
                     'Ward not broken: the Anchor blasts the team (200% ATK Geo DMG)'
                   )
-                : t('enemy.fight.hornsBreakAt', {
-                    defaultValue: 'Horns broken: −{{hp}}% of its HP',
-                    hp: siteDecimal(moment.event.hp * 100),
-                  })}
+                : moment.event.kind === 'statue'
+                  ? t('enemy.fight.statueAt', {
+                      defaultValue:
+                        'Statues explode on it: −{{hp}}% of its HP, its RES down',
+                      hp: siteDecimal(moment.event.hp * 100),
+                    })
+                  : moment.event.kind === 'hpLoss'
+                    ? t('enemy.fight.hpLossAt', {
+                        defaultValue:
+                          'Its cannon interrupted: −{{hp}}% of its HP, paralyzed',
+                        hp: siteDecimal(moment.event.hp * 100),
+                      })
+                    : moment.event.kind === 'heal'
+                      ? t('enemy.fight.healAt', {
+                          defaultValue:
+                            'Its Ice Coffin held: +{{hp}}% of its HP back',
+                          hp: siteDecimal(-moment.event.hp * 100),
+                        })
+                      : t('enemy.fight.hornsBreakAt', {
+                          defaultValue: 'Horns broken: −{{hp}}% of its HP',
+                          hp: siteDecimal(moment.event.hp * 100),
+                        })}
         </Box>
       )}
       {pinned && (

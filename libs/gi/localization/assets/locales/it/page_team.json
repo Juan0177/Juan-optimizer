@@ -14,7 +14,8 @@
     "error": {
       "verifi": "Verifica dei dati non riuscita.",
       "import": "Importazione dei dati non riuscita.",
-      "multiOpt": "I dati importati sono un multi-opt, non una squadra. Vai alla squadra e al personaggio desiderati per importare il multi-opt"
+      "multiOpt": "I dati importati sono un multi-opt, non una squadra. Vai alla squadra e al personaggio desiderati per importare il multi-opt",
+      "json": "Questo non è il JSON di una squadra: incolla tutto il testo copiato da Esporta squadra."
     }
   },
   "teamDelModal": {
@@ -44,7 +45,8 @@
     "buffsEmpty": "Aggiungi un personaggio per vedere i buff di risonanza, Presagio lunare, Hexerei e reazioni della squadra.",
     "buffsTitle": "Buff della squadra",
     "noResonance": "Nessuna risonanza elementale con questa formazione.",
-    "removeBtn": "Rimuovi dalla squadra"
+    "removeBtn": "Rimuovi dalla squadra",
+    "addFirstChar": "Dopo il primo personaggio"
   },
   "exportModal": {
     "msg": "Dati della squadra copiati negli appunti.",
@@ -57,7 +59,9 @@
     "mTargets": "Multi-obiettivi da esportare",
     "builds": "Build da esportare",
     "equipped": "Build equipaggiata",
-    "tcBadge": "Build TC"
+    "tcBadge": "Build TC",
+    "clipboardFailed": "Impossibile copiare negli appunti. Scarica invece il JSON della squadra.",
+    "download": "Scarica JSON"
   },
   "enemyEditor": {
     "enemyLevel": "Nemico ",
@@ -123,10 +127,44 @@
         "noHealer": "Nessun guaritore: la squadra resta nel Bozzolo radioso fino all'Ancora successiva",
         "opening": "La prima rotazione è conteggiata senza Tripudi: il combattimento inizia senza energia (impostabile nel box del nemico)",
         "cocoonApprox": "Il DPS della squadra nel bozzolo e durante Districamento non è ancora simulato: per ora si usa il suo DPS normale",
-        "mechanics": "PS ÷ DPS della squadra: le sue meccaniche non sono conteggiate"
+        "mechanics": "PS ÷ DPS della squadra: le sue meccaniche non sono conteggiate",
+        "cryoEstimated": "Nessuna rotazione scritta: i colpi Cryo sono gli attacchi inseriti, distribuiti in modo uniforme; Grazia dell'Anima della Notte non conteggiata",
+        "flightEstimated": "La durata dei suoi voli è una stima; i danni della squadra mentre vola sono conteggiati per intero",
+        "gaugeEstimated": "Nessuna rotazione scritta: le applicazioni elementali vengono prese dagli attacchi inseriti (1U ogni 3 colpi)",
+        "mechanismsEstimated": "La salita ai Meccanismi di accumulazione (13 s) è una stima; i danni della squadra nel frattempo sono conteggiati per intero",
+        "noNightsoul": "Nessuna rotazione scritta: Grazia dell'Anima della Notte non nota, le Contromisure adattive si riempiono da sole (100 s)",
+        "radianceAssumed": "Nessuna rotazione scritta: Splendore: Barlume astrale considerato sempre attivo (la squadra infligge DAN da Barlume astrale)",
+        "transitionsEstimated": "La durata delle sue trasformazioni e dei cambi di modalità è una stima (non è nei file del gioco)",
+        "windowEstimated": "Il momento in cui deve avere Splendore (1–5 s dall'inizio di ogni scultura) è una stima"
       },
       "title": "{{hp}} PS, con la rotazione della squadra ripetuta:",
-      "source": "PS e meccaniche: stygian.moe, la wiki di Fandom e i file del gioco."
+      "source": "PS e meccaniche: stygian.moe, la wiki di Fandom e i file del gioco.",
+      "cannon": "Electrocannone interrotto (entrambi i Meccanismi di accumulazione distrutti): {{hp}} dei suoi PS, poi 15 s paralizzato con −30% RES",
+      "coffinBreak": "Ogni Bara infranta: il 10% dei suoi PS (da scudo, il 60% dei DAN subiti in più, al massimo il 10%), poi 10 s con −40% RES: {{hp}} dei suoi PS in tutto",
+      "coffinHeal_one": "{{count}} non infranta in tempo: il 10% dei suoi PS ripristinato ({{hp}} in tutto)",
+      "coffinHeal_other": "{{count}} non infrante in tempo: il 10% dei suoi PS ripristinato ognuna ({{hp}} in tutto)",
+      "coffins_one": "{{count}} Bara di ghiaccio (resistenza 1050, 20 s; PS intatti), ≈ {{seconds}} s: {{broken}} infranta, {{shields}} come scudo sotto Splendore (15% dei suoi PS)",
+      "coffins_other": "{{count}} Bare di ghiaccio (resistenza 1050, 20 s; PS intatti), ≈ {{seconds}} s ciascuna: {{broken}} infrante, {{shields}} come scudi sotto Splendore (15% dei suoi PS)",
+      "countermeasures": "Il suo scudo (il doppio dei suoi PS, 110% RES) resiste finché le Contromisure adattive non si riempiono: {{time}} (2/s, Grazia dell'Anima della Notte per il {{share}} del tempo)",
+      "countermeasuresKept": "Il suo scudo (il doppio dei suoi PS, 110% RES) resiste: le Contromisure adattive non si riempiono mai in tempo",
+      "electroWards_one": "{{count}} Barriera di Electro (resistenza 1000; PS intatti): {{broken}} infranta, ≈ {{seconds}} s, le reazioni della squadra tolgono {{rate}}/s e {{backfires}} onde d'urto le si ritorcono contro con Splendore (400 ciascuna)",
+      "electroWards_other": "{{count}} Barriere di Electro (resistenza 1000; PS intatti): {{broken}} infrante, ≈ {{seconds}} s ciascuna, le reazioni della squadra tolgono {{rate}}/s e {{backfires}} onde d'urto le si ritorcono contro con Splendore (400 ciascuna)",
+      "paralysis_one": "{{count}} paralisi: {{time}}",
+      "paralysis_other": "{{count}} paralisi: {{time}} in tutto",
+      "sculptures_one": "{{count}} scultura, {{interrupted}} trasformata in statua da Splendore: Barlume astrale (2 × 499.999 DAN e 2 accumuli di RES ridotta ciascuna): {{hp}} dei suoi PS",
+      "sculptures_other": "{{count}} sculture, {{interrupted}} trasformate in statue da Splendore: Barlume astrale (2 × 499.999 DAN e 2 accumuli di RES ridotta ciascuna): {{hp}} dei suoi PS",
+      "sweeper_one": "{{count}} Modalità Pulizia ({{time}}, 270% RES): fermata dal Cryo per {{stopped}} (30%, Cryo −30%), {{counter}} in Contrattacco forzato (110%); {{cryo}} colpi Cryo/s contro i suoi 5/s di Slancio fluido (3 ciascuno)",
+      "sweeper_other": "{{count}} Modalità Pulizia ({{time}} in tutto, 270% RES): fermate dal Cryo per {{stopped}} (30%, Cryo −30%), {{counter}} in Contrattacco forzato (110%); {{cryo}} colpi Cryo/s contro i suoi 5/s di Slancio fluido (3 ciascuno)",
+      "vortex_one": "{{count}} vortice, {{failed}} fatto fallire (Splendore, o colpi Hydro/Pyro/Electro/Cryo sulle sue sfere di Anemo)",
+      "vortex_other": "{{count}} vortici, {{failed}} fatti fallire (Splendore, o colpi Hydro/Pyro/Electro/Cryo sulle sue sfere di Anemo)",
+      "wardBacklash": "Contraccolpo quando si infrange: il {{ratio}} dei DAN subiti, al massimo il {{cap}} dei suoi PS: {{hp}} dei suoi PS in tutto",
+      "coffinHeal": "{{count}} non infrante in tempo: il 10% dei suoi PS ripristinato ognuna ({{hp}} in tutto)",
+      "coffins": "{{count}} Bare di ghiaccio (resistenza 1050, 20 s; PS intatti), ≈ {{seconds}} s ciascuna: {{broken}} infrante, {{shields}} come scudi sotto Splendore (15% dei suoi PS)",
+      "electroWards": "{{count}} Barriere di Electro (resistenza 1000; PS intatti): {{broken}} infrante, ≈ {{seconds}} s ciascuna, le reazioni della squadra tolgono {{rate}}/s e {{backfires}} onde d'urto le si ritorcono contro con Splendore (400 ciascuna)",
+      "paralysis": "{{count}} paralisi: {{time}} in tutto",
+      "sculptures": "{{count}} sculture, {{interrupted}} trasformate in statue da Splendore: Barlume astrale (2 × 499.999 DAN e 2 accumuli di RES ridotta ciascuna): {{hp}} dei suoi PS",
+      "sweeper": "{{count}} Modalità Pulizia ({{time}} in tutto, 270% RES): fermate dal Cryo per {{stopped}} (30%, Cryo −30%), {{counter}} in Contrattacco forzato (110%); {{cryo}} colpi Cryo/s contro i suoi 5/s di Slancio fluido (3 ciascuno)",
+      "vortex": "{{count}} vortici, {{failed}} fatti fallire (Splendore, o colpi Hydro/Pyro/Electro/Cryo sulle sue sfere di Anemo)"
     },
     "customHpTip": "I suoi PS, come impostati.",
     "stygian": {
@@ -667,7 +705,29 @@
       "topBuildsChangesTip": "Sotto il n. 1, solo il membro che cambia in ogni squadra",
       "topBuildsAllGear": "Tutto",
       "topBuildsAllGearTip": "L'equipaggiamento di ogni membro, il cambio evidenziato in oro",
-      "sameAsBest": "Come il n. 1"
+      "sameAsBest": "Come il n. 1",
+      "copyRotation": "Copia da Ottimizza squadra",
+      "passiveCounted": "Passiva conteggiata",
+      "passiveFight": "{{percent}}% del combattimento, dai PS del nemico",
+      "passiveOn": "Passiva attiva",
+      "passiveRule": "attiva per regola",
+      "passiveShare": "Passiva {{percent}}%",
+      "passiveSwitch": "attivata da te",
+      "passiveWhere": "Si imposta in Scegli le armi; un nemico con PS imposta quella di Lapide del lupo",
+      "replaceRotation": "Sostituire la rotazione KQM con quella attuale di Ottimizza squadra?",
+      "screenedOutSets_one": "{{count}} altro set scartato",
+      "screenedOutSets_other": "Altri {{count}} set scartati",
+      "screenedOutWeapons_one": "{{count}} altra arma scartata",
+      "screenedOutWeapons_other": "Altre {{count}} armi scartate",
+      "search": "Ricerca",
+      "searchFull": "Completa",
+      "searchQuick": "Rapida",
+      "searchTipQuick": "La rapida prova tutte le armi e i set di manufatti ammessi al primo giro, poi solo quelli vicini al migliore di ogni membro, e mostra gli altri come scartati invece che in classifica. La completa li prova tutti a ogni giro.",
+      "separateRotation": "KQM usa una rotazione sua. Puoi copiarci la rotazione attuale di Ottimizza squadra.",
+      "teammatesEr": "ER richiesta ai compagni",
+      "teammatesErHelp": "La Ricarica di energia che serve ai compagni con questa scelta, e prima: la sua energia (particelle di Favonius, energia di un'arma o di un set) cambia la loro, e i loro manufatti vengono cercati di nuovo",
+      "screenedOutSets": "Altri {{count}} set scartati",
+      "screenedOutWeapons": "Altre {{count}} armi scartate"
     },
     "card": {
       "button": "Card della squadra",
@@ -751,7 +811,13 @@
       "vsNow": "variazione rispetto all'attuale",
       "timelineTip": "La rotazione scritta come la giocano queste build: azioni e cambi di ogni membro, con queste armi e questi set di manufatti. Scegli un attacco per vederne il danno e i buff attivi.",
       "enemy": "Per",
-      "enemyNow": "→ ora"
+      "enemyNow": "→ ora",
+      "equipWarnMove_one": "Equipaggia la nuova build su {{count}} membro. Manufatti e armi vengono tolti a chi li ha ora, e un membro con una build salvata passa alla build equipaggiata.",
+      "equipWarnMove_other": "Equipaggia le nuove build su {{count}} membri. Manufatti e armi vengono tolti a chi li ha ora, e un membro con una build salvata passa alla build equipaggiata.",
+      "undoEquip": "Annulla equipaggiamento",
+      "undoEquipConflict": "Equipaggiamento o build salvate sono cambiati dopo l'equipaggiamento. Controlla l'equipaggiamento interessato prima di ripristinarlo.",
+      "undoEquipHelp": "Ripristina l'equipaggiamento e le build salvate di prima dell'ultimo Equipaggia su questa squadra.",
+      "equipWarnMove": "Equipaggia le nuove build su {{count}} membri. Manufatti e armi vengono tolti a chi li ha ora, e un membro con una build salvata passa alla build equipaggiata."
     },
     "editor": {
       "close": "Chiudi",
@@ -939,7 +1005,9 @@
         "notes": "Ignorate · si gioca la prima",
         "loop": "Finisci con il primo membro: dove la rotazione ricomincia",
         "credit": "Le abilità di entrata automatiche sono incluse; le azioni non simulate sono elencate nelle note. Dati dei frame: gcsim e kqmsim (AGPLv3)."
-      }
+      },
+      "handEdited": "Attacchi modificati",
+      "handEditedTip": "Gli attacchi sono stati modificati a mano dopo che la rotazione è stata giocata. Cambiare la rotazione o quante rotazioni contano la rigioca e sostituisce queste modifiche (per qualche secondo si può annullare)."
     },
     "timeline": {
       "aura": {
@@ -1061,11 +1129,20 @@
       "attackCount_one": "{{count}} attacco",
       "attackCount_other": "{{count}} attacchi",
       "conditionCount_one": "{{count}} condizione dei buff",
-      "conditionCount_other": "{{count}} condizioni dei buff"
+      "conditionCount_other": "{{count}} condizioni dei buff",
+      "dmg": "DAN",
+      "dps": "DPS",
+      "moreConditions_one": "Un altro buff: apri l'attacco per vederlo",
+      "moreConditions_other": "Altri {{count}} buff: apri l'attacco per vederli",
+      "parts_one": "{{count}} parte",
+      "parts_other": "{{count}} parti",
+      "moreConditions": "Altri {{count}} buff: apri l'attacco per vederli",
+      "parts": "{{count}} parti"
     },
     "rotationTime": {
       "info": "Quanto dura una rotazione, per il DPS. Salvato per questa squadra.",
-      "label": "Durata della rotazione"
+      "label": "Durata della rotazione",
+      "playedInfo": "Quanto dura una rotazione come viene giocata, per il DPS."
     },
     "run": {
       "allKept": "Ogni membro tiene la sua build: non c'è niente da ottimizzare.",
@@ -1109,7 +1186,10 @@
       "title": "Ottimizza la squadra",
       "mainCount_one": "{{count}} statistica principale",
       "mainCount_other": "{{count}} statistiche principali",
-      "emptySlots": "Nessun manufatto tra cui scegliere per: {{slots}}. Attiva «Manufatti degli altri personaggi» o consenti livelli più bassi."
+      "emptySlots": "Nessun manufatto tra cui scegliere per: {{slots}}. Attiva «Manufatti degli altri personaggi» o consenti livelli più bassi.",
+      "emptyInventory": "Aggiungi o importa dei manufatti prima di ottimizzare la squadra.",
+      "erNone": "Nessuno",
+      "incompleteInventory": "Ad almeno un membro manca un manufatto ammesso per uno slot. Modifica i filtri dell'inventario o tieni la build attuale di quel membro."
     },
     "sens": {
       "hideNoGain": "Nascondi queste righe",
@@ -1190,7 +1270,13 @@
       "startTip": "Quando inizia l'azione, in secondi dall'inizio della rotazione.",
       "swap": "Tempo di cambio",
       "swapCooldown": "Attesi {{seconds}} s per il tempo di ricarica del cambio",
-      "swapTip": "Frame da quando premi il tasto di un personaggio a quando è in campo e può agire, per ogni cambio. Standard KQM: 12 frame."
+      "swapTip": "Frame da quando premi il tasto di un personaggio a quando è in campo e può agire, per ogni cambio. Standard KQM: 12 frame.",
+      "counted": "Conteggiate",
+      "firstOne": "Prima rotazione",
+      "firstTip": "Conteggiate dall'inizio, con ogni tempo di recupero pronto, come in una sfida a tempo.",
+      "firstTipTitle": "Prime 1–6 rotazioni",
+      "steady": "DPS a regime (rot. {{from}}–{{to}})",
+      "steadyTip": "Il valore predefinito. Giocata {{to}} volte di fila, media delle rotazioni {{from}}–{{to}}: il ritmo quando i tempi di recupero si trascinano da una rotazione all'altra."
     },
     "title": "Ottimizza squadra",
     "transfer": {
@@ -1206,7 +1292,14 @@
       "label": "JSON della rotazione",
       "skipped": "Non in questa squadra, saltati:",
       "time": "Durata della rotazione: {{time, number}} s",
-      "title": "Importa una rotazione della squadra"
+      "title": "Importa una rotazione della squadra",
+      "attackDesc": "Incolla il JSON degli attacchi per aggiornare i membri corrispondenti, la durata della rotazione e il membro in campo. Per condividere le rotazioni scritte modificabili usa Esporta squadra.",
+      "download": "Scarica JSON",
+      "exportAttacks": "Esporta attacchi",
+      "importAttacks": "Importa attacchi",
+      "noClipboard": "Impossibile copiare gli attacchi negli appunti.",
+      "switchSource": "Questa scheda calcolerà dagli attacchi importati. La rotazione scritta resta nel writer, da riapplicare quando vuoi.",
+      "useImported": "Usa gli attacchi importati"
     },
     "attack": {
       "onField": "in campo"
@@ -1277,7 +1370,10 @@
       "equippedDps": "DPS attuale",
       "equippedTip": "Con le build equipaggiate ora",
       "equippedTotal": "DAN attuale",
-      "total": "DAN rotazione"
+      "total": "DAN rotazione",
+      "currentDps": "DPS attuale",
+      "currentTip": "Con le build che la squadra usa ora",
+      "currentTotal": "DAN attuale"
     },
     "hitMode": {
       "avgHit": "Medio",
@@ -1324,7 +1420,9 @@
       "heading": "Imposta la rotazione",
       "info": "Scrivi la rotazione: digitala come fanno i giocatori (\"Bennett E Q -> …\"); attacchi, colpi e tempi vengono da ogni kit. Aggiungi attacchi: scegli a mano talenti e colpi di ogni membro.",
       "write": "Scrivi la rotazione",
-      "manual": "Aggiungi attacchi"
+      "manual": "Aggiungi attacchi",
+      "manualTip": "Scegli a mano i talenti di ogni membro e quante volte colpisce.",
+      "writeTip": "Digitala come fanno i giocatori (\"Bennett E Q -> …\"): attacchi, colpi e tempi vengono da ogni kit."
     },
     "buff": {
       "skill": "Abilità elementale",
@@ -1333,6 +1431,22 @@
       "sprint": "Scatto",
       "moonsign": "Presagio lunare",
       "passive": "Passiva"
+    },
+    "copyKqmRotation": "Copia da KQM Theorycrafting",
+    "energy": {
+      "active": "Obiettivi del calcolatore applicati. L'ER viene ricalcolato durante l'ottimizzazione per le armi di ogni build. Modificare il minimo di un membro torna ai requisiti di ER dei membri.",
+      "intro": "Conferma usi delle abilità, particelle raccolte e tempo in campo per una rotazione. L'ER viene calcolato per tutta la squadra, poi nella run per le armi di ogni build. L'energia extra da abilità o effetti va in Energia bonus."
+    },
+    "replaceWithKqmRotation": "Sostituire la rotazione di Ottimizza squadra con quella di KQM Theorycrafting?",
+    "templates": {
+      "heading": "Modelli",
+      "info": "Rotazioni standard di questi DPS principali, dalle guide e dai calcoli di squadra di KQM (calcoli della community dove KQM non ne ha), ognuna giocata prima qui. Sceglierne una la apre nel writer; i membri che usa e che non sono in questa squadra vengono tolti.",
+      "missing": "Non in questa squadra: {{names}}",
+      "replace": "Sostituisce la rotazione scritta qui",
+      "rotations_one": "{{count}} rotazione · {{s}} s",
+      "rotations_other": "{{count}} rotazioni · {{s}} s",
+      "seconds": "{{s}} s",
+      "rotations": "{{count}} rotazioni · {{s}} s"
     }
   },
   "tcNoOptimize": {
@@ -1459,7 +1573,23 @@
       "hornsBreakAt": "Corna rotte: −{{hp}}% dei suoi PS",
       "unpin": "Sblocca",
       "hpText": "PS {{pct}}% ({{hp}})",
-      "meterText": "indicatore {{value}}"
+      "meterText": "indicatore {{value}}",
+      "airborne": "In volo (volteggi e vortice)",
+      "barrier": "Bara trasformata in scudo (PS intatti)",
+      "cannon": "Electrocannone in carica (Meccanismi di accumulazione)",
+      "coffin": "Bara di ghiaccio (PS intatti)",
+      "healAt": "Bara di ghiaccio non infranta: +{{hp}}% dei suoi PS ripristinati",
+      "hpLossAt": "Electrocannone interrotto: −{{hp}}% dei suoi PS, paralizzato",
+      "meterLegend": "{{label}} (al massimo {{max}})",
+      "momentum": "Slancio fluido",
+      "progress": "Contromisure adattive",
+      "stacks": "Accumuli di RES ridotta",
+      "statueAt": "Le statue esplodono su di lui: −{{hp}}% dei suoi PS, RES ridotta",
+      "wardGauge": "Resistenza della barriera",
+      "wardTook": "La barriera ha subito",
+      "warded": "Barriera di Electro attiva (PS intatti)",
+      "windowAxis": "Danni ogni 3 s (max {{damage}})",
+      "windowLegend": "Danni della squadra ogni 3 s (anche su uno scudo o una barriera)"
     },
     "moongecko": {
       "wardLater": "Dalla rotazione, quando ci sono build",
@@ -1476,6 +1606,21 @@
       "afterRoar": "s dopo il ruggito",
       "never": "Mai",
       "seconds": "s"
-    }
+    },
+    "coffinsLine_one": "{{broken}} su {{count}} Bara di ghiaccio infranta",
+    "coffinsLine_other": "{{broken}} su {{count}} Bare di ghiaccio infrante",
+    "countermeasuresKeptLine": "Il suo scudo non si infrange mai",
+    "countermeasuresLine": "Il suo scudo si infrange a {{time}}",
+    "electroWardsKeptLine": "La sua Barriera di Electro non viene mai infranta",
+    "electroWardsLine_one": "{{count}} barriera infranta, ≈ {{time}}",
+    "electroWardsLine_other": "{{count}} barriere infrante, ≈ {{time}} ciascuna",
+    "sculpturesLine_one": "{{interrupted}} su {{count}} scultura trasformata in statua",
+    "sculpturesLine_other": "{{interrupted}} su {{count}} sculture trasformate in statue",
+    "sweeperLine_one": "{{count}} Modalità Pulizia, fermata per {{time}}",
+    "sweeperLine_other": "{{count}} Modalità Pulizia, fermate per {{time}}",
+    "coffinsLine": "{{broken}} su {{count}} Bare di ghiaccio infrante",
+    "electroWardsLine": "{{count}} barriere infrante, ≈ {{time}} ciascuna",
+    "sculpturesLine": "{{interrupted}} su {{count}} sculture trasformate in statue",
+    "sweeperLine": "{{count}} Modalità Pulizia, fermate per {{time}}"
   }
 }

@@ -184,9 +184,10 @@ export function KqmTopTeams({
           open
           onClose={() => setOpen(false)}
           containerProps={{ maxWidth: 'lg' }}
+          aria-label={title}
         >
           <CardThemed>
-            <Box role="dialog" aria-label={title}>
+            <Box>
               <Box
                 sx={{
                   display: 'flex',
