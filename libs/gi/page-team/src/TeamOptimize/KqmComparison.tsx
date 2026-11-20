@@ -18,6 +18,7 @@ import {
   compareTeamKqm,
   KQM_SUBSTAT_ROLLS,
   kqmLockedWeapon,
+  kqmMemberRolls,
   kqmSetsId,
   kqmWeaponData,
   quickTooltipProps,
@@ -50,7 +51,6 @@ import { useTranslation } from 'react-i18next'
 import { PassiveTag, useCountedPassives } from './CountedPassives'
 import { formatGain, formatRate, formatRateFull } from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
-import { kqmStandardRolls } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
 import { WeaponDetails, WeaponThumb } from './TeamOptResults'
 import {
@@ -451,7 +451,7 @@ export function KqmCompare({
             characterKey={characterKey}
             build={build}
             equipment={equipment}
-            rolls={kqmStandardRolls(runSettings.kqm)}
+            rolls={kqmMemberRolls(characterKey, runSettings.kqm)}
           />
           {er && (
             <Tooltip

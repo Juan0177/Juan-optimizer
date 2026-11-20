@@ -175,6 +175,10 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
         ]
       : [{ key: 'AmenomaKageuchi', refinement: 5 }],
   KQM_ONE_COPY: ['ExaiphanesBlade'],
+  kqmMemberRolls: (
+    key: string,
+    kqm?: { rolls?: number; memberRolls?: Record<string, number> }
+  ) => kqm?.memberRolls?.[key] ?? kqm?.rolls ?? 20,
   kqmLockedWeapon: (
     key: string,
     kqm?: {
@@ -464,6 +468,63 @@ describe('KQM first-time setup', () => {
         }),
       })
     )
+  })
+  it('sets every member’s artifacts from the header, one in its row (Mixed), and types them in with Custom', async () => {
+    const start = vi.fn()
+    render(<Setup start={start} />, { wrapper: wrap })
+    const all = () =>
+      screen.getByRole('combobox', { name: 'Every member’s artifacts' })
+    const row = (key: string) =>
+      screen.queryByRole('combobox', { name: `${key} artifacts` })
+    const box = (key: string) =>
+      screen.queryByLabelText(
+        `${key} artifact rolls`
+      ) as HTMLInputElement | null
+    const choose = async (combo: HTMLElement, option: RegExp) => {
+      fireEvent.mouseDown(combo)
+      fireEvent.click(await screen.findByRole('option', { name: option }))
+    }
+    const generated = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Generate builds' }))
+      return start.mock.lastCall![0].kqm
+    }
+    expect(all().textContent).toBe('KQM Standard (20)')
+    for (const key of keys) expect(row(key)!.textContent).toBe('KQMS (20)')
+    await choose(all(), /^Great/)
+    for (const key of keys) expect(row(key)!.textContent).toBe('Great (30)')
+    await choose(row('KamisatoAyaka')!, /^Top/)
+    expect(row('KamisatoAyaka')!.textContent).toBe('Top (40)')
+    expect(row('Shenhe')!.textContent).toBe('Great (30)')
+    expect(all().textContent).toBe('Mixed')
+    expect(generated()).toMatchObject({
+      rolls: 30,
+      memberRolls: { KamisatoAyaka: 40 },
+    })
+    // (all the same again: one standard for the team)
+    await choose(row('KamisatoAyaka')!, /^Great/)
+    expect(all().textContent).toBe('Great (30)')
+    expect(generated().memberRolls).toBeUndefined()
+    // Custom: a box per member, at its rolls
+    await choose(all(), /^Custom/)
+    for (const key of keys) {
+      expect(row(key)).toBeNull()
+      expect(box(key)!.value).toBe('30')
+    }
+    fireEvent.change(box('Shenhe')!, { target: { value: '4' } })
+    expect(box('Shenhe')!.getAttribute('aria-invalid')).toBe('true')
+    fireEvent.change(box('Shenhe')!, { target: { value: '35' } })
+    expect(generated()).toMatchObject({
+      rolls: 30,
+      memberRolls: { Shenhe: 35 },
+    })
+    await choose(all(), /^Top/)
+    for (const key of keys) {
+      expect(box(key)).toBeNull()
+      expect(row(key)!.textContent).toBe('Top (40)')
+    }
+    const back = generated()
+    expect(back.rolls).toBe(40)
+    expect(back.memberRolls).toBeUndefined()
   })
   it('locks a member’s weapon (Any by default), at a refinement, and unlocks it with Any', async () => {
     const seen: TeamOpt[] = []

@@ -225,6 +225,18 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     for (const bad of [{ Xingqiu: 'NoSuchSword' }, {}, 'Xingqiu', undefined])
       expect(kqm(bad)?.lockedWeapons).toBeUndefined()
   })
+  it('keeps each member’s artifact rolls, dropping unknown members and invalid counts', () => {
+    const kqm = (memberRolls: unknown) =>
+      validateTeamOpt({
+        kqm: { refinement5: 1, refinement4: 5, memberRolls },
+      })?.kqm
+    expect(
+      kqm({ Xingqiu: 40, Bennett: 20, Nobody: 30, Xiangling: 2.5 })
+        ?.memberRolls
+    ).toEqual({ Xingqiu: 40, Bennett: 20 })
+    for (const bad of [{ Xingqiu: 61 }, { Xingqiu: -1 }, {}, 30, undefined])
+      expect(kqm(bad)?.memberRolls).toBeUndefined()
+  })
   it('drops rotation times that are not durations', () => {
     for (const rotationTime of [-3, 0, 'x', Number.NaN, 9999])
       expect(validateTeamOpt({ rotationTime })?.rotationTime).toBeUndefined()

@@ -181,6 +181,12 @@ export const kqmTalentLevel = (
   kqm: Pick<TeamOptKqm, 'talents'> | undefined
 ): 9 | 10 => kqm?.talents ?? KQM_TALENT_DEFAULT
 
+/** A member's artifact standard: its own distributed rolls when set per member, else the team's */
+export const kqmMemberRolls = (
+  key: CharacterKey,
+  kqm: Pick<TeamOptKqm, 'rolls' | 'memberRolls'> | undefined
+): number => kqmRollBudget(kqm?.memberRolls?.[key] ?? kqm?.rolls)
+
 /** A valid total ER target: finite and at least 100%. */
 export const kqmHasEnergyRequirement = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 100
@@ -1367,8 +1373,8 @@ async function runKqm({
     })
   const tick = ticker(isCancelled)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
-  /** The artifact standard's distributed rolls (KQMS: 20) */
-  const rollBudget = kqmRollBudget(kqm.rolls)
+  /** A member's artifact standard: its distributed rolls (KQMS: 20) */
+  const rollsOf = (ck: CharacterKey) => kqmMemberRolls(ck, kqm)
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
   // The rotation the builds are for: as played for them (`replay`), else the team's attacks. A
@@ -1786,7 +1792,7 @@ async function runKqm({
       onField: teamOpt.onField,
       bonusStats,
     })
-    const problem = built.then((b) => b && compile(b, rollBudget))
+    const problem = built.then((b) => b && compile(b, rollsOf(ck)))
     // (one that failed is built again when asked for again; a wait that was cancelled is no error)
     problem.catch(() => {
       if (problemCache.get(cacheKey) === problem) problemCache.delete(cacheKey)
@@ -1943,7 +1949,7 @@ async function runKqm({
         kqmValues({
           sets,
           mains,
-          rolls: cappedRolls(current.rolls, mains, rollBudget),
+          rolls: cappedRolls(current.rolls, mains, rollsOf(ck)),
         })
       )
     const combos = setsList ?? setCombos(problem, space, current)
@@ -2512,7 +2518,7 @@ async function runKqm({
               const score = scoreOf(own, values)
               return { total: score.total, valid: meetsAsChosen(score) }
             },
-            rollBudget
+            rollsOf(ck)
           )
         }
         return options

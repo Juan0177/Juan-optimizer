@@ -268,6 +268,11 @@ export interface TeamOptKqm {
    * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
    */
   rolls?: number
+  /**
+   * The artifact standard set per member instead: each one's distributed rolls (a member without
+   * one: `rolls`). Absent: the team's one standard
+   */
+  memberRolls?: Partial<Record<CharacterKey, number>>
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
   /**
@@ -667,6 +672,22 @@ const teamOptSchema = z.object({
         .catch(undefined),
       fullSearch: z.boolean().optional().catch(undefined),
       rolls: z.number().int().min(0).max(60).optional().catch(undefined),
+      memberRolls: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['memberRolls']> = {}
+          for (const [key, value] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(key as CharacterKey) &&
+              Number.isInteger(value) &&
+              (value as number) >= 0 &&
+              (value as number) <= 60
+            )
+              result[key as CharacterKey] = value as number
+          return Object.keys(result).length ? result : undefined
+        }),
       energySource: z
         .enum(['manual', 'calculator'])
         .optional()

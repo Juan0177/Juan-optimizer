@@ -31,6 +31,7 @@ import {
   kqmGroupRefinements,
   kqmLockedWeapon,
   kqmMemberConstellation,
+  kqmMemberRolls,
   kqmRefinement,
   kqmRollCaps,
   kqmSets,
@@ -367,6 +368,35 @@ describe('KQM Standards builds', () => {
     teamOpt.kqm!.lockedWeapons = { [ayaka]: 'CalamityQueller' }
     expect(kqmLockedWeapon(ayaka, teamOpt.kqm)).toBeUndefined()
     expect(kqmWeapons(ayaka, teamOpt.kqm).length).toBeGreaterThan(1)
+  }, 300_000)
+
+  it('rolls set per member: each member’s builds and rankings place its own, within its own caps', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const kqm = { ...teamOpt.kqm!, rolls: 30, memberRolls: { [ayaka]: 40 } }
+    expect(kqmMemberRolls(ayaka, kqm)).toBe(40)
+    expect(kqmMemberRolls(shenhe, kqm)).toBe(30)
+    expect(kqmMemberRolls(shenhe, teamOpt.kqm)).toBe(20)
+    const result = (await run(database, teamId, { ...teamOpt, kqm }))!
+    const placed = (b: KqmBuild) =>
+      Object.values(b.rolls).reduce((a, n) => a + (n ?? 0), 0)
+    for (const [ck, budget] of [
+      [ayaka, 40],
+      [shenhe, 30],
+    ] as const) {
+      const b = result.builds[ck]!
+      expect(placed(b)).toBe(kqmBuildRarity(b, budget).rolls)
+      const caps = kqmRollCaps(b.mains, budget)
+      for (const [k, n] of Object.entries(b.rolls) as [SubstatKey, number][])
+        expect(n).toBeLessThanOrEqual(caps[k])
+      for (const o of result.rankings[ck]!.sets)
+        expect(placed(o)).toBe(kqmBuildRarity(o, budget).rolls)
+    }
+    // (more rolls on one member: more damage than the team's 30 for both)
+    const even = (await run(database, teamId, {
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm!, rolls: 30 },
+    }))!
+    expect(result.after.total).toBeGreaterThan(even.after.total)
   }, 300_000)
 
   it('a pick of a screened-out set after a quick search counts its effects, as after a full search', async () => {
