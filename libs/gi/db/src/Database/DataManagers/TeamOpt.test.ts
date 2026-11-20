@@ -213,6 +213,18 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     expect(kqm({ refinementStandard4: 1 })?.refinementStandard4).toBe(1)
     expect(kqm({ refinementStandard4: 7 })?.refinementStandard4).toBeUndefined()
   })
+  it('keeps each member’s locked weapon, dropping unknown members and weapons', () => {
+    const kqm = (lockedWeapons: unknown) =>
+      validateTeamOpt({
+        kqm: { refinement5: 1, refinement4: 5, lockedWeapons },
+      })?.kqm
+    expect(
+      kqm({ Xingqiu: 'SacrificialSword', Nobody: 'SacrificialSword' })
+        ?.lockedWeapons
+    ).toEqual({ Xingqiu: 'SacrificialSword' })
+    for (const bad of [{ Xingqiu: 'NoSuchSword' }, {}, 'Xingqiu', undefined])
+      expect(kqm(bad)?.lockedWeapons).toBeUndefined()
+  })
   it('drops rotation times that are not durations', () => {
     for (const rotationTime of [-3, 0, 'x', Number.NaN, 9999])
       expect(validateTeamOpt({ rotationTime })?.rotationTime).toBeUndefined()

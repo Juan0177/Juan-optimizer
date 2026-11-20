@@ -17,6 +17,7 @@ import {
   CharacterName,
   compareTeamKqm,
   KQM_SUBSTAT_ROLLS,
+  kqmLockedWeapon,
   kqmSetsId,
   kqmWeaponData,
   quickTooltipProps,
@@ -277,6 +278,8 @@ export function KqmCompare({
   // (a pick's rankings are a full search's: only the quick run's own leave options out)
   const screenedOut = (view.rankings[characterKey] ? view : result)
     .screenedOut?.[characterKey]
+  const locked = !!kqmLockedWeapon(characterKey, runSettings.kqm)
+  const lockedLine = t('teamOpt.kqm.weaponLocked', 'Weapon locked')
   const selectSx = compactFieldSx
   const equipment = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -285,7 +288,8 @@ export function KqmCompare({
         size="small"
         label={t('teamOpt.kqm.weaponLabel', 'Weapon')}
         value={weaponId(choice)}
-        disabled={disabled}
+        disabled={disabled || locked}
+        helperText={locked ? lockedLine : undefined}
         sx={selectSx}
         SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 380 } } } }}
         onChange={(e) => {
@@ -658,6 +662,14 @@ export function KqmCompare({
                 )
               }
             />
+            {locked && category === 0 && (
+              <Typography sx={{ ...type.label, fontWeight: 400, mt: 1, px: 1 }}>
+                {t(
+                  'teamOpt.kqm.weaponLockedRanking',
+                  'Weapon locked in Choose weapons: no other is tried for this member.'
+                )}
+              </Typography>
+            )}
             <ScreenedOut
               keys={
                 category === 0

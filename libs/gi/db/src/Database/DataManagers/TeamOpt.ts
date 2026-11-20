@@ -305,6 +305,11 @@ export interface TeamOptKqm {
   weaponList?: 2
   /** A refinement per weapon, over the default for its source and rarity */
   refinements?: Partial<Record<WeaponKey, number>>
+  /**
+   * A weapon per member that its builds always use, whatever the weapon list (at its refinement
+   * above); absent: the search chooses among the list's
+   */
+  lockedWeapons?: Partial<Record<CharacterKey, WeaponKey>>
   /** Artifact sets left out of the choice */
   excludedSets?: ArtifactSetKey[]
   /**
@@ -739,6 +744,20 @@ const teamOptSchema = z.object({
               r <= 5
             )
               result[key as WeaponKey] = r
+          return Object.keys(result).length ? result : undefined
+        }),
+      lockedWeapons: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['lockedWeapons']> = {}
+          for (const [ck, key] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(ck as CharacterKey) &&
+              allWeaponKeys.includes(key as WeaponKey)
+            )
+              result[ck as CharacterKey] = key as WeaponKey
           return Object.keys(result).length ? result : undefined
         }),
       weaponEnergy: z

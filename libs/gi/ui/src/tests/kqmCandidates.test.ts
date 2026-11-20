@@ -253,6 +253,61 @@ describe('one-copy weapons', () => {
         ).not.toContain('ExaiphanesBlade')
     }
   }, 300_000)
+
+  it('a one-copy weapon locked for one member is no one else’s; locked for two, the run is refused', async () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage({}))
+    const members = ['KamisatoAyaka', 'Keqing'] as const
+    for (const key of members)
+      database.chars.set(key, {
+        key,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
+      })
+    const teamId = database.teams.new({
+      loadoutData: members.map((k) => ({
+        teamCharId: database.teamChars.new(k),
+      })) as LoadoutDatum[],
+    })
+    const teamOpt = initTeamOpt()
+    teamOpt.kqm = {
+      refinement4: 1,
+      refinement5: 1,
+      energyRecharge: { KamisatoAyaka: 100, Keqing: 100 },
+      excludedWeapons: allWeaponKeys.filter(
+        (k) => !['ExaiphanesBlade', 'FavoniusSword'].includes(k)
+      ),
+      weaponList: 2,
+      lockedWeapons: { Keqing: 'ExaiphanesBlade' },
+    }
+    teamOpt.attacks = {
+      KamisatoAyaka: [{ path: ['skill', 'press'], hits: 4, hitMode: 'avgHit' }],
+      Keqing: [{ path: ['skill', 'stiletto'], hits: 4, hitMode: 'avgHit' }],
+    }
+    const run = () =>
+      optimizeTeamKqm({ database, teamId, gender: 'F', teamOpt, maxRounds: 2 })
+    const result = (await run())!
+    expect(result.builds.Keqing!.weapon.key).toBe('ExaiphanesBlade')
+    expect(
+      new Set(result.rankings.Keqing!.weapons.map((o) => o.weapon.key))
+    ).toEqual(new Set(['ExaiphanesBlade']))
+    expect(result.builds.KamisatoAyaka!.weapon.key).toBe('FavoniusSword')
+    expect(
+      result.rankings.KamisatoAyaka!.weapons.map((o) => o.weapon.key)
+    ).not.toContain('ExaiphanesBlade')
+    teamOpt.kqm.lockedWeapons = {
+      Keqing: 'ExaiphanesBlade',
+      KamisatoAyaka: 'ExaiphanesBlade',
+    }
+    await expect(run()).rejects.toThrow('there is only one')
+    // (Ayaka's list holds only the blade locked for Keqing: nothing is left for her)
+    teamOpt.kqm.lockedWeapons = { Keqing: 'ExaiphanesBlade' }
+    teamOpt.kqm.excludedWeapons = allWeaponKeys.filter(
+      (k) => k !== 'ExaiphanesBlade'
+    )
+    await expect(run()).rejects.toThrow('locked for another member')
+  }, 300_000)
 })
 
 describe('top teams', () => {

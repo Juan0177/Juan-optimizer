@@ -41,6 +41,10 @@ vi.mock('@genshin-optimizer/gi/ui', () => {
   return {
     KQM_WEAPON_LIST: 2,
     kqmWeapons: () => all.map((key) => ({ key, refinement: 1 })),
+    kqmLockedWeapon: () => undefined,
+    CharacterName: ({ characterKey }: { characterKey: string }) => (
+      <>{characterKey}</>
+    ),
     kqmWeaponGroup: groupOf,
     kqmExcludedWeapons: (kqm: { excludedWeapons?: string[] }) =>
       new Set(
@@ -98,7 +102,11 @@ vi.mock('@genshin-optimizer/gi/ui', () => {
 vi.mock('@genshin-optimizer/gi/db', () => ({
   defaultTeamOptKqm: { refinement4: 5, refinement5: 1 },
 }))
-vi.mock('@genshin-optimizer/gi/db-ui', () => ({ useDatabase: () => ({}) }))
+vi.mock('@genshin-optimizer/gi/db-ui', () => ({
+  useDatabase: () => ({}),
+  useDBMeta: () => ({ gender: 'F' }),
+}))
+vi.mock('./KqmWeaponLock', () => ({ KqmWeaponLock: () => null }))
 vi.mock('@genshin-optimizer/gi/sheets', () => ({
   getArtSheet: () => undefined,
 }))

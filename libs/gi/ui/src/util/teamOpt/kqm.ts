@@ -541,17 +541,9 @@ export function kqmWeaponData(
 /** Weapons that are not in the game (Genshin Optimizer's April Fools catalyst): never offered */
 export const KQM_NOT_IN_GAME: readonly WeaponKey[] = ['QuantumCatalyst']
 
-/**
- * The weapons a member may get: every 4★ and 5★ of its type, plus the 3★ Harbinger of Dawn,
- * Slingshot and Thrilling Tales of Dragon Slayers (`KQM_THREE_STARS`), at the settings' refinement
- */
-export function kqmWeapons(
-  characterKey: CharacterKey,
-  kqm: TeamOptKqm = defaultTeamOptKqm,
-  { all = false }: { all?: boolean } = {}
-): KqmWeapon[] {
+const kqmOfType = (characterKey: CharacterKey) => {
   const type = getCharWeaponType(characterKey)
-  const ofType = (allWeaponKeys as readonly WeaponKey[]).filter((key) => {
+  return (allWeaponKeys as readonly WeaponKey[]).filter((key) => {
     const stat = getWeaponStat(key)
     return (
       stat?.weaponType === type &&
@@ -559,6 +551,31 @@ export function kqmWeapons(
       ((stat?.rarity ?? 0) >= 4 || KQM_THREE_STARS.includes(key))
     )
   })
+}
+
+/** The weapon a member's builds are locked to (`TeamOptKqm.lockedWeapons`), if one of its type */
+export function kqmLockedWeapon(
+  characterKey: CharacterKey,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): KqmWeapon | undefined {
+  const key = kqm.lockedWeapons?.[characterKey]
+  if (!key || !kqmOfType(characterKey).includes(key)) return undefined
+  return { key, refinement: kqmRefinement(key, kqm) }
+}
+
+/**
+ * The weapons a member may get: every 4★ and 5★ of its type, plus the 3★ Harbinger of Dawn,
+ * Slingshot and Thrilling Tales of Dragon Slayers (`KQM_THREE_STARS`), at the settings' refinement;
+ * a locked member only its locked one. `all`: every weapon of its type, locked or not.
+ */
+export function kqmWeapons(
+  characterKey: CharacterKey,
+  kqm: TeamOptKqm = defaultTeamOptKqm,
+  { all = false }: { all?: boolean } = {}
+): KqmWeapon[] {
+  const locked = !all && kqmLockedWeapon(characterKey, kqm)
+  if (locked) return [locked]
+  const ofType = kqmOfType(characterKey)
   const excluded = kqmExcludedWeapons(kqm)
   const allowed = ofType.filter((key) => !excluded.has(key))
   return (
@@ -1394,6 +1411,18 @@ async function runKqm({
       throw new Error(
         `Select at least one weapon for ${m.characterKey} in KQM settings.`
       )
+  // (a one-copy weapon locked for a member is no one else's)
+  const lockedOnce = new Map<WeaponKey, CharacterKey>()
+  for (const { characterKey: ck } of optimized) {
+    const key = kqmLockedWeapon(ck, kqm)?.key
+    if (!key || !KQM_ONE_COPY.includes(key)) continue
+    const other = lockedOnce.get(key)
+    if (other)
+      throw new Error(
+        `${key} is locked for both ${other} and ${ck}, but there is only one.`
+      )
+    lockedOnce.set(key, ck)
+  }
   const characters = Object.fromEntries(
     optimized.map(({ characterKey }) => [
       characterKey,
@@ -1428,8 +1457,19 @@ async function runKqm({
   ) as Partial<Record<CharacterKey, StatFilters>>
   const bonusStats = teamOptBonusStats(teamOpt, keys)
   const spaces = new Map(
-    optimized.map((m) => [m.characterKey, memberSpace(m, kqm)])
+    optimized.map((m) => {
+      const space = memberSpace(m, kqm)
+      const weapons = space.weapons.filter(
+        (w) => (lockedOnce.get(w.key) ?? m.characterKey) === m.characterKey
+      )
+      return [m.characterKey, { ...space, weapons }]
+    })
   )
+  for (const [ck, { weapons }] of spaces)
+    if (!weapons.length)
+      throw new Error(
+        `Select another weapon for ${ck} in KQM settings: its only one is locked for another member.`
+      )
   // (members refitted: their weapons and sets as they were, their main stats free; the others
   // keep their builds)
   const refitted =

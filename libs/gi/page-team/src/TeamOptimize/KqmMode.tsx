@@ -37,6 +37,7 @@ import {
   kqmDefaultExcludedWeapons,
   kqmEnergyRequirement,
   kqmExcludedWeapons,
+  kqmLockedWeapon,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
   kqmTalentLevel,
@@ -53,6 +54,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CloseIcon from '@mui/icons-material/Close'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -1272,7 +1274,7 @@ export function KqmSetupSummary({
   rotation?: 'played' | 'entered'
   sx?: SxProps<Theme>
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'weaponNames_gen'])
   const { gender } = useDBMeta()
   const kqm = settings.kqm ?? defaultTeamOptKqm
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
@@ -1316,6 +1318,7 @@ export function KqmSetupSummary({
           const nowCons = nowKqm && kqmMemberConstellation(characterKey, nowKqm)
           const er = kqmEnergyRequirement(kqm, characterKey)
           const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
+          const lock = kqmLockedWeapon(characterKey, kqm)
           return (
             <SuspenseTooltip
               key={characterKey}
@@ -1324,6 +1327,8 @@ export function KqmSetupSummary({
                 <>
                   <CharacterName characterKey={characterKey} gender={gender} />
                   {`: C${cons}, ${t('teamOpt.kqm.minEr', 'Min ER')} ${er}%`}
+                  {lock &&
+                    `, ${t(`weaponNames_gen:${lock.key}`, lock.key)} R${lock.refinement} (${t('teamOpt.kqm.weaponLocked', 'Weapon locked')})`}
                 </>
               }
             >
@@ -1355,6 +1360,12 @@ export function KqmSetupSummary({
                   {er}% {t('teamOpt.kqm.erShort', 'ER')}
                 </Box>
                 {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
+                {lock && (
+                  <LockOutlinedIcon
+                    aria-label={t('teamOpt.kqm.weaponLocked', 'Weapon locked')}
+                    sx={{ fontSize: 14, color: 'primary.main', ml: -0.25 }}
+                  />
+                )}
               </Box>
             </SuspenseTooltip>
           )

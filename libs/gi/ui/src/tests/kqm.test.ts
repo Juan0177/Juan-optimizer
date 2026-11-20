@@ -29,6 +29,7 @@ import {
   kqmDefaultExcludedWeapons,
   kqmExcludedWeapons,
   kqmGroupRefinements,
+  kqmLockedWeapon,
   kqmMemberConstellation,
   kqmRefinement,
   kqmRollCaps,
@@ -330,6 +331,43 @@ describe('KQM Standards builds', () => {
         expect(out!.sets).not.toContain(set)
     }
   })
+
+  it('a locked weapon: every build and ranking of that member uses it, even off in the list, and the others are searched around it', async () => {
+    const { database, teamId, teamOpt } = setup()
+    // (an event-wish 5★: off in KQM's default list)
+    expect(kqmWeapons(ayaka, teamOpt.kqm).map((w) => w.key)).not.toContain(
+      'MistsplitterReforged'
+    )
+    teamOpt.kqm!.lockedWeapons = { [ayaka]: 'MistsplitterReforged' }
+    teamOpt.kqm!.refinements = { MistsplitterReforged: 3 }
+    expect(kqmWeapons(ayaka, teamOpt.kqm)).toEqual([
+      { key: 'MistsplitterReforged', refinement: 3 },
+    ])
+    for (const fullSearch of [false, true]) {
+      const result = (await run(database, teamId, {
+        ...teamOpt,
+        kqm: { ...teamOpt.kqm!, fullSearch },
+      }))!
+      expectKqms(result)
+      expect(result.builds[ayaka]!.weapon).toEqual({
+        key: 'MistsplitterReforged',
+        refinement: 3,
+      })
+      expect(
+        new Set(
+          result.rankings[ayaka]!.weapons.map(
+            (o) => `${o.weapon.key}@${o.weapon.refinement}`
+          )
+        )
+      ).toEqual(new Set(['MistsplitterReforged@3']))
+      expect(result.screenedOut?.[ayaka]?.weapons ?? []).toEqual([])
+      expect(result.rankings[shenhe]!.weapons.length).toBeGreaterThan(1)
+    }
+    // (a weapon of another type, as saved from elsewhere: no lock)
+    teamOpt.kqm!.lockedWeapons = { [ayaka]: 'CalamityQueller' }
+    expect(kqmLockedWeapon(ayaka, teamOpt.kqm)).toBeUndefined()
+    expect(kqmWeapons(ayaka, teamOpt.kqm).length).toBeGreaterThan(1)
+  }, 300_000)
 
   it('a pick of a screened-out set after a quick search counts its effects, as after a full search', async () => {
     const { database, teamId, teamOpt } = setup()
