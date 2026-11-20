@@ -1004,10 +1004,27 @@
         "entry": "Solo entrata in campo: l'effetto di entrata del membro (un nome da solo a metà rotazione fa lo stesso)",
         "notes": "Ignorate · si gioca la prima",
         "loop": "Finisci con il primo membro: dove la rotazione ricomincia",
-        "credit": "Le abilità di entrata automatiche sono incluse; le azioni non simulate sono elencate nelle note. Dati dei frame: gcsim e kqmsim (AGPLv3)."
+        "credit": "Le abilità di entrata automatiche sono incluse; le azioni non simulate sono elencate nelle note. Dati dei frame: gcsim e kqmsim (AGPLv3).",
+        "bullets": "Chasca: spara dopo aver caricato 4 proiettili (6 di default)",
+        "cancel": "Arlecchino: annulla l'attacco caricato prima che colpisca. Assorbe comunque la Direttiva del debito di sangue (Legame di vita, il Fuoco del sangue della C2), ma l'attacco non arriva, quindi non consuma l'aura per la Fusione",
+        "dashReady": "Vagabondo: scatto solo con Discesa, altrimenti un attacco caricato",
+        "otherwise": "Solo se pronta, altrimenti le azioni dopo «/» (senza spazi in mezzo)",
+        "plunge": "Attacco in picchiata alto o basso (P da sola: quello solito del personaggio). HP[collision] aggiunge il colpo di discesa; HP[collision=0.5] lo conta su metà delle picchiate",
+        "walk": "Camminata di 1 frame · 11 frame (un'azione: l'abilità successiva di Tartaglia è quella in camminata)"
       },
       "handEdited": "Attacchi modificati",
-      "handEditedTip": "Gli attacchi sono stati modificati a mano dopo che la rotazione è stata giocata. Cambiare la rotazione o quante rotazioni contano la rigioca e sostituisce queste modifiche (per qualche secondo si può annullare)."
+      "handEditedTip": "Gli attacchi sono stati modificati a mano dopo che la rotazione è stata giocata. Cambiare la rotazione o quante rotazioni contano la rigioca e sostituisce queste modifiche (per qualche secondo si può annullare).",
+      "configureEditedTip": "Scrivi la rotazione e guardane cronologia, dati dei frame e apertura. Il punto: ha un'apertura per la prima rotazione, o tempi o dati dei frame che hai cambiato.",
+      "handEditsReplaced": "Le modifiche che avevi fatto ai suoi attacchi sono state sostituite.",
+      "hitNeedsBuilds": "Il suo danno compare quando le build KQM sono state generate.",
+      "hitsInfo": "Media sulle rotazioni giocate: un colpo che arriva in alcune e non in altre (un effetto casuale, un tick di reazione, un buff attivo una volta sì e una no) conta come una frazione, per esempio 0,5.",
+      "playing": "Rotazione in esecuzione…",
+      "replayedAttacks": "{{name}} {{from}} → {{to}} attacchi",
+      "replayedCons": "{{cons}}: rotazione giocata di nuovo · {{changes}}",
+      "replayedKqm": "Rotazione copiata da Ottimizza squadra, giocata alle costellazioni di KQM ({{cons}}) · {{changes}}",
+      "replayedFromKqm": "Rotazione copiata da KQM Theorycrafting, giocata alle tue costellazioni ({{cons}}) · {{changes}}",
+      "replayedHits": "sono cambiati i suoi colpi",
+      "replayedOk": "OK"
     },
     "timeline": {
       "aura": {
@@ -1137,7 +1154,10 @@
       "parts_one": "{{count}} parte",
       "parts_other": "{{count}} parti",
       "moreConditions": "Altri {{count}} buff: apri l'attacco per vederli",
-      "parts": "{{count}} parti"
+      "parts": "{{count}} parti",
+      "hitCount_one": "{{hits}} colpo",
+      "hitCount_other": "{{hits}} colpi",
+      "hitCount": "{{hits}} colpi"
     },
     "rotationTime": {
       "info": "Quanto dura una rotazione, per il DPS. Salvato per questa squadra.",
@@ -1589,7 +1609,10 @@
       "wardTook": "La barriera ha subito",
       "warded": "Barriera di Electro attiva (PS intatti)",
       "windowAxis": "Danni ogni 3 s (max {{damage}})",
-      "windowLegend": "Danni della squadra ogni 3 s (anche su uno scudo o una barriera)"
+      "windowLegend": "Danni della squadra ogni 3 s (anche su uno scudo o una barriera)",
+      "dpsWindow": "DPS della squadra {{from}}–{{to}} s",
+      "dpsWardWindow": "Sulla barriera {{from}}–{{to}} s",
+      "dpsShieldWindow": "Sullo scudo {{from}}–{{to}} s"
     },
     "moongecko": {
       "wardLater": "Dalla rotazione, quando ci sono build",
