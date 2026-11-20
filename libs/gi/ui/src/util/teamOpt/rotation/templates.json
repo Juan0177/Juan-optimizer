@@ -45,6 +45,52 @@
           }
         }
       }
+    },
+    "Mavuika-Bennett-Citlali-Rosaria-optimized": {
+      "kind": "melt",
+      "members": ["Mavuika", "Bennett", "Citlali", "Rosaria"],
+      "text": "Mavuika E -> Bennett E D Q -> Citlali E Q -> Rosaria E N1 Q -> Mavuika Q 6[C2D] -> Mavuika",
+      "seconds": 18.4,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6,
+          "Rosaria": 6
+        },
+        "gear": {
+          "Mavuika": {
+            "weapon": "MailedFlower",
+            "refinement": 5,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "ExaiphanesBlade",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Rosaria": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "Instructor": 4
+            }
+          }
+        }
+      }
     }
   },
   "Skirk": {
@@ -179,6 +225,53 @@
         }
       }
     },
+    "Wriothesley-Furina-Shenhe-Escoffier-optimized": {
+      "kind": "freeze",
+      "members": ["Wriothesley", "Furina", "Shenhe", "Escoffier"],
+      "text": "Furina E D Q -> Escoffier E Q -> Shenhe hE Q -> Wriothesley E 5[N3 CA J] N3 Q -> Furina E D Q -> Escoffier E Q -> Shenhe E N1 Q hE -> Wriothesley E 5[N3 CA J] N3 CA D -> Furina",
+      "seconds": 40.4,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Wriothesley": 1,
+          "Shenhe": 1
+        },
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "HarbingerOfDawn",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Shenhe": {
+            "weapon": "MissiveWindspear",
+            "refinement": 5,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          },
+          "Escoffier": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "GoldenTroupe": 4
+            }
+          }
+        }
+      }
+    },
     "Wriothesley-Furina-Bennett-Xiangling": {
       "kind": "vapeMelt",
       "members": ["Wriothesley", "Furina", "Bennett", "Xiangling"],
@@ -221,6 +314,54 @@
             "refinement": 1,
             "sets": {
               "Instructor": 4
+            }
+          }
+        }
+      }
+    },
+    "Wriothesley-Furina-Bennett-Xiangling-optimized": {
+      "kind": "vapeMelt",
+      "members": ["Wriothesley", "Furina", "Bennett", "Xiangling"],
+      "text": "Furina E D Q -> Bennett Q E -> Xiangling Q E D -> Wriothesley D E 4[N3 CA J] N3 Q -> Bennett E -> Xiangling N1 N1 -> Furina E D Q -> Bennett Q E -> Xiangling Q N1 E D -> Wriothesley E 4[N3 CA J] N3 Q -> Bennett E -> Xiangling N1 N1 -> Furina",
+      "seconds": 40.6,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Wriothesley": 1,
+          "Bennett": 6,
+          "Xiangling": 6
+        },
+        "gear": {
+          "Wriothesley": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "MarechausseeHunter": 4
+            }
+          },
+          "Furina": {
+            "weapon": "HarbingerOfDawn",
+            "refinement": 5,
+            "sets": {
+              "TenacityOfTheMillelith": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "ExaiphanesBlade",
+            "refinement": 1,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Xiangling": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
             }
           }
         }
@@ -322,6 +463,52 @@
         }
       }
     },
+    "Flins-Ineffa-Columbina-Sucrose-optimized": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Columbina", "Sucrose"],
+      "text": "Ineffa Q -> Columbina E N1 -> Sucrose N2 E Q? -> Flins E E N4 D N3 Q N4 E N4 Q D N4 -> Sucrose N2 CA W8f -> Ineffa E N1 Q -> Columbina E Q -> Sucrose E Q? N2 -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA D W8f -> Ineffa",
+      "seconds": 40.0,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "ProspectorsShovel",
+            "refinement": 5,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
+    },
     "Flins-Ineffa-Aino-Sucrose": {
       "kind": "lunarCharged",
       "members": ["Flins", "Ineffa", "Aino", "Sucrose"],
@@ -368,6 +555,53 @@
           }
         }
       }
+    },
+    "Flins-Ineffa-Aino-Sucrose-optimized": {
+      "kind": "lunarCharged",
+      "members": ["Flins", "Ineffa", "Aino", "Sucrose"],
+      "text": "Ineffa E -> Aino Q E -> Sucrose N1 Q E D -> Flins E E Q N4 D N4 D N2 E Q N4 -> Sucrose N1 CA -> Aino E Q -> Ineffa E Q -> Sucrose N1 E D -> Flins E N1 E N1 Q N4 D N4 D N2 E N1 Q N4 -> Sucrose N1 CA -> Ineffa",
+      "seconds": 33.2,
+      "rotations": 2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6,
+          "Sucrose": 6
+        },
+        "gear": {
+          "Flins": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Ineffa": {
+            "weapon": "Deathmatch",
+            "refinement": 1,
+            "sets": {
+              "AubadeOfMorningstarAndMoon": 4
+            }
+          },
+          "Aino": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Sucrose": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "ViridescentVenerer": 4
+            }
+          }
+        }
+      }
     }
   },
   "Nefer": {
@@ -380,6 +614,50 @@
       "source": {
         "name": "KQM Lauma quick guide",
         "url": "https://keqingmains.com/q/lauma-quickguide/"
+      }
+    },
+    "Nefer-Columbina-Nahida-Lauma-optimized": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Columbina", "Nahida", "Lauma"],
+      "text": "Columbina E Q -> Nahida Q E -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q? -> Columbina",
+      "opener": "Nefer E -> Columbina E Q -> Nahida E Q -> Lauma hE Q -> Nefer E 3[CD] E 3[CD] Q?",
+      "seconds": 19.2,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "gear": {
+          "Nefer": {
+            "weapon": "ClashOfKings",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Columbina": {
+            "weapon": "SacrificialJade",
+            "refinement": 1,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "DeepwoodMemories": 4
+            }
+          },
+          "Lauma": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "WanderersTroupe": 2,
+              "GildedDreams": 2
+            }
+          }
+        }
       }
     },
     "Nefer-Aino-Nahida-Lauma": {
@@ -395,6 +673,52 @@
       "checked": {
         "constellations": {
           "Aino": 6
+        }
+      }
+    },
+    "Nefer-Aino-Nahida-Lauma-optimized": {
+      "kind": "lunarBloom",
+      "members": ["Nefer", "Aino", "Nahida", "Lauma"],
+      "text": "Nahida Q E -> Aino E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD -> Aino",
+      "opener": "Nefer E -> Aino E Q -> Nahida E Q -> Lauma E Q -> Nefer E 3[CD] E CD C Q? CD",
+      "seconds": 18.4,
+      "source": {
+        "name": "Stellar Optimizer search",
+        "url": ""
+      },
+      "checked": {
+        "constellations": {
+          "Aino": 6
+        },
+        "gear": {
+          "Nefer": {
+            "weapon": "ClashOfKings",
+            "refinement": 1,
+            "sets": {
+              "NightOfTheSkysUnveiling": 4
+            }
+          },
+          "Aino": {
+            "weapon": "ForestRegalia",
+            "refinement": 5,
+            "sets": {
+              "Instructor": 4
+            }
+          },
+          "Nahida": {
+            "weapon": "TheWidsith",
+            "refinement": 5,
+            "sets": {
+              "SilkenMoonsSerenade": 4
+            }
+          },
+          "Lauma": {
+            "weapon": "BlackmarrowLantern",
+            "refinement": 5,
+            "sets": {
+              "DeepwoodMemories": 4
+            }
+          }
         }
       }
     }
