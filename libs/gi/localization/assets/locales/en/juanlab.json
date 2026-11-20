@@ -54,7 +54,9 @@
     "importButtonAkasha": "Load the Akasha builds",
     "importHintAkasha": "Loads every build saved on Akasha, several per character, into the current database. Before saving you see a preview of what changes.",
     "creditsStellar": "The optimizer, rotations, KQM Setup, ER calculator and beta kits come from <stellar>Stellar Optimizer</stellar> by s-naveen and its contributors. That is why Juan-optimizer is released under the <agpl>GNU AGPL v3</agpl>: the <code>source code</code> is public.",
-    "gettingStartedImport": "Import by UID"
+    "gettingStartedImport": "Import by UID",
+    "discord": "Join the Discord server",
+    "discordHint": "Help, builds, rotations and news about the JuanLab sites."
   },
   "gcweb": {
     "title": "Link to gc-web",

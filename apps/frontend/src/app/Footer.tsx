@@ -1,4 +1,9 @@
-import { ChangelogDialog, currentRelease } from '@genshin-optimizer/gi/ui'
+import {
+  ChangelogDialog,
+  currentRelease,
+  DISCORD_INVITE,
+  DiscordIcon,
+} from '@genshin-optimizer/gi/ui'
 import GitHubIcon from '@mui/icons-material/GitHub'
 import { AppBar, Box, Link, Skeleton, Typography } from '@mui/material'
 import { Suspense, useState } from 'react'
@@ -78,6 +83,24 @@ function FooterContent() {
             }}
           >
             {t('feedback.button', 'Feedback')}
+          </Link>
+          <Link
+            href={DISCORD_INVITE}
+            target="_blank"
+            rel="noopener noreferrer"
+            underline="none"
+            variant="caption"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              color: 'neutral400.main',
+              transition: 'color 120ms',
+              '&:hover': { color: 'neutral300.main' },
+            }}
+          >
+            <DiscordIcon sx={{ fontSize: 14 }} />
+            Discord
           </Link>
           <Link
             href={GITHUB_URL}
