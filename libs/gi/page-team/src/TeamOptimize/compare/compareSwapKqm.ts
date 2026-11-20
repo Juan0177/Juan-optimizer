@@ -374,6 +374,11 @@ interface SwapArgs {
   opener: string
   /** The entering member's actions, in place of the leaving member's step */
   fragment: string
+  /**
+   * Its actions in the opener, in place of the leaving member's step there, when the leaving
+   * member acts in the rotation and in the opener
+   */
+  openerFragment?: string
   /** KQM Theorycrafting's rotation timing (frame edits, swap time); absent: the team's saved one */
   timing?: RotationTimingSettings
 }
@@ -396,6 +401,7 @@ function checkSwap({
   text,
   opener,
   fragment,
+  openerFragment,
 }: SwapArgs): CheckedSwap | CompareSwapRefusal {
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const key = swapIn.key
@@ -409,6 +415,7 @@ function checkSwap({
     out,
     inName: nameOf(key),
     fragment,
+    openerFragment,
   })
   if (!swapped.ok)
     return swapped.error === 'repeated'

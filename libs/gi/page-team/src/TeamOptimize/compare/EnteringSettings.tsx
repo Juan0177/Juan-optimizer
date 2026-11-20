@@ -76,6 +76,7 @@ function useSwapSettings({
   text,
   opener,
   fragment,
+  openerFragment,
   ready,
 }: {
   teamId: string
@@ -85,13 +86,15 @@ function useSwapSettings({
   text: string
   opener: string
   fragment: string
+  /** Its actions in the opener, when the leaving member acts there too */
+  openerFragment: string
   ready: boolean
 }) {
   const { t, i18n } = useTranslation(['juanlab', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
   const [settings, setSettings] = useState<SwapSettings>()
-  const id = `${out}|${fragment}|${text}|${opener}`
+  const id = `${out}|${fragment}|${openerFragment}|${text}|${opener}`
   // (a copy of the database and a replay: after the panel shows, again when the swap changes)
   useEffect(() => {
     if (!ready || !out || !swapIn) {
@@ -113,6 +116,7 @@ function useSwapSettings({
           text,
           opener,
           fragment,
+          openerFragment,
         })
         next =
           'error' in result
@@ -143,6 +147,7 @@ function useSwapSettings({
     text,
     opener,
     fragment,
+    openerFragment,
     ready,
     t,
     id,
@@ -165,6 +170,7 @@ export function EnteringSettings({
   text,
   opener,
   fragment,
+  openerFragment,
   ready,
   calculator,
   erText,
@@ -189,6 +195,8 @@ export function EnteringSettings({
   text: string
   opener: string
   fragment: string
+  /** Its actions in the opener, when the leaving member acts there too */
+  openerFragment: string
   /** B's rotation is ready (the fragment fits) */
   ready: boolean
   /** The team's ER targets come from the ER calculator */
@@ -228,6 +236,7 @@ export function EnteringSettings({
     text,
     opener,
     fragment,
+    openerFragment,
     ready,
   })
   const key = swapIn?.key

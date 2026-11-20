@@ -101,7 +101,12 @@ import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
 import { EnteringSettings } from './EnteringSettings'
 import type { SavedKqmRun } from './savedRun'
 import { savedRunOf } from './savedRun'
-import { memberActions, swapFragment } from './swapFragment'
+import {
+  leavingSteps,
+  memberActions,
+  memberOpenerActions,
+  swapFragment,
+} from './swapFragment'
 
 /*
  * KQM Compare (Alpha): KQM Theorycrafting's last result (A) against the same team with one member
@@ -309,6 +314,9 @@ export default function KqmCompare({
   const [fragment, setFragment] = useState('')
   /** What the fragment was filled in with (the leaving member's actions), while it holds it */
   const [prefilled, setPrefilled] = useState<string>()
+  /** The entering member's actions in the opener, when the leaving member acts there too */
+  const [openerFragment, setOpenerFragment] = useState('')
+  const [prefilledOpener, setPrefilledOpener] = useState<string>()
   /** The result confirmed final (its `savedAt`): a confirmation is for that result only */
   const [confirmedAt, setConfirmedAt] = useState<number>()
   const confirmed = !!saved && confirmedAt === saved.savedAt
@@ -364,6 +372,14 @@ export default function KqmCompare({
       setFragment(actions ?? '')
       setPrefilled(actions)
     } else setPrefilled(undefined)
+    // (its opener step too, when it acts there as well)
+    const openerActions = same
+      ? memberOpenerActions(text, opener, namesA, key)
+      : undefined
+    if (!openerFragment.trim() || openerFragment === prefilledOpener) {
+      setOpenerFragment(openerActions ?? '')
+      setPrefilledOpener(openerActions)
+    } else setPrefilledOpener(undefined)
   }
   /** Who leaves: an entering member that is a teammate again (the one leaving before) goes */
   const chooseOut = (key: CharacterKey) => {
@@ -463,9 +479,16 @@ export default function KqmCompare({
       out,
       inName: nameOf(inKey),
       fragment,
+      openerFragment,
       same: inKey === out,
     })
-  }, [out, inKey, text, opener, namesA, fragment, nameOf])
+  }, [out, inKey, text, opener, namesA, fragment, openerFragment, nameOf])
+  /** The leaving member acts in the rotation and in the opener: both steps are replaced */
+  const inBoth = useMemo(() => {
+    if (!out) return false
+    const steps = leavingSteps(text, opener, namesA, out)
+    return steps.inText === 1 && steps.inOpener === 1
+  }, [out, text, opener, namesA])
   const warnings = useMemo(() => {
     if (!swapped?.ok || !out || !inKey) return []
     const names = members.map((ck) => {
@@ -518,7 +541,10 @@ export default function KqmCompare({
   const outName = out ? nameOf(out) : ''
   const inName = inKey ? nameOf(inKey) : ''
   const fragmentError =
-    swapped && !swapped.ok && swapped.error !== 'emptyFragment'
+    swapped &&
+    !swapped.ok &&
+    swapped.error !== 'emptyFragment' &&
+    swapped.error !== 'emptyOpenerFragment'
       ? swapped.error === 'notFound'
         ? t('kqmCompare.error.notFound', { name: outName })
         : t('kqmCompare.error.repeated', {
@@ -546,9 +572,11 @@ export default function KqmCompare({
                   ? fragmentError
                   : !fragment.trim()
                     ? t('kqmCompare.need.fragment', { name: inName })
-                    : !confirmed
-                      ? t('kqmCompare.need.confirm')
-                      : ''
+                    : inBoth && !openerFragment.trim()
+                      ? t('kqmCompare.need.fragmentOpener', { name: inName })
+                      : !confirmed
+                        ? t('kqmCompare.need.confirm')
+                        : ''
   const canRun =
     !problem &&
     !running &&
@@ -565,6 +593,7 @@ export default function KqmCompare({
     text,
     opener,
     fragment,
+    openerFragment,
   ])
 
   const start = async () => {
@@ -631,6 +660,7 @@ export default function KqmCompare({
         text,
         opener,
         fragment,
+        openerFragment,
         onStep,
         isCancelled: () => mine.cancelled,
         // (the summary as soon as B's build is known: the rankings follow)
@@ -700,7 +730,9 @@ export default function KqmCompare({
           ? t('kqmCompare.error.repeated', { name: outName, count })
           : error === 'emptyFragment'
             ? t('kqmCompare.need.fragment', { name: inName })
-            : t('kqmCompare.error.unsupported')
+            : error === 'emptyOpenerFragment'
+              ? t('kqmCompare.need.fragmentOpener', { name: inName })
+              : t('kqmCompare.error.unsupported')
 
   const savedAt = saved ? formatWhen(saved.savedAt, i18n.language) : ''
   // the written rotation changed since A: it plays differently now from how A played it (with
@@ -1107,6 +1139,7 @@ export default function KqmCompare({
                   text={text}
                   opener={opener}
                   fragment={fragment}
+                  openerFragment={openerFragment}
                   ready={!!swapped?.ok}
                   calculator={calculator}
                   erText={erText}
@@ -1161,6 +1194,23 @@ export default function KqmCompare({
                   sx={{ width: { xs: '100%', sm: 320 } }}
                   inputProps={{ spellCheck: false, autoComplete: 'off' }}
                 />
+                {/* (the leaving member acts in the opener too: its step there, replaced as well) */}
+                {inBoth && (
+                  <TextField
+                    size="small"
+                    label={t('kqmCompare.fragmentOpener', {
+                      name: inName || '…',
+                    })}
+                    helperText={t('kqmCompare.fragmentOpenerTip', {
+                      name: outName,
+                    })}
+                    value={openerFragment}
+                    disabled={!inKey}
+                    onChange={(e) => setOpenerFragment(e.target.value)}
+                    sx={{ width: { xs: '100%', sm: 320 }, mt: 1.5 }}
+                    inputProps={{ spellCheck: false, autoComplete: 'off' }}
+                  />
+                )}
                 <Preview
                   label={t('kqmCompare.preview')}
                   openerLabel={t('kqmCompare.opener')}
@@ -1584,11 +1634,12 @@ function Preview({
         opener: string
         where: 'text' | 'opener'
         inserted: string
+        openerInserted?: string
       }
     | undefined
 }) {
-  const marked = (s: string) => {
-    const i = s.indexOf(swapped!.inserted)
+  const marked = (s: string, inserted = swapped!.inserted) => {
+    const i = s.indexOf(inserted)
     if (i < 0) return s
     return (
       <>
@@ -1605,9 +1656,9 @@ function Preview({
             fontWeight: 700,
           }}
         >
-          {swapped!.inserted}
+          {inserted}
         </Box>
-        {s.slice(i + swapped!.inserted.length)}
+        {s.slice(i + inserted.length)}
       </>
     )
   }
@@ -1643,7 +1694,9 @@ function Preview({
               </Box>
               {swapped.where === 'opener'
                 ? marked(swapped.opener)
-                : swapped.opener}
+                : swapped.openerInserted
+                  ? marked(swapped.opener, swapped.openerInserted)
+                  : swapped.opener}
             </Box>
           )}
           {swapped.where === 'text' ? marked(swapped.text) : swapped.text}
