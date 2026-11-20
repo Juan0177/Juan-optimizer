@@ -265,7 +265,7 @@ describe('Anastasya', () => {
     )
   })
 
-  it('sheet reflects 7.2.52 CRIT DMG ascension, A4 10% Swirl coeff, C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
+  it('sheet reflects 7.2.52 CRIT DMG ascension, A4 +10% Swirl coefficient (added), C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
     const db = new ArtCharDatabase(1, new SandboxStorage({}))
     db.chars.set('Anastasya', {
       key: 'Anastasya',
@@ -310,6 +310,15 @@ describe('Anastasya', () => {
       0.1,
       6
     )
+    // (the A4's 10% is added to each Stellar Swirl multiplier, the game's
+    // `StarSwirlDamageFactorDelta`: 75% + 10%, 200% + 10%, 300% + 10%)
+    const swirl = loveAna.getDisplay()['reaction']
+    const vortex1 = swirl['stellarswirl_vortex1'].value
+    expect(swirl['stellarswirl_vortex2'].value / vortex1).toBeCloseTo(
+      3.1 / 2.1,
+      9
+    )
+    expect(swirl['stellarswirl'].value / vortex1).toBeCloseTo(0.85 / 2.1, 9)
     expect(loveAna.get(input.total.stellarconduct_critDMG_).value).toBeCloseTo(
       0.5,
       6
