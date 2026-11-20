@@ -746,7 +746,9 @@ export default function KqmCompare({
       clearTimeout(id)
     }
   }, [run, database, gender, i18n, teamId, text, opener])
-  const recorded = run?.teamOpt?.kqm?.energyRotation
+  // (recorded as "text|opener and timing" (KqmMode's useRotationEnergy): its text against the
+  // written one; an opener or timing change shows in how the rotation plays, above)
+  const recorded = run?.teamOpt?.kqm?.energyRotation?.split('|')[0]
   const rotationChanged =
     playsDifferently ||
     (recorded !== undefined && recorded.trim() !== text.trim())
