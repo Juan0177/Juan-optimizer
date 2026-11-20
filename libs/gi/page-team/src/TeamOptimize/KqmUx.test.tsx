@@ -128,6 +128,7 @@ vi.mock('@genshin-optimizer/common/ui', () => ({
   BootstrapTooltip: (props: object) => <Tooltip {...props} />,
   SuspenseTooltip: Tooltip,
 }))
+const fakeI18n = { language: 'en', t: (key: string) => key.split(':').at(-1) }
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: string | Record<string, unknown>) => {
@@ -140,8 +141,8 @@ vi.mock('react-i18next', () => ({
           text = text.replaceAll(`{{${k}}}`, String(v))
       return text
     },
-    // (names as KQM plays the rotation: the key)
-    i18n: { language: 'en', t: (key: string) => key.split(':').at(-1) },
+    // (names as KQM plays the rotation: the key; one object, as react-i18next gives)
+    i18n: fakeI18n,
   }),
 }))
 vi.mock('@genshin-optimizer/gi/ui', () => ({
@@ -162,7 +163,10 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   kqmBuildThreadsAuto: () => 4,
   kqmBuildThreadsMax: () => 7,
   setKqmBuildThreads: () => undefined,
-  teamOptMembers: () => [{ characterKey: 'KamisatoAyaka' }],
+  // (with no artifacts: KQM Compare's B plays its rotation on them)
+  teamOptMembers: () => [
+    { characterKey: 'KamisatoAyaka', artifactIds: {}, loadoutDatum: {} },
+  ],
   runEnemyOf: () => undefined,
   kqmTalentLevel: (kqm?: { talents?: 9 | 10 }) => kqm?.talents ?? 10,
   kqmMemberConstellation: (
