@@ -59,7 +59,12 @@ import { useTranslation } from 'react-i18next'
 import { TargetSelectorModal } from '../CharacterDisplay/Tabs/TabOptimize/Components/TargetSelectorModal'
 import { AttackEditor, AttackFiguresContext } from './AttackEditor'
 import { AttackName } from './AttackName'
-import { groupAttacks, totalHits } from './attackGroups'
+import {
+  groupAttacks,
+  holdsItem,
+  type MemberGear,
+  totalHits,
+} from './attackGroups'
 import type { TeamBuff } from './buffs'
 import { describe } from './buffs'
 import type { ExpandStore } from './expandStore'
@@ -96,6 +101,7 @@ export function MemberRotation({
   figures = true,
   played = false,
   overrides,
+  gear,
 }: {
   teamId: string
   member: TeamOptMember
@@ -136,6 +142,11 @@ export function MemberRotation({
    * builds shown: `kqmTeamOverrides`), instead of the members' own
    */
   overrides?: TeamDataOverrides
+  /**
+   * The weapon and sets each member's build holds (KQM theorycrafting's builds shown): its played
+   * attacks carry the buff states of every weapon and set it could pick, which then name no part
+   */
+  gear?: MemberGear
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -221,22 +232,41 @@ export function MemberRotation({
   const hits = totalHits(attacks)
   const buffOf = useBuffNames(buffs, teamData)
   const offText = t('teamOpt.rotation.conditionOff', 'off')
-  const labels = useMemo(
+  // each grouped attack's parts, named by what sets them apart; with `gear`, parts that differ only
+  // in the effects of gear nobody holds are one
+  const parts = useMemo(
     () =>
       new Map(
         groups
           .filter(({ indices }) => indices.length > 1)
-          .map(({ key, indices }) => [
-            key,
-            partLabels(
+          .map(({ key, indices }) => {
+            const labels = partLabels(
               indices.map((i) => attacks[i]),
               onField,
               buffOf,
-              offText
-            ),
-          ])
+              offText,
+              gear && ((owner, item) => holdsItem(gear, owner, item))
+            )
+            if (!gear)
+              return [
+                key,
+                indices.map((i, n) => ({ indices: [i], label: labels[n] })),
+              ]
+            const byLabel = new Map<
+              string,
+              { indices: number[]; label: PartLabel }
+            >()
+            indices.forEach((i, n) => {
+              const label = labels[n]
+              const id = `${label.onField ? (attacks[i].onField ?? onField) : ''}|${label.conditions.map((c) => c.key).join('/')}`
+              const part = byLabel.get(id)
+              if (part) part.indices.push(i)
+              else byLabel.set(id, { indices: [i], label })
+            })
+            return [key, [...byLabel.values()]]
+          })
       ),
-    [groups, attacks, onField, buffOf, offText]
+    [groups, attacks, onField, buffOf, offText, gear]
   )
 
   const damage = evaluation?.members[characterKey]
@@ -464,20 +494,33 @@ export function MemberRotation({
                 onRemove: onRowRemove,
               }
               const [first] = indices
-              if (indices.length === 1)
+              const damageOf = (of: readonly number[]) => {
+                const all = of.map(
+                  (i) => evaluation?.attacks[characterKey]?.[i]
+                )
+                return all.every((d) => d !== undefined)
+                  ? all.reduce<number>((sum, d) => sum + (d ?? 0), 0)
+                  : undefined
+              }
+              const groupParts = parts.get(key)
+              if (indices.length === 1 || groupParts?.length === 1)
                 return (
                   <AttackRow
                     key={key}
                     {...rowProps}
                     index={first}
-                    attack={attacks[first]}
-                    damage={evaluation?.attacks[characterKey]?.[first]}
+                    attack={
+                      indices.length === 1
+                        ? attacks[first]
+                        : {
+                            ...attacks[first],
+                            hits: totalHits(indices.map((i) => attacks[i])),
+                          }
+                    }
+                    damage={damageOf(indices)}
                     selected={selected.has(first)}
                   />
                 )
-              const damages = indices.map(
-                (i) => evaluation?.attacks[characterKey]?.[i]
-              )
               return (
                 <AttackGroupRow
                   key={key}
@@ -486,11 +529,8 @@ export function MemberRotation({
                   data={data}
                   attack={attacks[first]}
                   hits={totalHits(indices.map((i) => attacks[i]))}
-                  damage={
-                    damages.every((d) => d !== undefined)
-                      ? damages.reduce<number>((sum, d) => sum + (d ?? 0), 0)
-                      : undefined
-                  }
+                  damage={damageOf(indices)}
+                  partCount={groupParts?.length ?? indices.length}
                   figures={rowProps.figures}
                   open={openGroups.has(key)}
                   selecting={selecting}
@@ -505,15 +545,22 @@ export function MemberRotation({
                   onClick={onGroupClick}
                   onRemove={onGroupRemove}
                 >
-                  {indices.map((i, n) => (
+                  {groupParts?.map(({ indices: of, label }) => (
                     <AttackRow
-                      key={i}
+                      key={of[0]}
                       {...rowProps}
-                      part={labels.get(key)?.[n]}
-                      index={i}
-                      attack={attacks[i]}
-                      damage={evaluation?.attacks[characterKey]?.[i]}
-                      selected={selected.has(i)}
+                      part={label}
+                      index={of[0]}
+                      attack={
+                        of.length === 1
+                          ? attacks[of[0]]
+                          : {
+                              ...attacks[of[0]],
+                              hits: totalHits(of.map((i) => attacks[i])),
+                            }
+                      }
+                      damage={damageOf(of)}
+                      selected={selected.has(of[0])}
                     />
                   ))}
                 </AttackGroupRow>
@@ -1042,10 +1089,13 @@ const AttackGroupRow = memo(function AttackGroupRow({
   readOnly,
   onClick,
   onRemove,
+  partCount,
   children,
 }: {
   groupKey: string
   indices: readonly number[]
+  /** Its parts shown (parts that differ only in effects of gear nobody holds are one) */
+  partCount: number
   data: UIData | undefined
   /** Its first part (the parts share the name, reaction and hit mode) */
   attack: TeamOptAttack
@@ -1063,7 +1113,7 @@ const AttackGroupRow = memo(function AttackGroupRow({
   const { t } = useTranslation('page_team')
   const parts = t('teamOpt.rotation.parts', {
     defaultValue: '{{count}} parts',
-    count: indices.length,
+    count: partCount,
   })
   return (
     <>
@@ -1157,7 +1207,9 @@ function partLabels(
   parts: readonly TeamOptAttack[],
   onField: CharacterKey,
   buffOf: BuffNames,
-  off: string
+  off: string,
+  /** Whether a buff's giver holds its weapon or set (absent: every state counts) */
+  held?: (owner: TeamOptBuffOwner, item: string) => boolean
 ): PartLabel[] {
   const conditions = parts.map((attack) =>
     [
@@ -1169,6 +1221,7 @@ function partLabels(
         return {
           key: `s${state.owner}${state.path.join('.')}=${state.value}`,
           owner: state.owner,
+          item: state.path[0],
           talent: !!buff.talent,
           unnamed: buff.unnamed,
           node: (
@@ -1184,6 +1237,7 @@ function partLabels(
         return {
           key: `l${limit.owner}${limit.path.join('.')}=${limit.hits}`,
           owner: limit.owner,
+          item: limit.path[0],
           talent: !!buff.talent,
           unnamed: buff.unnamed,
           node: (
@@ -1196,7 +1250,7 @@ function partLabels(
           ),
         }
       }),
-    ].filter((c) => !c.unnamed)
+    ].filter((c) => !c.unnamed && (!held || held(c.owner, c.item)))
   )
   const count = new Map<string, number>()
   for (const list of conditions)

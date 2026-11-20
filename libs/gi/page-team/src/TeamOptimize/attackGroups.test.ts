@@ -1,6 +1,6 @@
 import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
-import { groupAttacks, totalHits } from './attackGroups'
+import { groupAttacks, holdsItem, totalHits } from './attackGroups'
 
 const attack = (
   path: string,
@@ -45,5 +45,24 @@ describe('groupAttacks', () => {
     expect(
       totalHits([attack('a', { hits: 2 }), attack('b', { hits: 0.5 })])
     ).toBe(2.5)
+  })
+})
+
+describe('holdsItem', () => {
+  const gear = {
+    Sandrone: { weapon: 'WolfsGravestone', sets: { LongNightsOath: 4 } },
+    Mitya: { weapon: 'TheWidsith', sets: { GoldenTroupe: 2, Instructor: 2 } },
+  }
+  it('a weapon or set buff counts only for the build that holds it', () => {
+    expect(holdsItem(gear, 'Sandrone', 'WolfsGravestone')).toBe(true)
+    expect(holdsItem(gear, 'Sandrone', 'Deathmatch')).toBe(false)
+    expect(holdsItem(gear, 'Sandrone', 'LongNightsOath')).toBe(true)
+    expect(holdsItem(gear, 'Sandrone', 'CrimsonWitchOfFlames')).toBe(false)
+    expect(holdsItem(gear, 'Mitya', 'GoldenTroupe')).toBe(true)
+  })
+  it('other buffs, the team’s and members without a build always count', () => {
+    expect(holdsItem(gear, 'Sandrone', 'Sandrone')).toBe(true)
+    expect(holdsItem(gear, 'team', 'CrimsonWitchOfFlames')).toBe(true)
+    expect(holdsItem(gear, 'Odette', 'Deathmatch')).toBe(true)
   })
 })

@@ -416,6 +416,19 @@ export default function TeamBuildWorkspace({
     [kqmRotation, kqmShown, database, teamId]
   )
   const kqmBuffs = useKqmTeamBuffs(teamId, teamData, kqmOverrides, kqmShown)
+  // (the weapon and sets each KQM build holds: the played attacks' other gear names no part)
+  const kqmGear = useMemo(
+    () =>
+      kqmPlayed && kqmShown
+        ? Object.fromEntries(
+            Object.entries(kqmShown.builds).map(([ck, build]) => [
+              ck,
+              { weapon: build!.weapon.key, sets: build!.sets },
+            ])
+          )
+        : undefined,
+    [kqmPlayed, kqmShown]
+  )
   // the rotation written as text (inline), and its writer dialog with Undo
   const writer = useRotationWriter({
     teamId,
@@ -926,6 +939,7 @@ export default function TeamBuildWorkspace({
                     figures={mode === 'inventory'}
                     played={kqmPlayed}
                     overrides={kqmOverrides}
+                    gear={mode === 'kqm' ? kqmGear : undefined}
                     buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
                     mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
                     members={members}
