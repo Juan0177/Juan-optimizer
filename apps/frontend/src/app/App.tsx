@@ -15,7 +15,6 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import {
   Box,
-  Button,
   Container,
   CssBaseline,
   Skeleton,
@@ -40,6 +39,7 @@ import {
 } from '@genshin-optimizer/common/database'
 import { useDatabases } from '@genshin-optimizer/common/database-ui'
 import ErrorBoundary from './ErrorBoundary'
+import { FeedbackButton } from './Feedback'
 import Footer from './Footer'
 import Header from './Header'
 import { SaveErrorNotice } from './SaveErrorNotice'
@@ -243,7 +243,8 @@ function App() {
                 <NavigationProgress />
                 <Content />
                 <ScrollTop />
-                {/* juanlab: niente pulsante Feedback (mandava i messaggi al server di Stellar Optimizer) */}
+                {/* juanlab: il Feedback va al Worker di JuanLab (issue su GitHub e messaggio su Discord) */}
+                <FeedbackButton />
               </HashRouter>
               <SaveErrorNotice />
             </ErrorBoundary>
