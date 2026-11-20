@@ -73,10 +73,16 @@ describe("Arlecchino's Charged Attack cancelled before it hits (a player request
     ).toBe('130')
   })
 
-  it('at C2 still sets off Balemoon Bloodfire', () => {
+  it('at C2 still sets off Balemoon Bloodfire, before the next Normal Attack', () => {
     const sim = run('Arlecchino E CA[cancel] D N1 W1', 2)
-    expect(
-      sim.hits.filter((h) => h.label === 'Balemoon Bloodfire (C2)')
-    ).toHaveLength(1)
+    const bloodfire = sim.hits.filter(
+      (h) => h.label === 'Balemoon Bloodfire (C2)'
+    )
+    expect(bloodfire).toHaveLength(1)
+    const ca = sim.actions.find((a) => a.text === 'CA[cancel]')!
+    expect(bloodfire[0].t - ca.start).toBe(13)
+    expect(bloodfire[0].t).toBeLessThan(
+      sim.hits.find((h) => h.label === 'N1')!.t
+    )
   })
 })

@@ -134,7 +134,9 @@ function absorbDirective(c: SimContext, s: ArleState) {
   }
   if (cons >= 2 && level >= 2 && c.now >= s.c2Icd) {
     s.c2Icd = c.now + 600
-    c.hit(50, {
+    // (in game it lands about 1 frame after the pickup, from a 30 fps recording of a cancelled CA;
+    // gcsim queues it 50 frames later, which put it after the next Normal Attack)
+    c.hit(1, {
       path: ['constellation2', 'bloodfireDmg'],
       tag: 'other',
       element: 'pyro',
