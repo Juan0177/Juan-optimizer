@@ -182,9 +182,14 @@ const addExcite = (s: State, amount: number) => {
  * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 14 s from
  * either Skill
  */
-function dropBall(c: SimContext, s: State, delay: number) {
+function dropBall(c: SimContext, s: State, delay: number, skill: string) {
   c.at(delay, (c2) => {
-    if (c2.now < s.ballReady) return
+    if (c2.now < s.ballReady) {
+      c2.note(
+        `Danica: her ${skill} dropped no particles: either Skill's particles drop once per 14 s, as in the game, and the last drop was ${((c2.now - s.ballReady + 840) / 60).toFixed(1)} s before.`
+      )
+      return
+    }
     s.ballReady = c2.now + 840
     particleMarker(c2, 0, 'Danica particles', undefined, 'Danica')
   })
@@ -328,7 +333,7 @@ export const kit: KitModel = {
           return onFieldE2(ctx, s)
         }
         hit(ctx, 22, ['skill', 'dmg'], 'Anchor Skill', true, 'skill')
-        dropBall(ctx, s, 22)
+        dropBall(ctx, s, 22, 'Anchor Skill')
         // Dump Avatar_Danica_ElementalArt_InsertClaymore: Will to Cleanse to 0, Will to Protect's
         // cooldown (UNIQUE_Danica_E2_GuardMaid_CD) removed, and the Anchor handler removed and
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
@@ -497,7 +502,7 @@ export const kit: KitModel = {
     // Skill's refreshed Anchor at most
     aegisOn(ctx, s, 'Defense Maid shield')
     hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
-    dropBall(ctx, s, 42)
+    dropBall(ctx, s, 42, 'Entry Skill')
     return { frames: 60 }
   },
 }
