@@ -72,6 +72,7 @@ import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import {
   changedMembers,
+  equipChanges,
   equipTeamResult,
   saveTeamResult,
   undoTeamEquip,
@@ -99,6 +100,29 @@ import { useTeamOpt } from './useTeamOpt'
 
 /** Open and close: the design's quick Collapse */
 const COLLAPSE_MS = 180
+
+/** What Equip or Save as builds did, in place of its button */
+function AppliedStatus({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      role="status"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 0.5,
+        minHeight: 36,
+        px: 1,
+        fontSize: 14,
+        fontWeight: 600,
+        color: 'success.main',
+      }}
+    >
+      <CheckIcon sx={{ fontSize: 18 }} />
+      {children}
+    </Typography>
+  )
+}
 
 /** What Team Optimize found: the rotation's damage before and after, and each member's build */
 export function TeamOptResults({
@@ -185,6 +209,11 @@ export function TeamOptResults({
   // recomputed with the database: an applied result has no changes left
   const changed = useMemo(
     () => changedMembers(database, teamId, result),
+    [database, teamId, result, team]
+  )
+  // the members Equip changes (a member on a saved build too, even with the same gear)
+  const toEquip = useMemo(
+    () => equipChanges(database, teamId, result),
     [database, teamId, result, team]
   )
   const [confirm, setConfirm] = useState(false)
@@ -400,63 +429,53 @@ export function TeamOptResults({
               runTeamOpt={runTeamOpt}
               rotationTime={rotationTime}
             />
-            {applied ? (
-              <Typography
-                role="status"
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 0.5,
-                  minHeight: 36,
-                  px: 1,
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: 'success.main',
-                }}
-              >
-                <CheckIcon sx={{ fontSize: 18 }} />
-                {applied === 'equip'
-                  ? t('teamOpt.result.equipped', 'Equipped')
-                  : t('teamOpt.result.saved', 'Saved as builds')}
-              </Typography>
+            {applied === 'equip' ? (
+              <AppliedStatus>
+                {t('teamOpt.result.equipped', 'Equipped')}
+              </AppliedStatus>
             ) : (
               <>
-                <Tooltip
-                  arrow
-                  title={t(
-                    'teamOpt.result.saveHint',
-                    'A new build per member, used by this team. Nothing moves between characters.'
-                  )}
-                >
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      startIcon={<SaveIcon />}
-                      disabled={noChange || stale}
-                      onClick={() => {
-                        saveTeamResult(
-                          database,
-                          teamId,
-                          result,
-                          t('teamOpt.result.buildName', {
-                            defaultValue: '{{team}} (team optimized)',
-                            team: team?.name ?? '',
-                          })
-                        )
-                        setApplied('save')
-                      }}
-                    >
-                      {t('teamOpt.result.save', 'Save as builds')}
-                    </Button>
-                  </span>
-                </Tooltip>
+                {applied === 'save' ? (
+                  <AppliedStatus>
+                    {t('teamOpt.result.saved', 'Saved as builds')}
+                  </AppliedStatus>
+                ) : (
+                  <Tooltip
+                    arrow
+                    title={t(
+                      'teamOpt.result.saveHint',
+                      'A new build per member, used by this team. Nothing moves between characters.'
+                    )}
+                  >
+                    <span>
+                      <Button
+                        variant="contained"
+                        color="secondary"
+                        startIcon={<SaveIcon />}
+                        disabled={noChange || stale}
+                        onClick={() => {
+                          saveTeamResult(
+                            database,
+                            teamId,
+                            result,
+                            t('teamOpt.result.buildName', {
+                              defaultValue: '{{team}} (team optimized)',
+                              team: team?.name ?? '',
+                            })
+                          )
+                          setApplied('save')
+                        }}
+                      >
+                        {t('teamOpt.result.save', 'Save as builds')}
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
                 <Button
                   variant="contained"
                   color="secondary"
                   startIcon={<CheckroomIcon />}
-                  disabled={noChange || stale}
+                  disabled={!toEquip.length || stale}
                   aria-expanded={confirm}
                   onClick={() => setConfirm((c) => !c)}
                 >
@@ -535,7 +554,7 @@ export function TeamOptResults({
         </Notice>
       )}
       <Collapse
-        in={confirm && !applied && !stale}
+        in={confirm && applied !== 'equip' && !stale}
         timeout={COLLAPSE_MS}
         unmountOnExit
       >
@@ -566,13 +585,13 @@ export function TeamOptResults({
             </>
           }
         >
-          {t('teamOpt.result.equipWarn', {
+          {t('teamOpt.result.equipWarnMove', {
             defaultValue:
-              'Equips the new builds on {{count}} members (saved builds are updated instead). Artifacts move from whoever wears them now.',
-            count: changed.length,
+              'Equips the new builds on {{count}} members. Artifacts and weapons move from whoever has them now, and a member on a saved build switches to its equipped build.',
+            count: toEquip.length,
           })}{' '}
           <Names
-            keys={changed.map((member) => member.characterKey)}
+            keys={toEquip.map((member) => member.characterKey)}
             gender={gender}
           />
         </Notice>

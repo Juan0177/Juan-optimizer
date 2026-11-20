@@ -7,7 +7,12 @@ import {
 } from '@genshin-optimizer/gi/db'
 import type { TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
-import { equipTeamResult, undoTeamEquip } from './apply'
+import {
+  equipChanges,
+  equipTeamResult,
+  saveTeamResult,
+  undoTeamEquip,
+} from './apply'
 
 function setup() {
   const storage = new SandboxStorage({})
@@ -54,7 +59,7 @@ function setup() {
 }
 
 describe('Team Optimize Equip recovery', () => {
-  it('restores borrowed gear and saved builds after reload without touching unrelated gear', () => {
+  it('equips a member on a saved build too, and undo puts it back on that build', () => {
     const {
       database,
       storage,
@@ -66,11 +71,17 @@ describe('Team Optimize Equip recovery', () => {
       replacement,
       result,
     } = setup()
+    expect(
+      equipChanges(database, teamId, result).map((m) => m.characterKey)
+    ).toEqual(['Bennett', 'Sucrose'])
     equipTeamResult(database, teamId, result)
     expect(database.arts.get(borrowed)?.location).toBe('Bennett')
-    expect(database.builds.get(savedBuild)?.artifactIds.flower).toBe(
-      replacement
-    )
+    expect(database.arts.get(replacement)?.location).toBe('Sucrose')
+    expect(database.builds.get(savedBuild)?.artifactIds.flower).toBe(savedArt)
+    const sucroseLoadout = () =>
+      database.teams.get(teamId)?.loadoutData[1]?.buildType
+    expect(sucroseLoadout()).toBe('equipped')
+    expect(equipChanges(database, teamId, result)).toEqual([])
 
     const reloaded = new ArtCharDatabase(1, storage)
     const unrelated = reloaded.arts.new({
@@ -80,9 +91,22 @@ describe('Team Optimize Equip recovery', () => {
     expect(undoTeamEquip(reloaded, teamId)).toBe(true)
     expect(reloaded.arts.get(current)?.location).toBe('Bennett')
     expect(reloaded.arts.get(borrowed)?.location).toBe('Xiangling')
+    expect(reloaded.arts.get(replacement)?.location).toBe('')
     expect(reloaded.arts.get(unrelated)?.location).toBe('Bennett')
+    expect(reloaded.teams.get(teamId)?.loadoutData[1]).toMatchObject({
+      buildType: 'real',
+      buildId: savedBuild,
+    })
     expect(reloaded.builds.get(savedBuild)?.artifactIds.flower).toBe(savedArt)
     expect(reloaded.teams.get(teamId)?.equipmentUndo).toBeUndefined()
+  })
+
+  it('offers Equip after Save as builds, whose builds equal the result', () => {
+    const { database, teamId, result } = setup()
+    saveTeamResult(database, teamId, result, 'Saved')
+    expect(
+      equipChanges(database, teamId, result).map((m) => m.characterKey)
+    ).toEqual(['Bennett', 'Sucrose'])
   })
 
   it('declines to overwrite gear changed since equipping', () => {

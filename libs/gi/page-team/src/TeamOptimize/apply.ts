@@ -24,6 +24,31 @@ export function changedMembers(
   )
 }
 
+/**
+ * The optimized members Equip changes: the result's gear is not what the character wears, or the
+ * member is on a saved build (Equip puts it on its equipped build)
+ */
+export function equipChanges(
+  database: ArtCharDatabase,
+  teamId: string,
+  result: TeamOptResult
+) {
+  return teamOptMembers(database, teamId).flatMap((member) => {
+    const { characterKey, loadoutDatum, isTc } = member
+    const build = result.builds[characterKey]
+    if (isTc || !build || !result.optimized.includes(characterKey)) return []
+    const char = database.chars.get(characterKey)
+    const weaponId = result.weapons?.[characterKey] ?? member.weaponId
+    const changed =
+      loadoutDatum.buildType === 'real' ||
+      allArtifactSlotKeys.some(
+        (s) => (build[s] || '') !== (char?.equippedArtifacts[s] || '')
+      ) ||
+      (!!weaponId && weaponId !== char?.equippedWeapon)
+    return changed ? [{ ...member, build, weaponId }] : []
+  })
+}
+
 type EquipmentUndo = NonNullable<Team['equipmentUndo']>
 
 function locationChanges<Location extends string>(
@@ -55,8 +80,11 @@ export function canUndoTeamEquip(
   database: ArtCharDatabase,
   undo: EquipmentUndo
 ) {
-  const { artifacts, weapons, builds } = undo
+  const { artifacts, weapons, builds, loadouts = {} } = undo
   return (
+    Object.values(loadouts).every(
+      (buildId) => !!database.builds.get(buildId)
+    ) &&
     Object.entries(artifacts).every(([id, change]) => {
       const art = database.arts.get(id)
       if (!art || art.location !== change.after) return false
@@ -100,14 +128,19 @@ export function undoTeamEquip(database: ArtCharDatabase, teamId: string) {
     if (before) database.weapons.set(id, { location: before })
   for (const [id, { before }] of Object.entries(undo.builds))
     database.builds.set(id, before)
+  for (const [teamCharId, buildId] of Object.entries(undo.loadouts ?? {}))
+    database.teams.setLoadoutDatum(teamId, teamCharId, {
+      buildType: 'real',
+      buildId,
+    })
   database.teams.set(teamId, { equipmentUndo: undefined })
   return true
 }
 
 /**
- * Puts the result on the team: a member on its equipped build gets the artifacts equipped (they
- * move from whoever has them, as when equipping from the optimizer); a member on a saved build
- * gets that build updated.
+ * Puts the result on the team's characters: the artifacts and weapons move from whoever has them,
+ * as when equipping from the optimizer, and a member on a saved build switches to its equipped
+ * build (the saved build is left as it is).
  */
 export function equipTeamResult(
   database: ArtCharDatabase,
@@ -116,25 +149,19 @@ export function equipTeamResult(
 ) {
   const artsBefore = database.arts.values
   const weaponsBefore = database.weapons.values
-  const builds: EquipmentUndo['builds'] = {}
-  for (const member of changedMembers(database, teamId, result)) {
-    const build = result.builds[member.characterKey]!
-    const { loadoutDatum, characterKey, location } = member
-    const weaponId = result.weapons?.[characterKey]
-    if (loadoutDatum.buildType === 'real' && loadoutDatum.buildId) {
-      const before = buildGear(database, loadoutDatum.buildId)
-      database.builds.set(loadoutDatum.buildId, {
-        artifactIds: build,
-        ...(weaponId ? { weaponId } : {}),
+  const loadouts: NonNullable<EquipmentUndo['loadouts']> = {}
+  for (const member of equipChanges(database, teamId, result)) {
+    const { build, weaponId, loadoutDatum, characterKey, location } = member
+    if (loadoutDatum.buildType === 'real') {
+      if (loadoutDatum.buildId)
+        loadouts[member.teamCharId] = loadoutDatum.buildId
+      database.teams.setLoadoutDatum(teamId, member.teamCharId, {
+        buildType: 'equipped',
       })
-      const after = buildGear(database, loadoutDatum.buildId)
-      if (before && after) builds[loadoutDatum.buildId] = { before, after }
-      continue
     }
-    // (equipping moves the weapon from whoever wields it, like the artifacts below)
-    if (weaponId && weaponId !== member.weaponId)
-      database.weapons.set(weaponId, { location })
     const char = database.chars.get(characterKey)
+    if (weaponId && weaponId !== char?.equippedWeapon)
+      database.weapons.set(weaponId, { location })
     for (const slotKey of allArtifactSlotKeys) {
       const id = build[slotKey]
       if (id) database.arts.set(id, { location })
@@ -152,10 +179,10 @@ export function equipTeamResult(
   if (
     Object.keys(artifacts).length ||
     Object.keys(weapons).length ||
-    Object.keys(builds).length
+    Object.keys(loadouts).length
   )
     database.teams.set(teamId, {
-      equipmentUndo: { artifacts, weapons, builds },
+      equipmentUndo: { artifacts, weapons, builds: {}, loadouts },
     })
 }
 

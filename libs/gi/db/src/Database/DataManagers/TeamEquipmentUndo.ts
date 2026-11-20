@@ -18,5 +18,7 @@ export const teamEquipmentUndoSchema = z.object({
     z.string(),
     z.object({ before: buildGear, after: buildGear })
   ),
+  /** The saved build each member was on before Equip switched it to its equipped build */
+  loadouts: z.record(z.string(), z.string()).optional(),
 })
 export type TeamEquipmentUndo = z.infer<typeof teamEquipmentUndoSchema>
