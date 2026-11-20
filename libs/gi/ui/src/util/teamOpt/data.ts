@@ -5,6 +5,7 @@ import {
   layeredAssignment,
   notEmpty,
   objKeyMap,
+  objPathValue,
 } from '@genshin-optimizer/common/util'
 import type {
   ArtifactSlotKey,
@@ -183,6 +184,8 @@ function withValues<T extends object>(
   // (an off state is no state: a sheet testing `unequal(cond, undefined, …)` reads '' as on)
   for (const { path, value } of values)
     if (value === '') deletePropPath(result, path as string[])
+    // (an 'avg' state, The Widsith's random song, keeps the variant a switch picked)
+    else if (value === 'avg' && objPathValue(result, path as string[])) continue
     else layeredAssignment(result, path as string[], value)
   return result as unknown as T
 }
