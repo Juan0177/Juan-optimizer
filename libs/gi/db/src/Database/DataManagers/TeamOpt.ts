@@ -258,6 +258,12 @@ export interface TeamOptKqm {
   /** The members' talent levels (all three; absent: 9, as KQM's guides) */
   talents?: 9 | 10
   /**
+   * Full search: every allowed weapon and set in every round. Absent: a quick search, where after
+   * the first round each member keeps only the weapons and sets near its best (the rest are listed
+   * as screened out, not ranked)
+   */
+  fullSearch?: boolean
+  /**
    * The artifact standard: rolls placed for damage on top of the fixed ones (absent: KQM
    * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
    */
@@ -654,6 +660,7 @@ const teamOptSchema = z.object({
         .union([z.literal(9), z.literal(10)])
         .optional()
         .catch(undefined),
+      fullSearch: z.boolean().optional().catch(undefined),
       rolls: z.number().int().min(0).max(60).optional().catch(undefined),
       energySource: z
         .enum(['manual', 'calculator'])
