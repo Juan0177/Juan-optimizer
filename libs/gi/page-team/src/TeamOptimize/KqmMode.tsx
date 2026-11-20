@@ -737,6 +737,35 @@ export function KqmSettings({
               )}
             </Box>
           )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FieldLabel
+              tip={t(
+                'teamOpt.kqm.searchTipQuick',
+                'Quick tries every allowed weapon and artifact set in the first round, then only the ones near each member’s best, and lists the rest as screened out instead of ranked. Full tries all of them in every round.'
+              )}
+            >
+              {t('teamOpt.kqm.search', 'Search')}
+            </FieldLabel>
+            <Segmented
+              size="small"
+              value={kqm.fullSearch ? 'full' : 'quick'}
+              aria-label={t('teamOpt.kqm.search', 'Search')}
+              options={[
+                {
+                  value: 'quick',
+                  label: t('teamOpt.kqm.searchQuick', 'Quick'),
+                },
+                { value: 'full', label: t('teamOpt.kqm.searchFull', 'Full') },
+              ]}
+              onChange={(search) =>
+                setTeamOpt((o) => {
+                  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+                  if (search === 'full') settings.fullSearch = true
+                  else delete settings.fullSearch
+                })
+              }
+            />
+          </Box>
           <KqmThreads />
           <Button
             variant="contained"
@@ -1345,6 +1374,18 @@ export function KqmSetupSummary({
           },
         }}
       >
+        <SpecStat label={t('teamOpt.kqm.search', 'Search')}>
+          {kqm.fullSearch
+            ? t('teamOpt.kqm.searchFull', 'Full')
+            : t('teamOpt.kqm.searchQuick', 'Quick')}
+          {nowKqm &&
+            !!nowKqm.fullSearch !== !!kqm.fullSearch &&
+            nowIs(
+              nowKqm.fullSearch
+                ? t('teamOpt.kqm.searchFull', 'Full')
+                : t('teamOpt.kqm.searchQuick', 'Quick')
+            )}
+        </SpecStat>
         <SpecStat label={t('teamOpt.kqm.talents', 'Talents')}>
           {`${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}/${kqmTalentLevel(kqm)}`}
           {nowKqm &&

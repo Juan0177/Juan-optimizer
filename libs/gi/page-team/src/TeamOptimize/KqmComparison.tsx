@@ -274,6 +274,9 @@ export function KqmCompare({
     })
   const er = view.energyRecharge[characterKey]
   const list = category === 0 ? ranking.weapons : ranking.sets
+  // (a pick's rankings are a full search's: only the quick run's own leave options out)
+  const screenedOut = (view.rankings[characterKey] ? view : result)
+    .screenedOut?.[characterKey]
   const selectSx = compactFieldSx
   const equipment = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -654,6 +657,14 @@ export function KqmCompare({
                   <SetLines sets={o.sets} tooltipPlacement="left" />
                 )
               }
+            />
+            <ScreenedOut
+              keys={
+                category === 0
+                  ? (screenedOut?.weapons ?? []).map((w) => w.key)
+                  : (screenedOut?.sets ?? [])
+              }
+              kind={category === 0 ? 'weapons' : 'sets'}
             />
           </Box>
         </Box>
@@ -1228,3 +1239,57 @@ const compactFieldSx = {
   '& .MuiInputLabel-root': { fontSize: 13.5 },
   '& .MuiSelect-select': { py: 0.875 },
 } as const
+
+/** A quick search's options left out after its first round: one line, opening to their names */
+function ScreenedOut({
+  keys,
+  kind,
+}: {
+  keys: readonly string[]
+  kind: 'weapons' | 'sets'
+}) {
+  const { t } = useTranslation([
+    'page_team',
+    'weaponNames_gen',
+    'artifactNames_gen',
+  ])
+  const [open, setOpen] = useState(false)
+  if (!keys.length) return null
+  const names = [...new Set(keys)].map((k) =>
+    t(kind === 'weapons' ? `weaponNames_gen:${k}` : `artifactNames_gen:${k}`)
+  )
+  return (
+    <Box sx={{ mt: 1, px: 1 }}>
+      <ButtonBase
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        sx={{ ...quickSx, ...focusSx, gap: 0.5, borderRadius: 1 }}
+      >
+        <Typography sx={{ ...type.label, fontWeight: 400 }}>
+          {kind === 'weapons'
+            ? t('page_team:teamOpt.kqm.screenedOutWeapons', {
+                defaultValue: '{{count}} more weapons screened out',
+                count: names.length,
+              })
+            : t('page_team:teamOpt.kqm.screenedOutSets', {
+                defaultValue: '{{count}} more sets screened out',
+                count: names.length,
+              })}
+        </Typography>
+        <ExpandMoreIcon
+          sx={{
+            fontSize: 16,
+            color: 'text.secondary',
+            transform: open ? 'rotate(180deg)' : undefined,
+            transition: 'transform .18s',
+          }}
+        />
+      </ButtonBase>
+      <Collapse in={open} timeout={180} unmountOnExit>
+        <Typography sx={{ ...type.label, fontWeight: 400, mt: 0.5 }}>
+          {names.join(' · ')}
+        </Typography>
+      </Collapse>
+    </Box>
+  )
+}
