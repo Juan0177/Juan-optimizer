@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.23.0",
+    "date": "2026-11-20",
+    "new": [
+      "KQM Theorycrafting finds builds quicker by default: after the first round, each member only tries the weapons and artifact sets close to its best (and every one that helps the team or its Energy), and the rest are listed as screened out under the rankings. Search: Full in the setup tries every weapon and set in every round, as before."
+    ]
+  },
+  {
     "version": "1.22.6",
     "date": "2026-11-20",
     "fixed": [

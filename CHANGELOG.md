@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.23.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.23.0) (2026-11-20)
+
+### New
+
+- KQM Theorycrafting finds builds quicker by default: after the first round, each member only tries the weapons and artifact sets close to its best (and every one that helps the team or its Energy), and the rest are listed as screened out under the rankings. Search: Full in the setup tries every weapon and set in every round, as before.
+
 ## [v1.22.6](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.22.6) (2026-11-20)
 
 ### Fixed
