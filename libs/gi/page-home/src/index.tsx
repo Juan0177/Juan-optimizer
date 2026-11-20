@@ -1,5 +1,6 @@
 // juanlab: la home di Stellar Optimizer (primi passi, inventario) con le schede del fork: link da gc-web, import
-// dall'UID (Enka o Akasha) e crediti. Le novita di Stellar Optimizer (WhatsNewCard) parlano delle sue versioni: tolte.
+// dall'UID (Enka o Akasha), le novità di Juan-optimizer e i crediti. Le novità di Stellar Optimizer
+// (WhatsNewCard) parlano delle sue versioni: al loro posto il changelog del fork (JuanlabChangelog).
 import { Box } from '@mui/material'
 import GettingStartedCard from './GettingStartedCard'
 import InventoryCard from './InventoryCard'
@@ -9,6 +10,7 @@ import {
   ImportUidCard,
   IntroCard,
 } from './JuanlabCards'
+import { ChangelogCard } from './JuanlabChangelog'
 
 export default function PageHome() {
   return (
@@ -23,6 +25,7 @@ export default function PageHome() {
     >
       <GcwebIncoming />
       <IntroCard />
+      <ChangelogCard />
       <ImportUidCard />
       <GettingStartedCard />
       <InventoryCard />
