@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.22.6",
+    "date": "2026-11-20",
+    "fixed": [
+      "KQM Theorycrafting's rotation no longer lists, under an attack's parts, the effects of artifact sets and weapons the builds don't hold, so an attack is split only where something that counts for the builds differs."
+    ]
+  },
+  {
     "version": "1.22.5",
     "date": "2026-11-20"
   },
