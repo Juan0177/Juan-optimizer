@@ -3,6 +3,7 @@ import GitHubIcon from '@mui/icons-material/GitHub'
 import { AppBar, Box, Link, Skeleton, Typography } from '@mui/material'
 import { Suspense, useState } from 'react'
 import { Trans, useTranslation } from 'react-i18next'
+import { openFeedback } from './Feedback'
 
 // juanlab: il sorgente del fork (AGPL: deve essere raggiungibile dal sito) e il progetto su cui si basa
 const GITHUB_URL = 'https://github.com/Juan0177/Juan-optimizer'
@@ -27,7 +28,9 @@ function FooterContent() {
     >
       <Box
         sx={{
-          px: 2,
+          pl: 2,
+          // (the floating Feedback button sits over the footer's right end on larger screens)
+          pr: { xs: 2, sm: 19 },
           py: 1,
           display: 'flex',
           flexWrap: 'wrap',
@@ -61,6 +64,21 @@ function FooterContent() {
               {t('faq')}
             </Link>
           </Typography>
+          {/* (phones have no floating Feedback button: it is here) */}
+          <Link
+            component="button"
+            type="button"
+            onClick={openFeedback}
+            color="inherit"
+            underline="hover"
+            variant="caption"
+            sx={{
+              display: { xs: 'inline', sm: 'none' },
+              color: 'text.secondary',
+            }}
+          >
+            {t('feedback.button', 'Feedback')}
+          </Link>
           <Link
             href={GITHUB_URL}
             target="_blank"
