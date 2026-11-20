@@ -2,6 +2,10 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import { DatabaseContext } from '@genshin-optimizer/gi/db-ui'
 import {
+  DISCORD_COLOR,
+  DISCORD_COLOR_DARK,
+  DISCORD_INVITE,
+  DiscordIcon,
   decodeAccount,
   decodePayload,
   enkaToGood,
@@ -55,6 +59,37 @@ export function IntroCard() {
             }}
           />
         </Typography>
+        {/* juanlab: il server Discord (aiuto, build, novità) */}
+        <Box
+          sx={{
+            mt: 2,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 1.5,
+            rowGap: 1,
+          }}
+        >
+          <Button
+            variant="contained"
+            href={DISCORD_INVITE}
+            target="_blank"
+            rel="noreferrer"
+            startIcon={<DiscordIcon />}
+            sx={{
+              bgcolor: DISCORD_COLOR,
+              color: '#fff',
+              textTransform: 'none',
+              fontWeight: 600,
+              '&:hover': { bgcolor: DISCORD_COLOR_DARK },
+            }}
+          >
+            {t('home.discord')}
+          </Button>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            {t('home.discordHint')}
+          </Typography>
+        </Box>
       </CardContent>
     </CardThemed>
   )
