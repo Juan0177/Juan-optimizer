@@ -7,7 +7,12 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { RotationTimingSettings } from '../RotationTiming'
 
-export type SwapFragmentError = 'notFound' | 'repeated' | 'emptyFragment'
+export type SwapFragmentError =
+  | 'notFound'
+  | 'repeated'
+  | 'emptyFragment'
+  /** The leaving member acts in the opener too: its actions there are still to write */
+  | 'emptyOpenerFragment'
 
 export type SwapFragmentResult =
   | {
@@ -32,6 +37,12 @@ export type SwapFragmentResult =
       turn?: number
       /** The entering member's turn in the new `text` (its first, if the fragment has several) */
       insertedTurn?: number
+      /**
+       * The leaving member acts in the rotation and in the opener: the opener's step, replaced too
+       * (with `openerFragment`), as written, and the step put in its place
+       */
+      openerReplaced?: string
+      openerInserted?: string
     }
   | { ok: false; error: SwapFragmentError; count: number }
 
@@ -84,13 +95,28 @@ function find(c: Cut, out: CharacterKey, names: RotationMember[]) {
   return { acts, loop }
 }
 
+/** Where the leaving member acts: its steps in the rotation and in the opener */
+export function leavingSteps(
+  text: string,
+  opener: string,
+  names: RotationMember[],
+  out: CharacterKey
+) {
+  return {
+    inText: find(cut(text, names), out, names).acts.length,
+    inOpener: find(cut(opener, names), out, names).acts.length,
+  }
+}
+
 /**
- * Replaces the leaving member's single step of a written rotation (the opener counts too) with the
- * entering member's fragment, leaving every other step, separator and space as written. A trailing
- * "-> Leaving" (the loop back to them) becomes "-> Entering".
+ * Replaces the leaving member's step of a written rotation with the entering member's fragment,
+ * leaving every other step, separator and space as written. A trailing "-> Leaving" (the loop back
+ * to them) becomes "-> Entering". The leaving member may act once in the rotation and once in the
+ * opener (the opener's first-rotation step: built-in templates have one for every member); the
+ * opener's step is then replaced with `openerFragment`, its actions there.
  *
- * `same`: the leaving member re-entering. Its fragment is filled in from that single step, so with
- * the fragment empty a missing or repeated step is said first (why nothing was filled in).
+ * `same`: the leaving member re-entering. Its fragment is filled in from that step, so with the
+ * fragment empty a missing or repeated step is said first (why nothing was filled in).
  */
 export function swapFragment({
   text,
@@ -99,6 +125,7 @@ export function swapFragment({
   out,
   inName,
   fragment,
+  openerFragment = '',
   same = false,
 }: {
   text: string
@@ -107,6 +134,8 @@ export function swapFragment({
   out: CharacterKey
   inName: string
   fragment: string
+  /** The entering member's actions in the opener, when the leaving member acts there too */
+  openerFragment?: string
   same?: boolean
 }): SwapFragmentResult {
   const frag = fragment.trim()
@@ -116,10 +145,16 @@ export function swapFragment({
   const ft = find(t, out, names)
   const fo = find(o, out, names)
   const count = ft.acts.length + fo.acts.length
-  if (!frag && count === 1)
+  // (once in the rotation, once in the opener at most)
+  const repeated = ft.acts.length > 1 || fo.acts.length > 1
+  if (!frag && count >= 1 && !repeated)
     return { ok: false, error: 'emptyFragment', count: 0 }
   if (count === 0) return { ok: false, error: 'notFound', count }
-  if (count > 1) return { ok: false, error: 'repeated', count }
+  if (repeated) return { ok: false, error: 'repeated', count }
+  const both = ft.acts.length === 1 && fo.acts.length === 1
+  const openerFrag = openerFragment.trim()
+  if (both && !openerFrag)
+    return { ok: false, error: 'emptyOpenerFragment', count: 0 }
 
   const name = inName.trim()
   const inserted = `${name} ${frag}`
@@ -147,6 +182,10 @@ export function swapFragment({
   const insertedTurn =
     where === 'text' ? turns(t.parts.slice(0, i).join(''), namesB) : undefined
   target.parts[i] = inserted
+  // (in the opener too: its own actions there)
+  const openerReplaced = both ? o.parts[fo.acts[0]].trim() : undefined
+  const openerInserted = both ? `${name} ${openerFrag}` : undefined
+  if (both) o.parts[fo.acts[0]] = openerInserted!
   if (ft.loop !== undefined) t.parts[ft.loop] = name
   if (fo.loop !== undefined) o.parts[fo.loop] = name
   return {
@@ -160,13 +199,42 @@ export function swapFragment({
     replacedActions,
     delta,
     ...(turn !== undefined && { turn, insertedTurn }),
+    ...(both && { openerReplaced, openerInserted }),
+  }
+}
+
+/** A step's actions as written, without the member's name (the start that names it, as read) */
+function stepActions(step: string, names: RotationMember[], out: CharacterKey) {
+  const words = step.trim().split(/\s+/)
+  for (let n = Math.min(words.length, 3); n >= 1; n--)
+    if (matchMember(words.slice(0, n).join(' '), names) === out)
+      return words.slice(n).join(' ')
+  return undefined
+}
+
+/** The leaving member's steps, when the comparison takes them: once in the rotation and/or the opener */
+function leavingStepsText(
+  text: string,
+  opener: string,
+  names: RotationMember[],
+  out: CharacterKey
+) {
+  const t = cut(text, names)
+  const o = cut(opener, names)
+  const ft = find(t, out, names)
+  const fo = find(o, out, names)
+  if (!ft.acts.length && !fo.acts.length) return undefined
+  if (ft.acts.length > 1 || fo.acts.length > 1) return undefined
+  return {
+    text: ft.acts.length ? t.parts[ft.acts[0]] : undefined,
+    opener: fo.acts.length ? o.parts[fo.acts[0]] : undefined,
   }
 }
 
 /**
- * The actions of the leaving member's single step (the opener counts too), as written, without
- * its name: what it does in A's rotation ("E E E"). Undefined when it acts in no step, or in more
- * than one (the comparison refuses those).
+ * The actions of the leaving member's step, as written, without its name: what it does in A's
+ * rotation ("E E E"), or in its opener when it acts only there. Undefined when it acts in no step,
+ * or in more than one of the rotation or of the opener (the comparison refuses those).
  */
 export function memberActions(
   text: string,
@@ -174,18 +242,25 @@ export function memberActions(
   names: RotationMember[],
   out: CharacterKey
 ): string | undefined {
-  const t = cut(text, names)
-  const o = cut(opener, names)
-  const ft = find(t, out, names)
-  const fo = find(o, out, names)
-  if (ft.acts.length + fo.acts.length !== 1) return undefined
-  const step = ft.acts.length ? t.parts[ft.acts[0]] : o.parts[fo.acts[0]]
-  // (the name is the step's start that names the member, as the parser reads it)
-  const words = step.trim().split(/\s+/)
-  for (let n = Math.min(words.length, 3); n >= 1; n--)
-    if (matchMember(words.slice(0, n).join(' '), names) === out)
-      return words.slice(n).join(' ')
-  return undefined
+  const steps = leavingStepsText(text, opener, names, out)
+  const step = steps?.text ?? steps?.opener
+  return step === undefined ? undefined : stepActions(step, names, out)
+}
+
+/**
+ * The leaving member's actions in the opener, when it acts in the rotation too (its opener's step
+ * is replaced as well): what it does in A's first rotation ("E")
+ */
+export function memberOpenerActions(
+  text: string,
+  opener: string,
+  names: RotationMember[],
+  out: CharacterKey
+): string | undefined {
+  const steps = leavingStepsText(text, opener, names, out)
+  return steps?.text !== undefined && steps.opener !== undefined
+    ? stepActions(steps.opener, names, out)
+    : undefined
 }
 
 /**

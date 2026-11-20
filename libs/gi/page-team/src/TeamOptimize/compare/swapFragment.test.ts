@@ -1,6 +1,12 @@
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
-import { memberActions, swapFragment, timingForSwap } from './swapFragment'
+import {
+  leavingSteps,
+  memberActions,
+  memberOpenerActions,
+  swapFragment,
+  timingForSwap,
+} from './swapFragment'
 
 const names: RotationMember[] = [
   { characterKey: 'Anastasya', name: 'Anastasya' },
@@ -50,9 +56,41 @@ describe('swapFragment', () => {
     const r = swapFragment({ ...base, text: `${text} -> Yae Miko E` })
     expect(r).toEqual({ ok: false, error: 'repeated', count: 2 })
   })
-  it('repeated across opener and text', () => {
+  it('once in the opener and once in the text: its opener actions asked for', () => {
     const r = swapFragment({ ...base, opener: 'Yae Miko E -> Danica E' })
-    expect(r).toEqual({ ok: false, error: 'repeated', count: 2 })
+    expect(r).toEqual({ ok: false, error: 'emptyOpenerFragment', count: 0 })
+    expect(
+      leavingSteps(text, 'Yae Miko E -> Danica E', names, 'YaeMiko')
+    ).toEqual({ inText: 1, inOpener: 1 })
+  })
+  it('once in the opener and once in the text: both replaced, each with its actions', () => {
+    const r = swapFragment({
+      ...base,
+      opener: 'Yae Miko E -> Danica E',
+      openerFragment: 'Q',
+    })
+    expect(r).toMatchObject({
+      ok: true,
+      where: 'text',
+      text: swapped,
+      opener: 'Mitya Q -> Danica E',
+      replaced: 'Yae Miko E E E',
+      inserted: 'Mitya E Q',
+      openerReplaced: 'Yae Miko E',
+      openerInserted: 'Mitya Q',
+      // (the rotation's own step, for its timing edits: the opener has none)
+      firstAction: 3,
+      replacedActions: 3,
+      delta: -1,
+    })
+  })
+  it('twice in the opener', () => {
+    const r = swapFragment({
+      ...base,
+      opener: 'Yae Miko E -> Danica E -> Yae Miko Q',
+      openerFragment: 'Q',
+    })
+    expect(r).toEqual({ ok: false, error: 'repeated', count: 3 })
   })
   it('opener only', () => {
     const noYae = 'Danica E -> Odette E E -> Danica Q'
@@ -306,6 +344,13 @@ describe('memberActions', () => {
       )
     ).toBe('hE N2')
   })
+  it('in the rotation and the opener: the rotation’s, and the opener’s apart', () => {
+    const opener = 'Yae Miko E -> Danica E'
+    expect(memberActions(text, opener, names, 'YaeMiko')).toBe('E E E')
+    expect(memberOpenerActions(text, opener, names, 'YaeMiko')).toBe('E')
+    // (only in one of them: no opener actions apart)
+    expect(memberOpenerActions(text, '', names, 'YaeMiko')).toBeUndefined()
+  })
   it('finds it in the opener, cut as the comparison cuts it', () => {
     expect(
       memberActions(
@@ -321,7 +366,12 @@ describe('memberActions', () => {
       memberActions(`${text} -> Yae Miko E`, '', names, 'YaeMiko')
     ).toBeUndefined()
     expect(
-      memberActions(text, 'Yae Miko E -> Danica E', names, 'YaeMiko')
+      memberActions(
+        text,
+        'Yae Miko E -> Danica E -> Yae Miko Q',
+        names,
+        'YaeMiko'
+      )
     ).toBeUndefined()
     expect(memberActions(text, '', names, 'Mitya' as never)).toBeUndefined()
     // (a trailing loop marker is not a step)

@@ -164,12 +164,13 @@
       "gear": "Scegli arma e set, o Auto",
       "er": "ER richiesta: almeno 100%",
       "fragment": "Scrivi le azioni di {{name}}",
-      "confirm": "Conferma che i dati di A sono definitivi"
+      "confirm": "Conferma che i dati di A sono definitivi",
+      "fragmentOpener": "Scrivi le azioni di {{name}} nell'apertura"
     },
     "error": {
       "noRotation": "Nessuna rotazione scritta in KQM Theorycrafting.",
       "notFound": "{{name}} non compare nella rotazione.",
-      "repeated": "{{name}} compare {{count}} volte nella rotazione: il confronto funziona solo con un unico passo.",
+      "repeated": "{{name}} compare {{count}} volte: il confronto funziona con un solo passo nella rotazione (più, se c'è, uno nell'apertura).",
       "inTeam": "{{name}} è già nella squadra.",
       "unsupported": "Questa scelta non è ancora disponibile.",
       "failed": "Confronto non riuscito: {{message}}",
@@ -234,7 +235,9 @@
       "readyLabel": "Classifiche pronte",
       "cancelled": "Classifiche di B annullate: esegui di nuovo il confronto per vederle.",
       "rankingFailed": "Classifiche di B non riuscite: {{message}}"
-    }
+    },
+    "fragmentOpener": "Azioni di {{name}} nell'apertura",
+    "fragmentOpenerTip": "{{name}} c'è anche in «Solo prima rotazione»: cosa fa chi entra lì"
   },
   "changelog": {
     "title": "Novità",

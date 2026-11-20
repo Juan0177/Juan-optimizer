@@ -577,6 +577,10 @@ describe('compareSwapKqm', () => {
     expect(await compareSwapKqm({ ...argsOf(s), fragment: ' ' })).toEqual({
       error: 'emptyFragment',
     })
+    // (in the opener too: its actions there are asked for)
+    expect(
+      await compareSwapKqm({ ...argsOf(s), opener: 'Yae Miko E -> Danica E' })
+    ).toEqual({ error: 'emptyOpenerFragment' })
   }, 60_000)
 
   it('stops when cancelled, writing nothing', async () => {

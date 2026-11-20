@@ -525,6 +525,46 @@ describe('KqmCompare', () => {
     expect(mark?.textContent).toBe('Mitya E Q')
   })
 
+  it('in the opener too: asks for its actions there, marks both steps and runs with them', async () => {
+    withRun()
+    stored.set('teamOptRotationOpener_t1', 'Yae Miko E -> Danica E')
+    show()
+    fireEvent.click(screen.getByRole('radio', { name: /Yae Miko/ }))
+    fireEvent.change(
+      screen.getByRole('combobox', { name: /kqmCompare\.character/ }),
+      { target: { value: 'Mit' } }
+    )
+    fireEvent.click(screen.getByRole('option', { name: 'Mitya' }))
+    fireEvent.change(
+      screen.getByRole('textbox', { name: 'kqmCompare.fragment name=Mitya' }),
+      { target: { value: 'E Q' } }
+    )
+    fireEvent.click(confirmBox())
+    // (its opener step still to write: Confronta waits for it)
+    const openerField = screen.getByRole('textbox', {
+      name: 'kqmCompare.fragmentOpener name=Mitya',
+    })
+    expect(
+      screen.getByText('kqmCompare.need.fragmentOpener name=Mitya')
+    ).toBeTruthy()
+    expect((runButton() as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(openerField, { target: { value: 'Q' } })
+    const preview = screen.getByLabelText(/kqmCompare\.preview/)
+    expect(
+      [...preview.querySelectorAll('mark')].map((m) => m.textContent)
+    ).toEqual(['Mitya Q', 'Mitya E Q'])
+    mocks.compare.mockReturnValue(new Promise(() => {}))
+    await act(async () => {
+      fireEvent.click(runButton())
+    })
+    await waitFor(() => expect(mocks.compare).toHaveBeenCalledTimes(1))
+    expect(mocks.compare.mock.calls[0][0]).toMatchObject({
+      fragment: 'E Q',
+      openerFragment: 'Q',
+      opener: 'Yae Miko E -> Danica E',
+    })
+  })
+
   it('cancels the run when the tab is left', async () => {
     withRun()
     let isCancelled: (() => boolean) | undefined

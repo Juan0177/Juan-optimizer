@@ -164,12 +164,13 @@
       "gear": "Choose weapon and set, or Auto",
       "er": "ER target: at least 100%",
       "fragment": "Write {{name}}'s actions",
-      "confirm": "Confirm that A's data are final"
+      "confirm": "Confirm that A's data are final",
+      "fragmentOpener": "Write {{name}}'s actions in the opener"
     },
     "error": {
       "noRotation": "No rotation written in KQM Theorycrafting.",
       "notFound": "{{name}} is not in the rotation.",
-      "repeated": "{{name}} appears {{count}} times in the rotation: the comparison needs a single step.",
+      "repeated": "{{name}} appears {{count}} times: the comparison needs a single step in the rotation (plus, if any, one in the opener).",
       "inTeam": "{{name}} is already in the team.",
       "unsupported": "This choice is not available yet.",
       "failed": "Comparison failed: {{message}}",
@@ -234,7 +235,9 @@
       "readyLabel": "Rankings ready",
       "cancelled": "B's rankings cancelled: run the comparison again to see them.",
       "rankingFailed": "B's rankings failed: {{message}}"
-    }
+    },
+    "fragmentOpener": "{{name}}'s actions in the opener",
+    "fragmentOpenerTip": "{{name}} is in “First rotation only” too: what the entering member does there"
   },
   "changelog": {
     "title": "What’s new",
