@@ -1453,6 +1453,34 @@ describe('KqmCompare: rotation changed since A', () => {
     expect(screen.queryByText('kqmCompare.rotationChanged')).toBeNull()
   })
 
+  it('does not warn for the rotation A recorded with its opener and timing ("text|…")', async () => {
+    withPlayed()
+    const run = (
+      mocks.state.saved as {
+        run: { teamOpt: { kqm: Record<string, unknown> } }
+      }
+    ).run
+    run.teamOpt.kqm['energyRotation'] =
+      `${TEXT}|{"opener":"Danica E","edits":{}}`
+    mocks.replay.mockReturnValue(() => structuredClone(played))
+    show()
+    await waitFor(() => expect(mocks.replay).toHaveBeenCalled())
+    expect(screen.queryByText('kqmCompare.rotationChanged')).toBeNull()
+  })
+
+  it('warns when A recorded another text', async () => {
+    withPlayed()
+    const run = (
+      mocks.state.saved as {
+        run: { teamOpt: { kqm: Record<string, unknown> } }
+      }
+    ).run
+    run.teamOpt.kqm['energyRotation'] = `${TEXT} -> Danica E|{}`
+    mocks.replay.mockReturnValue(() => structuredClone(played))
+    show()
+    expect(await screen.findByText('kqmCompare.rotationChanged')).toBeTruthy()
+  })
+
   it('warns when the written rotation plays differently from A', async () => {
     withPlayed()
     mocks.replay.mockReturnValue(() => ({
