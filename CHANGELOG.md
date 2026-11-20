@@ -4,6 +4,20 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.24.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.24.0) (2026-11-20)
+
+### New
+
+- KQM Theorycrafting can lock a member's weapon: in Choose weapons, each weapon type has a Lock a weapon row. Every build of that member then uses the locked weapon, even if it isn't ticked, and the rest of the team is optimized around it.
+
+### Improved
+
+- KQM Theorycrafting runs faster, most of all for teams with many buffs (up to about half the time).
+
+### Fixed
+
+- Anastasya's ascension talent now adds 10% to the Stellar Swirl reaction multiplier (300% becomes 310%) instead of multiplying it, as the game does.
+
 ## [v1.23.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.23.0) (2026-11-20)
 
 ### New
