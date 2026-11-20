@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.25.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.25.0) (2026-11-20)
+
+### New
+
+- KQM Theorycrafting can set each member's artifacts: every member in Setup has its own Artifacts choice (KQM Standard, Good, Great, Top or a custom number of rolls), and the Artifacts menu above still sets them all at once.
+
 ## [v1.24.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.24.0) (2026-11-20)
 
 ### New

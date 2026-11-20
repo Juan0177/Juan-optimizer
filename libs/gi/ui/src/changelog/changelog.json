@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.25.0",
+    "date": "2026-11-20",
+    "new": [
+      "KQM Theorycrafting can set each member's artifacts: every member in Setup has its own Artifacts choice (KQM Standard, Good, Great, Top or a custom number of rolls), and the Artifacts menu above still sets them all at once."
+    ]
+  },
+  {
     "version": "1.24.0",
     "date": "2026-11-20",
     "new": [
