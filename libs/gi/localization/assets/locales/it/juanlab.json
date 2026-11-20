@@ -233,5 +233,117 @@
       "cancelled": "Classifiche di B annullate: esegui di nuovo il confronto per vederle.",
       "rankingFailed": "Classifiche di B non riuscite: {{message}}"
     }
+  },
+  "changelog": {
+    "title": "Novità",
+    "showAll": "Mostra tutto il changelog",
+    "showLess": "Mostra meno",
+    "kind": {
+      "new": "Novità",
+      "improved": "Miglioramenti",
+      "fixed": "Correzioni",
+      "juanlab": "Solo in Juan-optimizer"
+    },
+    "entries": [
+      {
+        "date": "2026-11-20",
+        "title": "Aggiornamento a Stellar Optimizer 1.23",
+        "summary": "Arrivano le versioni da 1.17 a 1.23 di Stellar Optimizer. Le rotazioni scritte passano da sole nelle squadre; il primo risultato di KQM va rifatto, perché ora KQM ha impostazioni sue.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              {
+                "text": "**Modelli di rotazione**",
+                "sub": [
+                  "In «Scrivi la rotazione», e nella schermata iniziale di una rotazione vuota, c'è **Modelli**: rotazioni standard dei DPS principali prese dalle guide e dai calcoli di squadra di KQM (della community dove KQM non ne ha). Prima quelle dei personaggi della tua squadra.",
+                  "Sceglierne una la apre nel writer; i membri che non sono nella tua squadra vengono tolti.",
+                  "7 modelli hanno accanto la loro **versione ottimizzata**, trovata con una ricerca sulle build KQM."
+                ]
+              },
+              {
+                "text": "**Parole nuove nelle rotazioni**",
+                "sub": [
+                  "`Q/N3` o `Q?/N3`: usa il Tripudio se è pronto, altrimenti N3; allo stesso modo `E/N2CA` per l'abilità in tempo di recupero. Le note dicono quando è stata usata l'alternativa.",
+                  "`WK` (camminata, `WK11f` = 11 frame); `HP` e `LP` (picchiata alta e bassa, `HP[collision]` per il colpo di discesa).",
+                  "`CA[cancel]` (Arlecchino), `CA[bullets=4]` (Chasca), `CA[weakspot]` (Lyney); `D?/CA` per Wanderer."
+                ]
+              },
+              {
+                "text": "**KQM Theorycrafting**",
+                "sub": [
+                  "**Rotazione propria**, separata da quella di Ottimizza squadra e giocata alle costellazioni del Setup. All'inizio è una copia; poi si copia nei due sensi con «Copia da Ottimizza squadra» e «Copia da KQM Theorycrafting».",
+                  "**Impostazioni proprie**: nemico, buff della squadra, interruttori dei kit e buff extra. Spegnere una passiva in Ottimizza squadra non cambia più i risultati di KQM.",
+                  "**Ricerca Rapida** (predefinita): dopo il primo giro ogni membro prova solo le armi e i set vicini al suo migliore, gli altri compaiono come «scartati» sotto le classifiche. **Completa** li prova tutti, come prima.",
+                  "Le righe delle armi mostrano «Passiva attiva» o la quota del combattimento in cui è attiva; ogni scelta dice come cambia l'ER richiesta ai compagni (per esempio con le particelle di Favonius).",
+                  "Cambiando una costellazione la rotazione si rigioca da sola, e un avviso dice cosa è cambiato.",
+                  "**Calcolatore ER**: conta le ricariche di Rovine insanguinate, Splendore di Giadacaduta, Elegia di Lumidouce e Amenoma Kageuchi."
+                ]
+              },
+              {
+                "text": "**Ottimizza squadra**",
+                "sub": [
+                  "**ER minima di ogni membro** calcolata dalla rotazione scritta, come fa KQM; si regola con «Calcola ER».",
+                  "**Annulla equipaggiamento**: rimette l'equipaggiamento e le build salvate di prima dell'ultimo Equipaggia.",
+                  "**Esporta e Importa attacchi** in JSON.",
+                  "**Rotazioni contate**: «DPS a regime (rot. 3–4)», il valore predefinito, oppure le prime 1–6 rotazioni contate dall'inizio, come in una sfida a tempo."
+                ]
+              },
+              {
+                "text": "**Squadre**",
+                "sub": [
+                  "Le rotazioni scritte sono salvate **con la squadra**, non più solo nel browser: duplicare una squadra le copia, eliminarla le cancella, l'export le include.",
+                  "L'export della squadra si può scaricare come file JSON.",
+                  "Pagina della squadra con intestazione compatta e freccia indietro; se la ricerca non trova squadre, c'è «Azzera i filtri»."
+                ]
+              },
+              {
+                "text": "**Battaglia nel regno oscuro: tempo per sconfiggere il boss**",
+                "sub": [
+                  "**Scultore Domovoj**: con Splendore: Barlume astrale le sculture diventano statue che esplodono e gli abbassano la RES.",
+                  "**Lama guardiana della neve fluttuante**: la Bara di ghiaccio (oppure lo scudo con Splendore); se resiste 20 s ricupera PS.",
+                  "**Leone alato chimerico**: Barriera di Electro, contraccolpo, volo e vortice.",
+                  "**Automi della Fonte segreta**: Modalità Pulizia fermata dal Cryo, Contrattacco forzato, Contromisure adattive ed Electrocannone.",
+                  "La cronologia del combattimento mostra i danni della squadra ogni 3 s, anche su scudi e barriere.",
+                  "Contro il Gecoluna radioso, Ottimizza squadra tiene conto del Tasso di CRIT e del Bonus DAN di Districamento."
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "Danni delle rotazioni: la risonanza Geo arriva dagli scudi e i frammenti di Cristallizzazione si raccolgono con i dash (Itto, Navia); Kazuha assorbe il Pyro nel campo di Bennett; il campo di Bennett dà ATT solo a chi ci sta dentro; Finale delle Profondità segue il Legame di vita.",
+              "Correzioni ai kit di Cyno, Fischl, Clorinde, Navia, Itto, Wanderer, Xiao, Diluc, Chasca e Tartaglia.",
+              "Un attacco giocato con membri in campo o buff diversi è una sola riga con il totale; aprendola si vedono le parti, ognuna con quello che la distingue.",
+              "Gli attacchi modificati a mano sono segnati «Attacchi modificati».",
+              "Scrivere nel writer non rallenta più la pagina dietro.",
+              "La «Quota di danno» di KQM segue la rotazione giocata e l'elemento reale di ogni colpo.",
+              "Le note della rotazione dicono quando l'abilità di Danica non dà particelle (tempo di recupero condiviso di 14 s)."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Arlecchino C2**: colpisce prima del suo attacco normale successivo, quindi in Fusione non le ruba più il Cryo.",
+              "**Widsith**: suona la canzone scelta, non la media delle tre.",
+              "**Equipaggia**: funziona anche con i membri su una build salvata.",
+              "**Tripudio ogni 2ª o 3ª rotazione**: le rotazioni senza Tripudio giocano comunque quelli corti (Thunderous Symphony di Flins, Volcanic Kablam di Varesa).",
+              "**Inizio senza energia**: nel primo giro il combattimento non aspetta più quello che i Tripudi avrebbero reso pronto.",
+              "**Varie**: risultati segnati come non aggiornati se cambiano i membri, import più sicuri, il nemico Custom non tiene più i PS del boss."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Tutti i testi nuovi sono in italiano (113 testi, con i nomi ufficiali del gioco: Bara di ghiaccio, Slancio fluido, Contromisure adattive…).",
+              "KQM Compare legge la rotazione di KQM dal nuovo posto e tiene le armi e i set scelti nell'ispettore di KQM Theorycrafting.",
+              "Calcolatore ER: un avviso quando la rotazione usa la Q completa di Flins insieme a Thunderous Symphony.",
+              "Restano come prima la home, il piè di pagina e l'assenza del pulsante Feedback."
+            ]
+          }
+        ]
+      }
+    ]
   }
 }

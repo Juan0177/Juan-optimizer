@@ -233,5 +233,117 @@
       "cancelled": "B's rankings cancelled: run the comparison again to see them.",
       "rankingFailed": "B's rankings failed: {{message}}"
     }
+  },
+  "changelog": {
+    "title": "What’s new",
+    "showAll": "Show the whole changelog",
+    "showLess": "Show less",
+    "kind": {
+      "new": "New",
+      "improved": "Improved",
+      "fixed": "Fixed",
+      "juanlab": "Only in Juan-optimizer"
+    },
+    "entries": [
+      {
+        "date": "2026-11-20",
+        "title": "Update to Stellar Optimizer 1.23",
+        "summary": "Stellar Optimizer’s releases 1.17 to 1.23 arrive. Written rotations move into their teams by themselves; the first KQM result has to be run again, as KQM now keeps its own settings.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              {
+                "text": "**Rotation templates**",
+                "sub": [
+                  "In Write the rotation, and on the start screen of an empty rotation, **Templates** lists standard rotations for the main DPS characters, from KQM’s guides and team calcs (community calcs where KQM has none). Your team’s characters come first.",
+                  "Picking one opens it in the writer; members it uses that are not in your team are left out.",
+                  "7 templates have their **optimized version** beside them, found by a rotation search at KQM builds."
+                ]
+              },
+              {
+                "text": "**New rotation words**",
+                "sub": [
+                  "`Q/N3` or `Q?/N3`: the Burst when it is ready, else N3; `E/N2CA` the same for a Skill on cooldown. The notes say when the alternative was played.",
+                  "`WK` (walk, `WK11f` = 11 frames); `HP` and `LP` (high and low plunge, `HP[collision]` for the hit on the way down).",
+                  "`CA[cancel]` (Arlecchino), `CA[bullets=4]` (Chasca), `CA[weakspot]` (Lyney); `D?/CA` for Wanderer."
+                ]
+              },
+              {
+                "text": "**KQM Theorycrafting**",
+                "sub": [
+                  "**Its own rotation**, apart from Team optimize’s, played at the Setup’s constellations. It starts as a copy; then Copy from Team optimize and Copy from KQM Theorycrafting copy it either way.",
+                  "**Its own settings**: enemy, team buffs, kit switches and extra buffs. A passive switched off on Team optimize no longer changes KQM’s results.",
+                  "**Quick search** (the default): after the first round each member only tries the weapons and sets near its best, the rest listed as screened out under the rankings. **Full** tries them all, as before.",
+                  "Weapon rows show Passive on, or the share of the fight it is on; each pick says how it changes the teammates’ ER required (Favonius particles, for example).",
+                  "Changing a constellation plays the rotation again by itself, and a notice says what changed.",
+                  "**ER calculator**: counts the refunds of Bloodsoaked Ruins, Jadefall’s Splendor, Lumidouce Elegy and Amenoma Kageuchi."
+                ]
+              },
+              {
+                "text": "**Team optimize**",
+                "sub": [
+                  "**Each member’s Min ER** worked out from the written rotation, as KQM does; adjust it with Calculate ER.",
+                  "**Undo equip**: puts back the equipment and saved builds from before the last Equip.",
+                  "**Export and Import attacks** as JSON.",
+                  "**Rotations counted**: Steady DPS (rot 3–4), the default, or the first 1–6 rotations counted from the start, like a timed challenge."
+                ]
+              },
+              {
+                "text": "**Teams**",
+                "sub": [
+                  "Written rotations are saved **with their team**, not only in the browser: duplicating a team copies them, deleting it removes them, the export includes them.",
+                  "The team export can be downloaded as a JSON file.",
+                  "A compact team header with a back arrow; when no team matches the search, Clear filters brings them back."
+                ]
+              },
+              {
+                "text": "**Stygian Onslaught: time to defeat**",
+                "sub": [
+                  "**Domovoy Sculptor**: Radiance: Stellar Glimmer turns its sculptures into statues that explode on it and take its RES down.",
+                  "**Guardian Blade of Drifting Snow**: its Ice Coffin (a shield under Radiance); one that holds 20 s gives HP back.",
+                  "**Chimeric Winged Lion**: Electro Ward, backlash, flight and vortex.",
+                  "**Secret Source Automatons**: Sweeper Mode stopped by Cryo, Forced Counterstrike, Adaptive Countermeasures and the Boltsphere Cannon.",
+                  "The fight timeline shows the team’s damage every 3 s, into shields and wards too.",
+                  "Against the Radiant Moongecko, Team optimize picks builds with Disentangled’s CRIT Rate and DMG Bonus in mind."
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "Rotation damage: Geo resonance comes from shields and Crystallize shards are picked up on dashes (Itto, Navia); Kazuha absorbs Pyro inside Bennett’s field; Bennett’s field ATK goes only to who stands in it; Finale of the Deep tracks its Bond of Life.",
+              "Kit fixes for Cyno, Fischl, Clorinde, Navia, Itto, Wanderer, Xiao, Diluc, Chasca and Tartaglia.",
+              "An attack played with different members on the field or different buffs is one row with its total; open it to see each part and what sets it apart.",
+              "Attacks changed by hand are marked Attacks edited.",
+              "Typing in the writer no longer slows the page behind it.",
+              "KQM’s Damage share follows the rotation played and each hit’s real element.",
+              "The rotation notes say when Danica’s Skill drops no particles (their shared 14 s cooldown)."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Arlecchino C2**: lands before her next Normal Attack, so in Melt it no longer takes her Cryo.",
+              "**The Widsith**: plays the song picked, not the average of the three.",
+              "**Equip**: works for members on a saved build too.",
+              "**Burst every 2nd or 3rd rotation**: the rotations without it still play the short Bursts (Flins’ Thunderous Symphony, Varesa’s Volcanic Kablam).",
+              "**No-energy start**: the first rotation no longer waits for what the Bursts would have made ready.",
+              "**Other**: results marked out of date when the members change, safer imports, the Custom enemy no longer keeps a boss’s HP."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Every new text is in Italian too (113 texts, with the game’s own names).",
+              "KQM Compare reads KQM’s rotation where it now lives, and keeps the weapons and sets picked in KQM Theorycrafting’s inspector.",
+              "ER calculator: a warning when the rotation uses Flins’ full Burst together with Thunderous Symphony.",
+              "The home page, the footer and the missing Feedback button stay as before."
+            ]
+          }
+        ]
+      }
+    ]
   }
 }
