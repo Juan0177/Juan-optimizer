@@ -141,6 +141,50 @@ describe("a problem's attacks", () => {
       kqmProblemAttacks(attacks, 'YumemizukiMizuki', state).Odette
     ).toHaveLength(2)
   })
+
+  it('drops the limits of gear no build in it can have, and the member’s own sets outside its sets', () => {
+    const attack = (
+      limits: { owner: string; path: string[]; hits: number }[],
+      hits = 1
+    ) => ({
+      path: ['skill', 'dmg'],
+      hits,
+      hitMode: 'avgHit' as const,
+      limits: limits as never,
+    })
+    const state = {
+      YumemizukiMizuki: build({ BlizzardStrayer: 4 }, 'BlackmarrowLantern'),
+      Odette: build({ GladiatorsFinale: 4 }, 'SacrificialSword'),
+    }
+    const vv = { owner: 'YumemizukiMizuki', path: ['ViridescentVenerer', 'x'] }
+    const noblesse = { owner: 'Odette', path: ['NoblesseOblige', 'set4'] }
+    const attacks: TeamOpt['attacks'] = {
+      Odette: [
+        attack([{ ...vv, hits: 0 }]),
+        attack([]),
+        attack([{ ...noblesse, hits: 0 }]),
+      ],
+    }
+    // Mizuki's VV limit (not on her) is dropped: the first two are one of 2 hits
+    const pruned = kqmProblemAttacks(attacks, 'Odette', state).Odette!
+    expect(pruned.map((a) => a.hits)).toEqual([2, 1])
+    expect(pruned[1].limits).toEqual([{ ...noblesse, hits: 0 }])
+    // Odette's Noblesse outside her sets: dropped too, all three are one
+    const narrowed = kqmProblemAttacks(
+      attacks,
+      'Odette',
+      state,
+      new Set(['GladiatorsFinale'])
+    ).Odette!
+    expect(narrowed.map((a) => a.hits)).toEqual([3])
+    // a limit on some of an attack's hits: those attacks stay apart (merged, it would cover fewer)
+    const partial = kqmProblemAttacks(
+      { Odette: [0, 1].map(() => attack([{ ...noblesse, hits: 1 }], 2)) },
+      'Odette',
+      state
+    ).Odette!
+    expect(partial.map((a) => a.hits)).toEqual([2, 2])
+  })
 })
 
 describe('one-copy weapons', () => {

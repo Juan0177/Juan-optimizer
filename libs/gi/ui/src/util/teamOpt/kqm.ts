@@ -1038,27 +1038,34 @@ const SET_KEYS: ReadonlySet<string> = new Set(allArtifactSetKeys)
 const WEAPON_KEYS: ReadonlySet<string> = new Set(allWeaponKeys)
 
 /**
- * A problem's attacks, where only `dyn`'s artifacts vary: a buff state of a set or weapon that no
- * build in it can have (another member's set or weapon not on it, a weapon `dyn` does not hold)
- * counts nothing there (its sheet needs the pieces or the weapon), so it is dropped, and the
+ * A problem's attacks, where only `dyn`'s artifacts vary: a buff state or limit of a set or weapon
+ * that no build in it can have (another member's set or weapon not on it, a weapon `dyn` does not
+ * hold) counts nothing there (its sheet needs the pieces or the weapon), so it is dropped, and the
  * attacks it split are merged again. (A replay's candidate windows split them for every option.)
+ * `dynSets`: the sets `dyn` may have in it (absent: any). An attack with a limit on some of its
+ * hits is not merged: the limit would cover fewer of them.
  */
 export function kqmProblemAttacks(
   attacks: TeamOpt['attacks'],
   dyn: CharacterKey,
-  state: Partial<Record<CharacterKey, KqmBuild>>
+  state: Partial<Record<CharacterKey, KqmBuild>>,
+  dynSets?: ReadonlySet<string>
 ): TeamOpt['attacks'] {
-  const keep = (s: TeamOptBuffState) => {
+  const keep = (s: Pick<TeamOptBuffState, 'owner' | 'path'>) => {
     if (s.owner === 'team') return true
     const build = state[s.owner as CharacterKey]
     const key = s.path[0]
     if (!build || !key) return true
     if (WEAPON_KEYS.has(key)) return build.weapon.key === key
     if (SET_KEYS.has(key))
-      return s.owner === dyn || !!build.sets[key as ArtifactSetKey]
+      return s.owner === dyn
+        ? !dynSets || dynSets.has(key)
+        : !!build.sets[key as ArtifactSetKey]
     return true
   }
-  const prune = (list: TeamOptBuffState[]) => list.filter(keep)
+  const prune = <T extends Pick<TeamOptBuffState, 'owner' | 'path'>>(
+    list: T[]
+  ) => list.filter(keep)
   const out: TeamOpt['attacks'] = {}
   for (const [ck, list] of Object.entries(attacks) as [
     CharacterKey,
@@ -1069,6 +1076,7 @@ export function kqmProblemAttacks(
     for (const a of list) {
       const next: TeamOptAttack = { ...a }
       if (a.states) next.states = prune(a.states)
+      if (a.limits) next.limits = prune(a.limits)
       if (a.reactionContributorStates)
         next.reactionContributorStates = Object.fromEntries(
           Object.entries(a.reactionContributorStates).map(([k, v]) => [
@@ -1081,7 +1089,10 @@ export function kqmProblemAttacks(
           ...snap,
           states: prune(snap.states),
         }))
-      const id = JSON.stringify({ ...next, hits: 0 })
+      const partial = next.limits?.some((l) => l.hits > 0 && l.hits < a.hits)
+      const id = partial
+        ? `#${merged.size}`
+        : JSON.stringify({ ...next, hits: 0 })
       const same = merged.get(id)
       if (same) same.hits += a.hits
       else merged.set(id, next)
@@ -1669,6 +1680,22 @@ async function runKqm({
   const workKey = (p: KqmPlayed | undefined) => `${teamStamp}\n${playedKey(p)}`
   let work = workFor(workKey(played))
 
+  // (the sets a member's problem holds the effects of: its space's, fewer once narrowed)
+  const spaceSets = new WeakMap<
+    MemberSpace,
+    { sets: Set<string>; id: string }
+  >()
+  const setsOf = (ck: CharacterKey) => {
+    const space = spaces.get(ck)
+    if (!space) return undefined
+    let found = spaceSets.get(space)
+    if (!found) {
+      const sets = new Set<string>([...space.four, ...space.two])
+      found = { sets, id: [...sets].sort().join(',') }
+      spaceSets.set(space, found)
+    }
+    return found
+  }
   /** The team's damage as a function of `ck`'s artifacts, with `weapon` on it, the others as in `state` */
   const problemKey = (
     ck: CharacterKey,
@@ -1679,7 +1706,7 @@ async function runKqm({
       .filter(([k]) => k !== ck)
       .map(([k, b]) => `${k}=${buildId(b!)}`)
       .sort()
-      .join(';')}`
+      .join(';')}|${setsOf(ck)?.id ?? ''}`
   // (built in the builders' workers, several at once: see `kqmBuildPool`)
   const builder = kqmProblemBuilder(database, isCancelled)
   const problemFor = (
@@ -1702,7 +1729,12 @@ async function runKqm({
     const built = builder.build(teamId, gender, {
       dyn: ck,
       arts,
-      attacks: kqmProblemAttacks(attacksNow(), ck, withWeapon),
+      attacks: kqmProblemAttacks(
+        attacksNow(),
+        ck,
+        withWeapon,
+        setsOf(ck)?.sets
+      ),
       statFilters: calculator
         ? filtersFor(withWeapon)
         : { [ck]: filtersFor(withWeapon)[ck] ?? {} },

@@ -331,6 +331,43 @@ describe('KQM Standards builds', () => {
     }
   })
 
+  it('a pick of a screened-out set after a quick search counts its effects, as after a full search', async () => {
+    const { database, teamId, teamOpt } = setup()
+    // (weak sets here: their 35% only on the 2 Skill hits)
+    teamOpt.attacks[ayaka] = [
+      { path: ['burst', 'cutting'], hits: 19, hitMode: 'avgHit' },
+      {
+        path: ['skill', 'press'],
+        hits: 2,
+        hitMode: 'avgHit',
+        states: [
+          { owner: ayaka, path: ['Lavawalker', 'state'], value: 'on' },
+          { owner: ayaka, path: ['Thundersoother', 'state'], value: 'on' },
+        ],
+      },
+    ]
+    const result = (await run(database, teamId, teamOpt))!
+    const set = (['Lavawalker', 'Thundersoother'] as const).find((k) =>
+      result.screenedOut?.[ayaka]?.sets.includes(k)
+    )
+    expect(set).toBeTruthy()
+    const pick = (fullSearch: boolean) =>
+      compareTeamKqm({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt: { ...teamOpt, kqm: { ...teamOpt.kqm!, fullSearch } },
+        result,
+        characterKey: ayaka,
+        weapon: result.builds[ayaka]!.weapon,
+        sets: { [set!]: 4 },
+      }) as Promise<KqmResult>
+    const quick = await pick(false)
+    const full = await pick(true)
+    expect(quick.builds[ayaka]!.sets).toEqual({ [set!]: 4 })
+    expect(quick.after.total).toBeCloseTo(full.after.total, 6)
+  }, 300_000)
+
   it('pairs two sets with the same 2-piece bonus (2-piece ATK + 2-piece ATK)', async () => {
     const { database, teamId, teamOpt } = setup()
     // (two ATK% 2-pieces and one Cryo DMG 2-piece: one bonus class each, ATK% twice)
