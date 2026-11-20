@@ -4,6 +4,18 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.22.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.22.4) (2026-11-20)
+
+### Improved
+
+- A rotation note says when Danica's Skill drops no particles: both her Skills share one 14 s particle cooldown.
+
+### Fixed
+
+- Equip on Team optimize puts the artifacts and weapons on the characters even when a member uses a saved build: that member switches to its equipped build and the saved build stays as it was. Equip is also still offered after Save as builds.
+- The Widsith plays the song picked in its switch in the rotation, instead of the average of the three.
+- Arlecchino's C2 Balemoon Bloodfire lands right after she absorbs the directive, before her next Normal Attack, so in Melt teams it Melts and no longer takes the Cryo her Normal Attacks need.
+
 ## [v1.22.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.22.0) (2026-11-19)
 
 ### Improved
