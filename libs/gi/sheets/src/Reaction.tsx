@@ -220,7 +220,7 @@ export const reactionConditionals: DocumentConditional[] = [
           node: polestarStacks_stellarconduct_mult_disp,
         },
         {
-          // Anastasya A4 (only source of stellarswirl_mult_) -> Polestar Field gains 2 stacks per release
+          // Anastasya A4 (only source of stellarswirl_mult_) -> Polestar Field gains 1 stack per release
           canShow: (data) => data.get(input.total.stellarswirl_mult_).value > 0,
           text: st('elementalReaction.polestar.anastasyaA4'),
         },

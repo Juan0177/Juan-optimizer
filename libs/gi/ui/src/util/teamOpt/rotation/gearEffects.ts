@@ -110,7 +110,11 @@ export interface GearEffects {
    * triggers (kqmsim emits OnSkill/OnBurst before the ability), so hits that take their stats at
    * the cast count them
    */
-  beforeAction(ctx: SimContext, actor: CharacterKey, action: RotationAction): void
+  beforeAction(
+    ctx: SimContext,
+    actor: CharacterKey,
+    action: RotationAction
+  ): void
   /** A member acts */
   onAction(
     ctx: SimContext,
@@ -128,6 +132,13 @@ export interface GearEffects {
   ): void
   /** The run ends at `t` (open windows close) */
   end(t: number): void
+  /** Whether `k` is protected by a shield at `t` (a party shield while on the field, or its own) */
+  shieldedAt(k: CharacterKey, t: number): boolean
+  /**
+   * The Crystallize shards there now that can be picked up when they arrive `arrive` frames from
+   * now (Navia's Skill pulls them): picked up then, with their shield; how many
+   */
+  takeShards(ctx: SimContext, who: CharacterKey, arrive: number): number
 }
 
 export function gearEffects({
@@ -138,7 +149,10 @@ export function gearEffects({
   cooldown,
   window,
   reduceCooldown,
+  onShield,
 }: {
+  /** A shield is created (Geo resonance is checked again) */
+  onShield?: (t: number) => void
   members: CharacterKey[]
   gear: Partial<Record<CharacterKey, SimGear>>
   cooldown: (characterKey: CharacterKey, key: string, t: number) => number
@@ -378,6 +392,7 @@ export function gearEffects({
       if (s.owner === owner && s.target === to && s.kind === kind && s.end > t)
         s.end = t
     shields.push({ owner, target: to, kind, start: t, end: t + +frames })
+    onShield?.(t)
     // Angelos Heptades: Pathfinder's Light for 20 s after the wielder creates a shield (off the
     // field too), DMG for the member on the field
     if (holds(owner, 'AngelosHeptades'))
@@ -540,14 +555,17 @@ export function gearEffects({
     const nightsoul = inNightsoul(k, t)
     for (const e of new Set(elements)) {
       if (e === 'physical') continue
-      ctx.buff(k, ['ScrollOfTheHeroOfCinderCity', `react_${e}`], e, 0, 900)
+      ctx.buff(k, ['ScrollOfTheHeroOfCinderCity', `react_${e}`], e, 0, 900, {
+        hitlag: 'recipient',
+      })
       if (nightsoul)
         ctx.buff(
           k,
           ['ScrollOfTheHeroOfCinderCity', `nightsoul_${e}`],
           e,
           0,
-          1200
+          1200,
+          { hitlag: 'recipient' }
         )
     }
   }
@@ -564,21 +582,43 @@ export function gearEffects({
     members.filter((m) => getCharEle(m) === 'dendro').length >= 2
 
   // Crystallize shards (gcsim): spawn 23 frames after the reaction, can be picked up 31 frames
-  // later, last 15 s. Archaic Petra 4 procs when its holder is on the field at a pickup (the
-  // holder picks them up, as gcsim's pick_up_crystallize in the holder's turn): 35% DMG of the
-  // shard's element for the party, 10 s.
+  // later, last 15 s. A pickup gives the party its Crystallize shield (906 frames, gcsim's
+  // shard.go; the reaction's trigger's) and, to an Archaic Petra 4 holder, 35% DMG of the shard's
+  // element for the party for 10 s. They are picked up on a dash (KQM's pick_up_crystallize
+  // before one), in the Petra holder's turn, and by Navia's hold (`takeShards`).
   let active = onField
   const petra = members.filter((m) => opens(m, 'ArchaicPetra'))
-  const shards: { element: string; pickable: number; expiry: number }[] = []
+  const shards: {
+    element: string
+    owner: CharacterKey
+    pickable: number
+    expiry: number
+  }[] = []
   const petraProc = (ctx: SimContext, holder: CharacterKey, element: string) =>
     ctx.buff(holder, ['ArchaicPetra', 'element'], element, 0, 600)
-  const pickUp = (ctx: SimContext) => {
-    if (!petra.includes(active)) return
+  const collect = (
+    ctx: SimContext,
+    who: CharacterKey,
+    shard: (typeof shards)[number]
+  ) => {
+    ctx.hit(0, {
+      characterKey: shard.owner,
+      path: ['_marker', 'shield', '906', '', 'crystallize'],
+      tag: 'other',
+      element: 'physical',
+      label: 'Crystallize shield',
+    })
+    if (petra.includes(who)) petraProc(ctx, who, shard.element)
+  }
+  const takeOne = (ctx: SimContext, who: CharacterKey) => {
     const t = ctx.now
     const i = shards.findIndex((x) => x.pickable <= t && t < x.expiry)
     if (i < 0) return
     const [shard] = shards.splice(i, 1)
-    petraProc(ctx, active, shard.element)
+    collect(ctx, who, shard)
+  }
+  const pickUp = (ctx: SimContext) => {
+    if (petra.includes(active)) takeOne(ctx, active)
   }
 
   // Epochal Advent: a Starspark (2 at most) when the wearer uses a Skill or Burst or performs a
@@ -739,15 +779,15 @@ export function gearEffects({
         else if (['aggravate', 'spread'].includes(hit.path[1]))
           ctx.buff('team', ['resonance', 'SprawlingCanopy3ele'], 'on', 0, 360)
       }
-      if (petra.length && hit.path[0] === '_reaction') {
+      if (hit.path[0] === '_reaction') {
         if (hit.path[1] === 'crystallize' && hit.element !== 'geo') {
-          const shard = {
+          shards.push({
             element: hit.element,
+            owner: k,
             pickable: t + 54,
             expiry: t + 23 + 900,
-          }
-          shards.push(shard)
-          ctx.at(54, (c) => pickUp(c))
+          })
+          if (petra.length) ctx.at(54, (c) => pickUp(c))
         } else if (hit.path[1] === 'lunarCrystallize' && petra.includes(active))
           petraProc(ctx, active, 'hydro')
       }
@@ -1172,6 +1212,7 @@ export function gearEffects({
     },
     beforeAction(ctx, actor, action) {
       weapons.onAction(ctx, actor, action)
+      if (action.kind === 'dash' && actor === active) takeOne(ctx, actor)
     },
     onAction(ctx, actor, action, normalStarts) {
       if (actor === active) pickUp(ctx)
@@ -1423,6 +1464,28 @@ export function gearEffects({
         window(to, ['GoldenTroupe', 'set4'], 'on', since, t + 120)
         offSince.delete(to)
       }
+    },
+    shieldedAt(k, t) {
+      let field = fieldLog[0][1]
+      for (const [from, member] of fieldLog) {
+        if (from > t) break
+        field = member
+      }
+      return shields.some(
+        (s) =>
+          s.start <= t && t < s.end && (s.target ? s.target === k : field === k)
+      )
+    },
+    takeShards(ctx, who, arrive) {
+      const at = ctx.now + arrive
+      const taken = shards.filter(
+        (x) => x.pickable - 31 <= ctx.now && x.pickable <= at && at < x.expiry
+      )
+      for (const shard of taken) {
+        shards.splice(shards.indexOf(shard), 1)
+        ctx.at(arrive, (c) => collect(c, who, shard))
+      }
+      return taken.length
     },
     end(t) {
       weapons.end(t)

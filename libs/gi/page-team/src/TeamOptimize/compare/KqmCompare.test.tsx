@@ -117,9 +117,14 @@ vi.mock('../useKqmRun', async () => {
         : undefined,
   }
 })
+// (KQM's written rotation, read from the test's storage under the keys it had before it was saved
+// with the team)
 vi.mock('../RotationWriter', () => ({
-  storageKey: (teamId: string) => `teamOptRotationText_${teamId}`,
-  openerKey: (teamId: string) => `teamOptRotationOpener_${teamId}`,
+  readKqmRotation: (_database: unknown, teamId: string) => ({
+    text: localStorage.getItem(`teamOptRotationText_${teamId}`) ?? '',
+    opener: localStorage.getItem(`teamOptRotationOpener_${teamId}`) ?? '',
+    timing: { edits: {} },
+  }),
 }))
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mocks.database,
@@ -148,6 +153,8 @@ vi.mock('@genshin-optimizer/common/ui', () => ({
   InfoTooltipInline: ({ title }: { title: string }) => (
     <span role="img" aria-label={title} />
   ),
+  // (the beta badge's tooltip: its child only)
+  SuspenseTooltip: ({ children }: { children: React.ReactNode }) => children,
 }))
 vi.mock('react-i18next', () => {
   const t = (key: string, options?: Record<string, unknown>) => {
@@ -264,6 +271,7 @@ vi.mock('../KqmEnergyCalculator', () => ({
     </div>
   ),
   kqmEnergyEstimate: () => ({ targets: {}, members: {}, errors: [] }),
+  kqmEnergyGear: () => ({ constellation: () => 0, weapons: () => [] }),
 }))
 vi.mock('../WeaponChooser', async () => {
   const { createContext, useContext } = await import('react')

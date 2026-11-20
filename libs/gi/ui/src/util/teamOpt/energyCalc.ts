@@ -1352,16 +1352,26 @@ export function withRotationEnergy(
       .reduce((n, k) => n + (members[k]?.fieldTime ?? 0), 0)
     const rest = Math.max(0, 100 - fixed)
     const sum = auto.reduce((n, k) => n + energy.members[k]!.fieldTime!, 0)
-    for (const k of auto)
-      members[k] = {
-        ...members[k]!,
-        fieldTime:
-          Math.round(
-            (sum > 0
-              ? (energy.members[k]!.fieldTime! / sum) * rest
-              : rest / auto.length) * 10
-          ) / 10,
-      }
+    // (in tenths of a percent, rounded so they still add up to the rest: rounded one by one, three
+    // equal shares made 99.9% and a run stopped on "Field time must add up to 100%")
+    const tenths = auto.map(
+      (k) =>
+        (sum > 0
+          ? (energy.members[k]!.fieldTime! / sum) * rest
+          : rest / auto.length) * 10
+    )
+    const rounded = tenths.map((x) => Math.floor(x + 1e-9))
+    let left = Math.round(rest * 10) - rounded.reduce((n, x) => n + x, 0)
+    for (const i of tenths
+      .map((_, i) => i)
+      .sort((a, b) => tenths[b]! - rounded[b]! - (tenths[a]! - rounded[a]!))) {
+      if (left <= 0) break
+      rounded[i]!++
+      left--
+    }
+    auto.forEach((k, i) => {
+      members[k] = { ...members[k]!, fieldTime: rounded[i]! / 10 }
+    })
   }
   return { ...settings, ...electro, members }
 }

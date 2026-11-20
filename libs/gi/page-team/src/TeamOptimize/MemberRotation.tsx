@@ -1,7 +1,7 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
-import { DropdownButton } from '@genshin-optimizer/common/ui'
+import { DropdownButton, SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOptAttack } from '@genshin-optimizer/gi/db'
+import type { TeamOptAttack, TeamOptBuffOwner } from '@genshin-optimizer/gi/db'
 import {
   initTeamOptAttack,
   TEAM_OPT_MAX_ATTACKS,
@@ -10,12 +10,18 @@ import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  BuffRef,
   TeamData,
   TeamDataOverrides,
   TeamOptEvaluation,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { CharacterName, DataContext, sameBuff } from '@genshin-optimizer/gi/ui'
+import {
+  buffRefKey,
+  CharacterName,
+  DataContext,
+  sameBuff,
+} from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
@@ -23,7 +29,8 @@ import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CloseIcon from '@mui/icons-material/Close'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import TuneIcon from '@mui/icons-material/Tune'
+import IndeterminateCheckBoxIcon from '@mui/icons-material/IndeterminateCheckBox'
+import type { ButtonBaseProps } from '@mui/material'
 import {
   alpha,
   Box,
@@ -37,12 +44,30 @@ import {
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
 import type { HTMLAttributes, ReactNode } from 'react'
-import { Fragment, forwardRef, useEffect, useMemo, useState } from 'react'
+import {
+  forwardRef,
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { TargetSelectorModal } from '../CharacterDisplay/Tabs/TabOptimize/Components/TargetSelectorModal'
 import { AttackEditor, AttackFiguresContext } from './AttackEditor'
 import { AttackName } from './AttackName'
+import {
+  groupAttacks,
+  holdsItem,
+  type MemberGear,
+  totalHits,
+} from './attackGroups'
 import type { TeamBuff } from './buffs'
+import { describe } from './buffs'
+import type { ExpandStore } from './expandStore'
 import { formatDamage, formatHits, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import {
@@ -69,13 +94,14 @@ export function MemberRotation({
   onField,
   rotationTime,
   footer,
-  showConditions = false,
   expanded = true,
+  expandStore,
   onToggle,
   disabled,
   figures = true,
   played = false,
   overrides,
+  gear,
 }: {
   teamId: string
   member: TeamOptMember
@@ -94,10 +120,10 @@ export function MemberRotation({
   rotationTime?: number
   /** The member's settings, under its rotation */
   footer?: ReactNode
-  /** Each attack's buff states and limits are listed under it (else a count with a tooltip) */
-  showConditions?: boolean
   /** Its attacks are shown (the header opens and closes them, for every member at once) */
   expanded?: boolean
+  /** …read from this shared flag instead: flipping it re-renders the header and the fold only */
+  expandStore?: ExpandStore
   onToggle?: () => void
   /** A run is going: its attacks can't be edited */
   disabled?: boolean
@@ -116,6 +142,11 @@ export function MemberRotation({
    * builds shown: `kqmTeamOverrides`), instead of the members' own
    */
   overrides?: TeamDataOverrides
+  /**
+   * The weapon and sets each member's build holds (KQM theorycrafting's builds shown): its played
+   * attacks carry the buff states of every weapon and set it could pick, which then name no part
+   */
+  gear?: MemberGear
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
@@ -159,6 +190,84 @@ export function MemberRotation({
     setSelecting(false)
     setSelected(new Set())
   }
+  // (the same handlers every render: a click re-renders only the rows it changes)
+  const latest = useRef({ selecting, remove })
+  latest.current = { selecting, remove }
+  const onRowClick = useCallback((i: number) => {
+    if (!latest.current.selecting) return setEditing(i)
+    // (from the latest selection: clicks may come faster than renders)
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(i)) next.delete(i)
+      else next.add(i)
+      return next
+    })
+  }, [])
+  const onRowRemove = useCallback(
+    (i: number) => latest.current.remove(new Set([i])),
+    []
+  )
+  const groups = useMemo(() => groupAttacks(attacks), [attacks])
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set())
+  const onGroupClick = useCallback(
+    (key: string, indices: readonly number[]) => {
+      if (!latest.current.selecting)
+        return setOpenGroups((prev) => toggled(prev, key))
+      setSelected((prev) => {
+        const all = indices.every((i) => prev.has(i))
+        const next = new Set(prev)
+        for (const i of indices) {
+          if (all) next.delete(i)
+          else next.add(i)
+        }
+        return next
+      })
+    },
+    []
+  )
+  const onGroupRemove = useCallback(
+    (indices: readonly number[]) => latest.current.remove(new Set(indices)),
+    []
+  )
+  const hits = totalHits(attacks)
+  const buffOf = useBuffNames(buffs, teamData)
+  const offText = t('teamOpt.rotation.conditionOff', 'off')
+  // each grouped attack's parts, named by what sets them apart; with `gear`, parts that differ only
+  // in the effects of gear nobody holds are one
+  const parts = useMemo(
+    () =>
+      new Map(
+        groups
+          .filter(({ indices }) => indices.length > 1)
+          .map(({ key, indices }) => {
+            const labels = partLabels(
+              indices.map((i) => attacks[i]),
+              onField,
+              buffOf,
+              offText,
+              gear && ((owner, item) => holdsItem(gear, owner, item))
+            )
+            if (!gear)
+              return [
+                key,
+                indices.map((i, n) => ({ indices: [i], label: labels[n] })),
+              ]
+            const byLabel = new Map<
+              string,
+              { indices: number[]; label: PartLabel }
+            >()
+            indices.forEach((i, n) => {
+              const label = labels[n]
+              const id = `${label.onField ? (attacks[i].onField ?? onField) : ''}|${label.conditions.map((c) => c.key).join('/')}`
+              const part = byLabel.get(id)
+              if (part) part.indices.push(i)
+              else byLabel.set(id, { indices: [i], label })
+            })
+            return [key, [...byLabel.values()]]
+          })
+      ),
+    [groups, attacks, onField, buffOf, offText, gear]
+  )
 
   const damage = evaluation?.members[characterKey]
   const share =
@@ -239,11 +348,13 @@ export function MemberRotation({
     >
       {/* the member, its attacks and its share of the rotation: also the button that shows or
           hides every member's attacks (a chevron says which) */}
-      <ButtonBase
+      <FoldButton
+        store={expandStore}
+        expanded={expanded}
+        foldable={!!onToggle}
         component="div"
         role="button"
         tabIndex={onToggle ? 0 : -1}
-        aria-expanded={onToggle ? expanded : undefined}
         disabled={!onToggle}
         onClick={onToggle}
         onKeyDown={(e) => {
@@ -283,9 +394,11 @@ export function MemberRotation({
                 <CharacterName characterKey={characterKey} gender={gender} />
               </Typography>
               <Typography noWrap sx={{ ...type.label, fontSize: 12, ...numSx }}>
-                {t('teamOpt.rotation.attackCount', {
-                  defaultValue: '{{count}} attacks',
-                  count: attacks.length,
+                {t('teamOpt.rotation.hitCount', {
+                  defaultValue_one: '{{hits}} hit',
+                  defaultValue_other: '{{hits}} hits',
+                  count: hits,
+                  hits: formatHits(hits),
                 })}
               </Typography>
             </Box>
@@ -311,6 +424,14 @@ export function MemberRotation({
                     sx={{ fontSize: 13.5, fontWeight: 650 }}
                   >
                     {formatRate(damage, rotationTime)}
+                    <Box
+                      component="span"
+                      sx={{ ...type.label, fontSize: 11, ml: 0.5 }}
+                    >
+                      {rotationTime
+                        ? t('teamOpt.rotation.dps', 'DPS')
+                        : t('teamOpt.rotation.dmg', 'DMG')}
+                    </Box>
                   </Typography>
                   {share !== undefined && (
                     <Typography
@@ -334,25 +455,10 @@ export function MemberRotation({
             characterKey={characterKey}
           />
         </Box>
-        {onToggle && (
-          <ExpandMoreIcon
-            className="member-chevron"
-            aria-hidden
-            sx={{
-              position: 'absolute',
-              top: 14,
-              right: 10,
-              fontSize: 20,
-              color: 'text.secondary',
-              transition: `transform .18s ${tokens.ease}, color .12s`,
-              transform: expanded ? 'rotate(180deg)' : 'none',
-              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-            }}
-          />
-        )}
-      </ButtonBase>
+        {onToggle && <FoldChevron store={expandStore} expanded={expanded} />}
+      </FoldButton>
 
-      <Collapse in={expanded} timeout={180}>
+      <Fold store={expandStore} expanded={expanded}>
         <Box
           component="fieldset"
           disabled={disabled}
@@ -377,33 +483,89 @@ export function MemberRotation({
               flexGrow: 1,
             }}
           >
-            {attacks.map((attack, i) => (
-              <AttackRow
-                // biome-ignore lint/suspicious/noArrayIndexKey: attacks are a list without ids
-                key={i}
-                data={data}
-                attack={attack}
-                buffs={buffs}
-                onField={onField}
-                showConditions={showConditions}
-                damage={evaluation?.attacks[characterKey]?.[i]}
-                figures={figures || !!evaluation}
-                selecting={selecting}
-                selected={selected.has(i)}
-                readOnly={played}
-                onClick={() => {
-                  if (!selecting) return setEditing(i)
-                  // (from the latest selection: clicks may come faster than renders)
-                  setSelected((prev) => {
-                    const next = new Set(prev)
-                    if (next.has(i)) next.delete(i)
-                    else next.add(i)
-                    return next
-                  })
-                }}
-                onRemove={() => remove(new Set([i]))}
-              />
-            ))}
+            {groups.map(({ key, indices }) => {
+              const rowProps = {
+                data,
+                onField,
+                figures: figures || !!evaluation,
+                selecting,
+                readOnly: played,
+                onClick: onRowClick,
+                onRemove: onRowRemove,
+              }
+              const [first] = indices
+              const damageOf = (of: readonly number[]) => {
+                const all = of.map(
+                  (i) => evaluation?.attacks[characterKey]?.[i]
+                )
+                return all.every((d) => d !== undefined)
+                  ? all.reduce<number>((sum, d) => sum + (d ?? 0), 0)
+                  : undefined
+              }
+              const groupParts = parts.get(key)
+              if (indices.length === 1 || groupParts?.length === 1)
+                return (
+                  <AttackRow
+                    key={key}
+                    {...rowProps}
+                    index={first}
+                    attack={
+                      indices.length === 1
+                        ? attacks[first]
+                        : {
+                            ...attacks[first],
+                            hits: totalHits(indices.map((i) => attacks[i])),
+                          }
+                    }
+                    damage={damageOf(indices)}
+                    selected={selected.has(first)}
+                  />
+                )
+              return (
+                <AttackGroupRow
+                  key={key}
+                  groupKey={key}
+                  indices={indices}
+                  data={data}
+                  attack={attacks[first]}
+                  hits={totalHits(indices.map((i) => attacks[i]))}
+                  damage={damageOf(indices)}
+                  partCount={groupParts?.length ?? indices.length}
+                  figures={rowProps.figures}
+                  open={openGroups.has(key)}
+                  selecting={selecting}
+                  selection={
+                    indices.every((i) => selected.has(i))
+                      ? 'all'
+                      : indices.some((i) => selected.has(i))
+                        ? 'some'
+                        : 'none'
+                  }
+                  readOnly={played}
+                  onClick={onGroupClick}
+                  onRemove={onGroupRemove}
+                >
+                  {groupParts?.map(({ indices: of, label }) => (
+                    <AttackRow
+                      key={of[0]}
+                      {...rowProps}
+                      part={label}
+                      index={of[0]}
+                      attack={
+                        of.length === 1
+                          ? attacks[of[0]]
+                          : {
+                              ...attacks[of[0]],
+                              hits: totalHits(of.map((i) => attacks[i])),
+                            }
+                      }
+                      damage={damageOf(of)}
+                      selected={selected.has(of[0])}
+                    />
+                  ))}
+                </AttackGroupRow>
+              )
+            })}
             {!attacks.length && (
               <EmptyLine
                 sx={{ mx: 0.75 }}
@@ -568,7 +730,7 @@ export function MemberRotation({
           {/* the member's settings, at the bottom: in line with the other members' */}
           <Box sx={{ mt: 'auto' }}>{footer}</Box>
         </Box>
-      </Collapse>
+      </Fold>
 
       {dataContextValue && (
         <DataContext.Provider value={dataContextValue}>
@@ -717,130 +879,149 @@ function sameAttack(a: TeamOptAttack, b: TeamOptAttack) {
   )
 }
 
+const noSubscribe = () => () => {}
+/** Whether the member's attacks are shown: the shared flag's, else the prop's */
+function useFoldOpen(store: ExpandStore | undefined, expanded: boolean) {
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    store?.get ?? (() => expanded),
+    store?.get ?? (() => expanded)
+  )
+}
+
+/** The member's header: the button that opens and closes the attacks (its content is the card's) */
+function FoldButton({
+  store,
+  expanded,
+  foldable,
+  ...props
+}: ButtonBaseProps & {
+  store: ExpandStore | undefined
+  expanded: boolean
+  foldable: boolean
+  role?: string
+}) {
+  const open = useFoldOpen(store, expanded)
+  return <ButtonBase {...props} aria-expanded={foldable ? open : undefined} />
+}
+
+function FoldChevron({
+  store,
+  expanded,
+}: {
+  store: ExpandStore | undefined
+  expanded: boolean
+}) {
+  const open = useFoldOpen(store, expanded)
+  return (
+    <ExpandMoreIcon
+      className="member-chevron"
+      aria-hidden
+      sx={{
+        position: 'absolute',
+        top: 14,
+        right: 10,
+        fontSize: 20,
+        color: 'text.secondary',
+        transition: `transform .18s ${tokens.ease}, color .12s`,
+        transform: open ? 'rotate(180deg)' : 'none',
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+      }}
+    />
+  )
+}
+
 /**
- * An attack of the rotation, on one line: what it is (with its reaction, crit mode, own on-field
- * member and buff conditions as small marks), its damage over the rotation and how often it hits
+ * The member's attacks, folded or shown: re-rendered alone when the flag flips. Folded, they
+ * mount once the page is idle (they are most of a tab's elements), so a tab opens without them
+ * and the first unfold is still instant
  */
-function AttackRow({
+function Fold({
+  store,
+  expanded,
+  children,
+}: {
+  store: ExpandStore | undefined
+  expanded: boolean
+  children: ReactNode
+}) {
+  const open = useFoldOpen(store, expanded)
+  const [mounted, setMounted] = useState(open)
+  useEffect(() => {
+    if (mounted) return undefined
+    if (open) {
+      setMounted(true)
+      return undefined
+    }
+    const mount = () => startTransition(() => setMounted(true))
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(mount, { timeout: 1500 })
+      return () => cancelIdleCallback(id)
+    }
+    const id = setTimeout(mount, 300)
+    return () => clearTimeout(id)
+  }, [open, mounted])
+  return (
+    <Collapse in={open} timeout={180}>
+      {mounted || open ? children : null}
+    </Collapse>
+  )
+}
+
+/**
+ * An attack of the rotation, on one line: what it is (with its reaction, crit mode and own on-field
+ * member as small marks), its damage over the rotation and how often it hits
+ */
+const AttackRow = memo(function AttackRow({
+  index,
   data,
   attack,
-  buffs,
   onField,
   damage,
   selecting,
   selected,
   onClick,
   onRemove,
-  showConditions,
   figures,
   readOnly = false,
+  part,
 }: {
+  index: number
   data: UIData | undefined
   attack: TeamOptAttack
-  showConditions: boolean
   /** A played attack: it opens, read-only, and is not removed here */
   readOnly?: boolean
+  /** One part of a grouped attack: named by what sets it apart (the group names the attack) */
+  part?: PartLabel
   /** Its damage column (none without figures) */
   figures: boolean
-  buffs: TeamBuff[]
   /** Who is on the field by default */
   onField: CharacterKey
   damage: number | undefined
   /** Picking attacks to remove: a click toggles this one */
   selecting: boolean
   selected: boolean
-  onClick: () => void
-  onRemove: () => void
+  onClick: (index: number) => void
+  onRemove: (index: number) => void
 }) {
   const { t } = useTranslation('page_team')
-  const { t: tSheet } = useTranslation('sheet_gen')
   const { gender } = useDBMeta()
-  const limits = attack.limits ?? []
-  const states = attack.states ?? []
-  // who is on the field during this attack: its own choice, else the rotation's (always shown,
-  // the rotation's default member too, so every row says it)
+  // who is on the field during this attack: its own choice, else the rotation's
   const ownOnField = attack.onField ?? onField
-  // (the buff states and limits, as text for the compact view's tooltip)
-  const conditionLines: { key: string; node: ReactNode }[] = [
-    ...states.map((state) => {
-      const buff = buffs.find((b) => sameBuff(b.ref, state))
-      const stateName =
-        buff?.states?.find((x) => x.value === state.value)?.name ?? state.value
-      return {
-        key: `s${state.owner}${state.path.join('.')}`,
-        node: (
-          <>
-            {buff?.label ?? state.path.at(-1)}: {stateName}
-          </>
-        ),
-      }
-    }),
-    ...limits.map((limit) => {
-      const buff = buffs.find((b) => sameBuff(b.ref, limit))
-      return {
-        key: `l${limit.owner}${limit.path.join('.')}`,
-        node: (
-          <>
-            {buff?.name ?? limit.path.at(-1)}
-            {limit.hits
-              ? ` ${formatHits(limit.hits)}/${formatHits(attack.hits)}`
-              : ` (${t('teamOpt.rotation.conditionOff', 'off')})`}
-          </>
-        ),
-      }
-    }),
-  ]
-  const conditionCount = conditionLines.length
-  const listConditions = showConditions && (!!limits.length || !!states.length)
-  const SelectIcon = selected ? CheckBoxIcon : CheckBoxOutlineBlankIcon
   return (
     // the row opens the attack (or picks it); its remove button sits beside, not inside
-    <Box
-      sx={(theme) => ({
-        display: 'flex',
-        alignItems: 'center',
-        width: '100%',
-        borderRadius: tokens.radius.control,
-        ...quickSx,
-        ...(selected && selectedSx(theme)),
-        '&:hover': {
-          bgcolor: selected
-            ? alpha(theme.palette.primary.main, 0.14)
-            : alpha(giTokens.parchment, 0.05),
-        },
-        // the remove button shows on hover and keyboard focus (always without hover)
-        '&:hover .attack-remove, &:focus-within .attack-remove': { opacity: 1 },
-        '@media (hover: none)': { '& .attack-remove': { opacity: 1 } },
-      })}
-    >
+    <Box sx={(theme) => rowSx(theme, selected)}>
       <ButtonBase
-        onClick={onClick}
+        onClick={() => onClick(index)}
         aria-pressed={selecting ? selected : undefined}
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          flexGrow: 1,
-          minWidth: 0,
-          textAlign: 'left',
-          pl: 0.75,
+          ...rowButtonSx,
           pr: selecting ? 1 : 0.25,
-          py: 0.5,
-          minHeight: 36,
-          borderRadius: tokens.radius.control,
-          ...focusSx,
+          ...(part && { flexWrap: 'wrap', rowGap: 0.25 }),
         }}
       >
-        {selecting && (
-          <SelectIcon
-            sx={{
-              fontSize: 18,
-              color: selected ? 'primary.main' : 'text.secondary',
-              flexShrink: 0,
-            }}
-          />
-        )}
-        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        {selecting && <SelectMark selection={selected ? 'all' : 'none'} />}
+        <Box sx={{ flex: '1 1 0', minWidth: 0 }}>
           <Box
             sx={{
               display: 'flex',
@@ -849,30 +1030,16 @@ function AttackRow({
               minWidth: 0,
             }}
           >
-            <AttackName data={data} path={attack.path} oneLine />
-            {/* what is special about this attack: small marks after its name */}
-            {attack.reaction && (
-              <Tag
-                sx={{
-                  color: `${attack.reaction}.main`,
-                  flexShrink: 0,
-                }}
-              >
-                {tSheet(`reaction.${attack.reaction}`)}
-              </Tag>
+            {part ? (
+              <PartName part={part} onField={ownOnField} />
+            ) : (
+              <>
+                <AttackName data={data} path={attack.path} oneLine />
+                <AttackMarks attack={attack} />
+              </>
             )}
-            {attack.hitMode === 'critHit' && (
-              <Tag sx={{ flexShrink: 0 }}>
-                {t('teamOpt.hitMode.critHit', 'Crit')}
-              </Tag>
-            )}
-            {attack.hitMode === 'hit' && (
-              <Tag sx={{ flexShrink: 0 }}>
-                {t('teamOpt.hitMode.hit', 'Non-crit')}
-              </Tag>
-            )}
-            {ownOnField && (
-              <Tooltip
+            {!part && ownOnField && (
+              <SuspenseTooltip
                 placement="top"
                 title={
                   <>
@@ -887,143 +1054,510 @@ function AttackRow({
                 >
                   <MemberAvatar characterKey={ownOnField} size={18} />
                 </Box>
-              </Tooltip>
-            )}
-            {!showConditions && conditionCount > 0 && (
-              <Tooltip
-                placement="bottom-start"
-                // (in place: a portal re-rendered the translated names in a loop on resize)
-                PopperProps={{ disablePortal: true }}
-                title={conditionLines.map((line, n) => (
-                  <Fragment key={line.key}>
-                    {n > 0 && <br />}
-                    {line.node}
-                  </Fragment>
-                ))}
-              >
-                <Tag
-                  aria-label={t('teamOpt.rotation.conditionCount', {
-                    defaultValue: '{{count}} buff conditions',
-                    count: conditionCount,
-                  })}
-                  sx={{
-                    flexShrink: 0,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.25,
-                    color: 'text.secondary',
-                    ...numSx,
-                  }}
-                >
-                  <TuneIcon sx={{ fontSize: 13 }} />
-                  {conditionCount}
-                </Tag>
-              </Tooltip>
+              </SuspenseTooltip>
             )}
           </Box>
-          {/* power users: each buff state and limit, listed under the attack */}
-          {listConditions && (
+        </Box>
+        <RowFigures figures={figures} damage={damage} hits={attack.hits} />
+        {part && <PartConditions part={part} indent={selecting} />}
+      </ButtonBase>
+      {!selecting && !readOnly && (
+        <RemoveButton
+          label={t('teamOpt.rotation.remove', 'Remove')}
+          onClick={() => onRemove(index)}
+        />
+      )}
+    </Box>
+  )
+})
+
+/**
+ * An attack the rotation plays with different members on the field or buffs up: one row with its
+ * total, opening to its parts
+ */
+const AttackGroupRow = memo(function AttackGroupRow({
+  groupKey,
+  indices,
+  data,
+  attack,
+  hits,
+  damage,
+  figures,
+  open,
+  selecting,
+  selection,
+  readOnly,
+  onClick,
+  onRemove,
+  partCount,
+  children,
+}: {
+  groupKey: string
+  indices: readonly number[]
+  /** Its parts shown (parts that differ only in effects of gear nobody holds are one) */
+  partCount: number
+  data: UIData | undefined
+  /** Its first part (the parts share the name, reaction and hit mode) */
+  attack: TeamOptAttack
+  hits: number
+  damage: number | undefined
+  figures: boolean
+  open: boolean
+  selecting: boolean
+  selection: Selection
+  readOnly: boolean
+  onClick: (key: string, indices: readonly number[]) => void
+  onRemove: (indices: readonly number[]) => void
+  children: ReactNode
+}) {
+  const { t } = useTranslation('page_team')
+  const parts = t('teamOpt.rotation.parts', {
+    defaultValue: '{{count}} parts',
+    count: partCount,
+  })
+  return (
+    <>
+      <Box sx={(theme) => rowSx(theme, selection === 'all')}>
+        <ButtonBase
+          onClick={() => onClick(groupKey, indices)}
+          aria-expanded={selecting ? undefined : open}
+          aria-pressed={selecting ? selection === 'all' : undefined}
+          sx={{ ...rowButtonSx, pr: selecting ? 1 : 0.25 }}
+        >
+          {selecting ? (
+            <SelectMark selection={selection} />
+          ) : (
+            <ExpandMoreIcon
+              aria-hidden
+              sx={{
+                fontSize: 18,
+                ml: -0.25,
+                mr: -0.5,
+                flexShrink: 0,
+                color: 'text.secondary',
+                transform: open ? 'none' : 'rotate(-90deg)',
+                transition: `transform .18s ${tokens.ease}`,
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                },
+              }}
+            />
+          )}
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
             <Box
               sx={{
                 display: 'flex',
-                flexWrap: 'wrap',
-                gap: 0.5,
-                mt: 0.5,
-                pl: 3.5,
+                alignItems: 'center',
+                gap: 0.75,
+                minWidth: 0,
               }}
             >
-              {states.map((state) => {
-                const buff = buffs.find((b) => sameBuff(b.ref, state))
-                const stateName =
-                  buff?.states?.find((s) => s.value === state.value)?.name ??
-                  state.value
-                return (
-                  <Tag key={`${state.owner}${state.path.join('.')}=`}>
-                    {buff?.label ?? state.path.at(-1)}: {stateName}
-                  </Tag>
-                )
-              })}
-              {limits.map((limit) => {
-                const buff = buffs.find((b) => sameBuff(b.ref, limit))
-                return (
-                  <Tag
-                    key={`${limit.owner}${limit.path.join('.')}`}
-                    off={!limit.hits}
-                  >
-                    {buff?.name ?? limit.path.at(-1)}
-                    {!!limit.hits &&
-                      ` ${formatHits(limit.hits)}/${formatHits(attack.hits)}`}
-                  </Tag>
-                )
-              })}
+              <AttackName data={data} path={attack.path} oneLine />
+              <AttackMarks attack={attack} />
             </Box>
-          )}
-        </Box>
-        {/* its damage over the rotation, and its hits: in columns */}
-        {figures && (
-          <Typography
-            component="span"
-            sx={{
-              ...type.label,
-              ...numSx,
-              flexShrink: 0,
-              minWidth: '3.4em',
-              textAlign: 'right',
-            }}
-          >
-            {formatDamage(damage)}
-          </Typography>
+            <Typography noWrap sx={{ ...type.label, fontSize: 12, ...numSx }}>
+              {parts}
+            </Typography>
+          </Box>
+          <RowFigures figures={figures} damage={damage} hits={hits} />
+        </ButtonBase>
+        {!selecting && !readOnly && (
+          <RemoveButton
+            label={`${t('teamOpt.rotation.remove', 'Remove')} (${parts})`}
+            onClick={() => onRemove(indices)}
+          />
         )}
-        <Typography
-          component="span"
+      </Box>
+      <Collapse in={open || selecting} timeout={180} unmountOnExit>
+        <Box
           sx={{
-            fontSize: 13.5,
-            fontWeight: 650,
-            ...numSx,
-            flexShrink: 0,
-            minWidth: '2.4em',
-            textAlign: 'right',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.25,
+            ml: 1.25,
+            pl: 0.75,
+            borderLeft: `1px solid ${giTokens.hairline}`,
           }}
         >
-          ×{formatHits(attack.hits)}
-        </Typography>
-      </ButtonBase>
-      {!selecting && !readOnly && (
-        <Tooltip title={t('teamOpt.rotation.remove', 'Remove')}>
-          <IconButton
-            className="attack-remove"
-            size="small"
-            aria-label={t('teamOpt.rotation.remove', 'Remove')}
-            onClick={onRemove}
-            sx={{
-              opacity: 0,
-              mr: 0.25,
-              p: 0.5,
-              color: 'text.secondary',
-              transition: 'opacity .12s, color .12s, background-color .12s',
-              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-              '&:hover': { color: 'error.main' },
-              ...focusSx,
-            }}
-          >
-            <CloseIcon sx={{ fontSize: 16 }} />
-          </IconButton>
+          {children}
+        </Box>
+      </Collapse>
+    </>
+  )
+})
+
+type Selection = 'all' | 'some' | 'none'
+
+/** What sets a part of a grouped attack apart from the group's other parts */
+interface PartLabel {
+  /** The parts differ in who is on the field: say it */
+  onField: boolean
+  /**
+   * The buff states and limits the other parts don't all share: the characters' own first (not
+   * their weapons' or sets'), the rarest first
+   */
+  conditions: { key: string; owner: TeamOptBuffOwner; node: ReactNode }[]
+}
+
+/**
+ * Each part's label: its on-field member when that differs between the parts, and the buff states
+ * and limits it doesn't share with every other part (the rest are the same for all of them)
+ */
+function partLabels(
+  parts: readonly TeamOptAttack[],
+  onField: CharacterKey,
+  buffOf: BuffNames,
+  off: string,
+  /** Whether a buff's giver holds its weapon or set (absent: every state counts) */
+  held?: (owner: TeamOptBuffOwner, item: string) => boolean
+): PartLabel[] {
+  const conditions = parts.map((attack) =>
+    [
+      ...(attack.states ?? []).map((state) => {
+        const buff = buffOf(state, state.value)
+        const stateName = buff.states?.find(
+          (x) => x.value === state.value
+        )?.name
+        return {
+          key: `s${state.owner}${state.path.join('.')}=${state.value}`,
+          owner: state.owner,
+          item: state.path[0],
+          talent: !!buff.talent,
+          unnamed: buff.unnamed,
+          node: (
+            <>
+              {buff.title ?? buff.label ?? buff.name}
+              {stateName && <> · {stateName}</>}
+            </>
+          ),
+        }
+      }),
+      ...(attack.limits ?? []).map((limit) => {
+        const buff = buffOf(limit)
+        return {
+          key: `l${limit.owner}${limit.path.join('.')}=${limit.hits}`,
+          owner: limit.owner,
+          item: limit.path[0],
+          talent: !!buff.talent,
+          unnamed: buff.unnamed,
+          node: (
+            <>
+              {buff.title ?? buff.name}{' '}
+              {limit.hits
+                ? `${formatHits(limit.hits)}/${formatHits(attack.hits)}`
+                : off}
+            </>
+          ),
+        }
+      }),
+    ].filter((c) => !c.unnamed && (!held || held(c.owner, c.item)))
+  )
+  const count = new Map<string, number>()
+  for (const list of conditions)
+    for (const { key } of list) count.set(key, (count.get(key) ?? 0) + 1)
+  const onFields = new Set(parts.map((attack) => attack.onField ?? onField))
+  return conditions.map((list) => ({
+    onField: onFields.size > 1,
+    conditions: list
+      .filter((c) => count.get(c.key)! < parts.length)
+      .sort(
+        (a, b) =>
+          Number(b.talent) - Number(a.talent) ||
+          count.get(a.key)! - count.get(b.key)!
+      )
+      .map(({ key, owner, node }) => ({ key, owner, node })),
+  }))
+}
+
+/**
+ * A part's name: who is on the field when that tells the parts apart (its other differences then
+ * get a line of their own, see PartConditions), else what differs
+ */
+function PartName({
+  part,
+  onField,
+}: {
+  part: PartLabel
+  onField: CharacterKey
+}) {
+  const { t } = useTranslation('page_team')
+  const { gender } = useDBMeta()
+  if (!part.onField && part.conditions.length)
+    return <ConditionTags conditions={part.conditions} />
+  return (
+    <Typography noWrap sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+      <Box component="span" sx={{ color: 'text.primary' }}>
+        <CharacterName characterKey={onField} gender={gender} />
+      </Box>{' '}
+      {t('teamOpt.attack.onField', 'on the field')}
+    </Typography>
+  )
+}
+
+/** The buffs that set a part apart besides its on-field member: a full-width line under the row */
+function PartConditions({
+  part,
+  indent,
+}: {
+  part: PartLabel
+  /** Room for the select mark before the name */
+  indent: boolean
+}) {
+  if (!part.onField || !part.conditions.length) return null
+  return (
+    <Box sx={{ flexBasis: '100%', minWidth: 0, pl: indent ? '26px' : 0 }}>
+      <ConditionTags conditions={part.conditions} />
+    </Box>
+  )
+}
+
+function ConditionTags({
+  conditions,
+}: {
+  conditions: PartLabel['conditions']
+}) {
+  const { t } = useTranslation('page_team')
+  const shown = conditions.slice(0, 2)
+  const more = conditions.length - shown.length
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 0.5,
+        minWidth: 0,
+      }}
+    >
+      {shown.map(({ key, owner, node }) => (
+        <Tag key={key} sx={{ minWidth: 0, maxWidth: '100%' }}>
+          {owner !== 'team' && (
+            <Box
+              component="span"
+              sx={{ display: 'inline-block', verticalAlign: -3, mr: 0.5 }}
+            >
+              <MemberAvatar characterKey={owner} size={14} />
+            </Box>
+          )}
+          {node}
+        </Tag>
+      ))}
+      {more > 0 && (
+        <Tooltip
+          title={t('teamOpt.rotation.moreConditions', {
+            defaultValue: '{{count}} more buffs: open the attack to see them',
+            count: more,
+          })}
+        >
+          <Tag sx={{ flexShrink: 0, color: 'text.secondary', ...numSx }}>
+            +{more}
+          </Tag>
         </Tooltip>
       )}
     </Box>
   )
 }
 
-/** A small mark on an attack: its reaction, crit mode, or a buff state or limit (off: struck) */
+type BuffNames = (
+  ref: BuffRef,
+  value?: string
+) => Pick<
+  TeamBuff,
+  'name' | 'label' | 'title' | 'states' | 'unnamed' | 'talent'
+>
+
+/**
+ * Names a buff an attack sets: the team's own when it is on there, else from its sheet (the
+ * rotation sets buffs per attack that are off in Team settings)
+ */
+function useBuffNames(
+  buffs: readonly TeamBuff[],
+  teamData: TeamData | undefined
+): BuffNames {
+  return useMemo(() => {
+    const described = new Map<
+      string,
+      Pick<
+        TeamBuff,
+        'name' | 'label' | 'title' | 'states' | 'unnamed' | 'talent'
+      >
+    >()
+    return (ref, value = 'on') => {
+      const own = buffs.find((b) => sameBuff(b.ref, ref))
+      if (own) return own
+      const key = buffRefKey(ref)
+      let found = described.get(key)
+      if (!found) {
+        found = teamData
+          ? describe(ref, value, teamData)
+          : { name: ref.path.join(' · '), unnamed: true as const }
+        described.set(key, found)
+      }
+      return found
+    }
+  }, [buffs, teamData])
+}
+
+const toggled = (set: ReadonlySet<string>, key: string) => {
+  const next = new Set(set)
+  if (next.has(key)) next.delete(key)
+  else next.add(key)
+  return next
+}
+
+const rowSx = (theme: Theme, selected: boolean) => ({
+  display: 'flex',
+  alignItems: 'center',
+  width: '100%',
+  borderRadius: tokens.radius.control,
+  ...quickSx,
+  ...(selected && selectedSx(theme)),
+  '&:hover': {
+    bgcolor: selected
+      ? alpha(theme.palette.primary.main, 0.14)
+      : alpha(giTokens.parchment, 0.05),
+  },
+  // the remove button shows on hover and keyboard focus (always without hover)
+  '&:hover .attack-remove, &:focus-within .attack-remove': { opacity: 1 },
+  '@media (hover: none)': { '& .attack-remove': { opacity: 1 } },
+})
+
+const rowButtonSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  flexGrow: 1,
+  minWidth: 0,
+  textAlign: 'left',
+  pl: 0.75,
+  py: 0.5,
+  minHeight: 36,
+  borderRadius: tokens.radius.control,
+  ...focusSx,
+} as const
+
+function SelectMark({ selection }: { selection: Selection }) {
+  const Icon =
+    selection === 'all'
+      ? CheckBoxIcon
+      : selection === 'some'
+        ? IndeterminateCheckBoxIcon
+        : CheckBoxOutlineBlankIcon
+  return (
+    <Icon
+      sx={{
+        fontSize: 18,
+        color: selection === 'none' ? 'text.secondary' : 'primary.main',
+        flexShrink: 0,
+      }}
+    />
+  )
+}
+
+/** What is special about an attack: its reaction and crit mode, as small marks after its name */
+function AttackMarks({ attack }: { attack: TeamOptAttack }) {
+  const { t } = useTranslation('page_team')
+  const { t: tSheet } = useTranslation('sheet_gen')
+  return (
+    <>
+      {attack.reaction && (
+        <Tag sx={{ color: `${attack.reaction}.main`, flexShrink: 0 }}>
+          {tSheet(`reaction.${attack.reaction}`)}
+        </Tag>
+      )}
+      {attack.hitMode === 'critHit' && (
+        <Tag sx={{ flexShrink: 0 }}>{t('teamOpt.hitMode.critHit', 'Crit')}</Tag>
+      )}
+      {attack.hitMode === 'hit' && (
+        <Tag sx={{ flexShrink: 0 }}>{t('teamOpt.hitMode.hit', 'Non-crit')}</Tag>
+      )}
+    </>
+  )
+}
+
+/** A row's damage over the rotation and its hits, in columns */
+function RowFigures({
+  figures,
+  damage,
+  hits,
+}: {
+  figures: boolean
+  damage: number | undefined
+  hits: number
+}) {
+  return (
+    <>
+      {figures && (
+        <Typography
+          component="span"
+          sx={{
+            ...type.label,
+            ...numSx,
+            flexShrink: 0,
+            minWidth: '3.4em',
+            textAlign: 'right',
+          }}
+        >
+          {formatDamage(damage)}
+        </Typography>
+      )}
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 13.5,
+          fontWeight: 650,
+          ...numSx,
+          flexShrink: 0,
+          minWidth: '2.4em',
+          textAlign: 'right',
+        }}
+      >
+        ×{formatHits(hits)}
+      </Typography>
+    </>
+  )
+}
+
+function RemoveButton({
+  label,
+  onClick,
+}: {
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <Tooltip title={label}>
+      <IconButton
+        className="attack-remove"
+        size="small"
+        aria-label={label}
+        onClick={onClick}
+        sx={{
+          opacity: 0,
+          mr: 0.25,
+          p: 0.5,
+          color: 'text.secondary',
+          transition: 'opacity .12s, color .12s, background-color .12s',
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+          '&:hover': { color: 'error.main' },
+          ...focusSx,
+        }}
+      >
+        <CloseIcon sx={{ fontSize: 16 }} />
+      </IconButton>
+    </Tooltip>
+  )
+}
+
+/** A small mark on an attack: its reaction, crit mode, or its buff conditions' count */
 const Tag = forwardRef<
   HTMLSpanElement,
   {
     children: ReactNode
-    off?: boolean
     sx?: SxProps<Theme>
     'aria-label'?: string
   } & HTMLAttributes<HTMLSpanElement>
->(function Tag({ children, off = false, sx, ...rest }, ref) {
+>(function Tag({ children, sx, ...rest }, ref) {
   return (
     <Box
       component="span"
@@ -1043,8 +1577,7 @@ const Tag = forwardRef<
           fontSize: 11.5,
           fontWeight: 600,
           lineHeight: '18px',
-          color: off ? 'text.secondary' : 'text.primary',
-          textDecoration: off ? 'line-through' : undefined,
+          color: 'text.primary',
           bgcolor: alpha(giTokens.parchment, 0.07),
         },
         ...(Array.isArray(sx) ? sx : [sx]),

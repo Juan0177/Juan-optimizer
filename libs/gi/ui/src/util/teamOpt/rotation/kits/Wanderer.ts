@@ -144,11 +144,13 @@ function endWf(
   }
 }
 
-/** Windfavored's natural end (its points or its 20 s run out), checked every few frames */
+/**
+ * Windfavored's 20 s running out, checked every few frames. (Its points running out ends it only
+ * when his next action starts, gcsim's checkForSkillEnd: until then it lingers.)
+ */
 function poll(c: SimContext, s: WandererState, id: number) {
   if (s.wfId !== id || s.wfEnd === undefined) return
-  const end = Math.min(s.wfEnd, s.wfLimit)
-  if (c.now >= end) endWf(c, s, end, true)
+  if (c.now >= s.wfLimit) endWf(c, s, s.wfLimit, true)
   else c.at(POLL, (c2) => poll(c2, s, id))
 }
 
@@ -218,7 +220,7 @@ function c6Hit(c: SimContext, s: WandererState, i: number) {
 function absorbA1(c: SimContext, s: WandererState) {
   const left = [...A1_ELES]
   for (let k = 0; k < 2; k++) {
-    const ele = c.absorb(left) as Absorbed | undefined
+    const ele = c.absorb(left, { player: true }) as Absorbed | undefined
     if (!ele || !left.includes(ele)) break
     s.contact.push(ele)
     left.splice(left.indexOf(ele), 1)
@@ -244,6 +246,13 @@ export const kit: KitModel = {
   sampled: true,
   normalAnimationDelay: (ctx, s: WandererState, kind) =>
     kind === 'xingqiu' && inWf(s, ctx.now) ? 12 : 0,
+  // "D?": a dash only with A4's Descent in Windfavored (gcsim's `if .wanderer.mods.wanderer-a4`)
+  actionReadyAt: (ctx, s: WandererState, action) =>
+    action.kind === 'dash' &&
+    action.optional &&
+    !(inWf(s, ctx.now) && s.descent)
+      ? Number.POSITIVE_INFINITY
+      : ctx.now,
   init: (): WandererState => ({
     wfLimit: -1,
     wfId: 0,
@@ -268,11 +277,15 @@ export const kit: KitModel = {
   },
   act(ctx, s: WandererState, action, previous) {
     const now = ctx.now
-    // Windfavored ran out since the last check: it ends now (with the fall)
-    if (s.wfEnd !== undefined && !inWf(s, now))
-      endWf(ctx, s, Math.min(s.wfEnd, s.wfLimit), true)
+    // Windfavored's points ran out: it ends as this action starts (with the fall), unless it is
+    // the Skill, which ends it as its second press does (gcsim's Skill: the status is still on)
+    const lingering =
+      s.wfEnd !== undefined && !inWf(s, now) && now < s.wfLimit
+    const pressEnds = lingering && action.kind === 'skill'
+    if (s.wfEnd !== undefined && !inWf(s, now) && !pressEnds)
+      endWf(ctx, s, lingering ? now : s.wfLimit, true)
     const fall = Math.max(0, s.fallUntil - now)
-    const wf = inWf(s, now)
+    const wf = inWf(s, now) || pressEnds
     const c = ctx.constellation('Wanderer')
     switch (action.kind) {
       case 'normal': {

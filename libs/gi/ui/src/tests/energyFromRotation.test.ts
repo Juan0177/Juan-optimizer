@@ -135,6 +135,24 @@ describe('energy inputs from the rotation', () => {
     )
     expect(result.targets.Durin!).toBeLessThan(150)
   })
+  it('rounds field times to a tenth that still add up to 100%, so a run is not stopped', () => {
+    // (three equal shares, rounded one by one, made 33.3% each: 99.9%)
+    const team: CharacterKey[] = ['Bennett', 'Xingqiu', 'Xiangling']
+    const thirds = {
+      members: Object.fromEntries(team.map((k) => [k, { fieldTime: 1 }])),
+    } as unknown as RotationEnergy
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team, 20),
+      team,
+      thirds
+    )
+    const fields = team.map((k) => filled.members[k]!.fieldTime)
+    expect(fields.map((f) => Math.round(f * 10)).sort()).toEqual([
+      333, 333, 334,
+    ])
+    expect(fields.reduce((n, f) => n + f, 0)).toBeCloseTo(100, 6)
+    expect(calculateEnergyRecharge(team, filled).errors).toEqual([])
+  })
 })
 
 describe('energy inputs: Varesa Overload (KQM quick guide)', () => {
@@ -360,6 +378,36 @@ describe('energy inputs: Flins (two Bursts)', () => {
         .flatEnergy ?? 0
     expect(at(4) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
     expect(at(6) - at(3)).toBeCloseTo((5 * procs) / 2, 2)
+  })
+  it('Bloodsoaked Ruins played as a KQM candidate: its Energy counts for the build that holds it', () => {
+    const rotation =
+      'Columbina E -> Ineffa E Q -> Sucrose E -> Flins E N4 N2 E Q N4 E Q'
+    const candidate = simulateRotation({
+      rotation: parseRotation(
+        rotation,
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      gear: {
+        Flins: { candidates: { weapons: ['BloodsoakedRuins', 'Deathmatch'] } },
+      },
+      repeats: 4,
+      keep: 'last2',
+    })
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team, candidate.frames / 120),
+      team,
+      energyFromRotation(candidate, team, 2)
+    )
+    expect(filled.members.Flins!.weaponTriggers?.BloodsoakedRuins).toBe(1)
+    const target = (weapon: 'BloodsoakedRuins' | 'Deathmatch') =>
+      calculateEnergyRecharge(team, filled, { Flins: weapon }, { Flins: 1 })
+        .targets.Flins!
+    expect(target('BloodsoakedRuins')).toBeLessThan(target('Deathmatch') - 20)
   })
 })
 

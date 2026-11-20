@@ -10,8 +10,16 @@ import {
   enemyHpOf,
   FIGHT_LIMIT,
   MOONGECKO,
+  DRIFTING_SNOW,
+  DRIFTING_SNOW_BOSS,
+  LION,
+  LION_BOSS,
+  LYSIS_BOSS,
   MOONGECKO_BOSS,
+  OVERSEER_BOSS,
   resMultiplier,
+  SCULPTOR,
+  SCULPTOR_BOSS,
   stygianFight,
 } from '../components/enemy/stygianFights'
 
@@ -582,5 +590,214 @@ describe('a fight that starts with no energy', () => {
       (0.7 * recorded) / stygianBoss(MOONGECKO_BOSS)!.hp.dire,
       9
     )
+  })
+})
+
+/** A looped rotation of `seconds`: its Radiance, active Nightsoul's Blessing, Cryo hits */
+const cycle = (
+  seconds: number,
+  over: Partial<import('../components/enemy/stygianFights').FightCycle> = {}
+) => ({ seconds, radiance: [], nightsoul: [], cryoHits: [], ...over })
+
+describe('Secret Source Automaton: Overseer Device (the game files’ Fearless/Dire values)', () => {
+  const boss = stygianBoss(OVERSEER_BOSS)!
+  const part = (f: ReturnType<typeof stygianFight>) =>
+    f.parts.find((p) => p.key === 'sweeper') as {
+      count: number
+      seconds: number
+      stopped: number
+      counterstrike: number
+    }
+  it('keeps its Sweeper RES (270%) without Cryo or Nightsoul, then its normal attacks at 80%', () => {
+    const fight = stygianFight(boss, 'dire', {
+      ...team('physical', 100000),
+      cycle: cycle(10),
+    })
+    const p = part(fight)
+    expect(p.stopped).toBe(0)
+    expect(p.counterstrike).toBe(0)
+    expect(fight.timeline.segments[0].state).toBe('enhanced')
+    expect(
+      fight.timeline.segments.find((s) => s.start >= 57.5 - 1e-9)?.state
+    ).toBe('normalMode')
+  })
+  it('stops once Cryo outpaces its Flow Momentum: 3 hits/s from 32 (net −4/s), first at 10 or less ≈ 4.3 s into its loop', () => {
+    // (one Cryo hit every 1/3 s)
+    const hits = [0, 1, 2].map((i) => [i / 3, 1] as [number, number])
+    const fight = stygianFight(boss, 'dire', {
+      ...team('cryo', 100000),
+      cycle: cycle(1, { cryoHits: hits }),
+    })
+    const stop = fight.timeline.segments.find((s) => s.state === 'lowEnergy')!
+    // (14 hits by 4.33 s, −42, and 10 ticks, +20: at 10)
+    expect(stop.start).toBeCloseTo(5 + 13 / 3, 6)
+    // stopped once: its normal attacks after at 10%
+    expect(
+      fight.timeline.segments.find((s) => s.start >= 57.5 - 1e-9)?.state
+    ).toBe('regular')
+  })
+  it('turns to Forced Counterstrike 18 s into its loop with Nightsoul’s Blessing kept from the start (10 a second)', () => {
+    const fight = stygianFight(boss, 'dire', {
+      ...team('pyro', 100000),
+      cycle: cycle(10, { nightsoul: [[0, 10]] }),
+    })
+    const counter = fight.timeline.segments.find(
+      (s) => s.state === 'nightsoul'
+    )!
+    expect(counter.start).toBeCloseTo(5 + 18, 0)
+  })
+})
+
+describe('Battle-Hardened Domovoy Sculptor', () => {
+  const boss = stygianBoss(SCULPTOR_BOSS)!
+  it('turns each sculpting with Radiance on it into statues: 2 × 499,999 off it, 2 stacks then 3', () => {
+    const fight = stygianFight(boss, 'fearless', {
+      ...team('anemo', 100000),
+      cycle: cycle(10, { radiance: [[0, 10]] }),
+    })
+    const statues = fight.timeline.events.filter((e) => e.kind === 'statue')
+    expect(statues[0].t).toBeCloseTo(SCULPTOR.first + SCULPTOR.lead + 0.1, 9)
+    expect(statues[0].hp).toBeCloseTo(999998 / boss.hp.fearless, 9)
+    const states = fight.timeline.segments.map((s) => s.state)
+    expect(states.slice(0, 3)).toEqual(['initial', 'stacks2', 'stacks3'])
+  })
+  it('stays at 90% RES without Radiance, nothing off it', () => {
+    const fight = stygianFight(boss, 'fearless', {
+      ...team('anemo', 100000),
+      cycle: cycle(10),
+    })
+    expect(fight.timeline.events).toEqual([])
+    expect(new Set(fight.timeline.segments.map((s) => s.state))).toEqual(
+      new Set(['initial'])
+    )
+    // (90% RES: ×1/(4·0.9+1) of the 10% damage)
+    const dps = (100000 * (1 / 4.6)) / 0.9
+    expect(fight.seconds).toBeCloseTo(boss.hp.fearless / dps, 3)
+  })
+  it('lets its stacks lapse 30 s after the last statues', () => {
+    // (Radiance in the first two sculptings' windows only)
+    const fight = stygianFight(boss, 'dire', {
+      ...team('anemo', 50000),
+      cycle: cycle(600, { radiance: [[8, 30]] }),
+    })
+    const lapse = fight.timeline.segments.find(
+      (s, i) => i > 0 && s.state === 'initial'
+    )!
+    expect(lapse.start).toBeCloseTo(
+      SCULPTOR.first + SCULPTOR.cadence + 1.1 + 30,
+      6
+    )
+  })
+})
+
+describe('Guardian Blade of Drifting Snow', () => {
+  const boss = stygianBoss(DRIFTING_SNOW_BOSS)!
+  const hp = boss.hp.fearless
+  it('holds its HP at 81% for its first Ice Coffin', () => {
+    const fight = stygianFight(boss, 'fearless', team('physical', 100000, {}))
+    const first = fight.timeline.segments[0]
+    expect(first.hpEnd).toBeCloseTo(DRIFTING_SNOW.trigger, 9)
+    expect(first.end).toBeCloseTo((0.19 * hp) / 100000, 6)
+  })
+  it('breaks its ward with Pyro (2 units each): 10% off it, then 10 s at −40%', () => {
+    // (2U Pyro a second: 100 durability a second, 10.5 s)
+    const fight = stygianFight(
+      boss,
+      'fearless',
+      team('pyro', 100000, { pyro: 2 })
+    )
+    const coffin = fight.timeline.segments.find((s) => s.state === 'warded')!
+    expect(coffin.end - coffin.start).toBeCloseTo(10.5, 6)
+    expect(fight.timeline.events[0]).toMatchObject({ kind: 'backlash' })
+    expect(fight.timeline.events[0].hp).toBeCloseTo(0.1, 9)
+    const weak = fight.timeline.segments.find((s) => s.state === 'stunned')!
+    expect(weak.end - weak.start).toBeCloseTo(10, 6)
+  })
+  it('gets 10% back from a coffin not broken in 20 s', () => {
+    const fight = stygianFight(boss, 'fearless', team('physical', 100000, {}))
+    const heal = fight.timeline.events.find((e) => e.kind === 'heal')!
+    expect(heal.hp).toBeCloseTo(-0.1, 9)
+  })
+  it('turns its ward to a shield of 15% of its HP under Radiance; broken: 10% and 60% of it off', () => {
+    const fight = stygianFight(boss, 'fearless', {
+      ...team('electro', 300000, {}),
+      cycle: cycle(10, { radiance: [[0, 10]] }),
+    })
+    const shield = fight.timeline.segments.find((s) => s.state === 'barrier')!
+    expect(shield.end - shield.start).toBeCloseTo((0.15 * hp) / 300000, 6)
+    expect(fight.timeline.events[0].hp).toBeCloseTo(0.1 + 0.6 * 0.15, 9)
+  })
+})
+
+describe('Chimeric Winged Lion', () => {
+  const boss = stygianBoss(LION_BOSS)!
+  it('breaks its Electro Ward with Cryo (1000 durability, 25 a unit), its backlash 30% of what it took', () => {
+    // (1U Cryo a second: 40 s)
+    const fight = stygianFight(
+      boss,
+      'fearless',
+      team('cryo', 100000, { cryo: 1 })
+    )
+    const end = fight.timeline.segments.find(
+      (s) => s.state === 'stunned'
+    )!.start
+    expect(end - LION.opening).toBeCloseTo(40, 6)
+    const absorbed = 100000 * 40
+    expect(fight.timeline.events[0].hp).toBeCloseTo(
+      (0.3 * absorbed) / boss.hp.fearless,
+      9
+    )
+    const stun = fight.timeline.segments.find((s) => s.state === 'stunned')!
+    expect(stun.end - stun.start).toBeCloseTo(LION.paralysis, 6)
+  })
+  it('never takes damage while its ward holds (no reactions)', () => {
+    const fight = stygianFight(boss, 'fearless', team('physical', 100000, {}))
+    expect(fight.seconds).toBeUndefined()
+  })
+  it('turns its shockwave on its ward under Radiance: 400 off 2.1 s after', () => {
+    const fight = stygianFight(boss, 'fearless', {
+      ...team('cryo', 100000, { cryo: 0.5 }),
+      cycle: cycle(10, { radiance: [[0, 10]] }),
+    })
+    const part = fight.parts.find((p) => p.key === 'electroWards') as {
+      backfires: number
+    }
+    expect(part.backfires).toBeGreaterThan(0)
+    const ward = fight.timeline.segments.find(
+      (s) =>
+        s.state === 'warded' &&
+        Math.abs(s.end - (LION.shockFirst + LION.shockDelay)) < 1e-6
+    )!
+    const next =
+      fight.timeline.segments[fight.timeline.segments.indexOf(ward) + 1]
+    expect(ward.meterEnd! - next.meterStart!).toBeCloseTo(LION.shockWear, 6)
+  })
+})
+
+describe('Secret Source Automaton: Lysis Shears', () => {
+  const boss = stygianBoss(LYSIS_BOSS)!
+  it('fills its countermeasures on their own in 100 s; its shield’s backlash 50% of what it took', () => {
+    const fight = stygianFight(boss, 'fearless', team('physical', 100000, {}))
+    const p = fight.parts.find((x) => x.key === 'countermeasures') as {
+      seconds: number
+    }
+    expect(p.seconds).toBe(100)
+    // (110% RES: ×1/5.4 of the 10% damage)
+    const absorbed = (100000 / 5.4 / 0.9) * 100
+    expect(fight.timeline.events[0].hp).toBeCloseTo(
+      (0.5 * absorbed) / boss.hp.fearless,
+      9
+    )
+    expect(fight.timeline.events[1]).toMatchObject({ kind: 'hpLoss', hp: 0.15 })
+  })
+  it('fills in 40 s with a member in Nightsoul’s Blessing throughout (5 a second)', () => {
+    const fight = stygianFight(boss, 'fearless', {
+      ...team('pyro', 100000, {}),
+      cycle: cycle(10, { anyNightsoul: [[0, 10]], nightsoulEntries: [] }),
+    })
+    const p = fight.parts.find((x) => x.key === 'countermeasures') as {
+      seconds: number
+    }
+    expect(p.seconds).toBe(40)
   })
 })

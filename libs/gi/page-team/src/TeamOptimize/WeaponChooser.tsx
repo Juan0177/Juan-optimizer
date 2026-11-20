@@ -5,6 +5,7 @@ import {
   ImgIcon,
   ModalWrapper,
   NumberInputLazy,
+  SuspenseTooltip,
 } from '@genshin-optimizer/common/ui'
 import {
   deepClone,
@@ -935,7 +936,7 @@ function MemberEnergy({
       component="label"
       sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
     >
-      <Tooltip
+      <SuspenseTooltip
         title={
           <>
             <CharacterName characterKey={characterKey} gender={gender} />
@@ -956,7 +957,7 @@ function MemberEnergy({
         >
           <MemberAvatar characterKey={characterKey} size={22} />
         </Box>
-      </Tooltip>
+      </SuspenseTooltip>
       <NumberInputLazy
         size="small"
         float
@@ -1063,7 +1064,6 @@ export function PassiveLines({
           }}
         >
           <Typography
-            // (the members' switches go under it when they don't fit beside it)
             sx={{
               flex: '1 1 150px',
               minWidth: 0,
@@ -1074,20 +1074,36 @@ export function PassiveLines({
           >
             {line.label}
           </Typography>
-          {wielders.map((member) =>
-            line.states.length <= 1 ? (
-              <PassiveAvatarToggle
-                key={member.characterKey}
-                member={member}
-                line={line}
-              />
-            ) : (
-              <PassiveAvatarStates
-                key={member.characterKey}
-                member={member}
-                line={line}
-              />
-            )
+          {line.states.length <= 1 ? (
+            // (the members' switches stay together: beside it, or all under it)
+            <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, ml: 'auto' }}>
+              {wielders.map((member) => (
+                <PassiveAvatarToggle
+                  key={member.characterKey}
+                  member={member}
+                  line={line}
+                />
+              ))}
+            </Box>
+          ) : (
+            // (choices of a state: a row of their own under it, in even columns)
+            <Box
+              sx={{
+                flexBasis: '100%',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                columnGap: 1.5,
+                rowGap: 0.5,
+              }}
+            >
+              {wielders.map((member) => (
+                <PassiveAvatarStates
+                  key={member.characterKey}
+                  member={member}
+                  line={line}
+                />
+              ))}
+            </Box>
           )}
         </Box>
       ))}
@@ -1153,7 +1169,7 @@ function PassiveAvatarToggle({
   const stateKey = line.states[0]?.[0]
   const on = !!stateKey && value === stateKey
   return (
-    <Tooltip
+    <SuspenseTooltip
       arrow
       title={
         <>
@@ -1190,7 +1206,7 @@ function PassiveAvatarToggle({
       >
         <MemberAvatar characterKey={member.characterKey} size={22} />
       </ButtonBase>
-    </Tooltip>
+    </SuspenseTooltip>
   )
 }
 
@@ -1210,7 +1226,7 @@ function PassiveAvatarStates({
         display: 'flex',
         alignItems: 'center',
         gap: 0.5,
-        flexShrink: 0,
+        minWidth: 0,
         opacity: value ? 1 : 0.55,
       }}
     >
@@ -1228,6 +1244,7 @@ function PassiveAvatarStates({
         sx={{
           fontSize: 13,
           minWidth: 48,
+          flex: '0 1 auto',
           color: value ? 'text.primary' : 'text.secondary',
           ...quickSx,
           '&:hover': { color: 'text.primary' },
@@ -1492,7 +1509,7 @@ function RemoveWeaponButton({
   }
   return (
     <>
-      <Tooltip
+      <SuspenseTooltip
         title={
           blocked ? (
             <>
@@ -1525,7 +1542,7 @@ function RemoveWeaponButton({
             <DeleteOutlineIcon sx={{ fontSize: 18 }} />
           </IconButton>
         </span>
-      </Tooltip>
+      </SuspenseTooltip>
       <Dialog
         open={asking}
         onClose={() => setAsking(false)}

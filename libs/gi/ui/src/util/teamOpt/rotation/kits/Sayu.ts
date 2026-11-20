@@ -142,7 +142,7 @@ export const kit: KitModel = {
           // the absorb check at 30 (Pyro > Hydro > Electro > Cryo): the kick then also deals
           // the absorbed element 1 frame after it
           ctx.at(30, (c) => {
-            const ele = c.absorb(absorbEles)
+            const ele = c.absorb(absorbEles, { player: true })
             if (!ele || !absorbEles.includes(ele)) return
             c.hit(19, {
               path: ['skill', 'eleKickDmg'],

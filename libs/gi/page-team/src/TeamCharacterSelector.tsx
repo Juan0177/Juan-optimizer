@@ -13,6 +13,7 @@ import {
   CharacterName,
   TeamIcon,
 } from '@genshin-optimizer/gi/ui'
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded'
 import BorderColorIcon from '@mui/icons-material/BorderColor'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
@@ -26,7 +27,6 @@ import {
   CircularProgress,
   Divider,
   IconButton,
-  Link,
   Tab,
   Tabs,
   Tooltip,
@@ -80,48 +80,41 @@ export default function TeamCharacterSelector({
     // the page header of a team: the same type and spacing as PageHeader on the other pages
     <Box
       component="header"
-      sx={{ px: 0.5, pt: { xs: 1.5, md: 3 }, pb: { xs: 1.5, md: 2 } }}
+      sx={{ px: 0.5, pt: { xs: 1.25, md: 2 }, pb: { xs: 1.25, md: 2 } }}
     >
       <TeamEditorModal
         teamId={teamId}
         show={showEditor}
         onClose={onHideEditor}
       />
-      {/* back to the team list */}
-      <Link
-        component={RouterLink}
-        to="/teams"
-        underline="hover"
-        sx={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 0.5,
-          mb: 0.5,
-          color: 'text.secondary',
-          fontSize: '0.8125rem',
-          fontWeight: 600,
-          '&:hover': { color: 'text.primary' },
-        }}
-      >
-        <TeamIcon sx={{ fontSize: 16 }} />
-        {t('ui:tabs.teams')}
-      </Link>
-      {/* title row: the team's name is the page title, renamed in place */}
+      {/* title row: back to the team list, the team's name (renamed in place), its actions */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           gap: 1,
           minWidth: 0,
-          mb: 2,
+          mb: { xs: 1.25, md: 1.75 },
         }}
       >
+        <Tooltip title={t('ui:tabs.teams')}>
+          <IconButton
+            component={RouterLink}
+            to="/teams"
+            size="small"
+            aria-label={t('ui:tabs.teams')}
+            sx={{ ml: -0.75, color: 'text.secondary' }}
+          >
+            <ArrowBackRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Typography
           variant="h4"
           component="h1"
           noWrap
           sx={{
-            fontSize: { xs: '1.5rem', md: '1.875rem' },
+            fontSize: { xs: '1.375rem', md: '1.625rem' },
+            fontWeight: 650,
             lineHeight: 1.2,
             minWidth: 0,
           }}
@@ -299,15 +292,23 @@ export default function TeamCharacterSelector({
  * The KQM tab's icon, or while a KQM run of the team is in progress (it goes on on other pages
  * and tabs) a ring with how far it is
  */
-function KqmTabIcon({ teamId }: { teamId: string }) {
+function KqmTabIcon({
+  teamId,
+  className,
+}: {
+  teamId: string
+  /** The tab's icon class (its gap before the label) */
+  className?: string
+}) {
   const { t } = useTranslation('page_team')
   const running = useKqmRunning(teamId)
   const step = useKqmProgress(teamId)
-  if (!running) return <TheorycraftIcon />
+  if (!running) return <TheorycraftIcon className={className} />
   const percent = Math.round((step?.progress ?? 0) * 100)
   return (
     <Box
       component="span"
+      className={className}
       sx={{
         position: 'relative',
         display: 'inline-flex',
@@ -398,15 +399,28 @@ function TeamEditorModal({
   const handleDesc = (teamDesc: string): void => {
     database.teams.set(teamId, { description: teamDesc })
   }
+  // (the fields save when they lose focus: closing with Escape or ✕ keeps what was typed)
+  const close = () => {
+    if (document.activeElement instanceof HTMLElement)
+      document.activeElement.blur()
+    onClose()
+  }
   return (
-    <ModalWrapper open={show} onClose={onClose}>
+    <ModalWrapper
+      open={show}
+      onClose={close}
+      aria-label={t('team.editNameDesc')}
+    >
       <CardThemed>
         <CardHeader
           title={t('team.editNameDesc')}
           avatar={<TeamIcon />}
           titleTypographyProps={{ variant: 'h6' }}
           action={
-            <IconButton onClick={onClose}>
+            <IconButton
+              onClick={close}
+              aria-label={t('teamOpt.editor.close', 'Close')}
+            >
               <CloseIcon />
             </IconButton>
           }

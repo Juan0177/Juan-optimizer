@@ -315,4 +315,16 @@ export const bow1: WeaponModule[] = [
       },
     ],
   },
+  {
+    // Prototype Crescent (gcsim prototypecrescent.go): an aimed shot on a weak point gives ATK for
+    // 10 s on the wielder's clock, refreshed by the next one
+    weapon: 'PrototypeCrescent',
+    timed: [
+      {
+        cond: 'Unreturning',
+        on: [{ kind: 'hit', tags: ['charged'], weakspot: true }],
+        duration: 10 * 60,
+      },
+    ],
+  },
 ]

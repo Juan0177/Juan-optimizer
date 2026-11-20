@@ -134,7 +134,9 @@ function absorbDirective(c: SimContext, s: ArleState) {
   }
   if (cons >= 2 && level >= 2 && c.now >= s.c2Icd) {
     s.c2Icd = c.now + 600
-    c.hit(50, {
+    // (in game it lands about 1 frame after the pickup, from a 30 fps recording of a cancelled CA;
+    // gcsim queues it 50 frames later, which put it after the next Normal Attack)
+    c.hit(1, {
       path: ['constellation2', 'bloodfireDmg'],
       tag: 'other',
       element: 'pyro',
@@ -232,6 +234,7 @@ export const kit: KitModel = {
         const w =
           own?.kind === 'normal' && ctx.now < (s.normalAnimEnd ?? -1) ? 12 : 0
         ctx.at(12 - w, (c2) => absorbDirective(c2, s))
+        if (action.cancel) return { frames: 13 - w }
         ctx.at(37 - w, (c2) => {
           // the sheet's Pyro infusion follows the Bond of Life state (Masque of the Red Death)
           const masque = s.debt >= MASQUE

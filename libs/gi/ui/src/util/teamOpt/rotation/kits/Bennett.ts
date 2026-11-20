@@ -201,6 +201,8 @@ export const kit: KitModel = {
         // separate 126f buff whose expiry pauses with that recipient's hitlag.
         for (let delay = 34; delay <= 754; delay += 60)
           ctx.at(delay, (c) => {
+            // the field's Pyro on the player: what absorption checks pick up there (gcsim)
+            c.selfInfuse('pyro', 25, 126)
             const ratio = c.hpRatio(c.onField) ?? 1
             if (ctx.constellation('Bennett') >= 1 || ratio > 0.7) {
               if (c.onField === 'Bennett')

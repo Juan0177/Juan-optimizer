@@ -22,10 +22,12 @@ import { siteDecimal } from './format'
 import type { TimelineMoment } from './RotationTimeline'
 import { RotationTimeline } from './RotationTimeline'
 import {
+  kqmBurstEvery,
+  rotationIdOf,
   simulateWritten,
+  useAppliedRotation,
   useMemberNames,
   useRotationSettings,
-  useRotationText,
   useSimTeam,
   writtenSeconds,
 } from './RotationWriter'
@@ -122,9 +124,12 @@ export function KqmTimeline({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied } = useRotationText(teamId)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  // (the tab's own rotation: the KQM tab's, or Team optimize's)
+  const rotationId = rotationIdOf(teamId, kqm)
+  const applied = useAppliedRotation(rotationId)
+  const { opener, timing, frameData } = useRotationSettings(rotationId)
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
+  const burstEvery = useMemo(() => kqmBurstEvery(kqm), [kqm])
   const team = useMemo(
     () => (gear ? { ...simTeam, gear: { ...simTeam.gear, ...gear } } : simTeam),
     [simTeam, gear]
@@ -132,10 +137,12 @@ export function KqmTimeline({
   const names = useMemberNames(members)
   // (a heavy team's play takes a moment: the page first, the timeline once it is played)
   const deferredTeam = useDeferredValue(team)
+  const isKqm = !!kqm
   const result = useMemo(
     () =>
       applied.trim()
         ? simulateWritten({
+            kqm: isKqm,
             text: applied,
             opener,
             timing,
@@ -149,14 +156,18 @@ export function KqmTimeline({
             // (the enemy's auras: an attack's window says which were on when it hit)
             auraTimeline: true,
             openerWarning: (warning) => warning,
+            // (a Burst every 2nd rotation, as the run plays it)
+            ...(burstEvery && { burstEvery }),
           })
         : undefined,
     [
+      isKqm,
       applied,
       opener,
       timing,
       frameData,
       deferredTeam,
+      burstEvery,
       names,
       members,
       database,
@@ -224,23 +235,9 @@ export function KqmTimeline({
     const listed = kqmAttacks?.[characterKey] ?? []
     const parts: Part[] = []
     for (const hit of hits) {
-      const at = mapping.hitAttacks.get(hit)
-      const mine = at && mapping.attacks[at.characterKey]?.[at.index]
-      if (!mine) continue
-      const samePath = listed.filter(
-        (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
-      )
-      const attack =
-        samePath.find((x) => sameAttack(x, mine)) ?? samePath[0] ?? mine
+      const part = partOf(hit, true)
       // (one part an attack: at its first hit here)
-      if (parts.some((p) => p.attack === attack)) continue
-      parts.push({
-        attack,
-        moment: {
-          seconds: (hit.t - sim.start) / 60,
-          auras: aurasAt(sim, hit.t),
-        },
-      })
+      if (part && !parts.some((p) => p.attack === part.attack)) parts.push(part)
     }
     // most damage in the rotation first (Mitya's Gradient Detonation: its Stellar-Conduct hit
     // before its ATK one); the play's order otherwise
@@ -251,6 +248,35 @@ export function KqmTimeline({
     parts.sort((a, b) => damage(b) - damage(a))
     // (a swap, an entry or a buff with no hit of its own: nothing to open)
     if (parts.length) setOpened({ characterKey, parts, index: 0 })
+  }
+  /**
+   * A hit's attack: the run's same one, else the play's own (`loose`: else the run's first of the
+   * same name, as a bar's window lists the run's attacks)
+   */
+  const partOf = (hit: SimHit, loose = false): Part | undefined => {
+    const sim = result?.sim
+    const at = mapping?.hitAttacks.get(hit)
+    const mine = at && mapping?.attacks[at.characterKey]?.[at.index]
+    if (!sim || !at || !mine) return undefined
+    const samePath = (kqmAttacks?.[at.characterKey] ?? []).filter(
+      (x) => JSON.stringify(x.path) === JSON.stringify(mine.path)
+    )
+    return {
+      attack:
+        samePath.find((x) => sameAttack(x, mine)) ??
+        (loose ? samePath[0] : undefined) ??
+        mine,
+      moment: {
+        seconds: (hit.t - sim.start) / 60,
+        auras: aurasAt(sim, hit.t),
+      },
+    }
+  }
+  // a hit's mark clicked (an off-field member's too, which has no bar): its attack, as it landed
+  const openHit = (hit: SimHit) => {
+    const part = partOf(hit)
+    if (part)
+      setOpened({ characterKey: hit.characterKey, parts: [part], index: 0 })
   }
   // the members' stats at the moment shown and what each buff up then gives, with these builds
   const [moment, setMoment] = useState<TimelineMoment>()
@@ -304,6 +330,7 @@ export function KqmTimeline({
         edited={NONE}
         onSelect={noop}
         onAction={openAction}
+        onHit={openHit}
         teamData={teamData}
         buffs={kqmBuffs}
         stats={stats}

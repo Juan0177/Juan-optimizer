@@ -45,6 +45,7 @@ export const stygianPhaseKeys = [
   'initial',
   'stacks2',
   'stacks3',
+  'normalMode',
 ] as const
 export type StygianPhaseKey = (typeof stygianPhaseKeys)[number]
 
@@ -101,12 +102,15 @@ const fights: Record<number, [StygianPhase[], StygianPhaseKey]> = {
     ],
     'weakened',
   ],
-  // Secret Source Automaton: Overseer Device - Obliterator Panoply (Cryo hits: Low Energy)
+  // Secret Source Automaton: Overseer Device - Obliterator Panoply (Cryo hits: Low Energy; after
+  // each Sweeper Mode, its normal attacks at 80%, 10% once stopped or in Forced Counterstrike)
   1001063: [
     [
       phase('enhanced', res(270)),
       phase('lowEnergy', res(30, { cryo: -30 })),
       phase('nightsoul', res(110)),
+      phase('normalMode', res(80)),
+      phase('regular', res(10)),
     ],
     'lowEnergy',
   ],
@@ -226,9 +230,10 @@ const fights: Record<number, [StygianPhase[], StygianPhaseKey]> = {
     ],
     'recovered',
   ],
-  // Chimeric Winged Lion: Power Overwhelming
+  // Chimeric Winged Lion: Power Overwhelming (before its first Electro Ward: +200% RES)
   1011061: [
     [
+      phase('opening', res(210, { electro: 250, anemo: 250 })),
       phase('regular', res(10, { electro: 50, anemo: 50 })),
       phase('stunned', res(-60, { cryo: -120, anemo: -120 })),
     ],
@@ -239,7 +244,8 @@ const fights: Record<number, [StygianPhase[], StygianPhaseKey]> = {
     [phase('regular', res(10, { physical: -20, anemo: 50 }))],
     'regular',
   ],
-  // Battle-Hardened Domovoy Sculptor: Gale Hewing (each shattered statue: RES down a stack)
+  // Battle-Hardened Domovoy Sculptor: Gale Hewing (each sculpting turned to statues by Radiance:
+  // 2 stacks of RES down, 3 at most)
   1012061: [
     [
       phase('initial', res(90)),

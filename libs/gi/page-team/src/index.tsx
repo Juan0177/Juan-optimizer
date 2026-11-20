@@ -60,22 +60,14 @@ const KQM_PATH = 'kqm'
 const KQM_COMPARE_PATH = 'kqm-compare'
 
 export default function PageTeam() {
-  const database = useDatabase()
   const { teamId } = useParams<{ teamId?: string }>()
   const kqmRoute = useMatch({ path: '/teams/:teamId/kqm', end: false })
   const kqmCompareRoute = useMatch({
     path: `/teams/:teamId/${KQM_COMPARE_PATH}`,
     end: false,
   })
-  const invalidKey = !teamId || !database.teams.keys.includes(teamId)
-
-  // An edit is triggered whenever a team gets opened even if no edits are done
-  useEffect(() => {
-    if (invalidKey) return
-    database.teams.set(teamId, { lastEdit: Date.now() })
-  }, [teamId, database.teams, invalidKey])
-
-  if (invalidKey) return <Navigate to="/teams" />
+  const team = useTeam(teamId ?? '')
+  if (!team || !teamId) return <Navigate to="/teams" replace />
   if ((kqmRoute || kqmCompareRoute) && !kqmTheorycraftingEnabled)
     return <Navigate to={`/teams/${teamId}/optimize`} replace />
 
@@ -84,7 +76,7 @@ export default function PageTeam() {
       <Suspense
         fallback={<Skeleton variant="rectangular" width="100%" height={1000} />}
       >
-        {teamId && <Page teamId={teamId} />}
+        <Page key={teamId} teamId={teamId} team={team} />
       </Suspense>
     </Box>
   )
@@ -95,12 +87,17 @@ const fallback = <Skeleton variant="rectangular" width="100%" height={1000} />
 const chartDataAll: Record<string, ChartData> = {}
 const graphBuildAll: Record<string, GeneratedBuild[]> = {}
 
-function Page({ teamId }: { teamId: string }) {
+function Page({
+  teamId,
+  team,
+}: {
+  teamId: string
+  team: NonNullable<ReturnType<typeof useTeam>>
+}) {
   const database = useDatabase()
   const navigate = useNavigate()
   const { gender } = useDBMeta()
 
-  const team = useTeam(teamId)!
   const { loadoutData } = team
   // use the current URL as the "source of truth" for characterKey and tab.
   const {
@@ -134,8 +131,9 @@ function Page({ teamId }: { teamId: string }) {
     kqmTheorycraftingEnabled && characterKeyRaw === KQM_COMPARE_PATH
   const isTeamBuild = isTeamOpt || isKqm || isKqmCompare
   useEffect(() => {
-    if (!loadoutDatum && !isTeamBuild) navigate('', { replace: true })
-  }, [loadoutDatum, navigate, isTeamBuild])
+    if (characterKeyRaw && !loadoutDatum && !isTeamBuild)
+      navigate('', { replace: true })
+  }, [characterKeyRaw, loadoutDatum, navigate, isTeamBuild])
 
   const teamCharId = loadoutDatum?.teamCharId
   const characterKey = database.teamChars.get(teamCharId)?.key

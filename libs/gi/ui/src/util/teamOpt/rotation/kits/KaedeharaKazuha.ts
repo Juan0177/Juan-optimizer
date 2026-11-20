@@ -1,3 +1,5 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import type { RotationAction } from '../parse'
 import type { HitElement, KitModel, SimContext } from '../types'
 import {
@@ -62,7 +64,30 @@ interface KazuhaState {
   last?: RotationAction
   skillAbsorb?: HitElement
   burstAbsorb?: HitElement
+  /** The Burst's DoT snapshot (gcsim's qTickSnap, right before the slash) */
+  burstSnap?: { t: number; onField: CharacterKey }
 }
+
+/** The attacker's stats a gcsim snapshot fixes, as of `snap` (and the absorbed element's DMG) */
+const dotSnapshot = (
+  snap: { t: number; onField: CharacterKey },
+  element: HitElement
+) =>
+  (
+    [
+      'atk',
+      'eleMas',
+      'critRate_',
+      'critDMG_',
+      'all_dmg_',
+      'burst_dmg_',
+      `${element}_dmg_`,
+    ] as const
+  ).map((stat) => ({
+    stat: stat as InputPremodKey,
+    path: ['total', stat],
+    ...snap,
+  }))
 
 /** The previous action, if it was this member's own (undefined: a swap or another member's action came between) */
 function ownPrevious(
@@ -139,7 +164,7 @@ export const kit: KitModel = {
         const hold = !!action.hold
         s.skillAbsorb = undefined
         const check = (c2: SimContext, count: number) => {
-          s.skillAbsorb = c2.absorb()
+          s.skillAbsorb = c2.absorb(undefined, { player: true })
           if (!s.skillAbsorb && count > 1)
             c2.at(6, (c3) => check(c3, count - 1))
         }
@@ -192,11 +217,15 @@ export const kit: KitModel = {
       case 'burst': {
         s.burstAbsorb = undefined
         const check = (c2: SimContext, count: number) => {
-          s.burstAbsorb = c2.absorb()
+          s.burstAbsorb = c2.absorb(undefined, { player: true })
           if (!s.burstAbsorb && count > 1)
             c2.at(18, (c3) => check(c3, count - 1))
         }
         ctx.at(81, (c2) => check(c2, 17))
+        s.burstSnap = undefined
+        ctx.atCharacter('KaedeharaKazuha', 81, (c2) => {
+          s.burstSnap = { t: c2.now, onField: c2.onField }
+        })
         ctx.hit(82, {
           path: ['burst', 'dmg'],
           tag: 'burst',
@@ -226,6 +255,9 @@ export const kit: KitModel = {
                   applies: true,
                   icd: 'none',
                   label: 'Kazuha Slash (Absorb DoT)',
+                  ...(s.burstSnap && {
+                    statSnapshots: dotSnapshot(s.burstSnap, s.burstAbsorb),
+                  }),
                   states: [
                     {
                       owner: 'KaedeharaKazuha',
@@ -241,6 +273,9 @@ export const kit: KitModel = {
                 applies: true,
                 icd: 'none',
                 label: 'Kazuha Slash (DoT)',
+                ...(s.burstSnap && {
+                  statSnapshots: dotSnapshot(s.burstSnap, 'anemo'),
+                }),
               })
             })
         })

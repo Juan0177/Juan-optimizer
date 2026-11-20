@@ -61,4 +61,24 @@ describe('Chasca', () => {
     expect(shells.slice(0, 6).every((v) => v === '')).toBe(true)
     expect(shells.slice(6, 12).every((v) => v === 'on')).toBe(true)
   })
+
+  it('loads only the written bullets (CA[bullets=4]): 2 Anemo and 2 Shining shells, a shorter charge', () => {
+    const sim = run('Chasca E CA[bullets=4] W2', 0)
+    const shells = sim.hits.filter(
+      (h) => h.characterKey === 'Chasca' && h.label.includes('Shadowhunt Shell')
+    )
+    expect(shells.filter((h) => h.label.startsWith('Shining'))).toHaveLength(2)
+    expect(shells.filter((h) => h.label === 'Shadowhunt Shell')).toHaveLength(2)
+    const start = sim.actions.find((a) => a.text === 'CA[bullets=4]')!.start
+    // (the 4th bullet loads at 70 frames, no windup after the skill; the shots 4 to 13 later)
+    expect(Math.min(...shells.map((h) => h.t)) - start).toBe(70 + 4)
+  })
+
+  it('falls when the blessing ends during the charge: the next action waits for the whole aim', () => {
+    // the fifth Shadowhunt ends after the blessing's 10 s: Q follows at charge + 60 (gcsim 130)
+    const sim = run('Chasca E 4[CA] CA[bullets=4] Q W3', 0)
+    const start = (text: string) =>
+      sim.actions.find((a) => a.text === text)!.start
+    expect(start('Q') - start('CA[bullets=4]')).toBe(130)
+  })
 })

@@ -98,12 +98,21 @@ export default function PageTeams() {
     try {
       dataObj = JSON.parse(data)
     } catch (e) {
-      setImportError(`${t('importForm.error.import')} ${e}`)
+      console.error(e)
+      setImportError(
+        t(
+          'importForm.error.json',
+          'This is not a team’s JSON: paste the whole text that Export team copied.'
+        )
+      )
       return
     }
     try {
-      if (database.teams.import(dataObj as never)) {
+      const imported = database.teams.import(dataObj)
+      if (imported) {
+        setData('')
         onHideImport()
+        navigate(imported)
         return
       }
     } catch (e) {
@@ -181,10 +190,11 @@ export default function PageTeams() {
           </>
         }
       />
-      {/* one quiet row: find a team by name or by who is in it, then order the list */}
+      {/* one quiet row: find a team by name or by who is in it, then order the list (once there
+          are teams to find) */}
       <Box
         sx={{
-          display: 'flex',
+          display: totalTeamNum ? 'flex' : 'none',
           flexWrap: 'wrap',
           alignItems: 'center',
           gap: 1,
@@ -300,6 +310,26 @@ export default function PageTeams() {
                 {t('page_teams:empty.import')}
               </Button>
             </>
+          }
+        />
+      )}
+      {totalTeamNum > 0 && filteredTeamIds.length === 0 && (
+        <EmptyState
+          icon={<SearchIcon />}
+          title={t('page_teams:empty.noMatches', 'No matching teams')}
+          description={t(
+            'page_teams:empty.noMatchesDesc',
+            'Try a different name or clear the selected characters.'
+          )}
+          actions={
+            <Button
+              onClick={() => {
+                setSearchTerm('')
+                database.displayTeam.set({ searchTerm: '', charKeys: [] })
+              }}
+            >
+              {t('page_teams:empty.clear', 'Clear filters')}
+            </Button>
           }
         />
       )}

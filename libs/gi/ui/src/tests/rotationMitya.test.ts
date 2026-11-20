@@ -1,8 +1,10 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { ArtCharDatabase, type LoadoutDatum } from '@genshin-optimizer/gi/db'
+import { getCharSheet } from '@genshin-optimizer/gi/sheets'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
-import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
+import { type UIData, uiDataForTeam } from '@genshin-optimizer/gi/uidata'
+import type { NumNode } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import { getTeamDataWith } from '../'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
@@ -28,6 +30,11 @@ function run(
 
 /** Mitya's sheet values (display, average hits) at a constellation and Detection Core state */
 function sheet(constellation: number, detectionCore: string) {
+  return mitya(constellation, { detectionCore }).getDisplay()
+}
+
+/** Mitya's UI data (his Talent tab in a team) with his own switches */
+function mitya(constellation: number, conditional: Record<string, string>) {
   const db = new ArtCharDatabase(1, new SandboxStorage({}))
   db.chars.set('Mitya', {
     key: 'Mitya',
@@ -45,17 +52,43 @@ function sheet(constellation: number, detectionCore: string) {
     lock: false,
   })
   const id = db.teamChars.new('Mitya', {
-    conditional: { Mitya: { detectionCore } },
+    conditional: { Mitya: conditional },
   })
   const teamId = db.teams.new({
     loadoutData: [{ teamCharId: id }] as LoadoutDatum[],
   })
-  return uiDataForTeam(
-    getTeamDataWith(db, teamId, {})! as never,
-    'F',
-    'Mitya'
-  ).Mitya!.target.getDisplay()
+  return uiDataForTeam(getTeamDataWith(db, teamId, {})! as never, 'F', 'Mitya')
+    .Mitya!.target
 }
+
+describe('Mitya’s Talent tab', () => {
+  it('shows Gradient Detonation for all the Beacons he has, with an Overloaded core only (a player report)', () => {
+    const fields = getCharSheet('Mitya', 'F')
+      .getTalentOfKey('auto')!
+      .sections.flatMap((s) => s.fields ?? [])
+    const total = fields.find(
+      (f) => 'node' in f && f.canShow !== undefined
+    ) as unknown as { node: NumNode; canShow: (data: UIData) => boolean }
+    const at = (core: string, beacons: string) => {
+      const ui = mitya(0, { detectionCore: core, gradientBeacons: beacons })
+      const d = ui.getDisplay()
+      return {
+        shown: total.canShow(ui),
+        value: ui.get(total.node).value,
+        main: d['charged']['gradientDmg'].value,
+        each: d['charged']['gradientStellarDmg'].value,
+      }
+    }
+    const four = at('overloaded', '4')
+    expect(four.shown).toBe(true)
+    expect(four.value).toBeCloseTo(four.main + 4 * four.each, 6)
+    const one = at('overloaded', '1')
+    expect(one.value).toBeCloseTo(one.main + one.each, 6)
+    // (Gradient Detonation needs an Overloaded core and a Beacon)
+    expect(at('steady', '4').shown).toBe(false)
+    expect(at('overloaded', '').shown).toBe(false)
+  })
+})
 
 describe('Mitya constellations', () => {
   const c4 = (text: string) =>

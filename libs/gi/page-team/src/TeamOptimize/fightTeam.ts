@@ -8,10 +8,13 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getCharStat } from '@genshin-optimizer/gi/stats'
 import type {
   BonusStats,
+  DamageTimes,
   ElectroHits,
+  FightCycle,
   FightTeam,
   KqmBuild,
   SimHit,
+  SimulationResult,
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
@@ -28,10 +31,11 @@ import { input } from '@genshin-optimizer/gi/wr'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { attackElement } from './DamageShare'
 import {
+  rotationIdOf,
   simulateWritten,
+  useAppliedRotation,
   useMemberNames,
   useRotationSettings,
-  useRotationText,
   useSimTeam,
 } from './RotationWriter'
 
@@ -43,6 +47,12 @@ export interface FightApplications {
   electroHits: ElectroHits
   /** Seconds it takes to break the Moongecko's Moonstone Anchor ward (`wardTimeOf`) */
   wardSeconds: number
+  /** Its Radiance, active Nightsoul's Blessing and Cryo hits over one rotation */
+  cycle?: FightCycle
+  /** Its reactions per second, by reaction */
+  reactions?: Partial<Record<string, number>>
+  /** One rotation's hits as played, and how long it takes (its damage over time) */
+  played?: PlayedHits
   /**
    * Its first rotation from no energy: played once from the start without its Bursts, its
    * attacks and how long it takes
@@ -50,7 +60,38 @@ export interface FightApplications {
   opening?: {
     attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>
     seconds: number
+    hits?: PlayedHit[]
   }
+}
+
+/** A played hit: seconds from its rotation's start, whose, its sheet node and weight */
+export interface PlayedHit {
+  t: number
+  characterKey: CharacterKey
+  path: string[]
+  weight: number
+}
+export interface PlayedHits {
+  seconds: number
+  hits: PlayedHit[]
+}
+
+/** The hits from `start` for `frames` frames, timed from `start` */
+function playedHits(
+  hits: readonly SimHit[],
+  start: number,
+  frames: number
+): PlayedHit[] {
+  return hits
+    .filter(
+      (h) => h.path[0] !== '_marker' && h.t >= start && h.t < start + frames
+    )
+    .map((h) => ({
+      t: (h.t - start) / 60,
+      characterKey: h.characterKey,
+      path: h.path,
+      weight: h.weight ?? 1,
+    }))
 }
 
 const MELEE = ['sword', 'claymore', 'polearm']
@@ -155,8 +196,116 @@ export const PARTY_HEALERS: ReadonlySet<CharacterKey> = new Set<CharacterKey>([
 export function applicationsOf(
   hits: readonly SimHit[],
   frames: number,
-  start = 0
+  start = 0,
+  played?: Pick<SimulationResult, 'buffWindows' | 'actions' | 'nightsoulSpans'>
 ): FightApplications {
+  return {
+    ...gaugeOf(hits, frames, start),
+    cycle: cycleOf(hits, frames, start, played),
+    reactions: reactionsOf(hits, frames, start),
+  }
+}
+
+/** How long a Stellar reaction keeps Radiance: Stellar Glimmer on the enemy (reactions.ts) */
+const RADIANCE_SECONDS: Record<string, number> = {
+  stellarConduct: 6,
+  stellarSwirl: 8,
+}
+
+/** Windows merged, within one looped rotation of `seconds` (a window past its end wraps) */
+function loopWindows(windows: [number, number][], seconds: number) {
+  const parts: [number, number][] = []
+  for (const [a, b] of windows) {
+    if (!(b > a)) continue
+    if (b - a >= seconds) return [[0, seconds]] as [number, number][]
+    const from = ((a % seconds) + seconds) % seconds
+    const to = from + (b - a)
+    if (to <= seconds) parts.push([from, to])
+    else parts.push([from, seconds], [0, to - seconds])
+  }
+  parts.sort((x, y) => x[0] - y[0])
+  const merged: [number, number][] = []
+  for (const [a, b] of parts) {
+    const last = merged[merged.length - 1]
+    if (last && a <= last[1] + 1e-9) last[1] = Math.max(last[1], b)
+    else merged.push([a, b])
+  }
+  return merged
+}
+
+/** One played rotation's Radiance, active Nightsoul's Blessing and Cryo hits (`FightCycle`) */
+function cycleOf(
+  hits: readonly SimHit[],
+  frames: number,
+  start: number,
+  played?: Pick<SimulationResult, 'buffWindows' | 'actions' | 'nightsoulSpans'>
+): FightCycle | undefined {
+  const seconds = frames / 60
+  if (!(seconds > 0)) return undefined
+  const end = start + frames
+  const within = (t: number) => t >= start && t < end
+  const radiance: [number, number][] = []
+  const cryoHits: [number, number][] = []
+  for (const h of hits) {
+    if (!within(h.t)) continue
+    const at = (h.t - start) / 60
+    if (h.path[0] === '_reaction') {
+      const last = RADIANCE_SECONDS[h.path[1] ?? '']
+      if (last) radiance.push([at, at + last])
+      continue
+    }
+    if (h.path[0].startsWith('_')) continue
+    if (h.element === 'cryo') cryoHits.push([at, h.weight ?? 1])
+  }
+  const blessing: [number, number][] = []
+  for (const w of played?.buffWindows ?? []) {
+    if (
+      w.path[0] !== 'ObsidianCodex' ||
+      w.path[1] !== '2NightsoulBlessing' ||
+      w.value !== 'on'
+    )
+      continue
+    const a = Math.max(w.start, start)
+    const b = Math.min(w.end, end)
+    if (b > a) blessing.push([(a - start) / 60, (b - start) / 60])
+  }
+  const anyBlessing: [number, number][] = []
+  const entries: number[] = []
+  for (const span of played?.nightsoulSpans ?? []) {
+    if (span.start >= start && span.start < end)
+      entries.push((span.start - start) / 60)
+    const a = Math.max(span.start, start)
+    const b = Math.min(span.end, end)
+    if (b > a) anyBlessing.push([(a - start) / 60, (b - start) / 60])
+  }
+  return {
+    seconds,
+    radiance: loopWindows(radiance, seconds),
+    nightsoul: loopWindows(blessing, seconds),
+    anyNightsoul: loopWindows(anyBlessing, seconds),
+    nightsoulEntries: entries.sort((x, y) => x - y),
+    cryoHits: cryoHits.sort((x, y) => x[0] - y[0]),
+  }
+}
+
+/** A played rotation's reactions per second, by reaction (its reaction marks) */
+function reactionsOf(hits: readonly SimHit[], frames: number, start: number) {
+  const seconds = frames / 60
+  const out: Partial<Record<string, number>> = {}
+  if (!(seconds > 0)) return out
+  for (const h of hits) {
+    if (h.path[0] !== '_reaction' || !h.path[1]) continue
+    if (h.t < start || h.t >= start + frames) continue
+    out[h.path[1]] = (out[h.path[1]] ?? 0) + (h.weight ?? 1) / seconds
+  }
+  return out
+}
+
+function gaugeOf(
+  hits: readonly SimHit[],
+  frames: number,
+  start: number
+): Omit<FightApplications, 'cycle' | 'reactions'> {
   const passes = icdTracker()
   const units: Partial<Record<ElementWithPhyKey, number>> = {}
   const electro = { stellar: 0, units: 0, plain: 0 }
@@ -212,16 +361,20 @@ export function useRotationApplications(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
-  const { applied } = useRotationText(teamId)
-  const { opener, timing, frameData } = useRotationSettings(teamId)
+  // (the tab's own rotation: Team optimize's, or KQM's)
+  const rid = rotationIdOf(teamId, kqm)
+  const applied = useAppliedRotation(rid)
+  const { opener, timing, frameData } = useRotationSettings(rid)
   const team = useSimTeam(members, kqm, kqmBuilds)
   const names = useMemberNames(members)
   // (played after the page: a heavy team's rotation takes a moment)
   const deferredTeam = useDeferredValue(team)
+  const isKqm = !!kqm
   return useMemo(() => {
     if (!enabled || !applied.trim()) return undefined
     try {
       const played = simulateWritten({
+        kqm: isKqm,
         text: applied,
         opener,
         timing,
@@ -238,12 +391,20 @@ export function useRotationApplications(
       })
       const sim = played?.sim
       if (!sim || sim.frames <= 0) return undefined
-      const applications = applicationsOf(sim.hits, sim.frames, sim.start)
-      // (a fight from no energy: its first rotation without Bursts)
+      const applications: FightApplications = {
+        ...applicationsOf(sim.hits, sim.frames, sim.start, sim),
+        played: {
+          seconds: sim.frames / 60,
+          hits: playedHits(sim.hits, sim.start, sim.frames),
+        },
+      }
+      // (a fight from no energy: its first rotation without Bursts, whatever the tab counts; not
+      // counted from the start, so `repeats` is what plays)
       const opening = simulateWritten({
+        kqm: isKqm,
         text: applied,
         opener,
-        timing,
+        timing: { ...timing, rotations: 0 },
         frameData,
         team: deferredTeam,
         names,
@@ -261,7 +422,11 @@ export function useRotationApplications(
       return opening?.attacks && span && span > 0
         ? {
             ...applications,
-            opening: { attacks: opening.attacks, seconds: span / 60 },
+            opening: {
+              attacks: opening.attacks,
+              seconds: span / 60,
+              hits: playedHits(opening.sim?.hits ?? [], 0, span),
+            },
           }
         : applications
     } catch (e) {
@@ -271,6 +436,7 @@ export function useRotationApplications(
       return undefined
     }
   }, [
+    isKqm,
     enabled,
     applied,
     opener,
@@ -357,6 +523,7 @@ export function fightTeamOf({
   teamData,
   rotationTime,
   enemyOverride,
+  dataEnemy = enemyOverride,
   applications,
   cocoon,
 }: {
@@ -366,6 +533,11 @@ export function fightTeamOf({
   teamData: TeamData | undefined
   rotationTime: number | undefined
   enemyOverride: Partial<Record<string, number>>
+  /**
+   * The enemy `teamData` was computed against, when another (the KQM tab's own): its RES after the
+   * team's shred is moved by the difference
+   */
+  dataEnemy?: Partial<Record<string, number>>
   applications?: FightApplications
   cocoon?: CocoonEvaluations
 }): FightTeam | undefined {
@@ -376,11 +548,17 @@ export function fightTeamOf({
   let electroHits = 0
   let stellarDamage = 0
   let damageTotal = 0
+  let cryoHits = 0
+  // (no written rotation: every 3rd hit of an element applying 1U)
+  const hitsByElement: Partial<Record<ElementWithPhyKey, number>> = {}
   for (const ck of members) {
     const damage = evaluation.attacks?.[ck] ?? []
     ;(attacks[ck] ?? []).forEach((attack, i) => {
       const element = attackElement(teamData, ck, attack) as ElementWithPhyKey
       const stellar = stellarAttack(ck, attack)
+      if (element === 'cryo') cryoHits += attack.hits
+      if (element !== 'physical')
+        hitsByElement[element] = (hitsByElement[element] ?? 0) + attack.hits
       if (element === 'electro') {
         if (stellar) stellarHits += attack.hits
         else electroHits += attack.hits
@@ -414,7 +592,13 @@ export function fightTeamOf({
       if (from > 0 && to > 0 && Number.isFinite(baseRes[e]))
         return [e, resFromRatio(to / from, baseRes[e])]
       const v = data?.get(input.total[`${e}_enemyRes_`]).value
-      return [e, typeof v === 'number' && Number.isFinite(v) ? v : baseRes[e]]
+      const dataBase = (dataEnemy[`${e}_enemyRes_`] ?? 10) / 100
+      return [
+        e,
+        typeof v === 'number' && Number.isFinite(v) && Number.isFinite(dataBase)
+          ? v + (baseRes[e] - dataBase)
+          : baseRes[e],
+      ]
     })
   ) as Record<ElementWithPhyKey, number>
   // its DPS in the cocoon and Disentangled: each element's, as their evaluation changes it from
@@ -457,6 +641,18 @@ export function fightTeamOf({
           ) as Partial<Record<ElementWithPhyKey, number>>
         })()
       : undefined
+  const rotationTimes = damageTimesOf(
+    members,
+    evaluation,
+    attacks,
+    applications?.played
+  )
+  const openingTimes =
+    open?.hits &&
+    damageTimesOf(members, cocoon?.opening, open.attacks, {
+      seconds: open.seconds,
+      hits: open.hits,
+    })
   return {
     dps,
     baseRes,
@@ -467,8 +663,19 @@ export function fightTeamOf({
           gauge: applications.gauge,
           electroHits: applications.electroHits,
           wardSeconds: applications.wardSeconds,
+          ...(applications.cycle ? { cycle: applications.cycle } : {}),
+          ...(applications.reactions
+            ? { reactions: applications.reactions }
+            : {}),
         }
       : {
+          cryoRate: cryoHits / rotationTime,
+          estimatedGauge: Object.fromEntries(
+            Object.entries(hitsByElement).map(([e, n]) => [
+              e,
+              (n ?? 0) / 3 / rotationTime,
+            ])
+          ) as Partial<Record<ElementWithPhyKey, number>>,
           // (no written rotation: every 3rd other hit applying 1U, as the standard ICD lets it)
           electroHits: {
             stellar: stellarHits / rotationTime,
@@ -482,7 +689,64 @@ export function fightTeamOf({
     ...(opening && open
       ? { opening: { dps: opening, seconds: open.seconds } }
       : {}),
+    ...(rotationTimes
+      ? {
+          damageTimes: {
+            rotation: rotationTimes,
+            ...(openingTimes ? { opening: openingTimes } : {}),
+          },
+        }
+      : {}),
     healer: members.some((ck) => PARTY_HEALERS.has(ck)),
+  }
+}
+
+/**
+ * A played rotation's damage over its time: each attack's damage shared among its hits (by sheet
+ * node, weighted), the rest (no hit of its node played) spread over the rotation
+ */
+function damageTimesOf(
+  members: CharacterKey[],
+  evaluation: TeamOptEvaluation | undefined,
+  attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>,
+  played: PlayedHits | undefined
+): DamageTimes | undefined {
+  if (!evaluation || !played?.hits.length || !(played.seconds > 0))
+    return undefined
+  const keyOf = (ck: CharacterKey, path: readonly string[]) =>
+    `${ck}|${path.join('.')}`
+  const damageOf = new Map<string, number>()
+  let total = 0
+  for (const ck of members) {
+    const damage = evaluation.attacks?.[ck] ?? []
+    ;(attacks[ck] ?? []).forEach((attack, i) => {
+      const value = damage[i] ?? 0
+      if (!(value > 0)) return
+      total += value
+      const key = keyOf(ck, attack.path)
+      damageOf.set(key, (damageOf.get(key) ?? 0) + value)
+    })
+  }
+  const weightOf = new Map<string, number>()
+  for (const hit of played.hits) {
+    const key = keyOf(hit.characterKey, hit.path)
+    if (damageOf.has(key))
+      weightOf.set(key, (weightOf.get(key) ?? 0) + hit.weight)
+  }
+  const hits: [number, number][] = []
+  let timed = 0
+  for (const hit of played.hits) {
+    const key = keyOf(hit.characterKey, hit.path)
+    const weight = weightOf.get(key)
+    if (!weight) continue
+    const value = (damageOf.get(key)! * hit.weight) / weight
+    hits.push([hit.t, value])
+    timed += value
+  }
+  return {
+    seconds: played.seconds,
+    hits: hits.sort((a, b) => a[0] - b[0]),
+    spread: Math.max(0, total - timed) / played.seconds,
   }
 }
 
@@ -541,9 +805,12 @@ export function useCocoonEvaluations(
   useEffect(() => {
     if (!deferred) return undefined
     const timer = setTimeout(() => {
-      // (every RES `RES_PROBE` lower than the team's enemy's)
+      // (every RES `RES_PROBE` lower than the enemy's: the evaluation's own, else the team's)
       const shiftedEnemy = () => {
-        const enemy = database.teams.get(teamId)?.enemyOverride ?? {}
+        const enemy =
+          (deferred as { enemy?: Partial<Record<string, number>> }).enemy ??
+          database.teams.get(teamId)?.enemyOverride ??
+          {}
         return Object.fromEntries(
           allElementWithPhyKeys.map((e) => {
             const v = enemy[`${e}_enemyRes_`] ?? 10

@@ -41,6 +41,7 @@ import { statName } from '../../../util/statName'
 import { DocumentDisplay } from '../../DocumentDisplay'
 import { LoadoutInfoAlert } from '../../loadout'
 import { TeamCard, TeamInfoAlert } from '../../team'
+import { LoadoutName } from '../LoadoutName'
 import { OptimizationTargetDisplay } from './OptimizationTargetDisplay'
 import { RemoveLoadout } from './RemoveLoadout'
 
@@ -61,6 +62,7 @@ export function LoadoutEditor({
   const navigate = useNavigate()
   const database = useDatabase()
   const {
+    key: characterKey,
     name,
     description,
     customMultiTargets,
@@ -99,7 +101,9 @@ export function LoadoutEditor({
           title={
             <Box display="flex" gap={1} alignItems="center">
               <PersonIcon />
-              <strong>{name}</strong>
+              <strong>
+                <LoadoutName name={name} characterKey={characterKey} />
+              </strong>
             </Box>
           }
           action={

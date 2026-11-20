@@ -23,6 +23,7 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import type { IConditionalValues } from '@genshin-optimizer/gi/sheets'
+import { getArtSheet, getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import type {
   KqmMains,
   KqmMainValues,
@@ -68,6 +69,7 @@ import { teamOptBonusStats, teamOptMembers } from './data'
 import {
   calculateEnergyRecharge,
   energyCalcData,
+  isCalcEnergyWeapon,
   isFavonius,
   syncEnergyCalculator,
 } from './energyCalc'
@@ -293,6 +295,13 @@ export interface KqmResult {
    * team's attacks were used as they are (nothing written)
    */
   played?: KqmPlayed
+  /**
+   * A quick search's (not `TeamOptKqm.fullSearch`) per member: the weapons and sets left out after the first
+   * round, as far behind its best (not ranked)
+   */
+  screenedOut?: Partial<
+    Record<CharacterKey, { weapons: KqmWeapon[]; sets: ArtifactSetKey[] }>
+  >
 }
 /** The written rotation played for KQM builds: each member's attacks per rotation */
 export interface KqmPlayed {
@@ -919,6 +928,19 @@ export function kqmEnergyRelief(
 }
 
 /**
+ * What a KQM calculation takes instead of the team's own: none of the members' gear switches or
+ * bonus stats (their builds' settings), and once KQM has its own (set up from the team's), its own
+ * kit and team switches and enemy instead of the members' and the team's
+ */
+export const kqmOwnSettings = (kqm: TeamOptKqm | undefined) => ({
+  ownBuild: false,
+  ...(kqm?.teamConditional
+    ? { ownKit: false, teamConditional: kqm.teamConditional }
+    : {}),
+  ...(kqm?.enemy ? { enemy: kqm.enemy.enemyOverride } : {}),
+})
+
+/**
  * Per optimized member, the weapon and set effects counted by rule where nobody set them (see
  * `itemConditionals`): from what it does in the rotation and the team's elements
  */
@@ -993,6 +1015,7 @@ export function kqmTeamOverrides(
     ) as NonNullable<TeamDataOverrides['extraConditionals']>,
     conditionalOverrides: kqm.passives,
     bonusStats: teamOptBonusStats(teamOpt, keys),
+    ...kqmOwnSettings(kqm),
   }
 }
 
@@ -1134,6 +1157,36 @@ export const kqmSimGear = (build: KqmBuild): SimGear => ({
   weapon: build.weapon.key,
   refinement: build.weapon.refinement,
 })
+
+/**
+ * A quick search's contenders per member after the first round (not `TeamOptKqm.fullSearch`): its best
+ * screened weapons, 4-piece sets and 2-piece bonuses, besides what its build holds
+ */
+const QUICK_WEAPONS = 8
+const QUICK_FOUR = 8
+const QUICK_TWO_CLASSES = 7
+/** …and any other within this share of the best screened total, up to `QUICK_MOST` */
+const QUICK_MARGIN = 0.06
+const QUICK_MOST = 12
+/**
+ * Sets and weapons whose effects reach the team (their sheets' team buffs): worth little to a
+ * member while a teammate's gives the same, so a quick search never leaves them out (a later round
+ * may hand one over)
+ */
+const givesTeam = (sheet: unknown) =>
+  !!(sheet as { data?: { teamBuff?: object } } | undefined)?.data?.teamBuff
+const teamSet = (k: string) => givesTeam(getArtSheet(k as ArtifactSetKey))
+const teamWeapon = (k: string) => givesTeam(getWeaponSheet(k as WeaponKey))
+/** The best `few`, and any other within `QUICK_MARGIN` of the best's total, up to `QUICK_MOST` */
+function contendersOf<T>(sorted: { item: T; score: KqmScore }[], few: number) {
+  const best = sorted[0]?.score.total ?? 0
+  return sorted
+    .filter(
+      ({ score }, i) =>
+        i < few || (i < QUICK_MOST && score.total >= best * (1 - QUICK_MARGIN))
+    )
+    .map(({ item }) => item)
+}
 
 /** Members' builds per team step (search breadth) */
 const WEAPONS_SEARCHED = 4
@@ -1400,6 +1453,34 @@ async function runKqm({
       two: sets.filter(([, n]) => n === 2).map(([k]) => k),
     })
   }
+  // (a pick after a quick run searches that run's contenders, and the picked weapon and sets)
+  const rootOut = kqm.fullSearch ? undefined : comparison?.result.screenedOut
+  for (const [k, out] of Object.entries(rootOut ?? {}) as [
+    CharacterKey,
+    { weapons: KqmWeapon[]; sets: ArtifactSetKey[] },
+  ][]) {
+    const space = spaces.get(k)
+    if (!space) continue
+    const pick = k === comparison?.characterKey ? comparison : undefined
+    const out1 = new Set(
+      out.weapons
+        .filter(
+          (w) =>
+            w.key !== pick?.weapon.key ||
+            w.refinement !== pick?.weapon.refinement
+        )
+        .map((w) => `${w.key}@${w.refinement}`)
+    )
+    const outSets = new Set(out.sets.filter((set) => !pick?.sets[set]))
+    spaces.set(k, {
+      ...space,
+      weapons: space.weapons.filter(
+        (w) => !out1.has(`${w.key}@${w.refinement}`)
+      ),
+      four: space.four.filter((set) => !outSets.has(set)),
+      two: space.two.filter((set) => !outSets.has(set)),
+    })
+  }
   /**
    * The weapons a member may take with the others' builds in `state`: not a one-copy weapon
    * (`KQM_ONE_COPY`: a quest reward like Exaiphanes' Blade) another member already has
@@ -1426,8 +1507,8 @@ async function runKqm({
       weapons: [...new Set((space?.weapons ?? []).map((w) => w.key))],
     }
   }
-  // the weapon and set effects nobody set up, by rule; the members' own settings win over them,
-  // and KQM mode's own (`conditionalOverrides`) over both
+  // the weapon and set effects nobody set up, by rule; KQM mode's own (`conditionalOverrides`)
+  // over them (the members' own switches for their gear play no part: `ownBuild`)
   // (from what the members do in the rotation: again when it is played differently)
   const ruleConditionals = () => {
     const ctx = kqmRuleConditionals(database, teamId, { attacks: attacksNow() })
@@ -1641,6 +1722,7 @@ async function runKqm({
       weapons,
       extraConditionals,
       conditionalOverrides,
+      ...kqmOwnSettings(kqm),
       characters,
       onField: teamOpt.onField,
       bonusStats,
@@ -1946,6 +2028,7 @@ async function runKqm({
     }
     tried += allowed.length
     screened.sort((a, b) => compareScores(a.score, b.score))
+    weaponScreens.set(ck, screened)
     const weapons = screened.slice(0, WEAPONS_SEARCHED).map((s) => s.weapon)
     if (
       allowed.some((w) => w.key === current.weapon.key) &&
@@ -1990,6 +2073,104 @@ async function runKqm({
     }
 
   const rankings: Partial<Record<CharacterKey, KqmRanking>> = {}
+
+  // A quick search (not `TeamOptKqm.fullSearch`): after the first round each member keeps its contenders,
+  // the weapons and sets near its best besides its build's and the ones that give the team
+  // something; the later rounds, the replays' candidates and the rankings use only them (a
+  // comparison or a refit searches what its run allows)
+  const quick = !kqm.fullSearch && !comparison && !from
+  let narrowed = false
+  const weaponScreens = new Map<
+    CharacterKey,
+    { weapon: KqmWeapon; score: Score }[]
+  >()
+  const screenedOut: NonNullable<KqmResult['screenedOut']> = {}
+  const narrowToContenders = async () => {
+    narrowed = true
+    const weaponId = (w: KqmWeapon) => `${w.key}@${w.refinement}`
+    for (const { characterKey: ck } of optimized) {
+      const space = spaces.get(ck)
+      const build = builds[ck]
+      if (!space || !build) continue
+      const problem = await problemFor(ck, build.weapon, builds)
+      if (!problem) continue
+      const value = (sets: KqmSets) =>
+        scoreOf(problem, kqmValues({ ...build, sets }))
+      // (a weapon or set that gives the team Energy stays: what it frees teammates is found when
+      // they are searched again)
+      const screen = weaponScreens.get(ck) ?? []
+      const keptWeapons = new Set(
+        screen.length
+          ? [
+              ...contendersOf(
+                screen.map((s) => ({
+                  item: weaponId(s.weapon),
+                  score: s.score,
+                })),
+                QUICK_WEAPONS
+              ),
+              weaponId(build.weapon),
+              ...space.weapons
+                .filter(
+                  (w) =>
+                    isFavonius(w.key) ||
+                    isCalcEnergyWeapon(w.key) ||
+                    teamWeapon(w.key)
+                )
+                .map(weaponId),
+            ]
+          : space.weapons.map(weaponId)
+      )
+      const four = space.four
+        .map((k) => ({ item: k, score: value({ [k]: 4 }) }))
+        .sort(
+          (a, b) =>
+            compareScores(a.score, b.score) || pref(a.item) - pref(b.item)
+        )
+      // (2-piece bonuses alike count once, as in `setCombos`: two sets of each kept, for its 2+2)
+      const classes: { v: number; sets: ArtifactSetKey[] }[] = []
+      for (const x of space.two
+        .map((k) => ({ k, v: value({ [k]: 2 }).total }))
+        .sort((a, b) => b.v - a.v || pref(a.k) - pref(b.k))) {
+        const same = classes.find(
+          (c) => Math.abs(c.v - x.v) <= 1e-9 * Math.abs(x.v)
+        )
+        if (same) same.sets.push(x.k)
+        else classes.push({ v: x.v, sets: [x.k] })
+      }
+      // (the team's sets too: one may be handed over to this member later)
+      const held = optimized.flatMap(
+        ({ characterKey: k }) =>
+          Object.keys(builds[k]?.sets ?? {}) as ArtifactSetKey[]
+      )
+      const shared = [...space.four, ...space.two].filter(teamSet)
+      const keptFour = new Set<ArtifactSetKey>([
+        ...contendersOf(four, QUICK_FOUR),
+        ...held,
+        ...shared,
+        ...space.four.filter((k) => k === 'TheExile'),
+      ])
+      const keptTwo = new Set([
+        ...classes
+          .slice(0, QUICK_TWO_CLASSES)
+          .flatMap((c) => c.sets.slice(0, 2)),
+        ...held,
+        ...shared,
+      ])
+      spaces.set(ck, {
+        ...space,
+        weapons: space.weapons.filter((w) => keptWeapons.has(weaponId(w))),
+        four: space.four.filter((k) => keptFour.has(k)),
+        two: space.two.filter((k) => keptTwo.has(k)),
+      })
+      screenedOut[ck] = {
+        weapons: space.weapons.filter((w) => !keptWeapons.has(weaponId(w))),
+        sets: [...new Set([...space.four, ...space.two])].filter(
+          (k) => !keptFour.has(k) && !keptTwo.has(k)
+        ),
+      }
+    }
+  }
 
   // Rounds of member steps (each member's search with the others' builds fixed), until no
   // build changes. A step is skipped when its result is known: its last one changed nothing and
@@ -2072,6 +2253,7 @@ async function runKqm({
           settled[ck] = changes
         }
       }
+      if (quick && !narrowed) await narrowToContenders()
       if (!changed) break
       if (round === plannedRounds && round < last) plannedRounds++
     }
@@ -2619,6 +2801,7 @@ async function runKqm({
         extraConditionals,
         conditionalOverrides,
         bonusStats,
+        ...kqmOwnSettings(kqm),
       },
     })
     if (!next) return false
@@ -2646,6 +2829,7 @@ async function runKqm({
       weapons,
       extraConditionals,
       conditionalOverrides,
+      ...kqmOwnSettings(kqm),
       characters,
       onField: teamOpt.onField,
       bonusStats,
@@ -2681,14 +2865,10 @@ async function runKqm({
     for (const m of optimized) {
       const ck = m.characterKey
       const b = builds[ck]!
-      const own = m.teamChar.conditional as
-        | Record<string, Record<string, unknown>>
-        | undefined
       const items = new Set<string>([b.weapon.key, ...Object.keys(b.sets)])
       assumed[ck] = (ctxConditionals[ck]?.picked ?? []).filter(
         ({ path }) =>
           items.has(path[0]) &&
-          own?.[path[0]]?.[path[path.length - 1]] === undefined &&
           kqm.passives?.[ck]?.[path[0]]?.[path[path.length - 1]] === undefined
       )
     }
@@ -2703,6 +2883,7 @@ async function runKqm({
       optimized: optimized.map((m) => m.characterKey),
       rounds,
       played,
+      ...(narrowed ? { screenedOut } : rootOut ? { screenedOut: rootOut } : {}),
     }
   }
 

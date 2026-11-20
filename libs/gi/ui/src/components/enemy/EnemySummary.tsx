@@ -285,6 +285,95 @@ export function FightBreakdown({
             'Disentangled (+15% CRIT Rate, +50% DMG Bonus) for 15 s after each: {{time}} in all',
           time: formatDuration(t, part.seconds),
         })
+      case 'sweeper':
+        return t('enemyEditor.fight.sweeper', {
+          defaultValue:
+            '{{count}} Sweeper Modes ({{time}} in all, 270% RES): stopped by Cryo {{stopped}} of it (30%, Cryo −30%), {{counter}} in Forced Counterstrike (110%); {{cryo}} Cryo hits/s against its 5/s of Flow Momentum (3 each)',
+          count: part.count,
+          time: formatDuration(t, part.seconds),
+          stopped: formatDuration(t, part.stopped),
+          counter: formatDuration(t, part.counterstrike),
+          cryo: part.cryo.toFixed(1),
+        })
+      case 'sculptures':
+        return t('enemyEditor.fight.sculptures', {
+          defaultValue:
+            '{{count}} sculptings, {{interrupted}} turned to statues by Radiance: Stellar Glimmer (2 × 499,999 DMG and 2 stacks of RES down each): {{hp}} of its HP',
+          count: part.count,
+          interrupted: part.interrupted,
+          hp: pct(part.hp),
+        })
+      case 'coffins':
+        return t('enemyEditor.fight.coffins', {
+          defaultValue:
+            '{{count}} Ice Coffins (1050 durability, 20 s; its HP untouched), ≈ {{seconds}} s each: {{broken}} broken, {{shields}} as shields under Radiance (15% of its HP)',
+          count: part.count,
+          seconds: Math.round(part.seconds),
+          broken: part.broken,
+          shields: part.shields,
+        })
+      case 'coffinBreak':
+        return t('enemyEditor.fight.coffinBreak', {
+          defaultValue:
+            'Each broken: 10% of its HP (a shield’s 60% of what it took more, 10% at most), then 10 s at −40% RES: {{hp}} of its HP in all',
+          hp: pct(part.hp),
+        })
+      case 'coffinHeal':
+        return t('enemyEditor.fight.coffinHeal', {
+          defaultValue:
+            '{{count}} not broken in time: 10% of its HP back each ({{hp}} in all)',
+          count: part.count,
+          hp: pct(part.hp),
+        })
+      case 'electroWards':
+        return t('enemyEditor.fight.electroWards', {
+          defaultValue:
+            '{{count}} Electro Wards (1000 durability; its HP untouched): {{broken}} broken, ≈ {{seconds}} s each, the team’s reactions taking {{rate}}/s off and {{backfires}} shockwaves turned on it by Radiance (400 each)',
+          count: part.count,
+          broken: part.broken,
+          seconds: Math.round(part.seconds),
+          rate: Math.round(part.rate),
+          backfires: part.backfires,
+        })
+      case 'wardBacklash':
+        return t('enemyEditor.fight.wardBacklash', {
+          defaultValue:
+            'Backlash when it breaks: {{ratio}} of the DMG it took, at most {{cap}} of its HP: {{hp}} of its HP in all',
+          ratio: pct(part.ratio),
+          cap: pct(part.cap),
+          hp: pct(part.hp),
+        })
+      case 'paralysis':
+        return t('enemyEditor.fight.paralysis', {
+          defaultValue: '{{count}} paralyses: {{time}} in all',
+          count: part.count,
+          time: formatDuration(t, part.seconds),
+        })
+      case 'vortex':
+        return t('enemyEditor.fight.vortex', {
+          defaultValue:
+            '{{count}} vortices, {{failed}} made to fail (Radiance, or Hydro/Pyro/Electro/Cryo hits on its Anemo Orbs)',
+          count: part.count,
+          failed: part.failed,
+        })
+      case 'countermeasures':
+        return part.seconds !== undefined
+          ? t('enemyEditor.fight.countermeasures', {
+              defaultValue:
+                'Its shield (twice its HP, 110% RES) holds until its Adaptive Countermeasures fill: {{time}} (2/s, Nightsoul’s Blessing {{share}} of the time)',
+              time: formatDuration(t, part.seconds),
+              share: pct(part.nightsoul),
+            })
+          : t(
+              'enemyEditor.fight.countermeasuresKept',
+              'Its shield (twice its HP, 110% RES) holds: its Adaptive Countermeasures never fill in time'
+            )
+      case 'cannon':
+        return t('enemyEditor.fight.cannon', {
+          defaultValue:
+            'Its cannon interrupted (both mechanisms broken): {{hp}} of its HP, then 15 s paralyzed at −30% RES',
+          hp: pct(part.hp),
+        })
       default:
         return ''
     }
@@ -341,6 +430,38 @@ export function FightBreakdown({
           cocoonApprox: t(
             'enemyEditor.fight.note.cocoonApprox',
             'The team’s DPS in its cocoon and Disentangled is still being worked out: its own DPS counted for now'
+          ),
+          transitionsEstimated: t(
+            'enemyEditor.fight.note.transitionsEstimated',
+            'Its transforms’ and switches’ lengths are estimates (not in the game files)'
+          ),
+          cryoEstimated: t(
+            'enemyEditor.fight.note.cryoEstimated',
+            'No written rotation: its Cryo hits are the attacks entered, spread evenly; Nightsoul’s Blessing not counted'
+          ),
+          radianceAssumed: t(
+            'enemyEditor.fight.note.radianceAssumed',
+            'No written rotation: Radiance: Stellar Glimmer taken to be on throughout (the team deals Stellar Glimmer DMG)'
+          ),
+          gaugeEstimated: t(
+            'enemyEditor.fight.note.gaugeEstimated',
+            'No written rotation: its element applications are taken from the attacks entered (every 3rd hit 1U)'
+          ),
+          windowEstimated: t(
+            'enemyEditor.fight.note.windowEstimated',
+            'The moment Radiance must be on it (1–5 s into each sculpting) is an estimate'
+          ),
+          flightEstimated: t(
+            'enemyEditor.fight.note.flightEstimated',
+            'Its flights’ lengths are estimates; the team’s damage counted in full while it flies'
+          ),
+          mechanismsEstimated: t(
+            'enemyEditor.fight.note.mechanismsEstimated',
+            'The climb to its mechanisms (13 s) is an estimate; the team’s damage counted in full meanwhile'
+          ),
+          noNightsoul: t(
+            'enemyEditor.fight.note.noNightsoul',
+            'No written rotation: Nightsoul’s Blessing not known, its Adaptive Countermeasures fill on their own (100 s)'
           ),
           mechanics: t(
             'enemyEditor.fight.note.mechanics',

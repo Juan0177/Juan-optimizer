@@ -78,6 +78,8 @@ import {
   MAX_ENEMY_HP,
   validateFightSettings,
 } from './TeamDataManager'
+import type { EnemyOverride, TeamEnemy } from './TeamEnemy'
+import { validateEnemyOverride, validateTeamEnemy } from './TeamEnemy'
 import type {
   TeamOpt,
   TeamOptAttack,
@@ -96,6 +98,9 @@ import {
   teamOptEnergyRotationFields,
   validateTeamOpt,
 } from './TeamOpt'
+
+export type { RotationDocumentField } from './TeamDataManager'
+
 import type { TeamRotation } from './TeamRotation'
 import {
   applyTeamRotation,
@@ -119,6 +124,7 @@ export type {
   BuildTcArtifactSlot,
   CustomMultiTarget,
   CustomTarget,
+  EnemyOverride,
   GeneratedBuild,
   ICachedArtifact,
   ICachedCharacter,
@@ -147,6 +153,7 @@ export type {
   StatFilters,
   Team,
   TeamCharacter,
+  TeamEnemy,
   TeamFightSettings,
   TeamOpt,
   TeamOptAttack,
@@ -196,6 +203,8 @@ export {
   toBuildTc,
   validateArtifact,
   validateCustomMultiTarget,
+  validateEnemyOverride,
   validateFightSettings,
+  validateTeamEnemy,
   validateTeamOpt,
 }

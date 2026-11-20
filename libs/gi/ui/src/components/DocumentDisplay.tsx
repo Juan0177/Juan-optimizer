@@ -67,7 +67,7 @@ export function DocumentDisplay({
     .filter((s) => s)
   if (!sectionDisplays.length) return null
   return (
-    <Box display="flex" flexDirection="column" gap={1} flexWrap="wrap">
+    <Box display="flex" flexDirection="column" gap={1}>
       {sectionDisplays}
     </Box>
   )

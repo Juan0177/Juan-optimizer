@@ -4,7 +4,10 @@
  * what floats or is selected. Gold marks the one main action, a selection, an edited value and focus;
  * element hues mark character data. Labels are sentence case; details live in ⓘ tooltips.
  */
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
+import {
+  InfoTooltipInline,
+  SuspenseTooltip,
+} from '@genshin-optimizer/common/ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import {
@@ -13,11 +16,18 @@ import {
   ButtonBase,
   Collapse,
   Skeleton,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
-import { createContext, type ReactNode, Suspense, useContext } from 'react'
+import {
+  createContext,
+  type ReactNode,
+  Suspense,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 
 /* ---------- tokens ---------- */
 
@@ -76,9 +86,9 @@ export const type = {
   section: { fontSize: 17, fontWeight: 650, letterSpacing: '-0.01em' },
   /** A step of the page (KQM: Rotation, Setup, Team builds): the largest heading */
   step: {
-    fontSize: 20,
+    fontSize: 18.5,
     fontWeight: 650,
-    letterSpacing: '-0.015em',
+    letterSpacing: '-0.012em',
     lineHeight: 1.25,
   },
   /** A panel's or dialog's title */
@@ -115,6 +125,7 @@ export function StepTitle({
   id,
   info,
   result,
+  accent = result ? 'result' : 'setup',
   children,
 }: {
   step: number
@@ -122,31 +133,36 @@ export function StepTitle({
   info?: ReactNode
   /** The step that shows the outcome: a gold badge */
   result?: boolean
+  /** Its colour (`stepAccents`): the badge's */
+  accent?: StepAccent
   children: ReactNode
 }) {
+  const color = stepAccents[accent]
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
       <Box
         aria-hidden
         sx={{
           flex: '0 0 auto',
-          width: 28,
-          height: 28,
+          width: 24,
+          height: 24,
           borderRadius: '50%',
           display: 'grid',
           placeItems: 'center',
-          fontSize: 13.5,
+          fontSize: 12.5,
           fontWeight: 700,
+          lineHeight: 1,
           ...numSx,
           ...(result
             ? {
                 bgcolor: giTokens.gold,
                 color: '#17181f',
-                boxShadow: `0 0 0 4px ${alpha(giTokens.gold, 0.14)}`,
+                boxShadow: `0 0 0 3px ${alpha(giTokens.gold, 0.14)}`,
               }
             : {
-                color: 'text.secondary',
-                boxShadow: `inset 0 0 0 1.5px ${giTokens.hairlineStrong}`,
+                color,
+                bgcolor: alpha(color, 0.12),
+                boxShadow: `inset 0 0 0 1px ${alpha(color, 0.32)}`,
               }),
         }}
       >
@@ -155,10 +171,24 @@ export function StepTitle({
       <Typography
         id={id}
         component="h2"
-        sx={{ ...type.step, display: 'flex', alignItems: 'center', gap: 0.5 }}
+        sx={{ ...type.step, display: 'flex', alignItems: 'center', gap: 0.75 }}
       >
         {children}
-        {info && <InfoTooltipInline title={info} />}
+        {info && (
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-flex',
+              fontSize: 15,
+              color: 'text.secondary',
+              opacity: 0.65,
+              transition: 'opacity .12s',
+              '&:hover': { opacity: 1 },
+            }}
+          >
+            <InfoTooltipInline title={info} />
+          </Box>
+        )}
       </Typography>
     </Box>
   )
@@ -221,6 +251,35 @@ export const subsectionSx = {
 } as const
 
 /** A step's surface: inputs on the panel; the outcome raised, with a gold top edge */
+/** Each step's colour, so the page's parts read apart at a glance: the rotation, the setup, the result */
+export const stepAccents = {
+  rotation: '#7db4e6',
+  setup: '#ab95e0',
+  result: giTokens.gold,
+} as const
+export type StepAccent = keyof typeof stepAccents
+
+/** A step's colour on its surface: a line along the top and a tint fading down from its head */
+export const stepAccentSx = (accent: StepAccent) => {
+  const c = stepAccents[accent]
+  return {
+    position: 'relative',
+    borderColor: alpha(c, 0.2),
+    backgroundImage: `linear-gradient(180deg, ${alpha(c, 0.085)}, ${alpha(c, 0)} 200px)`,
+    '&::before': {
+      content: '""',
+      position: 'absolute',
+      top: -1,
+      left: 24,
+      right: 24,
+      height: 2,
+      borderRadius: 2,
+      pointerEvents: 'none',
+      background: `linear-gradient(90deg, transparent, ${alpha(c, 0.9)} 18%, ${alpha(c, 0.9)} 82%, transparent)`,
+    },
+  } as const
+}
+
 export const stepSurfaceSx = (result?: boolean) =>
   ({
     bgcolor: result ? giTokens.panelRaised : tokens.panel,
@@ -231,6 +290,7 @@ export const stepSurfaceSx = (result?: boolean) =>
     ...(result && {
       borderColor: alpha(giTokens.gold, 0.22),
       boxShadow: `0 18px 48px ${alpha('#000', 0.35)}`,
+      backgroundImage: `linear-gradient(180deg, ${alpha(giTokens.gold, 0.085)}, ${alpha(giTokens.gold, 0)} 200px)`,
       // (a thin gold line along the top: the outcome)
       '&::before': {
         content: '""',
@@ -381,9 +441,9 @@ export function FieldLabel({
     </Typography>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       {label}
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     label
   )
@@ -482,9 +542,9 @@ export function Pill({
     </ButtonBase>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       <span style={{ display: 'inline-flex' }}>{pill}</span>
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     pill
   )
@@ -509,11 +569,55 @@ export function Segmented<T extends string | number>({
   wrap?: boolean
   'aria-label'?: string
 }) {
+  // the chosen option's thumb: under it, sliding to the next one chosen (placed once the track
+  // is laid out, and whenever it changes size)
+  const track = useRef<HTMLDivElement>(null)
+  const active = options.findIndex((o) => o.value === value)
+  const [thumb, setThumb] = useState<{
+    x: number
+    y: number
+    w: number
+    h: number
+  }>()
+  const [sliding, setSliding] = useState(false)
+  const placed = useRef(false)
+  useLayoutEffect(() => {
+    const el = track.current
+    if (!el) return undefined
+    const place = () => {
+      placed.current = true
+      const button = el.querySelectorAll<HTMLElement>('[role="radio"]')[active]
+      setThumb(
+        button?.offsetWidth
+          ? {
+              x: button.offsetLeft,
+              y: button.offsetTop,
+              w: button.offsetWidth,
+              h: button.offsetHeight,
+            }
+          : undefined
+      )
+    }
+    // (the first time by the observer, after the page's layout: measuring here forces one)
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? undefined
+        : new ResizeObserver(place)
+    if (placed.current || !observer) place()
+    observer?.observe(el)
+    const id = requestAnimationFrame(() => setSliding(true))
+    return () => {
+      observer?.disconnect()
+      cancelAnimationFrame(id)
+    }
+  }, [active, options.length])
   return (
     <Box
+      ref={track}
       role="radiogroup"
       aria-label={ariaLabel}
       sx={{
+        position: 'relative',
         ...(wrap
           ? { display: 'inline-flex', flexWrap: 'wrap', maxWidth: '100%' }
           : {
@@ -521,34 +625,58 @@ export function Segmented<T extends string | number>({
               gridAutoFlow: 'column',
               gridAutoColumns: fullWidth ? 'minmax(0, 1fr)' : 'auto',
             }),
-        p: 0.375,
-        gap: 0.25,
+        p: '3px',
+        gap: '2px',
         borderRadius: tokens.radius.control,
-        bgcolor: alpha(giTokens.parchment, 0.05),
+        bgcolor: alpha(giTokens.parchment, 0.045),
+        boxShadow: `inset 0 0 0 1px ${alpha(giTokens.parchment, 0.06)}`,
       }}
     >
-      {options.map((o) => {
-        const active = o.value === value
+      {thumb && (
+        <Box
+          aria-hidden
+          style={{
+            width: thumb.w,
+            height: thumb.h,
+            transform: `translate(${thumb.x}px, ${thumb.y}px)`,
+          }}
+          sx={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            borderRadius: 1.25,
+            bgcolor: giTokens.panelRaised,
+            backgroundImage: `linear-gradient(180deg, ${alpha(giTokens.parchment, 0.07)}, ${alpha(giTokens.parchment, 0)})`,
+            boxShadow: `0 1px 3px ${alpha('#000', 0.45)}, inset 0 0 0 1px ${giTokens.hairlineStrong}`,
+            pointerEvents: 'none',
+            transition: sliding
+              ? 'transform .22s cubic-bezier(.2,.8,.2,1), width .22s cubic-bezier(.2,.8,.2,1)'
+              : 'none',
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+          }}
+        />
+      )}
+      {options.map((o, i) => {
+        const on = i === active
         const button = (
           <ButtonBase
             key={String(o.value)}
             role="radio"
-            aria-checked={active}
+            aria-checked={on}
             disabled={o.disabled}
             onClick={() => onChange(o.value)}
             sx={{
+              position: 'relative',
               px: size === 'small' ? 1 : 1.5,
               minHeight: size === 'small' ? 26 : 30,
               borderRadius: 1.25,
               fontSize: size === 'small' ? 12.5 : 13,
               fontWeight: 600,
               whiteSpace: 'nowrap',
-              color: active ? 'text.primary' : 'text.secondary',
-              bgcolor: active ? giTokens.panelRaised : 'transparent',
-              boxShadow: active
-                ? `0 1px 2px ${alpha('#000', 0.45)}, inset 0 0 0 1px ${giTokens.hairlineStrong}`
-                : 'none',
-              ...quickSx,
+              color: on ? 'text.primary' : 'text.secondary',
+              // (before the thumb is placed: the chosen one shows on its own)
+              bgcolor: on && !thumb ? giTokens.panelRaised : 'transparent',
+              transition: 'color .15s',
               ...focusSx,
               '&:hover': { color: 'text.primary' },
               '&.Mui-disabled': { opacity: 0.4 },
@@ -558,9 +686,9 @@ export function Segmented<T extends string | number>({
           </ButtonBase>
         )
         return o.tip ? (
-          <Tooltip key={String(o.value)} arrow title={o.tip}>
+          <SuspenseTooltip key={String(o.value)} arrow title={o.tip}>
             <span style={{ display: 'grid' }}>{button}</span>
-          </Tooltip>
+          </SuspenseTooltip>
         ) : (
           button
         )
@@ -748,9 +876,9 @@ export function BetaBadge({
     </Box>
   )
   return tip ? (
-    <Tooltip arrow title={tip}>
+    <SuspenseTooltip arrow title={tip}>
       {badge}
-    </Tooltip>
+    </SuspenseTooltip>
   ) : (
     badge
   )

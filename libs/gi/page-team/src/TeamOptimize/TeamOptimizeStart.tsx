@@ -1,33 +1,32 @@
-import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
+import {
+  type RotationTemplate,
+  templatesForTeam,
+} from '@genshin-optimizer/gi/ui'
 import AddRoundedIcon from '@mui/icons-material/AddRounded'
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded'
-import { alpha, Box, ButtonBase, Typography } from '@mui/material'
-import { type ReactNode, useCallback, useSyncExternalStore } from 'react'
+import { alpha, Box, ButtonBase, Tooltip, Typography } from '@mui/material'
+import { type ReactNode, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
+import { TemplateCards } from './RotationTemplates'
 import { focusSx, hairline, quickSx, tokens, type } from './ui'
 
-/** The first visit's choice, per team: attacks entered by hand (the start screen is then left out) */
-const manualKey = (teamId: string) => `teamOpt.start.manual_${teamId}`
-const startEvent = 'teamOpt.startChoice'
-const subscribe = (onChange: () => void) => {
-  window.addEventListener(startEvent, onChange)
-  return () => window.removeEventListener(startEvent, onChange)
-}
-
-/** Whether the team chose to enter its attacks by hand, and the setter */
-export function useManualStart(teamId: string) {
-  const manual = useSyncExternalStore(
-    subscribe,
-    () => localStorage.getItem(manualKey(teamId)) === '1'
-  )
+/** Whether this tab has moved from the start screen to manual attack entry. */
+export function useManualStart(teamId: string, kqm: boolean) {
+  const database = useDatabase()
+  const document =
+    useTeam(teamId)?.rotationDocuments?.[kqm ? 'kqm' : 'inventory']
   const chooseManual = useCallback(() => {
-    localStorage.setItem(manualKey(teamId), '1')
-    window.dispatchEvent(new Event(startEvent))
-  }, [teamId])
-  return { manual, chooseManual }
+    database.teams.setRotationField(
+      kqm ? `${teamId}_kqm` : teamId,
+      'Manual',
+      '1'
+    )
+  }, [database, kqm, teamId])
+  return { manual: document?.Manual === '1', chooseManual }
 }
 
 /** The tiles' picture area (shorter on phones, where the tiles stack) */
@@ -36,22 +35,26 @@ const PREVIEW_HEIGHT = { xs: 92, sm: 112 }
 /**
  * The rotation before it has anything in it: two ways to start, each a tile with a small picture
  * of what it gives (a written line of the team's actions; the members' attack rows). Writing opens
- * the writer; adding attacks shows the members' attack lists (remembered). `footer`: Import.
+ * the writer; adding attacks shows the members' attack lists (remembered). Under them, the built-in
+ * templates for the team's main DPS (one opens in the writer). `footer`: Import.
  */
 export function TeamOptimizeStart({
   members,
   onWrite,
+  onTemplate,
   onManual,
   footer,
   disabled,
 }: {
   members: CharacterKey[]
   onWrite: () => void
+  onTemplate: (template: RotationTemplate) => void
   onManual: () => void
   footer?: ReactNode
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
+  const templates = useMemo(() => templatesForTeam(members), [members])
   return (
     <Box
       sx={{
@@ -61,24 +64,6 @@ export function TeamOptimizeStart({
         py: { xs: 2.5, sm: 5 },
       }}
     >
-      <Typography
-        component="h3"
-        sx={{
-          ...type.step,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          mb: 2.5,
-        }}
-      >
-        {t('teamOpt.start.heading', 'Set up the rotation')}
-        <InfoTooltipInline
-          title={t(
-            'teamOpt.start.info',
-            'Write rotation: type it the way players do ("Bennett E Q -> …"); the attacks, hits and timing come from each kit. Add attacks: pick each member’s talents and hits by hand.'
-          )}
-        />
-      </Typography>
       <Box
         sx={{
           display: 'grid',
@@ -94,6 +79,10 @@ export function TeamOptimizeStart({
         <Tile
           main
           label={t('teamOpt.start.write', 'Write rotation')}
+          tip={t(
+            'teamOpt.start.writeTip',
+            'Type it the way players do ("Bennett E Q -> …"): the attacks, hits and timing come from each kit.'
+          )}
           onClick={onWrite}
           disabled={disabled}
         >
@@ -101,12 +90,23 @@ export function TeamOptimizeStart({
         </Tile>
         <Tile
           label={t('teamOpt.start.manual', 'Add attacks')}
+          tip={t(
+            'teamOpt.start.manualTip',
+            'Pick each member’s talents and how often they hit, by hand.'
+          )}
           onClick={onManual}
           disabled={disabled}
         >
           <AttackRows members={members} />
         </Tile>
       </Box>
+      {!disabled && (
+        <TemplateCards
+          templates={templates}
+          team={members}
+          onPick={onTemplate}
+        />
+      )}
       {footer && <Box sx={{ mt: 2 }}>{footer}</Box>}
     </Box>
   )
@@ -115,76 +115,80 @@ export function TeamOptimizeStart({
 function Tile({
   main,
   label,
+  tip,
   onClick,
   disabled,
   children,
 }: {
   main?: boolean
   label: string
+  tip: string
   onClick: () => void
   disabled?: boolean
   children: ReactNode
 }) {
   const gold = giTokens.gold
   return (
-    <ButtonBase
-      onClick={onClick}
-      disabled={disabled}
-      focusRipple
-      aria-label={label}
-      sx={{
-        ...quickSx,
-        ...focusSx,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'stretch',
-        justifyContent: 'flex-start',
-        overflow: 'hidden',
-        textAlign: 'left',
-        borderRadius: tokens.radius.inset,
-        bgcolor: tokens.inset,
-        border: hairline,
-        borderColor: main ? alpha(gold, 0.4) : tokens.hairline,
-        '&:hover': {
-          bgcolor: alpha(giTokens.parchment, 0.025),
-          borderColor: main ? alpha(gold, 0.75) : tokens.hairlineStrong,
-        },
-        '&:hover .tile-arrow': { color: main ? gold : 'text.primary' },
-        '&.Mui-disabled': { opacity: 0.5 },
-      }}
-    >
-      <Box
-        aria-hidden
+    <Tooltip arrow title={tip} placement="top" enterDelay={400}>
+      <ButtonBase
+        onClick={onClick}
+        disabled={disabled}
+        focusRipple
+        aria-label={label}
         sx={{
-          height: PREVIEW_HEIGHT,
-          display: 'grid',
-          placeItems: 'center',
-          px: 2,
-          borderBottom: hairline,
-        }}
-      >
-        {children}
-      </Box>
-      <Box
-        sx={{
+          ...quickSx,
+          ...focusSx,
           display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          px: 2,
-          py: 1.5,
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          justifyContent: 'flex-start',
+          overflow: 'hidden',
+          textAlign: 'left',
+          borderRadius: tokens.radius.inset,
+          bgcolor: tokens.inset,
+          border: hairline,
+          borderColor: main ? alpha(gold, 0.4) : tokens.hairline,
+          '&:hover': {
+            bgcolor: alpha(giTokens.parchment, 0.025),
+            borderColor: main ? alpha(gold, 0.75) : tokens.hairlineStrong,
+          },
+          '&:hover .tile-arrow': { color: main ? gold : 'text.primary' },
+          '&.Mui-disabled': { opacity: 0.5 },
         }}
       >
-        <Typography sx={{ ...type.title, flexGrow: 1 }}>{label}</Typography>
-        <ArrowForwardRoundedIcon
-          className="tile-arrow"
+        <Box
+          aria-hidden
           sx={{
-            ...quickSx,
-            fontSize: 18,
-            color: main ? gold : 'text.secondary',
+            height: PREVIEW_HEIGHT,
+            display: 'grid',
+            placeItems: 'center',
+            px: 2,
+            borderBottom: hairline,
           }}
-        />
-      </Box>
-    </ButtonBase>
+        >
+          {children}
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 2,
+            py: 1.5,
+          }}
+        >
+          <Typography sx={{ ...type.title, flexGrow: 1 }}>{label}</Typography>
+          <ArrowForwardRoundedIcon
+            className="tile-arrow"
+            sx={{
+              ...quickSx,
+              fontSize: 18,
+              color: main ? gold : 'text.secondary',
+            }}
+          />
+        </Box>
+      </ButtonBase>
+    </Tooltip>
   )
 }
 

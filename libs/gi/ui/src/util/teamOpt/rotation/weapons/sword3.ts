@@ -1,5 +1,5 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { SimHit } from '../types'
+import type { SimContext, SimHit } from '../types'
 import { healedBy, isReactionEvent, type WeaponModule } from '../weaponEffects'
 
 /** A damage hit (not a marker or a reaction's own damage) */
@@ -181,8 +181,12 @@ export const sword3: WeaponModule[] = [
     },
   },
   {
-    // Finale of the Deep (kqmsim finaleofthedeep.go): ATK for 15 s after the wielder's Skill,
-    // once per 10 s (its Bond of Life ATK needs the Bond cleared: left to its switch)
+    // Finale of the Deep (gcsim finaleofthedeep.go): ATK for 15 s after the wielder's Skill, once
+    // per 10 s, and that Skill's Bond of Life (25% Max HP); heals on the wielder lower it, and once
+    // it is cleared flat ATK for 15 s on the wielder's clock (the sheet's switch: the whole Bond).
+    // Each change of the Bond is marked (Fragment of Harmonic Whimsy). Without a calculation (no
+    // heal amounts) the first heal clears it. A kit clearing its own Bond (Clorinde's Impale,
+    // ['_marker', 'bondOfLife', 'loss', 'clear']) clears all of it: the cap's ATK.
     weapon: 'FinaleOfTheDeep',
     timed: [
       {
@@ -192,6 +196,85 @@ export const sword3: WeaponModule[] = [
         icd: 600,
       },
     ],
+    custom: ({ members, holds, window, onFieldAt }) => {
+      const path = ['FinaleOfTheDeep', 'bond']
+      const holders = members.filter(holds)
+      /** Each wielder's Bond left (HP; NaN: not known) */
+      const bond = new Map<CharacterKey, number>()
+      const icdUntil = new Map<CharacterKey, number>()
+      const generation = new Map<CharacterKey, number>()
+      /** Flat ATK for 15 s on the wielder's clock ('max': a kit's own Bond, worth the cap) */
+      const cleared = (ctx: SimContext, k: CharacterKey, value: string) => {
+        const g = (generation.get(k) ?? 0) + 1
+        generation.set(k, g)
+        ctx.state(k, path, value)
+        ctx.atCharacter(k, 900, (c) => {
+          if (generation.get(k) === g) c.state(k, path, '')
+        })
+      }
+      const mark = (ctx: SimContext, k: CharacterKey, change: string) =>
+        ctx.hit(0, {
+          characterKey: k,
+          path: ['_marker', 'bondOfLife', change],
+          tag: 'other',
+          element: 'physical',
+          label: 'Finale of the Deep (Bond of Life)',
+        })
+      return {
+        declare() {
+          for (const k of holders) window(k, path, 'on', 0, 0)
+        },
+        onAction(ctx, actor, action) {
+          if (action.kind !== 'skill' || !holders.includes(actor)) return
+          const clock = ctx.characterFrame(actor)
+          if (clock < (icdUntil.get(actor) ?? -Infinity)) return
+          icdUntil.set(actor, clock + 600)
+          const maxHp = ctx.calculate(actor, ['total', 'hp'])
+          bond.set(actor, maxHp ? 0.25 * maxHp : Number.NaN)
+          mark(ctx, actor, 'gain')
+        },
+        onHit(ctx, hit) {
+          const k = hit.characterKey
+          if (
+            hit.path[0] === '_marker' &&
+            hit.path[1] === 'bondOfLife' &&
+            hit.path[3] === 'clear' &&
+            holders.includes(k)
+          ) {
+            bond.delete(k)
+            cleared(ctx, k, 'max')
+            return
+          }
+          if (hit.path[0] !== '_heal') return
+          for (const k of healedBy(
+            hit,
+            members,
+            hit.onField ?? onFieldAt(hit.t)
+          )) {
+            const left = bond.get(k)
+            if (left === undefined || !holders.includes(k)) continue
+            const amount =
+              hit.path[1] === '_percent'
+                ? undefined
+                : ctx.calculate(hit.characterKey, [
+                    'display',
+                    ...hit.path.slice(1),
+                  ])
+            const rest =
+              Number.isNaN(left) || amount === undefined
+                ? 0
+                : Math.max(0, left - amount)
+            mark(ctx, k, 'loss')
+            if (rest > 0) {
+              bond.set(k, rest)
+              continue
+            }
+            bond.delete(k)
+            cleared(ctx, k, 'on')
+          }
+        },
+      }
+    },
   },
   {
     // Iron Sting (kqmsim ironsting.go): the wielder's Elemental DMG on the field, once per 1 s,

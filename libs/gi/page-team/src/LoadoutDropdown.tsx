@@ -7,7 +7,7 @@ import {
   SqBadge,
 } from '@genshin-optimizer/common/ui'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import { CharacterName } from '@genshin-optimizer/gi/ui'
+import { CharacterName, LoadoutName } from '@genshin-optimizer/gi/ui'
 import PersonIcon from '@mui/icons-material/Person'
 import {
   Box,
@@ -121,10 +121,14 @@ export function LoadoutDropdown({
             {label ? (
               <span>
                 {t('loDropdown.label')}
-                <strong>{name}</strong>
+                <strong>
+                  <LoadoutName name={name} characterKey={characterKey} />
+                </strong>
               </span>
             ) : (
-              <span>{name}</span>
+              <span>
+                <LoadoutName name={name} characterKey={characterKey} />
+              </span>
             )}
           </Box>
         }
@@ -140,7 +144,9 @@ export function LoadoutDropdown({
               onClick={() => onChangeTeamCharId(tcId)}
               sx={{ display: 'flex', gap: 1 }}
             >
-              <span>{name}</span>
+              <span>
+                <LoadoutName name={name} characterKey={characterKey} />
+              </span>
               <SqBadge
                 color={customMultiTargets.length ? 'success' : 'secondary'}
                 sx={{ marginLeft: 'auto' }}

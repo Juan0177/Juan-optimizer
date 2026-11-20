@@ -3,6 +3,7 @@ import {
   InfoTooltipInline,
   ModalWrapper,
   NumberInputLazy,
+  SuspenseTooltip,
 } from '@genshin-optimizer/common/ui'
 import { getUnitStr } from '@genshin-optimizer/common/util'
 import type {
@@ -346,12 +347,14 @@ export function AttackEditor({
   const currentOnField = attack.onField ?? onField
   // the stats this hit's formula uses: a buff's effect on another stat is dimmed in its row
   const uses = useMemo(() => statsUsed(hit?.hit), [hit])
+  const titleId = useId()
 
   return (
     <ModalWrapper
       open={open}
       onClose={onClose}
       containerProps={{ maxWidth: 'lg' }}
+      aria-labelledby={titleId}
     >
       {/* (its texts load here: the page behind it stays) */}
       <Suspense
@@ -378,6 +381,7 @@ export function AttackEditor({
               >
                 <MemberAvatar characterKey={characterKey} size={36} />
                 <Box
+                  id={titleId}
                   sx={{
                     flexGrow: 1,
                     minWidth: 0,
@@ -1564,7 +1568,7 @@ function BuffRow({
           lineHeight: 1.45,
         }}
       >
-        <Tooltip
+        <SuspenseTooltip
           arrow
           placement="top-start"
           enterDelay={300}
@@ -1601,7 +1605,7 @@ function BuffRow({
           >
             {source(buff)}
           </Typography>
-        </Tooltip>
+        </SuspenseTooltip>
         {effects === undefined ? (
           <Skeleton variant="rounded" width={120} height={18} />
         ) : (
@@ -1725,6 +1729,11 @@ function StateSelect({
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
+  // (the rotation can set a state the sheet does not list, as Raiden's 52 Resolve stacks)
+  const states = [...(buff.states ?? [])]
+  for (const value of new Set([buff.value, state]))
+    if (!states.some((s) => s.value === value))
+      states.push({ value, name: value })
   return (
     <Tooltip
       title={t(
@@ -1741,7 +1750,7 @@ function StateSelect({
         size="small"
         value={state}
         disabled={disabled}
-        renderValue={(v) => buff.states?.find((s) => s.value === v)?.name ?? v}
+        renderValue={(v) => states.find((s) => s.value === v)?.name ?? v}
         onChange={(e) => onChange(e.target.value)}
         inputProps={{
           'aria-label': t('teamOpt.editor.state', 'State during this attack'),
@@ -1767,7 +1776,7 @@ function StateSelect({
           }),
         })}
       >
-        {buff.states?.map((s) => (
+        {states.map((s) => (
           <MenuItem
             key={s.value}
             value={s.value}
@@ -1903,8 +1912,10 @@ function HitsLimit({
         }}
       >
         {t('teamOpt.editor.allHitsCount', {
+          count: attack.hits,
           hits: formatHits(attack.hits),
-          defaultValue: 'all {{hits}} hits',
+          defaultValue_one: 'its {{hits}} hit',
+          defaultValue_other: 'all {{hits}} hits',
         })}
       </ButtonBase>
     </Tooltip>

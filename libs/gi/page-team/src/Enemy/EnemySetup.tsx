@@ -1,7 +1,6 @@
 import { useBoolState } from '@genshin-optimizer/common/react-util'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { Team } from '@genshin-optimizer/gi/db'
-import { useDatabase, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { FightEstimate, FightTeam } from '@genshin-optimizer/gi/ui'
 import {
@@ -40,6 +39,7 @@ import {
 } from '../TeamOptimize/ui'
 import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
+import { useEnemyTeam, useSetEnemy } from './enemyScope'
 import { formatHp } from './hp'
 import { MoongeckoSettings, StartEnergySetting } from './MoongeckoSettings'
 
@@ -64,8 +64,8 @@ export function EnemySetup({
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const database = useDatabase()
-  const team = useTeam(teamId)
+  const setEnemy = useSetEnemy(teamId)
+  const team = useEnemyTeam(teamId)
   const [open, onOpen, onClose] = useBoolState()
   if (!team) return null
   const stygian = appliedStygianPreset(team)
@@ -134,7 +134,7 @@ export function EnemySetup({
                 size="small"
                 value={stygian.difficulty}
                 onChange={(key) =>
-                  database.teams.set(teamId, (team) => {
+                  setEnemy((team) => {
                     team.enemyOverride.enemyLevel = levelOf(key)
                   })
                 }
@@ -222,6 +222,40 @@ function mechanicsLine(t: TFunction, estimate: FightEstimate) {
             defaultValue: '{{count}} Anchors, wards not broken in time',
             count: part.count,
           })
+    if (part.key === 'sweeper')
+      return t('enemy.sweeperLine', {
+        defaultValue: '{{count}} Sweeper Modes, stopped {{time}}',
+        count: part.count,
+        time: formatDuration(t, part.stopped),
+      })
+    if (part.key === 'sculptures')
+      return t('enemy.sculpturesLine', {
+        defaultValue:
+          '{{interrupted}} of {{count}} sculptings turned to statues',
+        count: part.count,
+        interrupted: part.interrupted,
+      })
+    if (part.key === 'coffins')
+      return t('enemy.coffinsLine', {
+        defaultValue: '{{broken}} of {{count}} Ice Coffins broken',
+        count: part.count,
+        broken: part.broken,
+      })
+    if (part.key === 'electroWards')
+      return part.broken
+        ? t('enemy.electroWardsLine', {
+            defaultValue: '{{count}} wards broken, ≈ {{time}} each',
+            count: part.broken,
+            time: formatDuration(t, part.seconds),
+          })
+        : t('enemy.electroWardsKeptLine', 'Its Electro Ward never broken')
+    if (part.key === 'countermeasures')
+      return part.seconds !== undefined
+        ? t('enemy.countermeasuresLine', {
+            defaultValue: 'Its shield breaks at {{time}}',
+            time: formatDuration(t, part.seconds),
+          })
+        : t('enemy.countermeasuresKeptLine', 'Its shield never breaks')
   }
   const phase = estimate.parts.find((p) => p.key === 'phase')
   return phase?.key === 'phase'

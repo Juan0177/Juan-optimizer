@@ -28,7 +28,11 @@ import { Box, InputAdornment, TextField, Typography } from '@mui/material'
 import type { i18n as I18n, TFunction } from 'i18next'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { kqmEnergyEstimate, MemberEnergy } from '../KqmEnergyCalculator'
+import {
+  kqmEnergyEstimate,
+  kqmEnergyGear,
+  MemberEnergy,
+} from '../KqmEnergyCalculator'
 import { EmptyLine, FieldLabel, hairline, insetSx, numSx } from '../ui'
 import type { PassiveStore } from '../WeaponChooser'
 import {
@@ -390,7 +394,7 @@ function EnteringEnergy({
     <MemberEnergy
       characterKey={characterKey}
       keys={keys}
-      kqm={teamOpt.kqm}
+      gear={kqmEnergyGear(teamOpt.kqm)}
       member={member}
       rotationTime={calc.rotationTime}
       estimate={estimate}

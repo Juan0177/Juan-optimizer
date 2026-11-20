@@ -1,8 +1,9 @@
+import { SuspenseTooltip } from '@genshin-optimizer/common/ui'
 import { objPathValue } from '@genshin-optimizer/common/util'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { getDisplayHeader, resolveInfo } from '@genshin-optimizer/gi/ui'
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
-import { Box, Tooltip, Typography } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -89,7 +90,7 @@ export function AttackName({
   const { name, textSuffix, element, header } = info
   if (oneLine)
     return (
-      <Tooltip title={header?.title ?? ''} placement="top-start">
+      <SuspenseTooltip title={header?.title ?? ''} placement="top-start">
         <Box
           sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}
         >
@@ -124,7 +125,7 @@ export function AttackName({
             {textSuffix && <span> {textSuffix}</span>}
           </Typography>
         </Box>
-      </Tooltip>
+      </SuspenseTooltip>
     )
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>

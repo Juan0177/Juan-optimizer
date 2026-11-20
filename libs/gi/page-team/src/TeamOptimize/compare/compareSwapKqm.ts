@@ -37,7 +37,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import type { RotationTimingSettings } from '../RotationTiming'
-import { readRotationTiming } from '../RotationWriter'
+import { readKqmRotation } from '../RotationWriter'
 import type { KqmRotation } from '../useKqmRun'
 import { kqmReplayOf } from '../useKqmRun'
 import { CompareSwapFailure } from './compareError'
@@ -451,7 +451,7 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
   const sandbox = sandboxOf(database, teamId, out, swapIn, teamOpt)
   // (the team's frame edits, each on its own action of B's rotation)
   const timing = timingForSwap(
-    args.timing ?? readRotationTiming(teamId),
+    args.timing ?? readKqmRotation(database, teamId).timing,
     swapped
   )
   const replayOf = (settings: TeamOpt) =>

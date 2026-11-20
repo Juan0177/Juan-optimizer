@@ -19,7 +19,12 @@ export function EnemyDialog({
   const { t } = useTranslation('page_team')
   if (!open) return null
   return (
-    <ModalWrapper open onClose={onClose} containerProps={{ maxWidth: 'lg' }}>
+    <ModalWrapper
+      open
+      onClose={onClose}
+      containerProps={{ maxWidth: 'lg' }}
+      aria-label={t('enemy.title', 'Enemy')}
+    >
       <CardThemed sx={floatSx}>
         <DialogHead title={t('enemy.title', 'Enemy')} onClose={onClose} />
         <Box

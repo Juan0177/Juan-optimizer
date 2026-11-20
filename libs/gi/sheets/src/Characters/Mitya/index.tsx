@@ -354,6 +354,18 @@ const sheet: TalentSheet = {
             textSuffix: ct.ch('perBeacon'),
           }),
         },
+        {
+          canShow: (data) =>
+            data.get(condCore).value === 'overloaded' &&
+            data.get(beaconCount).value > 0,
+          node: infoMut(
+            sum(
+              dmgFormulas.charged.gradientDmg,
+              prod(beaconCount, dmgFormulas.charged.gradientStellarDmg)
+            ),
+            { name: ct.ch('gradientAll'), variant: 'electro' }
+          ),
+        },
       ],
     },
     { text: ct.chg('auto.fields.plunging') },
