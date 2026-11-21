@@ -21,6 +21,7 @@ import type {
 import {
   optimizeTeam,
   runEnemyOf,
+  TEAM_GPU_MIN_TOTAL,
   TeamOptCancelled,
   TeamOptSetRulesUnmet,
   teamOptMembers,
@@ -75,9 +76,6 @@ export type TeamOptStatus = {
   testedPerSecond: number
   skippedPerSecond: number
 }
-/** Team Optimize's searches go to the GPU from this many builds (see `GOSolver`'s `gpuMinTotal`) */
-const TEAM_GPU_MIN_TOTAL = 2_000_000
-
 const initStatus = (): TeamOptStatus => ({
   tested: 0,
   failed: 0,

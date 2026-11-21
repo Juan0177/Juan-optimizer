@@ -460,6 +460,8 @@ const SOLVE_MEMO_SIZE = 400
  */
 const QUICK_FROM_BUILDS = 5e9
 const QUICK_FROM_BUILDS_CPU = 1e8
+/** Team Optimize's searches go to the GPU from this many builds (`GOSolver`'s `gpuMinTotal`) */
+export const TEAM_GPU_MIN_TOTAL = 2_000_000
 /** Forgets every solve done (tests; or to measure a run from scratch) */
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
@@ -578,7 +580,11 @@ export async function optimizeTeam({
         ? await quickPool(problem)
         : {
             arts: input.arts,
-            seed: await seedBuild(problem),
+            // (a floor speeds the CPU's branch and bound; the GPU sweeps the whole space anyway)
+            seed:
+              optimizerGpuSupported() && space >= TEAM_GPU_MIN_TOTAL
+                ? undefined
+                : await seedBuild(problem),
             refine: undefined,
           }
     profile.prefilterMs += performance.now() - t0
