@@ -594,6 +594,8 @@ export const kit: KitModel = {
             label: 'Volcanic Kablam',
             states: impactStates(ctx, s, 42, true),
           })
+          // C2: 11.5 Energy on its hit too (dump: its tag Special_Elemental_Burst is in the checker)
+          if (c >= 2) flatEnergy(ctx, 42, 11.5, 'Varesa C2')
           ctx.at(42, () => endApex(s))
           s.lastKablam = true
           return {
