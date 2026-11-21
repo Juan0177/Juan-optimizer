@@ -4,9 +4,11 @@ import {
   allElementKeys,
   allWeaponTypeKeys,
 } from '@genshin-optimizer/gi/consts'
+import type { IGOOD } from '@genshin-optimizer/gi/good'
 import { z } from 'zod'
 import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataEntry } from '../DataEntry'
+import type { IGO, ImportResult } from '../exim'
 
 export const characterSortKeys = [
   'new',
@@ -45,5 +47,14 @@ export class DisplayCharacterEntry extends DataEntry<
   override validate(obj: unknown): IDisplayCharacterEntry | undefined {
     const result = displayCharacterSchema.safeParse(obj)
     return result.success ? result.data : undefined
+  }
+  // (as the artifacts': an import keeps the sort, not the filters)
+  override importGOOD(go: IGO & IGOOD, result: ImportResult) {
+    super.importGOOD(go, result)
+    this.set({
+      weaponType: [...allWeaponTypeKeys],
+      element: [...allElementKeys],
+      rarity: [...allCharacterRarityKeys],
+    })
   }
 }

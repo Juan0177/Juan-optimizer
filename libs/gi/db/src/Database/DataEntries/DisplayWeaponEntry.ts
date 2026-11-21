@@ -4,9 +4,11 @@ import {
   allRarityKeys,
   allWeaponTypeKeys,
 } from '@genshin-optimizer/gi/consts'
+import type { IGOOD } from '@genshin-optimizer/gi/good'
 import { z } from 'zod'
 import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataEntry } from '../DataEntry'
+import type { IGO, ImportResult } from '../exim'
 
 export const weaponSortKeys = ['level', 'rarity', 'name'] as const
 export type WeaponSortKey = (typeof weaponSortKeys)[number]
@@ -48,6 +50,11 @@ export class DisplayWeaponEntry extends DataEntry<
   override validate(obj: unknown): IDisplayWeapon | undefined {
     const result = displayWeaponSchema.safeParse(obj)
     return result.success ? result.data : undefined
+  }
+  // (as the artifacts': an import keeps the sort, not the filters)
+  override importGOOD(go: IGO & IGOOD, result: ImportResult) {
+    super.importGOOD(go, result)
+    this.set({ action: 'reset' })
   }
   override set(
     value:
