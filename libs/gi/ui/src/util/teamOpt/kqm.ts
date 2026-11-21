@@ -12,6 +12,7 @@ import {
   allMainStatKeys,
   allSubstatKeys,
   allWeaponKeys,
+  signatureWeapons,
 } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
@@ -559,11 +560,18 @@ const kqmOfType = (characterKey: CharacterKey) => {
   })
 }
 
-/** The weapon a member's builds are locked to (`TeamOptKqm.lockedWeapons`), if one of its type */
+/**
+ * The weapon a member's builds are locked to, if one of its type: its signature at the refinement
+ * chosen (`TeamOptKqm.signature`), else `TeamOptKqm.lockedWeapons`'
+ */
 export function kqmLockedWeapon(
   characterKey: CharacterKey,
   kqm: TeamOptKqm = defaultTeamOptKqm
 ): KqmWeapon | undefined {
+  const sig = signatureWeapons[characterKey]
+  const sigRefinement = kqm.signature?.[characterKey]
+  if (sig && sigRefinement && kqmOfType(characterKey).includes(sig))
+    return { key: sig, refinement: sigRefinement }
   const key = kqm.lockedWeapons?.[characterKey]
   if (!key || !kqmOfType(characterKey).includes(key)) return undefined
   return { key, refinement: kqmRefinement(key, kqm) }
@@ -583,6 +591,9 @@ export function kqmWeapons(
   if (locked) return [locked]
   const ofType = kqmOfType(characterKey)
   const excluded = kqmExcludedWeapons(kqm)
+  // (its signature left out: `TeamOptKqm.signature` 0)
+  const sig = signatureWeapons[characterKey]
+  if (sig && kqm.signature?.[characterKey] === 0) excluded.add(sig)
   const allowed = ofType.filter((key) => !excluded.has(key))
   return (
     (all ? ofType : allowed)
