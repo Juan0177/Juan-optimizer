@@ -4,6 +4,15 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.30.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.0) (2026-11-22)
+
+### Fixed
+
+- Wriothesley C4: his Attack Speed bonus is now counted. In a Polestar Field (Radiance: Stellar-Conduct) he attacks 20% faster and the rest of the party 10%; outside it, an overflowing heal gives him +20% for 4 s on the field, or the party +10% for 6 s while he is off the field.
+- Wriothesley C6 in Radiance: Stellar-Conduct: the Stellar-Conduct hit of his third Repelling Fist now gets the C6 CRIT Rate and CRIT DMG bonus, and Luster: Vaulting Fist makes its C6 icicle even after Icefang Rush ends.
+- Anastasya's Lament for the Lost: with her in the party, a new Stellar Vortex now starts at Level 2 (at most once per second), as in the game.
+- ER calculator: Varesa's C2 now also restores 11.5 Energy when her Volcanic Kablam hits, not only on her Plunging Attacks.
+
 ## [v1.29.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.29.0) (2026-11-22)
 
 ### New
