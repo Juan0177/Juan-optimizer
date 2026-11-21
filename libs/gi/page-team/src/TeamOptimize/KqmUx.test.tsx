@@ -31,7 +31,10 @@ import { useKqmRun } from './useKqmRun'
 
 const mocks = vi.hoisted(() => {
   // the saved last runs (`database.teamKqmResults`), as the browser's storage keeps them
-  const saved: { runs: Record<string, any> } = { runs: {} }
+  const saved: {
+    runs: Record<string, any>
+    summaries: Record<string, any>
+  } = { runs: {}, summaries: {} }
   return {
     compare: vi.fn(),
     optimize: vi.fn(),
@@ -52,6 +55,11 @@ const mocks = vi.hoisted(() => {
         setRun: (teamId: string, run: unknown) => {
           if (run) saved.runs[teamId] = JSON.parse(JSON.stringify(run))
           else delete saved.runs[teamId]
+        },
+        getSummary: (teamId: string) => saved.summaries[teamId],
+        setSummary: (teamId: string, summary: unknown) => {
+          if (summary) saved.summaries[teamId] = summary
+          else delete saved.summaries[teamId]
         },
       },
     },

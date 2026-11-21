@@ -1,6 +1,10 @@
 import type { GenderKey } from '@genshin-optimizer/gi/consts'
 import { charKeyToLocGenderedCharKey } from '@genshin-optimizer/gi/consts'
-import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
+import type {
+  ArtCharDatabase,
+  TeamKqmRunSummary,
+  TeamOpt,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { nextPaint } from '@genshin-optimizer/gi/solver'
 import type {
@@ -25,8 +29,14 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { kqmEnemyTeam } from '../Enemy/enemyScope'
-import { kqmRotationReplay } from './RotationWriter'
+import { kqmSharedKey } from './kqmVersions'
+import {
+  kqmRotationId,
+  kqmRotationReplay,
+  savedPlayedRotationKey,
+} from './RotationWriter'
 import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
+import { kqmRotationView, kqmRunKey } from './useTeamOpt'
 
 export type KqmRunState =
   | { type: 'idle' }
@@ -170,8 +180,78 @@ function subscribeRun(teamId: string, onChange: () => void) {
 const runState = (database: ArtCharDatabase, teamId: string): KqmRunState =>
   jobs.get(teamRunKey(database, teamId))?.state ?? lastRun(database, teamId)
 
+/** What a run started with: the settings a version shares with its original, and its rotation */
+interface KqmRunStart {
+  settings: string
+  rotation: string
+}
+/** A finished run in brief, for KQM versions (`TeamKqmRunSummary`) */
+function runSummary(
+  database: ArtCharDatabase,
+  teamId: string,
+  run: KqmDoneRun,
+  savedAt: number,
+  start: KqmRunStart
+): TeamKqmRunSummary {
+  const { after, builds } = run.result
+  const time = run.runTeamOpt.rotationTime
+  const calculator = run.teamOpt.kqm?.energyCalculator
+  return {
+    savedAt,
+    members: memberKeys(database, teamId),
+    total: after.total,
+    memberTotals: Object.fromEntries(
+      Object.entries(after.members).flatMap(([k, v]) =>
+        typeof v === 'number' && Number.isFinite(v) ? [[k, v]] : []
+      )
+    ),
+    er: Object.fromEntries(
+      Object.entries(run.result.energyRecharge).flatMap(([k, e]) =>
+        e && Number.isFinite(e.minimum) ? [[k, e.minimum]] : []
+      )
+    ),
+    // (the ER calculator's field time, of the rotation as played)
+    ...(time !== undefined
+      ? {
+          field: Object.fromEntries(
+            Object.entries(calculator?.members ?? {}).flatMap(([k, m]) =>
+              m && Number.isFinite(m.fieldTime)
+                ? [[k, (m.fieldTime / 100) * time]]
+                : []
+            )
+          ),
+          rotationTime: time,
+        }
+      : {}),
+    gear: Object.fromEntries(
+      Object.entries(builds).flatMap(([k, b]) =>
+        b
+          ? [
+              [
+                k,
+                {
+                  weapon: b.weapon.key,
+                  refinement: b.weapon.refinement,
+                  sets: Object.fromEntries(
+                    Object.entries(b.sets).filter(([, n]) => !!n)
+                  ) as Record<string, number>,
+                },
+              ],
+            ]
+          : []
+      )
+    ),
+    ...start,
+  }
+}
+
 /** Keeps a finished run's state: the last result (saved once the page shows it), or its error */
-function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
+function keep(
+  database: ArtCharDatabase,
+  teamId: string,
+  s: KqmRunState,
+  start?: KqmRunStart
+) {
   // (a new result: when it was found says which saved one it is)
   const next: KqmRunState =
     s.type === 'done' && s.savedAt === undefined
@@ -199,10 +279,14 @@ function keep(database: ArtCharDatabase, teamId: string, s: KqmRunState) {
         members: memberKeys(database, teamId),
         run: run as never,
       })
+      if (start)
+        database.teamKqmResults.setSummary(
+          teamId,
+          runSummary(database, teamId, next, savedAt!, start)
+        )
     }, 0)
 }
 
-/** Runs KQM theorycrafting for a team, in the background of whichever page is shown */
 /**
  * The written rotation, played by KQM theorycrafting itself (never with the members' own
  * constellations or gear): at the KQM constellations, with the builds' weapons and sets. For a run
@@ -239,7 +323,8 @@ export function kqmReplayOf(
   }
 }
 
-async function startKqmRun(
+/** Runs KQM theorycrafting for a team, in the background of whichever page is shown */
+export async function startKqmRun(
   database: ArtCharDatabase,
   gender: GenderKey,
   i18n: i18n,
@@ -250,6 +335,10 @@ async function startKqmRun(
 ) {
   const key = teamRunKey(database, teamId)
   const roster = teamRoster(database, teamId)
+  const start: KqmRunStart = {
+    settings: kqmSharedKey(database, teamId),
+    rotation: savedPlayedRotationKey(database, kqmRotationId(teamId)),
+  }
   // (a run already going for the team is replaced)
   const previous = jobs.get(key)
   if (previous) previous.cancelled = true
@@ -267,7 +356,7 @@ async function startKqmRun(
   const end = (s?: KqmRunState) => {
     stopFollowing()
     if (jobs.get(key) !== job) return
-    if (s) keep(database, teamId, s)
+    if (s) keep(database, teamId, s, start)
     jobs.delete(key)
     notifyRun(key)
   }
@@ -331,6 +420,46 @@ async function startKqmRun(
   }
 }
 
+/**
+ * A team's run in brief from its saved run (one found before runs were kept in brief), when it is
+ * still for the team's KQM settings, rotation and members now; none otherwise
+ */
+export function savedRunSummary(
+  database: ArtCharDatabase,
+  teamId: string
+): TeamKqmRunSummary | undefined {
+  const saved = database.teamKqmResults.getRun(teamId)
+  const run = saved?.run as unknown as KqmDoneRun | undefined
+  const stored = database.teams.get(teamId)?.teamOpt
+  if (!saved || run?.type !== 'done' || !run.result || !run.teamOpt || !stored)
+    return undefined
+  const now = kqmRotationView(
+    stored.assumeMaxMain ? { ...stored, assumeMaxMain: false } : stored
+  )
+  const rotation = savedPlayedRotationKey(database, kqmRotationId(teamId))
+  const members = memberKeys(database, teamId)
+  if (
+    kqmRunKey(run.teamOpt) !== kqmRunKey(now) ||
+    (run.rotation === 'played') !== !!rotation ||
+    saved.members.length !== members.length ||
+    !saved.members.every((m) => members.includes(m))
+  )
+    return undefined
+  return runSummary(
+    database,
+    teamId,
+    { ...run, runTeamOpt: run.runTeamOpt ?? run.teamOpt },
+    saved.savedAt,
+    { settings: kqmSharedKey(database, teamId), rotation }
+  )
+}
+
+/** Stops a team's KQM run in progress, from any page */
+export function cancelKqmRun(database: ArtCharDatabase, teamId: string) {
+  const job = jobs.get(teamRunKey(database, teamId))
+  if (job) job.cancelled = true
+}
+
 /** Whether a KQM run of the team is in progress (also while another page is shown) */
 export function useKqmRunning(teamId: string) {
   const key = teamRunKey(useDatabase(), teamId)
@@ -375,6 +504,7 @@ export function useKqmRun(teamId: string) {
   const clear = useCallback(() => {
     delete lastRuns[key]
     database.teamKqmResults.setRun(teamId, undefined)
+    database.teamKqmResults.setSummary(teamId, undefined)
     notifyRun(key)
   }, [database, teamId, key])
   const previous = lastRuns[key]

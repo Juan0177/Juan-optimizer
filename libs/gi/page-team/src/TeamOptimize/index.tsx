@@ -84,6 +84,8 @@ import {
 } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
+import { VersionNote, VersionsButton, VersionsDrawer } from './KqmVersionList'
+import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { KqmTimeline } from './KqmTimeline'
 import { kqmOwnSetUp } from './kqmOwn'
 import { MemberAvatar } from './MemberAvatar'
@@ -179,6 +181,20 @@ export default function TeamBuildWorkspace({
     !!enemyTeam &&
     !sameEnemy(enemy.enemyOverride, enemyTeam.enemyOverride)
   const [storedTeamOpt, setStoredTeamOpt] = useTeamOpt(teamId)
+  // A version (KQM): its shared settings are its original's when it is shown, and changed here
+  // they are the original's too (so its whole family's)
+  const { i18n: namesI18n } = useTranslation('charNames_gen')
+  const { gender } = useDBMeta()
+  const rootId = versionRoot(database, teamId)
+  const versionOf = rootId !== teamId ? rootId : undefined
+  useEffect(() => {
+    if (mode !== 'kqm' || !versionOf) return
+    const names = { i18n: namesI18n, gender }
+    syncVersion(database, teamId, names)
+    return database.teams.follow(teamId, () =>
+      pushVersionSettings(database, teamId, names)
+    )
+  }, [database, mode, teamId, versionOf, namesI18n, gender])
   // Each tab has its own rotation: on the KQM tab the page reads and changes KQM's (its attacks
   // and rotation time), at its constellations; the rest of the settings are shared
   const teamOpt = useMemo(
@@ -997,6 +1013,13 @@ export default function TeamBuildWorkspace({
       </Box>
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
+      {kqmTheorycraftingEnabled && mode === 'kqm' && versionOf && (
+        <VersionNote rootId={versionOf} />
+      )}
+      {/* (once on the tab, outside the results: a result coming in leaves it open) */}
+      {kqmTheorycraftingEnabled && mode === 'kqm' && (
+        <VersionsDrawer teamId={teamId} />
+      )}
       {kqmTheorycraftingEnabled && mode === 'kqm' && (
         <Box sx={{ ...sectionSx, ...stepAccentSx('setup'), p: 0 }}>
           <KqmSettings
@@ -1086,6 +1109,7 @@ export default function TeamBuildWorkspace({
               kqm.clear()
               rotationOpen.set(true)
             }}
+            actions={<VersionsButton teamId={teamId} />}
           />
         </Box>
       )}

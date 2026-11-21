@@ -6,7 +6,6 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   TeamOpt,
-  TeamOptEnergyCalculator,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
@@ -47,9 +46,7 @@ import {
   MOONGECKO_BOSS,
   sameEnemy,
   setKqmBuildThreads,
-  syncEnergyCalculator,
   teamOptMembers,
-  withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
@@ -103,6 +100,11 @@ import {
 } from './KqmChoosers'
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
+import {
+  kqmEnergyUpdate,
+  kqmRotationEnergyOf,
+  teamCalculator,
+} from './kqmEnergy'
 import { KqmShareMenu } from './KqmShareMenu'
 import {
   KqmArtifactStandard,
@@ -116,6 +118,7 @@ import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
 import {
   kqmRotationId,
+  playedRotationKey,
   useAppliedRotation,
   useRotationSettings,
 } from './RotationWriter'
@@ -134,7 +137,7 @@ import {
   tokens,
   type,
 } from './ui'
-import { kqmReplayOf, useKqmProgress } from './useKqmRun'
+import { useKqmProgress } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 /**
@@ -163,33 +166,6 @@ const compactFieldSx = {
   '& .MuiInputBase-input': { py: 0.875, ...numSx },
   '& .MuiSelect-select': { py: 0.875, ...numSx },
 } as const
-
-/**
- * The ER calculator's settings for the team as it is now: members added since get the starting
- * assumptions, at their KQM constellation (see `syncEnergyCalculator`)
- */
-function teamCalculator(
-  members: TeamOptMember[],
-  teamOpt: TeamOpt,
-  saved: TeamOptEnergyCalculator | undefined,
-  /** The written rotation's inputs, filled in where not set by hand */
-  energy?: RotationEnergy
-) {
-  const keys = members.map((m) => m.characterKey)
-  return withRotationEnergy(
-    syncEnergyCalculator(
-      keys,
-      saved,
-      teamOpt.rotationTime ?? 20,
-      teamOpt.onField ?? keys[0],
-      Object.fromEntries(
-        keys.map((key) => [key, kqmMemberConstellation(key, teamOpt.kqm)])
-      )
-    ),
-    keys,
-    energy
-  )
-}
 
 type RotationWorked = {
   for: string
@@ -272,7 +248,7 @@ function useRotationEnergy(
     kqmRotationId(teamId)
   )
   const played = JSON.stringify([opener, timing, frameData])
-  const rotation = text.trim() ? `${text.trim()}|${played}` : ''
+  const rotation = playedRotationKey(text, opener, timing, frameData)
   const replayKey = JSON.stringify([
     gender,
     i18n?.language,
@@ -299,43 +275,14 @@ function useRotationEnergy(
     }
     let cancelled = false
     const run = () => {
-      let next: RotationEnergy | undefined
-      let seconds: number | undefined
-      try {
-        const teamOpt = latest.current
-        const played = kqmReplayOf(
-          database,
-          gender,
-          i18n,
-          teamId,
-          teamOpt
-        )?.({
-          constellations: Object.fromEntries(
-            members.map((m) => [
-              m.characterKey,
-              kqmMemberConstellation(m.characterKey, teamOpt.kqm),
-            ])
-          ),
-          gear: Object.fromEntries(
-            members.map((m) => [
-              m.characterKey,
-              {
-                candidates: {
-                  weapons: kqmWeapons(m.characterKey, teamOpt.kqm).map(
-                    (w) => w.key
-                  ),
-                },
-              },
-            ])
-          ),
-          overrides: {},
-        })
-        next = played?.energy
-        seconds = played?.rotationTime
-      } catch {
-        next = undefined
-        seconds = undefined
-      }
+      const { energy: next, rotationTime: seconds } = kqmRotationEnergyOf(
+        database,
+        gender,
+        i18n,
+        teamId,
+        latest.current,
+        members
+      )
       if (cancelled) return
       const result = { for: rotation, energy: next, rotationTime: seconds }
       const byTeam = workedReplays.get(database) ?? new Map()
@@ -557,61 +504,24 @@ export function KqmSettings({
   // (over ones typed by hand: those were for the rotation before)
   const lastWritten = useRef<string>()
   useEffect(() => {
-    const kqm = teamOpt.kqm
-    const source = kqm?.energySource
     const written = writtenRotation
-    const ready = !!written && energyFor === written && !!rotationEnergy
-    // (typed by hand before the rotation was recorded, or recorded as its text alone before its
-    // opener and timing counted: kept, and the rotation is recorded now)
-    if (
-      source === 'manual' &&
-      ready &&
-      (kqm?.energyRotation === undefined ||
-        kqm.energyRotation === written.split('|')[0])
-    ) {
-      setTeamOpt((o) => {
-        o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), energyRotation: written }
-      })
-      return
-    }
-    const newRotation = ready && kqm?.energyRotation !== written
-    if (source !== 'calculator' && !(ready && (!source || newRotation))) return
-    const applied = kqm?.energyCalculator
-    const rotationTime = (ready && playedTime) || (teamOpt.rotationTime ?? 20)
-    const energyCalculator = {
-      ...teamCalculator(
-        members,
-        teamOpt,
-        applied,
-        ready ? rotationEnergy : undefined
-      ),
-      rotationTime,
-    }
-    const json = JSON.stringify(energyCalculator)
-    if (
-      source === 'calculator' &&
-      !newRotation &&
-      json === JSON.stringify(applied)
-    )
-      return
+    const update = kqmEnergyUpdate({
+      members,
+      teamOpt,
+      written,
+      ready: !!written && energyFor === written && !!rotationEnergy,
+      rotationEnergy,
+      playedTime,
+    })
+    if (!update) return
     // (written once per change: if the saved settings come back different, e.g. a value the
     // database does not keep, the same inputs are not written again, or it would loop)
-    const key = `${json}|${ready ? written : ''}`
-    if (key === lastWritten.current) return
-    lastWritten.current = key
-    const estimate = kqmEnergyEstimate(
-      members.map((m) => m.characterKey),
-      energyCalculator,
-      kqm
-    )
+    if (update.key !== undefined) {
+      if (update.key === lastWritten.current) return
+      lastWritten.current = update.key
+    }
     setTeamOpt((o) => {
-      o.kqm = {
-        ...(o.kqm ?? defaultTeamOptKqm),
-        energySource: 'calculator',
-        energyCalculator,
-        energyRecharge: estimate.targets,
-        ...(ready ? { energyRotation: written } : {}),
-      }
+      o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), ...update.kqm }
     })
   }, [
     teamOpt,
@@ -2270,6 +2180,7 @@ export function KqmResults({
   running,
   improving,
   onDiscard,
+  actions,
   onView,
   teamData,
   timeline,
@@ -2306,6 +2217,8 @@ export function KqmResults({
   /** The run's builds so far: it is still looking for better ones (its members can be viewed) */
   improving?: boolean
   onDiscard: () => void
+  /** More actions beside Share (the team's versions) */
+  actions?: ReactNode
   /** The builds shown now: the run's, or the team with other equipment picked here */
   onView?: (view: KqmResult) => void
 }) {
@@ -2508,6 +2421,7 @@ export function KqmResults({
             ml: 'auto',
           }}
         >
+          {actions}
           <KqmShareMenu
             teamId={teamId}
             result={result}

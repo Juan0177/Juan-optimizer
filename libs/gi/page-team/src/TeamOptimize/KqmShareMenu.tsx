@@ -94,7 +94,7 @@ const SHARE_TIP_KEY = 'kqm_share_tip_seen'
  * What made the picture and when, small in its corner (to check a shared picture against later):
  * "Stellar Optimizer v1.11.2 · 16 Nov 2026"
  */
-const shareStamp = () =>
+export const shareStamp = () =>
   `Stellar Optimizer v${currentRelease.version} · ${new Date().toLocaleDateString(
     undefined,
     { day: 'numeric', month: 'short', year: 'numeric' }
@@ -103,7 +103,7 @@ const shareStamp = () =>
 declare const __GO_BUILD_ID__: string
 
 /** The unreleased content (keys) among `keys`, each once */
-const betaOf = (keys: Iterable<string>) =>
+export const betaOf = (keys: Iterable<string>) =>
   [...new Set(keys)].filter((k) => BETA_KEYS.has(k)).sort()
 
 type ShareProps = {
@@ -480,7 +480,7 @@ function useShareText(props: ShareProps) {
 }
 
 /** The written rotation, its members' turns apart */
-function rotationTurns(text: string | undefined) {
+export function rotationTurns(text: string | undefined) {
   return (text ?? '')
     .split(/\s*(?:->|→|\n)+\s*/)
     .map((turn) => turn.replace(/^>\s*/, '').trim())

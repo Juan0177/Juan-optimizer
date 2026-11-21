@@ -138,7 +138,8 @@ export const kqmRotationSetUp: TeamOptUpdate = (teamOpt) => {
   }
 }
 
-function sortedJson(value: unknown): string {
+/** JSON with every object's keys sorted: the same settings give the same text */
+export function sortedJson(value: unknown): string {
   return JSON.stringify(value, (_, value) =>
     value && typeof value === 'object' && !Array.isArray(value)
       ? Object.fromEntries(

@@ -20,9 +20,38 @@ export interface TeamKqmSavedRun {
   } & Record<string, unknown>
 }
 
+/**
+ * A team's last KQM run in brief, kept for every team (its full run may have made room for newer
+ * ones): what KQM versions compare
+ */
+export interface TeamKqmRunSummary {
+  savedAt: number
+  /** The members it ran with */
+  members: string[]
+  /** The rotation's damage with the builds */
+  total: number
+  /** Per member, its own attacks' damage */
+  memberTotals: Record<string, number>
+  /** Per member, the Energy Recharge it needs (%, after energy weapons) */
+  er?: Record<string, number>
+  /** Per member, its time on the field per rotation (seconds) */
+  field?: Record<string, number>
+  /** The rotation's length (seconds); absent: damage only */
+  rotationTime?: number
+  /** Per member, its build's weapon and artifact sets (pieces) */
+  gear: Record<
+    string,
+    { weapon: string; refinement: number; sets: Record<string, number> }
+  >
+  /** What it ran with: the settings a version shares with its original, and its own rotation */
+  settings: string
+  rotation: string
+}
+
 /** Per team (id), its last run. (One field, replaced whole: `set` merges top-level keys.) */
 export interface ITeamKqmResultsEntry {
   runs: Record<string, TeamKqmSavedRun>
+  summaries?: Record<string, TeamKqmRunSummary>
 }
 
 /** As the browser's storage keeps them: each run packed (`packKqmRun`), a fraction of its size */
@@ -33,6 +62,56 @@ export interface ITeamKqmResultsStored {
       run: PackedKqmRun | TeamKqmSavedRun['run']
     }
   >
+  summaries?: Record<string, TeamKqmRunSummary>
+}
+
+const isFiniteNumber = (v: unknown): v is number =>
+  typeof v === 'number' && Number.isFinite(v)
+const isStringArray = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string')
+function validateSummary(v: unknown): TeamKqmRunSummary | undefined {
+  if (!isObject(v)) return undefined
+  const { savedAt, members, total, memberTotals, rotationTime, gear } = v
+  const numbers = (r: unknown) =>
+    isObject(r) && Object.values(r).every(isFiniteNumber)
+      ? (r as Record<string, number>)
+      : undefined
+  const er = numbers(v['er'])
+  const field = numbers(v['field'])
+  const { settings, rotation } = v
+  if (
+    !isFiniteNumber(savedAt) ||
+    !isStringArray(members) ||
+    !isFiniteNumber(total) ||
+    !isObject(memberTotals) ||
+    !Object.values(memberTotals).every(isFiniteNumber) ||
+    (rotationTime !== undefined && !isFiniteNumber(rotationTime)) ||
+    !isObject(gear) ||
+    typeof settings !== 'string' ||
+    typeof rotation !== 'string'
+  )
+    return undefined
+  const builds: TeamKqmRunSummary['gear'] = {}
+  for (const [k, b] of Object.entries(gear)) {
+    if (!isObject(b) || !isObject(b['sets'])) return undefined
+    const { weapon, refinement, sets } = b
+    if (typeof weapon !== 'string' || !isFiniteNumber(refinement))
+      return undefined
+    if (!Object.values(sets).every(isFiniteNumber)) return undefined
+    builds[k] = { weapon, refinement, sets: sets as Record<string, number> }
+  }
+  return {
+    savedAt,
+    members,
+    total,
+    memberTotals: memberTotals as Record<string, number>,
+    ...(er ? { er } : {}),
+    ...(field ? { field } : {}),
+    ...(rotationTime !== undefined ? { rotationTime } : {}),
+    gear: builds,
+    settings,
+    rotation,
+  }
 }
 
 /**
@@ -92,7 +171,14 @@ export class TeamKqmResultsEntry extends DataEntry<
         run: { ...run, ...settings } as TeamKqmSavedRun['run'],
       }
     }
-    return { runs }
+    const summaries: NonNullable<ITeamKqmResultsEntry['summaries']> = {}
+    for (const [teamId, summary] of Object.entries(
+      isObject(obj['summaries']) ? obj['summaries'] : {}
+    )) {
+      const valid = validateSummary(summary)
+      if (valid) summaries[teamId] = valid
+    }
+    return Object.keys(summaries).length ? { runs, summaries } : { runs }
   }
   override toCache(stored: ITeamKqmResultsStored): ITeamKqmResultsEntry {
     // (`validate` has unpacked them)
@@ -106,6 +192,24 @@ export class TeamKqmResultsEntry extends DataEntry<
           { ...saved, run: packKqmRun(saved.run) },
         ])
       ),
+      ...(cached.summaries ? { summaries: cached.summaries } : {}),
+    }
+  }
+  /** A team's last run in brief */
+  getSummary(teamId: string): TeamKqmRunSummary | undefined {
+    return this.get().summaries?.[teamId]
+  }
+  /** Saves (or with `undefined`, forgets) a team's last run in brief */
+  setSummary(teamId: string, summary: TeamKqmRunSummary | undefined): void {
+    const summaries = { ...(this.get().summaries ?? {}) }
+    if (summary) summaries[teamId] = summary
+    else if (teamId in summaries) delete summaries[teamId]
+    else return
+    try {
+      this.set({ summaries })
+    } catch (e) {
+      // (QuotaExceededError: the storage keeps what it had)
+      if (!(e instanceof DOMException)) throw e
     }
   }
   /** A team's saved run (a copy: the database keeps its own frozen) */

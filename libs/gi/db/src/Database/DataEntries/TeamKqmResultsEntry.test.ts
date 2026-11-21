@@ -155,3 +155,51 @@ describe('saved KQM runs are packed for the storage', () => {
     ).toEqual(reference)
   })
 })
+
+describe('database.teamKqmResults summaries (KQM versions)', () => {
+  const summary = (total: number) => ({
+    savedAt: 1_700_000_000_000,
+    members: ['Sandrone', 'Anastasya', 'Odette', 'Mitya'],
+    total,
+    memberTotals: { Sandrone: total / 2, Anastasya: total / 2 },
+    rotationTime: 20.5,
+    gear: {
+      Sandrone: {
+        weapon: 'TheCatch',
+        refinement: 5,
+        sets: { GladiatorsFinale: 4 },
+      },
+    },
+    settings: '{}',
+    rotation: 'Sandrone E',
+  })
+  it('keeps every team’s summary across reloads, apart from the runs kept', () => {
+    const storage = new SandboxStorage()
+    const database = new ArtCharDatabase(1, storage)
+    for (let i = 0; i < TEAM_KQM_RUNS_KEPT + 3; i++) {
+      database.teamKqmResults.setRun(`team_${i}`, saved(1_700_000_000_000 + i))
+      database.teamKqmResults.setSummary(`team_${i}`, summary(1000 + i))
+    }
+    const reloaded = new ArtCharDatabase(1, storage).teamKqmResults
+    expect(Object.keys(reloaded.get().runs)).toHaveLength(TEAM_KQM_RUNS_KEPT)
+    for (let i = 0; i < TEAM_KQM_RUNS_KEPT + 3; i++)
+      expect(reloaded.getSummary(`team_${i}`)).toEqual(summary(1000 + i))
+  })
+  it('forgets one, drops invalid ones, and goes with its team', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    database.teamKqmResults.setSummary('team_1', summary(1))
+    database.teamKqmResults.setSummary('team_2', summary(2))
+    database.teamKqmResults.setSummary('team_1', undefined)
+    expect(database.teamKqmResults.getSummary('team_1')).toBeUndefined()
+    database.teamKqmResults.setSummary('team_3', {
+      ...summary(3),
+      total: Number.NaN,
+    })
+    expect(database.teamKqmResults.getSummary('team_3')).toBeUndefined()
+    expect(database.teamKqmResults.getSummary('team_2')).toEqual(summary(2))
+    const teamId = database.teams.new({})
+    database.teamKqmResults.setSummary(teamId, summary(4))
+    database.teams.remove(teamId)
+    expect(database.teamKqmResults.getSummary(teamId)).toBeUndefined()
+  })
+})

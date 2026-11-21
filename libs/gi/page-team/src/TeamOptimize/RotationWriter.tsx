@@ -17,7 +17,7 @@ import type {
   TeamOptAttack,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
-import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
+import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
@@ -54,6 +54,7 @@ import {
   type SimBuffOwner,
   type SimHit,
   simulateRotationSamples,
+  teamOptMembers,
   templatesForTeam,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -89,6 +90,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import type { i18n } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useAttackInfo, variantColor } from './AttackName'
 import type { TeamBuff } from './buffs'
@@ -117,7 +119,7 @@ import {
 } from './TimelineFigures'
 import { Disclosure, focusSx, numSx, quickSx, tokens, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
-import { kqmRotationView } from './useTeamOpt'
+import { kqmRotationUpdate, kqmRotationView } from './useTeamOpt'
 
 const storageKey = (teamId: string) => `teamOptRotationText_${teamId}`
 const manualAttacksKey = (teamId: string) =>
@@ -212,6 +214,129 @@ export function copyRotationFromKqm(database: Database, teamId: string) {
     writeStored(database, copiedKey(teamId), '1')
   }
 }
+/**
+ * A written rotation as played, as what records it keeps it (KQM's ER targets): its text with its
+ * opener, timing and frame data; empty when none is written
+ */
+export const playedRotationKey = (
+  text: string,
+  opener: string,
+  timing: RotationTimingSettings,
+  frameData: FrameData
+) =>
+  text.trim()
+    ? `${text.trim()}|${JSON.stringify([opener, timing, frameData])}`
+    : ''
+/** A tab's saved timing settings (rotations counted, the opener's, swap edits) */
+export function savedTimingOf(database: Database, rid: string) {
+  return parseTiming(readStored(database, timingKey(rid)))
+}
+/** `playedRotationKey` of a tab's saved rotation */
+export function savedPlayedRotationKey(database: Database, rid: string) {
+  const manual = readStored(database, manualAttacksKey(rid)) === '1'
+  return playedRotationKey(
+    manual ? '' : (readStored(database, storageKey(rid)) ?? ''),
+    readStored(database, openerKey(rid)) ?? '',
+    parseTiming(readStored(database, timingKey(rid))),
+    parseFrameData(readStored(database, frameDataKey))
+  )
+}
+/**
+ * A tab's written rotation set from outside the writer (a KQM version's): its text and opener,
+ * with what was typed, played or copied for the one before forgotten; its timing when given
+ */
+export function setWrittenRotation(
+  database: Database,
+  rid: string,
+  { text, opener, timing }: { text: string; opener: string; timing?: string }
+) {
+  for (const key of [
+    draftKey,
+    openerDraftKey,
+    manualAttacksKey,
+    playedKey,
+    consKey,
+    copiedKey,
+  ])
+    writeStored(database, key(rid), null)
+  writeStored(database, storageKey(rid), text)
+  writeStored(database, openerKey(rid), opener || null)
+  if (timing !== undefined)
+    writeStored(database, timingKey(rid), timing || null)
+}
+/** A tab's saved rotation settings as stored: its text, opener and timing (JSON) */
+export function writtenRotationOf(database: Database, rid: string) {
+  return {
+    text: readStored(database, storageKey(rid)) ?? '',
+    opener: readStored(database, openerKey(rid)) ?? '',
+    timing: readStored(database, timingKey(rid)) ?? '',
+  }
+}
+/**
+ * A tab's saved rotation played and used as "Use this rotation" does, for a team set up outside
+ * its page (a KQM version): false when none is written, or it does not play
+ */
+export function applySavedRotation(
+  database: Database,
+  teamId: string,
+  { kqm, i18n, gender }: { kqm?: boolean; i18n: i18n; gender: GenderKey }
+): boolean {
+  const rid = rotationIdOf(teamId, kqm)
+  const { text, opener } = writtenRotationOf(database, rid)
+  if (!text.trim() || readStored(database, manualAttacksKey(rid)) === '1')
+    return false
+  const timing = parseTiming(readStored(database, timingKey(rid)))
+  const frameData = parseFrameData(readStored(database, frameDataKey))
+  const members = teamOptMembers(database, teamId)
+  const team = simTeamFor(
+    members,
+    database,
+    kqm
+      ? (database.teams.get(teamId)?.teamOpt?.kqm ?? defaultTeamOptKqm)
+      : undefined
+  )
+  let result: WrittenRotation | undefined
+  try {
+    result = simulateWritten({
+      kqm,
+      text,
+      opener,
+      timing,
+      frameData,
+      team,
+      names: memberNamesOf(members, i18n, gender),
+      members,
+      database,
+      teamId,
+      gender,
+      openerWarning: (warning) => warning,
+    })
+  } catch {
+    return false
+  }
+  if (!result?.sim) return false
+  const setStored = (update: TeamOptUpdate) =>
+    database.teams.set(teamId, (t) => {
+      const draft = structuredClone(t.teamOpt ?? initTeamOpt())
+      t.teamOpt = update(draft) ?? draft
+    })
+  applyWritten({
+    database,
+    teamId,
+    members,
+    setTeamOpt: kqm
+      ? (update) => setStored(kqmRotationUpdate(update))
+      : setStored,
+    result,
+    text,
+    opener,
+    timing,
+    frameData,
+    kqm,
+    constellations: team.constellations,
+  })
+  return true
+}
 /** Both tabs hold the same rotation: the same written text, opener and timing, or the same attacks */
 export function useSameRotations(teamId: string) {
   const kqmId = kqmRotationId(teamId)
@@ -304,7 +429,12 @@ export const exampleRotation = (names: string[]) => {
 /** The writer's action words, inserted from the quick row */
 const TOKENS: { text: string; key: string; label: string }[] = [
   { text: 'E', key: 'skill', label: 'Elemental Skill (tap)' },
-  { text: 'hE', key: 'hold', label: 'Elemental Skill (hold)' },
+  {
+    text: 'hE',
+    key: 'hold',
+    label:
+      'Elemental Skill (hold; Beidou: 2 Polaris stacks, hE[stacks=1] for 1)',
+  },
   { text: 'Q', key: 'burst', label: 'Elemental Burst' },
   { text: 'N3', key: 'normal', label: 'Normal attacks: N1 to N6 hits' },
   {
@@ -505,15 +635,22 @@ export function useMemberNames(members: TeamOptMember[]) {
   const { i18n } = useTranslation('charNames_gen')
   const { gender } = useDBMeta()
   return useMemo(
-    () =>
-      members.map(({ characterKey }) => ({
-        characterKey,
-        name: i18n.t(
-          `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
-        ),
-      })),
+    () => memberNamesOf(members, i18n, gender),
     [members, gender, i18n]
   )
+}
+/** `useMemberNames` outside a page */
+export function memberNamesOf(
+  members: readonly { characterKey: CharacterKey }[],
+  i18n: i18n,
+  gender: GenderKey
+): RotationMember[] {
+  return members.map(({ characterKey }) => ({
+    characterKey,
+    name: i18n.t(
+      `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+    ),
+  }))
 }
 
 /** The team as the simulation sees it (constellations, elements, the members' sets) */
@@ -531,22 +668,32 @@ export function useSimTeam(
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
 ) {
   const database = useDatabase()
-  return useMemo(() => {
-    const own = simTeamOf(members, database)
-    if (!kqm) return own
-    return {
-      ...own,
-      constellations: Object.fromEntries(
-        own.members.map((k) => [k, kqmMemberConstellation(k, kqm)])
-      ),
-      gear: Object.fromEntries(
-        own.members.flatMap((k) => {
-          const build = kqmBuilds?.[k]
-          return build ? [[k, kqmSimGear(build)]] : []
-        })
-      ),
-    }
-  }, [members, database, kqm, kqmBuilds])
+  return useMemo(
+    () => simTeamFor(members, database, kqm, kqmBuilds),
+    [members, database, kqm, kqmBuilds]
+  )
+}
+/** `useSimTeam` outside a page */
+export function simTeamFor(
+  members: TeamOptMember[],
+  database: Database,
+  kqm?: TeamOptKqm,
+  kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
+): SimTeam {
+  const own = simTeamOf(members, database)
+  if (!kqm) return own
+  return {
+    ...own,
+    constellations: Object.fromEntries(
+      own.members.map((k) => [k, kqmMemberConstellation(k, kqm)])
+    ),
+    gear: Object.fromEntries(
+      own.members.flatMap((k) => {
+        const build = kqmBuilds?.[k]
+        return build ? [[k, kqmSimGear(build)]] : []
+      })
+    ),
+  }
 }
 function simTeamOf(members: TeamOptMember[], database: Database) {
   const keys = members.map((m) => m.characterKey)
@@ -3270,7 +3417,7 @@ export function WriterQuickRow({
   trailing,
   bar,
 }: {
-  members: TeamOptMember[]
+  members: readonly { characterKey: CharacterKey }[]
   onInsert: (word: string) => void
   draft?: ReactNode
   /** The box the words go into, when there are several (shown with the row) */
@@ -3480,6 +3627,13 @@ function SyntaxSheet() {
       t(
         'teamOpt.writer.syntax.normal',
         'A normal attack string of that many hits'
+      ),
+    ],
+    [
+      'hE[stacks=1]',
+      t(
+        'teamOpt.writer.syntax.stacks',
+        'Beidou: hold for 1 Polaris stack (0.8 s each; hE alone holds for 2, the maximum bonus)'
       ),
     ],
     ['CA', t('teamOpt.writer.syntax.charged', 'Charged Attack')],

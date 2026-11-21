@@ -3,6 +3,7 @@ import type {
   CharacterKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
+import { memberSteps } from './parse'
 import data from './templates.json'
 
 export const rotationTemplateKinds = {
@@ -94,4 +95,51 @@ export function templatesForTeam(members: CharacterKey[]) {
     .map((t, i) => ({ t, i, n: has(t) }))
     .sort((a, b) => b.n - a.n || a.i - b.i)
     .map(({ t }) => t)
+}
+
+/**
+ * What a character does as a support in the templates: its first step there, the most common one
+ * ("E Q" when no template has it as a support)
+ */
+export function supportPart(characterKey: CharacterKey): string {
+  const counts = new Map<string, number>()
+  for (const t of rotationTemplates) {
+    if (t.characterKey === characterKey || !t.members.includes(characterKey))
+      continue
+    const [part] = memberSteps(
+      t.text,
+      t.members.map((k) => ({ characterKey: k, name: k })),
+      characterKey
+    )
+    if (part) counts.set(part, (counts.get(part) ?? 0) + 1)
+  }
+  let best = 'E Q'
+  let most = 0
+  for (const [part, n] of counts)
+    if (n > most) {
+      best = part
+      most = n
+    }
+  return best
+}
+
+/**
+ * What a character does as the main DPS in its own templates: its longest step in the first one
+ * (its field time); none without a template of its own
+ */
+export function mainPart(characterKey: CharacterKey): string | undefined {
+  const template = rotationTemplates.find(
+    (t) => t.characterKey === characterKey
+  )
+  if (!template) return undefined
+  const words = (part: string) => part.split(/\s+/).length
+  return memberSteps(
+    template.text,
+    template.members.map((k) => ({ characterKey: k, name: k })),
+    characterKey
+  ).reduce<string | undefined>(
+    (longest, part) =>
+      !longest || words(part) > words(longest) ? part : longest,
+    undefined
+  )
 }
