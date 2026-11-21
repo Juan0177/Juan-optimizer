@@ -648,19 +648,15 @@ function groupSetting(group: KqmWeaponGroup, kqm: TeamOptKqm): number {
   }
 }
 /**
- * The refinement a group's weapons are built at among several ticked (one at least): the group's
- * default one if ticked (Battle Pass R1 with R5: R5 is compared, never built), else the highest
+ * The refinement a group's weapons are built at among several ticked (one at least): the highest
+ * (Battle Pass R1 with R5: built at R5, R1 compared)
  */
-export function kqmBuiltRefinement(
-  group: KqmWeaponGroup,
-  ticked: readonly number[]
-): number {
-  const usual = groupSetting(group, defaultTeamOptKqm)
-  return ticked.includes(usual) ? usual : Math.max(...ticked)
+export function kqmBuiltRefinement(ticked: readonly number[]): number {
+  return Math.max(...ticked)
 }
 /**
  * The refinement a group's weapons are built at: its setting, else the group's default; with
- * several ticked, the default one when ticked (a setting saved as the highest ticked included)
+ * several ticked, the highest
  */
 export function kqmGroupRefinement(
   group: KqmWeaponGroup,
@@ -668,13 +664,11 @@ export function kqmGroupRefinement(
 ): number {
   const setting = groupSetting(group, kqm)
   const ticked = kqm.compareRefinements?.[group]
-  return ticked?.length
-    ? kqmBuiltRefinement(group, [...ticked, setting])
-    : setting
+  return ticked?.length ? kqmBuiltRefinement([...ticked, setting]) : setting
 }
 /**
- * The refinements ticked for a group: the one its builds use (its default one when ticked), and
- * any others its weapons are ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
+ * The refinements ticked for a group: the one its builds use (the highest), and any others its
+ * weapons are ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
  */
 export function kqmGroupRefinements(
   group: KqmWeaponGroup,

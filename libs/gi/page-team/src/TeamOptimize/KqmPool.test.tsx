@@ -61,14 +61,7 @@ vi.mock('@genshin-optimizer/gi/ui', () => {
       standard5: 'refinementStandard5',
       wish5: 'refinement5',
     },
-    kqmBuiltRefinement: (group: string, ticked: number[]) => {
-      const usual = { bp: 1, wish4: 5, standard4: 5, standard5: 1, wish5: 1 }[
-        group
-      ]
-      return usual !== undefined && ticked.includes(usual)
-        ? usual
-        : Math.max(...ticked)
-    },
+    kqmBuiltRefinement: (ticked: number[]) => Math.max(...ticked),
     kqmGroupRefinements: (
       group: string,
       kqm: {
@@ -239,10 +232,10 @@ describe('KQM Setup’s weapons and artifact sets', () => {
     // (written for the current weapon list, so the user's own exclusions are kept as they are)
     expect(saved?.kqm?.weaponList).toBe(2)
     // its refinements, ticked right there: R3 as well as R1, so the group's weapons are built
-    // at R1 (the group's default) and ranked at R3 too
+    // at R3 (the highest) and ranked at R1 too
     fireEvent.click(pill('5★ standard wish weapons refinement'))
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'R3' }))
-    expect(saved?.kqm?.refinementStandard5).toBe(1)
+    expect(saved?.kqm?.refinementStandard5).toBe(3)
     expect(saved?.kqm?.compareRefinements?.standard5).toEqual([1, 3])
     // (the menu stays open for more ticks: the pill behind it)
     expect(

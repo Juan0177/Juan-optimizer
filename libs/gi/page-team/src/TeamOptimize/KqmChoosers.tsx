@@ -393,8 +393,8 @@ function toggleKqmWeaponGroup(kqm: TeamOptKqm, keys: WeaponKey[]): TeamOptKqm {
 
 /**
  * A group's weapons counted at the refinements ticked (`values`, one at least): built at the
- * group's default one if ticked (Battle Pass R1), else the highest, ranked at the others too for
- * comparison (their own refinements, set one by one, are cleared)
+ * highest, ranked at the others too for comparison (their own refinements, set one by one, are
+ * cleared)
  */
 function setKqmGroupRefinements(
   kqm: TeamOptKqm,
@@ -411,7 +411,7 @@ function setKqmGroupRefinements(
   else delete compare[group]
   return {
     ...kqm,
-    [kqmGroupRefinementKey[group]]: kqmBuiltRefinement(group, ticked),
+    [kqmGroupRefinementKey[group]]: kqmBuiltRefinement(ticked),
     refinements: Object.keys(refinements).length ? refinements : undefined,
     compareRefinements: Object.keys(compare).length ? compare : undefined,
   }
@@ -1128,8 +1128,8 @@ export function kqmChooserCounts(
  * the refinement its weapons count at (a menu, R1 to R5)
  */
 /**
- * A group's refinements as toggles, several at once: the builds use the group's default one if
- * ticked, else the highest; the rankings and charts show each (one stays ticked)
+ * A group's refinements as toggles, several at once: the builds use the highest; the rankings and
+ * charts show each (one stays ticked)
  */
 function RefinementToggles({
   label,
@@ -1201,7 +1201,7 @@ function GroupPill({
   tip: string
   on: number
   total: number
-  /** the refinements ticked (the builds use the default one if ticked, else the highest; the rankings show each) */
+  /** the refinements ticked (the builds use the highest; the rankings show each) */
   refinements: number[]
   onToggle: () => void
   onRefinements: (values: number[]) => void

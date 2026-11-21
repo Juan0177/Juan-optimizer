@@ -511,28 +511,26 @@ describe('KQM Standards builds', () => {
     expect(refit.after.total).toBeGreaterThan(first.after.total)
   })
 
-  it('ranks a group’s weapons at every refinement ticked, building at the group’s default one (else the highest)', async () => {
+  it('ranks a group’s weapons at every refinement ticked, building at the highest', async () => {
     // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too. The
-    // Battle Pass's R1 + R5, saved with the highest as the setting, as before: still built at R1)
+    // Battle Pass's R1 + R5 saved with R1 as the setting, as an older version did: built at R5)
     const kqm = {
       refinement5: 1,
       refinement4: 5,
       compareRefinements: { standard4: [1, 5], bp: [1, 5] },
-      refinementBp: 5,
+      refinementBp: 1,
     }
     expect(kqmWeaponGroup('FavoniusSword')).toBe('standard4')
     expect(kqmRefinement('FavoniusSword', kqm)).toBe(5)
     expect(kqmGroupRefinements('standard4', kqm)).toEqual([1, 5])
     expect(kqmCompareRefinements('FavoniusSword', kqm)).toEqual([1])
     expect(kqmWeaponGroup('TheBlackSword')).toBe('bp')
-    expect(kqmRefinement('TheBlackSword', kqm)).toBe(1)
+    expect(kqmRefinement('TheBlackSword', kqm)).toBe(5)
     expect(kqmGroupRefinements('bp', kqm)).toEqual([1, 5])
-    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([5])
-    // (the default one when ticked: Battle Pass R1, 4★ standard wish R5; else the highest)
-    expect(kqmBuiltRefinement('bp', [1, 5])).toBe(1)
-    expect(kqmBuiltRefinement('bp', [3, 5])).toBe(5)
-    expect(kqmBuiltRefinement('standard4', [1, 5])).toBe(5)
-    expect(kqmBuiltRefinement('standard4', [1, 3])).toBe(3)
+    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([1])
+    expect(kqmBuiltRefinement([1, 5])).toBe(5)
+    expect(kqmBuiltRefinement([1, 3])).toBe(3)
+    expect(kqmBuiltRefinement([2])).toBe(2)
     // (a weapon with its own refinement is not compared; a group with one ticked neither)
     expect(
       kqmCompareRefinements('FavoniusSword', {
@@ -558,10 +556,10 @@ describe('KQM Standards builds', () => {
     const blackSword = weapons.filter((o) => o.weapon.key === 'TheBlackSword')
     expect(blackSword.map((o) => o.weapon.refinement).sort()).toEqual([1, 5])
     expect(blackSword.find((o) => o.weapon.refinement === 1)?.compare).toBe(
-      undefined
+      true
     )
     expect(blackSword.find((o) => o.weapon.refinement === 5)?.compare).toBe(
-      true
+      undefined
     )
     for (const ck of [ayaka, shenhe]) {
       const built = result.builds[ck]!.weapon
