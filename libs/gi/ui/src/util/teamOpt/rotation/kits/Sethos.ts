@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/sethos, main as of 2026-11-10. */
 
@@ -253,6 +259,7 @@ export const kit: KitModel = {
     ) {
       s.skillHitAt = -1
       c2Stack(ctx, s, 'regaining')
+      flatEnergy(ctx, 0, 12, 'Ancient Rite (Energy)', { owner: 'Sethos' })
     }
   },
 }

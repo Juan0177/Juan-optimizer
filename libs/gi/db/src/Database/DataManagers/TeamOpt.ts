@@ -187,6 +187,7 @@ export const teamOptEnergyRotationFields = [
   'favoniusCatchBy',
   'weaponTriggers',
   'turretParticles',
+  'scaledEnergy',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
@@ -216,6 +217,11 @@ export interface TeamOptEnergyMember {
    * the Skill uses are set by hand
    */
   turretParticles?: number
+  /**
+   * Energy from members whose gift grows with their Energy Recharge (Raiden's Musou Isshin, Sara's
+   * A4), per rotation at their base amount, by giver
+   */
+  scaledEnergy?: Partial<Record<CharacterKey, number>>
   /** Inputs set by hand: the written rotation no longer fills them in */
   edited?: TeamOptEnergyRotationField[]
 }
@@ -227,6 +233,8 @@ export interface TeamOptEnergyCalculator {
   rng: 'average' | 'safe' | 'worst'
   /** Zero disables Electro resonance particle generation. */
   electroInterval: number
+  /** Nightsoul Bursts a rotation, as the written rotation plays them (Scroll of the Hero of Cinder City) */
+  nightsoulBursts?: number
   members: Partial<Record<CharacterKey, TeamOptEnergyMember>>
   /** Encounter inputs set by hand: the written rotation no longer fills them in */
   edited?: 'electroInterval'[]
@@ -483,6 +491,10 @@ const energyMemberSchema = z.object({
   favoniusCatchBy: z.enum(allCharacterKeys).optional(),
   flatEnergy: z.number().finite(),
   turretParticles: z.number().finite().min(0).optional().catch(undefined),
+  scaledEnergy: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
   edited: z
     .array(z.enum(teamOptEnergyRotationFields))
     .optional()
@@ -494,6 +506,7 @@ const energyCalculatorSchema = z.object({
   enemyParticles: z.number().finite().min(0),
   rng: z.enum(['average', 'safe', 'worst']),
   electroInterval: z.number().finite().min(0),
+  nightsoulBursts: z.number().finite().min(0).optional().catch(undefined),
   edited: z
     .array(z.enum(['electroInterval']))
     .optional()

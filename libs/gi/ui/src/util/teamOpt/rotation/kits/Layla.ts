@@ -1,6 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -125,6 +126,9 @@ const shootStars = (ctx: SimContext, s: LaylaState) => {
       icd: 'layla',
       label: `Shooting Star ${i + 1}`,
     })
+    // C2: 1 Energy as each Shooting Star hits
+    if (ctx.constellation('Layla') >= 2)
+      flatEnergy(ctx, at + travel, 1, 'Layla C2', { owner: 'Layla' })
   })
   // C4 is granted at launch, before the first star reaches its target.
   if (ctx.constellation('Layla') >= 4)

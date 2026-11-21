@@ -2,7 +2,13 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats, getCharEle } from '@genshin-optimizer/gi/stats'
 import { energyCalcData } from '../../energyCalc'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, turretParticles } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  turretParticles,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/raiden, main as of 2026-11-10. */
 
@@ -119,7 +125,15 @@ interface RaidenState {
   /** C6: its 1 s ICD and the count in this Musou Isshin (5 at most) */
   c6Icd: number
   c6Count: number
+  /** Musou Isshin's Energy restores: their 1 s ICD and the count in this one (5 at most) */
+  restoreIcd: number
+  restores: number
 }
+
+/** Musou Isshin's Energy restoration a hit, by Burst talent level (gcsim's burstRestore) */
+const MUSOU_RESTORE = [
+  1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5,
+]
 
 /** Musou Isshin is on (its end is on her clock: her hitlag extends it, as in gcsim) */
 const inMusou = (s: RaidenState, ctx: SimContext) =>
@@ -158,6 +172,8 @@ export const kit: KitModel = {
   element: 'electro',
   source: `${GCSIM}/raiden`,
   init: (): RaidenState => ({
+    restoreIcd: -1,
+    restores: 0,
     musouGen: 0,
     eyeUntil: {},
     eyeIcd: -1,
@@ -298,6 +314,7 @@ export const kit: KitModel = {
         s.musouEnd = ctx.characterFrame('RaidenShogun') + musouFrames
         s.c6Count = 0
         s.c6Icd = -1
+        s.restores = 0
         // C2's DEF ignore from the cast until Musou Isshin ends (or she leaves the field)
         ctx.state('RaidenShogun', ['RaidenShogun', 'InBurst'], 'on')
         ctx.atCharacter('RaidenShogun', musouFrames, (c2) => {
@@ -385,6 +402,27 @@ export const kit: KitModel = {
     }
   },
   onHit(ctx, s: RaidenState, hit) {
+    // Musou Isshin: her normal, charged and plunging hits (Burst DMG) restore Energy to the party
+    // (her too), once per 1 s, 5 times; A4 raises it by her ER (energyCalc's SCALED_ENERGY)
+    if (
+      hit.characterKey === 'RaidenShogun' &&
+      hit.path[0] === 'burst' &&
+      hit.path[1] !== 'dmg' &&
+      inMusou(s, ctx) &&
+      s.restores < 5 &&
+      ctx.now > s.restoreIcd
+    ) {
+      s.restores++
+      s.restoreIcd = ctx.now + 60
+      const level = ctx.calculate('RaidenShogun', ['total', 'burstIndex']) ?? 9
+      flatEnergy(
+        ctx,
+        0,
+        MUSOU_RESTORE[Math.min(14, Math.max(0, Math.round(level)))]!,
+        'Musou Isshin (Energy)',
+        { owner: 'RaidenShogun', to: 'team', scaled: true }
+      )
+    }
     // A1: a party member gaining particles gives 2 Resolve (once per 3 s)
     if (hit.path[0] === '_particle' && ctx.now >= s.particleReady) {
       s.resolve = Math.min(60, s.resolve + 2)

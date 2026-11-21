@@ -1,5 +1,12 @@
 import type { KitModel, SimContext, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  critChance,
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/escoffier, main as of 2026-11-10. */
 
@@ -189,6 +196,9 @@ export const kit: KitModel = {
           weight: ctx.members.length,
           label: 'Scoring Cuts (Heal)',
         })
+        // C4: each Rehab Diet heal restores 2 Energy to Escoffier at her CRIT Rate's chance, 7
+        // times a Burst (counted by its expected triggers)
+        let c4Left = 7
         for (let i = 0; i < 9 + (c >= 4 ? 6 : 0); i++)
           ctx.at(157 + Math.ceil(58.5 * i), (c2) => {
             if (healToken !== s.healToken) return
@@ -198,6 +208,13 @@ export const kit: KitModel = {
               element: 'physical',
               label: 'Rehab Diet',
             })
+            if (c >= 4 && c4Left > 0) {
+              const procs = Math.min(c4Left, critChance(c2, 'Escoffier'))
+              c4Left -= procs
+              flatEnergy(c2, 0, 2 * procs, 'Escoffier C4', {
+                owner: 'Escoffier',
+              })
+            }
           })
         ctx.hit(92, {
           path: ['burst', 'skillDmg'],

@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -232,6 +233,7 @@ function salonTick(
     // the members' particles: 1, 2.5 s ICD on Furina's clock (kqmsim particleCB)
     if (turretReady(s.particles, 'salon', c2.characterFrame('Furina'), 150))
       turretParticles(c2, 0, 1, 'Furina')
+    c4Energy(c2, s)
     c2.hit(0, {
       path: ['skill', m.node],
       tag: 'skill',
@@ -255,6 +257,15 @@ function salonTick(
   c.at(Math.round(m.initial + (n + 1) * m.mean) - (c.now - src), (c2) =>
     salonTick(c2, s, src, n + 1, m)
   )
+}
+
+/** C4: 4 Energy as a Salon member hits or the Singer heals, once per 5 s (Furina's clock) */
+function c4Energy(c: SimContext, s: FurinaState) {
+  if (
+    c.constellation('Furina') >= 4 &&
+    turretReady(s.particles, 'c4', c.characterFrame('Furina'), 300)
+  )
+    flatEnergy(c, 0, 4, 'Furina C4', { owner: 'Furina' })
 }
 
 /** Summons the Salon Solitaire members `delay` frames from now: each ticks from its initial tick */
@@ -285,6 +296,7 @@ function summonSinger(ctx: SimContext, s: FurinaState, delay: number) {
         healTargets: [c2.onField],
         label: 'Singer of Many Waters',
       })
+      c4Energy(c2, s)
       const hp = c2.calculate('Furina', ['total', 'hp']) ?? 0
       const reduction = Math.min((hp / 1000) * 0.004, 0.16)
       c2.at(Math.trunc(120 * (1 - reduction) + 0.5), tick)

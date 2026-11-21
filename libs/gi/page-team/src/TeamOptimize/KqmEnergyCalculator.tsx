@@ -1467,7 +1467,7 @@ function MemberEnergy({
             <Label
               tip={t(
                 'teamOpt.kqm.calc.flatTip',
-                'Energy per rotation from character abilities or effects shared by every build. From a written rotation it includes the random Energy of the member’s Normal and Charged Attack hits.'
+                'Energy per rotation from character abilities or effects shared by every build. From a written rotation it includes the Energy that constellations and passives restore as the rotation plays them, and the random Energy of the member’s Normal and Charged Attack hits.'
               )}
             >
               {t('teamOpt.kqm.calc.flat', 'Bonus energy')}
@@ -1481,6 +1481,19 @@ function MemberEnergy({
                 updateMember(characterKey, { flatEnergy })
               }
             />
+            {Object.entries(member.scaledEnergy ?? {}).map(([giver, value]) => (
+              <Typography
+                key={giver}
+                sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}
+              >
+                {t('teamOpt.kqm.calc.scaledEnergy', {
+                  defaultValue:
+                    'And {{value}} from {{name}} a rotation at 100% ER, more with their Energy Recharge',
+                  value: +(value ?? 0).toFixed(1),
+                  name: t(`charNames_gen:${giver}`, giver),
+                })}
+              </Typography>
+            ))}
           </Box>
         </Box>
       </Section>

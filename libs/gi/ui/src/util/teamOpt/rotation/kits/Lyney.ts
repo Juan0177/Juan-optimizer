@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/lyney, main as of 2026-11-10. */
 
@@ -50,7 +56,11 @@ const c4 = (c: SimContext, delay: number) => {
 function hatPyro(c: SimContext, hat: Hat, delay: number, label: string) {
   hat.alive = false
   // A1: the drained hat's strike has +80% ATK (a conditional on until the hit)
-  if (hat.drained) c.buff('Lyney', ['Lyney', 'a1DrainHp'], 'on', 0, delay + 1)
+  // and restores 3 Energy to Lyney
+  if (hat.drained) {
+    c.buff('Lyney', ['Lyney', 'a1DrainHp'], 'on', 0, delay + 1)
+    flatEnergy(c, delay, 3, 'Lyney A1', { owner: 'Lyney' })
+  }
   c.hit(delay, {
     path: ['charged', 'pyrotechnic'],
     tag: 'charged',

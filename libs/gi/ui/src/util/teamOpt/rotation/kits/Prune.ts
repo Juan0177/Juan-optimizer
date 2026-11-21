@@ -2,8 +2,9 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import type { KitModel, SimContext } from '../types'
 import {
-  KQMSIM,
+  flatEnergy,
   kitFramesInto,
+  KQMSIM,
   type NormalHit,
   normalString,
   templateJump,
@@ -46,6 +47,8 @@ const convertFrames = 364
 interface PruneState {
   a1Ready: number
   c4Ready: number
+  /** C1: its Energy's 1.8 s ICD ends (frame) */
+  c1Ready: number
   rally: Map<CharacterKey, object>
   rallySnapshot?: { t: number; onField: CharacterKey }
   convertEle?: 'pyro' | 'hydro' | 'electro' | 'cryo'
@@ -106,6 +109,7 @@ export const kit: KitModel = {
   init: (): PruneState => ({
     a1Ready: -1,
     c4Ready: -1,
+    c1Ready: -1,
     rally: new Map(),
     recastToken: 0,
     hexToken: 0,
@@ -146,6 +150,11 @@ export const kit: KitModel = {
           poiseDamage: 20,
           label: 'Banehunter Oathhammer (A1)',
         })
+        // C1: the converted Oathhammer's hit restores 2 Energy, once per 1.8 s
+        if (ctx.constellation('Prune') >= 1 && ctx.now + 45 >= s.c1Ready) {
+          s.c1Ready = ctx.now + 45 + 108
+          flatEnergy(ctx, 45, 2, 'Prune C1', { owner: 'Prune' })
+        }
       }
       if (
         hit.characterKey === 'Prune' &&

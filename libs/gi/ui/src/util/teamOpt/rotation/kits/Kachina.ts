@@ -1,5 +1,10 @@
 import type { KitModel, SimContext } from '../types'
-import { type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /*
  * Kachina. Neither gcsim nor the pinned kqmsim has her, so this kit follows the in-game text and
@@ -75,6 +80,8 @@ interface KachinaState {
   /** The current Twirly's summon (its slams stop when another one replaces it) */
   version: number
   fieldEnd: number
+  /** C1's Energy cooldown ends (frame) */
+  c1Ready: number
 }
 
 /** Points now, after the drain since the last settle; ends the Blessing at 0 */
@@ -171,16 +178,30 @@ export const kit: KitModel = {
     riding: false,
     version: 0,
     fieldEnd: -1,
+    c1Ready: -1,
   }),
   onStart(c) {
     c.note(
-      'Kachina: action frames are estimates (no published frame data); Nightsoul drain, Twirly intervals and costs follow the game ability configs. C1 energy and C6 (shield replaced) are not modelled.'
+      'Kachina: action frames are estimates (no published frame data); Nightsoul drain, Twirly intervals and costs follow the game ability configs. C6 (shield replaced) is not modelled; for C1 Energy every Crystallize Shard counts as picked up.'
     )
   },
   nightsoul(c, state: KachinaState) {
     const s = { ...state }
     if (s.blessing) s.points = Math.max(0, s.points - (c.now - s.at) * NS_DRAIN)
     return { active: s.blessing && s.points > 0, points: s.points }
+  },
+  // C1: 3 Energy when the party picks up a Crystallize Shard (each Crystallize's, taken as picked
+  // up) or triggers Lunar-Crystallize, once per 5 s
+  onHit(c, s: KachinaState, hit) {
+    if (
+      c.constellation('Kachina') >= 1 &&
+      hit.path[0] === '_reaction' &&
+      (hit.path[1] === 'crystallize' || hit.path[1] === 'lunarCrystallize') &&
+      c.now >= s.c1Ready
+    ) {
+      s.c1Ready = c.now + 300
+      flatEnergy(c, 0, 3, 'Kachina C1', { owner: 'Kachina' })
+    }
   },
   onNightsoulBurst(c) {
     // A1: Geo DMG +20% for 12 s after a party member's Nightsoul Burst

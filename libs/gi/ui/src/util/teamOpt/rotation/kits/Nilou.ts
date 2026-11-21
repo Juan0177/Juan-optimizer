@@ -1,5 +1,6 @@
 import type { ActionResult, HitElement, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalInto,
@@ -231,8 +232,11 @@ function swordDance(
       label: step.label,
     })
     if (inPirouette && idx === 2) {
-      if (ctx.constellation('Nilou') >= 4)
+      // C4: the third step's hit restores 15 Energy (and +50% burst DMG for 8 s)
+      if (ctx.constellation('Nilou') >= 4) {
         ctx.buff('Nilou', ['Nilou', 'c4AfterPirHit'], 'on', hitAt, 8 * 60)
+        flatEnergy(ctx, hitAt, 15, 'Nilou C4')
+      }
       const endAt = start + 30
       ctx.at(endAt, (c2) => pirouetteEnd(c2, s, true))
     }
@@ -259,8 +263,10 @@ function whirlingSteps(ctx: SimContext, s: NilouState): ActionResult {
     label: w.label,
   })
   if (idx === 2) {
-    if (ctx.constellation('Nilou') >= 4)
+    if (ctx.constellation('Nilou') >= 4) {
       ctx.buff('Nilou', ['Nilou', 'c4AfterPirHit'], 'on', w.hit, 8 * 60)
+      flatEnergy(ctx, w.hit, 15, 'Nilou C4')
+    }
     ctx.at(40, (c2) => pirouetteEnd(c2, s, false))
   }
   s.step = (idx + 1) % 3

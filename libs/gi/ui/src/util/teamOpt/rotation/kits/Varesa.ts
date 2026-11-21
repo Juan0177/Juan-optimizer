@@ -1,5 +1,6 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -244,6 +245,9 @@ function gainPoints(
 
 /** Apex Drive: from a plunge at C2+, or in the blessing */
 function startApex(ctx: SimContext, s: VaresaState) {
+  // C6: 30 Energy on entering Apex Drive
+  if (ctx.constellation('Varesa') >= 6)
+    flatEnergy(ctx, 0, 30, 'Varesa C6', { owner: 'Varesa' })
   s.apex = true
   s.apexLost = undefined
   const token = ++s.apexToken
@@ -649,6 +653,8 @@ export const kit: KitModel = {
           label: variant.label,
           states: impactStates(ctx, s, variant.hitmark, false),
         })
+        // C2: 11.5 Energy as the ground impact hits
+        if (c >= 2) flatEnergy(ctx, variant.hitmark, 11.5, 'Varesa C2')
         if (fiery) {
           // a Fiery Passion plunge spends the points; the blessing ends at the next action
           s.exitNS = true

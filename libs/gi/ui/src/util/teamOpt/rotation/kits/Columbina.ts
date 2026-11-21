@@ -8,6 +8,7 @@ import type {
 } from '../types'
 import {
   atkSpdAdjust,
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   shieldMarker,
@@ -227,9 +228,14 @@ function gravityTick(ctx: SimContext, s: ColumbinaState, clear: boolean) {
       element: v.element,
       label: v.label,
     })
-  // C1: a Lunar-Crystallize Gravity Interference gives her the Rainsea Shield for 8 s
+  // C1: a Lunar-Crystallize Gravity Interference gives her the Rainsea Shield for 8 s, a
+  // Lunar-Charged one the active character 6 Energy
   if (c >= 1 && type === LCR)
     shieldMarker(ctx, 0, 480, 'Rainsea Shield (C1)', { target: 'Columbina' })
+  if (c >= 1 && type === LC)
+    flatEnergy(ctx, 0, 6, 'Columbina C1', { owner: 'Columbina', to: 'active' })
+  // C4: 4 Energy to her on every Gravity Interference (the 15 s cooldown is its DMG bonus's)
+  if (c >= 4) flatEnergy(ctx, 0, 4, 'Columbina C4', { owner: 'Columbina' })
   // A1: +5% CRIT Rate per tick (stacks to 3, 10 s)
   s.a1Stacks = Math.min(
     3,

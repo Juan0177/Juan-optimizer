@@ -1,6 +1,7 @@
 import type { KitModel } from '../types'
 import {
   annulusHitChance,
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -117,6 +118,9 @@ export const kit: KitModel = {
         if (snap < s.a1Until)
           ctx.buff('Ganyu', ['Ganyu', 'A1'], 'on', 103 - skip, 29)
         s.a1Until = snap + 5 * 60
+        // C1: 2 Energy as the arrow (or its Bloom) hits
+        if (ctx.constellation('Ganyu') >= 1)
+          flatEnergy(ctx, 113 - skip, 2, 'Ganyu C1')
         ctx.hit(113 - skip, {
           path: ['charged', 'frostflake'],
           tag: 'charged',

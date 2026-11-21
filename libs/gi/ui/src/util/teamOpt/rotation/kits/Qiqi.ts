@@ -1,13 +1,14 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
   templateJump,
-  withHitlag,
   turretParticles,
   turretReady,
+  withHitlag,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/qiqi, main as of 2026-11-10. */
@@ -90,6 +91,15 @@ const qiqiHeal = (
 function heraldParticles(ctx: SimContext, s: QiqiState) {
   if (turretReady(s.particles, 'herald', ctx.characterFrame('Qiqi'), 360))
     turretParticles(ctx, 0, 2, 'Qiqi')
+  // C1: a hit on the Talisman-marked enemy restores 2 Energy; (Revelation) in a radiance, 6 more
+  // once per 6 s
+  if (ctx.constellation('Qiqi') < 1) return
+  if (s.talismanOn) flatEnergy(ctx, 0, 2, 'Qiqi C1', { owner: 'Qiqi' })
+  if (
+    ctx.radiance &&
+    turretReady(s.particles, 'c1', ctx.characterFrame('Qiqi'), 360)
+  )
+    flatEnergy(ctx, 0, 6, 'Qiqi C1 (Stellar Glimmer)', { owner: 'Qiqi' })
 }
 
 export const kit: KitModel = {

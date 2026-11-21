@@ -1,5 +1,5 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { flatEnergy, GCSIM, type NormalHit, normalString } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/geo/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -229,6 +229,8 @@ export const kit: KitModel = {
             snapshotDelay: 0,
             label: `Wake of Earth (${i + 1})`,
           })
+        // C4: the shockwave restores 5 Energy per opponent it hits
+        if (c >= 4) flatEnergy(ctx, 66, 5, 'Traveler (Geo) C4')
         const wall = c >= 6 ? 1200 : 900
         ctx.at(35, (c2) => {
           s.wallsEnd = c2.now + wall
@@ -248,7 +250,7 @@ export const kit: KitModel = {
           )
         }
         ctx.note(
-          'TravelerGeo: C4 Energy from the shockwaves and the Rockfell shield bonus are not modelled; Blade of Archaic Petra stacks come from its own meteorites and walls only.'
+          'TravelerGeo: the Rockfell shield bonus is not modelled; Blade of Archaic Petra stacks come from its own meteorites and walls only.'
         )
         return {
           cooldown: { key: 'burst', frames: 900, delay: 35 },

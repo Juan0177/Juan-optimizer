@@ -1,13 +1,14 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
   templateJump,
-  withHitlag,
   turretParticles,
   turretReady,
+  withHitlag,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/yaoyao, main as of 2026-11-10. */
@@ -216,6 +217,13 @@ const skillThrow =
     const burst = inBurst(s, c.now + 13)
     c.at(13, (c2) => radishHeal(c2, s, burst, atPlayer))
     // under Adeptal Legacy its radishes are the burst's (Elemental Burst DMG), with its stats
+    // C2: a radish hit in Adeptal Legacy restores 3 Energy to Yaoyao, once per 0.8 s
+    if (
+      burst &&
+      c.constellation('Yaoyao') >= 2 &&
+      turretReady(s.particles, 'c2', c.now + 13, 48)
+    )
+      flatEnergy(c, 13, 3, 'Yaoyao C2', { owner: 'Yaoyao' })
     if (burst)
       throwRadish(
         c,

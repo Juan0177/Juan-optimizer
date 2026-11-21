@@ -1,6 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/charlotte, main as of 2026-11-10. */
 
@@ -24,6 +30,9 @@ interface CharlotteState {
   holdMarkEnd: number
   /** The mark whose tick chain runs: a new mark ends the old chain */
   markId: number
+  /** C4: its Energy restores in the current 20 s window, and the window's end */
+  c4Count: number
+  c4WindowEnd: number
   /** The mark on the enemy (its id), until it expires; -1: none */
   markLive: number
   /** C6 Summation of Interest: its 6 s ICD */
@@ -154,6 +163,8 @@ export const kit: KitModel = {
   init: (): CharlotteState => ({
     holdMarkEnd: -1,
     markId: 0,
+    c4Count: 0,
+    c4WindowEnd: -1,
     markLive: -1,
     c6Icd: -1e9,
     thornIcd: -1e9,
@@ -313,6 +324,18 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Still Photo: Comprehensive Confirmation',
         })
+        // C4: a hit on the marked enemy restores 2 Energy, 5 times per 20 s
+        for (const t of [53, 95, 119, 143, 166, 179, 203, 226, 249])
+          ctx.at(t, (c2) => {
+            if (c2.constellation('Charlotte') < 4 || s.markLive < 0) return
+            if (c2.now >= s.c4WindowEnd) {
+              s.c4Count = 0
+              s.c4WindowEnd = c2.now + 1200
+            }
+            if (s.c4Count >= 5) return
+            s.c4Count++
+            flatEnergy(c2, 0, 2, 'Charlotte C4', { owner: 'Charlotte' })
+          })
         // the cast heals the party at 53 frames (kqmsim charlotte/burst.go:73)
         ctx.at(53, (c2) =>
           charlotteHeal(

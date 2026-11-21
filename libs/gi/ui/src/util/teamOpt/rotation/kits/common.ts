@@ -386,6 +386,45 @@ export function turretParticles(
 }
 
 /**
+ * A member's chance to CRIT, for Energy that only a CRIT hit restores: its CRIT Rate when the
+ * simulation calculates stats, else a typical build's 60%
+ */
+export const critChance = (ctx: SimContext, key: CharacterKey) =>
+  Math.min(1, Math.max(0, ctx.calculate(key, ['total', 'critRate_']) ?? 0.6))
+
+/**
+ * Flat Energy a kit restores, `delay` frames from now, for the ER calculator (energyCalc counts
+ * these markers): to `owner` (the context's member by default), or `to` the active member, the
+ * owner's party apart from it (`others`), the whole party (`team`), or one member. `scaled`: the
+ * amount grows with the owner's Energy Recharge (energyCalc `SCALED_ENERGY`).
+ */
+export function flatEnergy(
+  ctx: SimContext,
+  delay: number,
+  amount: number,
+  label: string,
+  options: {
+    owner?: CharacterKey
+    to?: 'active' | 'others' | 'team' | CharacterKey
+    scaled?: boolean
+  } = {}
+) {
+  ctx.hit(delay, {
+    ...(options.owner && { characterKey: options.owner }),
+    path: [
+      '_marker',
+      'flatEnergy',
+      `${amount}`,
+      ...(options.to || options.scaled ? [options.to ?? ''] : []),
+      ...(options.scaled ? ['scaled'] : []),
+    ],
+    tag: 'other',
+    element: 'physical',
+    label,
+  })
+}
+
+/**
  * A turret particle callback's ICD (kqmsim's AddStatus before the roll): whether it is ready at
  * `now`, and if so it starts again (`frames`; gcsim's statuses are active through their expiry
  * frame, so the next is `frames + 1` later). `clocks` keeps each turret's next ready frame.

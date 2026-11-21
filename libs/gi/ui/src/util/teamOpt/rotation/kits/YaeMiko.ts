@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -52,6 +53,8 @@ interface YaeState {
   revelationIcd: number
   /** The Sakura lightning's particle ICD (2.5 s, Yae's clock) */
   particleReady: number
+  /** C4's Energy ICD (5 s, Yae's clock) */
+  c4EnergyReady: number
 }
 
 /** Yae's own clock (gcsim's hitlag-affected statuses, active through their expiry frame) */
@@ -119,9 +122,14 @@ function sakuraTick(c: SimContext, s: YaeState, totem: Totem, c2: boolean) {
     s.particleReady = t + 1 + 151
     turretParticles(c, 1, 1, 'YaeMiko')
   }
-  // C4: a lightning hit gives the team +20% Electro DMG for 5 s
-  if (c.constellation('YaeMiko') >= 4)
+  // C4: a lightning hit gives the team +20% Electro DMG for 5 s, and Yae 8 Energy (5 s ICD)
+  if (c.constellation('YaeMiko') >= 4) {
     c.buff('YaeMiko', ['YaeMiko', 'c4'], 'hit', 1, 5 * 60)
+    if (t + 1 >= s.c4EnergyReady) {
+      s.c4EnergyReady = t + 1 + 301
+      flatEnergy(c, 1, 8, 'Yae Miko C4', { owner: 'YaeMiko' })
+    }
+  }
   c.at(176, (c3) => sakuraTick(c3, s, totem, c2))
 }
 
@@ -169,6 +177,7 @@ export const kit: KitModel = {
     revelationUntil: -1,
     revelationIcd: -1e9,
     particleReady: -1e9,
+    c4EnergyReady: -1e9,
   }),
   onStart(ctx) {
     // Revelation is unlocked (gcsim's default): longer Sakura, enhanced lightning, C1/C2/C4/C6
@@ -247,7 +256,7 @@ export const kit: KitModel = {
         // Revelation: the Sakura are not destroyed; each still resets a skill charge (A1)
         const totems = alive(s, ctx.now).length
         ctx.resetCooldown('skill', totems)
-        for (let i = 0; i < totems; i++)
+        for (let i = 0; i < totems; i++) {
           ctx.hit(154 + 24 * i, {
             path: ['burst', 'tenkoDmg'],
             tag: 'burst',
@@ -256,6 +265,10 @@ export const kit: KitModel = {
             icd: 'none',
             label: 'Tenko Thunderbolt',
           })
+          // C1: 8 Energy per Tenko Thunderbolt
+          if (ctx.constellation('YaeMiko') >= 1)
+            flatEnergy(ctx, 154 + 24 * i, 8, 'Yae Miko C1')
+        }
         return {
           cooldown: { key: 'burst', frames: 22 * 60 },
           frames: 114,

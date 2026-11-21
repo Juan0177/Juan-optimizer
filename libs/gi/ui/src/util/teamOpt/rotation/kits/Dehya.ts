@@ -1,12 +1,13 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
   templateJump,
-  withHitlag,
   turretParticles,
+  withHitlag,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/dehya, main as of 2026-11-10. */
@@ -115,6 +116,7 @@ function c4Heal(c: SimContext, s: DehyaState) {
     healTargets: ['Dehya'],
     label: 'An Oath Abiding (C4 heal)',
   })
+  flatEnergy(c, 0, 1.5, 'Dehya C4', { owner: 'Dehya' })
 }
 
 /** C6 state on a Leonine Bite hit: the CRIT DMG stacks so far */

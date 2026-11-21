@@ -2,6 +2,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharStat } from '@genshin-optimizer/gi/stats'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -56,6 +57,8 @@ interface ChongyunState {
   snapshot?: { t: number; onField: CharacterKey }
   enemyDamage: number
   enemyHit: boolean
+  /** C4: its Energy's 2 s ICD ends (Chongyun's clock) */
+  c4Ready: number
 }
 
 function infuseField(ctx: SimContext, member: CharacterKey, duration: number) {
@@ -109,7 +112,23 @@ export const kit: KitModel = {
     linger: 180,
     enemyDamage: 0,
     enemyHit: false,
+    c4Ready: -1,
   }),
+  // C4: his hits on a Cryo-affected enemy restore 1 Energy (the game text; the reference 2), once
+  // per 2 s
+  onHit(ctx, s: ChongyunState, hit) {
+    const frame = ctx.characterFrame('Chongyun')
+    if (
+      hit.characterKey === 'Chongyun' &&
+      !hit.path[0].startsWith('_') &&
+      ctx.constellation('Chongyun') >= 4 &&
+      frame >= s.c4Ready &&
+      ctx.absorb(['cryo']) === 'cryo'
+    ) {
+      s.c4Ready = frame + 121
+      flatEnergy(ctx, 0, 1, 'Chongyun C4', { owner: 'Chongyun' })
+    }
+  },
   onStart(ctx) {
     if (ctx.constellation('Chongyun') >= 6 && !ctx.damageTracked)
       ctx.note(

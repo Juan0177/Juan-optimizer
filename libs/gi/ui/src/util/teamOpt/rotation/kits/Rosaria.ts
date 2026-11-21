@@ -1,6 +1,8 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  critChance,
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -155,6 +157,15 @@ export const kit: KitModel = {
           applies: true,
           label: 'Ravaging Confession (2)',
         })
+        // C4: a CRIT hit restores 5 Energy, once a cast, on the field: by the chance either of its
+        // two hits CRITs
+        if (ctx.constellation('Rosaria') >= 4 && ctx.onField === 'Rosaria')
+          flatEnergy(
+            ctx,
+            24,
+            5 * (1 - (1 - critChance(ctx, 'Rosaria')) ** 2),
+            'Rosaria C4'
+          )
         // A1: the first hit from behind (assumed): CRIT Rate +12% for 5 s
         ctx.buff('Rosaria', ['Rosaria', 'RosariaA1'], 'on', 24, 300, {
           hitlag: 'recipient',

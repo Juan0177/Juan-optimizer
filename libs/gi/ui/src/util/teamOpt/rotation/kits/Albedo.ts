@@ -2,6 +2,7 @@ import { HEXEREI_CHARACTERS } from '../gearEffects'
 import { annulusHitChance } from '../geometry'
 import type { KitModel, SimContext, SimHit } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
@@ -307,6 +308,9 @@ export const kit: KitModel = {
     })
     // its particles: a 67% chance of 1 (kqmsim particleCB; the 1 s ICD never binds at 2 s apart)
     turretParticles(ctx, 1, 0.67, 'Albedo')
+    // C1: 1.2 Energy with each
+    if (ctx.constellation('Albedo') >= 1)
+      flatEnergy(ctx, 1, 1.2, 'Albedo C1', { owner: 'Albedo' })
     if (ctx.constellation('Albedo') >= 2) {
       if (hit.t >= s.c2Until) s.c2Stacks = 0
       s.c2Stacks = Math.min(4, s.c2Stacks + 1)

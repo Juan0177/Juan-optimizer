@@ -232,198 +232,260 @@ export function calculateEnergyRecharge(
     keys.some((key) =>
       ['pyro', 'hydro', 'cryo', 'dendro'].includes(getCharEle(key))
     )
-  for (const recipient of keys) {
-    const own = settings.members[recipient]!
-    const ownData = energyCalcData[recipient]!
-    const field = own.fieldTime / 100
-    // A skill's particles are of its element: 3 energy to a matching member, 1 to another.
-    const elementValue = (source: CharacterKey) =>
-      getCharEle(source) === getCharEle(recipient) ? 3 : 1
-    let particles = 0
-    const sources = {
-      own: 0,
-      team: 0,
-      favonius: 0,
-      enemies: 0,
-      resonance: 0,
-      bonus: 0,
-      gear: 0,
-      skills: 0,
-    }
-    for (const source of keys) {
-      const member = settings.members[source]!
-      const data = energyCalcData[source]!
-      const modes = [
-        { mode: member.skillMode, uses: member.skillUses },
-        { mode: member.secondaryMode, uses: member.secondaryUses },
-      ]
-      let turretTime = 0
-      // (the particles its turret made as the rotation played: all its Skill's, in place of the
-      // options' rate for their uses)
-      const made = turretParticlesOf(member, data)
-      if (made !== undefined) {
-        const energy =
-          made *
-          (1 - (data.skills[member.skillMode]?.variance ?? 0) * rng) *
-          elementValue(source) *
-          share(field)
-        particles += energy
-        if (source === recipient) sources.own += energy
-        else sources.team += energy
-      }
-      for (const [i, { mode, uses }] of (made === undefined
-        ? modes
-        : []
-      ).entries()) {
-        const skill = data.skills[mode]
-        // Fischl's burst also summons Oz. Kokomi's refresh extends her existing turret.
-        // (once per burst: with the primary skill only, even when the second one is the same)
-        const burstSummons =
-          i === 0 &&
-          (source === 'Fischl' ||
-            (source === 'SangonomiyaKokomi' && skill.label === 'Refresh')) &&
-          member.burstEvery > 0
-            ? 1 / member.burstEvery
-            : 0
-        const uptime = Math.min(
-          skill.duration * (uses + burstSummons),
-          Math.max(0, settings.rotationTime - turretTime)
-        )
-        const isTurret = skill.perSecond > 0
-        if (isTurret) turretTime += uptime
-        const count =
-          (isTurret ? skill.perSecond * uptime : skill.particles * uses) *
-          (1 - skill.variance * rng)
-        const catchBy = member.catchBy ?? source
-        const fed = member.funnelShare / 100
-        const caught = isTurret
-          ? field
-          : (recipient === catchBy ? fed : 0) +
-            (recipient === source ? 1 - fed : 0)
-        const energy = count * elementValue(source) * share(caught)
-        particles += energy
-        if (source === recipient) sources.own += energy
-        else sources.team += energy
-      }
-      // A Favonius trigger makes 3 clear particles (2 energy each on the field) for whoever
-      // is on the field then.
-      const weapon = weapons?.[source]
-      const favoniusProcs = !weapons
-        ? member.favoniusProcs
-        : isFavonius(weapon)
-          ? Math.min(
-              // (counted from the rotation at R5: a smaller refinement's chance; a typed count has it)
-              member.favoniusProcs *
-                (member.edited?.includes('favoniusProcs')
-                  ? 1
-                  : favoniusChance(refinements?.[source])),
-              settings.rotationTime / favoniusCooldown(refinements?.[source])
-            )
-          : 0
-      const favonius =
-        3 *
-        favoniusProcs *
-        2 *
-        share(recipient === (member.favoniusCatchBy ?? source) ? 1 : 0)
-      particles += favonius
-      sources.favonius += favonius
-    }
-    const enemies =
-      (settings.enemyParticles * 2 * share(field) * settings.rotationTime) /
-      settings.clearTime
-    particles += enemies
-    sources.enemies = enemies
-    if (hasElectroResonance && settings.electroInterval > 0) {
-      const resonance =
-        (settings.rotationTime / Math.max(5, settings.electroInterval)) *
-        (getCharEle(recipient) === 'electro' ? 3 : 1) *
-        share(field)
-      particles += resonance
-      sources.resonance = resonance
-    }
-    // Dori's A4 converts each skill use into energy that scales with her ER.
-    if (recipient === 'Dori') {
-      particles += 5 * (own.skillUses + own.secondaryUses)
-      sources.own += 5 * (own.skillUses + own.secondaryUses)
-    }
-    // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
-    // the others' (Frostbreath)
-    const weaponTriggers = (member: CharacterKey) => {
-      // (Exaiphanes Blade gives its Energy to the Traveler only: kqmsim exaiphanesblade.go)
-      if (
-        weapons?.[member] === 'ExaiphanesBlade' &&
-        !member.startsWith('Traveler')
-      )
-        return 0
-      // (Prototype Amber: once per Burst of its wielder, whatever was entered)
-      if (energyWeaponPerBurst(weapons?.[member])) {
-        const every = settings.members[member]?.burstEvery ?? 0
-        return every > 0 ? 1 / every : 0
-      }
-      // (triggers set by hand, else the rotation's for the weapon it holds)
-      const inputs = settings.members[member]
-      const weapon = weapons?.[member]
-      const entered =
-        (inputs?.weaponEnergyTriggers ?? 0) > 0
-          ? inputs!.weaponEnergyTriggers
-          : ((weapon && inputs?.weaponTriggers?.[weapon]) ?? 0)
-      return energyWeaponTriggers(weapon, entered, settings.rotationTime)
-    }
-    const teamWeaponEnergy = keys
-      .filter((k) => k !== recipient)
-      .reduce(
-        (n, k) =>
-          n +
-          energyWeaponTeam(weapons?.[k], refinements?.[k]) * weaponTriggers(k),
-        0
-      )
-    // The Exile (gcsim exile.go): the wearer's Burst gives every other member 2 Energy every 2 s
-    // for 6 s; it does not stack (the most from one wearer)
-    const exileEnergy = Math.max(
-      0,
-      ...keys
-        .filter((k) => k !== recipient && (sets?.[k]?.['TheExile'] ?? 0) >= 4)
-        .map((k) => {
-          const every = settings.members[k]?.burstEvery ?? 0
-          return every > 0 ? 6 / every : 0
-        })
+  // Energy that grows with its giver's ER (Raiden's Musou Isshin, Sara's A4): the giver's own in
+  // step with its ER, the others' at the giver's ER the previous pass found (100% at first). A
+  // giver's own needs come first, so a few passes settle.
+  const scaled = keys.some((k) =>
+    Object.keys(settings.members[k]?.scaledEnergy ?? {}).some(
+      (g) =>
+        SCALED_ENERGY[g as CharacterKey] && keys.includes(g as CharacterKey)
     )
-    sources.bonus = own.flatEnergy
-    sources.gear =
-      exileEnergy +
-      energyWeaponFlat(weapons?.[recipient], refinements?.[recipient]) *
-        weaponTriggers(recipient) +
-      teamWeaponEnergy
-    sources.skills =
-      ownData.skills[own.skillMode].flatEnergy * own.skillUses +
-      ownData.skills[own.secondaryMode].flatEnergy * own.secondaryUses
-    const flat = sources.bonus + sources.gear + sources.skills
-    const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
-    // (without the Burst, still the energy it spends: Varesa's Kablam is -30 a use)
-    const needed =
-      (own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery) - flat
-    const required =
-      needed <= 0
-        ? 100
-        : particles > 0
-          ? Math.max(100, (needed / particles - ownData.erDiscount) * 100)
-          : Number.POSITIVE_INFINITY
-    result.members[recipient] = {
-      particleEnergy: particles,
-      flatEnergy: flat,
-      burstCost: cost,
-      required,
-      sources,
-      burstSpend:
-        own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
-    }
-    if (!Number.isFinite(required))
-      result.errors.push(
-        `${recipient} has no particle energy. Add particle sources or disable its burst.`
+  )
+  let giverER: Partial<Record<CharacterKey, number>> = {}
+  for (let pass = 0; pass < (scaled ? 3 : 1); pass++) {
+    if (pass > 0) {
+      giverER = Object.fromEntries(
+        keys.map((k) => {
+          const target = result.targets[k]
+          return [
+            k,
+            target !== undefined && Number.isFinite(target)
+              ? Math.max(1, target / 100)
+              : 1,
+          ]
+        })
       )
-    else result.targets[recipient] = Math.ceil(required * 10 - 1e-9) / 10
+      result.members = {}
+      result.targets = {}
+      result.errors = []
+    }
+    for (const recipient of keys) {
+      const own = settings.members[recipient]!
+      const ownData = energyCalcData[recipient]!
+      const field = own.fieldTime / 100
+      // A skill's particles are of its element: 3 energy to a matching member, 1 to another.
+      const elementValue = (source: CharacterKey) =>
+        getCharEle(source) === getCharEle(recipient) ? 3 : 1
+      let particles = 0
+      const sources = {
+        own: 0,
+        team: 0,
+        favonius: 0,
+        enemies: 0,
+        resonance: 0,
+        bonus: 0,
+        gear: 0,
+        skills: 0,
+      }
+      for (const source of keys) {
+        const member = settings.members[source]!
+        const data = energyCalcData[source]!
+        const modes = [
+          { mode: member.skillMode, uses: member.skillUses },
+          { mode: member.secondaryMode, uses: member.secondaryUses },
+        ]
+        let turretTime = 0
+        // (the particles its turret made as the rotation played: all its Skill's, in place of the
+        // options' rate for their uses)
+        const made = turretParticlesOf(member, data)
+        if (made !== undefined) {
+          const energy =
+            made *
+            (1 - (data.skills[member.skillMode]?.variance ?? 0) * rng) *
+            elementValue(source) *
+            share(field)
+          particles += energy
+          if (source === recipient) sources.own += energy
+          else sources.team += energy
+        }
+        for (const [i, { mode, uses }] of (made === undefined
+          ? modes
+          : []
+        ).entries()) {
+          const skill = data.skills[mode]
+          // Fischl's burst also summons Oz. Kokomi's refresh extends her existing turret.
+          // (once per burst: with the primary skill only, even when the second one is the same)
+          const burstSummons =
+            i === 0 &&
+            (source === 'Fischl' ||
+              (source === 'SangonomiyaKokomi' && skill.label === 'Refresh')) &&
+            member.burstEvery > 0
+              ? 1 / member.burstEvery
+              : 0
+          const uptime = Math.min(
+            skill.duration * (uses + burstSummons),
+            Math.max(0, settings.rotationTime - turretTime)
+          )
+          const isTurret = skill.perSecond > 0
+          if (isTurret) turretTime += uptime
+          const count =
+            (isTurret ? skill.perSecond * uptime : skill.particles * uses) *
+            (1 - skill.variance * rng)
+          const catchBy = member.catchBy ?? source
+          const fed = member.funnelShare / 100
+          const caught = isTurret
+            ? field
+            : (recipient === catchBy ? fed : 0) +
+              (recipient === source ? 1 - fed : 0)
+          const energy = count * elementValue(source) * share(caught)
+          particles += energy
+          if (source === recipient) sources.own += energy
+          else sources.team += energy
+        }
+        // A Favonius trigger makes 3 clear particles (2 energy each on the field) for whoever
+        // is on the field then.
+        const weapon = weapons?.[source]
+        const favoniusProcs = !weapons
+          ? member.favoniusProcs
+          : isFavonius(weapon)
+            ? Math.min(
+                // (counted from the rotation at R5: a smaller refinement's chance; a typed count has it)
+                member.favoniusProcs *
+                  (member.edited?.includes('favoniusProcs')
+                    ? 1
+                    : favoniusChance(refinements?.[source])),
+                settings.rotationTime / favoniusCooldown(refinements?.[source])
+              )
+            : 0
+        const favonius =
+          3 *
+          favoniusProcs *
+          2 *
+          share(recipient === (member.favoniusCatchBy ?? source) ? 1 : 0)
+        particles += favonius
+        sources.favonius += favonius
+      }
+      const enemies =
+        (settings.enemyParticles * 2 * share(field) * settings.rotationTime) /
+        settings.clearTime
+      particles += enemies
+      sources.enemies = enemies
+      if (hasElectroResonance && settings.electroInterval > 0) {
+        const resonance =
+          (settings.rotationTime / Math.max(5, settings.electroInterval)) *
+          (getCharEle(recipient) === 'electro' ? 3 : 1) *
+          share(field)
+        particles += resonance
+        sources.resonance = resonance
+      }
+      // Dori's A4 converts each skill use into energy that scales with her ER.
+      if (recipient === 'Dori') {
+        particles += 5 * (own.skillUses + own.secondaryUses)
+        sources.own += 5 * (own.skillUses + own.secondaryUses)
+      }
+      // a weapon's energy per trigger: the wielder's own, and the energy given to the party by
+      // the others' (Frostbreath)
+      const weaponTriggers = (member: CharacterKey) => {
+        // (Exaiphanes Blade gives its Energy to the Traveler only: kqmsim exaiphanesblade.go)
+        if (
+          weapons?.[member] === 'ExaiphanesBlade' &&
+          !member.startsWith('Traveler')
+        )
+          return 0
+        // (Prototype Amber: once per Burst of its wielder, whatever was entered)
+        if (energyWeaponPerBurst(weapons?.[member])) {
+          const every = settings.members[member]?.burstEvery ?? 0
+          return every > 0 ? 1 / every : 0
+        }
+        // (triggers set by hand, else the rotation's for the weapon it holds)
+        const inputs = settings.members[member]
+        const weapon = weapons?.[member]
+        const entered =
+          (inputs?.weaponEnergyTriggers ?? 0) > 0
+            ? inputs!.weaponEnergyTriggers
+            : ((weapon && inputs?.weaponTriggers?.[weapon]) ?? 0)
+        return energyWeaponTriggers(weapon, entered, settings.rotationTime)
+      }
+      const teamWeaponEnergy = keys
+        .filter((k) => k !== recipient)
+        .reduce(
+          (n, k) =>
+            n +
+            energyWeaponTeam(weapons?.[k], refinements?.[k]) *
+              weaponTriggers(k),
+          0
+        )
+      // The Exile (gcsim exile.go): the wearer's Burst gives every other member 2 Energy every 2 s
+      // for 6 s; it does not stack (the most from one wearer)
+      const exileEnergy = Math.max(
+        0,
+        ...keys
+          .filter((k) => k !== recipient && (sets?.[k]?.['TheExile'] ?? 0) >= 4)
+          .map((k) => {
+            const every = settings.members[k]?.burstEvery ?? 0
+            return every > 0 ? 6 / every : 0
+          })
+      )
+      // Scroll of the Hero of Cinder City (2 pieces): 6 Energy on each Nightsoul Burst in the party
+      const scrollEnergy =
+        (sets?.[recipient]?.['ScrollOfTheHeroOfCinderCity'] ?? 0) >= 2
+          ? 6 * (settings.nightsoulBursts ?? 0)
+          : 0
+      sources.bonus = own.flatEnergy
+      sources.gear =
+        exileEnergy +
+        scrollEnergy +
+        energyWeaponFlat(weapons?.[recipient], refinements?.[recipient]) *
+          weaponTriggers(recipient) +
+        teamWeaponEnergy
+      sources.skills =
+        ownData.skills[own.skillMode].flatEnergy * own.skillUses +
+        ownData.skills[own.secondaryMode].flatEnergy * own.secondaryUses
+      for (const [giver, base] of Object.entries(own.scaledEnergy ?? {}) as [
+        CharacterKey,
+        number,
+      ][]) {
+        const scale = SCALED_ENERGY[giver]
+        if (!scale || !keys.includes(giver)) continue
+        if (giver === recipient) {
+          sources.skills += base * scale.flat
+          particles += base * scale.perER
+          sources.own += base * scale.perER
+        } else
+          sources.skills +=
+            base * (scale.flat + scale.perER * (giverER[giver] ?? 1))
+      }
+      const flat = sources.bonus + sources.gear + sources.skills
+      const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
+      // (without the Burst, still the energy it spends: Varesa's Kablam is -30 a use)
+      const needed =
+        (own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery) - flat
+      const required =
+        needed <= 0
+          ? 100
+          : particles > 0
+            ? Math.max(100, (needed / particles - ownData.erDiscount) * 100)
+            : Number.POSITIVE_INFINITY
+      result.members[recipient] = {
+        particleEnergy: particles,
+        flatEnergy: flat,
+        burstCost: cost,
+        required,
+        sources,
+        burstSpend:
+          own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
+      }
+      if (!Number.isFinite(required))
+        result.errors.push(
+          `${recipient} has no particle energy. Add particle sources or disable its burst.`
+        )
+      else result.targets[recipient] = Math.ceil(required * 10 - 1e-9) / 10
+    }
   }
   return result
+}
+
+/**
+ * Energy that grows with its giver's Energy Recharge (`TeamOptEnergyMember.scaledEnergy`): at ER
+ * (1 = 100%), the base amount times `flat + perER × ER`
+ */
+const SCALED_ENERGY: Partial<
+  Record<CharacterKey, { flat: number; perER: number }>
+> = {
+  // A4: 0.6% more Musou Isshin restoration per 1% ER above 100%
+  RaidenShogun: { flat: 0.4, perER: 0.6 },
+  // A4: 1.2 Energy for every 100% ER
+  KujouSara: { flat: 0, perER: 1 },
 }
 
 /**
@@ -659,6 +721,8 @@ const ELECTRO_RESONANCE_REACTIONS = [
 export interface RotationEnergy {
   /** Seconds between Electro resonance particles (its Electro reactions, 5 s apart at least) */
   electroInterval?: number
+  /** Nightsoul Bursts a rotation */
+  nightsoulBursts?: number
   members: Partial<
     Record<
       CharacterKey,
@@ -783,6 +847,7 @@ interface TriggerContext {
   keys: readonly CharacterKey[]
   /** Each member's Burst casts (frames) */
   bursts: Partial<Record<CharacterKey, number[]>>
+  hits: readonly SimHit[]
 }
 /** An energy weapon the simulation marks when it restores Energy (its module applies its rules) */
 const marked = (weapon: WeaponKey) => (h: SimHit, key: CharacterKey) =>
@@ -900,6 +965,34 @@ const ROTATION_TRIGGERS: Partial<
   },
   // marked by their modules (rotation/weapons), which apply their own rules
   JadefallsSplendor: { match: marked('JadefallsSplendor'), cooldown: 0 },
+  BeyondTheChrysalis: { match: marked('BeyondTheChrysalis') },
+  TheDockhandsAssistant: {
+    match: marked('TheDockhandsAssistant'),
+    cooldown: 0,
+  },
+  PortablePowerSaw: { match: marked('PortablePowerSaw'), cooldown: 0 },
+  // its own Stellar Glimmer reactions or DMG with 3 Lake-Hued Laments (Skill hits 0.1 s apart in
+  // the last 8 s)
+  WhitelakeFrostfeather: {
+    match: (h, key, { hits }) => {
+      if (!ownStellarGlimmer(h, key)) return false
+      let laments = 0
+      let last = Number.NEGATIVE_INFINITY
+      for (const k of hits)
+        if (
+          k.characterKey === key &&
+          k.tag === 'skill' &&
+          isDamageHit(k) &&
+          k.t > h.t - 480 &&
+          k.t <= h.t &&
+          k.t >= last + 6
+        ) {
+          laments++
+          last = k.t
+        }
+      return laments >= 3
+    },
+  },
   BloodsoakedRuins: { match: marked('BloodsoakedRuins'), cooldown: 0 },
   LumidouceElegy: { match: marked('LumidouceElegy'), cooldown: 0 },
   AmenomaKageuchi: { match: marked('AmenomaKageuchi'), cooldown: 0 },
@@ -922,7 +1015,7 @@ export function weaponTriggersFromRotation(
   for (const a of sim.actions ?? [])
     if (a.text === 'Q' || /burst/i.test(a.text))
       (bursts[a.characterKey] ??= []).push(a.start)
-  const ctx: TriggerContext = { keys, bursts }
+  const ctx: TriggerContext = { keys, bursts, hits: sim.hits }
   const out: Partial<Record<CharacterKey, Partial<Record<WeaponKey, number>>>> =
     {}
   for (const key of keys) {
@@ -1134,7 +1227,11 @@ export function energyFromRotation(
         count(owner, sim, keys, per, constellations)
       ) as [CharacterKey, number][])
         kitEnergy[k] = (kitEnergy[k] ?? 0) + v
-  // (flat Energy the kits mark where it is restored: Beidou's Polaris, Diona's C1)
+  // (flat Energy the kits mark where it is restored, `flatEnergy`: the marker's member's, else
+  // the members its recipient names; one that grows with the giver's ER kept by giver)
+  const scaledEnergy: Partial<
+    Record<CharacterKey, Partial<Record<CharacterKey, number>>>
+  > = {}
   for (const h of sim.hits)
     if (
       h.path[0] === '_marker' &&
@@ -1143,8 +1240,14 @@ export function energyFromRotation(
       h.t >= sim.start &&
       h.t < sim.start + sim.frames
     )
-      kitEnergy[h.characterKey] =
-        (kitEnergy[h.characterKey] ?? 0) + (Number(h.path[2]) || 0) / per
+      for (const k of flatEnergyRecipients(h, keys)) {
+        const amount = (Number(h.path[2]) || 0) / per
+        if (h.path[4] === 'scaled') {
+          const by = (scaledEnergy[k] ??= {})
+          by[h.characterKey] =
+            Math.round(((by[h.characterKey] ?? 0) + amount) * 100) / 100
+        } else kitEnergy[k] = (kitEnergy[k] ?? 0) + amount
+      }
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -1317,6 +1420,7 @@ export function energyFromRotation(
     if (kitEnergy[key])
       member.flatEnergy =
         Math.round(((member.flatEnergy ?? 0) + kitEnergy[key]!) * 100) / 100
+    member.scaledEnergy = scaledEnergy[key] ?? {}
     if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
     member.weaponEnergyTriggers = filledWeaponTriggers(key, weaponTriggers[key])
     if (favonius[key]) {
@@ -1348,7 +1452,15 @@ export function energyFromRotation(
     }
     members[key] = member
   }
-  return { members, ...(electroInterval !== undefined && { electroInterval }) }
+  const nightsoulBursts =
+    sim.hits.filter(
+      (h) => h.path[0] === '_nightsoulBurst' && h.t >= start && h.t < end
+    ).length / per
+  return {
+    members,
+    ...(electroInterval !== undefined && { electroInterval }),
+    ...(nightsoulBursts > 0 && { nightsoulBursts }),
+  }
 }
 
 /**
@@ -1367,6 +1479,9 @@ export function withRotationEnergy(
     !settings.edited?.includes('electroInterval')
       ? { electroInterval: energy.electroInterval }
       : {}
+  const nightsoul = energy.nightsoulBursts
+    ? { nightsoulBursts: energy.nightsoulBursts }
+    : {}
   const members = { ...settings.members }
   for (const key of keys) {
     const member = members[key]
@@ -1435,7 +1550,7 @@ export function withRotationEnergy(
       members[k] = { ...members[k]!, fieldTime: rounded[i]! / 10 }
     })
   }
-  return { ...settings, ...electro, members }
+  return { ...settings, ...electro, ...nightsoul, members }
 }
 
 /**
@@ -1633,12 +1748,38 @@ function maidEnergyFromRotation(
       if (k !== owner) out[k] = (out[k] ?? 0) + (3 * c4) / per
   return out
 }
+/** Who a flat Energy marker (`flatEnergy`) restores Energy to */
+function flatEnergyRecipients(
+  h: SimHit,
+  keys: readonly CharacterKey[]
+): CharacterKey[] {
+  const to = h.path[3]
+  if (!to) return [h.characterKey]
+  if (to === 'active')
+    return h.onField && keys.includes(h.onField) ? [h.onField] : []
+  if (to === 'others') return keys.filter((k) => k !== h.characterKey)
+  if (to === 'team') return [...keys]
+  return keys.filter((k) => k === to)
+}
+/** Barbara's C1: 1 Energy every 10 s, the whole rotation */
+function barbaraEnergyFromRotation(
+  owner: CharacterKey,
+  sim: Pick<SimulationResult, 'start' | 'frames' | 'hits' | 'actions'>,
+  _keys: readonly CharacterKey[],
+  per: number,
+  constellations?: Partial<Record<CharacterKey, number>>
+): Partial<Record<CharacterKey, number>> {
+  const cons =
+    constellations?.[owner] ?? (getCharStat(owner).rarity === 4 ? 6 : 0)
+  return cons >= 1 ? { [owner]: sim.frames / 600 / per } : {}
+}
 type KitEnergy = typeof maidEnergyFromRotation
 /**
  * Flat Energy from a member's constellations, counted from the rotation (one entry per line: the
  * released-only build drops unreleased characters' lines)
  */
 const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
+  Barbara: barbaraEnergyFromRotation,
   Danica: maidEnergyFromRotation,
 }
 /**

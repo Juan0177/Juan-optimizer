@@ -1,5 +1,6 @@
 import type { KitModel, SimContext, SimCountedBuff } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -33,6 +34,8 @@ interface KokomiState {
   kurageId: number
   /** Swapped out since the last action */
   away: boolean
+  /** C4: its Energy's 0.2 s ICD ends (Kokomi's clock) */
+  c4Ready: number
 }
 
 /**
@@ -84,12 +87,27 @@ export const kit: KitModel = {
     ctx.now < s.burstEnd
       ? 0.1
       : 0,
+  // C4: her normal attacks in the Garment restore 0.8 Energy, once per 0.2 s
+  onHit(ctx, s: KokomiState, hit) {
+    const frame = ctx.characterFrame('SangonomiyaKokomi')
+    if (
+      hit.characterKey === 'SangonomiyaKokomi' &&
+      hit.tag === 'normal' &&
+      ctx.constellation('SangonomiyaKokomi') >= 4 &&
+      ctx.now < s.burstEnd &&
+      frame >= s.c4Ready
+    ) {
+      s.c4Ready = frame + 13
+      flatEnergy(ctx, 0, 0.8, 'Kokomi C4', { owner: 'SangonomiyaKokomi' })
+    }
+  },
   init: (): KokomiState => ({
     particles: new Map(),
     burstEnd: -1,
     kurageEnd: -1,
     kurageId: 0,
     away: false,
+    c4Ready: -1,
   }),
   act(ctx, s: KokomiState, action, previous) {
     const swapped = s.away

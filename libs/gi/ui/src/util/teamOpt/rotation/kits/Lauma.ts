@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
@@ -378,6 +379,12 @@ function frostgroveTick(c: SimContext, s: LaumaState) {
   // its particles: 1, or 2 at a 30% chance, 3.3 s ICD on Lauma's clock (kqmsim particleCB)
   if (turretReady(s.particles, 'sanctuary', c.characterFrame('Lauma'), 198))
     turretParticles(c, 0, 1.3, 'Lauma')
+  // C4: 4 Energy as it hits, once per 5 s (the game text; the reference restores 5)
+  if (
+    c.constellation('Lauma') >= 4 &&
+    turretReady(s.particles, 'c4', c.characterFrame('Lauma'), 300)
+  )
+    flatEnergy(c, 0, 4, 'Lauma C4', { owner: 'Lauma' })
   c.buff('Lauma', ['Lauma', 'skillAfterHit'], 'on', 0, 600)
   if (c.constellation('Lauma') >= 6 && s.c6Count < 8) {
     s.c6Count++

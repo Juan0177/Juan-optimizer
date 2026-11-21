@@ -1,5 +1,11 @@
 import type { KitModel } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/dori, main as of 2026-11-10. */
 
@@ -48,6 +54,11 @@ const A1_REACTIONS = [
   'quicken',
   'aggravate',
   'electroSwirl',
+]
+
+/** The Connector's Energy to the active character a tick, by Burst talent level (gcsim's) */
+const JINNI_ENERGY = [
+  1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5,
 ]
 
 export const kit: KitModel = {
@@ -176,13 +187,27 @@ export const kit: KitModel = {
         })
         // the Connector's 6 heals on the active character (from frame 11, every 120: gcsim's
         // bursthealpp), for the HP model (Furina's Fanfare, Ocean-Hued Clam, …)
-        for (let i = 0; i < 6; i++)
+        // (each also restores Energy to the active character, by her Burst's talent level)
+        const level = ctx.calculate('Dori', ['total', 'burstIndex']) ?? 9
+        const energy =
+          JINNI_ENERGY[Math.min(14, Math.max(0, Math.round(level)))]!
+        for (let i = 0; i < 6; i++) {
           ctx.hit(11 + 120 * i, {
             path: ['_heal', 'burst', 'heal'],
             tag: 'other',
             element: 'physical',
             label: "Alcazarzaray's Exactitude: Healing",
           })
+          flatEnergy(
+            ctx,
+            11 + 120 * i,
+            energy,
+            "Alcazarzaray's Exactitude: Energy",
+            {
+              to: 'active',
+            }
+          )
+        }
         // C2: each of the 6 Connector heals (from frame 11, every 120) fires a Jinni Toop 10 frames later
         if (c >= 2)
           for (let i = 0; i < 6; i++)

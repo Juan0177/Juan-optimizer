@@ -1,5 +1,6 @@
 import type { HitElement, KitModel } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -191,6 +192,11 @@ export const kit: KitModel = {
             icd: 'none',
             label: 'Windmuster Iris',
           })
+          // C4: the Kick's first Iris explosion restores 9 Energy
+          if (c.constellation('ShikanoinHeizou') >= 4)
+            flatEnergy(c, 40, 9, 'Shikanoin Heizou C4', {
+              owner: 'ShikanoinHeizou',
+            })
         })
         return {
           cooldown: { key: 'burst', frames: 720 },

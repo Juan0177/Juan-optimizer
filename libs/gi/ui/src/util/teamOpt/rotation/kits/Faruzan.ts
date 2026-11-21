@@ -1,5 +1,11 @@
 import type { KitModel, SimContext, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/faruzan, main as of 2026-11-10. */
 
@@ -26,6 +32,11 @@ interface FaruzanState {
 }
 
 /** A4's Hurricane Guard: these attacks' Anemo DMG */
+/** C4: a vortex restores 2 Energy to Faruzan as it hits (one opponent) */
+function c4Energy(ctx: SimContext, delay: number) {
+  if (ctx.constellation('Faruzan') >= 4)
+    flatEnergy(ctx, delay, 2, 'Faruzan C4', { owner: 'Faruzan' })
+}
 const A4_TAGS = new Set(['normal', 'charged', 'plunge', 'skill', 'burst'])
 
 /**
@@ -112,6 +123,7 @@ export const kit: KitModel = {
             snapshotDelay: 59,
             label: 'Pressurized Collapse',
           })
+          c4Energy(ctx, 59 + 33)
           return {
             frames: 60,
             framesInto: {
@@ -271,5 +283,6 @@ export const kit: KitModel = {
       snapshotDelay: 0,
       label: 'Pressurized Collapse (C6)',
     })
+    c4Energy(ctx, 33)
   },
 }
