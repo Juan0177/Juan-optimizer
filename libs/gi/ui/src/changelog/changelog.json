@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.26.1",
+    "date": "2026-11-21",
+    "fixed": [
+      "Team optimize no longer counts a weapon or artifact passive that needs a shield (such as Calamity of Eshu's) while the written rotation has no shield on that member, even when its switch was left on. For a rotation written before this update, press Use this rotation once more."
+    ]
+  },
+  {
     "version": "1.26.0",
     "date": "2026-11-21",
     "improved": [

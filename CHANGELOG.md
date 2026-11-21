@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.26.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.26.1) (2026-11-21)
+
+### Fixed
+
+- Team optimize no longer counts a weapon or artifact passive that needs a shield (such as Calamity of Eshu's) while the written rotation has no shield on that member, even when its switch was left on. For a rotation written before this update, press Use this rotation once more.
+
 ## [v1.26.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.26.0) (2026-11-21)
 
 ### Improved
