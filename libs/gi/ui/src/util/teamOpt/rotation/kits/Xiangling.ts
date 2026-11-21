@@ -5,6 +5,7 @@ import {
   normalString,
   templateJump,
   withHitlag,
+  turretParticles,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/xiangling, main as of 2026-11-10. */
@@ -139,6 +140,8 @@ export const kit: KitModel = {
             label: 'Guoba Flame',
             snapshotDelay: 13,
           })
+          // its particle: 1 per flame (kqmsim; the 1 s ICD never binds at 100 frames apart)
+          turretParticles(ctx, t, 1)
           // C1: the enemy's Pyro RES -15% for 6 s after each flame
           if (ctx.constellation('Xiangling') >= 1)
             ctx.buff(

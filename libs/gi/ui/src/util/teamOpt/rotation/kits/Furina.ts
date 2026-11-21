@@ -5,6 +5,8 @@ import {
   normalString,
   templateJump,
   withHitlag,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/furina, main as of 2026-11-10. */
@@ -110,6 +112,8 @@ const FANFARE_DELAY = 6
 const FANFARE_CHUNK = 30
 
 interface FurinaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** Fanfare's debounce status: added at `debounceFrom`, active through `debounceEnd` */
   debounceFrom: number
   debounceEnd: number
@@ -225,6 +229,9 @@ function salonTick(
   // the attack is dropped if the members are dismissed (a new summon, an arkhe change, the end)
   c.at(m.travel, (c2) => {
     if (src !== s.salonSrc || c2.now >= s.skillEnd) return
+    // the members' particles: 1, 2.5 s ICD on Furina's clock (kqmsim particleCB)
+    if (turretReady(s.particles, 'salon', c2.characterFrame('Furina'), 150))
+      turretParticles(c2, 0, 1, 'Furina')
     c2.hit(0, {
       path: ['skill', m.node],
       tag: 'skill',
@@ -357,6 +364,7 @@ export const kit: KitModel = {
   element: 'hydro',
   source: `${GCSIM}/furina`,
   init: (): FurinaState => ({
+    particles: new Map(),
     fanfare: 0,
     debounceFrom: -1,
     debounceEnd: -2,

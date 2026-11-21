@@ -1,5 +1,12 @@
 import type { KitModel, SimContext, SimCountedBuff } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kokomi, main as of 2026-11-10. */
 
@@ -16,6 +23,8 @@ const garmentFrames = 600
 const kurageFrames = 751
 
 interface KokomiState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The Ceremonial Garment is up until this frame */
   burstEnd: number
   /** Bake-Kurage is up until this frame */
@@ -76,6 +85,7 @@ export const kit: KitModel = {
       ? 0.1
       : 0,
   init: (): KokomiState => ({
+    particles: new Map(),
     burstEnd: -1,
     kurageEnd: -1,
     kurageId: 0,
@@ -155,6 +165,11 @@ export const kit: KitModel = {
           label: 'Bake-Kurage',
           statSnapshots: kurageSnapshot(snapshot),
         })
+        // its particles: a 67% chance of 1, 1 s ICD (kqmsim particleCB)
+        ctx.at(24, (c) => {
+          if (turretReady(s.particles, 'kurage', c.now, 60))
+            turretParticles(c, 0, 0.67, 'SangonomiyaKokomi')
+        })
         const tick = (c: SimContext) => {
           if (id !== s.kurageId || c.now >= s.kurageEnd) return
           c.hit(0, {
@@ -165,6 +180,8 @@ export const kit: KitModel = {
             label: 'Bake-Kurage',
             statSnapshots: kurageSnapshot(snapshot),
           })
+          if (turretReady(s.particles, 'kurage', c.now, 60))
+            turretParticles(c, 0, 0.67, 'SangonomiyaKokomi')
           // each tick heals the active character
           c.hit(0, {
             path: ['_heal', 'skill', 'heal'],

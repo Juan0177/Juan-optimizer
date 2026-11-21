@@ -6,7 +6,14 @@ import type {
   SimContext,
   SimHit,
 } from '../types'
-import { atkSpdAdjust, KQMSIM, type NormalHit, shieldMarker } from './common'
+import {
+  atkSpdAdjust,
+  KQMSIM,
+  type NormalHit,
+  shieldMarker,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/columbina. */
 
@@ -110,6 +117,8 @@ const GRAVITY_STATUS = 120
 const accrual = (c2: boolean) => 10 * 0.05 * (c2 ? 1.34 : 1)
 
 interface ColumbinaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   a1Stacks: number
   /** Gravity Ripple ends (undefined: not on the field) */
   rippleEnd?: number
@@ -404,6 +413,9 @@ function columbinaAct(
               icd: 'none',
               label: 'Gravity Ripple',
             })
+            // its particles: 1, or 2 at a 33% chance, 3 s ICD (kqmsim particleCB)
+            if (turretReady(s.particles, 'ripple', c3.now, 180))
+              turretParticles(c3, 0, 1.33, 'Columbina')
             c3.at(117, tick)
           }
           c2.at(117, tick)
@@ -474,6 +486,7 @@ export const kit: KitModel = {
   element: 'hydro',
   source: `${KQMSIM}/columbina`,
   init: (): ColumbinaState => ({
+    particles: new Map(),
     a1Stacks: 0,
     rippleFrom: 0,
     chainSrc: -1,

@@ -59,12 +59,14 @@ const beidouNormals: NormalHit[] = [
 const stormbreakerFrames = 900
 
 /**
- * Polaris (Revelation): a held Tidecaller gains a stack every 0.8 s even when not attacked; the
- * rotation's hold is held for 2 stacks (the maximum DMG Bonus). Neither gcsim nor the pinned
- * kqmsim models it (their hold is the tap), so the 96-frame hold before the tap's release
- * timeline is an estimate from the game text.
+ * Polaris (Revelation): a held Tidecaller gains a stack every 0.8 s even when not attacked (the
+ * game files' Charge_Timer raises the hit's CounterStage, so its DMG Bonus and particles). "hE"
+ * holds for 2 stacks (the maximum DMG Bonus), "hE[stacks=1]" for 1. Neither gcsim nor the pinned
+ * kqmsim models the hold (their counter is taken at the tap's timing), so the hold before the
+ * tap's release timeline is 48 frames a stack.
  */
-const POLARIS_HOLD = 96
+const POLARIS_STACK = 48
+const MAX_STACKS = 2
 
 interface BeidouState {
   /** Stormbreaker is up until this frame */
@@ -112,8 +114,11 @@ export const kit: KitModel = {
         ctx.note('Beidou: the charged attack is not in gcsim; not modelled')
         return { frames: 30 }
       case 'skill': {
-        // Tap: the base hit. Hold (Polaris): 2 stacks after 1.6 s, then the same release
-        const hold = action.hold ? POLARIS_HOLD : 0
+        // Tap: the base hit. Hold (Polaris): a stack each 0.8 s, then the same release
+        const stacks = action.hold
+          ? Math.min(action.stacks ?? MAX_STACKS, MAX_STACKS)
+          : 0
+        const hold = stacks * POLARIS_STACK
         const hitmark = hold + 23
         // Tidecaller's shield on Beidou from the cast until the hitmark (kqmsim)
         shieldMarker(ctx, 0, hitmark, 'Tidecaller shield', {
@@ -121,16 +126,18 @@ export const kit: KitModel = {
           kind: 'BeidouThunderShield',
         })
         ctx.hit(hitmark, {
-          path: ['skill', hold ? 'dmgTwoHits' : 'baseDmg'],
+          path: ['skill', ['baseDmg', 'dmgOneHit', 'dmgTwoHits'][stacks]],
           tag: 'skill',
           element: 'electro',
           applies: true,
           durability: 50,
           icd: 'none',
-          label: hold ? 'Tidecaller (2 stacks)' : 'Tidecaller',
+          label: stacks
+            ? `Tidecaller (${stacks} stack${stacks > 1 ? 's' : ''})`
+            : 'Tidecaller',
         })
         // The blunt hit's pause: 0.09 s (0.15 s at the maximum bonus) plus the defense halt
-        const pause = hold ? 13 : 9
+        const pause = stacks === MAX_STACKS ? 13 : 9
         ctx.hit(hitmark, {
           path: ['_marker', 'hitlag'],
           tag: 'other',
@@ -138,20 +145,28 @@ export const kit: KitModel = {
           animationPause: pause,
           label: 'Tidecaller hitlag',
         })
-        if (hold) {
-          // A4 (Lightning Storm): the maximum DMG Bonus gives Normal and Charged Attacks +15%
-          // DMG and ATK SPD for 10 s
-          ctx.buff('Beidou', ['Beidou', 'Ascension4'], 'on', hitmark, 600, {
+        if (stacks === MAX_STACKS) {
+          // A4 (Lightning Storm): released with the maximum DMG Bonus, Normal and Charged
+          // Attacks get +15% DMG and ATK SPD for 10 s (the game files: from the release)
+          ctx.buff('Beidou', ['Beidou', 'Ascension4'], 'on', hold, 600, {
             hitlag: 'recipient',
           })
-          ctx.at(hitmark, (c) => c.modifyAttackSpeed('BeidouA4', 0.15, 600))
-          // Polaris: on hit, each stack cuts the skill CD by 4 s (once per 15 s)
+          ctx.at(hold, (c) => c.modifyAttackSpeed('BeidouA4', 0.15, 600))
+        }
+        if (stacks)
+          // Polaris: on hit, each stack cuts the skill CD by 4 s and restores 8 flat Energy (once
+          // per 15 s; the Energy is the ER calculator's, from this marker)
           ctx.at(hitmark, (c) => {
             if (c.now < s.polarisReady) return
             s.polarisReady = c.now + 900
-            c.reduceCooldown('skill', 2 * 240)
+            c.reduceCooldown('skill', stacks * 240)
+            c.hit(0, {
+              path: ['_marker', 'flatEnergy', `${8 * stacks}`],
+              tag: 'other',
+              element: 'electro',
+              label: 'Polaris',
+            })
           })
-        }
         ctx.note(
           'Beidou: A1 (perfect counter) and C4 (being hit) need enemy attacks; not modelled'
         )

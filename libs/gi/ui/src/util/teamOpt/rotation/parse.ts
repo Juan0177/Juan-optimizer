@@ -47,6 +47,8 @@ export interface RotationAction {
   kind: RotationActionKind
   /** Skill: tapped or held */
   hold?: boolean
+  /** Skill: the stacks a hold is held for (Beidou's Polaris, "hE[stacks=1]"; the kit's most when absent) */
+  stacks?: number
   /** Normal: how many hits of the string (N4 = 4); wait: seconds */
   count?: number
   /** Wait: a walk ("WK", gcsim's walk), not idle time */
@@ -222,6 +224,8 @@ const CHARGE_BULLETS: Partial<Record<CharacterKey, number>> = { Chasca: 6 }
 const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
 /** Members whose Charged Attack can be cancelled before it hits ("CA[cancel]") */
 const CHARGE_CANCEL: Partial<Record<CharacterKey, true>> = { Arlecchino: true }
+/** Members whose held Skill is held for a number of stacks ("hE[stacks=1]"), and the most */
+const SKILL_STACKS: Partial<Record<CharacterKey, number>> = { Beidou: 2 }
 
 /** The most times one group is repeated ("4[N5CD]", "4N5CD") */
 const MAX_REPEAT = 20
@@ -280,7 +284,7 @@ export function expandRepeats(
 }
 
 /** A Skill or Burst with an alternative after "/" ("Q?/N3", "Q/N3", "hE/N2CA"): the alternative is played when it is not ready */
-const SKILL_BURST_ALT = /^(?:(?:[ht]?e|q)\??|d\?)\/./i
+const SKILL_BURST_ALT = /^(?:(?:[ht]?e(?:\[[^\]]*\])?|q)\??|d\?)\/./i
 
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
@@ -356,18 +360,47 @@ function parseActions(
           `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
         )
     } else if (m[4] || m[6]) {
+      // a hold's stacks ("hE[stacks=1]", "hE[stacks=1]?")
+      const stacksWord = /\[\s*stacks\s*=\s*(\d+)\s*\](\?)?/iy
+      stacksWord.lastIndex = i
+      const st = m[4] && !m[5] ? stacksWord.exec(s) : null
+      if (st) i = stacksWord.lastIndex
+      const written = st ? `${raw}${st[0].trim()}` : raw
+      const hold = !!m[4] && m[3]?.toLowerCase() === 'h'
+      let stacks: number | undefined
+      if (st) {
+        const n = Number(st[1])
+        const most = characterKey && SKILL_STACKS[characterKey]
+        if (!most)
+          warnings.push(
+            `${who}: "${written}": only Beidou's held Skill has stacks (played without them)`
+          )
+        else if (!hold)
+          warnings.push(
+            `${who}: "${written}": stacks come from holding, write hE${st[0].replace(/\?$/, '')} (played as a tap)`
+          )
+        else if (n < 1 || n > most)
+          warnings.push(
+            `${who}: "${written}": 1 to ${most} stacks (played as hE, ${most} stacks)`
+          )
+        else stacks = n
+      }
       // its alternative: what follows "/" up to the next space ("Q?/N3", "E?/N2CA"; without the "?"
       // too, "Q/N3": an alternative makes it optional)
       const hasAlt = s[i] === '/'
-      const optional = !!(m[4] ? m[5] : m[7]) || hasAlt
+      const optional = !!(m[4] ? m[5] || st?.[2] : m[7]) || hasAlt
       const otherwise = hasAlt ? takeAlternative() : undefined
       actions.push({
         ...(m[4]
-          ? { kind: 'skill' as const, hold: m[3]?.toLowerCase() === 'h' }
+          ? {
+              kind: 'skill' as const,
+              hold,
+              ...(stacks !== undefined && { stacks }),
+            }
           : { kind: 'burst' as const }),
         text: otherwise
-          ? `${raw}/${otherwise.map((a) => a.text).join(' ')}`
-          : raw,
+          ? `${written}/${otherwise.map((a) => a.text).join(' ')}`
+          : written,
         ...(optional && { optional: true }),
         ...(otherwise && { otherwise }),
       })
@@ -521,6 +554,96 @@ export function parseRotation(
     )
   }
   return { steps, loopsTo, warnings }
+}
+
+/** A written step's member and the rest of its text, named as `parseRotation` reads it */
+function stepHead(part: string, members: readonly RotationMember[]) {
+  const words = part.split(/\s+/)
+  for (let n = Math.min(words.length, 3); n >= 1; n--) {
+    const characterKey = matchMember(words.slice(0, n).join(' '), members)
+    if (characterKey) return { characterKey, rest: words.slice(n).join(' ') }
+  }
+  return undefined
+}
+const writtenSteps = (text: string, members: readonly RotationMember[]) =>
+  text
+    .split(SEPARATOR)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .flatMap((p) => splitOnNames(p, members))
+
+/** A member's steps in a rotation, as written without its name ("E Q") */
+export function memberSteps(
+  text: string,
+  members: readonly RotationMember[],
+  characterKey: CharacterKey
+): string[] {
+  return writtenSteps(text, members).flatMap((part) => {
+    const head = stepHead(part, members)
+    return head?.characterKey === characterKey && head.rest ? [head.rest] : []
+  })
+}
+
+/**
+ * The rotation with members swapped (`members`: the team's before): a step of each one swapped out
+ * becomes its replacement's `part`, under the replacement's `name` (its first step, or with
+ * `longest` its longest: a main DPS's field time); its other steps are left out, and a loop back to
+ * it loops back to the rotation's first member. A replacement for a member without a step plays
+ * its part last. Without a `part` (an opener's setup), the member's steps are only left out. The
+ * other steps stay as written.
+ */
+export function swapRotationMembers(
+  text: string,
+  members: readonly RotationMember[],
+  swaps: readonly {
+    from: CharacterKey
+    name: string
+    part?: string
+    longest?: boolean
+  }[]
+): string {
+  const parts = writtenSteps(text, members)
+  const heads = parts.map((part) => stepHead(part, members))
+  const size = (rest: string) =>
+    expandRepeats(rest).split(/\s+/).filter(Boolean).length
+  // (the step each replacement plays its part at)
+  const at = new Map<CharacterKey, number>()
+  for (const swap of swaps) {
+    if (swap.part === undefined) continue
+    heads.forEach((head, i) => {
+      if (head?.characterKey !== swap.from || !head.rest) return
+      const best = at.get(swap.from)
+      if (
+        best === undefined ||
+        (swap.longest && size(head.rest) > size(heads[best]!.rest))
+      )
+        at.set(swap.from, i)
+    })
+  }
+  const out: { text: string; name: string }[] = []
+  let loop: string | undefined
+  let loopSwapped = false
+  parts.forEach((part, index) => {
+    const head = heads[index]
+    const swap = head && swaps.find((s) => s.from === head.characterKey)
+    if (head && !head.rest && index === parts.length - 1) {
+      if (swap) loopSwapped = true
+      else loop = part
+      return
+    }
+    if (!swap) {
+      const name = head ? part.slice(0, part.length - head.rest.length) : part
+      out.push({ text: part, name: name.trim() })
+      return
+    }
+    if (at.get(swap.from) === index)
+      out.push({ text: `${swap.name} ${swap.part}`.trim(), name: swap.name })
+  })
+  for (const swap of swaps)
+    if (swap.part !== undefined && !at.has(swap.from) && text.trim())
+      out.push({ text: `${swap.name} ${swap.part}`.trim(), name: swap.name })
+  if (loopSwapped && out.length) loop = out[0].name
+  return [...out.map((o) => o.text), ...(loop ? [loop] : [])].join(' -> ')
 }
 
 /** What a piece of rotation text is, as the writer colours it */

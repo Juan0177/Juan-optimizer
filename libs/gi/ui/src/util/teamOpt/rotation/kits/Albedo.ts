@@ -1,7 +1,13 @@
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import { annulusHitChance } from '../geometry'
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/albedo, main as of 2026-11-10. */
 
@@ -299,6 +305,8 @@ export const kit: KitModel = {
       icd: 'skill',
       label: 'Transient Blossom',
     })
+    // its particles: a 67% chance of 1 (kqmsim particleCB; the 1 s ICD never binds at 2 s apart)
+    turretParticles(ctx, 1, 0.67, 'Albedo')
     if (ctx.constellation('Albedo') >= 2) {
       if (hit.t >= s.c2Until) s.c2Stacks = 0
       s.c2Stacks = Math.min(4, s.c2Stacks + 1)

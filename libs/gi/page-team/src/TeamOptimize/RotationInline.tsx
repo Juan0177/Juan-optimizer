@@ -464,7 +464,7 @@ const otherwiseCode = (a: RotationAction): string =>
 const actionCode = (a: RotationAction): string => {
   switch (a.kind) {
     case 'skill':
-      return `${a.hold ? 'hE' : 'E'}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+      return `${a.hold ? 'hE' : 'E'}${a.stacks ? `[stacks=${a.stacks}]` : ''}${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'burst':
       return `${a.optional ? 'Q?' : 'Q'}${otherwiseCode(a)}`
     case 'normal':

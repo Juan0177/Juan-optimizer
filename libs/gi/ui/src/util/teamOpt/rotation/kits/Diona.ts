@@ -217,6 +217,14 @@ export const kit: KitModel = {
         }
         // the field lasts 12.5 s from frame 58 (C4's window ends with it)
         s.fieldUntil = ctx.now + 808
+        // C1: 15 flat Energy when it ends (the ER calculator's, from this marker)
+        if (ctx.constellation('Diona') >= 1)
+          ctx.hit(808, {
+            path: ['_marker', 'flatEnergy', '15'],
+            tag: 'other',
+            element: 'cryo',
+            label: 'A Lingering Flavor (C1)',
+          })
         // C6: every 0.5 s in the field, the active character gets EM for 2 s (HP above 50% assumed)
         if (ctx.constellation('Diona') >= 6)
           for (let t = 30; t <= 750; t += 30)

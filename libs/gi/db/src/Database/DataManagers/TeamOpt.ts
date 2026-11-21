@@ -186,6 +186,7 @@ export const teamOptEnergyRotationFields = [
   'favoniusProcs',
   'favoniusCatchBy',
   'weaponTriggers',
+  'turretParticles',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
@@ -209,6 +210,12 @@ export interface TeamOptEnergyMember {
   weaponTriggers?: Partial<Record<WeaponKey, number>>
   favoniusCatchBy?: CharacterKey
   flatEnergy: number
+  /**
+   * The particles the member's turret made a rotation, as the written rotation played it (its kit
+   * marks them where they drop): counted in place of its Skill options' rate for its uses, unless
+   * the Skill uses are set by hand
+   */
+  turretParticles?: number
   /** Inputs set by hand: the written rotation no longer fills them in */
   edited?: TeamOptEnergyRotationField[]
 }
@@ -315,6 +322,12 @@ export interface TeamOptKqm {
    * above); absent: the search chooses among the list's
    */
   lockedWeapons?: Partial<Record<CharacterKey, WeaponKey>>
+  /**
+   * Per member, its signature weapon (gi/consts `signatureWeapons`): its builds use it at this
+   * refinement (1–5, over `lockedWeapons`), or never (0). A team's own: a KQM version's choice,
+   * not shared with its family.
+   */
+  signature?: Partial<Record<CharacterKey, number>>
   /** Artifact sets left out of the choice */
   excludedSets?: ArtifactSetKey[]
   /**
@@ -469,6 +482,7 @@ const energyMemberSchema = z.object({
     .catch(undefined),
   favoniusCatchBy: z.enum(allCharacterKeys).optional(),
   flatEnergy: z.number().finite(),
+  turretParticles: z.number().finite().min(0).optional().catch(undefined),
   edited: z
     .array(z.enum(teamOptEnergyRotationFields))
     .optional()
@@ -765,6 +779,23 @@ const teamOptSchema = z.object({
               r <= 5
             )
               result[key as WeaponKey] = r
+          return Object.keys(result).length ? result : undefined
+        }),
+      signature: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['signature']> = {}
+          for (const [ck, r] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(ck as CharacterKey) &&
+              typeof r === 'number' &&
+              Number.isInteger(r) &&
+              r >= 0 &&
+              r <= 5
+            )
+              result[ck as CharacterKey] = r
           return Object.keys(result).length ? result : undefined
         }),
       lockedWeapons: z

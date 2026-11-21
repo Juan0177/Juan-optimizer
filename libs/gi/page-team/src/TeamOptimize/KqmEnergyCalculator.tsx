@@ -14,6 +14,7 @@ import {
   ENERGY_CALC_SOURCE,
   ENERGY_HELP,
   energyCalcData,
+  turretParticlesOf,
   energyCalcWeapons,
   energySkillConstellation,
   isCalcEnergyWeapon,
@@ -855,6 +856,9 @@ function MemberEnergy({
   const phone = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'))
   const [secondOpen, setSecondOpen] = useState(false)
   const data = energyCalcData[characterKey]
+  // (a turret counted as the rotation plays it: its uses no longer count)
+  const turretMade =
+    member && data ? turretParticlesOf(member, data) : undefined
   const name = t(`charNames_gen:${characterKey}`, characterKey)
   if (!member || !data)
     return (
@@ -1166,6 +1170,17 @@ function MemberEnergy({
               tip={usesTip}
             />
           </Box>
+          {turretMade !== undefined && (
+            <Typography
+              sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}
+            >
+              {t('teamOpt.kqm.calc.turretMade', {
+                defaultValue:
+                  'Its turret: {{value}} particles a rotation, as the rotation plays it',
+                value: turretMade,
+              })}
+            </Typography>
+          )}
           {!showSecond && (
             <ButtonBase
               onClick={() => setSecondOpen(true)}

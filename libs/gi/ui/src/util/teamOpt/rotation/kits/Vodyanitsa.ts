@@ -1,5 +1,11 @@
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit pinned by KQMSIM, internal/characters/vodyanitsa. */
 const normals: NormalHit[] = [
@@ -9,6 +15,8 @@ const normals: NormalHit[] = [
   { hitmarks: [32], toNormal: 60, toCharged: 60, toAbil: 32, frames: 60 },
 ]
 interface State {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   skillId: number
   skillEnd: number
   /** C2: "Two Voices in Black and White" lasts until this frame (5 s after each Horn attack) */
@@ -79,6 +87,7 @@ export const kit: KitModel = {
   element: 'hydro',
   source: `${KQMSIM}/vodyanitsa`,
   init: (): State => ({
+    particles: new Map(),
     skillId: 0,
     skillEnd: -1,
     c2End: -1,
@@ -124,6 +133,11 @@ export const kit: KitModel = {
         // C2: Song of Ages Past lasts 9 s longer (the cooldown stays 16 s).
         const song = 960 + (c.constellation('Vodyanitsa') >= 2 ? 540 : 0)
         const id = ++s.skillId
+        // its particle: 1, 0.2 s ICD on her clock (kqmsim particleCB)
+        if (
+          turretReady(s.particles, 'skill', c.characterFrame('Vodyanitsa'), 12)
+        )
+          turretParticles(c, 0, 1, 'Vodyanitsa')
         c.hit(0, {
           path: ['skill', 'skillDmg'],
           tag: 'skill',

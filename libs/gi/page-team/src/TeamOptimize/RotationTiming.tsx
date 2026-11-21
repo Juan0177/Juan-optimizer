@@ -472,9 +472,15 @@ export function actionName(
 ): string {
   switch (a.kind) {
     case 'skill':
-      return a.hold
-        ? t('teamOpt.timing.kind.skillHold', 'Skill (hold)')
-        : t('teamOpt.timing.kind.skill', 'Skill')
+      return a.stacks
+        ? t('teamOpt.timing.kind.skillHoldStacks', {
+            defaultValue: 'Skill (hold, {{count}} stacks)',
+            defaultValue_one: 'Skill (hold, {{count}} stack)',
+            count: a.stacks,
+          })
+        : a.hold
+          ? t('teamOpt.timing.kind.skillHold', 'Skill (hold)')
+          : t('teamOpt.timing.kind.skill', 'Skill')
     case 'burst':
       return t('teamOpt.timing.kind.burst', 'Burst')
     case 'normal':

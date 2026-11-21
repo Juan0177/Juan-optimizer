@@ -1,5 +1,12 @@
 import type { KitModel, SimContext } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/lauma. */
 
@@ -19,6 +26,8 @@ interface HymnPool {
 type HymnKind = 'burst' | 'song' | 'c6'
 
 interface LaumaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   pools: Record<HymnKind, HymnPool>
   burstEnd: number
   songUsed: boolean
@@ -99,6 +108,7 @@ export const kit: KitModel = {
   element: 'dendro',
   source: `${KQMSIM}/lauma`,
   init: (): LaumaState => ({
+    particles: new Map(),
     pools: {
       burst: { count: 0, end: -1 },
       song: { count: 0, end: -1 },
@@ -365,6 +375,9 @@ function frostgroveTick(c: SimContext, s: LaumaState) {
     icd: 'none',
     label: 'Frostgrove Sanctuary',
   })
+  // its particles: 1, or 2 at a 30% chance, 3.3 s ICD on Lauma's clock (kqmsim particleCB)
+  if (turretReady(s.particles, 'sanctuary', c.characterFrame('Lauma'), 198))
+    turretParticles(c, 0, 1.3, 'Lauma')
   c.buff('Lauma', ['Lauma', 'skillAfterHit'], 'on', 0, 600)
   if (c.constellation('Lauma') >= 6 && s.c6Count < 8) {
     s.c6Count++

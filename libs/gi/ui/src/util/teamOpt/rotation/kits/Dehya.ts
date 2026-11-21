@@ -6,6 +6,7 @@ import {
   normalString,
   templateJump,
   withHitlag,
+  turretParticles,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/dehya, main as of 2026-11-10. */
@@ -468,6 +469,8 @@ export const kit: KitModel = {
     )
       return
     s.dotUntil = hit.t + 150
+    // its particle: 1 per DoT (kqmsim skill.go, under the DoT's 2.5 s ICD)
+    turretParticles(ctx, 2, 1, 'Dehya')
     if (ctx.constellation('Dehya') >= 2)
       ctx.note(
         'Dehya C2: the Fiery Sanctum DoT +50% (when the active character is hit in the field) is not modelled.'

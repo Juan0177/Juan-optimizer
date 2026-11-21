@@ -6,6 +6,8 @@ import {
   normalString,
   shieldMarker,
   templateJump,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/layla, main as of 2026-11-10. */
@@ -41,6 +43,8 @@ const laylaNormals: NormalHit[] = [
 const SHIELD = 12 * 60
 
 interface LaylaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The Curtain of Slumber is up until this frame */
   shieldUntil: number
   /** Night Stars held (4 fires the Shooting Stars) */
@@ -106,6 +110,12 @@ const shootStars = (ctx: SimContext, s: LaylaState) => {
     [90, 30],
     [117, 28],
   ]
+  // the volley's particles: 1, or 2 at a 33% chance, from its first star, 3.5 s ICD (kqmsim
+  // makeParticleCB)
+  ctx.at(shots[0][0] + shots[0][1], (c) => {
+    if (turretReady(s.particles, 'stars', c.now, 210))
+      turretParticles(c, 0, 1.33, 'Layla')
+  })
   shots.forEach(([at, travel], i) => {
     ctx.hit(at + travel, {
       path: ['skill', 'starDmg'],
@@ -139,6 +149,7 @@ export const kit: KitModel = {
   element: 'cryo',
   source: `${GCSIM}/layla`,
   init: (): LaylaState => ({
+    particles: new Map(),
     shieldUntil: -1,
     stars: 0,
     tickGen: 0,

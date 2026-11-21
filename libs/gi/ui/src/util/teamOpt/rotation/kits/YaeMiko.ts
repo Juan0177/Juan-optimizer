@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/yaemiko, main as of 2026-11-10. */
 
@@ -44,6 +50,8 @@ interface YaeState {
   revelationUntil: number
   /** Revelation's 2.5 s ICD (Yae's clock) */
   revelationIcd: number
+  /** The Sakura lightning's particle ICD (2.5 s, Yae's clock) */
+  particleReady: number
 }
 
 /** Yae's own clock (gcsim's hitlag-affected statuses, active through their expiry frame) */
@@ -106,6 +114,11 @@ function sakuraTick(c: SimContext, s: YaeState, totem: Totem, c2: boolean) {
     })
     c.at(13, c1Buff)
   }
+  // its particle: 1 per lightning hit, 2.5 s ICD (kqmsim particleCB)
+  if (t + 1 >= s.particleReady) {
+    s.particleReady = t + 1 + 151
+    turretParticles(c, 1, 1, 'YaeMiko')
+  }
   // C4: a lightning hit gives the team +20% Electro DMG for 5 s
   if (c.constellation('YaeMiko') >= 4)
     c.buff('YaeMiko', ['YaeMiko', 'c4'], 'hit', 1, 5 * 60)
@@ -155,6 +168,7 @@ export const kit: KitModel = {
     totems: [],
     revelationUntil: -1,
     revelationIcd: -1e9,
+    particleReady: -1e9,
   }),
   onStart(ctx) {
     // Revelation is unlocked (gcsim's default): longer Sakura, enhanced lightning, C1/C2/C4/C6

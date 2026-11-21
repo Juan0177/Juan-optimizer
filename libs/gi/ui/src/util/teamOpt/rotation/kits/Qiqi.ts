@@ -6,6 +6,8 @@ import {
   normalString,
   templateJump,
   withHitlag,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/qiqi, main as of 2026-11-10. */
@@ -54,6 +56,8 @@ const qiqiNormals: NormalHit[] = [
 ]
 
 interface QiqiState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The newest Herald of Frost (its tick chain stops when a newer one is cast) */
   heraldSrc: number
   heraldStart: number
@@ -82,11 +86,18 @@ const qiqiHeal = (
     label,
   })
 
+/** Herald of Frost's particles from a hit now: 2, 6 s ICD on Qiqi's clock (kqmsim particleCB) */
+function heraldParticles(ctx: SimContext, s: QiqiState) {
+  if (turretReady(s.particles, 'herald', ctx.characterFrame('Qiqi'), 360))
+    turretParticles(ctx, 0, 2, 'Qiqi')
+}
+
 export const kit: KitModel = {
   characterKey: 'Qiqi',
   element: 'cryo',
   source: `${KQMSIM}/qiqi`,
   init: (): QiqiState => ({
+    particles: new Map(),
     heraldSrc: -1,
     heraldStart: -1,
     heraldEnd: -1,
@@ -179,6 +190,7 @@ export const kit: KitModel = {
               enemyAnimationPause: 7,
               label: 'Qiqi Herald tick hitlag',
             })
+            heraldParticles(t, s)
             const next = last === 60 ? 135 : 60
             if (t.now + next < s.heraldEnd) t.at(next, (t2) => tick(t2, next))
           }
@@ -191,6 +203,7 @@ export const kit: KitModel = {
             label: 'Herald of Frost',
             statSnapshots,
           })
+          heraldParticles(c2, s)
           c2.hit(0, {
             path: ['_marker', 'hitlag'],
             tag: 'other',

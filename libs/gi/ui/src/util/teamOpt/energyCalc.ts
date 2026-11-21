@@ -258,7 +258,23 @@ export function calculateEnergyRecharge(
         { mode: member.secondaryMode, uses: member.secondaryUses },
       ]
       let turretTime = 0
-      for (const [i, { mode, uses }] of modes.entries()) {
+      // (the particles its turret made as the rotation played: all its Skill's, in place of the
+      // options' rate for their uses)
+      const made = turretParticlesOf(member, data)
+      if (made !== undefined) {
+        const energy =
+          made *
+          (1 - (data.skills[member.skillMode]?.variance ?? 0) * rng) *
+          elementValue(source) *
+          share(field)
+        particles += energy
+        if (source === recipient) sources.own += energy
+        else sources.team += energy
+      }
+      for (const [i, { mode, uses }] of (made === undefined
+        ? modes
+        : []
+      ).entries()) {
         const skill = data.skills[mode]
         // Fischl's burst also summons Oz. Kokomi's refresh extends her existing turret.
         // (once per burst: with the primary skill only, even when the second one is the same)
@@ -446,6 +462,26 @@ export function energyCalcWeapons(
     refinements[key] = weapon.refinement
   }
   return { weapons, refinements }
+}
+
+/**
+ * The particles a member's turret made a rotation as the written rotation played it
+ * (`TeamOptEnergyMember.turretParticles`), when they count: a turret option, its Skill not set
+ * by hand
+ */
+export function turretParticlesOf(
+  member: TeamOptEnergyMember,
+  data: { skills: { perSecond: number }[] }
+): number | undefined {
+  if (member.turretParticles === undefined) return undefined
+  if (!((data.skills[member.skillMode]?.perSecond ?? 0) > 0)) return undefined
+  const typed = member.edited ?? []
+  return typed.includes('skillUses') ||
+    typed.includes('skillMode') ||
+    typed.includes('secondaryUses') ||
+    typed.includes('secondaryMode')
+    ? undefined
+    : member.turretParticles
 }
 
 /** Starting assumptions are visible and editable; skill uses are casts, not damage hits. */
@@ -1098,6 +1134,17 @@ export function energyFromRotation(
         count(owner, sim, keys, per, constellations)
       ) as [CharacterKey, number][])
         kitEnergy[k] = (kitEnergy[k] ?? 0) + v
+  // (flat Energy the kits mark where it is restored: Beidou's Polaris, Diona's C1)
+  for (const h of sim.hits)
+    if (
+      h.path[0] === '_marker' &&
+      h.path[1] === 'flatEnergy' &&
+      keys.includes(h.characterKey) &&
+      h.t >= sim.start &&
+      h.t < sim.start + sim.frames
+    )
+      kitEnergy[h.characterKey] =
+        (kitEnergy[h.characterKey] ?? 0) + (Number(h.path[2]) || 0) / per
   const members: RotationEnergy['members'] = {}
   for (const key of keys) {
     const data = energyCalcData[key]
@@ -1228,6 +1275,21 @@ export function energyFromRotation(
     if (shortOption >= 0 && !modes[1]) {
       member.secondaryMode = shortOption
       member.secondaryUses = shortBursts / per
+    }
+    // the particles its turret made, as its kit marks them (`turretParticles`): a turret that needs
+    // the party's hits, ends early, or is replaced by its Burst's counts what it made
+    if (TURRET_MARKED.has(key)) {
+      let made = 0
+      for (const h of sim.hits)
+        if (
+          h.characterKey === key &&
+          h.t >= start &&
+          h.t < end &&
+          h.path[0] === '_marker' &&
+          h.path[1] === 'turretParticles'
+        )
+          made += Number(h.path[2]) || 0
+      member.turretParticles = Math.round((made / per) * 100) / 100
     }
     if (SKILL_FLAT_ENERGY[key] !== undefined)
       member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
@@ -1439,8 +1501,13 @@ function particlesMade(
 const USE_OPTIONS: Partial<
   Record<CharacterKey, (use: UseContext) => string | undefined>
 > = {
-  // the hold absorbs 2 hits (Polaris): 2 + 2 particles, the sheet's "Perfect"
-  Beidou: (u) => (u.hit?.path[1] === 'dmgTwoHits' ? 'Perfect' : '0 stacks'),
+  // a particle more a Polaris stack held for: 2 stacks are the sheet's "Perfect"
+  Beidou: (u) =>
+    u.hit?.path[1] === 'dmgTwoHits'
+      ? 'Perfect'
+      : u.hit?.path[1] === 'dmgOneHit'
+        ? '1 stack'
+        : '0 stacks',
   // A4: an enemy Frozen by Frostgnaw drops 1 more particle (one enemy: 1 freeze at most)
   Kaeya: (u) =>
     u.hit &&
@@ -1574,6 +1641,33 @@ type KitEnergy = typeof maidEnergyFromRotation
 const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
   Danica: maidEnergyFromRotation,
 }
+/**
+ * The turrets whose kits mark the particles they make (`turretParticles`, kqmsim's particle
+ * callbacks): counted as made in the rotation (one entry per line)
+ */
+const TURRET_MARKED = new Set<CharacterKey>([
+  'Albedo',
+  'Chiori',
+  'Columbina',
+  'Dehya',
+  'Emilie',
+  'Fischl',
+  'Furina',
+  'Ineffa',
+  'KukiShinobu',
+  'Lauma',
+  'Layla',
+  'Linnea',
+  'Nahida',
+  'Qiqi',
+  'RaidenShogun',
+  'SangonomiyaKokomi',
+  'Vodyanitsa',
+  'Xiangling',
+  'YaeMiko',
+  'Yaoyao',
+  'Zhongli',
+])
 /** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
 const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
   Flins: 'Manifest Flame hit',
