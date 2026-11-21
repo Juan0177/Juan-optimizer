@@ -4,6 +4,23 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.27.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.27.0) (2026-11-21)
+
+### New
+
+- KQM Theorycrafting: Versions. From the Versions button next to Share, make versions of a team with members swapped, other constellations, or a signature weapon set to R1–R5 or left out. Each version is a team of its own with its own rotation, and every version runs under the original's KQM settings, so they compare like for like. Run them all in the background, edit a version's rotation in place, duplicate one, make any version the original, and share them all as one picture.
+- Rotation writer: write hE[stacks=1] for Beidou's hold with one Polaris stack (hE alone holds for two).
+
+### Improved
+
+- ER calculator: turrets (Fischl's Oz, Raiden's Eye, Yae's Sakuras, Xiangling's Guoba, Nahida, Kokomi, Zhongli and more) now count the particles they actually make in the written rotation. A turret that needs the party's hits, ends early, or is replaced by its own Burst no longer counts a full duration of particles.
+- ER calculator: Beidou's Polaris Energy and Diona's C1 Energy are now filled in from the written rotation, and Beidou's 1-stack hold counts as 1 stack for her particles.
+
+### Fixed
+
+- Raiden's Eye of Stormy Judgement now lasts longer for members whose attacks pause on hit (hitlag), as in game, so it strikes more often with hard-hitting on-field characters.
+- Beidou's Lightning Storm bonus (A4) now starts when Tidecaller is released rather than when it hits.
+
 ## [v1.26.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.26.1) (2026-11-21)
 
 ### Fixed
