@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.29.0",
+    "date": "2026-11-22",
+    "new": [
+      "Team optimize: a Search setting in the Optimize team window. Quick, the default, narrows very large searches to the artifacts that can matter: much faster, and it rarely misses the best build (by a little when it does). Full always searches every artifact."
+    ],
+    "improved": [
+      "Team optimize runs are much faster: small searches now run on your GPU too, not only big ones. Runs on real inventories that took over a minute now take around 10 seconds."
+    ]
+  },
+  {
     "version": "1.28.0",
     "date": "2026-11-21",
     "improved": [

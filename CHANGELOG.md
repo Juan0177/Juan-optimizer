@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.29.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.29.0) (2026-11-22)
+
+### New
+
+- Team optimize: a Search setting in the Optimize team window. Quick, the default, narrows very large searches to the artifacts that can matter: much faster, and it rarely misses the best build (by a little when it does). Full always searches every artifact.
+
+### Improved
+
+- Team optimize runs are much faster: small searches now run on your GPU too, not only big ones. Runs on real inventories that took over a minute now take around 10 seconds.
+
 ## [v1.28.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.28.0) (2026-11-21)
 
 ### Improved
