@@ -391,7 +391,12 @@ const dmgFormulas = {
             'atk',
             'stellarconduct',
             'cryo',
-            undefined,
+            {
+              premod: {
+                critRate_: c6ChillingRepellingLuster_critRate_,
+                critDMG_: c6ChillingRepellingLuster_critDMG_,
+              },
+            },
             prod(
               subscript(input.total.skillIndex, dm.skill.fistDmg, {
                 unit: '%',
