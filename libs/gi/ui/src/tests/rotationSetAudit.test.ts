@@ -477,6 +477,51 @@ describe('Lavawalker and Thundersoother: from the enemy’s aura at each hit', (
   })
 })
 
+describe('Silken Moon’s Serenade', () => {
+  const path = 'SilkenMoonsSerenade.4GleamingMoon'
+  /** A Moonsign wearer whose Skill lands only a zero-damage Hydro hit (Nilou's Tranquility Aura) */
+  const played = (applies: boolean) => {
+    const wearer: KitModel = {
+      characterKey: 'Nilou',
+      element: 'hydro',
+      source: 'test',
+      moonsign: 1,
+      act(ctx, _state, action) {
+        if (action.kind === 'skill')
+          ctx.hit(10, {
+            path: ['_marker', 'tranquilityAura'],
+            tag: 'other',
+            element: 'hydro',
+            applies,
+            label: 'Tranquility Aura',
+          })
+        return { frames: 60 }
+      },
+    }
+    const members: CharacterKey[] = ['Nilou', 'Bennett']
+    const sim = simulateRotation({
+      rotation: parseRotation(
+        'Nilou E',
+        members.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members,
+      constellations: {},
+      elements: { Nilou: 'hydro', Bennett: 'pyro' } as never,
+      repeats: 1,
+      kits: { Nilou: wearer, Bennett: kit('Bennett', []) },
+      reactions: { onHit() {} },
+      gear: { Nilou: sets('SilkenMoonsSerenade') },
+    })
+    return windowsOf(sim, sim.actions[0].start, path)
+  }
+  it('8 s from the wearer’s zero-damage element application (it triggers on attacks landing)', () => {
+    expect(played(true).on).toEqual([[11, 480, 'on']])
+  })
+  it('not from a marker that applies nothing; declared off', () => {
+    expect(played(false)).toEqual({ declared: true, on: [] })
+  })
+})
+
 describe('rules, for attacks entered without a rotation', () => {
   const rule = (
     set: string,

@@ -1091,6 +1091,16 @@ export function gearEffects({
           hitlag: 'recipient',
         })
       }
+      // Silken Moon's Serenade: on the wearer's elemental attacks landing, zero-damage ones that
+      // apply an element too (Nilou's Tranquility Aura, Xingqiu's Rain Sword orbitals)
+      if (
+        ctx.moonsign >= 1 &&
+        opens(k, 'SilkenMoonsSerenade') &&
+        hit.element !== 'physical' &&
+        (!hit.path[0].startsWith('_') ||
+          (hit.path[0] === '_marker' && hit.applies))
+      )
+        ctx.buff(k, ['SilkenMoonsSerenade', '4GleamingMoon'], 'on', 1, 480)
       if (hit.path[0].startsWith('_')) return
       // Beacon of the Reed Sea (kqmsim beacon.go): ATK for 8 s (hitlag-extended) after each of the
       // wielder's Skill hits, off the field too, from the next hit on
@@ -1105,12 +1115,6 @@ export function gearEffects({
         ctx.buff(k, ['RainbowSerpentsRainBow', 'passive'], 'on', 1, 480, {
           hitlag: 'recipient',
         })
-      if (
-        ctx.moonsign >= 1 &&
-        opens(k, 'SilkenMoonsSerenade') &&
-        hit.element !== 'physical'
-      )
-        ctx.buff(k, ['SilkenMoonsSerenade', '4GleamingMoon'], 'on', 1, 480)
       // Sacrificial procs are random in game. Use accumulated proc probability as a stable
       // expected-timing estimate, with the refinement's real ICD and on-field restriction.
       if (
