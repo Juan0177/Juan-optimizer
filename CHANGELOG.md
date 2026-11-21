@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.26.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.26.0) (2026-11-21)
+
+### Improved
+
+- KQM Theorycrafting: with several refinements ticked for a weapon group, the builds now use the highest, and the lower ones are ranked for comparison (Battle Pass R1 and R5 ticked now builds at R5).
+- Anastasya at C6: the rotation's notes now say when her Honor strike went unused because the others' Sealing ended before her Skill was tapped, and how to keep it.
+
+### Fixed
+
+- KQM Theorycrafting no longer runs out of memory on some teams whose rotation has random hits, such as Chasca with Ororon, Furina and Bennett.
+
 ## [v1.25.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.25.0) (2026-11-20)
 
 ### New
