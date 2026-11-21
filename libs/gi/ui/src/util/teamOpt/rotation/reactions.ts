@@ -93,6 +93,12 @@ export const reactionEnablers = {
 const polestarBonus: Partial<Record<CharacterKey, number>> = {
   Anastasya: 1,
 }
+/** A new (Wandering) Stellar Vortex starts at this stack count, Level 2, once per 1 s (one entry
+ * per line, as above). Anastasya's Lament for the Lost (dump: PermanentSkill_2_StarSwirlInitStack,
+ * StarSwirlUpgradeCD) */
+const vortexInitStacks: Partial<Record<CharacterKey, number>> = {
+  Anastasya: 3,
+}
 
 /**
  * Marker hits (no damage) the kits can react to in `onHit`: path ['_reaction', <reaction>], the
@@ -667,6 +673,8 @@ export function elementalReactions({
   let sswOwner: CharacterKey | undefined
   let vortexId = 0
   let vortexAlive = false
+  let vortexUpgradeReady = -1
+  const vortexInit = Math.max(0, ...members.map((m) => vortexInitStacks[m] ?? 0))
   const sswContributors = new Set<CharacterKey>()
   const detonate = (ctx: SimContext, id: number) => {
     if (id !== vortexId || !vortexAlive || !sswOwner) return
@@ -708,6 +716,10 @@ export function elementalReactions({
     if (!vortexAlive) {
       vortexAlive = true
       const id = ++vortexId
+      if (vortexInit > sswStacks && ctx.now >= vortexUpgradeReady) {
+        sswStacks = vortexInit
+        vortexUpgradeReady = ctx.now + 60
+      }
       ctx.at(181, (c) => detonate(c, id))
     }
     if (sswStacks >= 6) detonate(ctx, vortexId)

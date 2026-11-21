@@ -398,3 +398,20 @@ describe('Anastasya: stopping Doom after two stages', () => {
     }
   })
 })
+
+describe('Anastasya: Lament for the Lost raises a new Stellar Vortex to Level 2', () => {
+  // (dump: the vortex gadget's stack count is set to PermanentSkill_2_StarSwirlInitStack, 3, the
+  // Level 2 threshold, once per StarSwirlUpgradeCD, 1 s)
+  const detonations = (text: string, members: CharacterKey[]) =>
+    run(text, members)
+      .hits.filter((h) => h.path[1]?.startsWith('stellarswirl_vortex'))
+      .map((h) => h.path[1])
+  it('one Stellar Swirl detonates at Level 2 with her, Level 1 without', () => {
+    expect(
+      detonations('Anastasya E -> Sucrose E W240f', ['Anastasya', 'Sucrose'])
+    ).toEqual(['stellarswirl_vortex2'])
+    expect(
+      detonations('Ganyu E -> Sucrose E W240f', ['Odette', 'Ganyu', 'Sucrose'])
+    ).toEqual(['stellarswirl_vortex1'])
+  })
+})
