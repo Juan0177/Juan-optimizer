@@ -2,7 +2,7 @@ import { SandboxStorage } from '@genshin-optimizer/common/database'
 import { ArtCharDatabase } from '../ArtCharDatabase'
 import { initTeamOpt } from '../DataManagers/TeamOpt'
 import type { TeamKqmSavedRun } from './TeamKqmResultsEntry'
-import { TEAM_KQM_RUNS_KEPT } from './TeamKqmResultsEntry'
+import { runStorageKey, TEAM_KQM_RUNS_KEPT } from './TeamKqmResultsEntry'
 
 const saved = (savedAt = 1_700_000_000_000): TeamKqmSavedRun => ({
   savedAt,
@@ -54,36 +54,95 @@ describe('database.teamKqmResults (last KQM theorycrafting runs)', () => {
     const database = new ArtCharDatabase(1, storage)
     database.teamKqmResults.setRun('team_1', saved(1))
     database.teamKqmResults.setRun('team_2', saved(2))
-    // a storage that only takes small values (as a full localStorage would)
-    const set = storage.set.bind(storage)
-    storage.set = (key: string, value: unknown) => {
-      if (JSON.stringify(value).length > 1200)
+    // a storage with room for two runs (as a full localStorage would)
+    const setString = storage.setString.bind(storage)
+    storage.setString = (key: string, value: string) => {
+      const others = storage.keys.filter(
+        (k) => k.startsWith(runStorageKey('')) && k !== key
+      )
+      if (key.startsWith(runStorageKey('')) && others.length >= 2)
         throw new DOMException('full', 'QuotaExceededError')
-      set(key, value)
+      setString(key, value)
     }
     expect(() =>
       database.teamKqmResults.setRun('team_3', saved(3))
     ).not.toThrow()
-    const runs = Object.keys(
-      new ArtCharDatabase(1, storage).teamKqmResults.get().runs
+    const reloaded = new ArtCharDatabase(1, storage).teamKqmResults
+    expect(Object.keys(reloaded.get().runs).sort()).toEqual([
+      'team_2',
+      'team_3',
+    ])
+    expect(reloaded.getRun('team_3')).toEqual(
+      JSON.parse(JSON.stringify(saved(3)))
     )
-    expect(runs).toContain('team_3')
-    expect(runs.length).toBeLessThan(3)
+    expect(storage.getString(runStorageKey('team_1'))).toBeUndefined()
+  })
+
+  it('writes only the saved run: the others stay as they are', () => {
+    const storage = new SandboxStorage()
+    const database = new ArtCharDatabase(1, storage)
+    database.teamKqmResults.setRun('team_1', saved(1))
+    const written: string[] = []
+    const setString = storage.setString.bind(storage)
+    storage.setString = (key: string, value: string) => {
+      written.push(key)
+      setString(key, value)
+    }
+    database.teamKqmResults.setRun('team_2', saved(2))
+    expect(written).toContain(runStorageKey('team_2'))
+    expect(written).not.toContain(runStorageKey('team_1'))
+    expect((storage.getString('teamKqmResults') ?? '').length).toBeLessThan(400)
+  })
+
+  it('moves its runs along with the database to another storage', () => {
+    const first = new ArtCharDatabase(1, new SandboxStorage())
+    const second = new ArtCharDatabase(2, new SandboxStorage())
+    first.teamKqmResults.setRun('team_1', saved(1))
+    second.teamKqmResults.setRun('team_9', saved(9))
+    first.swapStorage(second)
+    const reloadedFirst = new ArtCharDatabase(1, first.storage).teamKqmResults
+    const reloadedSecond = new ArtCharDatabase(2, second.storage).teamKqmResults
+    expect(reloadedFirst.getRun('team_1')).toEqual(
+      JSON.parse(JSON.stringify(saved(1)))
+    )
+    expect(reloadedFirst.getRun('team_9')).toBeUndefined()
+    expect(reloadedSecond.getRun('team_9')).toEqual(
+      JSON.parse(JSON.stringify(saved(9)))
+    )
+    expect(first.storage.getString(runStorageKey('team_9'))).toBeUndefined()
+  })
+
+  it('forgets every run when the database is cleared', () => {
+    const storage = new SandboxStorage()
+    const database = new ArtCharDatabase(1, storage)
+    database.teamKqmResults.setRun('team_1', saved(1))
+    database.clear()
+    expect(database.teamKqmResults.getRun('team_1')).toBeUndefined()
+    expect(storage.getString(runStorageKey('team_1'))).toBeUndefined()
   })
 
   it('drops runs whose settings no longer validate', () => {
     const storage = new SandboxStorage()
     const database = new ArtCharDatabase(1, storage)
     database.teamKqmResults.setRun('team_1', saved())
-    // (the storage keeps each run packed: its settings are in `data`)
-    const raw = storage.get('teamKqmResults') as {
-      runs: Record<string, { run: { data: Record<string, unknown> } }>
+    // (the storage keeps each run packed under its own key: its settings are in `data`)
+    const raw = storage.get(runStorageKey('team_1')) as {
+      data: Record<string, unknown>
     }
-    raw.runs['team_1'].run.data['teamOpt'] = 'not settings'
-    storage.set('teamKqmResults', raw)
-    expect(new ArtCharDatabase(1, storage).teamKqmResults.get().runs).toEqual(
-      {}
-    )
+    raw.data['teamOpt'] = 'not settings'
+    storage.set(runStorageKey('team_1'), raw)
+    expect(
+      new ArtCharDatabase(1, storage).teamKqmResults.getRun('team_1')
+    ).toBeUndefined()
+  })
+
+  it('removes a stored run its index no longer lists', () => {
+    const storage = new SandboxStorage()
+    new ArtCharDatabase(1, storage).teamKqmResults.setRun('team_1', saved())
+    storage.setString(runStorageKey('team_7'), '{}')
+    new ArtCharDatabase(1, storage)
+    expect(storage.getString(runStorageKey('team_7'))).toBeUndefined()
+    expect(storage.getString(runStorageKey('team_1'))).toBeDefined()
   })
 
   it('is never part of a GOOD export or import', () => {
@@ -137,14 +196,15 @@ describe('saved KQM runs are packed for the storage', () => {
     )!
     // (the result is kept as it is: every attack's states and limits, exactly)
     expect(reference.run.result).toEqual(saved.run.result)
-    // loading it packed it in the storage
-    const stored = legacy.get('teamKqmResults') as {
-      runs: Record<string, { run: { $packed?: number } }>
-    }
-    expect(stored.runs['team_1'].run.$packed).toBe(1)
+    // loading it moved it, packed, to its own key
+    const stored = legacy.get(runStorageKey('team_1')) as { $packed?: number }
+    expect(stored.$packed).toBe(1)
     expect(JSON.stringify(stored).length).toBeLessThan(
       JSON.stringify(saved).length / 10
     )
+    expect(legacy.get('teamKqmResults')).toEqual({
+      runs: { team_1: { savedAt: saved.savedAt, members: saved.members } },
+    })
     // and the packed run reads back the same, again and again
     const again = new ArtCharDatabase(1, legacy).teamKqmResults.getRun('team_1')
     expect(again).toEqual(reference)

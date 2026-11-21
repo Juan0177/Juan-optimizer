@@ -48,22 +48,36 @@ export interface TeamKqmRunSummary {
   rotation: string
 }
 
-/** Per team (id), its last run. (One field, replaced whole: `set` merges top-level keys.) */
+/** A team's saved run in the entry: when, and for which members (its run is under its own key) */
+export interface TeamKqmRunIndex {
+  savedAt: number
+  members: string[]
+}
+
+/**
+ * Per team (id), its last run's index, and every team's summary. (One field, replaced whole: `set`
+ * merges top-level keys.) Each run itself is packed under its own storage key (`runStorageKey`),
+ * so saving one writes only that one.
+ */
 export interface ITeamKqmResultsEntry {
-  runs: Record<string, TeamKqmSavedRun>
+  runs: Record<string, TeamKqmRunIndex>
   summaries?: Record<string, TeamKqmRunSummary>
 }
 
-/** As the browser's storage keeps them: each run packed (`packKqmRun`), a fraction of its size */
+/** As the browser's storage keeps the entry (older versions kept each run inside it, `run`) */
 export interface ITeamKqmResultsStored {
   runs: Record<
     string,
-    Omit<TeamKqmSavedRun, 'run'> & {
-      run: PackedKqmRun | TeamKqmSavedRun['run']
-    }
+    TeamKqmRunIndex & { run?: PackedKqmRun | TeamKqmSavedRun['run'] }
   >
   summaries?: Record<string, TeamKqmRunSummary>
 }
+
+/** The storage key of a team's packed run */
+export const runStorageKey = (teamId: string) => `teamKqmRun_${teamId}`
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null
 
 const isFiniteNumber = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v)
@@ -115,13 +129,24 @@ function validateSummary(v: unknown): TeamKqmRunSummary | undefined {
 }
 
 /**
- * Runs kept: the most recent ones. Each holds every member's rankings and the rotation it played
- * (~200 KB packed), and the browser's storage for the whole database is ~5 MB.
+ * Runs kept: the most recent ones (~250–450 KB each, packed). Each is under its own key in the
+ * browser's database (IndexedDB), so saving one writes only it.
  */
-export const TEAM_KQM_RUNS_KEPT = 6
+export const TEAM_KQM_RUNS_KEPT = 100
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null
+/** A run's settings checked (an older version's that no longer validate: none) */
+function checkedRun(run: unknown): TeamKqmSavedRun['run'] | undefined {
+  if (!isObject(run) || !isObject(run['result'])) return undefined
+  if (!isObject(run['result']['builds'])) return undefined
+  const settings: Record<string, unknown> = {}
+  for (const key of ['teamOpt', 'runTeamOpt'] as const) {
+    if (run[key] === undefined) continue
+    const value = validateTeamOpt(run[key])
+    if (!value) return undefined
+    settings[key] = value
+  }
+  return { ...run, ...settings } as TeamKqmSavedRun['run']
+}
 
 export class TeamKqmResultsEntry extends DataEntry<
   'teamKqmResults',
@@ -129,12 +154,30 @@ export class TeamKqmResultsEntry extends DataEntry<
   ITeamKqmResultsEntry,
   ITeamKqmResultsStored
 > {
+  /**
+   * Each kept run, packed, as the storage holds it under `runStorageKey` (the same strings): kept
+   * here too so that a database moved to another storage (`saveStorage`) takes them along.
+   * (Declared only: the base constructor fills it through `validate`.)
+   */
+  private declare packed?: Map<string, string>
+  private get packedRuns() {
+    this.packed ??= new Map()
+    return this.packed
+  }
+
   constructor(database: ArtCharDatabase) {
     super(database, 'teamKqmResults', () => ({ runs: {} }), 'teamKqmResults')
+    // (runs an index no longer lists: one dropped while loading, or by an older version)
+    const runs = this.get().runs
+    this.database.storage.removeForKeys(
+      (key) =>
+        key.startsWith(runStorageKey('')) &&
+        !(key.slice(runStorageKey('').length) in runs)
+    )
   }
   /**
-   * The runs, unpacked and checked: from the storage (packed, or as older versions saved them)
-   * or as they are set. (What comes out is the cache's form; `deCache` packs it for the storage.)
+   * The index and summaries, checked. A run an older version kept inside the entry moves to its
+   * own key (packed); a run whose key is gone leaves the index.
    */
   override validate(obj: unknown): ITeamKqmResultsStored | undefined {
     if (!isObject(obj)) return undefined
@@ -144,31 +187,31 @@ export class TeamKqmResultsEntry extends DataEntry<
     )) {
       if (!isObject(saved)) continue
       const { savedAt, members } = saved
-      let run = saved['run']
-      if (isPackedKqmRun(run))
-        try {
-          run = unpackKqmRun(run)
-        } catch {
-          continue
-        }
-      if (!isObject(run) || !isObject(run['result'])) continue
-      if (!isObject(run['result']['builds'])) continue
       if (!Array.isArray(members) || members.some((m) => typeof m !== 'string'))
         continue
-      // settings saved by an older version that no longer validate: the run is dropped
-      const settings: Record<string, unknown> = {}
-      let valid = true
-      for (const key of ['teamOpt', 'runTeamOpt'] as const) {
-        if (run[key] === undefined) continue
-        const value = validateTeamOpt(run[key])
-        if (value) settings[key] = value
-        else valid = false
-      }
-      if (!valid) continue
+      let packed: string | undefined
+      if (saved['run'] !== undefined) {
+        // (inside the entry, as older versions kept it: checked once, then under its own key)
+        let run = saved['run']
+        if (isPackedKqmRun(run))
+          try {
+            run = unpackKqmRun(run)
+          } catch {
+            continue
+          }
+        const checked = checkedRun(run)
+        if (!checked) continue
+        packed = JSON.stringify(packKqmRun(checked))
+        if (!this.writePacked(teamId, packed)) continue
+      } else
+        packed =
+          this.packedRuns.get(teamId) ??
+          this.database.storage.getString(runStorageKey(teamId))
+      if (!packed) continue
+      this.packedRuns.set(teamId, packed)
       runs[teamId] = {
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
         members: members as string[],
-        run: { ...run, ...settings } as TeamKqmSavedRun['run'],
       }
     }
     const summaries: NonNullable<ITeamKqmResultsEntry['summaries']> = {}
@@ -181,19 +224,27 @@ export class TeamKqmResultsEntry extends DataEntry<
     return Object.keys(summaries).length ? { runs, summaries } : { runs }
   }
   override toCache(stored: ITeamKqmResultsStored): ITeamKqmResultsEntry {
-    // (`validate` has unpacked them)
+    // (`validate` has moved the runs to their keys: the index alone)
     return stored as ITeamKqmResultsEntry
   }
   override deCache(cached: ITeamKqmResultsEntry): ITeamKqmResultsStored {
-    return {
-      runs: Object.fromEntries(
-        Object.entries(cached.runs).map(([teamId, saved]) => [
-          teamId,
-          { ...saved, run: packKqmRun(saved.run) },
-        ])
-      ),
-      ...(cached.summaries ? { summaries: cached.summaries } : {}),
-    }
+    return cached
+  }
+  /** The entry and every kept run, written to the (new) storage */
+  override saveStorage() {
+    super.saveStorage()
+    for (const [teamId, packed] of this.packedRuns)
+      if (teamId in this.get().runs) this.writePacked(teamId, packed)
+  }
+  /** The entry and every kept run, out of the storage (kept here: `saveStorage` may follow) */
+  override clearStorage() {
+    super.clearStorage()
+    for (const teamId of this.packedRuns.keys())
+      this.database.storage.remove(runStorageKey(teamId))
+  }
+  override clear() {
+    for (const teamId of [...this.packedRuns.keys()]) this.dropRun(teamId)
+    super.clear()
   }
   /** A team's last run in brief */
   getSummary(teamId: string): TeamKqmRunSummary | undefined {
@@ -212,42 +263,80 @@ export class TeamKqmResultsEntry extends DataEntry<
       if (!(e instanceof DOMException)) throw e
     }
   }
-  /** A team's saved run (a copy: the database keeps its own frozen) */
+  /** A team's saved run (unpacked from its key: a copy of its own), if it still validates */
   getRun(teamId: string): TeamKqmSavedRun | undefined {
-    const saved = this.get().runs[teamId]
-    return saved && structuredClone(saved)
+    const index = this.get().runs[teamId]
+    const packed = index && this.packedRuns.get(teamId)
+    if (!packed) return undefined
+    let run: unknown
+    try {
+      run = JSON.parse(packed)
+      if (isPackedKqmRun(run)) run = unpackKqmRun(run)
+    } catch {
+      return undefined
+    }
+    const checked = checkedRun(run)
+    return (
+      checked && {
+        savedAt: index.savedAt,
+        members: [...index.members],
+        run: checked,
+      }
+    )
   }
   /**
    * Saves (or with `undefined`, forgets) a team's last run. Only the most recent runs are kept;
    * when the browser's storage is full, older runs make room, else this one is not saved.
    */
   setRun(teamId: string, run: TeamKqmSavedRun | undefined): void {
-    const others = Object.entries(this.get().runs)
-      .filter(([id]) => id !== teamId)
-      .sort(([, a], [, b]) => b.savedAt - a.savedAt)
+    const runs = { ...this.get().runs }
     if (!run) {
-      if (others.length < Object.keys(this.get().runs).length)
-        this.write(Object.fromEntries(others))
+      if (!(teamId in runs)) return
+      delete runs[teamId]
+      this.dropRun(teamId)
+      this.writeIndex(runs)
       return
     }
-    const own = structuredClone(run)
-    let kept = others.slice(0, TEAM_KQM_RUNS_KEPT - 1)
-    for (;;) {
-      if (this.write({ ...Object.fromEntries(kept), [teamId]: own })) return
-      if (!kept.length) break
-      kept = kept.slice(0, -1)
+    const packed = JSON.stringify(packKqmRun(structuredClone(run.run)))
+    // (the oldest make room while the storage is full)
+    const others = Object.entries(runs)
+      .filter(([id]) => id !== teamId)
+      .sort(([, a], [, b]) => b.savedAt - a.savedAt)
+      .map(([id]) => id)
+    while (!this.writePacked(teamId, packed)) {
+      const oldest = others.pop()
+      if (!oldest) return
+      delete runs[oldest]
+      this.dropRun(oldest)
     }
-    this.write(Object.fromEntries(others.slice(0, TEAM_KQM_RUNS_KEPT)))
+    this.packedRuns.set(teamId, packed)
+    runs[teamId] = { savedAt: run.savedAt, members: [...run.members] }
+    for (const id of others.slice(TEAM_KQM_RUNS_KEPT - 1)) {
+      delete runs[id]
+      this.dropRun(id)
+    }
+    this.writeIndex(runs)
   }
-  /** Writes the runs; false when the browser's storage is full */
-  private write(runs: ITeamKqmResultsEntry['runs']) {
+  /** A run's packed form under its key; false when the browser's storage is full */
+  private writePacked(teamId: string, packed: string) {
     try {
-      this.set({ runs })
+      this.database.storage.setString(runStorageKey(teamId), packed)
       return true
     } catch (e) {
       // (QuotaExceededError: the storage keeps what it had)
       if (e instanceof DOMException) return false
       throw e
+    }
+  }
+  private dropRun(teamId: string) {
+    this.packedRuns.delete(teamId)
+    this.database.storage.remove(runStorageKey(teamId))
+  }
+  private writeIndex(runs: ITeamKqmResultsEntry['runs']) {
+    try {
+      this.set({ runs })
+    } catch (e) {
+      if (!(e instanceof DOMException)) throw e
     }
   }
   // Runs are this browser's work for its teams (team ids that a GOOD import changes): never part
