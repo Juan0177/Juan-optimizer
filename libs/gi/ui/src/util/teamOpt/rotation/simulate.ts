@@ -1497,6 +1497,9 @@ export function simulateRotation({
     }
     if (action.kind === 'wait') {
       lastNormalActor = undefined
+      // a walk ends the Normal Attack string (gcsim resets it on any action but an attack); idle
+      // time does not
+      if (action.walk) normalCounter = 0
       const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
       // (a length that is not a number would never end the wait: 0 instead)
       const frames = finiteFrames(

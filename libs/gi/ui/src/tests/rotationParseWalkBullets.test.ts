@@ -1,6 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { describe, expect, it } from 'vitest'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
+import { simulateRotation } from '../util/teamOpt/rotation/simulate'
 
 const parse = (text: string, who: CharacterKey[]) =>
   parseRotation(
@@ -30,6 +31,23 @@ describe('walks (WK, gcsim walk)', () => {
       ['skill', undefined, false],
       ['wait', 4, false],
     ])
+  })
+
+  it('ends the Normal Attack string at a walk, not at idle time', () => {
+    const normals = (text: string) =>
+      simulateRotation({
+        rotation: parse(text, ['Bennett']),
+        members: ['Bennett'],
+        elements: { Bennett: 'pyro' },
+        constellations: {},
+        repeats: 1,
+        keep: 'all',
+        reactions: { onHit() {} },
+      })
+        .hits.filter((h) => h.tag === 'normal')
+        .map((h) => h.label)
+    expect(normals('Bennett N2 WK N2')).toEqual(['N1', 'N2', 'N1', 'N2'])
+    expect(normals('Bennett N2 W4f N2')).toEqual(['N1', 'N2', 'N3', 'N4'])
   })
 })
 
