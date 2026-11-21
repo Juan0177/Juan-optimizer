@@ -161,6 +161,11 @@ export interface SimBuffWindow {
    * gearEffects): a hit that took its stats at its cast, before it was written, still counts it
    */
   late?: true
+  /**
+   * The effect of a weapon or set the member doesn't hold (being protected by a shield, timed for
+   * any it could): it counts only where the member has its switch saved, so it adds no parts
+   */
+  offOnly?: true
 }
 
 /**

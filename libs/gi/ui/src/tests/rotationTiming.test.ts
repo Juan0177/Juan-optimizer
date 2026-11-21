@@ -512,7 +512,11 @@ describe('timed gear effects', () => {
     fx.onSwap(500, 'Neuvillette', 'Xilonen')
     fx.onSwap(550, 'Xilonen', 'Neuvillette')
     fx.end(1400)
-    expect(windows.filter((w) => w.owner === 'Neuvillette')).toEqual([
+    expect(
+      windows.filter(
+        (w) => w.owner === 'Neuvillette' && w.path[0] === 'SacrificialJade'
+      )
+    ).toEqual([
       {
         owner: 'Neuvillette',
         path: ['SacrificialJade', 'offField'],
@@ -533,7 +537,9 @@ describe('timed gear effects', () => {
     fx.end(2000)
     expect(
       windows
-        .filter((w) => w.owner === 'Neuvillette')
+        .filter(
+          (w) => w.owner === 'Neuvillette' && w.path[0] === 'SacrificialJade'
+        )
         .map((w) => [w.start, w.end])
     ).toEqual([
       [300, 900],

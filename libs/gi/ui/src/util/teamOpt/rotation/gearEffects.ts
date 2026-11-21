@@ -1,5 +1,9 @@
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
+import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
+import {
+  getCharEle,
+  getCharWeaponType,
+  getWeaponStat,
+} from '@genshin-optimizer/gi/stats'
 import { energyCalcData, isFrostbreathReaction } from '../energyCalc'
 import type { RotationAction } from './parse'
 import type {
@@ -166,7 +170,8 @@ export function gearEffects({
     path: string[],
     value: string,
     start: number,
-    end: number
+    end: number,
+    offOnly?: boolean
   ) => void
   reduceCooldown: (
     characterKey: CharacterKey,
@@ -185,6 +190,16 @@ export function gearEffects({
   const holds = (k: CharacterKey, weapon: string) =>
     gear[k]?.weapon === weapon ||
     !!gear[k]?.candidates?.weapons?.includes(weapon)
+  // Being protected by a shield is the member's own: those effects are timed for any set and any
+  // weapon of its type too, so one a build tries (Team optimize) never counts a saved switch
+  // without a shield; not held, they count only where a switch is saved (`SimBuffWindow.offOnly`)
+  const shieldGear = (k: CharacterKey, item: string, set?: boolean) =>
+    (set ? opens(k, item) : holds(k, item))
+      ? 'held'
+      : set ||
+          getWeaponStat(item as WeaponKey)?.weaponType === getCharWeaponType(k)
+        ? 'unheld'
+        : undefined
   const icd = new Map<string, number>()
   /** Once per `frames` per key */
   const ready = (key: string, t: number, frames: number) => {
@@ -378,9 +393,10 @@ export function gearEffects({
   for (const k of members) {
     for (const [item, path, value] of SHIELD_CREATED)
       if (holds(k, item)) window(k, [item, path], value, 0, 0)
-    for (const [item, path, value, set] of SHIELDED)
-      if (set ? opens(k, item) : holds(k, item))
-        window(k, [item, path], value, 0, 0)
+    for (const [item, path, value, set] of SHIELDED) {
+      const how = shieldGear(k, item, set)
+      if (how) window(k, [item, path], value, 0, 0, how === 'unheld')
+    }
   }
   /** A shield marker lands: it replaces its creator's earlier one of the same kind and target */
   const shieldCreated = (ctx: SimContext, hit: SimHit) => {
@@ -1491,20 +1507,23 @@ export function gearEffects({
       weapons.end(t)
       for (const k of members)
         for (const [item, path, value, set] of SHIELDED) {
-          if (!(set ? opens(k, item) : holds(k, item))) continue
+          const how = shieldGear(k, item, set)
+          if (!how) continue
+          const offOnly = how === 'unheld'
           const spans = protectedSpans(k, t)
           if (item !== 'BeaconOfTheReedSea') {
             for (const [from, to] of spans)
-              window(k, [item, path], value, from, to)
+              window(k, [item, path], value, from, to, offOnly)
             continue
           }
           // (Beacon of the Reed Sea: while not protected)
           let from = 0
           for (const [start, to] of spans) {
-            if (start > from) window(k, [item, path], value, from, start)
+            if (start > from)
+              window(k, [item, path], value, from, start, offOnly)
             from = to
           }
-          if (t > from) window(k, [item, path], value, from, t)
+          if (t > from) window(k, [item, path], value, from, t, offOnly)
         }
       shields.length = 0
       for (const [k, s] of sparks) {
