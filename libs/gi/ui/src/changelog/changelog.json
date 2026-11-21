@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.30.1",
+    "date": "2026-11-22",
+    "improved": [
+      "Team optimize is faster again on teams with big rotations, often by half or more: each member's search no longer starts with a slow warm-up step when your GPU does the search."
+    ]
+  },
+  {
     "version": "1.30.0",
     "date": "2026-11-22",
     "fixed": [

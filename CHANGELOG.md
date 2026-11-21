@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.30.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.1) (2026-11-22)
+
+### Improved
+
+- Team optimize is faster again on teams with big rotations, often by half or more: each member's search no longer starts with a slow warm-up step when your GPU does the search.
+
 ## [v1.30.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.0) (2026-11-22)
 
 ### Fixed
