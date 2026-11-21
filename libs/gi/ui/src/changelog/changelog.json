@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.30.2",
+    "date": "2026-11-22",
+    "fixed": [
+      "Importing a database now shows everything you imported: the Artifacts, Weapons and Characters pages open without the filters saved in the file, and your sort order is kept.",
+      "Labels with a description show it only when you point at the label itself, not at the empty space next to it."
+    ]
+  },
+  {
     "version": "1.30.1",
     "date": "2026-11-22",
     "improved": [

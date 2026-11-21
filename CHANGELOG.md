@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.30.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.2) (2026-11-22)
+
+### Fixed
+
+- Importing a database now shows everything you imported: the Artifacts, Weapons and Characters pages open without the filters saved in the file, and your sort order is kept.
+- Labels with a description show it only when you point at the label itself, not at the empty space next to it.
+
 ## [v1.30.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.1) (2026-11-22)
 
 ### Improved
