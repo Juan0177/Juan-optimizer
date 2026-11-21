@@ -6,6 +6,12 @@ import { getTeamDataWith, type TeamDataOverrides } from './data'
 import { attackDamageOutcomes } from './objective'
 import type { RotationCalculation } from './rotation/types'
 
+/**
+ * Team calculations kept for reuse, the most recently read: each is a whole team's data, and a
+ * rotation played with many candidate sets (their states in every context) makes thousands
+ */
+const TEAMS_KEPT = 16
+
 /** Evaluate a heal or stat in the timeline's buff context, without changing the saved build. */
 export function rotationCalculation(
   database: ArtCharDatabase,
@@ -13,7 +19,8 @@ export function rotationCalculation(
   gender: GenderKey,
   overrides: TeamDataOverrides = {}
 ): RotationCalculation {
-  const cache = new Map<string, ReturnType<typeof uiDataForTeam> | undefined>()
+  const teams = new Map<string, ReturnType<typeof uiDataForTeam> | undefined>()
+  const values = new Map<string, number | undefined>()
   const calculate: RotationCalculation = (
     characterKey,
     path,
@@ -21,25 +28,23 @@ export function rotationCalculation(
     onField
   ) => {
     const key = JSON.stringify([states, onField])
-    if (!cache.has(key)) {
+    const valueKey = `${key}|${characterKey}|${path.join('.')}`
+    if (values.has(valueKey)) return values.get(valueKey)
+    let data = teams.get(key)
+    if (teams.has(key)) teams.delete(key)
+    else {
       const team = getTeamDataWith(database, teamId, { ...overrides, states })
-      cache.set(
-        key,
-        team?.[onField]
-          ? uiDataForTeam(
-              { [onField]: team[onField], ...team },
-              gender,
-              onField
-            )
-          : undefined
-      )
+      data = team?.[onField]
+        ? uiDataForTeam({ [onField]: team[onField], ...team }, gender, onField)
+        : undefined
+      if (teams.size >= TEAMS_KEPT) teams.delete(teams.keys().next().value!)
     }
-    const value = cache
-      .get(key)
-      ?.[characterKey]?.target.get({ ...read(), path })?.value
-    return typeof value === 'number' && Number.isFinite(value)
-      ? value
-      : undefined
+    teams.set(key, data)
+    const value = data?.[characterKey]?.target.get({ ...read(), path })?.value
+    const out =
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined
+    values.set(valueKey, out)
+    return out
   }
   const damageCache = new Map<string, ReturnType<typeof attackDamageOutcomes>>()
   calculate.damage = (characterKey, attack) => {
