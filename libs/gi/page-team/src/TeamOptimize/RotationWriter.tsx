@@ -3132,6 +3132,8 @@ function HitGroup({
             alignItems: 'baseline',
             gap: 0.75,
             minWidth: 0,
+            width: 'fit-content',
+            maxWidth: '100%',
           }}
         >
           <Box

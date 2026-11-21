@@ -227,7 +227,7 @@ export function StepTiming({
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ ...hintSx, textAlign: 'right' }}
+            sx={{ ...hintSx, textAlign: 'right', justifySelf: 'end' }}
           >
             {t('teamOpt.timing.start', 'Starts')}
           </Typography>
@@ -242,7 +242,7 @@ export function StepTiming({
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ ...hintSx, textAlign: 'right' }}
+            sx={{ ...hintSx, textAlign: 'right', justifySelf: 'end' }}
           >
             {t('teamOpt.timing.frames', 'Frames')}
           </Typography>

@@ -512,7 +512,14 @@ export function KqmCompare({
                 'The Energy Recharge the teammates need with this pick, and before it: its energy (Favonius particles, a weapon’s or set’s energy) changes theirs, and their artifacts are searched again'
               )}
             >
-              <Box sx={{ mt: 1, cursor: 'help' }}>
+              <Box
+                sx={{
+                  mt: 1,
+                  cursor: 'help',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                }}
+              >
                 <Typography
                   sx={{
                     fontSize: 12.5,
