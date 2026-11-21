@@ -75,6 +75,9 @@ export type TeamOptStatus = {
   testedPerSecond: number
   skippedPerSecond: number
 }
+/** Team Optimize's searches go to the GPU from this many builds (see `GOSolver`'s `gpuMinTotal`) */
+const TEAM_GPU_MIN_TOTAL = 2_000_000
+
 const initStatus = (): TeamOptStatus => ({
   tested: 0,
   failed: 0,
@@ -258,9 +261,12 @@ export function useTeamOptRun(teamId: string) {
           }
           Object.assign(status.current, initStatus())
           // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
-          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches)
+          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
+          // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
+          // small searches)
           const solver = new GOSolver(problem, status.current, maxWorkers, {
             gpu: true,
+            gpuMinTotal: TEAM_GPU_MIN_TOTAL,
           })
           stopSolver = () => solver.cancel(new TeamOptCancelled())
           const t0 = performance.now()
