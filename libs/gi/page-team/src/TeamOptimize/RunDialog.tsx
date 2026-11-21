@@ -263,6 +263,34 @@ export function RunDialog({
               }))}
             />
           </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FieldLabel
+              tip={t(
+                'teamOpt.run.searchTip',
+                'Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.'
+              )}
+            >
+              {t('teamOpt.kqm.search', 'Search')}
+            </FieldLabel>
+            <Segmented
+              size="small"
+              aria-label={t('teamOpt.kqm.search', 'Search')}
+              value={teamOpt.fullSearch ? 'full' : 'quick'}
+              onChange={(search) =>
+                setTeamOpt((o) => {
+                  if (search === 'full') o.fullSearch = true
+                  else delete o.fullSearch
+                })
+              }
+              options={[
+                {
+                  value: 'quick',
+                  label: t('teamOpt.kqm.searchQuick', 'Quick'),
+                },
+                { value: 'full', label: t('teamOpt.kqm.searchFull', 'Full') },
+              ]}
+            />
+          </Box>
           {!!toOptimize.length && !eligible && (
             <Alert severity="info" role="status">
               {artifacts.length

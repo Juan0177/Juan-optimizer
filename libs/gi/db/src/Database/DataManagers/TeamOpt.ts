@@ -157,6 +157,11 @@ export interface TeamOpt {
   /** How many team builds to find, best first (2 to 5); absent: 1 */
   topN?: number
   /**
+   * Search every artifact (exact); absent: Quick, which first narrows each slot to the artifacts
+   * that can matter (it may rarely miss the best build, by a little)
+   */
+  fullSearch?: boolean
+  /**
    * Where the members' Energy Recharge requirements come from: the ER calculator (`energyCalculator`,
    * worked out for the weapons each build holds), or each member's own Optimize settings
    * (`manual`); absent: the calculator once a written rotation fills it in
@@ -620,6 +625,7 @@ const teamOptSchema = z.object({
     .optional()
     .catch(undefined),
   topN: z.number().int().min(2).max(5).optional().catch(undefined),
+  fullSearch: z.boolean().optional().catch(undefined),
   energySource: z.enum(['manual', 'calculator']).optional().catch(undefined),
   energyCalculator: energyCalculatorSchema.optional().catch(undefined),
   energyRotation: z.string().optional().catch(undefined),

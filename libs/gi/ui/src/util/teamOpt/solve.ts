@@ -15,6 +15,7 @@ import type {
   TeamOpt,
 } from '@genshin-optimizer/gi/db'
 import type { IConditionalValues } from '@genshin-optimizer/gi/sheets'
+import { optimizerGpuSupported } from '@genshin-optimizer/gi/solver'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
@@ -22,6 +23,7 @@ import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
 import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
+import { type PrefilterProblem, quickPool, seedBuild } from './prefilter'
 import {
   canWield,
   hasEnergyRequirement,
@@ -452,6 +454,12 @@ const solveMemo = new Map<
   { best?: { value: number; artifactIds: string[] }; below?: number }
 >()
 const SOLVE_MEMO_SIZE = 400
+/**
+ * Quick narrows a member's search only above this many builds: smaller ones are fast as they
+ * are on the GPU (a few billion builds a second), slow on the CPU (a team's formula: ~2 million)
+ */
+const QUICK_FROM_BUILDS = 5e9
+const QUICK_FROM_BUILDS_CPU = 1e8
 /** Forgets every solve done (tests; or to measure a run from scratch) */
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
@@ -537,23 +545,80 @@ export async function optimizeTeam({
     problemMs: 0,
     solves: 0,
     solveMs: 0,
+    prefilterMs: 0,
     found: 0,
     evals: 0,
     evalMs: 0,
     t0: performance.now(),
   }
+  const quick = !teamOpt.fullSearch
+  /**
+   * The search `solveRaw` is given: Quick narrows each slot to the artifacts that can matter
+   * (`quickPool`); both start above a good build found fast, when it meets every requirement and
+   * beats `floor` (a floor cuts the next best builds: only for a top 1)
+   */
+  const prepare = async (input: TeamOptSolveInput, floor: number) => {
+    const t0 = performance.now()
+    const problem: PrefilterProblem = {
+      arts: input.arts,
+      objective: input.objective,
+      constraints: input.constraints.filter((c) => c.value !== input.objective),
+      values: (art) => teamOptArtValues(art, input.mainStatAssumptionLevel),
+      allowed: (arts) => meetsSetRules(arts, input.exclusion),
+    }
+    const perSlot = new Map<string, number>()
+    for (const art of input.arts)
+      perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
+    const space = [...perSlot.values()].reduce((a, b) => a * b, 1)
+    // (a search this small is fast as it is: narrowing it would cost more than it saves)
+    const { arts, seed, refine } =
+      quick &&
+      space >
+        (optimizerGpuSupported() ? QUICK_FROM_BUILDS : QUICK_FROM_BUILDS_CPU)
+        ? await quickPool(problem)
+        : {
+            arts: input.arts,
+            seed: await seedBuild(problem),
+            refine: undefined,
+          }
+    profile.prefilterMs += performance.now() - t0
+    const seeded =
+      (input.topN ?? 1) === 1 && seed?.feasible && seed.value >= floor
+        ? seed
+        : undefined
+    return {
+      input: {
+        ...input,
+        arts: [...arts],
+        constraints: seeded
+          ? [
+              ...input.constraints,
+              {
+                value: input.objective,
+                min: seeded.value - Math.abs(seeded.value) * 1e-9,
+              },
+            ]
+          : input.constraints,
+      },
+      seed: seeded,
+      refine,
+    }
+  }
   const solve: TeamOptSolver = async (input) => {
     const t0 = performance.now()
     // several builds: not in the memo (it keeps a problem's top 1)
     if ((input.topN ?? 1) > 1) {
-      const result = await solveRaw(input)
+      const result = await solveRaw(
+        (await prepare(input, Number.NEGATIVE_INFINITY)).input
+      )
       profile.solves++
       profile.solveMs += performance.now() - t0
       if (result) profile.found++
       return result
     }
     // the same problem solved before (this run or an earlier one): its answer is known
-    const { key, floor } = solveKey(input)
+    const { key: problemKey, floor } = solveKey(input)
+    const key = quick ? `${problemKey}|quick` : problemKey
     const known = solveMemo.get(key)
     if (known?.best) {
       profile.memoHits++
@@ -563,18 +628,49 @@ export async function optimizeTeam({
       profile.memoHits++
       return undefined
     }
+    const prepared = await prepare(input, floor)
     const perSlot = new Map<string, number>()
-    for (const art of input.arts)
+    for (const art of prepared.input.arts)
       perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
     profile.space += [...perSlot.values()].reduce((a, b) => a * b, 1)
     // the solver picks CPU or GPU itself: measured on Apple Silicon, starting members on the
     // CPU's branch and bound was slower than the GPU's sweep, even where the floor pruned it well
-    const result = await solveRaw({
-      ...input,
+    const found = await solveRaw({
+      ...prepared.input,
       onWork: ({ tested }) => {
         profile.tested += tested
       },
     })
+    // (nothing above the seed's floor: the seed is the best, as its value was computed apart)
+    let result =
+      found ??
+      (prepared.seed && {
+        value: prepared.seed.value,
+        artifactIds: prepared.seed.arts.map((a) => a.id),
+      })
+    // Quick: once more with the artifacts that can matter around the build found, if any were left
+    // out (a piece can count only next to others: crit rate from them for a crit damage circlet)
+    const wider =
+      result &&
+      (await prepared.refine?.(
+        result.artifactIds
+          .map((id) => input.arts.find((a) => a.id === id))
+          .filter((a): a is ICachedArtifact => !!a)
+      ))
+    if (result && wider) {
+      const again = await solveRaw({
+        ...prepared.input,
+        arts: wider,
+        constraints: [
+          ...input.constraints,
+          {
+            value: input.objective,
+            min: result.value + Math.abs(result.value) * 1e-9,
+          },
+        ],
+      })
+      if (again && again.value > result.value) result = again
+    }
     profile.solves++
     profile.solveMs += performance.now() - t0
     if (result) profile.found++
