@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.28.0",
+    "date": "2026-11-21",
+    "improved": [
+      "ER calculator: Energy from constellations, passives, artifact sets and weapons is now filled into Bonus energy from the written rotation, for the member who gets it. This covers Mitya's C1, Yae's C1 and C4, Furina's C4, Xingqiu's C6, Raiden's Burst (from her Energy Recharge), Sara's A4, Venti's A4, the Scroll of the Hero of Cinder City 2-piece, The Dockhand's Assistant, Portable Power Saw and about 60 more.",
+      "KQM Theorycrafting keeps the generated builds of your last 100 teams instead of 6, so a team you ran earlier still shows its results when you come back to it."
+    ]
+  },
+  {
     "version": "1.27.0",
     "date": "2026-11-21",
     "new": [
