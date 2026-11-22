@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.34.1",
+    "date": "2026-11-23",
+    "fixed": [
+      "Energy Recharge calculator: what a rotation filled in no longer stays once the rotation stops giving it. Lowering a character's constellation now removes that constellation's Energy, and Favonius and energy weapon triggers update the same way. Open the KQM tab and run it again to refresh its builds.",
+      "KQM Optimize rotation (Full): the better rotations found by every start stay listed while it searches, each compared with your rotation, a rotation no longer ends with a swap to someone who no longer plays first, and up to 25 are shown."
+    ]
+  },
+  {
     "version": "1.34.0",
     "date": "2026-11-22",
     "new": [

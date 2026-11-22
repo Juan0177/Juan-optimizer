@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.34.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.1) (2026-11-23)
+
+### Fixed
+
+- Energy Recharge calculator: what a rotation filled in no longer stays once the rotation stops giving it. Lowering a character's constellation now removes that constellation's Energy, and Favonius and energy weapon triggers update the same way. Open the KQM tab and run it again to refresh its builds.
+- KQM Optimize rotation (Full): the better rotations found by every start stay listed while it searches, each compared with your rotation, a rotation no longer ends with a swap to someone who no longer plays first, and up to 25 are shown.
+
 ## [v1.34.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.0) (2026-11-22)
 
 ### New
