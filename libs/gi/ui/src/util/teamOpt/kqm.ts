@@ -1712,11 +1712,13 @@ async function runKqm({
   const root = comparison
     ? (rootOf.get(comparison.result) ?? comparison.result)
     : undefined
+  // (a run's own too: a play switched back to finds its problems)
+  const runPlays = new Map<string, KqmWork>()
   const workFor = (key: string): KqmWork => {
     const fresh = () => ({ problems: new Map(), searches: new Map() })
-    if (!root) return fresh()
-    if (lastWork?.root !== root) lastWork = { root, byPlayed: new Map() }
-    const { byPlayed } = lastWork
+    if (root && lastWork?.root !== root)
+      lastWork = { root, byPlayed: new Map() }
+    const byPlayed = root ? lastWork!.byPlayed : runPlays
     const found = byPlayed.get(key)
     if (found) {
       // (the latest used last)
@@ -2844,6 +2846,8 @@ async function runKqm({
     return { state, score }
   }
 
+  let replayedFor: string | undefined
+  let lastReplayed: Partial<Record<CharacterKey, KqmBuild>> = {}
   /**
    * The rotation played for `state` (with its weapons and sets when `withGear`): when it plays
    * differently from before, the run counts it from now on (its time, the ER calculator's targets
@@ -2854,6 +2858,14 @@ async function runKqm({
     withGear: boolean
   ) => {
     if (!replay) return false
+    const replaying = withGear
+      ? optimized
+          .map(({ characterKey: ck }) => (state[ck] ? buildId(state[ck]!) : ''))
+          .join(';')
+      : ''
+    if (withGear && replaying === replayedFor) return false
+    replayedFor = replaying
+    if (withGear) lastReplayed = { ...state }
     const { arts, weapons } = gearOf(state)
     const next = replay({
       constellations,
@@ -2892,6 +2904,50 @@ async function runKqm({
     work = workFor(workKey(played))
     setSearches.clear()
     return true
+  }
+
+  /**
+   * The builds' score on the rotation as they play it (damage per second: plays differ in length)
+   */
+  const ownPlayScore = async () => {
+    const score = await teamScore(builds)
+    const time = rotationTimeNow()
+    return score && time ? { ...score, total: score.total / time } : score
+  }
+  /**
+   * When the builds still play differently from the rotation played last (gear that changes the
+   * play can flip two builds, each the better on the other's play): each scored on its own play,
+   * the better one kept, with its play
+   */
+  const lostOnOwnPlay = new Set<string>()
+  const gearId = (ck: CharacterKey, b: KqmBuild) =>
+    `${ck}|${b.weapon.key}@${b.weapon.refinement}|${kqmSetsId(b.sets)}`
+  const settlePlay = async () => {
+    const now = { ...builds }
+    const last = lastReplayed
+    if (optimized.some(({ characterKey: ck }) => !last[ck])) return
+    // (only a play that changes with them can flip the builds)
+    if (!replayFor(builds, true)) return
+    const after = await ownPlayScore()
+    Object.assign(builds, last)
+    replayFor(builds, true)
+    const then = await ownPlayScore()
+    const keepLast = !!then && (!after || better(then, after))
+    const [kept, lost] = keepLast ? [last, now] : [now, last]
+    // (the loser's weapons and sets: a ranking judged on the winner's play would take them again)
+    for (const { characterKey: ck } of optimized)
+      if (gearId(ck, lost[ck]!) !== gearId(ck, kept[ck]!))
+        lostOnOwnPlay.add(gearId(ck, lost[ck]!))
+    if (!keepLast) {
+      Object.assign(builds, now)
+      replayFor(builds, true)
+      return
+    }
+    for (const { characterKey: ck } of optimized)
+      if (buildId(now[ck]!) !== buildId(last[ck]!)) {
+        lastChange[ck] = ++changes
+        delete settled[ck]
+      }
   }
 
   /** The team with its builds now: its figures, ER and what was assumed (with `rankings`) */
@@ -3052,6 +3108,19 @@ async function runKqm({
     }
     // (from another run's builds: its rounds only)
     for (let pass = 0; !from; pass++) {
+      // (played again with the builds as they are now, while that changes the play: the rankings
+      // and the result count what the builds taken on do to it, not the play of the ones before)
+      for (
+        let r = 0;
+        !comparison && maxRounds > 0 && r < REPLAYS && replayFor(builds, true);
+        r++
+      ) {
+        for (const ck of Object.keys(settled) as CharacterKey[])
+          delete settled[ck]
+        plannedRounds = rounds + ADOPT_ROUNDS
+        await descend(rounds + 1, rounds + ADOPT_ROUNDS)
+      }
+      if (!comparison && maxRounds > 0) await settlePlay()
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
       // (the builds so far, with these rankings, while a better one is looked for: later
@@ -3065,7 +3134,7 @@ async function runKqm({
         (await missedBest()) ??
         (await missedPair()) ??
         (await missedHandoff())
-      if (!missed) break
+      if (!missed || lostOnOwnPlay.has(gearId(missed.ck, missed.build))) break
       // taken, and the rounds go on from there (the others' best builds may change with it)
       builds[missed.ck] = missed.build
       lastChange[missed.ck] = ++changes
