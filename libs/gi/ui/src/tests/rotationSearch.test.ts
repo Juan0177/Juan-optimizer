@@ -68,9 +68,12 @@ describe('the rotations one change away', () => {
     members
   )
   const texts = rotationEdits(steps, { Furina: ['D'] }).map(wordsRotationText)
-  it('steps swapped, the loop back kept last', () => {
-    expect(texts).toContain('Neuvillette 2[N3 CA] -> Furina E Q -> Furina')
-    expect(texts.every((t) => t.endsWith('-> Furina'))).toBe(true)
+  it('steps swapped, the loop back kept last and to whoever plays first', () => {
+    expect(texts).toContain('Neuvillette 2[N3 CA] -> Furina E Q -> Neuvillette')
+    for (const t of texts) {
+      const parts = t.split(' -> ')
+      expect(parts.at(-1)).toBe(parts[0].split(' ')[0])
+    }
   })
   it('words left out, swapped and added', () => {
     expect(texts).toContain('Furina Q -> Neuvillette 2[N3 CA] -> Furina')
@@ -104,18 +107,16 @@ describe('the members’ order and visits (a player request)', () => {
     rotationEdits(steps, vocabulary, kinds).map(wordsRotationText)
   it('a step moved anywhere: a support played right before the member who catches its particles', () => {
     expect(texts()).toContain(
-      'Kazuha E P -> Xianyun E -> Furina E Q -> Neuvillette 2[N3 CA] -> Furina'
+      'Kazuha E P -> Xianyun E -> Furina E Q -> Neuvillette 2[N3 CA] -> Kazuha'
     )
     expect(texts()).toContain(
-      'Xianyun E -> Furina E Q -> Kazuha E P -> Neuvillette 2[N3 CA] -> Furina'
+      'Xianyun E -> Furina E Q -> Kazuha E P -> Neuvillette 2[N3 CA] -> Xianyun'
     )
-    expect(
-      texts().every(
-        (t) =>
-          t.endsWith('-> Neuvillette 2[N3 CA] -> Furina') ||
-          t.endsWith('-> Furina')
-      )
-    ).toBe(true)
+    // (the loop back follows whoever plays first: no swap to the old first member at the end)
+    for (const t of texts()) {
+      const parts = t.split(' -> ')
+      expect(parts.at(-1)).toBe(parts[0].split(' ')[0])
+    }
   })
   it('a member back on the field for a Skill or Burst, to refresh a buff', () => {
     expect(texts()).toContain(
@@ -153,7 +154,7 @@ describe('the members’ order and visits (a player request)', () => {
     expect(texts(none)).toEqual([])
     const order = texts({ ...none, order: true })
     expect(order).toContain(
-      'Kazuha E P -> Furina E Q -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+      'Kazuha E P -> Furina E Q -> Xianyun E -> Neuvillette 2[N3 CA] -> Kazuha'
     )
     expect(order.every((t) => t.split(' -> ').length === 5)).toBe(true)
     const attacks = texts({ ...none, attacks: true })
@@ -201,6 +202,17 @@ describe('every order of the steps', () => {
     )
     expect(
       orders.every((t) => t.startsWith('Furina E Q') && t.endsWith('-> Furina'))
+    ).toBe(true)
+    // (a loop back written to another member loops back to the first)
+    expect(
+      stepOrders(
+        rotationWords(
+          'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Kazuha',
+          members
+        )
+      )
+        .map(wordsRotationText)
+        .every((t) => t.endsWith('-> Furina'))
     ).toBe(true)
   })
 })

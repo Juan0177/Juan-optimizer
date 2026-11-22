@@ -61,7 +61,7 @@ import { focusSx, insetSx, numSx, quickSx, Segmented, tokens, type } from './ui'
 /** How long a search may take (seconds) */
 const BUDGETS = [30, 120, 300] as const
 /** Rotations shown after a search */
-const SHOWN = 5
+const SHOWN = 25
 /** The best rotations a search found that get their own KQM builds */
 const CONFIRMED = 3
 /** What the last search could change: the next one starts from it */
@@ -488,8 +488,15 @@ function RotationSearchDialog({
             )),
       ].slice(0, SHOWN)
     }
+    // (a full search's with builds of their own, from any pass, are better by their DPS with
+    // them; the others by their estimate)
     const found = top
-      .filter((c) => c.estimate > rowSeed.estimate * (1 + 1e-4))
+      .filter((c) => {
+        const dps = own(c)
+        return searched === 'full' && dps !== undefined
+          ? dps > runDps * (1 + 1e-4)
+          : c.estimate > rowSeed.estimate * (1 + 1e-4)
+      })
       .slice(0, SHOWN)
     return [
       ...found
@@ -497,7 +504,7 @@ function RotationSearchDialog({
         .sort((a, b) => own(b)! - own(a)!),
       ...found.filter((c) => own(c) === undefined),
     ]
-  }, [top, rowSeed, confirmed, fullDone, runDps, result])
+  }, [top, rowSeed, confirmed, fullDone, runDps, result, searched])
   const checking =
     searched === 'quick' &&
     running &&

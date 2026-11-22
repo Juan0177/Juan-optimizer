@@ -25,6 +25,7 @@ import {
   rotationGuard,
   rotationSearchPlayer,
   rotationWords,
+  samePlay,
   searchRotations,
   stepOrders,
   supportPart,
@@ -79,6 +80,19 @@ export function templateSeeds(
     const own = templateText(text, [...names])
     if (!out.includes(own)) out.push(own)
   }
+  return out
+}
+
+/**
+ * Rotations best first, one of those that play the same (from different starts: the shortest
+ * written)
+ */
+const distinct = (list: readonly RotationCandidate[]) => {
+  const out: RotationCandidate[] = []
+  for (const c of [...list].sort(
+    (a, b) => b.estimate - a.estimate || a.text.length - b.text.length
+  ))
+    if (!out.some((o) => samePlay(o, c))) out.push(c)
   return out
 }
 
@@ -252,6 +266,30 @@ export async function fullRotationSearch({
           .slice(0, MORE_STARTS)
           .map((c) => c.text),
       ]
+      // (what it shows as it goes: the pass's best so far over all its starts, against the
+      // rotation it measures from, and those with builds of their own, not one start's alone)
+      const passFrom = lastFrom!
+      let lastTop: RotationCandidate[] | undefined
+      let shown: RotationCandidate[] = []
+      const progress = (p: RotationSearchProgress) => {
+        if (p.top !== lastTop) {
+          lastTop = p.top
+          const merged = distinct([...pool.values(), ...p.top])
+          shown = [
+            ...[...found.values()].filter(
+              (c) =>
+                c.text in confirmed && !merged.some((m) => m.text === c.text)
+            ),
+            ...merged,
+          ]
+        }
+        onProgress?.({
+          ...p,
+          seed: passFrom,
+          best: shown[0] ?? p.best,
+          top: shown,
+        })
+      }
       for (const [i, start] of starts.entries()) {
         if (stop()) {
           ended = isCancelled() ? 'cancelled' : 'time'
@@ -272,7 +310,7 @@ export async function fullRotationSearch({
           erCost,
           kinds,
           isCancelled,
-          onProgress,
+          onProgress: progress,
         })
         played += search.played
         rounds += search.rounds
@@ -293,7 +331,7 @@ export async function fullRotationSearch({
     } finally {
       player.release()
     }
-    last = [...pool.values()].sort((a, b) => b.estimate - a.estimate)
+    last = distinct([...pool.values()])
     for (const c of last) found.set(c.text, c)
     if (isCancelled()) {
       ended = 'cancelled'

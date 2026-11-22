@@ -152,7 +152,7 @@ const visitWord = (word: string) =>
  * hit shorter or longer, an action written another way of the member's `vocabulary` (a Charged
  * Attack's beams, a held Skill), a group repeated once more or once less or its own words changed
  * so, or a word of the member's `vocabulary` added anywhere in its step. The last step stays last
- * when it is the loop back.
+ * when it is the loop back, and loops back to whoever plays first.
  */
 export function rotationEdits(
   steps: readonly RotationWordStep[],
@@ -251,7 +251,13 @@ export function rotationEdits(
       for (let j = 0; wordKind(word) && j <= words.length; j++)
         out.push(withStep(i, [...words.slice(0, j), word, ...words.slice(j)]))
   })
-  return out
+  // (a loop back to the member who used to play first would add a swap to them at the end)
+  return loops
+    ? out.map((edit) => [
+        ...edit.slice(0, -1),
+        { characterKey: edit[0].characterKey, name: edit[0].name, words: [] },
+      ])
+    : out
 }
 
 /**
@@ -279,7 +285,13 @@ export function stepOrders(
     )
   }
   permute(rest, [])
-  return orders.slice(1).map((order) => [...order, ...tail])
+  // (looping back to the first member, as `rotationEdits`' do)
+  const back = tail.map(() => ({
+    characterKey: first.characterKey,
+    name: first.name,
+    words: [],
+  }))
+  return orders.slice(1).map((order) => [...order, ...back])
 }
 
 /**
@@ -358,8 +370,11 @@ export function energyFits(
     })
 }
 
+/** The best rotations a search reports and keeps (the parents of a round are fewer, `keep`) */
+const KEPT = 30
+
 /** Two rotations that play the same: the same DPS and time */
-const samePlay = (a: RotationScore, b: RotationScore) =>
+export const samePlay = (a: RotationScore, b: RotationScore) =>
   a.time === b.time && Math.abs(a.dps - b.dps) <= 1e-9 * Math.max(a.dps, b.dps)
 
 /** Lets the page paint and take input between slices of a round's work on its thread */
@@ -521,7 +536,7 @@ export async function searchRotations({
       break
     }
     const bestBefore = pool[0].estimate
-    const top = pool.slice(0, keep * 2)
+    const top = pool.slice(0, KEPT)
     onProgress?.({
       round,
       played,
@@ -558,7 +573,7 @@ export async function searchRotations({
       (a, b) => b.estimate - a.estimate || a.text.length - b.text.length
     ))
       if (!merged.some((m) => samePlay(m, c))) merged.push(c)
-    pool = merged.slice(0, Math.max(keep * 6, widen ?? 0))
+    pool = merged.slice(0, Math.max(KEPT, widen ?? 0))
     onProgress?.({
       round,
       played,
@@ -566,7 +581,7 @@ export async function searchRotations({
       roundSize: texts.length,
       seed: start,
       best: pool[0],
-      top: pool.slice(0, keep * 2),
+      top: pool.slice(0, KEPT),
     })
     if (scores.some((s) => !s)) {
       ended = isCancelled() ? 'cancelled' : 'time'
