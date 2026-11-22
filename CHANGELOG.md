@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.32.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.32.2) (2026-11-22)
+
+### Fixed
+
+- Lohen: both hits of his Charged Attack in Masterstroke now gain Joy, so N1 CA N1 CA fills it for Etched Into Bone and Soul.
+
 ## [v1.32.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.32.0) (2026-11-22)
 
 ### New

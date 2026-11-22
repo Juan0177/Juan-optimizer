@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.32.2",
+    "date": "2026-11-22",
+    "fixed": [
+      "Lohen: both hits of his Charged Attack in Masterstroke now gain Joy, so N1 CA N1 CA fills it for Etched Into Bone and Soul."
+    ]
+  },
+  {
     "version": "1.32.1",
     "date": "2026-11-22"
   },
