@@ -89,6 +89,7 @@ export function CharacterSingleSelectionModal({
   onSelect,
   selectedIndex = -1,
   loadoutData = [undefined, undefined, undefined, undefined],
+  teamKeys,
   newFirst = false,
 }: {
   show: boolean
@@ -96,18 +97,23 @@ export function CharacterSingleSelectionModal({
   onSelect: (cKey: CharacterKey) => void
   selectedIndex?: number
   loadoutData?: (LoadoutDatum | undefined)[]
+  /** The team's members by slot, for a team not saved yet (over `loadoutData`'s) */
+  teamKeys?: readonly (CharacterKey | '')[]
   newFirst?: boolean
 }) {
   const database = useDatabase()
   const state = useDataEntryBase(database.displayCharacter)
 
+  const teamKeysKey = teamKeys?.join()
   const teamCharKeys = useMemo(
     () =>
-      loadoutData.map(
-        (loadoutDatum) =>
-          database.teamChars.get(loadoutDatum?.teamCharId)?.key ?? ''
-      ),
-    [database, loadoutData]
+      teamKeysKey !== undefined
+        ? (teamKeysKey.split(',') as (CharacterKey | '')[])
+        : loadoutData.map(
+            (loadoutDatum) =>
+              database.teamChars.get(loadoutDatum?.teamCharId)?.key ?? ''
+          ),
+    [database, loadoutData, teamKeysKey]
   )
 
   const [searchQuery, setSearchQuery] = useState('')

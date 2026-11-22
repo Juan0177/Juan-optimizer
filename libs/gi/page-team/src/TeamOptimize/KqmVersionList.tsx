@@ -95,6 +95,7 @@ import {
   createVersion,
   kqmSharedKey,
   makeOriginal,
+  pickVersionMember,
   versionName,
   versionRoot,
   versionRotation,
@@ -985,14 +986,15 @@ function NewVersionDialog({
       else next[k] = r
       return next
     })
+  const swapOf = (from: CharacterKey) => swaps.find((s) => s.from === from)
+  const shown = members.map((k) => swapOf(k)?.to ?? k)
+  const inTeam = ([k]: [string, unknown]) => shown.includes(k as CharacterKey)
   // (a copy may keep its team: another rotation)
   const changed =
     !!copied ||
     swaps.length > 0 ||
-    Object.keys(cons).length > 0 ||
-    Object.keys(sig).length > 0
-  const swapOf = (from: CharacterKey) => swaps.find((s) => s.from === from)
-  const taken = new Set<CharacterKey>([...members, ...swaps.map((s) => s.to)])
+    Object.entries(cons).some(inTeam) ||
+    Object.entries(sig).some(inTeam)
   // its name: its members' (`versionName`, numbered when the family has it) until one is typed
   const [name, setName] = useState<string>()
   const familyNames = useMemo(
@@ -1004,10 +1006,8 @@ function NewVersionDialog({
       ),
     [database, teamId]
   )
-  const inTeam = ([k]: [string, unknown]) =>
-    members.some((m) => (swapOf(m)?.to ?? m) === k)
   const membersName = versionName(
-    members.map((k) => swapOf(k)?.to ?? k),
+    shown,
     Object.fromEntries(Object.entries(cons).filter(inTeam)),
     { i18n, gender },
     Object.fromEntries(Object.entries(sig).filter(inTeam))
@@ -1015,7 +1015,7 @@ function NewVersionDialog({
   let defaultName = membersName
   for (let n = 2; familyNames.has(defaultName); n++)
     defaultName = `${membersName} (${n})`
-  const teamKey = members.map((k) => swapOf(k)?.to ?? k).join()
+  const teamKey = shown.join()
   const copiedKey =
     copied &&
     members.map((k) => copied.swaps.find((s) => s.from === k)?.to ?? k).join()
@@ -1423,13 +1423,11 @@ function NewVersionDialog({
           onSelect={(to) => {
             const from = picking
             setPicking(undefined)
-            if (!from || taken.has(to)) return
-            setSwaps((list) => [
-              ...list.filter((s) => s.from !== from),
-              { from, to },
-            ])
+            const next = from && pickVersionMember(members, swaps, from, to)
+            if (next) setSwaps(() => next)
           }}
-          loadoutData={team?.loadoutData}
+          teamKeys={shown}
+          selectedIndex={picking ? members.indexOf(picking) : -1}
         />
       </Suspense>
     </>

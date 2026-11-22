@@ -397,6 +397,34 @@ export interface VersionSwap {
 }
 
 /**
+ * The swaps once a member is picked for the slot of the original's `from`: it takes that slot. One
+ * picked from another slot leaves it to that slot's original member. Members of the original stay in
+ * their own slots, so one put in another slot swaps places with who is there. Undefined when the team
+ * stays as it is (one already in it, at its own slot).
+ */
+export function pickVersionMember(
+  members: readonly CharacterKey[],
+  swaps: readonly VersionSwap[],
+  from: CharacterKey,
+  to: CharacterKey
+): VersionSwap[] | undefined {
+  const shown = members.map((k) => swaps.find((s) => s.from === k)?.to ?? k)
+  const at = members.indexOf(from)
+  const was = shown.indexOf(to)
+  if (at < 0 || was === at || (was >= 0 && members[was] === to)) return
+  const team = shown.map((k, i) => (i === was ? members[i] : k))
+  team[at] = to
+  const ins = team.filter((k) => !members.includes(k))
+  const outs = members.flatMap((k, i) => (team.includes(k) ? [] : [i]))
+  const stay = new Set(outs.map((i) => team[i]).filter((k) => ins.includes(k)))
+  const rest = ins.filter((k) => !stay.has(k))
+  return outs.map((i) => ({
+    from: members[i],
+    to: stay.has(team[i]) ? team[i] : rest.shift()!,
+  }))
+}
+
+/**
  * A new version of a team (`rootId`, or the original of a version): a team of its own with members
  * swapped or other constellations (or both), under the original's KQM settings. Each one swapped in plays its usual
  * support part (`supportPart`) at the first step of the one it replaces. Its id ('' when the swaps
@@ -471,6 +499,11 @@ export function createVersion(
     const key = database.teamChars.get(datum?.teamCharId)?.key
     return key && (swaps.find((s) => s.from === key)?.to ?? key)
   })
+  const keyOf = (datum?: LoadoutDatum) =>
+    database.teamChars.get(datum?.teamCharId)?.key
+  // (one the copied team or the original has keeps its loadout)
+  const loadoutOf = (k: CharacterKey) =>
+    [...baseTeam.loadoutData, ...root.loadoutData].find((d) => keyOf(d) === k)
   const id = database.teams.duplicate(baseId)
   if (!id) return ''
   database.teams.set(id, (team) => {
@@ -478,9 +511,10 @@ export function createVersion(
     team.versionOf = rootId
     team.loadoutData = baseTeam.loadoutData.map((datum, i) => {
       const want = slots[i]
-      return !want || database.teamChars.get(datum?.teamCharId)?.key === want
+      return !want || keyOf(datum) === want
         ? datum
-        : ({ teamCharId: database.teamChars.new(want) } as LoadoutDatum)
+        : (loadoutOf(want) ??
+            ({ teamCharId: database.teamChars.new(want) } as LoadoutDatum))
     })
     if (Object.keys(cons).length) team.versionCons = cons
     else delete team.versionCons

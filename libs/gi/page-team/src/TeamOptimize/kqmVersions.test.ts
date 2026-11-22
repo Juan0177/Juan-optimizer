@@ -19,6 +19,7 @@ import {
   KQM_SHARED,
   kqmSharedKey,
   makeOriginal,
+  pickVersionMember,
   pushVersionSettings,
   syncVersion,
   versionRoot,
@@ -532,5 +533,80 @@ describe('KQM versions', () => {
     })
     pushVersionSettings(database, id, names)
     expect(database.teams.get(teamId)?.teamOpt?.kqm?.signature).toBeUndefined()
+  })
+})
+
+describe('picking a member in the New version and Duplicate windows', () => {
+  const root: CharacterKey[] = ['Anastasya', 'Mitya', 'Odette', 'Danica']
+  const yae = [{ from: 'Mitya', to: 'YaeMiko' }] as const
+  const pick = (from: CharacterKey, to: CharacterKey) =>
+    pickVersionMember(root, yae, from, to)
+
+  it('one the copied version swapped out goes in any slot, the swapped-in one moving to its place', () => {
+    expect(pick('Odette', 'Mitya')).toEqual([{ from: 'Odette', to: 'YaeMiko' }])
+    expect(pick('Danica', 'Mitya')).toEqual([{ from: 'Danica', to: 'YaeMiko' }])
+  })
+
+  it('the original member picked for its own slot undoes the swap', () => {
+    expect(pick('Mitya', 'Mitya')).toEqual([])
+  })
+
+  it('one shown in another slot moves there, leaving that slot to its original member', () => {
+    expect(pick('Danica', 'YaeMiko')).toEqual([
+      { from: 'Danica', to: 'YaeMiko' },
+    ])
+  })
+
+  it('a new member takes the slot, the other swaps kept', () => {
+    expect(pick('Odette', 'Furina')).toEqual([
+      { from: 'Mitya', to: 'YaeMiko' },
+      { from: 'Odette', to: 'Furina' },
+    ])
+    expect(pick('Mitya', 'Furina')).toEqual([{ from: 'Mitya', to: 'Furina' }])
+  })
+
+  it('nothing changes for one already in the team at its own slot', () => {
+    expect(pick('Odette', 'Danica')).toBeUndefined()
+    expect(pick('Mitya', 'YaeMiko')).toBeUndefined()
+    expect(pickVersionMember(root, [], 'Odette', 'Odette')).toBeUndefined()
+  })
+
+  it('with several swaps, each one swapped in stays where it was put when it can', () => {
+    const swaps = [
+      { from: 'Anastasya', to: 'Furina' },
+      { from: 'Odette', to: 'YaeMiko' },
+    ] as const
+    expect(pickVersionMember(root, swaps, 'Danica', 'Anastasya')).toEqual([
+      { from: 'Odette', to: 'YaeMiko' },
+      { from: 'Danica', to: 'Furina' },
+    ])
+  })
+
+  it('what it makes is the team shown, each member keeping a loadout the teams have', () => {
+    const { database, teamId } = setup()
+    const xiangling = [{ from: 'Bennett', to: 'Xiangling' }] as const
+    const copied = createVersion(database, teamId, xiangling, names)
+    const swaps = pickVersionMember(MEMBERS, xiangling, 'Citlali', 'Bennett')!
+    const id = createVersion(
+      database,
+      teamId,
+      swaps,
+      names,
+      undefined,
+      {},
+      undefined,
+      copied
+    )
+    expect(keysOf(database, id)).toEqual([
+      'Mavuika',
+      'Bennett',
+      'Xiangling',
+      'Rosaria',
+    ])
+    const charOf = (team: string, k: CharacterKey) =>
+      teamOptMembers(database, team).find((m) => m.characterKey === k)
+        ?.teamCharId
+    expect(charOf(id, 'Bennett')).toBe(charOf(teamId, 'Bennett'))
+    expect(charOf(id, 'Xiangling')).toBe(charOf(copied, 'Xiangling'))
   })
 })
