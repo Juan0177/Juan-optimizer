@@ -227,6 +227,28 @@ const CHARGE_CANCEL: Partial<Record<CharacterKey, true>> = { Arlecchino: true }
 /** Members whose held Skill is held for a number of stacks ("hE[stacks=1]"), and the most */
 const SKILL_STACKS: Partial<Record<CharacterKey, number>> = { Beidou: 2 }
 
+/**
+ * The ways a member's kit lets its actions be written beyond the plain ones, for a rotation
+ * search to try: Charged Attacks with beams (Sandrone) or bullets (Chasca), Flamestrider spins and
+ * finisher (Mavuika), a cancelled Charged Attack (Arlecchino, then a dash), a held Skill's stacks
+ * (Beidou). What the member's constellations do not allow, the simulation warns about.
+ */
+export function actionVariants(characterKey: CharacterKey): string[] {
+  const out: string[] = []
+  const counted = (most: number | undefined, word: (n: number) => string) => {
+    for (let n = 1; most && n <= most; n++) out.push(word(n))
+  }
+  counted(CHARGE_BEAMS[characterKey], (n) => `CA[beams=${n}]`)
+  counted(CHARGE_BULLETS[characterKey], (n) => `CA[bullets=${n}]`)
+  const spins = CHARGE_SPINS[characterKey]
+  counted(spins, (n) => `C${n}`)
+  counted(spins, (n) => `C${n}F`)
+  if (spins) out.push('CF')
+  if (CHARGE_CANCEL[characterKey]) out.push('CA[cancel] D')
+  counted(SKILL_STACKS[characterKey], (n) => `hE[stacks=${n}]`)
+  return out
+}
+
 /** The most times one group is repeated ("4[N5CD]", "4N5CD") */
 const MAX_REPEAT = 20
 
@@ -571,6 +593,85 @@ const writtenSteps = (text: string, members: readonly RotationMember[]) =>
     .map((p) => p.trim())
     .filter(Boolean)
     .flatMap((p) => splitOnNames(p, members))
+
+/** A written rotation's step as words (`rotationWords`) */
+export interface RotationWordStep {
+  characterKey: CharacterKey
+  /** The member's name as written */
+  name: string
+  /** One action or group a word ("E", "4[N5 CA]", "Q?/N3"); none: the loop back to the member */
+  words: string[]
+}
+
+/** Words split at spaces outside brackets ("4[N5 CA]" and "CA[beams=2]" stay one word) */
+function bracketWords(text: string) {
+  const words: string[] = []
+  let word = ''
+  let depth = 0
+  for (const ch of text) {
+    if (/\s/.test(ch) && !depth) {
+      if (word) words.push(word)
+      word = ''
+      continue
+    }
+    if (ch === '[') depth++
+    else if (ch === ']') depth = Math.max(0, depth - 1)
+    word += ch
+  }
+  if (word) words.push(word)
+  return words
+}
+
+/** A step's actions one word each: "EQ" is "E", "Q"; a group "4N5CA" is "4[N5 CA]" */
+function actionWords(
+  text: string,
+  who: string,
+  characterKey: CharacterKey
+): string[] {
+  return bracketWords(text).flatMap((word) => {
+    const group = /^(\d+)\[(.*)\]$/.exec(word)
+    if (group)
+      return [
+        `${group[1]}[${actionWords(group[2], who, characterKey).join(' ')}]`,
+      ]
+    const glued = /^(\d+)([a-z].*)$/i.exec(word)
+    if (glued && !/[[/]/.test(word))
+      return [
+        `${glued[1]}[${actionWords(glued[2], who, characterKey).join(' ')}]`,
+      ]
+    if (/[[/]/.test(word)) return [word]
+    const actions = parseActions(word, [], who, characterKey)
+    return actions.length > 1 ? actions.map((a) => a.text) : [word]
+  })
+}
+
+/**
+ * A written rotation as its steps' words, to change it a word at a time (a rotation search):
+ * each step's member, its name as written and its actions, one word each. Notes in parentheses
+ * are left out; a step naming no member is skipped.
+ */
+export function rotationWords(
+  text: string,
+  members: readonly RotationMember[]
+): RotationWordStep[] {
+  return writtenSteps(text, members).flatMap((part) => {
+    const head = stepHead(part, members)
+    if (!head) return []
+    const name = part.slice(0, part.length - head.rest.length).trim()
+    const rest = head.rest.replace(/\([^)]*\)/g, ' ').trim()
+    return [
+      {
+        characterKey: head.characterKey,
+        name,
+        words: rest ? actionWords(rest, name, head.characterKey) : [],
+      },
+    ]
+  })
+}
+
+/** `rotationWords` written back as a rotation */
+export const wordsRotationText = (steps: readonly RotationWordStep[]) =>
+  steps.map((s) => [s.name, ...s.words].join(' ')).join(' -> ')
 
 /** A member's steps in a rotation, as written without its name ("E Q") */
 export function memberSteps(

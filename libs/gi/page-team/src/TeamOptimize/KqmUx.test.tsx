@@ -239,6 +239,8 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
     },
   // (no written rotation here: nothing filled in)
   withRotationEnergy: (settings: object) => settings,
+  parseTiming: () => ({ edits: {} }),
+  parseFrameData: () => ({}),
   kqmTopTeams: (result: {
     builds: Record<string, { weapon: object; sets: object }>
     after: { total: number }

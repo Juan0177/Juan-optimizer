@@ -90,7 +90,7 @@ import {
 } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
-import type { SimGear } from './rotation/types'
+import type { RotationCalculation, SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
@@ -327,6 +327,11 @@ export interface KqmReplayInput {
   constellations: Partial<Record<CharacterKey, number>>
   gear: Partial<Record<CharacterKey, SimGear>>
   overrides: TeamDataOverrides
+  /**
+   * The stats the play reads, kept across plays with these same builds (a rotation search's);
+   * absent: read anew
+   */
+  calculate?: RotationCalculation
 }
 /** A KQM run's progress */
 export interface KqmStep {
