@@ -1238,8 +1238,12 @@ const SETS_SEARCHED = 6
 const TWO_PIECE_CLASSES = 5
 /** Problems a run keeps compiled (the rounds' and rankings' for every weapon of the team fit) */
 const PROBLEMS_KEPT = 200
-/** Times a ranked option better than its member's build is taken, and the rounds go on */
-const ADOPT_PASSES = 2
+/**
+ * Times a ranked option better than its member's build is taken, and the rounds go on (passes stop
+ * as soon as none is found; each takes the first kind found, so a Favonius and a ranked option
+ * taken first still leave passes for a set handed to a teammate)
+ */
+const ADOPT_PASSES = 4
 /**
  * A member's best ranked weapons and sets searched as pairs at the end (the rankings hold each
  * weapon with the build's sets and each set with the build's weapon: a pair that only wins
