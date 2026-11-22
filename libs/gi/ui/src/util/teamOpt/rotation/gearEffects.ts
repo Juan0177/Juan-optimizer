@@ -190,10 +190,11 @@ export function gearEffects({
   const holds = (k: CharacterKey, weapon: string) =>
     gear[k]?.weapon === weapon ||
     !!gear[k]?.candidates?.weapons?.includes(weapon)
-  // Being protected by a shield is the member's own: those effects are timed for any set and any
-  // weapon of its type too, so one a build tries (Team optimize) never counts a saved switch
-  // without a shield; not held, they count only where a switch is saved (`SimBuffWindow.offOnly`)
-  const shieldGear = (k: CharacterKey, item: string, set?: boolean) =>
+  // Being protected by a shield, and the member taking the field when Thrilling Tales' wielder
+  // leaves it: those effects are timed for any set and any weapon of its type too, so one a build
+  // tries (Team optimize) never counts a saved switch beyond them; not held, they count only where
+  // a switch is saved (`SimBuffWindow.offOnly`)
+  const triedGear = (k: CharacterKey, item: string, set?: boolean) =>
     (set ? opens(k, item) : holds(k, item))
       ? 'held'
       : set ||
@@ -339,9 +340,18 @@ export function gearEffects({
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
   // Thrilling Tales of Dragon Slayers: declared off, on only for the member taking the field when
   // the wielder leaves it (below), so a saved switch never adds uptime the swaps don't give
-  for (const k of members)
-    if (holds(k, 'ThrillingTalesOfDragonSlayers'))
-      window(k, ['ThrillingTalesOfDragonSlayers', 'Heritage'], 'on', 0, 0)
+  for (const k of members) {
+    const how = triedGear(k, 'ThrillingTalesOfDragonSlayers')
+    if (how)
+      window(
+        k,
+        ['ThrillingTalesOfDragonSlayers', 'Heritage'],
+        'on',
+        0,
+        0,
+        how === 'unheld'
+      )
+  }
   for (const k of members)
     if (opens(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
@@ -394,7 +404,7 @@ export function gearEffects({
     for (const [item, path, value] of SHIELD_CREATED)
       if (holds(k, item)) window(k, [item, path], value, 0, 0)
     for (const [item, path, value, set] of SHIELDED) {
-      const how = shieldGear(k, item, set)
+      const how = triedGear(k, item, set)
       if (how) window(k, [item, path], value, 0, 0, how === 'unheld')
     }
   }
@@ -1411,11 +1421,8 @@ export function gearEffects({
       if (ctx) pickUp(ctx)
       // Thrilling Tales of Dragon Slayers: the wielder's swap-out gives the incoming member
       // its ATK for 10 s (hitlag-extended), once per 20 s (gcsim)
-      if (
-        ctx &&
-        holds(from, 'ThrillingTalesOfDragonSlayers') &&
-        ready(`ttds.${from}`, t, 1200)
-      )
+      const ttds = triedGear(from, 'ThrillingTalesOfDragonSlayers')
+      if (ctx && ttds && ready(`ttds.${from}`, t, 1200))
         ctx.buff(
           from,
           ['ThrillingTalesOfDragonSlayers', 'Heritage'],
@@ -1425,6 +1432,7 @@ export function gearEffects({
           {
             recipient: to,
             hitlag: 'recipient',
+            ...(ttds === 'unheld' ? { offOnly: true } : {}),
           }
         )
       if (gleam.delete(from))
@@ -1511,7 +1519,7 @@ export function gearEffects({
       weapons.end(t)
       for (const k of members)
         for (const [item, path, value, set] of SHIELDED) {
-          const how = shieldGear(k, item, set)
+          const how = triedGear(k, item, set)
           if (!how) continue
           const offOnly = how === 'unheld'
           const spans = protectedSpans(k, t)

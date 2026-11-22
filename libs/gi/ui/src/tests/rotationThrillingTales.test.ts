@@ -6,7 +6,10 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { describe, expect, it } from 'vitest'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
-import { simulateRotation } from '../util/teamOpt/rotation/simulate'
+import {
+  rotationAttacks,
+  simulateRotation,
+} from '../util/teamOpt/rotation/simulate'
 import type { KitModel } from '../util/teamOpt/rotation/types'
 
 /** A member whose every action takes 60 frames and hits at 10 */
@@ -90,5 +93,75 @@ describe('Thrilling Tales of Dragon Slayers', () => {
       { recipient: 'Xiangling', frames: 600 },
       { recipient: 'Xiangling', frames: 600 },
     ])
+  })
+})
+
+describe('Thrilling Tales of Dragon Slayers a build tries (Team optimize)', () => {
+  const HERITAGE = ['ThrillingTalesOfDragonSlayers', 'Heritage']
+  const members: CharacterKey[] = ['Sucrose', 'Mona', 'Xiangling']
+  const sim = simulateRotation({
+    rotation: parseRotation(
+      'Sucrose E -> Mona E -> Xiangling E W5',
+      members.map((characterKey) => ({ characterKey, name: characterKey }))
+    ),
+    members,
+    elements: { Sucrose: 'anemo', Mona: 'hydro', Xiangling: 'pyro' },
+    constellations: {},
+    repeats: 1,
+    keep: 'all',
+    kits: {
+      Sucrose: probe('Sucrose'),
+      Mona: probe('Mona'),
+      Xiangling: probe('Xiangling'),
+    },
+    reactions: { onHit() {} },
+    // (Mona holds it; Sucrose, another Catalyst user, could)
+    gear: {
+      Sucrose: { weapon: 'FavoniusCodex' },
+      Mona: { weapon: 'ThrillingTalesOfDragonSlayers' },
+    },
+  })
+  const sucroses = sim.buffWindows.filter(
+    (w) => w.owner === 'Sucrose' && w.path.join('.') === HERITAGE.join('.')
+  )
+  const limited = (
+    attacks: ReturnType<typeof rotationAttacks>,
+    member: CharacterKey
+  ) =>
+    attacks[member]!.every((a) =>
+      a.limits?.some(
+        (l) => l.owner === 'Sucrose' && l.path.join('.') === HERITAGE.join('.')
+      )
+    )
+
+  it('times the one its member does not hold, only where its switch is saved', () => {
+    expect(sucroses.length).toBeGreaterThan(0)
+    expect(sucroses.every((w) => w.offOnly)).toBe(true)
+    expect(
+      sucroses.filter((w) => w.end > w.start).map((w) => w.recipient)
+    ).toEqual(['Mona'])
+  })
+
+  it('a saved switch counts only for the member taking the field when it leaves', () => {
+    const attacks = rotationAttacks(sim, (owner, path) =>
+      owner === 'Sucrose' && path.join('.') === HERITAGE.join('.')
+        ? 'on'
+        : undefined
+    )
+    expect(limited(attacks, 'Xiangling')).toBe(true)
+    expect(limited(attacks, 'Sucrose')).toBe(true)
+    expect(attacks.Mona!.some((a) => a.limits?.length)).toBe(false)
+  })
+
+  it('without a saved switch, it adds nothing', () => {
+    const attacks = rotationAttacks(sim)
+    const sucrose = (s: { owner: string; path: string[] }) =>
+      s.owner === 'Sucrose' && s.path.join('.') === HERITAGE.join('.')
+    for (const member of members)
+      expect(
+        attacks[member]!.some(
+          (a) => a.limits?.some(sucrose) || a.states?.some(sucrose)
+        )
+      ).toBe(false)
   })
 })

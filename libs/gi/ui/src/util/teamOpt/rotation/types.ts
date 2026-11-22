@@ -162,8 +162,9 @@ export interface SimBuffWindow {
    */
   late?: true
   /**
-   * The effect of a weapon or set the member doesn't hold (being protected by a shield, timed for
-   * any it could): it counts only where the member has its switch saved, so it adds no parts
+   * The effect of a weapon or set the member doesn't hold (being protected by a shield, Thrilling
+   * Tales' swap-out; timed for any it could): it counts only where the member has its switch
+   * saved, so it adds no parts
    */
   offOnly?: true
 }
@@ -321,6 +322,7 @@ export interface SimContext {
           max?: number
           recipient?: CharacterKey
           hitlag?: 'recipient' | 'enemy'
+          offOnly?: true
         }
   ): void
   /** Replace a continuously tracked conditional at this frame, closing its previous interval. */
