@@ -1,9 +1,10 @@
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import type { CharacterKey, SubstatKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt } from '@genshin-optimizer/gi/db'
+import type { TeamOpt, TeamOptSavedSensitivity } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  KqmResult,
   SensitivityLevel,
   SensitivityTalent,
   TeamOptMember,
@@ -11,6 +12,7 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
+  kqmTeamSensitivity,
   sensitivityLevels,
   sensitivitySubstats,
   sensitivityTalents,
@@ -49,9 +51,15 @@ interface Sensitivity {
 /**
  * Per result (team build) shown: its cells as far as they are computed, so that they are there at
  * once when it is shown again (another tab, another page), and a computation stopped half way goes
- * on from where it was. Also saved with the team's last result, for after a reload.
+ * on from where it was. Also saved with the team's last result (KQM's: its run's own builds), for
+ * after a reload.
  */
-const cache = new WeakMap<TeamOptResult, { key: string; value: Sensitivity }>()
+const cache = new WeakMap<object, { key: string; value: Sensitivity }>()
+
+/** KQM's builds are at level 90: only the levels above it are offered */
+const KQM_LEVEL = 90
+const levelsFor = (kqm: boolean) =>
+  sensitivityLevels.filter((level) => !kqm || level > KQM_LEVEL)
 
 /** Runs `fn` when the page is idle (a timeout where idle callbacks are missing) */
 function whenIdle(fn: () => void): () => void {
@@ -64,39 +72,48 @@ function whenIdle(fn: () => void): () => void {
 }
 
 /**
- * What each change to each member is worth to the team (see `teamSensitivity`): computed after the
- * result arrives, one change at a time while the page is idle, so the cells fill in as they come.
- * For the result as it was found (`teamOpt`: the run's settings); kept with it (see `cache`) and in
- * the saved result (`savedAt`: which one; `index`: which of its team builds).
+ * What each change to each member is worth to the team (see `teamSensitivity`, and
+ * `kqmTeamSensitivity` for KQM's builds): computed after the result arrives, one change at a time
+ * while the page is idle, so the cells fill in as they come. For the result as it was found
+ * (`teamOpt`: the run's settings); kept with it (see `cache`) and in the saved result (`savedAt`:
+ * which one; `index`: which of its team builds).
  */
 function useTeamSensitivity(
   teamId: string,
   teamOpt: TeamOpt,
-  result: TeamOptResult,
+  result: TeamOptResult | { kqm: KqmResult },
   savedAt: number | undefined,
   index: number
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
-  // what the cells depend on besides the result
-  const key = JSON.stringify([
-    teamOpt.attacks,
-    teamOpt.onField ?? '',
-    teamOpt.bonusStats ?? {},
-    teamOpt.assumeMaxMain,
-  ])
+  const kqm = 'kqm' in result ? result.kqm : undefined
+  const subject: object = kqm ?? result
+  // what the cells depend on besides the result (a KQM run's settings are its own, and its played
+  // attacks, every candidate's buffs on them, can be megabytes)
+  const key = kqm
+    ? 'kqm'
+    : JSON.stringify([
+        teamOpt.attacks,
+        teamOpt.onField ?? '',
+        teamOpt.bonusStats ?? {},
+        teamOpt.assumeMaxMain,
+      ])
   /** What is known for this result: of this visit, else the saved result's */
   const known = (): Sensitivity | undefined => {
-    const hit = cache.get(result)
+    const hit = cache.get(subject)
     if (hit?.key === key) return hit.value
-    const run = database.teamOptResults.get().runs[teamId]
-    const saved =
-      savedAt !== undefined && run?.savedAt === savedAt
-        ? run.sensitivity?.[index]
-        : undefined
+    let saved: TeamOptSavedSensitivity | undefined
+    if (savedAt !== undefined && kqm) {
+      const run = database.teamKqmResults.get().runs[teamId]
+      if (run?.savedAt === savedAt) saved = run.sensitivity
+    } else if (savedAt !== undefined) {
+      const run = database.teamOptResults.get().runs[teamId]
+      if (run?.savedAt === savedAt) saved = run.sensitivity?.[index]
+    }
     if (saved?.key !== key) return undefined
     const value = { cells: saved.cells as Cells, done: saved.done }
-    cache.set(result, { key, value })
+    cache.set(subject, { key, value })
     return value
   }
   const [value, setValue] = useState<Sensitivity>(
@@ -116,13 +133,20 @@ function useTeamSensitivity(
     let computed = false
     const save = (done: boolean) => {
       if (savedAt === undefined || !computed) return
-      database.teamOptResults.setSensitivity(teamId, savedAt, index, {
+      const value = {
         key,
         cells: cells as Record<string, Record<string, number | null>>,
         done,
-      })
+      }
+      if (kqm) database.teamKqmResults.setSensitivity(teamId, savedAt, value)
+      else database.teamOptResults.setSensitivity(teamId, savedAt, index, value)
     }
-    let sensitivity: ReturnType<typeof teamSensitivity> | undefined
+    let sensitivity:
+      | Pick<
+          ReturnType<typeof teamSensitivity>,
+          'base' | 'substats' | 'character'
+        >
+      | undefined
     const has = (member: TeamOptMember, row: RowId) =>
       cells[member.characterKey]?.[row] !== undefined
     const set = (
@@ -162,7 +186,7 @@ function useTeamSensitivity(
           )
       ),
       ...members.flatMap((member) =>
-        sensitivityLevels
+        levelsFor(!!kqm)
           .filter((level) => !has(member, `level:${level}`))
           .map(
             (level) => () =>
@@ -177,13 +201,15 @@ function useTeamSensitivity(
     const tasks: (() => void)[] = todo.length
       ? [
           () => {
-            sensitivity = teamSensitivity(
-              database,
-              teamId,
-              gender,
-              teamOpt,
-              result
-            )
+            sensitivity = kqm
+              ? kqmTeamSensitivity(database, teamId, gender, teamOpt, kqm)
+              : teamSensitivity(
+                  database,
+                  teamId,
+                  gender,
+                  teamOpt,
+                  result as TeamOptResult
+                )
           },
           ...todo,
         ]
@@ -195,7 +221,7 @@ function useTeamSensitivity(
       if (i > 1) computed = true
       const done = i >= tasks.length
       const value = { cells: { ...cells }, done }
-      cache.set(result, { key, value })
+      cache.set(subject, { key, value })
       if (done) save(true)
       setValue(value)
       if (!done) cancel = whenIdle(next)
@@ -208,7 +234,7 @@ function useTeamSensitivity(
       // (stopped half way: what is computed is saved, and goes on from there next time)
       if (i < tasks.length) save(false)
     }
-  }, [database, teamId, gender, key, result, savedAt, index])
+  }, [database, teamId, gender, key, subject, savedAt, index])
   return value
 }
 
@@ -218,7 +244,8 @@ const formatChange = (value: number) =>
 
 /**
  * Below the result: what one more substat roll, talent level or level on each member would add to
- * the team's damage, against the result (same rotation, buffs, builds and weapons).
+ * the team's damage, against the result (same rotation, buffs, builds and weapons). For KQM's
+ * builds (`result.kqm`): a roll is a KQM Standard roll on them, at KQM's talents and level.
  */
 export function TeamSensitivity({
   teamId,
@@ -232,7 +259,7 @@ export function TeamSensitivity({
   members: TeamOptMember[]
   /** The settings the result was found with */
   teamOpt: TeamOpt
-  result: TeamOptResult
+  result: TeamOptResult | { kqm: KqmResult }
   /** When the result was found (which saved result it is) */
   savedAt?: number
   /** Which of the result's team builds it is (0: the best) */
@@ -240,6 +267,7 @@ export function TeamSensitivity({
 }) {
   const { t } = useTranslation(['page_team', 'statKey_gen'])
   const { gender } = useDBMeta()
+  const kqm = 'kqm' in result
   const { cells, done } = useTeamSensitivity(
     teamId,
     teamOpt,
@@ -253,8 +281,10 @@ export function TeamSensitivity({
     rows: { id: RowId; label: ReactNode }[]
   }[] = [
     {
-      // (an average 5★ roll, as the Improve tab's: said in the label, not only in the ⓘ)
-      label: t('teamOpt.sens.substatsAverage', '+1 average substat roll'),
+      // (an average 5★ roll, as the Improve tab's, or KQM's: said in the label, not only in the ⓘ)
+      label: kqm
+        ? t('teamOpt.sens.substatsKqm', '+1 KQM substat roll')
+        : t('teamOpt.sens.substatsAverage', '+1 average substat roll'),
       rows: sensitivitySubstats.map((key) => ({
         id: `sub:${key}` as const,
         label: `${t(`statKey_gen:${key}`)}${percentKeys.includes(key) ? '%' : ''}`,
@@ -269,7 +299,7 @@ export function TeamSensitivity({
     },
     {
       label: t('teamOpt.sens.levels', 'Level'),
-      rows: sensitivityLevels.map((level) => ({
+      rows: levelsFor(kqm).map((level) => ({
         id: `level:${level}` as const,
         label: t('teamOpt.sens.level', {
           defaultValue: 'Level {{level}}',
@@ -356,10 +386,15 @@ export function TeamSensitivity({
   }
   const info = (
     <>
-      {t(
-        'teamOpt.sens.info',
-        'Each cell: the team’s rotation damage with that one change on that member, against the result above (same rotation, buffs, artifacts and weapons). A roll is an average 5★ roll, as in the Improve tab’s Substat value.'
-      )}
+      {kqm
+        ? t(
+            'teamOpt.sens.infoKqm',
+            'Each cell: the team’s rotation damage with that one change on that member’s KQM build, against the builds above (same rotation, buffs and weapons). A roll is a KQM Standard roll (0.8 of it on a 4★ piece); talents and levels go up from KQM’s.'
+          )
+        : t(
+            'teamOpt.sens.info',
+            'Each cell: the team’s rotation damage with that one change on that member, against the result above (same rotation, buffs, artifacts and weapons). A roll is an average 5★ roll, as in the Improve tab’s Substat value.'
+          )}
       {done && best && best.value > 0.00005 && (
         <Box component="span" sx={{ display: 'block', mt: 1 }}>
           <HowToRead best={best} gender={gender} />

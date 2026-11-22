@@ -1188,6 +1188,20 @@ export default function TeamBuildWorkspace({
           index={Math.min(pick, builds.length - 1)}
         />
       )}
+      {/* (KQM's: for its builds shown, while its result is for the rotation as it is; saved with
+          the run for its own builds, not for other equipment picked) */}
+      {mode === 'kqm' && kqmRotation && kqmShown && (
+        <TeamSensitivity
+          teamId={teamId}
+          members={members}
+          teamOpt={kqmRotation.runTeamOpt}
+          result={{ kqm: kqmShown }}
+          savedAt={
+            kqmShown === kqmRotation.result ? kqmRotation.savedAt : undefined
+          }
+          index={0}
+        />
+      )}
       {/* last on the page: it stays pinned to the window's foot while anything above scrolls */}
       {((mode === 'inventory' && !showStart) || running) && (
         <RunBar

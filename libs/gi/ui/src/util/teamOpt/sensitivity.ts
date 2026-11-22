@@ -16,9 +16,15 @@ import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
 import type { RollSize } from '../substatValue'
 import type { CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
+import type { KqmResult } from './kqm'
+import { kqmArtData, kqmTeamOverrides } from './kqm'
 import { teamRotationNodes } from './objective'
 import type { TeamOptResult } from './solve'
-import { evaluateTeamRotation, teamOptArtValues } from './solve'
+import {
+  evaluateTeamNodes,
+  evaluateTeamRotation,
+  teamOptArtValues,
+} from './solve'
 
 /** The substats whose extra roll is valued */
 export const sensitivitySubstats: readonly SubstatKey[] = [
@@ -190,6 +196,94 @@ export function teamSensitivity(
       }
       return evaluate({
         characters: { [member.characterKey]: { level: change.level } },
+      })
+    },
+  }
+}
+
+/**
+ * `teamSensitivity` for a KQM result (`runTeamOpt`: the settings it was run with): the rotation as
+ * KQM played it, read with its builds, constellations, talents, switches and enemy
+ * (`kqmTeamOverrides`), never the members' own. A roll is one more KQM Standard roll on the
+ * member's KQM build (its 4★ pieces' scale included); talents and levels change KQM's.
+ */
+export function kqmTeamSensitivity(
+  database: ArtCharDatabase,
+  teamId: string,
+  gender: GenderKey,
+  runTeamOpt: TeamOpt,
+  result: KqmResult
+) {
+  const members = teamOptMembers(database, teamId)
+  const overrides = kqmTeamOverrides(database, teamId, runTeamOpt, result)
+  const attacks = result.played?.attacks ?? runTeamOpt.attacks
+  const evaluate = (
+    changes: {
+      arts?: NonNullable<typeof overrides.arts>
+      characters?: Partial<Record<CharacterKey, CharacterOverride>>
+    } = {}
+  ) => {
+    const nodes = teamRotationNodes(database, teamId, gender, {
+      ...overrides,
+      arts: { ...overrides.arts, ...changes.arts },
+      characters: { ...overrides.characters, ...changes.characters },
+      attacks,
+      onField: runTeamOpt.onField,
+    })
+    return nodes
+      ? evaluateTeamNodes(database, teamId, attacks, nodes).total
+      : undefined
+  }
+  const base = evaluate()
+  return {
+    base,
+    members,
+    /** The rotation's damage with one more KQM roll of each substat on `member`'s build */
+    substats(member: TeamOptMember): Partial<Record<SubstatKey, number>> {
+      const { characterKey } = member
+      const build = result.builds[characterKey]
+      if (!build) return {}
+      return Object.fromEntries(
+        sensitivitySubstats.map((key) => [
+          key,
+          evaluate({
+            arts: {
+              [characterKey]: kqmArtData({
+                ...build,
+                rolls: { ...build.rolls, [key]: (build.rolls[key] ?? 0) + 1 },
+              }),
+            },
+          }),
+        ])
+      )
+    },
+    /**
+     * The rotation's damage with `member` changed: one more level of a KQM talent (undefined at its
+     * highest), or a level above KQM's 90 (undefined at or below it)
+     */
+    character(
+      member: TeamOptMember,
+      change: { talent: SensitivityTalent } | { level: SensitivityLevel }
+    ): number | undefined {
+      const character = overrides.characters?.[member.characterKey]
+      if (!character) return undefined
+      if ('talent' in change) {
+        const now = character.talent?.[change.talent] ?? MAX_TALENT_LEVEL
+        if (now >= MAX_TALENT_LEVEL) return undefined
+        return evaluate({
+          characters: {
+            [member.characterKey]: {
+              ...character,
+              talent: { ...character.talent, [change.talent]: now + 1 },
+            },
+          },
+        })
+      }
+      if (change.level <= (character.level ?? 90)) return undefined
+      return evaluate({
+        characters: {
+          [member.characterKey]: { ...character, level: change.level },
+        },
       })
     },
   }

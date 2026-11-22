@@ -30,6 +30,26 @@ describe('database.teamKqmResults (last KQM theorycrafting runs)', () => {
     expect(Object.isFrozen(run?.run.result)).toBe(false)
   })
 
+  it('keeps what raises the damage of a run’s builds across a reload, for that run only', () => {
+    const storage = new SandboxStorage()
+    const results = new ArtCharDatabase(1, storage).teamKqmResults
+    results.setRun('team_1', saved(5))
+    const sensitivity = {
+      key: 'k',
+      cells: { Flins: { 'sub:critRate_': 0.0123, 'talent:burst': null } },
+      done: true,
+    }
+    // (an older run's: left out)
+    results.setSensitivity('team_1', 4, sensitivity)
+    expect(results.get().runs['team_1']?.sensitivity).toBeUndefined()
+    results.setSensitivity('team_1', 5, sensitivity)
+    const reloaded = new ArtCharDatabase(1, storage).teamKqmResults
+    expect(reloaded.get().runs['team_1']?.sensitivity).toEqual(sensitivity)
+    // a new run starts without it
+    reloaded.setRun('team_1', saved(6))
+    expect(reloaded.get().runs['team_1']?.sensitivity).toBeUndefined()
+  })
+
   it('forgets a team’s run, and only that one', () => {
     const database = new ArtCharDatabase(1, new SandboxStorage())
     database.teamKqmResults.setRun('team_1', saved())

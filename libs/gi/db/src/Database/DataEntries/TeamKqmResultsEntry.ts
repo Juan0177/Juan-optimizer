@@ -3,6 +3,8 @@ import { DataEntry } from '../DataEntry'
 import { validateTeamOpt } from '../DataManagers/TeamOpt'
 import type { PackedKqmRun } from './packKqmRun'
 import { isPackedKqmRun, packKqmRun, unpackKqmRun } from './packKqmRun'
+import type { TeamOptSavedSensitivity } from './TeamOptResultsEntry'
+import { validSensitivity } from './TeamOptResultsEntry'
 
 /**
  * A team's last KQM theorycrafting run, kept across reloads. The run's shape belongs to KQM mode
@@ -52,6 +54,11 @@ export interface TeamKqmRunSummary {
 export interface TeamKqmRunIndex {
   savedAt: number
   members: string[]
+  /**
+   * What raises the damage of the run's builds, as far as it was computed (small: kept here, not
+   * in the packed run). Its shape belongs to the optimizer's page.
+   */
+  sensitivity?: TeamOptSavedSensitivity
 }
 
 /**
@@ -209,9 +216,11 @@ export class TeamKqmResultsEntry extends DataEntry<
           this.database.storage.getString(runStorageKey(teamId))
       if (!packed) continue
       this.packedRuns.set(teamId, packed)
+      const sensitivity = validSensitivity(saved['sensitivity'])
       runs[teamId] = {
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
         members: members as string[],
+        ...(sensitivity ? { sensitivity } : {}),
       }
     }
     const summaries: NonNullable<ITeamKqmResultsEntry['summaries']> = {}
@@ -316,6 +325,20 @@ export class TeamKqmResultsEntry extends DataEntry<
       this.dropRun(id)
     }
     this.writeIndex(runs)
+  }
+  /**
+   * Saves what raises the damage of a team's saved run's builds (`savedAt` says which run: a newer
+   * one is left as it is)
+   */
+  setSensitivity(
+    teamId: string,
+    savedAt: number,
+    sensitivity: TeamOptSavedSensitivity
+  ): void {
+    const runs = this.get().runs
+    const index = runs[teamId]
+    if (!index || index.savedAt !== savedAt) return
+    this.writeIndex({ ...runs, [teamId]: { ...index, sensitivity } })
   }
   /** A run's packed form under its key; false when the browser's storage is full */
   private writePacked(teamId: string, packed: string) {
