@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.33.1",
+    "date": "2026-11-22",
+    "fixed": [
+      "Sucrose: the party's Elemental Mastery from her Mollis Favonius passive now applies only after her Elemental Skill or Burst hits. A rotation where she uses neither no longer gives it to the team."
+    ]
+  },
+  {
     "version": "1.33.0",
     "date": "2026-11-22",
     "improved": [
