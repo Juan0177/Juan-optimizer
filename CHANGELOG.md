@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.32.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.32.0) (2026-11-22)
+
+### New
+
+- KQM Theorycrafting: Optimize, on the rotation's line, looks for a better rotation. It starts from yours, tries thousands of small changes (step order, actions, Normal Attack lengths, kit options such as how many beams a Charged Attack takes) with the builds of your last KQM run, and lists the best ones with their DPS gain and the Energy Recharge each member needs. Your main DPS keeps its Burst and field time. Use one, then generate builds again for it.
+
 ## [v1.31.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.31.0) (2026-11-22)
 
 ### New
