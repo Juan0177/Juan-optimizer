@@ -161,6 +161,17 @@ it('consumes Joy on a special skill and refuses to reuse it without rebuilding J
   expect(attacks.every((a) => a.talentMultiplier === 1.2)).toBe(true)
 })
 
+it('gains Joy from both charged attack hits, so N1 CA N1 CA fills it as in kqmsim', () => {
+  const sim = run('Fischl E -> Lohen E N1 CA N1 CA E W1')
+  expect(sim.warnings).toEqual([])
+  expect(
+    sim.hits.filter((h) => h.label === 'Etched Into Bone and Soul')
+  ).toHaveLength(4)
+  expect(run('Fischl E -> Lohen E N1 CA N1 N1 E W1').warnings).toContain(
+    'Lohen: Etched Into Bone and Soul needs 100 Joy and has three uses per Masterstroke.'
+  )
+})
+
 it('averages the Hexerei trigger probability without creating extra damage instances', () => {
   const sim = run('Fischl E -> Lohen E N4 E N1 W1')
   expect(sim.warnings).toEqual([])
