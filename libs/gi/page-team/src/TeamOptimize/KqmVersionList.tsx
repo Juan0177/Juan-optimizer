@@ -57,6 +57,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   Chip,
   CircularProgress,
   Drawer,
@@ -67,6 +68,8 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import {
@@ -555,11 +558,14 @@ function VersionLine({
   onDelete: () => void
 }) {
   const { t } = useTranslation('page_team')
+  const theme = useTheme()
+  const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   const { state } = useKqmRun(row.id)
   const step = useKqmProgress(row.id)
   const [confirm, setConfirm] = useState(false)
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const runningNow = state.type === 'running'
+  const canRerun = !runningNow && !queued && row.fresh
   const early = runningNow ? state.early : undefined
   const earlyValue =
     early &&
@@ -583,7 +589,7 @@ function VersionLine({
     <Box
       sx={(theme) => ({
         display: 'flex',
-        alignItems: 'center',
+        alignItems: { xs: 'flex-start', sm: 'center' },
         gap: 1,
         '& + &': { borderTop: hairline },
         ...(current
@@ -599,17 +605,20 @@ function VersionLine({
           ...focusSx,
           flex: 1,
           minWidth: 0,
-          display: 'flex',
+          display: { xs: 'grid', sm: 'flex' },
+          gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
+          gridTemplateAreas: '"faces . value chevron" "text text text text"',
+          columnGap: 1.5,
+          rowGap: 0.75,
           alignItems: 'center',
           justifyContent: 'flex-start',
           textAlign: 'left',
-          gap: 1.5,
           px: 1.5,
-          py: 1,
+          py: { xs: 1.25, sm: 1 },
           borderRadius: 0,
         }}
       >
-        <Box sx={{ display: 'flex', flexShrink: 0 }}>
+        <Box sx={{ gridArea: 'faces', display: 'flex', flexShrink: 0 }}>
           {row.members.map((k) => {
             const swapped =
               !original && (!rootMembers.includes(k) || k in row.cons)
@@ -632,7 +641,7 @@ function VersionLine({
             )
           })}
         </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Box sx={{ gridArea: 'text', flex: 1, minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             <Typography
               sx={{
@@ -675,7 +684,7 @@ function VersionLine({
                 : t('teamOpt.versions.done', 'Up to date'))}
           </Typography>
         </Box>
-        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
+        <Box sx={{ gridArea: 'value', textAlign: 'right', flexShrink: 0 }}>
           {runningNow ? (
             <Box
               sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
@@ -710,48 +719,62 @@ function VersionLine({
             </Typography>
           )}
         </Box>
-        {!current && (
-          <ChevronRightIcon
-            fontSize="small"
-            sx={{ color: 'text.disabled', flexShrink: 0 }}
-          />
-        )}
+        <ChevronRightIcon
+          fontSize="small"
+          sx={{
+            gridArea: 'chevron',
+            color: 'text.disabled',
+            flexShrink: 0,
+            visibility: current ? 'hidden' : undefined,
+          }}
+        />
       </ButtonBase>
-      {!runningNow &&
-        !queued &&
-        (row.fresh ? (
-          <Tooltip title={t('teamOpt.versions.runAgain', 'Run again')}>
-            <IconButton
-              size="small"
-              onClick={onRun}
-              aria-label={t('teamOpt.versions.runAgain', 'Run again')}
-              sx={{ color: 'text.disabled' }}
-            >
-              <ReplayRoundedIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        ) : (
-          <Button size="small" onClick={onRun} sx={{ minWidth: 0, mr: -0.5 }}>
-            {t('teamOpt.versions.run', 'Run')}
-          </Button>
-        ))}
-      <Tooltip title={t('teamOpt.versions.editRotation', 'Edit its rotation')}>
-        <IconButton
+      {canRerun && !narrow && (
+        <Tooltip title={t('teamOpt.versions.runAgain', 'Run again')}>
+          <IconButton
+            size="small"
+            onClick={onRun}
+            aria-label={t('teamOpt.versions.runAgain', 'Run again')}
+            sx={{ color: 'text.disabled' }}
+          >
+            <ReplayRoundedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {!runningNow && !queued && !row.fresh && (
+        <Button
           size="small"
-          onClick={onEdit}
-          aria-label={t('teamOpt.versions.editRotation', 'Edit its rotation')}
-          aria-expanded={editing}
-          sx={{ color: editing ? 'primary.main' : 'text.disabled' }}
+          onClick={onRun}
+          sx={{ minWidth: 0, mr: -0.5, mt: { xs: '9px', sm: 0 } }}
         >
-          <EditOutlinedIcon fontSize="small" />
-        </IconButton>
-      </Tooltip>
+          {t('teamOpt.versions.run', 'Run')}
+        </Button>
+      )}
+      {!narrow && (
+        <Tooltip
+          title={t('teamOpt.versions.editRotation', 'Edit its rotation')}
+        >
+          <IconButton
+            size="small"
+            onClick={onEdit}
+            aria-label={t('teamOpt.versions.editRotation', 'Edit its rotation')}
+            aria-expanded={editing}
+            sx={{ color: editing ? 'primary.main' : 'text.disabled' }}
+          >
+            <EditOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
       <IconButton
         size="small"
         onClick={(e) => setMenu(e.currentTarget)}
         aria-label={t('teamOpt.versions.more', 'More')}
         aria-haspopup="menu"
-        sx={{ mr: 1, color: 'text.disabled' }}
+        sx={{
+          mr: 1,
+          mt: { xs: '10px', sm: 0 },
+          color: editing && narrow ? 'primary.main' : 'text.disabled',
+        }}
       >
         <MoreVertRoundedIcon fontSize="small" />
       </IconButton>
@@ -762,6 +785,33 @@ function VersionLine({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
+        {narrow && canRerun && (
+          <MenuItem
+            onClick={() => {
+              setMenu(null)
+              onRun()
+            }}
+          >
+            <ListItemIcon>
+              <ReplayRoundedIcon fontSize="small" />
+            </ListItemIcon>
+            {t('teamOpt.versions.runAgain', 'Run again')}
+          </MenuItem>
+        )}
+        {narrow && (
+          <MenuItem
+            onClick={() => {
+              setMenu(null)
+              onEdit()
+            }}
+            selected={editing}
+          >
+            <ListItemIcon>
+              <EditOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            {t('teamOpt.versions.editRotation', 'Edit its rotation')}
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             setMenu(null)
@@ -1450,6 +1500,7 @@ function VersionsShare({
   // the teams' order on it: best first, or as arranged
   const [order, setOrder] = useState<'dps' | 'custom'>('dps')
   const [arranged, setArranged] = useState<string[]>([])
+  const [left, setLeft] = useState<string[]>([])
   const shown = rows.filter((r) => r.fresh && r.summary)
   // (made when the picture opens, from the runs then)
   // biome-ignore lint/correctness/useExhaustiveDependencies: made when the picture opens
@@ -1570,16 +1621,17 @@ function VersionsShare({
     if (!sheet) return undefined
     const { entries, ...rest } = sheet
     const byId = new Map(entries.map((e) => [e.row.id, e]))
-    const ids =
+    const ids = (
       order === 'custom' && arranged.length
         ? arranged.filter((id) => byId.has(id))
         : entries.map((e) => e.row.id)
+    ).filter((id) => !left.includes(id))
     return {
       ...rest,
       teams: ids.map((id) => byId.get(id)!.team),
       ranked: order === 'dps',
     }
-  }, [sheet, order, arranged])
+  }, [sheet, order, arranged, left])
   const render = useMemo(
     () => (data ? () => renderVersionsCard(data) : undefined),
     [data]
@@ -1648,26 +1700,30 @@ function VersionsShare({
               ...database.teams.get(rootId)!.teamOpt!.kqm!,
               attacks: undefined,
             },
-            teams: shown.map((r) => ({
-              id: r.id,
-              name: database.teams.get(r.id)?.name,
-              members: r.members,
-              rotation: writtenRotationOf(database, kqmRotationId(r.id)),
-              summary: r.summary,
-            })),
+            teams: shown
+              .filter((r) => !left.includes(r.id))
+              .map((r) => ({
+                id: r.id,
+                name: database.teams.get(r.id)?.name,
+                members: r.members,
+                rotation: writtenRotationOf(database, kqmRotationId(r.id)),
+                summary: r.summary,
+              })),
           })}
           onClose={() => setOpen(false)}
         >
           {sheet && (
-            <VersionsOrder
+            <PictureTeams
               rows={sheet.entries.map((e) => e.row)}
               rootId={rootId}
               order={order}
               arranged={
                 arranged.length ? arranged : sheet.entries.map((e) => e.row.id)
               }
+              left={left}
               onOrder={setOrder}
               onArrange={setArranged}
+              onLeave={setLeft}
             />
           )}
         </CardImageDialog>
@@ -1676,26 +1732,34 @@ function VersionsShare({
   )
 }
 
-/** The order of the teams on the picture: best first, or arranged by hand */
-function VersionsOrder({
+/** The teams on the picture (ticked) and their order: best first, or arranged by hand */
+function PictureTeams({
   rows,
   rootId,
   order,
   arranged,
+  left,
   onOrder,
   onArrange,
+  onLeave,
 }: {
   /** best first */
   rows: VersionRow[]
   rootId: string
   order: 'dps' | 'custom'
   arranged: string[]
+  /** left off the picture */
+  left: string[]
   onOrder: (order: 'dps' | 'custom') => void
   onArrange: (ids: string[]) => void
+  onLeave: (ids: string[]) => void
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const byId = new Map(rows.map((r) => [r.id, r]))
+  const custom = order === 'custom'
+  const ids = custom ? arranged : rows.map((r) => r.id)
+  const onPicture = ids.filter((id) => byId.has(id) && !left.includes(id))
   const move = (i: number, by: number) => {
     const next = [...arranged]
     const [id] = next.splice(i, 1)
@@ -1722,74 +1786,136 @@ function VersionsOrder({
           ]}
         />
       </Box>
-      {order === 'custom' && (
-        <Box sx={{ ...insetSx, mt: 1.25, overflow: 'hidden' }}>
-          {arranged.map((id, i) => {
-            const row = byId.get(id)
-            if (!row) return null
-            return (
+      <Box sx={{ ...insetSx, mt: 1.25, overflow: 'hidden' }}>
+        {ids.map((id, i) => {
+          const row = byId.get(id)
+          if (!row) return null
+          const on = !left.includes(id)
+          const name =
+            id === rootId ? (database.teams.get(rootId)?.name ?? '') : row.name
+          return (
+            <Box
+              key={id}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                pl: 0.5,
+                pr: 1,
+                minHeight: 44,
+                '& + &': { borderTop: hairline },
+              }}
+            >
               <Box
-                key={id}
+                component="label"
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: 1.25,
-                  px: 1.25,
-                  py: 0.5,
-                  '& + &': { borderTop: hairline },
+                  flex: 1,
+                  minWidth: 0,
+                  cursor: 'pointer',
                 }}
               >
-                <Typography
+                <Checkbox
+                  size="small"
+                  checked={on}
+                  disabled={on && onPicture.length === 1}
+                  onChange={() =>
+                    onLeave(on ? [...left, id] : left.filter((x) => x !== id))
+                  }
+                  inputProps={{
+                    'aria-label': t('teamOpt.versions.onPicture', {
+                      defaultValue: '{{team}} on the picture',
+                      team: name,
+                    }),
+                  }}
+                  sx={{ p: 0.75 }}
+                />
+                <Box
                   sx={{
-                    ...type.label,
-                    ...numSx,
-                    width: 18,
-                    textAlign: 'right',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.25,
+                    flex: 1,
+                    minWidth: 0,
+                    opacity: on ? 1 : 0.45,
                   }}
                 >
-                  {i + 1}
-                </Typography>
-                <Box sx={{ display: 'flex', flexShrink: 0 }}>
-                  {row.members.map((k) => (
-                    <Box
-                      key={k}
-                      sx={{ ml: '-6px', '&:first-of-type': { ml: 0 } }}
+                  <Box sx={{ display: 'flex', flexShrink: 0 }}>
+                    {row.members.map((k) => (
+                      <Box
+                        key={k}
+                        sx={{
+                          ml: { xs: '-10px', sm: '-6px' },
+                          '&:first-of-type': { ml: 0 },
+                        }}
+                      >
+                        <MemberAvatar characterKey={k} size={24} />
+                      </Box>
+                    ))}
+                  </Box>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: { xs: 'column', sm: 'row' },
+                      alignItems: { xs: 'flex-start', sm: 'center' },
+                      gap: { xs: 0.25, sm: 1.25 },
+                      flex: 1,
+                      minWidth: 0,
+                      py: { xs: 0.75, sm: 0 },
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        ...type.body,
+                        flex: { sm: 1 },
+                        minWidth: 0,
+                        maxWidth: '100%',
+                        lineHeight: 1.3,
+                        overflow: 'hidden',
+                        overflowWrap: 'anywhere',
+                        display: { xs: '-webkit-box', sm: 'block' },
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        whiteSpace: { sm: 'nowrap' },
+                        textOverflow: { sm: 'ellipsis' },
+                      }}
                     >
-                      <MemberAvatar characterKey={k} size={24} />
-                    </Box>
-                  ))}
+                      {name}
+                    </Typography>
+                    <Typography sx={{ ...type.label, ...numSx }}>
+                      {row.value !== undefined
+                        ? formatRateFull(row.value, undefined)
+                        : '–'}
+                    </Typography>
+                  </Box>
                 </Box>
-                <Typography noWrap sx={{ ...type.body, flex: 1, minWidth: 0 }}>
-                  {id === rootId
-                    ? (database.teams.get(rootId)?.name ?? '')
-                    : row.name}
-                </Typography>
-                <Typography sx={{ ...type.label, ...numSx }}>
-                  {row.value !== undefined
-                    ? formatRateFull(row.value, undefined)
-                    : '–'}
-                </Typography>
-                <IconButton
-                  size="small"
-                  disabled={i === 0}
-                  onClick={() => move(i, -1)}
-                  aria-label={t('teamOpt.versions.moveUp', 'Move up')}
-                >
-                  <ArrowUpwardRoundedIcon fontSize="small" />
-                </IconButton>
-                <IconButton
-                  size="small"
-                  disabled={i === arranged.length - 1}
-                  onClick={() => move(i, 1)}
-                  aria-label={t('teamOpt.versions.moveDown', 'Move down')}
-                >
-                  <ArrowDownwardRoundedIcon fontSize="small" />
-                </IconButton>
               </Box>
-            )
-          })}
-        </Box>
-      )}
+              {custom && (
+                <>
+                  <IconButton
+                    size="small"
+                    disabled={i === 0}
+                    onClick={() => move(i, -1)}
+                    aria-label={t('teamOpt.versions.moveUp', 'Move up')}
+                  >
+                    <ArrowUpwardRoundedIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
+                    disabled={i === arranged.length - 1}
+                    onClick={() => move(i, 1)}
+                    aria-label={t('teamOpt.versions.moveDown', 'Move down')}
+                  >
+                    <ArrowDownwardRoundedIcon fontSize="small" />
+                  </IconButton>
+                </>
+              )}
+            </Box>
+          )
+        })}
+      </Box>
     </Box>
   )
 }
