@@ -4,6 +4,21 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.34.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.0) (2026-11-22)
+
+### New
+
+- KQM Optimize rotation: a Full search. Besides your rotation, it tries every other member order and the built-in templates, searches from each until nothing nearby is better, then gets fresh KQM builds for the best ones and searches again with them. It finds the best rotation within reach of your plan. Quick still searches within a time limit.
+
+### Improved
+
+- KQM Optimize rotation can move a member anywhere in the order (a support played right before the character who catches its particles), bring a member back on the field to refresh a buff, and counts the damage stats a lower Energy Recharge need frees. You choose what it may change (order, coming back, attack strings, skills and kit options), and its best rotations are checked with their own KQM builds.
+
+### Fixed
+
+- KQM builds: Crystallize teams (like Navia's) now show the DPS they really get. An Archaic Petra the search was only trying used to pick up shards for the whole team, which read up to about 1.5% high.
+- KQM builds: the result is always scored on the rotation its final weapons and sets play. When two builds each change the rotation in the other's favor, the one that's better on its own rotation is kept.
+
 ## [v1.33.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.33.1) (2026-11-22)
 
 ### Fixed
