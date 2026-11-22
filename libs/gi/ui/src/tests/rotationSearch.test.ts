@@ -4,7 +4,12 @@ import type { LoadoutDatum } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { describe, expect, it } from 'vitest'
-import type { KqmBuild, RotationDamageCache, RotationScore } from '../'
+import type {
+  KqmBuild,
+  RotationDamageCache,
+  RotationScore,
+  RotationSearchProgress,
+} from '../'
 import {
   energyFits,
   evaluateTeamNodes,
@@ -193,6 +198,26 @@ describe('the hill climb', () => {
       expect(ok(rotationWords(c.text, members))).toBe(true)
       expect(c.warnings).toEqual([])
     }
+  })
+  it('reports the seed, each round as it starts and the best so far, best first', async () => {
+    const reports: RotationSearchProgress[] = []
+    const result = await searchRotations({
+      seed: 'Furina E Q -> Neuvillette Q E N1 CA',
+      members,
+      score,
+      deadline: Date.now() + 60_000,
+      onProgress: (p) => reports.push(p),
+    })
+    expect(reports[0]).toMatchObject({ round: 0, played: 1 })
+    expect(reports[0].top).toEqual([result.seed])
+    expect(reports[1]).toMatchObject({ round: 1, roundPlayed: 0 })
+    for (const p of reports) {
+      expect(p.top[0]).toBe(p.best)
+      expect(p.top.map((c) => c.dps)).toEqual(
+        [...p.top.map((c) => c.dps)].sort((a, b) => b - a)
+      )
+    }
+    expect(reports.at(-1)?.best).toBe(result.best[0])
   })
   it('stops at its deadline', async () => {
     const result = await searchRotations({

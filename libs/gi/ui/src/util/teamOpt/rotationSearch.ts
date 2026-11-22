@@ -259,6 +259,12 @@ export function energyFits(
 const samePlay = (a: RotationScore, b: RotationScore) =>
   a.time === b.time && Math.abs(a.dps - b.dps) <= 1e-9 * Math.max(a.dps, b.dps)
 
+/** Lets the page paint and take input between slices of a round's work on its thread */
+const yieldToPage = (): Promise<void> =>
+  (
+    globalThis as { scheduler?: { yield?: () => Promise<void> } }
+  ).scheduler?.yield?.() ?? new Promise((resolve) => setTimeout(resolve, 0))
+
 /** What a rotation plays, as the parser reads it: rotations written differently that play the same are one */
 function playedKey(text: string, members: readonly RotationMember[]) {
   const { steps, loopsTo } = parseRotation(text, members)
@@ -277,6 +283,8 @@ export interface RotationSearchProgress {
   roundSize: number
   seed: RotationCandidate
   best: RotationCandidate
+  /** The best rotations so far, best first (the seed among them until something beats it) */
+  top: RotationCandidate[]
 }
 export interface RotationSearchResult {
   seed: RotationCandidate
@@ -324,6 +332,15 @@ export async function searchRotations({
   if (!seedScore || !(seedScore.dps > 0))
     throw new Error('The rotation could not be played.')
   const start: RotationCandidate = { text: seedText, ...seedScore }
+  onProgress?.({
+    round: 0,
+    played: 1,
+    roundPlayed: 1,
+    roundSize: 1,
+    seed: start,
+    best: start,
+    top: [start],
+  })
   const fits = energyFits(seedScore, erSlack, funded)
   const known = new Set(seedScore.warnings)
   const ok = rotationGuard(seedSteps)
@@ -342,11 +359,16 @@ export async function searchRotations({
     }
     round++
     const texts: string[] = []
+    let slice = performance.now()
     for (const parent of pool.slice(0, keep))
       for (const steps of rotationEdits(
         rotationWords(parent.text, members),
         vocabulary
       )) {
+        if (performance.now() - slice > 8) {
+          await yieldToPage()
+          slice = performance.now()
+        }
         if (!ok(steps)) continue
         const text = wordsRotationText(steps)
         const key = playedKey(text, members)
@@ -359,6 +381,16 @@ export async function searchRotations({
       break
     }
     const bestBefore = pool[0].dps
+    const top = pool.slice(0, keep * 2)
+    onProgress?.({
+      round,
+      played,
+      roundPlayed: 0,
+      roundSize: texts.length,
+      seed: start,
+      best: pool[0],
+      top,
+    })
     const scores = await score(
       texts,
       (n) =>
@@ -369,6 +401,7 @@ export async function searchRotations({
           roundSize: texts.length,
           seed: start,
           best: pool[0],
+          top,
         }),
       stop
     )
@@ -393,6 +426,7 @@ export async function searchRotations({
       roundSize: texts.length,
       seed: start,
       best: pool[0],
+      top: pool.slice(0, keep * 2),
     })
     if (scores.some((s) => !s)) {
       ended = isCancelled() ? 'cancelled' : 'time'

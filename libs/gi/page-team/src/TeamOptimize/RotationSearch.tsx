@@ -9,37 +9,44 @@ import type {
   RotationMember,
   RotationSearchProgress,
   RotationSearchResult,
+  RotationWordStep,
 } from '@genshin-optimizer/gi/ui'
 import {
   kqmRotationSearchSetup,
   rotationSearchPlayer,
+  rotationWords,
   searchRotations,
 } from '@genshin-optimizer/gi/ui'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
 import {
   Alert,
   alpha,
   Box,
   Button,
   ButtonBase,
-  LinearProgress,
   Tooltip,
   Typography,
 } from '@mui/material'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import type { TFunction } from 'i18next'
+import {
+  Fragment,
+  memo,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatDamage } from './format'
+import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
+import { Arrow, mono } from './RotationInline'
+import { laneColor } from './RotationTimeline'
 import { kqmRotationId, useRotationSettings } from './RotationWriter'
-import {
-  focusSx,
-  hairline,
-  insetSx,
-  numSx,
-  quickSx,
-  Segmented,
-  tokens,
-} from './ui'
+import { focusSx, insetSx, numSx, quickSx, Segmented, tokens, type } from './ui'
 
 /** How long a search may take (seconds) */
 const BUDGETS = [30, 120, 300] as const
@@ -192,12 +199,12 @@ function RotationSearchDialog({
   const { gender } = useDBMeta()
   const saved = useRotationSettings(kqmRotationId(teamId))
   const [budget, setBudget] = useState<(typeof BUDGETS)[number]>(120)
+  const [run, setRun] = useState<SearchRun>()
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<RotationSearchProgress>()
   const [result, setResult] = useState<RotationSearchResult>()
   const [error, setError] = useState<string>()
   const [threads, setThreads] = useState(0)
-  const [elapsed, setElapsed] = useState(0)
   const cancelled = useRef(false)
   const release = useRef<() => void>()
   useEffect(
@@ -207,22 +214,13 @@ function RotationSearchDialog({
     },
     []
   )
-  useEffect(() => {
-    if (!running) return
-    const start = Date.now()
-    const timer = setInterval(
-      () => setElapsed((Date.now() - start) / 1000),
-      250
-    )
-    return () => clearInterval(timer)
-  }, [running])
 
   const start = () => {
     cancelled.current = false
     setResult(undefined)
     setError(undefined)
     setProgress(undefined)
-    setElapsed(0)
+    setRun({ start: Date.now(), budget })
     setRunning(true)
     let player: ReturnType<typeof rotationSearchPlayer>
     try {
@@ -264,7 +262,12 @@ function RotationSearchDialog({
       isCancelled: () => cancelled.current,
       onProgress: (p) => {
         const now = Date.now()
-        if (now - shown < 200 && p.roundPlayed < p.roundSize) return
+        if (
+          now - shown < 200 &&
+          p.roundPlayed > 0 &&
+          p.roundPlayed < p.roundSize
+        )
+          return
         shown = now
         setProgress(p)
         setThreads(player.threads())
@@ -275,21 +278,34 @@ function RotationSearchDialog({
       .finally(() => {
         player.release()
         release.current = undefined
+        setRun((r) => r && { ...r, end: Date.now() })
         setRunning(false)
       })
   }
 
-  const funded = Object.fromEntries(
-    Object.entries(kqmResult.energyRecharge).map(([k, er]) => [
-      k,
-      Math.round(er?.value ?? 0),
-    ])
-  ) as Partial<Record<CharacterKey, number>>
-  const best = result?.best ?? (progress ? [progress.best] : [])
+  const funded = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(kqmResult.energyRecharge).map(([k, er]) => [
+          k,
+          Math.round(er?.value ?? 0),
+        ])
+      ) as Partial<Record<CharacterKey, number>>,
+    [kqmResult]
+  )
+  const seedWords = useMemo(() => rotationWords(seed, names), [seed, names])
   const seedScore = result?.seed ?? progress?.seed
-  const better = seedScore
-    ? best.filter((c) => c.dps > seedScore.dps * (1 + 1e-4)).slice(0, SHOWN)
-    : []
+  const top = result?.best ?? progress?.top
+  const better = useMemo(
+    () =>
+      seedScore && top
+        ? top.filter((c) => c.dps > seedScore.dps * (1 + 1e-4)).slice(0, SHOWN)
+        : [],
+    [top, seedScore]
+  )
+  const list = useRef<HTMLDivElement>(null)
+  useListMotion(list, better.map((c) => c.text).join('\n'))
+  const ended = result?.ended
   return (
     <ModalWrapper
       open
@@ -302,7 +318,7 @@ function RotationSearchDialog({
           title={t('teamOpt.search.title', 'Optimize rotation')}
           info={t(
             'teamOpt.search.how',
-            'Plays thousands of rotations one change away from yours, then from the best ones (step order, actions, Normal Attack lengths, repeats), with the KQM builds shown. Your main DPS keeps its Burst and field time, and a rotation must not need more Energy Recharge than the builds can give.'
+            'Plays thousands of rotations one change away from yours, then from the best ones (step order, actions, Normal Attack lengths, repeats, kit options), with the KQM builds shown. Your main DPS keeps its Burst and field time, and a rotation must not need more Energy Recharge than the builds can give. After using one, run KQM again for its own builds.'
           )}
           onClose={onClose}
         />
@@ -318,16 +334,32 @@ function RotationSearchDialog({
             '& > *': { flexShrink: 0 },
           }}
         >
-          <RotationLine
-            label={t('teamOpt.search.from', 'From')}
-            text={seed}
-            dps={seedScore?.dps}
-            er={
-              seedScore && (
-                <ErNeeds er={seedScore.er} names={names} funded={funded} />
-              )
-            }
-          />
+          <Box sx={{ ...insetSx, p: 1.5, display: 'grid', gap: 1 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 0.75,
+                minHeight: 23,
+              }}
+            >
+              <Typography sx={{ ...type.label, flexGrow: 1 }}>
+                {t('teamOpt.search.yours', 'Your rotation')}
+              </Typography>
+              {seedScore && (
+                <>
+                  <Typography sx={type.stat}>
+                    {formatDamage(seedScore.dps, true)}
+                  </Typography>
+                  <Typography sx={type.label}>DPS</Typography>
+                </>
+              )}
+            </Box>
+            <RotationView steps={seedWords} />
+            {seedScore && (
+              <ErLine er={seedScore.er} names={names} funded={funded} />
+            )}
+          </Box>
           <Box
             sx={{
               display: 'flex',
@@ -336,7 +368,7 @@ function RotationSearchDialog({
               flexWrap: 'wrap',
             }}
           >
-            <Typography variant="caption" color="text.secondary">
+            <Typography sx={type.label}>
               {t('teamOpt.search.budget', 'Time limit')}
             </Typography>
             <Segmented
@@ -354,9 +386,11 @@ function RotationSearchDialog({
             {running ? (
               <Button
                 color="inherit"
+                variant="outlined"
                 onClick={() => {
                   cancelled.current = true
                 }}
+                sx={{ minWidth: 128, borderColor: tokens.hairlineStrong }}
               >
                 {t('teamOpt.search.stop', 'Stop')}
               </Button>
@@ -364,7 +398,8 @@ function RotationSearchDialog({
               <Button
                 variant="contained"
                 onClick={start}
-                sx={[{ px: 2.25 }, giCtaSx]}
+                startIcon={<AutoFixHighIcon />}
+                sx={[{ minWidth: 128 }, giCtaSx]}
               >
                 {result
                   ? t('teamOpt.search.again', 'Search again')
@@ -372,75 +407,108 @@ function RotationSearchDialog({
               </Button>
             )}
           </Box>
-          {(running || progress) && (
-            <Box>
-              <LinearProgress
-                variant="determinate"
-                value={running ? Math.min(100, (elapsed / budget) * 100) : 100}
-                sx={{ borderRadius: 1, mb: 0.75 }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={numSx}>
-                {progress
-                  ? `${t('teamOpt.search.progress', {
-                      defaultValue:
-                        'Round {{round}} · {{played}} rotations played',
-                      round: progress.round,
-                      played: progress.played.toLocaleString(),
-                    })} · ${
-                      threads === 1
-                        ? t('teamOpt.search.oneThread', '1 thread')
-                        : t('teamOpt.search.threads', {
-                            defaultValue: '{{threads}} threads',
-                            threads,
-                          })
-                    }`
-                  : t('teamOpt.search.starting', 'Starting…')}
-                {result &&
-                  ` · ${
-                    result.ended === 'converged'
-                      ? t('teamOpt.search.converged', 'nothing better nearby')
-                      : result.ended === 'time'
-                        ? t('teamOpt.search.timeUp', 'time up')
-                        : result.ended === 'cancelled'
-                          ? t('teamOpt.search.stopped', 'stopped')
-                          : t('teamOpt.search.rounds', 'all rounds played')
-                  }`}
-              </Typography>
+          {run && (
+            <Box sx={{ display: 'grid', gap: 0.75 }}>
+              <TimeBar run={run} running={running} />
+              <Box
+                sx={{
+                  ...type.label,
+                  ...numSx,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  minHeight: 20,
+                }}
+              >
+                {!running && ended && (
+                  <CheckCircleRoundedIcon
+                    sx={{ fontSize: 16, color: 'success.main' }}
+                  />
+                )}
+                <Box component="span" sx={{ flexGrow: 1, minWidth: 0 }}>
+                  {progress && (!running || progress.round > 0)
+                    ? running
+                      ? t('teamOpt.search.progress', {
+                          defaultValue:
+                            'Round {{round}} · {{played}} rotations played',
+                          round: progress.round,
+                          played: progress.played.toLocaleString(),
+                        })
+                      : `${t('teamOpt.search.played', {
+                          defaultValue: '{{played}} rotations played',
+                          played: (
+                            result?.played ?? progress.played
+                          ).toLocaleString(),
+                        })}${ended ? ` · ${endedText(t, ended)}` : ''}`
+                    : t('teamOpt.search.starting', 'Starting…')}
+                </Box>
+                {threads > 0 && (
+                  <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+                    {threads === 1
+                      ? t('teamOpt.search.oneThread', '1 thread')
+                      : t('teamOpt.search.threads', {
+                          defaultValue: '{{threads}} threads',
+                          threads,
+                        })}
+                  </Box>
+                )}
+                <Clock run={run} running={running} />
+              </Box>
             </Box>
           )}
           {error && <Alert severity="error">{error}</Alert>}
-          {seedScore &&
-            (better.length ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {better.map((c) => (
-                  <Candidate
+          {!!better.length && seedScore && (
+            <Box sx={{ display: 'grid', gap: 1 }}>
+              <Typography sx={type.label}>
+                {running
+                  ? t('teamOpt.search.soFar', 'Better rotations so far')
+                  : t('teamOpt.search.better', 'Better rotations')}
+              </Typography>
+              <Box
+                ref={list}
+                sx={{
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1,
+                }}
+              >
+                {better.map((c, i) => (
+                  <CandidateRow
                     key={c.text}
+                    rank={i + 1}
                     candidate={c}
                     seed={seedScore}
+                    seedWords={seedWords}
                     names={names}
                     funded={funded}
-                    onUse={running ? undefined : () => onUse(c.text)}
+                    onUse={onUse}
                   />
                 ))}
               </Box>
-            ) : (
-              !running &&
-              result && (
-                <Typography color="text.secondary">
-                  {t(
-                    'teamOpt.search.none',
-                    'No better rotation one change away: yours is the best of its neighbours.'
-                  )}
-                </Typography>
-              )
-            ))}
-          {!!better.length && !running && (
-            <Typography variant="caption" color="text.secondary">
-              {t(
-                'teamOpt.search.after',
-                'DPS with the KQM builds shown. After using one, run KQM again for its own builds.'
-              )}
-            </Typography>
+            </Box>
+          )}
+          {!better.length && !running && result && (
+            <Box
+              sx={{
+                ...insetSx,
+                p: 1.5,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                color: 'text.secondary',
+              }}
+            >
+              <CheckCircleRoundedIcon
+                sx={{ fontSize: 18, color: 'success.main' }}
+              />
+              <Typography>
+                {t(
+                  'teamOpt.search.none',
+                  'No better rotation one change away: yours is the best of its neighbours.'
+                )}
+              </Typography>
+            </Box>
           )}
         </Box>
       </CardThemed>
@@ -448,85 +516,372 @@ function RotationSearchDialog({
   )
 }
 
-function RotationLine({
-  label,
-  text,
-  dps,
-  er,
-}: {
-  label: string
-  text: string
-  dps: number | undefined
-  er?: ReactNode
-}) {
+/** A search: when it started, its time limit (s) and when it ended */
+interface SearchRun {
+  start: number
+  budget: number
+  end?: number
+}
+
+const endedText = (t: TFunction, ended: RotationSearchResult['ended']) =>
+  ended === 'converged'
+    ? t('teamOpt.search.converged', 'nothing better nearby')
+    : ended === 'time'
+      ? t('teamOpt.search.timeUp', 'time up')
+      : ended === 'cancelled'
+        ? t('teamOpt.search.stopped', 'stopped')
+        : t('teamOpt.search.rounds', 'all rounds played')
+
+const reducedMotion = () =>
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+/**
+ * The time limit's bar: the browser fills it over the time left (nothing re-renders per tick),
+ * and it runs to the end when the search ends
+ */
+function TimeBar({ run, running }: { run: SearchRun; running: boolean }) {
+  const bar = useRef<HTMLDivElement>(null)
+  const last = useRef<string>()
+  useLayoutEffect(() => {
+    const el = bar.current
+    if (!el || typeof el.animate !== 'function') return undefined
+    if (!running) {
+      if (last.current && !reducedMotion())
+        el.animate([{ transform: last.current }, { transform: 'scaleX(1)' }], {
+          duration: 280,
+          easing: tokens.ease,
+        })
+      last.current = undefined
+      return undefined
+    }
+    const total = run.budget * 1000
+    const from = Math.min(1, (Date.now() - run.start) / total)
+    const fill = el.animate(
+      [{ transform: `scaleX(${from})` }, { transform: 'scaleX(1)' }],
+      { duration: total * (1 - from), easing: 'linear', fill: 'forwards' }
+    )
+    return () => {
+      last.current = getComputedStyle(el).transform
+      fill.cancel()
+    }
+  }, [running, run])
   return (
-    <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'baseline' }}>
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ width: 40, flexShrink: 0 }}
-      >
-        {label}
-      </Typography>
-      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 13,
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {text}
-        </Box>
-        {er}
-      </Box>
-      <Typography sx={{ ...numSx, flexShrink: 0, fontWeight: 600 }}>
-        {dps ? formatDamage(dps, true) : '–'}
-      </Typography>
+    <Box
+      sx={{
+        height: 4,
+        borderRadius: 999,
+        overflow: 'hidden',
+        bgcolor: alpha(giTokens.parchment, 0.08),
+      }}
+    >
+      <Box
+        ref={bar}
+        sx={{
+          height: '100%',
+          borderRadius: 999,
+          bgcolor: tokens.gold,
+          transformOrigin: 'left',
+          transform: 'scaleX(1)',
+          willChange: 'transform',
+        }}
+      />
     </Box>
   )
 }
 
-/**
- * The Energy Recharge each member needs for a rotation: above what the starting one needs in
- * bold, above what its KQM build has in amber (KQM builds more ER for it when run again)
- */
-function ErNeeds({
+const clock = (seconds: number) => {
+  const s = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/** The time taken (and the limit, while it runs): only this re-renders each second */
+function Clock({ run, running }: { run: SearchRun; running: boolean }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!running) return undefined
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [running])
+  const taken = ((running ? now : (run.end ?? now)) - run.start) / 1000
+  return (
+    <Box component="span" sx={{ ...numSx, whiteSpace: 'nowrap' }}>
+      {clock(taken)}
+      {running && ` / ${clock(run.budget)}`}
+    </Box>
+  )
+}
+
+/** Rows that move slide to their new place, new ones fade in (none with reduced motion) */
+function useListMotion(ref: RefObject<HTMLElement>, order: string) {
+  const tops = useRef(new Map<string, number>())
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) {
+      tops.current = new Map()
+      return
+    }
+    const still = reducedMotion()
+    const next = new Map<string, number>()
+    for (const row of Array.from(el.children) as HTMLElement[]) {
+      const key = row.dataset['key']
+      if (!key) continue
+      next.set(key, row.offsetTop)
+      if (still || typeof row.animate !== 'function') continue
+      const before = tops.current.get(key)
+      if (before === undefined)
+        row.animate(
+          [
+            { opacity: 0, transform: 'translateY(6px)' },
+            { opacity: 1, transform: 'none' },
+          ],
+          { duration: 220, easing: tokens.ease }
+        )
+      else if (Math.abs(before - row.offsetTop) > 1)
+        row.animate(
+          [
+            { transform: `translateY(${before - row.offsetTop}px)` },
+            { transform: 'none' },
+          ],
+          { duration: 260, easing: tokens.ease }
+        )
+    }
+    tops.current = next
+  }, [ref, order])
+}
+
+/** Longest common subsequence: for each item of `b` it keeps, the index of its match in `a` */
+function commonItems<T>(
+  a: readonly T[],
+  b: readonly T[],
+  same: (x: T, y: T) => boolean
+) {
+  const len = Array.from({ length: a.length + 1 }, () =>
+    new Array<number>(b.length + 1).fill(0)
+  )
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      len[i][j] = same(a[i], b[j])
+        ? len[i + 1][j + 1] + 1
+        : Math.max(len[i + 1][j], len[i][j + 1])
+  const kept = new Map<number, number>()
+  for (let i = 0, j = 0; i < a.length && j < b.length; )
+    if (same(a[i], b[j])) kept.set(j++, i++)
+    else if (len[i + 1][j] >= len[i][j + 1]) i++
+    else j++
+  return kept
+}
+
+/** A step's word as shown: kept, added or (from the rotation searched from) removed */
+interface ShownWord {
+  word: string
+  change?: 'added' | 'removed'
+}
+/** What a rotation changes from the one searched from: a step new to it, and each step's words */
+interface StepChange {
+  step: boolean
+  words: ShownWord[]
+}
+function rotationChanges(
+  from: readonly RotationWordStep[],
+  steps: readonly RotationWordStep[]
+): StepChange[] {
+  const kept = commonItems(
+    from,
+    steps,
+    (a, b) => a.characterKey === b.characterKey
+  )
+  return steps.map((step, j) => {
+    const i = kept.get(j)
+    if (i === undefined)
+      return {
+        step: true,
+        words: step.words.map((word) => ({ word, change: 'added' })),
+      }
+    const was = from[i].words
+    const same = commonItems(was, step.words, (a, b) => a === b)
+    const words: ShownWord[] = []
+    let next = 0
+    const removedUntil = (end: number) => {
+      for (; next < end; next++)
+        words.push({ word: was[next], change: 'removed' })
+    }
+    step.words.forEach((word, k) => {
+      const match = same.get(k)
+      if (match === undefined) return words.push({ word, change: 'added' })
+      removedUntil(match)
+      next = match + 1
+      return words.push({ word })
+    })
+    removedUntil(was.length)
+    return { step: false, words }
+  })
+}
+
+/** A rotation as the bar shows it (members, then their actions), its changes picked out in gold */
+function RotationView({
+  steps,
+  changes,
+}: {
+  steps: readonly RotationWordStep[]
+  changes?: StepChange[]
+}) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        columnGap: 0.75,
+        rowGap: 0.5,
+        minWidth: 0,
+      }}
+    >
+      {steps.map((step, i) => (
+        <Fragment key={i}>
+          {i > 0 && <Arrow />}
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.625,
+              minWidth: 0,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                borderRadius: '50%',
+                boxShadow: changes?.[i]?.step
+                  ? `0 0 0 1.5px ${tokens.gold}`
+                  : undefined,
+              }}
+            >
+              <MemberAvatar characterKey={step.characterKey} size={20} />
+            </Box>
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'baseline',
+                flexWrap: 'wrap',
+                columnGap: 0.5,
+                rowGap: 0.25,
+                minWidth: 0,
+              }}
+            >
+              <Box
+                component="span"
+                sx={(theme) => ({
+                  color: laneColor(theme, step.characterKey),
+                  fontWeight: 650,
+                  fontSize: 13.5,
+                  whiteSpace: 'nowrap',
+                })}
+              >
+                {step.name}
+              </Box>
+              {(
+                changes?.[i]?.words ??
+                step.words.map((word): ShownWord => ({ word }))
+              ).map(({ word, change }, k) => (
+                <Box
+                  key={k}
+                  component={change === 'removed' ? 'del' : 'span'}
+                  sx={{
+                    fontFamily: mono,
+                    fontSize: 13.5,
+                    letterSpacing: '0.01em',
+                    px: 0.375,
+                    mx: -0.375,
+                    borderRadius: 0.75,
+                    ...(change === 'added'
+                      ? {
+                          color: tokens.gold,
+                          bgcolor: alpha(giTokens.gold, 0.14),
+                          fontWeight: 600,
+                        }
+                      : change === 'removed'
+                        ? {
+                            color: 'text.secondary',
+                            opacity: 0.55,
+                            textDecorationThickness: '1.5px',
+                          }
+                        : {
+                            color: changes ? 'text.secondary' : 'text.primary',
+                          }),
+                  }}
+                >
+                  {word}
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        </Fragment>
+      ))}
+    </Box>
+  )
+}
+
+/** Each member's Energy Recharge need for the rotation, above its KQM build's in amber */
+function ErLine({
   er,
   names,
   funded,
-  seed,
+  from,
 }: {
   er: RotationCandidate['er']
   names: RotationMember[]
   funded: Partial<Record<CharacterKey, number>>
-  seed?: RotationCandidate['er']
+  /** Only the members whose need differs from this rotation's (or that their build can't fund) */
+  from?: RotationCandidate['er']
 }) {
   const { t } = useTranslation('page_team')
+  const shown = names.filter(({ characterKey }) => {
+    const need = er[characterKey]
+    if (need === undefined) return false
+    return (
+      !from || need !== from[characterKey] || need > (funded[characterKey] ?? 0)
+    )
+  })
+  if (!shown.length) return null
   return (
-    <Typography
-      component="div"
-      variant="caption"
-      color="text.secondary"
-      sx={{ ...numSx, display: 'flex', flexWrap: 'wrap', columnGap: 1.25 }}
+    <Box
+      sx={{
+        ...type.label,
+        ...numSx,
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        columnGap: 1.25,
+        rowGap: 0.5,
+      }}
     >
       <span>{t('teamOpt.search.erNeeded', 'ER needed')}</span>
-      {names.map(({ characterKey, name }) => {
-        const need = er[characterKey]
-        if (need === undefined) return null
+      {shown.map(({ characterKey, name }) => {
+        const need = er[characterKey] ?? 0
+        const was = from?.[characterKey]
         const has = funded[characterKey] ?? 0
         const over = need > has
-        const more = seed && need > Math.max(seed[characterKey] ?? 100, 100)
         const item = (
           <Box
             component="span"
+            aria-label={name}
             sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
               whiteSpace: 'nowrap',
-              color: over ? 'warning.main' : more ? 'text.primary' : undefined,
-              fontWeight: over || more ? 650 : undefined,
+              color: over ? 'warning.main' : from ? 'text.primary' : undefined,
+              fontWeight: over || from ? 600 : undefined,
             }}
           >
-            {name} {need}%
+            <MemberAvatar characterKey={characterKey} size={16} />
+            {was !== undefined && was !== need && `${was} → `}
+            {need}%
           </Box>
         )
         return over ? (
@@ -541,86 +896,131 @@ function ErNeeds({
             {item}
           </Tooltip>
         ) : (
-          <Box component="span" key={characterKey}>
-            {item}
-          </Box>
+          <Fragment key={characterKey}>{item}</Fragment>
         )
       })}
-    </Typography>
+    </Box>
   )
 }
 
-function Candidate({
+const CandidateRow = memo(function CandidateRow({
+  rank,
   candidate,
   seed,
+  seedWords,
   names,
   funded,
   onUse,
 }: {
+  rank: number
   candidate: RotationCandidate
   seed: RotationCandidate
+  seedWords: readonly RotationWordStep[]
   names: RotationMember[]
   funded: Partial<Record<CharacterKey, number>>
-  onUse: (() => void) | undefined
+  onUse: (text: string) => void
 }) {
   const { t } = useTranslation('page_team')
+  const steps = useMemo(
+    () => rotationWords(candidate.text, names),
+    [candidate.text, names]
+  )
+  const changes = useMemo(
+    () => rotationChanges(seedWords, steps),
+    [seedWords, steps]
+  )
   const gain = candidate.dps / seed.dps - 1
   return (
     <Box
+      data-key={candidate.text}
       sx={{
-        ...insetSx,
-        p: 1.25,
+        ...quickSx,
         display: 'flex',
-        gap: 1.5,
+        flexWrap: 'wrap',
         alignItems: 'center',
-        border: hairline,
+        columnGap: 1.5,
+        rowGap: 1,
+        p: 1.25,
+        pl: { xs: 1.25, sm: 1 },
         borderRadius: tokens.radius.inset,
+        bgcolor: tokens.inset,
+        border: `1px solid ${
+          rank === 1 ? alpha(giTokens.gold, 0.35) : giTokens.hairline
+        }`,
+        '&:hover': {
+          bgcolor: tokens.hover,
+          borderColor:
+            rank === 1 ? alpha(giTokens.gold, 0.55) : tokens.hairlineStrong,
+        },
       }}
     >
-      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 13,
-            overflowWrap: 'anywhere',
-          }}
-        >
-          {candidate.text}
-        </Box>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ ...numSx, display: 'block', mt: 0.5 }}
-        >
-          {formatDamage(candidate.dps, true)} DPS · {candidate.time.toFixed(1)}{' '}
-          s
-        </Typography>
-        <ErNeeds
-          er={candidate.er}
-          names={names}
-          funded={funded}
-          seed={seed.er}
-        />
-      </Box>
-      <Typography
+      <Box
         sx={{
           ...numSx,
-          fontWeight: 650,
-          color: 'success.main',
-          flexShrink: 0,
+          display: { xs: 'none', sm: 'block' },
+          width: 18,
+          alignSelf: 'flex-start',
+          pt: 0.25,
+          textAlign: 'center',
+          fontSize: 12.5,
+          fontWeight: 600,
+          color: rank === 1 ? tokens.gold : 'text.secondary',
         }}
       >
-        +{(gain * 100).toFixed(1)}%
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        disabled={!onUse}
-        onClick={onUse}
-        sx={{ flexShrink: 0 }}
-      >
-        {t('teamOpt.search.use', 'Use')}
-      </Button>
+        {rank}
+      </Box>
+      <Box sx={{ flex: '1 1 340px', minWidth: 0, display: 'grid', gap: 0.75 }}>
+        <RotationView steps={steps} changes={changes} />
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 1.5,
+            rowGap: 0.5,
+          }}
+        >
+          <Typography sx={{ ...type.label, ...numSx }}>
+            {t('teamOpt.search.length', {
+              defaultValue: '{{seconds}} s rotation',
+              seconds: candidate.time.toFixed(1),
+            })}
+          </Typography>
+          <ErLine
+            er={candidate.er}
+            names={names}
+            funded={funded}
+            from={seed.er}
+          />
+        </Box>
+      </Box>
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ textAlign: 'right' }}>
+          <Typography sx={{ ...type.stat, color: 'success.main' }}>
+            +{(gain * 100).toFixed(1)}%
+          </Typography>
+          <Typography sx={{ ...type.label, ...numSx, whiteSpace: 'nowrap' }}>
+            {formatDamage(candidate.dps, true)} DPS
+          </Typography>
+        </Box>
+        <Button
+          size="small"
+          onClick={() => onUse(candidate.text)}
+          sx={{
+            ...focusSx,
+            minWidth: 64,
+            color: tokens.gold,
+            bgcolor: alpha(giTokens.gold, 0.1),
+            border: `1px solid ${alpha(giTokens.gold, 0.3)}`,
+            '&:hover': {
+              bgcolor: alpha(giTokens.gold, 0.18),
+              borderColor: alpha(giTokens.gold, 0.55),
+            },
+          }}
+        >
+          {t('teamOpt.search.use', 'Use')}
+        </Button>
+      </Box>
     </Box>
   )
-}
+})

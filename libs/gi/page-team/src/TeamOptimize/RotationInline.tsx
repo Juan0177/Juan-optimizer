@@ -82,7 +82,7 @@ import {
 import type { TeamOptUpdate } from './useTeamOpt'
 
 // (Windows has none of the first three: Consolas or Cascadia Mono there)
-const mono =
+export const mono =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace'
 const shortcut =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -634,7 +634,7 @@ export function RotationReadout({
   )
 }
 
-function Arrow() {
+export function Arrow() {
   return (
     <Box
       component="span"
