@@ -437,7 +437,33 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
     expect(c1.members.Danica!.flatEnergy).toBe(40)
     expect(c1.members.Mitya!.flatEnergy ?? 0).toBe(0)
     const c0 = energyFromRotation(sim as never, team, 1, { Danica: 0 })
-    expect(c0.members.Danica!.flatEnergy ?? 0).toBe(0)
+    expect(c0.members.Danica!.flatEnergy).toBe(0)
+  })
+  it('below C1 the calculator loses the Energy a C1 rotation filled in', () => {
+    const atC1 = withRotationEnergy(
+      defaultEnergyCalculator(team),
+      team,
+      energyFromRotation(sim as never, team, 1, { Danica: 1 })
+    )
+    expect(atC1.members.Danica!.flatEnergy).toBe(40)
+    const atC0 = withRotationEnergy(
+      atC1,
+      team,
+      energyFromRotation(sim as never, team, 1, { Danica: 0 })
+    )
+    expect(atC0.members.Danica!.flatEnergy).toBe(0)
+    // (so do the Favonius triggers and energy weapon triggers of a rotation where she does nothing)
+    expect(atC1.members.Danica!.favoniusProcs).toBeGreaterThan(0)
+    const idle = withRotationEnergy(
+      atC1,
+      team,
+      energyFromRotation({ ...sim, hits: [], actions: [] } as never, team, 1, {
+        Danica: 1,
+      })
+    )
+    expect(idle.members.Danica!.flatEnergy).toBe(0)
+    expect(idle.members.Danica!.favoniusProcs).toBe(0)
+    expect(idle.members.Danica!.weaponTriggers).toEqual({})
   })
   it('C4: 3 to each other member when the Aegis-protected member on the field deals Stellar-Conduct DMG, once per 3.5 s', () => {
     const c4 = energyFromRotation(sim as never, team, 1, { Danica: 4 })
@@ -446,7 +472,7 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
       expect(c4.members[k]!.flatEnergy).toBe(9)
     expect(c4.members.Danica!.flatEnergy).toBe(40)
     const c3 = energyFromRotation(sim as never, team, 1, { Danica: 3 })
-    expect(c3.members.Mitya!.flatEnergy ?? 0).toBe(0)
+    expect(c3.members.Mitya!.flatEnergy).toBe(0)
   })
   it('as the kit plays them: each Entry gives C1 and its own Stellar-Conduct hit under the Aegis C4', () => {
     const played = simulateRotation({

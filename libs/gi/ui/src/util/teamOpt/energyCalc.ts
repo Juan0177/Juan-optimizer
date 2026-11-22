@@ -1477,8 +1477,11 @@ export function energyFromRotation(
       member.turretParticles = Math.round((made / per) * 100) / 100
       member.turretCatchShares = catchSharesOf(caught)
     }
-    if (SKILL_FLAT_ENERGY[key] !== undefined)
-      member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
+    // (every field it fills is set, none left out: a rotation without, after one with, clears it)
+    member.flatEnergy =
+      SKILL_FLAT_ENERGY[key] !== undefined
+        ? (SKILL_FLAT_ENERGY[key]! * uses.length) / per
+        : 0
     // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
     // as the rotation triggers them
     const reactionEnergy = REACTION_ENERGY[key]
@@ -1504,15 +1507,11 @@ export function energyFromRotation(
       member.flatEnergy =
         Math.round(((member.flatEnergy ?? 0) + kitEnergy[key]!) * 100) / 100
     member.scaledEnergy = scaledEnergy[key] ?? {}
-    if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
+    member.weaponTriggers = weaponTriggers[key] ?? {}
     member.weaponEnergyTriggers = filledWeaponTriggers(key, weaponTriggers[key])
-    member.favoniusCatchShares = undefined
-    if (favonius[key]) {
-      member.favoniusProcs = favonius[key]!.procs
-      if (favonius[key]!.catchBy)
-        member.favoniusCatchBy = favonius[key]!.catchBy
-      member.favoniusCatchShares = favonius[key]!.shares
-    }
+    member.favoniusProcs = favonius[key]?.procs ?? 0
+    member.favoniusCatchBy = favonius[key]?.catchBy ?? key
+    member.favoniusCatchShares = favonius[key]?.shares
     if (attackEnergy[key])
       member.flatEnergy =
         Math.round(((member.flatEnergy ?? 0) + attackEnergy[key]!) * 100) / 100
