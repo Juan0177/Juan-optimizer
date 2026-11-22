@@ -193,6 +193,9 @@ export const teamOptEnergyRotationFields = [
   'weaponTriggers',
   'turretParticles',
   'scaledEnergy',
+  'catchShares',
+  'turretCatchShares',
+  'favoniusCatchShares',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
@@ -227,6 +230,16 @@ export interface TeamOptEnergyMember {
    * A4), per rotation at their base amount, by giver
    */
   scaledEnergy?: Partial<Record<CharacterKey, number>>
+  /**
+   * Who is on the field when the member's Skill particles arrive, as the written rotation plays
+   * them: each member's share (%) of them. Counted in place of `catchBy` and `funnelShare` unless
+   * one of those is set by hand
+   */
+  catchShares?: Partial<Record<CharacterKey, number>>
+  /** The same for the particles its turret made (`turretParticles`), in place of field time */
+  turretCatchShares?: Partial<Record<CharacterKey, number>>
+  /** The same for its Favonius triggers' particles, unless `favoniusCatchBy` is set by hand */
+  favoniusCatchShares?: Partial<Record<CharacterKey, number>>
   /** Inputs set by hand: the written rotation no longer fills them in */
   edited?: TeamOptEnergyRotationField[]
 }
@@ -497,6 +510,18 @@ const energyMemberSchema = z.object({
   flatEnergy: z.number().finite(),
   turretParticles: z.number().finite().min(0).optional().catch(undefined),
   scaledEnergy: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  catchShares: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  turretCatchShares: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  favoniusCatchShares: z
     .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
     .optional()
     .catch(undefined),

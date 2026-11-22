@@ -231,8 +231,7 @@ describe('team.teamOpt (Team Optimize settings)', () => {
         kqm: { refinement5: 1, refinement4: 5, memberRolls },
       })?.kqm
     expect(
-      kqm({ Xingqiu: 40, Bennett: 20, Nobody: 30, Xiangling: 2.5 })
-        ?.memberRolls
+      kqm({ Xingqiu: 40, Bennett: 20, Nobody: 30, Xiangling: 2.5 })?.memberRolls
     ).toEqual({ Xingqiu: 40, Bennett: 20 })
     for (const bad of [{ Xingqiu: 61 }, { Xingqiu: -1 }, {}, 30, undefined])
       expect(kqm(bad)?.memberRolls).toBeUndefined()
@@ -450,6 +449,74 @@ describe('team.teamOpt (Team Optimize settings)', () => {
       first.teams.get(id)!.teamOpt!.kqm!.energyCalculator!.members
         .KamisatoAyaka!
     expect(kept.weaponTriggers).toBeUndefined()
+    expect(kept.skillUses).toBe(1)
+  })
+
+  it('keeps who catches each member’s particles as the rotation plays them, dropping only a bad map', () => {
+    const first = new ArtCharDatabase(1, new SandboxStorage())
+    first.importGOOD(good(), false, false, false)
+    const [id] = first.teams.keys
+    const member = {
+      fieldTime: 50,
+      burstEvery: 1,
+      skillMode: 0,
+      skillUses: 1,
+      secondaryMode: 0,
+      secondaryUses: 0,
+      funnelShare: 100,
+      favoniusProcs: 0,
+      weaponEnergyTriggers: 0,
+      flatEnergy: 0,
+      catchShares: { KamisatoAyaka: 40, Shenhe: 60 },
+      turretCatchShares: { Shenhe: 100 },
+      favoniusCatchShares: { KamisatoAyaka: 75, Shenhe: 25 },
+    }
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      kqm: {
+        refinement5: 1,
+        refinement4: 5,
+        energySource: 'calculator',
+        energyCalculator: {
+          rotationTime: 20,
+          clearTime: 90,
+          enemyParticles: 9,
+          rng: 'safe',
+          electroInterval: 0,
+          members: { KamisatoAyaka: member, Shenhe: member },
+        },
+      },
+    }
+    first.teams.set(id, { teamOpt })
+    expect(first.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    const second = new ArtCharDatabase(1, new SandboxStorage())
+    second.importGOOD(first.exportGOOD() as IGOOD & IGO, false, false, false)
+    expect(second.teams.get(id)!.teamOpt).toEqual(teamOpt)
+    first.teams.set(id, {
+      teamOpt: {
+        ...teamOpt,
+        kqm: {
+          ...teamOpt.kqm!,
+          energyCalculator: {
+            ...teamOpt.kqm!.energyCalculator!,
+            members: {
+              KamisatoAyaka: {
+                ...member,
+                catchShares: { KamisatoAyaka: -5 } as never,
+                turretCatchShares: { NotACharacter: 100 } as never,
+              },
+              Shenhe: member,
+            },
+          },
+        },
+      },
+    })
+    const kept =
+      first.teams.get(id)!.teamOpt!.kqm!.energyCalculator!.members
+        .KamisatoAyaka!
+    expect(kept.catchShares).toBeUndefined()
+    expect(kept.turretCatchShares).toBeUndefined()
+    expect(kept.favoniusCatchShares).toEqual({ KamisatoAyaka: 75, Shenhe: 25 })
     expect(kept.skillUses).toBe(1)
   })
   it('round-trips every setting through a GOOD export and import', () => {

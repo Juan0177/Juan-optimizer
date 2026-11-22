@@ -225,6 +225,18 @@ export function calculateEnergyRecharge(
   const offField = 1 - 0.1 * Math.min(4, Math.max(2, keys.length))
   /** A particle's share of its energy for a member on the field `caught` of the time */
   const share = (caught: number) => offField + (1 - offField) * caught
+  /**
+   * The part of a source's particles each member catches, as the rotation played them (shares of
+   * members no longer in the team left out); undefined without any
+   */
+  const caughtOf = (
+    shares: Partial<Record<CharacterKey, number>> | undefined
+  ) => {
+    const total = keys.reduce((n, k) => n + (shares?.[k] ?? 0), 0)
+    return shares && total > 0
+      ? (k: CharacterKey) => (shares[k] ?? 0) / total
+      : undefined
+  }
   // (elemental resonance needs a party of four)
   const hasElectroResonance =
     keys.length === 4 &&
@@ -285,15 +297,23 @@ export function calculateEnergyRecharge(
           { mode: member.secondaryMode, uses: member.secondaryUses },
         ]
         let turretTime = 0
+        // (who caught its particles as the rotation played: in place of the catcher and the share
+        // fed, unless one of those is set by hand)
+        const typed = member.edited ?? []
+        const skillCaught =
+          typed.includes('catchBy') || typed.includes('funnelShare')
+            ? undefined
+            : caughtOf(member.catchShares)
         // (the particles its turret made as the rotation played: all its Skill's, in place of the
-        // options' rate for their uses)
+        // options' rate for their uses; caught by whoever was on the field as each one arrived)
         const made = turretParticlesOf(member, data)
         if (made !== undefined) {
+          const turretCaught = caughtOf(member.turretCatchShares)
           const energy =
             made *
             (1 - (data.skills[member.skillMode]?.variance ?? 0) * rng) *
             elementValue(source) *
-            share(field)
+            share(turretCaught ? turretCaught(recipient) : field)
           particles += energy
           if (source === recipient) sources.own += energy
           else sources.team += energy
@@ -325,8 +345,10 @@ export function calculateEnergyRecharge(
           const fed = member.funnelShare / 100
           const caught = isTurret
             ? field
-            : (recipient === catchBy ? fed : 0) +
-              (recipient === source ? 1 - fed : 0)
+            : skillCaught
+              ? skillCaught(recipient)
+              : (recipient === catchBy ? fed : 0) +
+                (recipient === source ? 1 - fed : 0)
           const energy = count * elementValue(source) * share(caught)
           particles += energy
           if (source === recipient) sources.own += energy
@@ -347,11 +369,20 @@ export function calculateEnergyRecharge(
                 settings.rotationTime / favoniusCooldown(refinements?.[source])
               )
             : 0
+        const favoniusCaught = typed.includes('favoniusCatchBy')
+          ? undefined
+          : caughtOf(member.favoniusCatchShares)
         const favonius =
           3 *
           favoniusProcs *
           2 *
-          share(recipient === (member.favoniusCatchBy ?? source) ? 1 : 0)
+          share(
+            favoniusCaught
+              ? favoniusCaught(recipient)
+              : recipient === (member.favoniusCatchBy ?? source)
+                ? 1
+                : 0
+          )
         particles += favonius
         sources.favonius += favonius
       }
@@ -1072,21 +1103,48 @@ const FAVONIUS_RUNS = 400
 
 /**
  * Each member's expected Favonius triggers a rotation if it held a Favonius weapon (its own CRIT
- * hits in the played rotation, as `FAVONIUS_ASSUMED`), and who is on the field when the particles
- * of most of them arrive
+ * hits in the played rotation, as `FAVONIUS_ASSUMED`), who is on the field when the particles
+ * of most of them arrive, and each member's share of them (`catchSharesOf`)
  */
+/** Particles caught by member as each one's share of them, % to a tenth (none caught: undefined) */
+export function catchSharesOf(
+  caught: ReadonlyMap<CharacterKey, number>
+): Partial<Record<CharacterKey, number>> | undefined {
+  const total = [...caught.values()].reduce((n, c) => n + c, 0)
+  if (!(total > 0)) return undefined
+  return Object.fromEntries(
+    [...caught]
+      .filter(([, c]) => c > 0)
+      .map(([k, c]) => [k, Math.round((c / total) * 1000) / 10])
+  )
+}
+
 export function favoniusFromRotation(
   sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'>,
   keys: readonly CharacterKey[],
   rotations = 1,
   onFieldAt: (t: number) => CharacterKey = (t) => keys[0] ?? ('' as never)
 ): Partial<
-  Record<CharacterKey, { procs: number; catchBy: CharacterKey | undefined }>
+  Record<
+    CharacterKey,
+    {
+      procs: number
+      catchBy: CharacterKey | undefined
+      shares: Partial<Record<CharacterKey, number>> | undefined
+    }
+  >
 > {
   const start = sim.start
   const end = sim.start + sim.frames
   const out: Partial<
-    Record<CharacterKey, { procs: number; catchBy: CharacterKey | undefined }>
+    Record<
+      CharacterKey,
+      {
+        procs: number
+        catchBy: CharacterKey | undefined
+        shares: Partial<Record<CharacterKey, number>> | undefined
+      }
+    >
   > = {}
   for (const key of keys) {
     // (its own hits that can CRIT, while it is on the field: kqmsim favonius.go counts only the
@@ -1126,7 +1184,11 @@ export function favoniusFromRotation(
     }
     const per = Math.max(1, rotations) * FAVONIUS_RUNS
     const [catchBy] = [...caught].sort((a, b) => b[1] - a[1])[0] ?? []
-    out[key] = { procs: Math.round((procs / per) * 10) / 10, catchBy }
+    out[key] = {
+      procs: Math.round((procs / per) * 10) / 10,
+      catchBy,
+      shares: catchSharesOf(caught),
+    }
   }
   return out
 }
@@ -1140,18 +1202,26 @@ export function favoniusFromRotation(
  *   (`USE_OPTIONS`), else pressed or held; a "Burst" option (Emilie's case, replaced by her Burst)
  *   counts the Bursts;
  * - the particle catcher: who is on the field when a Skill's particles arrive (they give energy
- *   on arrival, `particleDelay` after the hit that makes them), and the share they catch;
+ *   on arrival, `particleDelay` after the hit that makes them; past the end, as the rotation
+ *   loops), and the share they catch; and every catcher's share (`catchShares`), the same for
+ *   marked turret particles and Favonius triggers;
  * - Burst cadence: unused without a Burst, otherwise once per its Bursts in a rotation;
  * - bonus energy a Skill use restores directly (`SKILL_FLAT_ENERGY`), or a constellation on the
  *   party's reactions (`REACTION_ENERGY`);
  * - energy weapon triggers: what each weapon would trigger, and in the triggers field those of the
  *   one energy weapon of its type that has some (`filledWeaponTriggers`).
- * Turrets (particles over time) keep the catcher: the calculator shares them out by field time.
+ * Turrets the kits don't mark keep the catcher: the calculator shares them out by field time.
  */
 export function energyFromRotation(
   sim: Pick<
     SimulationResult,
-    'start' | 'frames' | 'hits' | 'swaps' | 'skillUses' | 'actions'
+    | 'start'
+    | 'frames'
+    | 'hits'
+    | 'swaps'
+    | 'skillUses'
+    | 'actions'
+    | 'rotationStarts'
   >,
   keys: readonly CharacterKey[],
   rotations = 1,
@@ -1173,6 +1243,11 @@ export function energyFromRotation(
       else break
     return who
   }
+  // Who catches particles arriving at `t`: past the end, the rotation loops, so the next one plays
+  // as the last kept one did from its start (its swap in included)
+  const lastStart = sim.rotationStarts?.at(-1) ?? start
+  const arrivalAt = (t: number) =>
+    onFieldAt(t < end ? t : lastStart + (t - end))
   const field = new Map<CharacterKey, number>()
   {
     let from = start
@@ -1213,7 +1288,7 @@ export function energyFromRotation(
   // (the random Energy of Normal and Charged Attack hits, a member's own)
   const attackEnergy = attackEnergyFromRotation(sim, keys, per)
   // (Favonius: what each member's hits would trigger with one, counted only if it holds one)
-  const favonius = favoniusFromRotation(sim, keys, per, onFieldAt)
+  const favonius = favoniusFromRotation(sim, keys, per, arrivalAt)
   // (energy weapons: what each member would trigger with one, counted only if it holds one)
   const weaponTriggers = weaponTriggersFromRotation(sim, keys, per)
   // (members whose constellations give flat Energy as the rotation plays them)
@@ -1381,8 +1456,11 @@ export function energyFromRotation(
     }
     // the particles its turret made, as its kit marks them (`turretParticles`): a turret that needs
     // the party's hits, ends early, or is replaced by its Burst's counts what it made
+    // (and who is on the field as each lot arrives, `particleDelay` after its hit)
+    member.turretCatchShares = undefined
     if (TURRET_MARKED.has(key)) {
       let made = 0
+      const caught = new Map<CharacterKey, number>()
       for (const h of sim.hits)
         if (
           h.characterKey === key &&
@@ -1390,9 +1468,14 @@ export function energyFromRotation(
           h.t < end &&
           h.path[0] === '_marker' &&
           h.path[1] === 'turretParticles'
-        )
-          made += Number(h.path[2]) || 0
+        ) {
+          const count = Number(h.path[2]) || 0
+          made += count
+          const who = arrivalAt(h.t + particleDelay(key))
+          caught.set(who, (caught.get(who) ?? 0) + count)
+        }
       member.turretParticles = Math.round((made / per) * 100) / 100
+      member.turretCatchShares = catchSharesOf(caught)
     }
     if (SKILL_FLAT_ENERGY[key] !== undefined)
       member.flatEnergy = (SKILL_FLAT_ENERGY[key]! * uses.length) / per
@@ -1423,25 +1506,30 @@ export function energyFromRotation(
     member.scaledEnergy = scaledEnergy[key] ?? {}
     if (weaponTriggers[key]) member.weaponTriggers = weaponTriggers[key]
     member.weaponEnergyTriggers = filledWeaponTriggers(key, weaponTriggers[key])
+    member.favoniusCatchShares = undefined
     if (favonius[key]) {
       member.favoniusProcs = favonius[key]!.procs
       if (favonius[key]!.catchBy)
         member.favoniusCatchBy = favonius[key]!.catchBy
+      member.favoniusCatchShares = favonius[key]!.shares
     }
     if (attackEnergy[key])
       member.flatEnergy =
         Math.round(((member.flatEnergy ?? 0) + attackEnergy[key]!) * 100) / 100
     // the catcher: who is on the field when each use's particles arrive (the first hit of the
-    // member's Skill after the use, then the particles' travel)
+    // member's Skill after the use, then the particles' travel); and each catcher's share, which
+    // the calculator counts (one catcher and the share fed to it can't say two members caught them)
     const primary = data.skills[member.skillMode!]
+    member.catchShares = undefined
     if (primary && !(primary.perSecond > 0) && uses.length) {
       const caught = new Map<CharacterKey, number>()
       uses.forEach((u, i) => {
         const made = u.particlesAt ?? firstHits[i]?.t
         if (made === undefined) return
-        const who = onFieldAt(made + particleDelay(key))
+        const who = arrivalAt(made + particleDelay(key))
         caught.set(who, (caught.get(who) ?? 0) + 1)
       })
+      member.catchShares = catchSharesOf(caught)
       const counted = [...caught.values()].reduce((n, c) => n + c, 0)
       const [catcher, count] = [...caught]
         .filter(([who]) => who !== key)

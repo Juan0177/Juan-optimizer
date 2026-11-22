@@ -112,10 +112,13 @@ describe('turret particles as played', () => {
     )
     const own = (s: typeof settings) =>
       calculateEnergyRecharge(team, s).members.Fischl!.sources.own
-    // (all of Oz's particles to Fischl: 3 each, 80% off the field in a party of two)
+    // (all of Oz's particles to Fischl: 3 each, 80% off the field in a party of two, all of it
+    // for those that arrive while she is on the field: Bennett is for most)
+    const caught = settings.members.Fischl!.turretCatchShares!
+    expect(caught.Bennett).toBeGreaterThan(caught.Fischl ?? 0)
     const counted = own(settings)
     expect(counted).toBeCloseTo(
-      turret * 3 * (0.8 + (0.2 * settings.members.Fischl!.fieldTime) / 100),
+      turret * 3 * (0.8 + (0.2 * (caught.Fischl ?? 0)) / 100),
       1
     )
     // (uses typed by hand: the option's rate for them, the Burst's Oz added)
