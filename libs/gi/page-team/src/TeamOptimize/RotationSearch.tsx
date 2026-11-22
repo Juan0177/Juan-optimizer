@@ -479,7 +479,6 @@ function RotationSearchDialog({
                     rank={i + 1}
                     candidate={c}
                     seed={seedScore}
-                    seedWords={seedWords}
                     names={names}
                     funded={funded}
                     onUse={onUse}
@@ -651,82 +650,8 @@ function useListMotion(ref: RefObject<HTMLElement>, order: string) {
   }, [ref, order])
 }
 
-/** Longest common subsequence: for each item of `b` it keeps, the index of its match in `a` */
-function commonItems<T>(
-  a: readonly T[],
-  b: readonly T[],
-  same: (x: T, y: T) => boolean
-) {
-  const len = Array.from({ length: a.length + 1 }, () =>
-    new Array<number>(b.length + 1).fill(0)
-  )
-  for (let i = a.length - 1; i >= 0; i--)
-    for (let j = b.length - 1; j >= 0; j--)
-      len[i][j] = same(a[i], b[j])
-        ? len[i + 1][j + 1] + 1
-        : Math.max(len[i + 1][j], len[i][j + 1])
-  const kept = new Map<number, number>()
-  for (let i = 0, j = 0; i < a.length && j < b.length; )
-    if (same(a[i], b[j])) kept.set(j++, i++)
-    else if (len[i + 1][j] >= len[i][j + 1]) i++
-    else j++
-  return kept
-}
-
-/** A step's word as shown: kept, added or (from the rotation searched from) removed */
-interface ShownWord {
-  word: string
-  change?: 'added' | 'removed'
-}
-/** What a rotation changes from the one searched from: a step new to it, and each step's words */
-interface StepChange {
-  step: boolean
-  words: ShownWord[]
-}
-function rotationChanges(
-  from: readonly RotationWordStep[],
-  steps: readonly RotationWordStep[]
-): StepChange[] {
-  const kept = commonItems(
-    from,
-    steps,
-    (a, b) => a.characterKey === b.characterKey
-  )
-  return steps.map((step, j) => {
-    const i = kept.get(j)
-    if (i === undefined)
-      return {
-        step: true,
-        words: step.words.map((word) => ({ word, change: 'added' })),
-      }
-    const was = from[i].words
-    const same = commonItems(was, step.words, (a, b) => a === b)
-    const words: ShownWord[] = []
-    let next = 0
-    const removedUntil = (end: number) => {
-      for (; next < end; next++)
-        words.push({ word: was[next], change: 'removed' })
-    }
-    step.words.forEach((word, k) => {
-      const match = same.get(k)
-      if (match === undefined) return words.push({ word, change: 'added' })
-      removedUntil(match)
-      next = match + 1
-      return words.push({ word })
-    })
-    removedUntil(was.length)
-    return { step: false, words }
-  })
-}
-
-/** A rotation as the bar shows it (members, then their actions), its changes picked out in gold */
-function RotationView({
-  steps,
-  changes,
-}: {
-  steps: readonly RotationWordStep[]
-  changes?: StepChange[]
-}) {
+/** A rotation as the bar shows it: each member, then their actions */
+function RotationView({ steps }: { steps: readonly RotationWordStep[] }) {
   return (
     <Box
       sx={{
@@ -750,25 +675,14 @@ function RotationView({
               minWidth: 0,
             }}
           >
-            <Box
-              component="span"
-              sx={{
-                display: 'inline-flex',
-                borderRadius: '50%',
-                boxShadow: changes?.[i]?.step
-                  ? `0 0 0 1.5px ${tokens.gold}`
-                  : undefined,
-              }}
-            >
-              <MemberAvatar characterKey={step.characterKey} size={20} />
-            </Box>
+            <MemberAvatar characterKey={step.characterKey} size={20} />
             <Box
               component="span"
               sx={{
                 display: 'inline-flex',
                 alignItems: 'baseline',
                 flexWrap: 'wrap',
-                columnGap: 0.5,
+                columnGap: 0.625,
                 rowGap: 0.25,
                 minWidth: 0,
               }}
@@ -784,35 +698,15 @@ function RotationView({
               >
                 {step.name}
               </Box>
-              {(
-                changes?.[i]?.words ??
-                step.words.map((word): ShownWord => ({ word }))
-              ).map(({ word, change }, k) => (
+              {step.words.map((word, k) => (
                 <Box
                   key={k}
-                  component={change === 'removed' ? 'del' : 'span'}
+                  component="span"
                   sx={{
                     fontFamily: mono,
                     fontSize: 13.5,
                     letterSpacing: '0.01em',
-                    px: 0.375,
-                    mx: -0.375,
-                    borderRadius: 0.75,
-                    ...(change === 'added'
-                      ? {
-                          color: tokens.gold,
-                          bgcolor: alpha(giTokens.gold, 0.14),
-                          fontWeight: 600,
-                        }
-                      : change === 'removed'
-                        ? {
-                            color: 'text.secondary',
-                            opacity: 0.55,
-                            textDecorationThickness: '1.5px',
-                          }
-                        : {
-                            color: changes ? 'text.secondary' : 'text.primary',
-                          }),
+                    color: 'text.primary',
                   }}
                 >
                   {word}
@@ -831,23 +725,12 @@ function ErLine({
   er,
   names,
   funded,
-  from,
 }: {
   er: RotationCandidate['er']
   names: RotationMember[]
   funded: Partial<Record<CharacterKey, number>>
-  /** Only the members whose need differs from this rotation's (or that their build can't fund) */
-  from?: RotationCandidate['er']
 }) {
   const { t } = useTranslation('page_team')
-  const shown = names.filter(({ characterKey }) => {
-    const need = er[characterKey]
-    if (need === undefined) return false
-    return (
-      !from || need !== from[characterKey] || need > (funded[characterKey] ?? 0)
-    )
-  })
-  if (!shown.length) return null
   return (
     <Box
       sx={{
@@ -861,9 +744,9 @@ function ErLine({
       }}
     >
       <span>{t('teamOpt.search.erNeeded', 'ER needed')}</span>
-      {shown.map(({ characterKey, name }) => {
-        const need = er[characterKey] ?? 0
-        const was = from?.[characterKey]
+      {names.map(({ characterKey, name }) => {
+        const need = er[characterKey]
+        if (need === undefined) return null
         const has = funded[characterKey] ?? 0
         const over = need > has
         const item = (
@@ -875,12 +758,11 @@ function ErLine({
               alignItems: 'center',
               gap: 0.5,
               whiteSpace: 'nowrap',
-              color: over ? 'warning.main' : from ? 'text.primary' : undefined,
-              fontWeight: over || from ? 600 : undefined,
+              color: over ? 'warning.main' : undefined,
+              fontWeight: over ? 600 : undefined,
             }}
           >
             <MemberAvatar characterKey={characterKey} size={16} />
-            {was !== undefined && was !== need && `${was} → `}
             {need}%
           </Box>
         )
@@ -907,7 +789,6 @@ const CandidateRow = memo(function CandidateRow({
   rank,
   candidate,
   seed,
-  seedWords,
   names,
   funded,
   onUse,
@@ -915,7 +796,6 @@ const CandidateRow = memo(function CandidateRow({
   rank: number
   candidate: RotationCandidate
   seed: RotationCandidate
-  seedWords: readonly RotationWordStep[]
   names: RotationMember[]
   funded: Partial<Record<CharacterKey, number>>
   onUse: (text: string) => void
@@ -924,10 +804,6 @@ const CandidateRow = memo(function CandidateRow({
   const steps = useMemo(
     () => rotationWords(candidate.text, names),
     [candidate.text, names]
-  )
-  const changes = useMemo(
-    () => rotationChanges(seedWords, steps),
-    [seedWords, steps]
   )
   const gain = candidate.dps / seed.dps - 1
   return (
@@ -970,7 +846,7 @@ const CandidateRow = memo(function CandidateRow({
         {rank}
       </Box>
       <Box sx={{ flex: '1 1 340px', minWidth: 0, display: 'grid', gap: 0.75 }}>
-        <RotationView steps={steps} changes={changes} />
+        <RotationView steps={steps} />
         <Box
           sx={{
             display: 'flex',
@@ -986,12 +862,7 @@ const CandidateRow = memo(function CandidateRow({
               seconds: candidate.time.toFixed(1),
             })}
           </Typography>
-          <ErLine
-            er={candidate.er}
-            names={names}
-            funded={funded}
-            from={seed.er}
-          />
+          <ErLine er={candidate.er} names={names} funded={funded} />
         </Box>
       </Box>
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
