@@ -39,9 +39,15 @@ export interface RotationSearchSetup {
 }
 
 /**
+ * Rotations a player plays before the stats and damage it keeps start over: they grow with every
+ * rotation, and a full search's hundred thousand would fill the tab's memory
+ */
+const PLAYS_KEPT = 4000
+
+/**
  * A rotation search's player: a written rotation played as the KQM tab plays it, with the
  * setup's builds, and its DPS, Energy Recharge needs and warnings. The stats the simulation reads
- * and each attack's damage are kept across the rotations it plays.
+ * and each attack's damage are kept across the rotations it plays (`PLAYS_KEPT` at a time).
  */
 export function rotationScorer(
   database: ArtCharDatabase,
@@ -59,9 +65,15 @@ export function rotationScorer(
   const sets = Object.fromEntries(
     Object.entries(gear).map(([k, g]) => [k, g?.sets])
   )
-  const calculate = rotationCalculation(database, teamId, gender, overrides)
-  const damage: RotationDamageCache = new Map()
+  let calculate = rotationCalculation(database, teamId, gender, overrides)
+  let damage: RotationDamageCache = new Map()
+  let plays = 0
   return (text: string): RotationScore | undefined => {
+    if (++plays > PLAYS_KEPT) {
+      plays = 1
+      calculate = rotationCalculation(database, teamId, gender, overrides)
+      damage = new Map()
+    }
     const warnings: string[] = []
     const played = writtenKqmReplay({
       database,

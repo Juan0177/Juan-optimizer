@@ -22,6 +22,7 @@ import {
   kqmErPrices,
   kqmRotationSearchSetup,
   mainMember,
+  releaseKqmBuilders,
   rotationGuard,
   rotationSearchPlayer,
   rotationWords,
@@ -208,6 +209,9 @@ export async function fullRotationSearch({
       ended = 'cancelled'
       break
     }
+    // (the KQM builders of the builds just found are kept a while for the inspector: ended first,
+    // or they and the search's workers hold the game data in one tab at once, more than it has)
+    releaseKqmBuilders()
     const player = rotationSearchPlayer(
       database,
       kqmRotationSearchSetup(

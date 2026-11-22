@@ -8,6 +8,7 @@ export {
   kqmBuildThreads,
   kqmBuildThreadsAuto,
   kqmBuildThreadsMax,
+  releaseKqmBuilders,
   setKqmBuildThreads,
 } from './kqmBuildPool'
 export * from './kqmWeaponSources'
