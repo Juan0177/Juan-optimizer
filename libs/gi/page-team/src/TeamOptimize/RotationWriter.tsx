@@ -2390,7 +2390,7 @@ function WriterModal({
                         )}
                         info={t('teamOpt.writer.openerTip', {
                           defaultValue:
-                            'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. Counted from the start, it is the first rotation; counting rotations {{from}}–{{to}}, it only sets up cooldowns, summons and auras and is not counted.',
+                            'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. It only sets up cooldowns, summons and auras and is not counted; counting from the start, tick Counted to make it the first rotation.',
                           ...STEADY_RANGE,
                         })}
                         aside={
@@ -2400,7 +2400,7 @@ function WriterModal({
                               <Tooltip
                                 title={t(
                                   'teamOpt.writer.openerCountedTip',
-                                  'Off: played before the start as a setup and not counted. Its cooldowns, summons and auras carry into the rotations.'
+                                  'Off (default): played before the start as a setup and not counted. Its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
                                 )}
                               >
                                 <Box
@@ -2417,14 +2417,14 @@ function WriterModal({
                                 >
                                   <Checkbox
                                     size="small"
-                                    checked={!timing.openerSetup}
+                                    checked={!!timing.countOpener}
                                     onChange={(_, checked) => {
-                                      const { openerSetup: _setup, ...rest } =
+                                      const { countOpener: _count, ...rest } =
                                         timing
                                       setTiming(
                                         checked
-                                          ? rest
-                                          : { ...rest, openerSetup: true }
+                                          ? { ...rest, countOpener: true }
+                                          : rest
                                       )
                                     }}
                                     sx={{ p: 0.5 }}

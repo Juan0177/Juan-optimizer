@@ -753,11 +753,11 @@ export function RotationsSetting({
     const { rotations: _previous, ...rest } = timing
     apply(rotations === undefined ? rest : { ...rest, rotations })
   }
-  // (counted from the start: the first rotation written apart is the first rotation, or a setup
-  // played before the start, not counted)
+  // (counted from the start: the first rotation written apart is a setup played before the start,
+  // not counted, or the first rotation)
   const setOpenerCounted = (counted: boolean) => {
-    const { openerSetup: _setup, ...rest } = timing
-    apply(counted ? rest : { ...rest, openerSetup: true })
+    const { countOpener: _count, ...rest } = timing
+    apply(counted ? { ...rest, countOpener: true } : rest)
   }
   const apply = (next: typeof timing) => {
     if (applied.trim()) {
@@ -921,16 +921,16 @@ export function RotationsSetting({
                 placement="left"
                 title={t(
                   'teamOpt.timing.openerCountedTip',
-                  'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+                  'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
                 )}
               >
                 <MenuItem
-                  onClick={() => setOpenerCounted(!!timing.openerSetup)}
+                  onClick={() => setOpenerCounted(!timing.countOpener)}
                   sx={{ fontSize: 13.5 }}
                 >
                   <Checkbox
                     size="small"
-                    checked={!timing.openerSetup}
+                    checked={!!timing.countOpener}
                     sx={{ p: 0, mr: 1 }}
                     tabIndex={-1}
                   />
@@ -989,7 +989,7 @@ export function RotationsSetting({
               arrow
               title={t(
                 'teamOpt.timing.openerCountedTip',
-                'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+                'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
               )}
             >
               <Box
@@ -1005,7 +1005,7 @@ export function RotationsSetting({
               >
                 <Checkbox
                   size="small"
-                  checked={!timing.openerSetup}
+                  checked={!!timing.countOpener}
                   disabled={disabled}
                   onChange={(_, checked) => setOpenerCounted(checked)}
                   sx={{ p: 0.5 }}
