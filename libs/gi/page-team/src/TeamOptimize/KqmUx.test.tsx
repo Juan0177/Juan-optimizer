@@ -146,6 +146,9 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
     <>{children}</>
   ),
   statName: (key: string) => key,
+  allRotationEdits: { order: true, visits: true, attacks: true, actions: true },
+  erCostOf: () => () => 0,
+  kqmErPrices: async () => ({}),
   quickTooltipProps: {},
   weaponSheetNs: (key: string) => `weapon_${key}_gen`,
   kqmConstellation: (key: string) => (key === 'Bennett' ? 6 : 0),

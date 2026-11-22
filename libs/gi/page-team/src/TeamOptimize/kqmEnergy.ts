@@ -54,7 +54,9 @@ export function kqmRotationEnergyOf(
   i18n: i18n,
   teamId: string,
   teamOpt: TeamOpt,
-  members: TeamOptMember[]
+  members: TeamOptMember[],
+  /** Another rotation to play; absent: the team's written one */
+  text?: string
 ): { energy?: RotationEnergy; rotationTime?: number } {
   try {
     const played = kqmReplayOf(
@@ -62,7 +64,8 @@ export function kqmRotationEnergyOf(
       gender,
       i18n,
       teamId,
-      teamOpt
+      teamOpt,
+      text
     )?.({
       constellations: Object.fromEntries(
         members.map((m) => [

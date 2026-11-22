@@ -56,6 +56,27 @@ interface Sensitivity {
  */
 const cache = new WeakMap<object, { key: string; value: Sensitivity }>()
 
+/**
+ * What one more KQM roll of each substat on each member adds to a KQM result's team damage
+ * (0.0105 for +1.05%), as far as the table has worked it out for that result
+ */
+export function kqmRollGains(
+  result: KqmResult
+): Partial<Record<CharacterKey, Partial<Record<SubstatKey, number | null>>>> {
+  const hit = cache.get(result)
+  if (hit?.key !== 'kqm') return {}
+  return Object.fromEntries(
+    Object.entries(hit.value.cells).flatMap(([member, rows]) => {
+      const gains = Object.fromEntries(
+        Object.entries(rows ?? {}).flatMap(([row, gain]) =>
+          row.startsWith('sub:') ? [[row.slice(4), gain]] : []
+        )
+      )
+      return Object.keys(gains).length ? [[member, gains]] : []
+    })
+  )
+}
+
 /** KQM's builds are at level 90: only the levels above it are offered */
 const KQM_LEVEL = 90
 const levelsFor = (kqm: boolean) =>

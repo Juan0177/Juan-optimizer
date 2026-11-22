@@ -11,7 +11,9 @@ import type {
   RotationSearchProgress,
 } from '../'
 import {
+  allRotationEdits,
   energyFits,
+  erCostOf,
   evaluateTeamNodes,
   fieldAttacks,
   kqmArtData,
@@ -24,6 +26,7 @@ import {
   rotationVocabulary,
   rotationWords,
   searchRotations,
+  stepOrders,
   teamRotationNodes,
   wordsRotationText,
 } from '../'
@@ -87,6 +90,118 @@ describe('the rotations one change away', () => {
         .map(wordsRotationText)
         .some((t) => /Furina\s*->/.test(t))
     ).toBe(false)
+  })
+})
+
+describe('the members’ order and visits (a player request)', () => {
+  const members = names(['Furina', 'Neuvillette', 'KaedeharaKazuha', 'Xianyun'])
+  const steps = rotationWords(
+    'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina',
+    members
+  )
+  const vocabulary = rotationVocabulary(steps)
+  const texts = (kinds = allRotationEdits) =>
+    rotationEdits(steps, vocabulary, kinds).map(wordsRotationText)
+  it('a step moved anywhere: a support played right before the member who catches its particles', () => {
+    expect(texts()).toContain(
+      'Kazuha E P -> Xianyun E -> Furina E Q -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(texts()).toContain(
+      'Xianyun E -> Furina E Q -> Kazuha E P -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(
+      texts().every(
+        (t) =>
+          t.endsWith('-> Neuvillette 2[N3 CA] -> Furina') ||
+          t.endsWith('-> Furina')
+      )
+    ).toBe(true)
+  })
+  it('a member back on the field for a Skill or Burst, to refresh a buff', () => {
+    expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Furina E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Kazuha E -> Furina'
+    )
+    // (no second Burst for a member that has one: it would wait out its cooldown)
+    expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Kazuha Q -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(texts()).not.toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Furina Q -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    // (never next to its own step: that is a word added to it)
+    expect(texts()).not.toContain(
+      'Furina E Q -> Furina E -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+  })
+  it('an extra visit left out, never a member’s only one', () => {
+    const twice = rotationWords(
+      'Furina E Q -> Kazuha E P -> Furina E -> Neuvillette 2[N3 CA]',
+      members
+    )
+    const edits = rotationEdits(twice, {}).map(wordsRotationText)
+    expect(edits).toContain('Kazuha E P -> Furina E -> Neuvillette 2[N3 CA]')
+    expect(edits).toContain('Furina E Q -> Kazuha E P -> Neuvillette 2[N3 CA]')
+    expect(edits).not.toContain(
+      'Furina E Q -> Furina E -> Neuvillette 2[N3 CA]'
+    )
+  })
+  it('only the kinds of change chosen', () => {
+    const none = { order: false, visits: false, attacks: false, actions: false }
+    expect(texts(none)).toEqual([])
+    const order = texts({ ...none, order: true })
+    expect(order).toContain(
+      'Kazuha E P -> Furina E Q -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(order.every((t) => t.split(' -> ').length === 5)).toBe(true)
+    const attacks = texts({ ...none, attacks: true })
+    expect(attacks).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 3[N3 CA] -> Furina'
+    )
+    expect(attacks).toContain(
+      'Furina E Q -> Kazuha E HP -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(attacks).not.toContain(
+      'Furina Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    const actions = texts({ ...none, actions: true })
+    expect(actions).toContain(
+      'Furina Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(actions).toContain(
+      'Furina E Q -> Kazuha hE P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(actions).not.toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 3[N3 CA] -> Furina'
+    )
+    const visits = texts({ ...none, visits: true })
+    expect(visits.length).toBeGreaterThan(0)
+    expect(visits.every((t) => t.split(' -> ').length === 6)).toBe(true)
+  })
+})
+
+describe('every order of the steps', () => {
+  const members = names(['Furina', 'Neuvillette', 'KaedeharaKazuha', 'Xianyun'])
+  it('one of each that only loops from another, the loop back kept last', () => {
+    const orders = stepOrders(
+      rotationWords(
+        'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N3 CA] -> Furina',
+        members
+      )
+    ).map(wordsRotationText)
+    // (3 others after the first step: 3! orders, the written one left out)
+    expect(orders).toHaveLength(5)
+    expect(orders).toContain(
+      'Furina E Q -> Xianyun E -> Kazuha E P -> Neuvillette 2[N3 CA] -> Furina'
+    )
+    expect(orders).toContain(
+      'Furina E Q -> Neuvillette 2[N3 CA] -> Xianyun E -> Kazuha E P -> Furina'
+    )
+    expect(
+      orders.every((t) => t.startsWith('Furina E Q') && t.endsWith('-> Furina'))
+    ).toBe(true)
   })
 })
 
@@ -219,6 +334,24 @@ describe('the hill climb', () => {
     }
     expect(reports.at(-1)?.best).toBe(result.best[0])
   })
+  it('measures from a reference: searches from different starts compare', async () => {
+    const reference: RotationScore = {
+      dps: 0.5,
+      time: 1,
+      er: { Neuvillette: 150 },
+      warnings: [],
+    }
+    const result = await searchRotations({
+      seed: 'Furina E Q -> Neuvillette Q E N1 CA',
+      members,
+      score,
+      deadline: Date.now() + 60_000,
+      reference,
+      erCost: (s) => (s.er.Neuvillette ?? 100) / 1000,
+    })
+    // (its own seed against the reference's Energy Recharge cost, 0.15)
+    expect(result.seed.estimate).toBeCloseTo(result.seed.dps + 0.15 - 0.1)
+  })
   it('stops at its deadline', async () => {
     const result = await searchRotations({
       seed: 'Furina E Q -> Neuvillette Q E N1 CA',
@@ -228,6 +361,56 @@ describe('the hill climb', () => {
     })
     expect(result.ended).toBe('time')
     expect(result.played).toBe(1)
+  })
+})
+
+describe('Energy Recharge a rotation frees, priced in damage stats', () => {
+  const members = names(['Furina', 'Neuvillette', 'KaedeharaKazuha'])
+  // (the same DPS whatever the order; Neuvillette needs less ER when Kazuha's particles come to
+  // him, played right before him)
+  const score = async (texts: string[]) =>
+    texts.map(
+      (text): RotationScore => ({
+        dps: 100,
+        time: 20,
+        er: {
+          Neuvillette: /Kazuha E\s*->\s*Neuvillette/.test(text) ? 120 : 150,
+        },
+        warnings: [],
+      })
+    )
+  const seed = 'Kazuha E -> Furina E Q -> Neuvillette Q E CA CA'
+  const kinds = { order: true, visits: false, attacks: false, actions: false }
+  it('a need a roll lower gains what the roll gives as a damage stat', () => {
+    const cost = erCostOf({ Neuvillette: { roll: 3, er: 5, floor: 110 } })
+    const at = (need: number) =>
+      cost({ dps: 0, time: 1, er: { Neuvillette: need }, warnings: [] })
+    expect(at(150) - at(120)).toBeCloseTo((30 / 5) * 3)
+    expect(at(100)).toBe(0)
+  })
+  it('finds the order that funnels particles, which the builds alone do not reward', async () => {
+    const plain = await searchRotations({
+      seed,
+      members,
+      score,
+      deadline: Date.now() + 60_000,
+      kinds,
+    })
+    expect(plain.best[0].text).toBe(plain.seed.text)
+    const priced = await searchRotations({
+      seed,
+      members,
+      score,
+      deadline: Date.now() + 60_000,
+      kinds,
+      erCost: erCostOf({ Neuvillette: { roll: 3, er: 5, floor: 110 } }),
+    })
+    expect(priced.best[0].text).toBe(
+      'Furina E Q -> Kazuha E -> Neuvillette Q E CA CA'
+    )
+    expect(priced.best[0].dps).toBe(100)
+    expect(priced.best[0].estimate).toBeCloseTo(100 + (30 / 5) * 3)
+    expect(priced.seed.estimate).toBe(100)
   })
 })
 

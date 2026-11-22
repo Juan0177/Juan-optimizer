@@ -16,6 +16,7 @@ export * from './objective'
 export * from './rotation'
 export * from './rotationCalculation'
 export * from './rotationSearch'
+export * from './rotationSearchEr'
 export {
   kqmRotationSearchSetup,
   type RotationSearchBase,

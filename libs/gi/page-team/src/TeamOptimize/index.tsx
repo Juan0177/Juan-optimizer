@@ -454,6 +454,8 @@ export default function TeamBuildWorkspace({
   // rotation it finds opens in the writer, to be played there and used)
   const kqmRunTeamOpt = kqmRotation?.runTeamOpt
   const memberNames = useMemberNames(members)
+  /** The states a KQM run gives every attack now (`lowHp`, set once it is worked out below) */
+  const attackStatesNow = useRef<readonly RunAttackState[]>()
   const searchButton = useCallback<SearchButton>(
     ({ text, names, setText }) => (
       <RotationSearchButton
@@ -462,6 +464,7 @@ export default function TeamBuildWorkspace({
         names={names}
         kqmResult={kqmShown}
         kqmTeamOpt={kqmRunTeamOpt}
+        attackStates={attackStatesNow}
         onUse={setText}
       />
     ),
@@ -599,6 +602,7 @@ export default function TeamBuildWorkspace({
         }
       : undefined
   }, [enemyTeam, fightNow, members])
+  attackStatesNow.current = lowHp?.states
   // the equipped builds' figures with that uptime too, as a run's: the fight they make sets it, so
   // it settles in a step or two (two states taking turns: the first kept)
   const wolfHistory = useRef<string[]>([])
@@ -885,6 +889,7 @@ export default function TeamBuildWorkspace({
                       names={memberNames}
                       kqmResult={kqmShown}
                       kqmTeamOpt={kqmRunTeamOpt}
+                      attackStates={attackStatesNow}
                       disabled={running}
                       onUse={(chosen) => {
                         setRotationDraft(

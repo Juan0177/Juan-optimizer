@@ -238,13 +238,16 @@ export function kqmTeamSensitivity(
   return {
     base,
     members,
-    /** The rotation's damage with one more KQM roll of each substat on `member`'s build */
-    substats(member: TeamOptMember): Partial<Record<SubstatKey, number>> {
+    /** The rotation's damage with one more KQM roll of each substat (`keys`) on `member`'s build */
+    substats(
+      member: TeamOptMember,
+      keys: readonly SubstatKey[] = sensitivitySubstats
+    ): Partial<Record<SubstatKey, number>> {
       const { characterKey } = member
       const build = result.builds[characterKey]
       if (!build) return {}
       return Object.fromEntries(
-        sensitivitySubstats.map((key) => [
+        keys.map((key) => [
           key,
           evaluate({
             arts: {

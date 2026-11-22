@@ -21,6 +21,11 @@ export interface RotationScore {
 }
 export interface RotationCandidate extends RotationScore {
   text: string
+  /**
+   * Its DPS with builds that fund its Energy Recharge needs instead of the seed's (`erCost`): the
+   * damage stats a lower need frees or a higher one takes. Without a cost, its DPS.
+   */
+  estimate: number
 }
 
 /**
@@ -115,26 +120,96 @@ function groupEdits(
 }
 
 /**
- * The rotations one change away: two steps in a row swapped, a word left out (a step keeps one),
- * two words in a row swapped, a Normal Attack string a hit shorter or longer, an action written
- * another way of the member's `vocabulary` (a Charged Attack's beams, a held Skill), a group
- * repeated once more or once less or its own words changed so, or a word of the member's
- * `vocabulary` added anywhere in its step. The last step stays last when it is the loop back.
+ * What a search may change: the members' order (`order`), a member coming back on the field or an
+ * extra visit left out (`visits`), Normal, Charged and Plunging Attacks and their repeats
+ * (`attacks`), and the other actions and kits' ways of writing them (`actions`)
+ */
+export interface RotationEditKinds {
+  order: boolean
+  visits: boolean
+  attacks: boolean
+  actions: boolean
+}
+export const allRotationEdits: RotationEditKinds = {
+  order: true,
+  visits: true,
+  attacks: true,
+  actions: true,
+}
+/** A field attack word, or a group of them */
+const attackWord = (word: string) =>
+  GROUP.test(word) || fieldAttacks([word]) > 0
+
+/** A Skill or Burst word: what a member comes back on the field to do */
+const visitWord = (word: string) =>
+  actionOf(word) === 'skill' || /^Q(?![a-z])/i.test(word)
+
+/**
+ * The rotations one change away: two steps in a row swapped, a step moved anywhere else (a
+ * support played right before the member who catches its particles), a member coming back on the
+ * field for a Skill or Burst of its `vocabulary` (to refresh a buff), a member's extra visit left
+ * out, a word left out (a step keeps one), two words in a row swapped, a Normal Attack string a
+ * hit shorter or longer, an action written another way of the member's `vocabulary` (a Charged
+ * Attack's beams, a held Skill), a group repeated once more or once less or its own words changed
+ * so, or a word of the member's `vocabulary` added anywhere in its step. The last step stays last
+ * when it is the loop back.
  */
 export function rotationEdits(
   steps: readonly RotationWordStep[],
-  vocabulary: Partial<Record<CharacterKey, string[]>>
+  vocabulary: Partial<Record<CharacterKey, string[]>>,
+  kinds: RotationEditKinds = allRotationEdits
 ): RotationWordStep[][] {
   const out: RotationWordStep[][] = []
+  const wordKind = (...words: string[]) =>
+    words.some(attackWord) ? kinds.attacks : kinds.actions
   const loops = !steps[steps.length - 1]?.words.length
   const movable = loops ? steps.length - 1 : steps.length
   const withStep = (i: number, words: string[]) =>
     steps.map((s, j) => (j === i ? { ...s, words } : s))
-  for (let i = 0; i + 1 < movable; i++) {
+  const tail = steps.slice(movable)
+  for (let i = 0; kinds.order && i + 1 < movable; i++) {
     const swapped = [...steps]
     swapped[i] = steps[i + 1]
     swapped[i + 1] = steps[i]
     out.push(swapped)
+  }
+  for (let i = 0; kinds.order && i < movable; i++)
+    for (let j = 0; j < movable; j++) {
+      if (Math.abs(i - j) <= 1) continue
+      const moved = steps.slice(0, movable).filter((_, k) => k !== i)
+      moved.splice(j, 0, steps[i])
+      out.push([...moved, ...tail])
+    }
+  const visits = new Map<CharacterKey, number>()
+  for (const s of steps.slice(0, movable))
+    if (s.words.length)
+      visits.set(s.characterKey, (visits.get(s.characterKey) ?? 0) + 1)
+  for (let i = 0; kinds.visits && i < movable; i++)
+    if ((visits.get(steps[i].characterKey) ?? 0) > 1)
+      out.push(steps.filter((_, k) => k !== i))
+  for (const [characterKey, words] of Object.entries(vocabulary) as [
+    CharacterKey,
+    string[],
+  ][]) {
+    const name = steps.find((s) => s.characterKey === characterKey)?.name
+    if (!name || !kinds.visits) continue
+    // (a Burst again would wait out its cooldown: only for a member that has none in the rotation)
+    const bursts = hasBurst(memberWords(steps, characterKey))
+    for (const word of words.filter(
+      (w) => visitWord(w) && !(bursts && /^Q/i.test(w))
+    ))
+      for (let j = 0; j <= movable; j++) {
+        if (
+          steps[j - 1]?.characterKey === characterKey ||
+          (j < movable && steps[j].characterKey === characterKey)
+        )
+          continue
+        out.push([
+          ...steps.slice(0, j),
+          { characterKey, name, words: [word] },
+          ...steps.slice(j),
+        ])
+      }
   }
   steps.forEach(({ characterKey, words }, i) => {
     if (!words.length) return
@@ -147,16 +222,16 @@ export function rotationEdits(
         : []
     }
     words.forEach((word, j) => {
-      if (words.length > 1)
+      if (words.length > 1 && wordKind(word))
         out.push(withStep(i, [...words.slice(0, j), ...words.slice(j + 1)]))
       const replace = (as: string[]) =>
         out.push(
           withStep(i, [...words.slice(0, j), ...as, ...words.slice(j + 1)])
         )
       for (const other of [...otherStrings(word), ...alternatives(word)])
-        replace([other])
+        if (wordKind(word, other)) replace([other])
       const group = GROUP.exec(word)
-      if (group) {
+      if (group && kinds.attacks) {
         const times = Number(group[1])
         for (const next of [times - 1, times + 1]) {
           if (next < 1 || next > 20) continue
@@ -165,7 +240,7 @@ export function rotationEdits(
         for (const inner of groupEdits(groupWords(group[2]), alternatives))
           replace([`${times}[${inner.join(' ')}]`])
       }
-      if (j + 1 < words.length) {
+      if (j + 1 < words.length && wordKind(word, words[j + 1])) {
         const swapped = [...words]
         swapped[j] = words[j + 1]
         swapped[j + 1] = word
@@ -173,10 +248,38 @@ export function rotationEdits(
       }
     })
     for (const word of vocabulary[characterKey] ?? [])
-      for (let j = 0; j <= words.length; j++)
+      for (let j = 0; wordKind(word) && j <= words.length; j++)
         out.push(withStep(i, [...words.slice(0, j), word, ...words.slice(j)]))
   })
   return out
+}
+
+/**
+ * The rotation's steps in every other order, one of each that only loops from another step
+ * (those play alike): for rotations of at most `most` steps, the loop back kept last
+ */
+export function stepOrders(
+  steps: readonly RotationWordStep[],
+  most = 6
+): RotationWordStep[][] {
+  const loops = !steps[steps.length - 1]?.words.length
+  const movable = steps.slice(0, loops ? -1 : undefined)
+  const tail = steps.slice(movable.length)
+  if (movable.length < 3 || movable.length > most) return []
+  // (each order from the first step's place: the others are its loops)
+  const [first, ...rest] = movable
+  const orders: RotationWordStep[][] = []
+  const permute = (left: RotationWordStep[], done: RotationWordStep[]) => {
+    if (!left.length) {
+      orders.push([first, ...done])
+      return
+    }
+    left.forEach((step, i) =>
+      permute([...left.slice(0, i), ...left.slice(i + 1)], [...done, step])
+    )
+  }
+  permute(rest, [])
+  return orders.slice(1).map((order) => [...order, ...tail])
 }
 
 /**
@@ -300,7 +403,10 @@ export interface RotationSearchResult {
  * A hill climb from a written rotation: each round plays every rotation one change away from the
  * best few so far (`rotationEdits`, kept to `rotationGuard`), keeps those whose Energy Recharge
  * needs fit (`energyFits`) and that bring no warning the seed does not have, and stops when three
- * rounds in a row find nothing better, at `deadline` (ms) or after `maxRounds`
+ * rounds in a row find nothing better (and, with `widen`, a round from more of the best does not
+ * either), at `deadline` (ms) or after `maxRounds`. Rotations are
+ * ranked by their `estimate`: with `erCost`, the Energy Recharge a rotation needs is paid in the
+ * damage stats it takes from the builds (one that lowers a need gains what it frees).
  */
 export async function searchRotations({
   seed,
@@ -311,6 +417,11 @@ export async function searchRotations({
   keep = 4,
   erSlack = 20,
   funded,
+  erCost,
+  kinds = allRotationEdits,
+  plan,
+  widen,
+  reference,
   onProgress,
   isCancelled = () => false,
 }: {
@@ -323,6 +434,19 @@ export async function searchRotations({
   erSlack?: number
   /** Each member's Energy Recharge with the builds the rotations are played with (%) */
   funded?: Partial<Record<CharacterKey, number>>
+  /** The DPS the builds give up to have the Energy Recharge a rotation needs */
+  erCost?: (score: RotationScore) => number
+  /** What it may change (`rotationEdits`) */
+  kinds?: RotationEditKinds
+  /** The rotation whose plan every rotation keeps to (`rotationGuard`); the seed by default */
+  plan?: string
+  /** When the best few find nothing better, one more round from this many of the best */
+  widen?: number
+  /**
+   * What estimates and Energy Recharge fits are measured from (several searches from different
+   * starts, compared): the seed's play by default
+   */
+  reference?: RotationScore
   onProgress?: (progress: RotationSearchProgress) => void
   isCancelled?: () => boolean
 }): Promise<RotationSearchResult> {
@@ -331,7 +455,15 @@ export async function searchRotations({
   const [seedScore] = await score([seedText])
   if (!seedScore || !(seedScore.dps > 0))
     throw new Error('The rotation could not be played.')
-  const start: RotationCandidate = { text: seedText, ...seedScore }
+  const base = reference ?? seedScore
+  const seedCost = erCost?.(base) ?? 0
+  const estimate = (s: RotationScore) =>
+    erCost ? s.dps + seedCost - erCost(s) : s.dps
+  const start: RotationCandidate = {
+    text: seedText,
+    ...seedScore,
+    estimate: estimate(seedScore),
+  }
   onProgress?.({
     round: 0,
     played: 1,
@@ -341,15 +473,18 @@ export async function searchRotations({
     best: start,
     top: [start],
   })
-  const fits = energyFits(seedScore, erSlack, funded)
+  const fits = energyFits(base, erSlack, funded)
   const known = new Set(seedScore.warnings)
-  const ok = rotationGuard(seedSteps)
+  const ok = rotationGuard(
+    plan === undefined ? seedSteps : rotationWords(plan, members)
+  )
   const vocabulary = rotationVocabulary(seedSteps)
   const seen = new Set([playedKey(seedText, members)])
   let pool = [start]
   let played = 1
   let stale = 0
   let round = 0
+  let width = keep
   let ended: RotationSearchResult['ended'] = 'rounds'
   const stop = () => isCancelled() || Date.now() > deadline
   while (round < maxRounds) {
@@ -360,10 +495,11 @@ export async function searchRotations({
     round++
     const texts: string[] = []
     let slice = performance.now()
-    for (const parent of pool.slice(0, keep))
+    for (const parent of pool.slice(0, width))
       for (const steps of rotationEdits(
         rotationWords(parent.text, members),
-        vocabulary
+        vocabulary,
+        kinds
       )) {
         if (performance.now() - slice > 8) {
           await yieldToPage()
@@ -377,10 +513,14 @@ export async function searchRotations({
         texts.push(text)
       }
     if (!texts.length) {
+      if (widen && width < widen) {
+        width = widen
+        continue
+      }
       ended = 'converged'
       break
     }
-    const bestBefore = pool[0].dps
+    const bestBefore = pool[0].estimate
     const top = pool.slice(0, keep * 2)
     onProgress?.({
       round,
@@ -410,15 +550,15 @@ export async function searchRotations({
       if (!s) return
       played++
       if (s.dps > 0 && fits(s) && s.warnings.every((w) => known.has(w)))
-        found.push({ text: texts[i], ...s })
+        found.push({ text: texts[i], ...s, estimate: estimate(s) })
     })
     // (rotations that play the same, as an action written that changes nothing: the shortest)
     const merged: RotationCandidate[] = []
     for (const c of [...pool, ...found].sort(
-      (a, b) => b.dps - a.dps || a.text.length - b.text.length
+      (a, b) => b.estimate - a.estimate || a.text.length - b.text.length
     ))
       if (!merged.some((m) => samePlay(m, c))) merged.push(c)
-    pool = merged.slice(0, keep * 6)
+    pool = merged.slice(0, Math.max(keep * 6, widen ?? 0))
     onProgress?.({
       round,
       played,
@@ -432,8 +572,17 @@ export async function searchRotations({
       ended = isCancelled() ? 'cancelled' : 'time'
       break
     }
-    stale = pool[0].dps > bestBefore * (1 + 1e-4) ? 0 : stale + 1
+    if (pool[0].estimate > bestBefore * (1 + 1e-4)) {
+      stale = 0
+      width = keep
+    } else stale++
     if (stale >= 3) {
+      // (before it ends: once from more of the best, which may lead somewhere the best few do not)
+      if (widen && width < widen) {
+        width = widen
+        stale = 2
+        continue
+      }
       ended = 'converged'
       break
     }

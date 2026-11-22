@@ -4,14 +4,20 @@ import type { TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  ErPrice,
   KqmResult,
   RotationCandidate,
+  RotationEditKinds,
   RotationMember,
   RotationSearchProgress,
   RotationSearchResult,
   RotationWordStep,
+  RunAttackState,
 } from '@genshin-optimizer/gi/ui'
 import {
+  allRotationEdits,
+  erCostOf,
+  kqmErPrices,
   kqmRotationSearchSetup,
   rotationSearchPlayer,
   rotationWords,
@@ -19,6 +25,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded'
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import {
   Alert,
   alpha,
@@ -46,12 +53,29 @@ import { DialogHead } from './OptionTile'
 import { Arrow, mono } from './RotationInline'
 import { laneColor } from './RotationTimeline'
 import { kqmRotationId, useRotationSettings } from './RotationWriter'
+import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
+import { type FullSearchStage, fullRotationSearch } from './rotationSearchFull'
+import { kqmRollGains } from './TeamSensitivity'
 import { focusSx, insetSx, numSx, quickSx, Segmented, tokens, type } from './ui'
 
 /** How long a search may take (seconds) */
 const BUDGETS = [30, 120, 300] as const
 /** Rotations shown after a search */
 const SHOWN = 5
+/** The best rotations a search found that get their own KQM builds */
+const CONFIRMED = 3
+/** What the last search could change: the next one starts from it */
+let lastKinds: RotationEditKinds = allRotationEdits
+/** Quick: a time limit; Full: until nothing within reach is better (at most `FULL_MINUTES`) */
+type SearchMode = 'quick' | 'full'
+let lastMode: SearchMode = 'quick'
+const FULL_MINUTES = 20
+const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+/** Each KQM result's Energy Recharge prices (`kqmErPrices`), worked out once */
+const erPrices = new WeakMap<
+  KqmResult,
+  Promise<Partial<Record<CharacterKey, ErPrice>>>
+>()
 
 /**
  * The KQM tab's rotation search, from the rotation in the writer: thousands of rotations a change
@@ -66,6 +90,7 @@ export function RotationSearchButton({
   onUse,
   compact,
   disabled,
+  attackStates,
 }: {
   teamId: string
   text: string
@@ -75,6 +100,8 @@ export function RotationSearchButton({
   /** The settings that result was run with */
   kqmTeamOpt: TeamOpt | undefined
   onUse: (text: string) => void
+  /** The states a KQM run gives every attack now (Wolf's Gravestone's uptime) */
+  attackStates?: RefObject<readonly RunAttackState[] | undefined>
   /** On the rotation's line: a pill like its other settings */
   compact?: boolean
   disabled?: boolean
@@ -166,6 +193,7 @@ export function RotationSearchButton({
           names={names}
           kqmResult={kqmResult}
           kqmTeamOpt={kqmTeamOpt}
+          attackStates={attackStates}
           onClose={() => setOpen(false)}
           onUse={(chosen) => {
             onUse(chosen)
@@ -183,6 +211,7 @@ function RotationSearchDialog({
   names,
   kqmResult,
   kqmTeamOpt,
+  attackStates,
   onClose,
   onUse,
 }: {
@@ -191,10 +220,11 @@ function RotationSearchDialog({
   names: RotationMember[]
   kqmResult: KqmResult
   kqmTeamOpt: TeamOpt
+  attackStates?: RefObject<readonly RunAttackState[] | undefined>
   onClose: () => void
   onUse: (text: string) => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
   const saved = useRotationSettings(kqmRotationId(teamId))
@@ -202,9 +232,25 @@ function RotationSearchDialog({
   const [run, setRun] = useState<SearchRun>()
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<RotationSearchProgress>()
-  const [result, setResult] = useState<RotationSearchResult>()
+  /** A full search's: `from`, what the last pass's estimates are against */
+  const [result, setResult] = useState<
+    RotationSearchResult & { from?: RotationCandidate }
+  >()
   const [error, setError] = useState<string>()
   const [threads, setThreads] = useState(0)
+  const [kinds, setKinds] = useState(lastKinds)
+  const [mode, setMode] = useState(lastMode)
+  /** The mode of the search shown */
+  const [searched, setSearched] = useState<SearchMode>()
+  /** A full search's stage, while it runs */
+  const [stage, setStage] = useState<FullSearchStage>()
+  /** The written rotation as the search played it */
+  const [yours, setYours] = useState<RotationCandidate>()
+  /** The best rotations' own KQM builds: their DPS (null: none found), as they are run */
+  const [confirmed, setConfirmed] = useState<{
+    total: number
+    dps: Record<string, number | null>
+  }>()
   const cancelled = useRef(false)
   const release = useRef<() => void>()
   useEffect(
@@ -215,11 +261,83 @@ function RotationSearchDialog({
     []
   )
 
-  const start = () => {
+  const startFull = () => {
     cancelled.current = false
     setResult(undefined)
     setError(undefined)
     setProgress(undefined)
+    setConfirmed(undefined)
+    setStage(undefined)
+    setYours(undefined)
+    setSearched('full')
+    setRun({ start: Date.now(), budget: FULL_MINUTES * 60 })
+    setRunning(true)
+    let shown = 0
+    fullRotationSearch({
+      database,
+      gender,
+      i18n,
+      teamId,
+      names,
+      teamOpt: kqmTeamOpt,
+      result: kqmResult,
+      saved: {
+        opener: saved.opener,
+        timing: saved.timing,
+        frameData: saved.frameData,
+      },
+      seed,
+      kinds,
+      attackStates: attackStates?.current ?? undefined,
+      deadline: Date.now() + FULL_MINUTES * 60_000,
+      gains: kqmRollGains(kqmResult),
+      pause,
+      isCancelled: () => cancelled.current,
+      onStage: setStage,
+      onThreads: setThreads,
+      onConfirmed: (dps) =>
+        setConfirmed({ total: Object.keys(dps).length, dps }),
+      onProgress: (p) => {
+        if (p.round === 0) setYours((y) => y ?? p.seed)
+        const now = Date.now()
+        if (
+          now - shown < 200 &&
+          p.roundPlayed > 0 &&
+          p.roundPlayed < p.roundSize
+        )
+          return
+        shown = now
+        setProgress(p)
+      },
+    })
+      .then((found) => {
+        setYours(found.seed)
+        setConfirmed({
+          total: Object.keys(found.confirmed).length,
+          dps: found.confirmed,
+        })
+        setResult(found)
+      })
+      .catch((e) => {
+        if (!cancelled.current) setError(String((e as Error)?.message ?? e))
+      })
+      .finally(() => {
+        setRun((r) => r && { ...r, end: Date.now() })
+        setRunning(false)
+        setStage(undefined)
+      })
+  }
+
+  const start = () => {
+    if (mode === 'full') return startFull()
+    cancelled.current = false
+    setResult(undefined)
+    setError(undefined)
+    setProgress(undefined)
+    setConfirmed(undefined)
+    setStage(undefined)
+    setYours(undefined)
+    setSearched('quick')
     setRun({ start: Date.now(), budget })
     setRunning(true)
     let player: ReturnType<typeof rotationSearchPlayer>
@@ -248,36 +366,87 @@ function RotationSearchDialog({
     release.current = player.release
     setThreads(player.threads())
     let shown = 0
-    searchRotations({
-      seed,
-      members: names,
-      score: player.score,
-      deadline: Date.now() + budget * 1000,
-      funded: Object.fromEntries(
-        Object.entries(kqmResult.energyRecharge).map(([k, er]) => [
-          k,
-          er?.value ?? 0,
-        ])
-      ) as Partial<Record<CharacterKey, number>>,
-      isCancelled: () => cancelled.current,
-      onProgress: (p) => {
-        const now = Date.now()
-        if (
-          now - shown < 200 &&
-          p.roundPlayed > 0 &&
-          p.roundPlayed < p.roundSize
-        )
-          return
-        shown = now
-        setProgress(p)
-        setThreads(player.threads())
-      },
-    })
-      .then(setResult)
+    let released = false
+    const done = () => {
+      if (released) return
+      released = true
+      player.release()
+      release.current = undefined
+    }
+    ;(async () => {
+      // (what Energy Recharge costs the builds: a rotation that needs less gains what it frees)
+      let prices = erPrices.get(kqmResult)
+      if (!prices) {
+        prices = kqmErPrices(
+          database,
+          teamId,
+          gender,
+          kqmTeamOpt,
+          kqmResult,
+          pause,
+          kqmRollGains(kqmResult)
+        ).catch(() => ({}))
+        erPrices.set(kqmResult, prices)
+      }
+      const erCost = erCostOf(await prices)
+      const deadline = Date.now() + budget * 1000
+      setRun((r) => r && { ...r, start: Date.now() })
+      const found = await searchRotations({
+        seed,
+        members: names,
+        score: player.score,
+        deadline,
+        funded: Object.fromEntries(
+          Object.entries(kqmResult.energyRecharge).map(([k, er]) => [
+            k,
+            er?.value ?? 0,
+          ])
+        ) as Partial<Record<CharacterKey, number>>,
+        erCost,
+        kinds,
+        isCancelled: () => cancelled.current,
+        onProgress: (p) => {
+          const now = Date.now()
+          if (
+            now - shown < 200 &&
+            p.roundPlayed > 0 &&
+            p.roundPlayed < p.roundSize
+          )
+            return
+          shown = now
+          setProgress(p)
+          setThreads(player.threads())
+        },
+      })
+      setResult(found)
+      done()
+      // (the best get their own KQM builds, as a run of the rotation would find them)
+      const best = found.best
+        .filter((c) => c.estimate > found.seed.estimate * (1 + 1e-4))
+        .slice(0, CONFIRMED)
+      const dps: Record<string, number | null> = {}
+      for (const c of best) {
+        if (cancelled.current) break
+        setConfirmed({ total: best.length, dps: { ...dps } })
+        const run = await kqmRotationRun({
+          database,
+          gender,
+          i18n,
+          teamId,
+          teamOpt: kqmTeamOpt,
+          text: c.text,
+          attackStates: attackStates?.current ?? undefined,
+          isCancelled: () => cancelled.current,
+        }).catch(() => undefined)
+        if (cancelled.current) break
+        dps[c.text] = run ? kqmResultDps(run) : null
+      }
+      if (best.length) setConfirmed({ total: best.length, dps: { ...dps } })
+      if (cancelled.current) setResult({ ...found, ended: 'cancelled' })
+    })()
       .catch((e) => setError(String((e as Error)?.message ?? e)))
       .finally(() => {
-        player.release()
-        release.current = undefined
+        done()
         setRun((r) => r && { ...r, end: Date.now() })
         setRunning(false)
       })
@@ -294,15 +463,46 @@ function RotationSearchDialog({
     [kqmResult]
   )
   const seedWords = useMemo(() => rotationWords(seed, names), [seed, names])
-  const seedScore = result?.seed ?? progress?.seed
+  const seedScore = yours ?? result?.seed ?? progress?.seed
+  /** What the rows' estimates are against: the search's own start (a full search's pass's) */
+  const rowSeed = (running ? progress?.seed : undefined) ?? seedScore
   const top = result?.best ?? progress?.top
-  const better = useMemo(
-    () =>
-      seedScore && top
-        ? top.filter((c) => c.dps > seedScore.dps * (1 + 1e-4)).slice(0, SHOWN)
-        : [],
-    [top, seedScore]
-  )
+  const runDps = useMemo(() => kqmResultDps(kqmResult), [kqmResult])
+  const fullDone = searched === 'full' && !!result && !running
+  // (those with their own KQM builds first, by their DPS with them; a full search's, only those)
+  const better = useMemo(() => {
+    if (!rowSeed || !top) return []
+    const own = (c: RotationCandidate) => confirmed?.dps[c.text] ?? undefined
+    // (stopped or out of time: those found without builds of their own yet after them)
+    if (fullDone) {
+      const from = result?.from ?? rowSeed
+      return [
+        ...top
+          .filter((c) => (own(c) ?? 0) > runDps * (1 + 1e-4))
+          .sort((a, b) => own(b)! - own(a)!),
+        ...(result?.ended === 'converged'
+          ? []
+          : top.filter(
+              (c) =>
+                own(c) === undefined && c.estimate > from.estimate * (1 + 1e-4)
+            )),
+      ].slice(0, SHOWN)
+    }
+    const found = top
+      .filter((c) => c.estimate > rowSeed.estimate * (1 + 1e-4))
+      .slice(0, SHOWN)
+    return [
+      ...found
+        .filter((c) => own(c) !== undefined)
+        .sort((a, b) => own(b)! - own(a)!),
+      ...found.filter((c) => own(c) === undefined),
+    ]
+  }, [top, rowSeed, confirmed, fullDone, runDps, result])
+  const checking =
+    searched === 'quick' &&
+    running &&
+    !!confirmed &&
+    Object.keys(confirmed.dps).length < confirmed.total
   const list = useRef<HTMLDivElement>(null)
   useListMotion(list, better.map((c) => c.text).join('\n'))
   const ended = result?.ended
@@ -318,7 +518,7 @@ function RotationSearchDialog({
           title={t('teamOpt.search.title', 'Optimize rotation')}
           info={t(
             'teamOpt.search.how',
-            'Plays thousands of rotations one change away from yours, then from the best ones (step order, actions, Normal Attack lengths, repeats, kit options), with the KQM builds shown. Your main DPS keeps its Burst and field time, and a rotation must not need more Energy Recharge than the builds can give. After using one, run KQM again for its own builds.'
+            'Plays thousands of rotations one change away from yours, then from the best ones (what you let it change: the order, members coming back on the field, attack strings, skills and kit options), with the KQM builds shown. A rotation that needs less Energy Recharge (a support played right before the member who catches its particles) gains the damage stats that frees, one that needs more pays for it. Your main DPS keeps its Burst and field time, and a rotation must not need more Energy Recharge than the builds can give. The best few then get their own KQM builds, and are ranked by their DPS with them. Quick stops at its time limit. Full also plays your steps in every other order and the team’s templates, climbs from the best of them each on its own until no change to the best rotations is better and a wider round finds nothing either, and searches again with the best one’s own builds until it stays the best: the best rotation within reach of your plan (not every rotation there could be).'
           )}
           onClose={onClose}
         />
@@ -364,24 +564,84 @@ function RotationSearchDialog({
             sx={{
               display: 'flex',
               alignItems: 'center',
+              gap: 1,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Typography sx={{ ...type.label, mr: 0.5 }}>
+              {t('teamOpt.search.canChange', 'It may change')}
+            </Typography>
+            {editKinds(t).map(({ key, label, tip }) => (
+              <KindPill
+                key={key}
+                label={label}
+                tip={tip}
+                on={kinds[key]}
+                disabled={running}
+                onClick={() =>
+                  setKinds((k) => {
+                    lastKinds = { ...k, [key]: !k[key] }
+                    return lastKinds
+                  })
+                }
+              />
+            ))}
+          </Box>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
               gap: 1.5,
               flexWrap: 'wrap',
             }}
           >
-            <Typography sx={type.label}>
-              {t('teamOpt.search.budget', 'Time limit')}
-            </Typography>
             <Segmented
               size="small"
-              value={budget}
-              onChange={setBudget}
-              aria-label={t('teamOpt.search.budget', 'Time limit')}
-              options={BUDGETS.map((s) => ({
-                value: s,
-                label: s < 60 ? `${s} s` : `${s / 60} min`,
-                disabled: running,
-              }))}
+              value={mode}
+              onChange={(m: SearchMode) => {
+                lastMode = m
+                setMode(m)
+              }}
+              aria-label={t('teamOpt.search.mode', 'Search')}
+              options={[
+                {
+                  value: 'quick' as const,
+                  label: t('teamOpt.search.quick', 'Quick'),
+                  disabled: running,
+                },
+                {
+                  value: 'full' as const,
+                  label: t('teamOpt.search.full', 'Full'),
+                  disabled: running,
+                },
+              ]}
             />
+            {mode === 'quick' ? (
+              <>
+                <Typography sx={type.label}>
+                  {t('teamOpt.search.budget', 'Time limit')}
+                </Typography>
+                <Segmented
+                  size="small"
+                  value={budget}
+                  onChange={setBudget}
+                  aria-label={t('teamOpt.search.budget', 'Time limit')}
+                  options={BUDGETS.map((s) => ({
+                    value: s,
+                    label: s < 60 ? `${s} s` : `${s / 60} min`,
+                    disabled: running,
+                  }))}
+                />
+              </>
+            ) : (
+              <Typography sx={{ ...type.label, maxWidth: 300 }}>
+                {t('teamOpt.search.fullNote', {
+                  defaultValue:
+                    'Until nothing within reach is better, each with its own KQM builds (up to {{minutes}} min)',
+                  minutes: FULL_MINUTES,
+                })}
+              </Typography>
+            )}
             <Box sx={{ flexGrow: 1 }} />
             {running ? (
               <Button
@@ -398,6 +658,7 @@ function RotationSearchDialog({
               <Button
                 variant="contained"
                 onClick={start}
+                disabled={!Object.values(kinds).some(Boolean)}
                 startIcon={<AutoFixHighIcon />}
                 sx={[{ minWidth: 128 }, giCtaSx]}
               >
@@ -426,21 +687,41 @@ function RotationSearchDialog({
                   />
                 )}
                 <Box component="span" sx={{ flexGrow: 1, minWidth: 0 }}>
-                  {progress && (!running || progress.round > 0)
-                    ? running
-                      ? t('teamOpt.search.progress', {
+                  {searched === 'full' && running && stage
+                    ? fullStageText(t, stage, progress)
+                    : checking && confirmed
+                      ? t('teamOpt.search.checking', {
                           defaultValue:
-                            'Round {{round}} · {{played}} rotations played',
-                          round: progress.round,
-                          played: progress.played.toLocaleString(),
+                            'Finding KQM builds for the best {{total}} · {{done}} of {{total}}',
+                          total: confirmed.total,
+                          done: Object.keys(confirmed.dps).length + 1,
                         })
-                      : `${t('teamOpt.search.played', {
-                          defaultValue: '{{played}} rotations played',
-                          played: (
-                            result?.played ?? progress.played
-                          ).toLocaleString(),
-                        })}${ended ? ` · ${endedText(t, ended)}` : ''}`
-                    : t('teamOpt.search.starting', 'Starting…')}
+                      : progress && (!running || progress.round > 0)
+                        ? running
+                          ? t('teamOpt.search.progress', {
+                              defaultValue:
+                                'Round {{round}} · {{played}} rotations played',
+                              round: progress.round,
+                              played: progress.played.toLocaleString(),
+                            })
+                          : `${t('teamOpt.search.played', {
+                              defaultValue: '{{played}} rotations played',
+                              played: (
+                                result?.played ?? progress.played
+                              ).toLocaleString(),
+                            })}${
+                              ended
+                                ? ` · ${
+                                    searched === 'full' && ended === 'converged'
+                                      ? t(
+                                          'teamOpt.search.fullConverged',
+                                          'the best within reach'
+                                        )
+                                      : endedText(t, ended)
+                                  }`
+                                : ''
+                            }`
+                        : t('teamOpt.search.starting', 'Starting…')}
                 </Box>
                 {threads > 0 && (
                   <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
@@ -478,9 +759,11 @@ function RotationSearchDialog({
                     key={c.text}
                     rank={i + 1}
                     candidate={c}
-                    seed={seedScore}
+                    seed={(fullDone ? result?.from : undefined) ?? rowSeed!}
                     names={names}
                     funded={funded}
+                    own={confirmed?.dps[c.text]}
+                    runDps={runDps}
                     onUse={onUse}
                   />
                 ))}
@@ -502,10 +785,20 @@ function RotationSearchDialog({
                 sx={{ fontSize: 18, color: 'success.main' }}
               />
               <Typography>
-                {t(
-                  'teamOpt.search.none',
-                  'No better rotation one change away: yours is the best of its neighbours.'
-                )}
+                {searched === 'full' && ended !== 'converged'
+                  ? t(
+                      'teamOpt.search.noneStopped',
+                      'Stopped before it found a better rotation.'
+                    )
+                  : searched === 'full'
+                    ? t(
+                        'teamOpt.search.noneFull',
+                        'No better rotation within reach: yours is the best with its own KQM builds.'
+                      )
+                    : t(
+                        'teamOpt.search.none',
+                        'No better rotation one change away: yours is the best of its neighbours.'
+                      )}
               </Typography>
             </Box>
           )}
@@ -522,6 +815,41 @@ interface SearchRun {
   end?: number
 }
 
+/** Where a full search is, as its status line says it */
+const fullStageText = (
+  t: TFunction,
+  stage: FullSearchStage,
+  progress: RotationSearchProgress | undefined
+) =>
+  stage.phase === 'builds'
+    ? t('teamOpt.search.fullBuilds', {
+        defaultValue:
+          'Pass {{pass}} · KQM builds for the best {{total}} · {{done}} of {{total}}',
+        pass: stage.pass,
+        total: stage.total,
+        done: (stage.done ?? 0) + 1,
+      })
+    : stage.phase === 'search'
+      ? t('teamOpt.search.fullRound', {
+          defaultValue:
+            'Pass {{pass}} · start {{start}} of {{starts}} · round {{round}} · {{played}} rotations played',
+          pass: stage.pass,
+          start: (stage.done ?? 0) + 1,
+          starts: stage.total,
+          round: progress?.round ?? 0,
+          played: (progress?.played ?? 0).toLocaleString(),
+        })
+      : stage.phase === 'starts'
+        ? t('teamOpt.search.fullStarts', {
+            defaultValue:
+              'Pass {{pass}} · playing every other order and the templates',
+            pass: stage.pass,
+          })
+        : t('teamOpt.search.fullStarting', {
+            defaultValue: 'Pass {{pass}} · starting…',
+            pass: stage.pass,
+          })
+
 const endedText = (t: TFunction, ended: RotationSearchResult['ended']) =>
   ended === 'converged'
     ? t('teamOpt.search.converged', 'nothing better nearby')
@@ -530,6 +858,95 @@ const endedText = (t: TFunction, ended: RotationSearchResult['ended']) =>
       : ended === 'cancelled'
         ? t('teamOpt.search.stopped', 'stopped')
         : t('teamOpt.search.rounds', 'all rounds played')
+
+/** What a search may change, as the dialog offers it */
+const editKinds = (
+  t: TFunction
+): { key: keyof RotationEditKinds; label: string; tip: string }[] => [
+  {
+    key: 'order',
+    label: t('teamOpt.search.kindOrder', 'Order'),
+    tip: t(
+      'teamOpt.search.kindOrderTip',
+      'Members played in another order: two swapped, or one moved anywhere (a support right before the member who catches its particles)'
+    ),
+  },
+  {
+    key: 'visits',
+    label: t('teamOpt.search.kindVisits', 'Coming back'),
+    tip: t(
+      'teamOpt.search.kindVisitsTip',
+      'A member coming back on the field for a Skill or Burst (to refresh a buff), or a member’s extra visit left out'
+    ),
+  },
+  {
+    key: 'attacks',
+    label: t('teamOpt.search.kindAttacks', 'Attack strings'),
+    tip: t(
+      'teamOpt.search.kindAttacksTip',
+      'Normal Attack lengths, Charged Attacks and their kit options (Sandrone’s beams), plunges, and how often a group repeats'
+    ),
+  },
+  {
+    key: 'actions',
+    label: t('teamOpt.search.kindActions', 'Skills & kit options'),
+    tip: t(
+      'teamOpt.search.kindActionsTip',
+      'Skills, Bursts, dashes and jumps added, left out or moved in a member’s turn, and kit options (a held Skill)'
+    ),
+  },
+]
+
+/** One kind of change a search may make, on or off */
+function KindPill({
+  label,
+  tip,
+  on,
+  disabled,
+  onClick,
+}: {
+  label: string
+  tip: string
+  on: boolean
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <Tooltip arrow title={tip} placement="top">
+      <span>
+        <ButtonBase
+          role="checkbox"
+          aria-checked={on}
+          disabled={disabled}
+          onClick={onClick}
+          sx={{
+            ...quickSx,
+            ...focusSx,
+            height: 28,
+            px: 1,
+            gap: 0.5,
+            borderRadius: 999,
+            border: `1px solid ${on ? alpha(giTokens.gold, 0.45) : tokens.hairlineStrong}`,
+            bgcolor: on ? alpha(giTokens.gold, 0.1) : 'transparent',
+            fontSize: 12.5,
+            fontWeight: 600,
+            whiteSpace: 'nowrap',
+            color: on ? 'text.primary' : 'text.secondary',
+            '&:hover': {
+              bgcolor: on
+                ? alpha(giTokens.gold, 0.16)
+                : alpha(giTokens.parchment, 0.05),
+            },
+            '&.Mui-disabled': { opacity: 0.6 },
+          }}
+        >
+          {on && <CheckRoundedIcon sx={{ fontSize: 15, color: tokens.gold }} />}
+          {label}
+        </ButtonBase>
+      </span>
+    </Tooltip>
+  )
+}
 
 const reducedMotion = () =>
   typeof window !== 'undefined' &&
@@ -791,6 +1208,8 @@ const CandidateRow = memo(function CandidateRow({
   seed,
   names,
   funded,
+  own,
+  runDps,
   onUse,
 }: {
   rank: number
@@ -798,6 +1217,10 @@ const CandidateRow = memo(function CandidateRow({
   seed: RotationCandidate
   names: RotationMember[]
   funded: Partial<Record<CharacterKey, number>>
+  /** Its DPS with its own KQM builds (null: none found; absent: not run) */
+  own?: number | null
+  /** The KQM run's DPS with its builds, for the rotation searched from */
+  runDps: number
   onUse: (text: string) => void
 }) {
   const { t } = useTranslation('page_team')
@@ -805,7 +1228,27 @@ const CandidateRow = memo(function CandidateRow({
     () => rotationWords(candidate.text, names),
     [candidate.text, names]
   )
-  const gain = candidate.dps / seed.dps - 1
+  const checked = typeof own === 'number' && runDps > 0
+  const gain = checked
+    ? own / runDps - 1
+    : candidate.estimate / seed.estimate - 1
+  const estimated = Math.abs(candidate.estimate - candidate.dps) > 0.5
+  const tip = checked
+    ? t('teamOpt.search.ownTip', {
+        defaultValue:
+          'With its own KQM builds: {{own}} DPS, against {{run}} for your rotation’s. With your run’s builds it plays {{dps}} DPS.',
+        own: formatDamage(own, true),
+        run: formatDamage(runDps, true),
+        dps: formatDamage(candidate.dps, true),
+      })
+    : estimated
+      ? t('teamOpt.search.estimateTip', {
+          defaultValue:
+            'With your KQM run’s builds it plays {{dps}} DPS; builds made for its Energy Recharge needs would have about {{estimate}}.',
+          dps: formatDamage(candidate.dps, true),
+          estimate: formatDamage(candidate.estimate, true),
+        })
+      : t('teamOpt.search.playedTip', 'Played with your KQM run’s builds.')
   return (
     <Box
       data-key={candidate.text}
@@ -866,14 +1309,33 @@ const CandidateRow = memo(function CandidateRow({
         </Box>
       </Box>
       <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography sx={{ ...type.stat, color: 'success.main' }}>
-            +{(gain * 100).toFixed(1)}%
-          </Typography>
-          <Typography sx={{ ...type.label, ...numSx, whiteSpace: 'nowrap' }}>
-            {formatDamage(candidate.dps, true)} DPS
-          </Typography>
-        </Box>
+        <Tooltip arrow title={tip} placement="top">
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography
+              sx={{
+                ...type.stat,
+                color: gain >= 0 ? 'success.main' : 'warning.main',
+              }}
+            >
+              {!checked && estimated ? '≈' : ''}
+              {gain >= 0 ? '+' : ''}
+              {(gain * 100).toFixed(1)}%
+            </Typography>
+            <Typography sx={{ ...type.label, ...numSx, whiteSpace: 'nowrap' }}>
+              {checked
+                ? t('teamOpt.search.ownDps', {
+                    defaultValue: '{{dps}} DPS · own builds',
+                    dps: formatDamage(own, true),
+                  })
+                : estimated
+                  ? t('teamOpt.search.estimateDps', {
+                      defaultValue: '≈{{dps}} DPS',
+                      dps: formatDamage(candidate.estimate, true),
+                    })
+                  : `${formatDamage(candidate.dps, true)} DPS`}
+            </Typography>
+          </Box>
+        </Tooltip>
         <Button
           size="small"
           onClick={() => onUse(candidate.text)}

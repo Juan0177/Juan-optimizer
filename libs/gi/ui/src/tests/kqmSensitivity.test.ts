@@ -5,6 +5,7 @@ import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
 import {
   evaluateTeamRotation,
+  kqmErPrices,
   kqmTeamOverrides,
   kqmTeamSensitivity,
   optimizeTeamKqm,
@@ -90,5 +91,54 @@ describe('what raises team damage, for KQM builds (kqmTeamSensitivity)', () => {
     expect(sensitivity.character(first, { level: 95 })).toBeGreaterThan(
       sensitivity.base!
     )
+  }, 300_000)
+
+  it('prices each member’s Energy Recharge in its best damage roll, the same from the table’s gains', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const result = (await optimizeTeamKqm({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt,
+      maxRounds: 2,
+    }))!
+    const worked = await kqmErPrices(database, teamId, 'F', teamOpt, result)
+    const sensitivity = kqmTeamSensitivity(
+      database,
+      teamId,
+      'F',
+      teamOpt,
+      result
+    )
+    const gains = Object.fromEntries(
+      sensitivity.members.map((m) => [
+        m.characterKey,
+        Object.fromEntries(
+          Object.entries(sensitivity.substats(m)).map(([k, total]) => [
+            k,
+            total! / sensitivity.base! - 1,
+          ])
+        ),
+      ])
+    )
+    const fromTable = await kqmErPrices(
+      database,
+      teamId,
+      'F',
+      teamOpt,
+      result,
+      undefined,
+      gains
+    )
+    for (const key of [ayaka, shenhe]) {
+      expect(worked[key]!.roll).toBeGreaterThan(0)
+      expect(fromTable[key]!.roll).toBeCloseTo(worked[key]!.roll, 3)
+      expect(fromTable[key]!.er).toBeCloseTo(5.51, 2)
+      expect(fromTable[key]!.floor).toBeCloseTo(
+        result.energyRecharge[key]!.value -
+          (result.builds[key]!.rolls.enerRech_ ?? 0) * 5.51,
+        3
+      )
+    }
   }, 300_000)
 })
