@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.33.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.33.0) (2026-11-22)
+
+### Improved
+
+- KQM Optimize rotation: a cleaner look. Each rotation found is shown in full with its DPS gain and the Energy Recharge each member needs, the best ones show while it searches, and the page stays smooth during the search.
+
+### Fixed
+
+- Energy Recharge calculator: during a rotation, Energy particles now go to whoever is on the field when they land, so a support that uses its skill and swaps out quickly feeds the next character and lowers that character's Energy Recharge need. Turret and Favonius particles too, and the calculator shows each catcher's share when particles are split.
+
 ## [v1.32.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.32.2) (2026-11-22)
 
 ### Fixed

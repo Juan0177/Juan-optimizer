@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.33.0",
+    "date": "2026-11-22",
+    "improved": [
+      "KQM Optimize rotation: a cleaner look. Each rotation found is shown in full with its DPS gain and the Energy Recharge each member needs, the best ones show while it searches, and the page stays smooth during the search."
+    ],
+    "fixed": [
+      "Energy Recharge calculator: during a rotation, Energy particles now go to whoever is on the field when they land, so a support that uses its skill and swaps out quickly feeds the next character and lowers that character's Energy Recharge need. Turret and Favonius particles too, and the calculator shows each catcher's share when particles are split."
+    ]
+  },
+  {
     "version": "1.32.2",
     "date": "2026-11-22",
     "fixed": [
