@@ -644,7 +644,13 @@ export function gearEffects({
     collect(ctx, who, shard)
   }
   const pickUp = (ctx: SimContext) => {
-    if (petra.includes(active)) takeOne(ctx, active)
+    if (!petra.includes(active)) return
+    if (wears(active, 'ArchaicPetra')) return takeOne(ctx, active)
+    // (a KQM candidate's own window only: the shard, its shield and Navia's take of it stay as
+    // they are without the set)
+    const t = ctx.now
+    const shard = shards.find((x) => x.pickable <= t && t < x.expiry)
+    if (shard) petraProc(ctx, active, shard.element)
   }
 
   // Epochal Advent: a Starspark (2 at most) when the wearer uses a Skill or Burst or performs a

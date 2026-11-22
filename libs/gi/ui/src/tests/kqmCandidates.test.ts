@@ -74,6 +74,53 @@ describe('candidate set effects in the rotation', () => {
   })
 })
 
+describe('a candidate Archaic Petra', () => {
+  const members: CharacterKey[] = ['Navia', 'Chiori', 'Bennett', 'Fischl']
+  const play = (gear: Partial<Record<CharacterKey, SimGear>>) =>
+    rotationAttacks(
+      simulateRotation({
+        rotation: parseRotation(
+          'Chiori E -> Fischl E -> Bennett Q E -> Navia Q hE N3 D N2 hE N3 D N2 -> Chiori',
+          members.map((characterKey) => ({ characterKey, name: characterKey }))
+        ),
+        members,
+        constellations: {},
+        elements: Object.fromEntries(
+          members.map((m) => [m, getCharEle(m)])
+        ) as never,
+        gear,
+      })
+    )
+  // hits per attack and the states no set's or weapon's own sheet gates
+  const shared = (attacks: TeamOpt['attacks']) => {
+    const hits = new Map<string, number>()
+    for (const [ck, list] of Object.entries(attacks))
+      for (const a of list ?? []) {
+        const states = (a.states ?? [])
+          .filter((s) => s.path[0] !== 'ArchaicPetra')
+          .map((s) => `${s.owner}:${s.path.join('.')}=${s.value}`)
+          .sort()
+          .join(',')
+        const key = `${ck}|${a.path.join('.')}|${states}`
+        hits.set(key, (hits.get(key) ?? 0) + a.hits)
+      }
+    return Object.fromEntries(
+      [...hits].map(([k, n]) => [k, +n.toFixed(6)]).sort()
+    )
+  }
+
+  it("opens its own window, but leaves the shards, their shields and Navia's take of them as without the set", () => {
+    const none = play({})
+    const tried = play({ Bennett: { candidates: { sets: ['ArchaicPetra'] } } })
+    const worn = play({ Bennett: { sets: { ArchaicPetra: 4 } } })
+    expect(statePaths(tried)).toContain('Bennett:ArchaicPetra.element')
+    expect(statePaths(worn)).toContain('Bennett:ArchaicPetra.element')
+    expect(shared(tried)).toEqual(shared(none))
+    // (worn, its holder picks the shards up: the play changes)
+    expect(shared(worn)).not.toEqual(shared(none))
+  })
+})
+
 describe("a problem's attacks", () => {
   const build = (sets: KqmBuild['sets'], weapon: string): KqmBuild => ({
     weapon: { key: weapon as never, refinement: 1 },
