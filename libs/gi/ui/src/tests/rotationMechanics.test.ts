@@ -564,6 +564,28 @@ describe('native combat rules shared across character kits', () => {
     ).toBe(true)
   })
 
+  it('gives Sucrose’s A4 EM only after her skill or burst hits, even with it saved on', () => {
+    const members: CharacterKey[] = ['Sucrose', 'Fischl']
+    const a4 = (text: string) => {
+      const sim = simulateRotation({
+        rotation: parse(text, members),
+        members,
+        elements: { Sucrose: 'anemo', Fischl: 'electro' },
+        constellations: {},
+        repeats: 1,
+      })
+      return rotationAttacks(sim, (_owner, path) =>
+        path.join('.') === 'Sucrose.skillHit' ? 'hit' : undefined
+      ).Fischl!.map((a) =>
+        a.limits?.some((l) => l.path.join('.') === 'Sucrose.skillHit')
+          ? 'off'
+          : 'on'
+      )
+    }
+    expect(new Set(a4('Sucrose N3 -> Fischl N4 W1'))).toEqual(new Set(['off']))
+    expect(a4('Fischl N1 -> Sucrose E -> Fischl N1 W1')).toEqual(['off', 'on'])
+  })
+
   it('triggers Ororon Hypersense on allied Nightsoul damage with its 108 frame cooldown', () => {
     const members: CharacterKey[] = ['Ororon', 'Chasca']
     const sim = simulateRotation({
