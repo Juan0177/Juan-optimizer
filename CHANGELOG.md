@@ -4,6 +4,26 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.31.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.31.0) (2026-11-22)
+
+### New
+
+- KQM Theorycrafting: “What raises team damage” now shows under the results too. It shows what one more KQM substat roll, talent level or character level on each member's KQM build adds to the team's damage, and it is saved with the run.
+- Versions: choose which teams go in the share picture with tick boxes. The Versions panel and the share pictures also work better on phones.
+
+### Improved
+
+- Rotation writer: your “First rotation only” is now played before the start as a setup and not counted, unless you tick Counted. When you count rotations from the start, teams with a first rotation now count the main rotation; tick Counted to count the first rotation again.
+
+### Fixed
+
+- Team optimize with weapons: Thrilling Tales of Dragon Slayers tried on a member who doesn't hold it now only buffs the character who takes the field when that member leaves it, not everyone all the time. Press “Use this rotation” again on a saved rotation to update it.
+- Nicole C6: every party member gets her A1 Guidance as soon as she is upgraded.
+- A walk (WK) in a rotation now ends the Normal Attack string, so the next attack starts again from N1.
+- Rotation timeline: Bennett's burst field now shows as his buff.
+- Silken Moon's Serenade now triggers on elemental attacks that apply an element without dealing damage, such as Nilou's Tranquility Aura.
+- Duplicate and New version: picking a member of the original team for a slot now works, and the members brought in keep their loadout.
+
 ## [v1.30.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.30.2) (2026-11-22)
 
 ### Fixed
