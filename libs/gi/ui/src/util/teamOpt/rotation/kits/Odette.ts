@@ -439,6 +439,12 @@ export const kit: KitModel = {
         return { frames: 30 }
     }
   },
+  // (her Dance Double's and Burst's: none without her Skill or Burst in the rotation)
+  simOnlyBuffs: (cons) => [
+    ['Odette', 'burst'],
+    ['Odette', 'a1TeamSplendor'],
+    ...(cons >= 2 ? [['Odette', 'c2NearOpponent']] : []),
+  ],
   onHit(ctx, s: OdetteState, hit) {
     if (hit.path[0].startsWith('_')) return
     const cons = ctx.constellation('Odette')

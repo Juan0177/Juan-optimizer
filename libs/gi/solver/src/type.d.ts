@@ -99,6 +99,12 @@ export interface LeadInit {
    * the problem alone, and this worker then stays idle (and warm, back in the pool)
    */
   waitForCPU?: boolean
+  /**
+   * With `waitForCPU`: problems of at least this many builds go to the GPU, which sweeps them
+   * without the artifact range pruning (it costs more than the sweep it saves); the CPU's work
+   * is pruned once it is needed
+   */
+  gpuMinTotal?: number
 }
 export interface HelperInit {
   command: 'init'

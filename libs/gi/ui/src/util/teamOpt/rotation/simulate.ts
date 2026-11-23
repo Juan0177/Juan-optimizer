@@ -7,7 +7,11 @@ import { gearEffects } from './gearEffects'
 import { Health } from './health'
 import { kitFramesInto, kitModels } from './kits/index'
 import { NORMAL_START_DELAYS } from './normalDelays'
-import type { ParsedRotation, RotationAction } from './parse'
+import {
+  type ParsedRotation,
+  parseRotation,
+  type RotationAction,
+} from './parse'
 import { rotationRandom, stratifiedRandoms } from './random'
 import { type AuraTrace, elementalReactions } from './reactions'
 import type {
@@ -67,6 +71,8 @@ export interface SimulationResult {
   rotationFrames?: number[]
   buffWindows: SimBuffWindow[]
   countedBuffs: SimCountedBuff[]
+  /** Buffs only the rotation turns on (`KitModel.simOnlyBuffs`): off where it doesn't */
+  simOnlyBuffs?: { owner: CharacterKey; path: string[] }[]
   /** Each member's Nightsoul's Blessing, on the field or off (its kit's own state), in frames */
   nightsoulSpans?: { characterKey: CharacterKey; start: number; end: number }[]
   /**
@@ -229,6 +235,76 @@ type Event = { t: number; priority: number; seq: number; run: () => void }
  */
 /** A frame count to use: a non-number (NaN, Infinity) would never end a wait or an action */
 const finiteFrames = (frames: number) => (Number.isFinite(frames) ? frames : 0)
+
+/**
+ * The members' own buffs their kits play (a probe: each member's Skill, held Skill, Burst and
+ * Normals), per team. The rotation decides these: one it never turns on is off, as it is outside
+ * its windows when it does, whatever the loadouts' conditionals say.
+ */
+const kitBuffCache = new Map<
+  string,
+  { owner: CharacterKey; path: string[] }[]
+>()
+let probing = false
+function kitBuffs(
+  members: CharacterKey[],
+  constellations: Partial<Record<CharacterKey, number>>,
+  elements: Partial<Record<CharacterKey, HitElement>>,
+  kits: Partial<Record<CharacterKey, KitModel>>
+) {
+  // (only the shipped kits: a test's own kit records what it plays)
+  if (!members.every((m) => kits[m] === kitModels[m])) return []
+  const key = JSON.stringify([
+    members,
+    members.map((m) => constellations[m] ?? 0),
+    members.map((m) => elements[m]),
+  ])
+  const cached = kitBuffCache.get(key)
+  if (cached) return cached
+  const names = members.map((characterKey) => ({
+    characterKey,
+    name: characterKey,
+  }))
+  const text = members
+    .filter((m) => kits[m])
+    .flatMap((m) => [`${m} E Q N3`, `${m} hE`])
+    .join(' -> ')
+  const refs: { owner: CharacterKey; path: string[] }[] = []
+  if (text) {
+    probing = true
+    try {
+      const probe = simulateRotation({
+        rotation: parseRotation(text, names),
+        members,
+        constellations,
+        elements,
+        kits,
+        repeats: 1,
+        keep: 'all',
+      })
+      const known = new Set<string>()
+      for (const b of [
+        ...probe.buffWindows,
+        ...probe.countedBuffs,
+        ...probe.hits.flatMap((h) => h.states ?? []),
+      ]) {
+        const owner = b.owner as CharacterKey
+        if (!members.includes(owner) || b.path[0] !== owner) continue
+        if (b.path[1]?.startsWith('_')) continue
+        const k = JSON.stringify(b.path)
+        if (known.has(k)) continue
+        known.add(k)
+        refs.push({ owner, path: b.path })
+      }
+    } catch {
+      // (a probe that cannot play: no buffs are declared, as before)
+    } finally {
+      probing = false
+    }
+  }
+  kitBuffCache.set(key, refs)
+  return refs
+}
 
 export function simulateRotation({
   rotation,
@@ -1925,6 +2001,15 @@ export function simulateRotation({
     rotationFrames: bounds.slice(1, repeats + 1).map((b, i) => b - bounds[i]),
     buffWindows: windows,
     countedBuffs,
+    simOnlyBuffs: [
+      ...members.flatMap((m) =>
+        (kits[m]?.simOnlyBuffs?.(constellations[m] ?? 0) ?? []).map((path) => ({
+          owner: m,
+          path,
+        }))
+      ),
+      ...(probing ? [] : kitBuffs(members, constellations, elements, kits)),
+    ],
     nightsoulSpans,
     hitlagEvents: all.filter((h) => h.path.join('.') === '_marker.hitlag'),
     notes: [...notes],
@@ -2193,6 +2278,7 @@ function buffStates(
   const refs = [...declared]
   const known = new Set(declared.map(refKey))
   for (const b of [
+    ...(sim.simOnlyBuffs ?? []),
     ...sim.buffWindows,
     ...sim.countedBuffs,
     ...sim.hits.flatMap((h) => h.states ?? []),
