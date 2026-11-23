@@ -494,6 +494,7 @@ export class GOSolver {
         problem,
         localMax: LOCAL_MAX,
         waitForCPU,
+        gpuMinTotal: this.gpuMinTotal,
       })
       // A worker that never answers (failed to load, stale code, ...) must not hang the UI
       setTimeout(() => {

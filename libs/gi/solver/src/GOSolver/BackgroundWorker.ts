@@ -1,6 +1,6 @@
 import { assertUnreachable } from '@genshin-optimizer/common/util'
 import { countBuilds } from '../common.js'
-import type { WorkerCommand, WorkerResult } from '../type.js'
+import type { Setup, WorkerCommand, WorkerResult } from '../type.js'
 import { solveLocal } from './local.js'
 import { preprocess } from './preprocess.js'
 import { SolverWorker } from './SolverWorker.js'
@@ -31,46 +31,68 @@ function handle(data: WorkerCommand) {
         postMessage({ resultType: 'ready', run })
         break
       }
-      const setup = preprocess(data.problem)
-      const plot = plotConfigFor(setup)
-      setup.plot = plot
+      const { problem, localMax } = data
+      // the GPU sweeps a large problem faster than its artifacts' ranges are pruned
+      const gpuFirst =
+        !!data.waitForCPU &&
+        countBuilds(problem.arts) >=
+          (data.gpuMinTotal ?? Number.POSITIVE_INFINITY)
+      const prepared = preprocess(problem, !gpuFirst)
+      prepared.plot = plotConfigFor(prepared)
       postMessage({
         resultType: 'prepared',
         run,
-        setup,
-        plot,
-        fullTotal: countBuilds(setup.arts),
+        setup: prepared,
+        plot: prepared.plot,
+        fullTotal: countBuilds(prepared.arts),
       })
-      const { items, total } = initialItems(setup.arts, data.problem.exclusion)
-      if (total <= data.localMax) {
-        const local = solveLocal(setup, data.problem.exclusion)
-        postMessage({
-          resultType: 'ready',
-          run,
-          lead: { items: [], total, plot, local },
-        })
-        break
-      }
       const thisRun = run
-      prepareCPU = () => {
-        prepareCPU = undefined
-        worker = new SolverWorker(setup, plot)
-        // a few bounded, best-first packs instead of (possibly) millions of tiny items
-        const packed = worker.packItems(items)
-        setup.slotFilters = packed.slotFilters
-        postMessage({
-          resultType: 'ready',
-          run: thisRun,
-          lead: {
-            items: packed.items,
-            total,
-            plot,
-            setup,
-            skipped: packed.skipped,
-          },
-        })
+      /**
+       * The CPU's work: a small problem is solved right away, else its items are listed and
+       * returned, to be packed and handed out (see `prepareCPU`)
+       */
+      const prepare = (setup: Setup) => {
+        const { plot } = setup
+        const { items, total } = initialItems(setup.arts, problem.exclusion)
+        if (total <= localMax) {
+          const local = solveLocal(setup, problem.exclusion)
+          postMessage({
+            resultType: 'ready',
+            run: thisRun,
+            lead: { items: [], total, plot, local },
+          })
+          return undefined
+        }
+        return () => {
+          prepareCPU = undefined
+          worker = new SolverWorker(setup, plot)
+          // a few bounded, best-first packs instead of (possibly) millions of tiny items
+          const packed = worker.packItems(items)
+          setup.slotFilters = packed.slotFilters
+          postMessage({
+            resultType: 'ready',
+            run: thisRun,
+            lead: {
+              items: packed.items,
+              total,
+              plot,
+              setup,
+              skipped: packed.skipped,
+            },
+          })
+        }
       }
-      if (!data.waitForCPU) prepareCPU()
+      if (gpuFirst)
+        prepareCPU = () => {
+          prepareCPU = undefined
+          const setup = preprocess(problem)
+          setup.plot = plotConfigFor(setup)
+          prepare(setup)?.()
+        }
+      else {
+        prepareCPU = prepare(prepared)
+        if (!data.waitForCPU) prepareCPU?.()
+      }
       break
     }
     case 'proceed':

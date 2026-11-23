@@ -40,6 +40,13 @@ export function pruneAll(
   forced: Partial<Record<MicropassOperation, boolean>>
 ): { nodes: OptNode[]; arts: ArtifactsBySlot } {
   let should = forced
+  // (an operation forced off stays off, whatever makes progress)
+  const notOff = (ops: Partial<Record<MicropassOperation, true>>) =>
+    Object.fromEntries(
+      Object.keys(ops)
+        .filter((op) => forced[op as MicropassOperation] !== false)
+        .map((op) => [op, true])
+    )
   /** If `key` makes progress, all operations in `value` should be performed */
   const deps: Record<
     MicropassOperation,
@@ -57,7 +64,7 @@ export function pruneAll(
       const newArts = pruneOrder(arts, numTop, exclusion)
       if (arts !== newArts) {
         arts = newArts
-        should = { ...should, ...deps.pruneOrder }
+        should = { ...should, ...notOff(deps.pruneOrder) }
       }
     }
     if (should.pruneArtRange) {
@@ -65,7 +72,7 @@ export function pruneAll(
       const newArts = pruneArtRange(nodes, arts, minimum)
       if (arts !== newArts) {
         arts = newArts
-        should = { ...should, ...deps.pruneArtRange }
+        should = { ...should, ...notOff(deps.pruneArtRange) }
       }
     }
     if (should.pruneNodeRange) {
@@ -73,7 +80,7 @@ export function pruneAll(
       const newNodes = pruneNodeRange(nodes, arts)
       if (nodes !== newNodes) {
         nodes = newNodes
-        should = { ...should, ...deps.pruneNodeRange }
+        should = { ...should, ...notOff(deps.pruneNodeRange) }
       }
     }
     if (should.reaffine) {
@@ -82,7 +89,7 @@ export function pruneAll(
       if (nodes !== newNodes || arts !== newArts) {
         nodes = newNodes
         arts = newArts
-        should = { ...should, ...deps.reaffine }
+        should = { ...should, ...notOff(deps.reaffine) }
       }
     }
   }
