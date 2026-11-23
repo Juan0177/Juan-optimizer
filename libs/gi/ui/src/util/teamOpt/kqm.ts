@@ -1355,6 +1355,11 @@ interface KqmRunArgs {
    * about one ranking row's work each.
    */
   only?: CharacterKey | readonly CharacterKey[]
+  /**
+   * With `from` and `only`: the members in `only` searched in full (any weapon and sets the
+   * settings allow), not refitted; the others still keep their builds
+   */
+  searchOnly?: boolean
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1421,6 +1426,7 @@ async function runKqm({
   onEarly,
   from,
   only,
+  searchOnly,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1547,13 +1553,13 @@ async function runKqm({
       throw new Error(
         `Select another weapon for ${ck} in KQM settings: its only one is locked for another member.`
       )
-  // (members refitted: their weapons and sets as they were, their main stats free; the others
-  // keep their builds)
+  // (members refitted: their weapons and sets as they were, their main stats free, or with
+  // `searchOnly` searched in full; the others keep their builds)
   const refitted =
     from && only !== undefined
       ? new Set<CharacterKey>(typeof only === 'string' ? [only] : only)
       : undefined
-  for (const k of refitted ?? []) {
+  for (const k of searchOnly ? [] : (refitted ?? [])) {
     const build = from?.[k]
     const space = spaces.get(k)
     if (!build || !space) continue
@@ -1646,7 +1652,7 @@ async function runKqm({
       const start = from?.[m.characterKey]
       const standard = standardOf(m.characterKey)
       // (another run's build, while its weapon is allowed here and its standard the same)
-      builds[m.characterKey] =
+      const usable =
         start &&
         kqmStandardOf(start.standard) === standard &&
         space.weapons.some(
@@ -1654,8 +1660,11 @@ async function runKqm({
             w.key === start.weapon.key &&
             w.refinement === start.weapon.refinement
         )
-          ? structuredClone(start)
-          : startBuild(space, standard)
+      builds[m.characterKey] = usable
+        ? structuredClone(start)
+        : startBuild(space, standard)
+      // (one meant to keep its build that has none to keep is searched)
+      if (!usable && refitted && searchOnly) refitted.add(m.characterKey)
     }
 
   const gearOf = (state: Partial<Record<CharacterKey, KqmBuild>>) => {

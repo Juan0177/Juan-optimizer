@@ -62,6 +62,7 @@ import {
   Chip,
   CircularProgress,
   Drawer,
+  FormControlLabel,
   IconButton,
   ListItemIcon,
   Menu,
@@ -97,7 +98,8 @@ import {
 import type { VersionSwap } from './kqmVersions'
 import {
   createVersion,
-  kqmSharedKey,
+  keepsTeammates,
+  kqmRunFresh,
   makeOriginal,
   pickVersionMember,
   signatureOf,
@@ -114,7 +116,6 @@ import {
   insertWord,
   kqmRotationId,
   memberNamesOf,
-  savedPlayedRotationKey,
   savedTimingOf,
   setWrittenRotation,
   WriterQuickRow,
@@ -161,6 +162,8 @@ interface VersionRow {
   value?: number
   /** Its own constellations, over the family's */
   cons: Partial<Record<CharacterKey, number>>
+  /** It keeps its teammates' gear from the original (`TeamOptKqm.keepTeammates`) */
+  keeps: boolean
 }
 
 function rowOf(
@@ -171,12 +174,7 @@ function rowOf(
   const team = database.teams.get(id)
   const members = teamOptMembers(database, id).map((m) => m.characterKey)
   const summary = database.teamKqmResults.getSummary(id)
-  const fresh =
-    !!summary &&
-    summary.settings === kqmSharedKey(database, id) &&
-    summary.rotation === savedPlayedRotationKey(database, kqmRotationId(id)) &&
-    summary.members.length === members.length &&
-    summary.members.every((m) => members.includes(m as CharacterKey))
+  const fresh = kqmRunFresh(database, id)
   const prefix = `${rootName} · `
   const name = team?.name ?? ''
   return {
@@ -186,6 +184,7 @@ function rowOf(
     summary,
     fresh,
     cons: team?.versionCons ?? {},
+    keeps: keepsTeammates(database, id),
     value: summary
       ? summary.rotationTime
         ? summary.total / summary.rotationTime
@@ -533,7 +532,14 @@ export function KqmVersions({
           teamId={rootId}
           from={creating.from}
           onClose={() => setCreating(undefined)}
-          onCreate={(swaps, rotation, constellations, name, signature) => {
+          onCreate={(
+            swaps,
+            rotation,
+            constellations,
+            name,
+            signature,
+            keepTeammates
+          ) => {
             const id = createVersion(
               database,
               rootId,
@@ -543,7 +549,8 @@ export function KqmVersions({
               constellations,
               name,
               creating.from,
-              signature
+              signature,
+              keepTeammates
             )
             if (id) run([id])
             return !!id
@@ -684,7 +691,7 @@ function VersionLine({
             >
               {row.name}
             </Typography>
-            {original && (
+            {(original || row.keeps) && (
               <Box
                 component="span"
                 sx={{
@@ -697,7 +704,9 @@ function VersionLine({
                   flexShrink: 0,
                 }}
               >
-                {t('teamOpt.versions.original', 'Original')}
+                {original
+                  ? t('teamOpt.versions.original', 'Original')
+                  : t('teamOpt.versions.keptTag', "Teammates' gear kept")}
               </Box>
             )}
           </Box>
@@ -948,7 +957,8 @@ function NewVersionDialog({
     rotation?: { text: string; opener: string },
     constellations?: Partial<Record<CharacterKey, number>>,
     name?: string,
-    signature?: Partial<Record<CharacterKey, number>>
+    signature?: Partial<Record<CharacterKey, number>>,
+    keepTeammates?: boolean
   ) => boolean
 }) {
   const { t, i18n } = useTranslation('page_team')
@@ -969,6 +979,7 @@ function NewVersionDialog({
       swaps,
       cons: { ...database.teams.get(from)?.versionCons },
       sig: signatureOf(database, from),
+      keep: keepsTeammates(database, from),
       name: database.teams.get(from)?.name ?? '',
       rotation: writtenRotationOf(database, kqmRotationId(from)),
     }
@@ -1012,6 +1023,8 @@ function NewVersionDialog({
       else next[k] = r
       return next
     })
+  // (its teammates keep the original's builds: only the changed members are searched)
+  const [keep, setKeep] = useState(copied?.keep ?? false)
   const swapOf = (from: CharacterKey) => swaps.find((s) => s.from === from)
   const shown = members.map((k) => swapOf(k)?.to ?? k)
   const inTeam = ([k]: [string, unknown]) => shown.includes(k as CharacterKey)
@@ -1386,6 +1399,31 @@ function NewVersionDialog({
               />
             </Box>
           )}
+          <FormControlLabel
+            sx={{ mt: 1.5, mr: 0, alignItems: 'flex-start' }}
+            control={
+              <Checkbox
+                size="small"
+                checked={keep}
+                disabled={busy}
+                onChange={(e) => setKeep(e.target.checked)}
+                sx={{ py: 0.25 }}
+              />
+            }
+            label={
+              <Box>
+                <Typography sx={{ ...type.body, fontWeight: 600 }}>
+                  {t('teamOpt.versions.keepTeammates', "Keep teammates' gear")}
+                </Typography>
+                <Typography sx={{ ...type.label }}>
+                  {t(
+                    'teamOpt.versions.keepTeammatesHint',
+                    "The members it shares with the original keep the original's builds (weapon, sets, stats): only the changed ones are searched. Run the original first."
+                  )}
+                </Typography>
+              </Box>
+            }
+          />
           {failed && (
             <Typography sx={{ ...type.label, color: 'error.main', mt: 1.5 }}>
               {t(
@@ -1429,7 +1467,8 @@ function NewVersionDialog({
                       : rotation,
                     cons,
                     name ?? defaultName,
-                    Object.fromEntries(Object.entries(sig).filter(inTeam))
+                    Object.fromEntries(Object.entries(sig).filter(inTeam)),
+                    keep
                   )
                   setBusy(false)
                   if (ok) onClose()

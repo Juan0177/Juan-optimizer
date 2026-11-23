@@ -1250,7 +1250,8 @@
       "buildsImported": "Build importate",
       "buildsOwn": "Le mie build",
       "importedBuilds": "Esegue le build importate così come sono: il loro danno, cosa lo aumenta, la scheda della squadra. «Le mie build» ottimizza i tuoi pezzi.",
-      "searchTip": "Rapida prima restringe ogni slot ai manufatti che possono contare, poi cerca esattamente tra quelli: molto più veloce, e manca di rado la build migliore (e di poco, quando succede). Completa cerca tra tutti i manufatti."
+      "searchTip": "Rapida prima restringe ogni slot ai manufatti che possono contare, poi cerca esattamente tra quelli: molto più veloce, e manca di rado la build migliore (e di poco, quando succede). Completa cerca tra tutti i manufatti.",
+      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato."
     },
     "runDialog": {
       "anyMain": "Qualsiasi",
@@ -1656,7 +1657,10 @@
       "templateOptimized": "Modello: {{kind}}, ottimizzato",
       "title": "Versioni",
       "toRun": "{{count}} non eseguite con queste impostazioni",
-      "undoSwap": "Tieni questo membro"
+      "undoSwap": "Tieni questo membro",
+      "keptTag": "Gear compagni fisso",
+      "keepTeammates": "Tieni fisso il gear dei compagni",
+      "keepTeammatesHint": "I membri in comune con l'originale tengono le sue build (arma, set, statistiche): si ricalcolano solo quelli cambiati. Esegui prima l'originale."
     }
   },
   "tcNoOptimize": {

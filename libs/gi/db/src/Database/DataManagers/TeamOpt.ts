@@ -357,6 +357,12 @@ export interface TeamOptKqm {
    * not shared with its family.
    */
   signature?: Partial<Record<CharacterKey, number>>
+  /**
+   * A KQM version's own choice, not shared with its family: the members it shares with its
+   * original (same character, constellation and signature choice) keep the builds of the
+   * original's saved run, and only the others are searched
+   */
+  keepTeammates?: boolean
   /** Artifact sets left out of the choice */
   excludedSets?: ArtifactSetKey[]
   /**
@@ -886,6 +892,7 @@ const teamOptSchema = z.object({
               result[ck as CharacterKey] = r
           return Object.keys(result).length ? result : undefined
         }),
+      keepTeammates: z.literal(true).optional().catch(undefined),
       lockedWeapons: z
         .unknown()
         .optional()

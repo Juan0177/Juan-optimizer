@@ -6,6 +6,7 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
+import type { KqmBuild } from '@genshin-optimizer/gi/ui'
 import {
   kqmMemberConstellation,
   mainPart,
@@ -15,10 +16,12 @@ import {
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
+import { savedRunOf } from './compare/savedRun'
 import {
   applySavedRotation,
   kqmRotationId,
   memberNamesOf,
+  savedPlayedRotationKey,
   setWrittenRotation,
   writtenRotationOf,
 } from './RotationWriter'
@@ -100,6 +103,10 @@ export function kqmSharedKey(database: ArtCharDatabase, teamId: string) {
   const rootId = versionRoot(database, teamId)
   const rootKqm = database.teams.get(rootId)?.teamOpt?.kqm
   const sig = signatureOf(database, teamId)
+  const kept = keepsTeammates(database, teamId)
+  const rootSummary = kept
+    ? database.teamKqmResults.getSummary(rootId)
+    : undefined
   return sortedJson({
     // (the constellations it plays at: the family's with its own over them, its members' only)
     kqm: sharedOf(rootKqm, {
@@ -108,7 +115,88 @@ export function kqmSharedKey(database: ArtCharDatabase, teamId: string) {
     timing: writtenRotationOf(database, kqmRotationId(rootId)).timing,
     // (its own signature weapon choices)
     ...(Object.keys(sig).length ? { sig } : {}),
+    // (its teammates' builds: the original's run it took them from)
+    ...(kept
+      ? {
+          keep: rootSummary
+            ? { total: rootSummary.total, gear: rootSummary.gear }
+            : null,
+        }
+      : {}),
   })
+}
+
+/**
+ * Whether a team's saved KQM run is for its settings, rotation and members now (a version's: for
+ * the family's shared settings as they are)
+ */
+export function kqmRunFresh(database: ArtCharDatabase, teamId: string) {
+  const summary = database.teamKqmResults.getSummary(teamId)
+  const members = teamOptMembers(database, teamId).map(
+    (m) => m.characterKey as string
+  )
+  return (
+    !!summary &&
+    summary.settings === kqmSharedKey(database, teamId) &&
+    summary.rotation ===
+      savedPlayedRotationKey(database, kqmRotationId(teamId)) &&
+    summary.members.length === members.length &&
+    summary.members.every((m) => members.includes(m))
+  )
+}
+
+/** Whether a version keeps its teammates' gear from its original (`TeamOptKqm.keepTeammates`) */
+export const keepsTeammates = (database: ArtCharDatabase, teamId: string) =>
+  versionRoot(database, teamId) !== teamId &&
+  !!database.teams.get(teamId)?.teamOpt?.kqm?.keepTeammates
+
+/**
+ * A version's members that differ from its original's: not in it, or at another constellation or
+ * signature weapon choice than there
+ */
+export function versionChangedMembers(
+  database: ArtCharDatabase,
+  teamId: string
+): CharacterKey[] {
+  const rootId = versionRoot(database, teamId)
+  const rootKqm = database.teams.get(rootId)?.teamOpt?.kqm
+  const inRoot = teamOptMembers(database, rootId).map((m) => m.characterKey)
+  const consRoot = consFor(database, rootId, rootKqm)
+  const consOwn = consFor(database, teamId, rootKqm)
+  const sigRoot = signatureOf(database, rootId)
+  const sigOwn = signatureOf(database, teamId)
+  return teamOptMembers(database, teamId)
+    .map((m) => m.characterKey)
+    .filter(
+      (k) =>
+        !inRoot.includes(k) ||
+        consOwn[k] !== consRoot[k] ||
+        sigOwn[k] !== sigRoot[k]
+    )
+}
+
+/**
+ * What a version that keeps its teammates' gear runs from: its original's saved builds, and the
+ * members searched (the changed ones; the others keep their builds). Absent for a team that does
+ * not keep them; `noOriginalRun` while the original has no run for its settings now.
+ */
+export function keptTeammates(
+  database: ArtCharDatabase,
+  teamId: string
+):
+  | { from: Partial<Record<CharacterKey, KqmBuild>>; only: CharacterKey[] }
+  | 'noOriginalRun'
+  | undefined {
+  if (!keepsTeammates(database, teamId)) return undefined
+  const rootId = versionRoot(database, teamId)
+  const saved = database.teamKqmResults.getRun(rootId)
+  if (!saved || !kqmRunFresh(database, rootId)) return 'noOriginalRun'
+  const run = savedRunOf(saved)
+  if (run.type !== 'done' || !run.result?.builds) return 'noOriginalRun'
+  return {
+    from: run.result.builds,
+    only: versionChangedMembers(database, teamId),
+  }
 }
 
 /**
@@ -162,6 +250,8 @@ export function makeOriginal(
         constellations: newCons,
       },
     }
+    // (an original has no original to keep its teammates' gear from)
+    delete team.teamOpt.kqm?.keepTeammates
   })
   const newKqm = database.teams.get(teamId)?.teamOpt?.kqm
   for (const id of family) {
@@ -447,7 +537,9 @@ export function createVersion(
    */
   base?: string,
   /** Its members' signature weapons (`TeamOptKqm.signature`: 0 none, 1–5 its refinement) */
-  signature: OwnCons = {}
+  signature: OwnCons = {},
+  /** Its teammates keep the original's builds (`TeamOptKqm.keepTeammates`) */
+  keepTeammates = false
 ): string {
   const rootId = versionRoot(database, teamId)
   const root = database.teams.get(rootId)
@@ -527,6 +619,9 @@ export function createVersion(
     if (Object.keys(sig).length)
       teamOpt.kqm = { ...(teamOpt.kqm ?? defaultTeamOptKqm), signature: sig }
     else if (teamOpt.kqm) delete teamOpt.kqm.signature
+    if (keepTeammates)
+      teamOpt.kqm = { ...(teamOpt.kqm ?? defaultTeamOptKqm), keepTeammates }
+    else if (teamOpt.kqm) delete teamOpt.kqm.keepTeammates
     for (const k of gone) {
       delete teamOpt.attacks[k]
       delete teamOpt.kqm?.attacks?.[k]
