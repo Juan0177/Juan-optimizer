@@ -152,6 +152,8 @@ export interface TeamOptResult {
    * weapons the same
    */
   alternatives?: TeamOptAlternative[]
+  /** The states every attack got in the run (`optimizeTeam`'s `attackStates`): its damage has them */
+  attackStates?: RunAttackState[]
 }
 
 export class TeamOptCancelled extends Error {
@@ -1905,5 +1907,6 @@ export async function optimizeTeam({
     ...(alternatives.length
       ? { alternatives: alternatives.map(({ state: _, ...a }) => a) }
       : {}),
+    ...(attackStates?.length ? { attackStates: [...attackStates] } : {}),
   }
 }

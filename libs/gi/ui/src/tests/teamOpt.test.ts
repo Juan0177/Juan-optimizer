@@ -41,11 +41,14 @@ import {
   teamOptArtValues,
   teamOptBonusStats,
   teamOptMembers,
+  teamOptResultGear,
   teamOptUIData,
   teamOptWeaponCandidates,
   teamRotationHits,
   teamRotationNodes,
   teamSensitivity,
+  withAttackStates,
+  wolfsGravestoneStates,
 } from '../'
 import { rotationCalculation } from '../util/teamOpt/rotationCalculation'
 
@@ -455,6 +458,61 @@ describe('team rotation', () => {
     expect(
       sensitivity.character(member(ayaka), { level: 100 })!
     ).toBeGreaterThan(base)
+  })
+
+  it('values a level at the ascension it needs, a talent up to its ascension’s cap, and the run’s attack states', () => {
+    const { database, teamId, ids } = setup()
+    const attacks = { [ayaka]: [attack(['burst', 'cutting'], 19)] }
+    const teamOpt: TeamOpt = { ...initTeamOpt(), attacks }
+    const builds = { [ayaka]: ids.crit, [shenhe]: ids.atk }
+    const { arts } = teamOptResultGear(database, teamId, {
+      builds,
+      weapons: {},
+    })
+    // at 80/80 her burst's 8 is as high as it goes
+    database.chars.set(ayaka, {
+      level: 80,
+      ascension: 5,
+      talent: { auto: 8, skill: 8, burst: 8 },
+    })
+    const sensitivity = teamSensitivity(database, teamId, 'F', teamOpt, {
+      builds,
+      weapons: {},
+    })
+    const member = sensitivity.members.find((m) => m.characterKey === ayaka)!
+    expect(sensitivity.character(member, { talent: 'burst' })).toBeUndefined()
+    // level 95 at ascension 6, as when her level is raised
+    const level95 = sensitivity.character(member, { level: 95 })!
+    database.chars.set(ayaka, { level: 95, ascension: 6 })
+    const raised = evaluateTeamRotation(database, teamId, 'F', {
+      arts,
+      attacks,
+    })!.total
+    expect(level95 / raised - 1).toBeCloseTo(0, 9)
+
+    // the states the run gave every attack (Wolf's Gravestone's uptime) count, as in its damage
+    const wolf = database.weapons.new({
+      key: 'WolfsGravestone',
+      level: 90,
+      ascension: 6,
+      refinement: 1,
+      location: '',
+      lock: false,
+    })
+    const result = { builds, weapons: { [shenhe]: wolf } }
+    const attackStates = wolfsGravestoneStates([ayaka, shenhe], 'on')
+    const gear = teamOptResultGear(database, teamId, result)
+    const shown = evaluateTeamRotation(database, teamId, 'F', {
+      ...gear,
+      attacks: withAttackStates(attacks, attackStates),
+    })!.total
+    const base = (states?: typeof attackStates) =>
+      teamSensitivity(database, teamId, 'F', teamOpt, {
+        ...result,
+        attackStates: states,
+      }).base!
+    expect(base(attackStates) / shown - 1).toBeCloseTo(0, 9)
+    expect(base()).toBeLessThan(shown * 0.99)
   })
 
   it('ranks independent crit outcomes for special reactions and keeps both builds dynamic', () => {

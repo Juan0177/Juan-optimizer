@@ -5,6 +5,10 @@ import type {
   GenderKey,
   SubstatKey,
 } from '@genshin-optimizer/gi/consts'
+import {
+  talentLimits,
+  validateCharLevelAsc,
+} from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   ICachedArtifact,
@@ -18,6 +22,7 @@ import type { CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
 import type { KqmResult } from './kqm'
 import { kqmArtData, kqmTeamOverrides } from './kqm'
+import { withAttackStates } from './lowHpUptime'
 import { teamRotationNodes } from './objective'
 import type { TeamOptResult } from './solve'
 import {
@@ -51,7 +56,7 @@ export const MAX_TALENT_LEVEL = 10
  * rotation's damage with the change, everything else as in the result (builds, weapons, buffs,
  * on-field members, extra buffs). The changes: one more substat roll on the member's artifacts
  * (of the Improve tab's size: a 5★ average roll by default), one more talent level (with its
- * constellation boosts), another level (the same ascension).
+ * constellation boosts), another level (with the ascension it needs).
  *
  * Substat rolls are cheap: the member's problem is compiled once (the team's damage as a function
  * of its artifacts, the buffs it gives the others included, as the optimizer sees it), then
@@ -63,7 +68,7 @@ export function teamSensitivity(
   teamId: string,
   gender: GenderKey,
   teamOpt: TeamOpt,
-  result: Pick<TeamOptResult, 'builds' | 'weapons'>,
+  result: Pick<TeamOptResult, 'builds' | 'weapons' | 'attackStates'>,
   {
     rarity = 5,
     rollSize = 'mid',
@@ -94,7 +99,7 @@ export function teamSensitivity(
   ) as Partial<Record<CharacterKey, ICachedWeapon>>
   const bonusStats = teamOptBonusStats(teamOpt, memberKeys)
   const common = {
-    attacks: teamOpt.attacks,
+    attacks: withAttackStates(teamOpt.attacks, result.attackStates),
     mainStatAssumptionLevel,
     weapons,
     onField: teamOpt.onField,
@@ -173,7 +178,7 @@ export function teamSensitivity(
     },
     /**
      * The rotation's damage with `member` changed: one more level of a talent (undefined at its
-     * highest), or another level
+     * highest, or the highest its ascension allows), or another level
      */
     character(
       member: TeamOptMember,
@@ -185,7 +190,10 @@ export function teamSensitivity(
       if (!character) return undefined
       if ('talent' in change) {
         const now = character.talent[change.talent]
-        if (now >= MAX_TALENT_LEVEL) return undefined
+        if (
+          now >= Math.min(MAX_TALENT_LEVEL, talentLimits[character.ascension])
+        )
+          return undefined
         return evaluate({
           characters: {
             [member.characterKey]: {
@@ -194,8 +202,14 @@ export function teamSensitivity(
           },
         })
       }
+      // (with the ascension that level needs, as the character editor sets it)
       return evaluate({
-        characters: { [member.characterKey]: { level: change.level } },
+        characters: {
+          [member.characterKey]: validateCharLevelAsc(
+            change.level,
+            character.ascension
+          ),
+        },
       })
     },
   }
