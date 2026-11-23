@@ -111,7 +111,7 @@ const ENERGY_WEAPONS: Partial<
   NocturnesCurtainCall: { energy: [14, 15, 16, 17, 18], cooldown: 18 },
   PortablePowerSaw: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 15 },
   RightfulReward: { energy: [8, 10, 12, 14, 16], cooldown: 10 },
-  Silverdawn: { energy: [10, 10.5, 11, 11.5, 12], cooldown: 15 },
+  Silverdawn: { energy: [10, 10.5, 11, 11.5, 12], cooldown: 18 },
   SongOfTheVigil: { energy: [4, 5, 6, 7, 8], cooldown: 9 },
   TheDockhandsAssistant: { energy: [6, 7.5, 9, 10.5, 12], cooldown: 15 },
   TomeOfTheEternalFlow: { energy: [8, 9, 10, 11, 12], cooldown: 12 },

@@ -25,7 +25,8 @@ const stellarconduct_dmg_arr = [-1, 0.2, 0.25, 0.3, 0.35, 0.4]
 const base_atk_ = subscript(input.weapon.refinement, atk_arr)
 
 // "Royal Decree" (15s, after the wielder's Electro attacks hit; also works off-field); its order is
-// "Complete" once the wielder's Stellar-Conduct attacks hit, which doubles both effects.
+// "Complete" once the wielder's Stellar-Conduct attacks hit or it triggers a Stellar-Conduct reaction
+// (beta 7.2.53), which doubles both effects.
 const [condDecreePath, condDecree] = cond(key, 'royalDecree')
 const complete_atk_ = equal(
   condDecree,

@@ -482,6 +482,27 @@ describe('the beta Royal Decree claymore', () => {
       ['decree', 2000, 2900],
     ])
   })
+  it('complete also from a Stellar-Conduct reaction its wielder triggers (beta 7.2.53)', () => {
+    const sim = run(
+      'Beidou E',
+      {
+        Beidou: kit('Beidou', 'electro', {
+          skill: {
+            frames: 1200,
+            hits: [
+              { at: 0, tag: 'skill' },
+              reaction(300, 'stellarConduct', 'Beidou'),
+            ],
+          },
+        }),
+      },
+      { Beidou: { weapon: 'TorrentsOfSpring', refinement: 1 } }
+    )
+    expect(windowsOf(sim, 'TorrentsOfSpring.royalDecree')).toEqual([
+      ['decree', 0, 300],
+      ['complete', 300, 900],
+    ])
+  })
 })
 
 describe('Blazing Lionfang’s sheet', () => {

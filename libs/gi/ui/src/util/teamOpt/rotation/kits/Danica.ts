@@ -85,12 +85,15 @@ const ANCHOR_DURATION = 1500
 const ANCHOR_HITMARK = 50
 /** Entry Skill E2 (Will to Protect) cooldown: 16 s */
 const ENTRY_CD = 960
+/** Noted when her E is cast with a Storm Anchor out: it keeps its time (beta 7.2.53) */
+const E_KEEPS_ANCHOR_TIME =
+  "Danica: her E with the Storm Anchor still out didn't refresh it, as the 7.2.53 beta text says: the Anchor runs out 25 s after it was summoned or refreshed by Will to Protect, so a swap-in after that gets no Will to Protect."
 /** C2 Toast: 10 stacks per member; Danica consumes up to 2 of hers in Battle Maid */
 const TOAST_STACKS = 10
 const TOAST_SELF_MAX = 2
 /** Noted when her E ends Royal Guard: the in-game behaviour players don't expect */
 const E_ENDS_ROYAL_GUARD =
-  'Danica: her E ended Maid: Royal Guard and with it her Burst\'s party ATK bonus, as in the game (her E re-summons the Anchor, which ends either Maid form and the Burst\'s form effects). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so "Danica Q" is enough.'
+  "Danica: her E ended Maid: Royal Guard and with it her Burst's party ATK bonus, as in the game (her E ends either Maid form and the Burst's form effects, and doesn't refresh a Storm Anchor already out). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so \"Danica Q\" is enough."
 
 type Maid = '' | 'defense' | 'battle'
 interface State {
@@ -115,7 +118,7 @@ interface State {
   aegisEnd: number
   /** C2 Toast stacks per member */
   toast: Partial<Record<CharacterKey, number>>
-  /** The enemy can drop her particles again from this frame (14 s after the last drop) */
+  /** The enemy can drop her particles again from this frame (16 s after the last drop) */
   ballReady: number
   /** Why her last swap-in with the Anchor out gave no Will to Protect (none: it did) */
   lastBlock?: string
@@ -208,19 +211,19 @@ const addExcite = (s: State, amount: number) => {
 /**
  * Her particles (dump Avatar_Danica_ElementalArt_DropBall_Handler): a hit with the
  * Danica_ElementalArt_DropBall tag, the Anchor Skill's (InsertClaymore) or the Entry Skill's
- * (E2_Enter_Attack), gives the enemy the Unique 14 s Avatar_Danica_ElementalArt_DropBall, whose
- * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 14 s from
- * either Skill
+ * (E2_Enter_Attack), gives the enemy the Unique Avatar_Danica_ElementalArt_DropBall, whose
+ * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 16 s from
+ * either Skill (14 s before beta 7.2.53)
  */
 function dropBall(c: SimContext, s: State, delay: number, skill: string) {
   c.at(delay, (c2) => {
     if (c2.now < s.ballReady) {
       c2.note(
-        `Danica: her ${skill} dropped no particles: either Skill's particles drop once per 14 s, as in the game, and the last drop was ${((c2.now - s.ballReady + 840) / 60).toFixed(1)} s before.`
+        `Danica: her ${skill} dropped no particles: either Skill's particles drop once per 16 s, as in the game, and the last drop was ${((c2.now - s.ballReady + 960) / 60).toFixed(1)} s before.`
       )
       return
     }
-    s.ballReady = c2.now + 840
+    s.ballReady = c2.now + 960
     particleMarker(c2, 0, 'Danica particles', undefined, 'Danica')
   })
 }
@@ -350,7 +353,7 @@ export const kit: KitModel = {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
     if (c.constellation('Danica') >= 2)
       c.note(
-        'Danica C2: the combat-entry Will to Protect and the Cleaning Decree Will to Purge (hold Normal Attack, 150% DMG, once per combat) are not modelled; Toast stacks are.'
+        'Danica C2: the combat-entry Will to Protect and the Cleansing Edict Will to Purge (hold Normal Attack, 150% DMG, not again while the Storm Anchor lasts) are not modelled; Raise a Chorus stacks are.'
       )
   },
   // With the Anchor out her normal attacks are the Anchor's (estimated frames of their own), and
@@ -383,13 +386,17 @@ export const kit: KitModel = {
         // Dump Avatar_Danica_ElementalArt_InsertClaymore: Will to Cleanse to 0, Will to Protect's
         // cooldown (UNIQUE_Danica_E2_GuardMaid_CD) removed, and the Anchor handler removed and
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
-        // (kqmsim keeps the forms)
+        // (kqmsim keeps the forms). Since beta 7.2.53 a Storm Anchor already out keeps its time
+        // (the skill text: casting it again doesn't refresh its duration)
         ctx.at(ANCHOR_HITMARK, (c) => {
           if (s.maid === 'defense') c.note(E_ENDS_ROYAL_GUARD)
           endMaid(c, s)
           s.excite = 0
           s.entryReady = -1
-          anchor(c, s, ANCHOR_DURATION)
+          if (c.now < s.anchorEnd) {
+            set(c, 'anchor', 'on')
+            c.note(E_KEEPS_ANCHOR_TIME)
+          } else anchor(c, s, ANCHOR_DURATION)
         })
         return withHitlag(
           {

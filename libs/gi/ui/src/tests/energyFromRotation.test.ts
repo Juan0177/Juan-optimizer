@@ -498,21 +498,23 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
         a.start >= played.start &&
         a.start < played.start + played.frames
     ).length
-    expect(entries).toBe(2)
+    // (since beta 7.2.53 her E doesn't refresh a Storm Anchor already out: the one Will to Protect
+    // refreshed runs out before the next rotation's swap-in, so one Entry in the two counted)
+    expect(entries).toBe(1)
     const at = (cons: number) =>
       energyFromRotation(played, team, 2, { Danica: cons })
     expect(
       at(1).members.Danica!.flatEnergy! -
         (at(0).members.Danica!.flatEnergy ?? 0)
-    ).toBeCloseTo(20, 2)
-    // (the Aegis lasts from the Entry to her E: the Entry hit is the one proc a rotation)
+    ).toBeCloseTo((20 * entries) / 2, 2)
+    // (the Aegis lasts from the Entry to her E: the Entry hit is the one proc)
     expect(
       at(4).members.Mitya!.flatEnergy! - (at(3).members.Mitya!.flatEnergy ?? 0)
-    ).toBeCloseTo(3, 2)
-    // (her particles: the Entry's hit drops them, the Anchor Skill 2 s later is inside their 14 s)
+    ).toBeCloseTo((3 * entries) / 2, 2)
+    // (her particles: the Entry's hit drops them, the Anchor Skill 2 s later is inside their 16 s)
     expect(at(6).members.Danica!.skillUses).toBe(1)
   })
-  it('particles: her Anchor Skill’s and her Entry Skill’s hits drop 5, once per 14 s (dump DropBall)', () => {
+  it('particles: her Anchor Skill’s and her Entry Skill’s hits drop 5, once per 16 s (dump DropBall, beta 7.2.53)', () => {
     const played = simulateRotation({
       rotation: parseRotation(
         'Danica E Q -> Odette E Q -> Mitya hE Q CA -> Tsaritsa hE Q N5 E E E -> Danica N1 -> Odette N3 N3 N3 -> Tsaritsa N5 N5 N5 N5 N5',
@@ -538,20 +540,17 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
           h.t < played.start + played.frames
       )
       .sort((a, b) => a.t - b.t)
-    // (an Anchor Skill and an Entry a rotation, 14 s apart at least: both drop)
-    expect(drops.map((h) => h.path[1])).toEqual([
-      'dmg',
-      'entryDmg',
-      'dmg',
-      'entryDmg',
-    ])
+    // (an Anchor Skill and an Entry, 16 s apart at least: both drop. The second rotation's E
+    // doesn't refresh the Storm Anchor Will to Protect refreshed (beta 7.2.53): it runs out
+    // before the swap-in, and that rotation has no Entry)
+    expect(drops.map((h) => h.path[1])).toEqual(['dmg', 'entryDmg', 'dmg'])
     for (let i = 1; i < drops.length; i++)
-      expect(drops[i].t - drops[i - 1].t).toBeGreaterThanOrEqual(840)
+      expect(drops[i].t - drops[i - 1].t).toBeGreaterThanOrEqual(960)
     expect(particleMarkers(played, 'Danica').map((m) => m.t)).toEqual(
       drops.map((h) => h.t)
     )
     expect(energyFromRotation(played, team, 2).members.Danica!.skillUses).toBe(
-      2
+      1.5
     )
   })
 })
