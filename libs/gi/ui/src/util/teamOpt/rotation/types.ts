@@ -605,6 +605,11 @@ export interface KitModel {
      */
     stateFrames?: number
   ) => void
+  /**
+   * Its buffs (paths in its sheet) that only its actions turn on: when the rotation never does,
+   * they are off for every hit, whatever its loadout's conditionals say
+   */
+  simOnlyBuffs?: (constellation: number) => string[][]
   /** Hits it adds to the counted buffs (Illuga's Songs): run after the timeline */
   countedBuffs?: (
     hits: readonly SimHit[],
