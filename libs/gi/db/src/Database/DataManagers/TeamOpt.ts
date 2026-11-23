@@ -11,6 +11,7 @@ import type {
   CharacterKey,
   ElementWithPhyKey,
   InfusionAuraElementKey,
+  KqmStandardKey,
   LocationCharacterKey,
   MultiOptHitModeKey,
   WeaponKey,
@@ -22,6 +23,7 @@ import {
   allCharacterKeys,
   allElementWithPhyKeys,
   allInfusionAuraElementKeys,
+  allKqmStandardKeys,
   allLocationCharacterKeys,
   allMultiOptHitModeKeys,
   allWeaponKeys,
@@ -296,16 +298,13 @@ export interface TeamOptKqm {
    * as screened out, not ranked)
    */
   fullSearch?: boolean
+  /** The artifact standard (absent: KQM Standards) */
+  standard?: KqmStandardKey
   /**
-   * The artifact standard: rolls placed for damage on top of the fixed ones (absent: KQM
-   * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
+   * The artifact standard set per member instead (a member without one: `standard`). Absent: the
+   * team's one standard
    */
-  rolls?: number
-  /**
-   * The artifact standard set per member instead: each one's distributed rolls (a member without
-   * one: `rolls`). Absent: the team's one standard
-   */
-  memberRolls?: Partial<Record<CharacterKey, number>>
+  memberStandards?: Partial<Record<CharacterKey, KqmStandardKey>>
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
   /**
@@ -375,6 +374,24 @@ export interface TeamOptKqm {
 export const defaultTeamOptKqm: TeamOptKqm = { refinement5: 1, refinement4: 5 }
 
 const reactionKeys = [...allAmpReactionKeys, ...allAdditiveReactions] as const
+/**
+ * A standard saved before the tiers, as its number of placed rolls: the presets (20 KQM
+ * Standards, 25 Good, 30 Great, 40 Top) as they were named, any other the nearest of them
+ */
+function kqmStandardFromRolls(rolls: unknown): KqmStandardKey | undefined {
+  if (typeof rolls !== 'number' || !Number.isFinite(rolls)) return undefined
+  const presets: [number, KqmStandardKey][] = [
+    [20, 'kqms'],
+    [25, 'good'],
+    [30, 'great'],
+    [40, 'top'],
+  ]
+  let best = presets[0]
+  for (const p of presets)
+    if (Math.abs(p[0] - rolls) < Math.abs(best[0] - rolls)) best = p
+  return best[1]
+}
+
 const ownerKeys = [...allCharacterKeys, 'team'] as const
 
 const buffLimitSchema = z.object({
@@ -729,23 +746,24 @@ const teamOptSchema = z.object({
         .optional()
         .catch(undefined),
       fullSearch: z.boolean().optional().catch(undefined),
-      rolls: z.number().int().min(0).max(60).optional().catch(undefined),
-      memberRolls: z
+      standard: z.enum(allKqmStandardKeys).optional().catch(undefined),
+      memberStandards: z
         .unknown()
         .optional()
         .transform((record) => {
           if (typeof record !== 'object' || record === null) return undefined
-          const result: NonNullable<TeamOptKqm['memberRolls']> = {}
+          const result: NonNullable<TeamOptKqm['memberStandards']> = {}
           for (const [key, value] of Object.entries(record))
             if (
               allCharacterKeys.includes(key as CharacterKey) &&
-              Number.isInteger(value) &&
-              (value as number) >= 0 &&
-              (value as number) <= 60
+              allKqmStandardKeys.includes(value as KqmStandardKey)
             )
-              result[key as CharacterKey] = value as number
+              result[key as CharacterKey] = value as KqmStandardKey
           return Object.keys(result).length ? result : undefined
         }),
+      // (before the tiers: a number of placed rolls, read as the nearest tier)
+      rolls: z.unknown().optional(),
+      memberRolls: z.unknown().optional(),
       energySource: z
         .enum(['manual', 'calculator'])
         .optional()
@@ -908,7 +926,26 @@ const teamOptSchema = z.object({
     })
     .optional()
     .catch(undefined)
-    .transform((kqm) => kqm && (stripUndefined(kqm) as TeamOptKqm)),
+    .transform((kqm) => {
+      if (!kqm) return kqm
+      const { rolls, memberRolls, ...rest } = kqm
+      const standard = rest.standard ?? kqmStandardFromRolls(rolls)
+      let memberStandards = rest.memberStandards
+      if (!memberStandards && typeof memberRolls === 'object' && memberRolls) {
+        const result: NonNullable<TeamOptKqm['memberStandards']> = {}
+        for (const [key, value] of Object.entries(memberRolls)) {
+          const member = kqmStandardFromRolls(value)
+          if (allCharacterKeys.includes(key as CharacterKey) && member)
+            result[key as CharacterKey] = member
+        }
+        if (Object.keys(result).length) memberStandards = result
+      }
+      return stripUndefined({
+        ...rest,
+        standard: standard === 'kqms' ? undefined : standard,
+        memberStandards,
+      }) as TeamOptKqm
+    }),
   bonusStats: teamBonusStatsSchema,
 })
 

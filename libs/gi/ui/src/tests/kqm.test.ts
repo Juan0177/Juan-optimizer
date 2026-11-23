@@ -31,7 +31,8 @@ import {
   kqmGroupRefinements,
   kqmLockedWeapon,
   kqmMemberConstellation,
-  kqmMemberRolls,
+  kqmMemberStandard,
+  kqmResultStandardChanged,
   kqmRefinement,
   kqmRollCaps,
   kqmSets,
@@ -370,31 +371,42 @@ describe('KQM Standards builds', () => {
     expect(kqmWeapons(ayaka, teamOpt.kqm).length).toBeGreaterThan(1)
   }, 300_000)
 
-  it('rolls set per member: each member’s builds and rankings place its own, within its own caps', async () => {
+  it('standards set per member: each member’s builds and rankings are its own standard’s', async () => {
     const { database, teamId, teamOpt } = setup()
-    const kqm = { ...teamOpt.kqm!, rolls: 30, memberRolls: { [ayaka]: 40 } }
-    expect(kqmMemberRolls(ayaka, kqm)).toBe(40)
-    expect(kqmMemberRolls(shenhe, kqm)).toBe(30)
-    expect(kqmMemberRolls(shenhe, teamOpt.kqm)).toBe(20)
+    const kqm = {
+      ...teamOpt.kqm!,
+      standard: 'great' as const,
+      memberStandards: { [ayaka]: 'top' as const },
+    }
+    expect(kqmMemberStandard(ayaka, kqm)).toBe('top')
+    expect(kqmMemberStandard(shenhe, kqm)).toBe('great')
+    expect(kqmMemberStandard(shenhe, teamOpt.kqm)).toBe('kqms')
     const result = (await run(database, teamId, { ...teamOpt, kqm }))!
     const placed = (b: KqmBuild) =>
       Object.values(b.rolls).reduce((a, n) => a + (n ?? 0), 0)
-    for (const [ck, budget] of [
-      [ayaka, 40],
-      [shenhe, 30],
+    for (const [ck, standard] of [
+      [ayaka, 'top'],
+      [shenhe, 'great'],
     ] as const) {
       const b = result.builds[ck]!
-      expect(placed(b)).toBe(kqmBuildRarity(b, budget).rolls)
-      const caps = kqmRollCaps(b.mains, budget)
+      expect(b.standard).toBe(standard)
+      expect(b.layout).toHaveLength(5)
+      // (no 4★ sets here: 9 rolls a piece, never more than 45 on the set)
+      expect(placed(b)).toBeCloseTo(45, 6)
+      const caps = kqmRollCaps(b.mains, standard)
       for (const [k, n] of Object.entries(b.rolls) as [SubstatKey, number][])
-        expect(n).toBeLessThanOrEqual(caps[k])
-      for (const o of result.rankings[ck]!.sets)
-        expect(placed(o)).toBe(kqmBuildRarity(o, budget).rolls)
+        expect(n).toBeLessThanOrEqual(caps[k] + 1e-9)
+      for (const o of result.rankings[ck]!.sets) {
+        expect(o.standard).toBe(standard)
+        expect(placed(o)).toBeLessThanOrEqual(45 + 1e-9)
+      }
     }
-    // (more rolls on one member: more damage than the team's 30 for both)
+    expect(kqmResultStandardChanged(result, kqm)).toBe(false)
+    expect(kqmResultStandardChanged(result, teamOpt.kqm)).toBe(true)
+    // (a better standard on one member: more damage than the team's Great for both)
     const even = (await run(database, teamId, {
       ...teamOpt,
-      kqm: { ...teamOpt.kqm!, rolls: 30 },
+      kqm: { ...teamOpt.kqm!, standard: 'great' },
     }))!
     expect(result.after.total).toBeGreaterThan(even.after.total)
   }, 300_000)

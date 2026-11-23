@@ -5,7 +5,7 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import type { KqmBuild, KqmResult } from './kqm'
-import { KQM_SUBSTAT_ROLLS, kqmBuildRarity } from './kqm'
+import { kqmBuildRollValue, kqmChosenRolls } from './kqm'
 import type { RotationScore } from './rotationSearch'
 import { kqmTeamSensitivity } from './sensitivity'
 
@@ -82,12 +82,11 @@ export async function kqmErPrices(
         if (total !== undefined) best = Math.max(best, total - base)
       }
     }
-    const er =
-      KQM_SUBSTAT_ROLLS.enerRech_ * kqmBuildRarity(build).subScale * 100
+    const er = kqmBuildRollValue(build, 'enerRech_') * 100
     prices[key] = {
       roll: best / time,
       er,
-      floor: has - (build.rolls.enerRech_ ?? 0) * er,
+      floor: has - (kqmChosenRolls(build).enerRech_ ?? 0) * er,
     }
   }
   return prices

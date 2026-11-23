@@ -39,7 +39,7 @@ import {
   kqmLockedWeapon,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
-  kqmMemberRolls,
+  kqmMemberStandard,
   kqmTalentLevel,
   kqmTeamOverrides,
   kqmWeapons,
@@ -108,11 +108,10 @@ import {
 import { KqmShareMenu } from './KqmShareMenu'
 import {
   KqmArtifactStandard,
-  KqmMemberRolls,
-  kqmRollsMixed,
-  kqmRollsText,
+  KqmMemberStandard,
   kqmStandardName,
-  useKqmCustomRolls,
+  kqmStandardsMixed,
+  kqmStandardText,
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
@@ -385,7 +384,6 @@ export function KqmSettings({
     () => members.map((m) => m.characterKey),
     [members]
   )
-  const [customRolls, setCustomRolls] = useKqmCustomRolls(kqm, memberKeys)
   // a team never set to a talent level takes the one last picked on any team (else KQM's 10)
   const unsetTalents = teamOpt.kqm?.talents === undefined
   useEffect(() => {
@@ -625,7 +623,7 @@ export function KqmSettings({
           </StepTitle>
           <KqmAssumptions
             talents={kqmTalentLevel(kqm)}
-            rolls={kqmRollsText(kqm, memberKeys)}
+            standard={kqmStandardText(t, kqm, memberKeys)}
           />
         </Box>
         <Box
@@ -751,10 +749,10 @@ export function KqmSettings({
             >
               {t('teamOpt.kqm.membersAll', 'Members')}
               <InfoTooltipInline
-                title={t('teamOpt.kqm.membersAllHelp', {
+                title={t('teamOpt.kqm.membersAllHelpStandard', {
                   defaultValue:
-                    'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
-                  rolls: kqmRollsText(kqm, memberKeys),
+                    'Every member gets a KQM build at the constellation shown: level 90, the talent levels set here, five +20 artifacts at the standard set here ({{standard}}).',
+                  standard: kqmStandardText(t, kqm, memberKeys),
                 })}
               />
             </Typography>
@@ -790,8 +788,6 @@ export function KqmSettings({
             <KqmArtifactStandard
               kqm={kqm}
               members={memberKeys}
-              custom={customRolls}
-              setCustom={setCustomRolls}
               setTeamOpt={setTeamOpt}
             />
             {calculated && (
@@ -906,12 +902,10 @@ export function KqmSettings({
                   />
                 </Box>
                 <Box sx={{ gridArea: 'arts', minWidth: 0 }}>
-                  <KqmMemberRolls
+                  <KqmMemberStandard
                     characterKey={characterKey}
                     members={memberKeys}
                     kqm={kqm}
-                    custom={customRolls}
-                    setCustom={setCustomRolls}
                     setTeamOpt={setTeamOpt}
                   />
                 </Box>
@@ -1138,11 +1132,11 @@ export function KqmSettings({
 /** The build rules under the title, in one muted line (the full rule in its tooltip) */
 function KqmAssumptions({
   talents,
-  rolls,
+  standard,
 }: {
   talents: 9 | 10
-  /** The artifact standard's distributed rolls (KQMS: 20; set per member: their range) */
-  rolls: string
+  /** The artifact standard's name (Mixed when set per member) */
+  standard: string
 }) {
   const { t } = useTranslation('page_team')
   const labels = [
@@ -1152,20 +1146,19 @@ function KqmAssumptions({
       defaultValue: 'Talents {{level}}/{{level}}/{{level}}',
       level: talents,
     }),
-    t('teamOpt.kqm.ruleArtifacts', '+20 artifacts'),
-    t('teamOpt.kqm.ruleRolls', {
-      defaultValue: '2 fixed + {{rolls}} rolls',
-      rolls,
+    t('teamOpt.kqm.ruleArtifactsStandard', {
+      defaultValue: '+20 artifacts: {{standard}}',
+      standard,
     }),
   ]
   return (
     <FieldLabel
       // (under the step's title, aligned with its text)
       sx={{ mt: 0.75, pl: '38px', lineHeight: 1.5 }}
-      tip={t('teamOpt.kqm.subtitleCons', {
+      tip={t('teamOpt.kqm.subtitleConsStandard', {
         defaultValue:
-          'Standard KQM builds for this rotation: level 90; 4★ C6, standard 5★ C2, 5★ from the free constellation event C1, other 5★ C0 (each can be changed below); the talent levels set below; five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
-        rolls,
+          'Standard KQM builds for this rotation: level 90; 4★ C6, standard 5★ C2, 5★ from the free constellation event C1, other 5★ C0 (each can be changed below); the talent levels set below; five +20 artifacts at the standard set below ({{standard}}).',
+        standard,
       })}
     >
       {labels.join('  ·  ')}
@@ -1230,22 +1223,12 @@ export function KqmSetupSummary({
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
   const fromCalculator = kqm.energySource === 'calculator'
   const keys = members.map((m) => m.characterKey)
-  // (members at different rolls, in the run or now: each member's pill shows its own)
-  const rollsMixed =
-    kqmRollsMixed(kqm, keys) || (!!nowKqm && kqmRollsMixed(nowKqm, keys))
-  /** The artifact standard: its name and rolls, or Mixed and their range */
-  const standardOf = (k: TeamOptKqm) =>
-    kqmRollsMixed(k, keys)
-      ? {
-          name: t('teamOpt.kqm.standardMixed', 'Mixed'),
-          rolls: kqmRollsText(k, keys),
-        }
-      : {
-          name: kqmStandardName(t, Number(kqmRollsText(k, keys))),
-          rolls: kqmRollsText(k, keys),
-        }
-  const standard = standardOf(kqm)
-  const nowStandard = nowKqm && standardOf(nowKqm)
+  // (members at different standards, in the run or now: each member's pill shows its own)
+  const standardsMixed =
+    kqmStandardsMixed(kqm, keys) ||
+    (!!nowKqm && kqmStandardsMixed(nowKqm, keys))
+  const standard = kqmStandardText(t, kqm, keys)
+  const nowStandard = nowKqm && kqmStandardText(t, nowKqm, keys)
   /** What it is now, if that changed */
   const nowIs = (value: ReactNode) => (
     <Box component="span" sx={{ color: tokens.gold, fontWeight: 600 }}>
@@ -1286,8 +1269,9 @@ export function KqmSetupSummary({
           const er = kqmEnergyRequirement(kqm, characterKey)
           const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
           const lock = kqmLockedWeapon(characterKey, kqm)
-          const rolls = kqmMemberRolls(characterKey, kqm)
-          const nowRolls = nowKqm && kqmMemberRolls(characterKey, nowKqm)
+          const memberStandard = kqmMemberStandard(characterKey, kqm)
+          const nowMemberStandard =
+            nowKqm && kqmMemberStandard(characterKey, nowKqm)
           return (
             <SuspenseTooltip
               key={characterKey}
@@ -1296,8 +1280,7 @@ export function KqmSetupSummary({
                 <>
                   <CharacterName characterKey={characterKey} gender={gender} />
                   {`: C${cons}, ${t('teamOpt.kqm.minEr', 'Min ER')} ${er}%`}
-                  {rollsMixed &&
-                    `, ${t('teamOpt.kqm.rollsShort', { defaultValue: '{{rolls}} rolls', rolls })}`}
+                  {standardsMixed && `, ${kqmStandardName(t, memberStandard)}`}
                   {lock &&
                     `, ${t(`weaponNames_gen:${lock.key}`, lock.key)} R${lock.refinement} (${t('teamOpt.kqm.weaponLocked', 'Weapon locked')})`}
                 </>
@@ -1331,15 +1314,10 @@ export function KqmSetupSummary({
                   {er}% {t('teamOpt.kqm.erShort', 'ER')}
                 </Box>
                 {nowKqm && nowEr !== er && nowIs(`${nowEr}%`)}
-                {rollsMixed &&
-                  nowRolls !== undefined &&
-                  nowRolls !== rolls &&
-                  nowIs(
-                    t('teamOpt.kqm.rollsShort', {
-                      defaultValue: '{{rolls}} rolls',
-                      rolls: nowRolls,
-                    })
-                  )}
+                {standardsMixed &&
+                  nowMemberStandard !== undefined &&
+                  nowMemberStandard !== memberStandard &&
+                  nowIs(kqmStandardName(t, nowMemberStandard))}
                 {lock && (
                   <LockOutlinedIcon
                     aria-label={t('teamOpt.kqm.weaponLocked', 'Weapon locked')}
@@ -1386,24 +1364,8 @@ export function KqmSetupSummary({
             )}
         </SpecStat>
         <SpecStat label={t('teamOpt.kqm.artifactsLabel', 'Artifacts')}>
-          {standard.name}
-          <Box
-            component="span"
-            sx={{ color: 'text.secondary', fontWeight: 500 }}
-          >
-            {t('teamOpt.kqm.rollsShort', {
-              defaultValue: '{{rolls}} rolls',
-              rolls: standard.rolls,
-            })}
-          </Box>
-          {nowStandard &&
-            (nowStandard.name !== standard.name ||
-              nowStandard.rolls !== standard.rolls) &&
-            nowIs(
-              nowStandard.name === standard.name || !rollsMixed
-                ? nowStandard.rolls
-                : nowStandard.name
-            )}
+          {standard}
+          {nowStandard && nowStandard !== standard && nowIs(nowStandard)}
         </SpecStat>
         <SpecStat label={t('teamOpt.kqm.weaponsLabel', 'Weapons')}>
           {choiceLabel(kqmWeaponsCustom(kqm))}

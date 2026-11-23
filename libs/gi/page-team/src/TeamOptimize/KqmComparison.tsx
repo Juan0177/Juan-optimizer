@@ -18,7 +18,6 @@ import {
   compareTeamKqm,
   KQM_SUBSTAT_ROLLS,
   kqmLockedWeapon,
-  kqmMemberRolls,
   kqmSetsId,
   kqmWeaponData,
   quickTooltipProps,
@@ -451,7 +450,6 @@ export function KqmCompare({
             characterKey={characterKey}
             build={build}
             equipment={equipment}
-            rolls={kqmMemberRolls(characterKey, runSettings.kqm)}
           />
           {er && (
             <Tooltip

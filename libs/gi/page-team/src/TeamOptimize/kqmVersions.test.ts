@@ -55,7 +55,7 @@ function setup() {
   teamOpt.kqm = {
     ...defaultTeamOptKqm,
     talents: 9,
-    rolls: 25,
+    standard: 'good',
     constellations: { Bennett: 6, Citlali: 2 },
     excludedSets: ['GladiatorsFinale'],
     energySource: 'calculator',
@@ -211,7 +211,7 @@ describe('KQM versions', () => {
     )
     expect(pushVersionSettings(database, first, names)).toBe(false)
     database.teams.set(first, (team) => {
-      team.teamOpt!.kqm!.rolls = 40
+      team.teamOpt!.kqm!.standard = 'top'
       // (a newcomer's own setting: kept for it in the family's)
       team.teamOpt!.kqm!.constellations = {
         ...team.teamOpt!.kqm!.constellations,
@@ -219,12 +219,12 @@ describe('KQM versions', () => {
       }
     })
     expect(pushVersionSettings(database, first, names)).toBe(true)
-    expect(database.teams.get(teamId)!.teamOpt!.kqm!.rolls).toBe(40)
+    expect(database.teams.get(teamId)!.teamOpt!.kqm!.standard).toBe('top')
     expect(
       database.teams.get(teamId)!.teamOpt!.kqm!.constellations?.Xilonen
     ).toBe(2)
     expect(syncVersion(database, second, names)).toBe(true)
-    expect(database.teams.get(second)!.teamOpt!.kqm!.rolls).toBe(40)
+    expect(database.teams.get(second)!.teamOpt!.kqm!.standard).toBe('top')
     // (an original's own changes are not pushed anywhere)
     expect(pushVersionSettings(database, teamId, names)).toBe(false)
   })

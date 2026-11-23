@@ -28,6 +28,7 @@ import {
   enemyFight,
   evaluateTeamRotation,
   fightBuffShare,
+  kqmResultStandardChanged,
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameEnemy,
@@ -409,6 +410,7 @@ export default function TeamBuildWorkspace({
     mode === 'kqm' &&
     kqmResult &&
     kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt) &&
+    !kqmResultStandardChanged(kqmResult.result, teamOpt.kqm) &&
     (kqmResult.rotation === 'played') === !!writtenRotation.trim() &&
     !enemyChanged(kqmResult.enemy)
       ? kqmResult
@@ -1128,6 +1130,7 @@ export default function TeamBuildWorkspace({
             }
             stale={
               kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+              kqmResultStandardChanged(kqmResult.result, teamOpt.kqm) ||
               (kqmResult.rotation === 'played') !== !!writtenRotation.trim() ||
               enemyChanged(kqmResult.enemy)
             }

@@ -1,18 +1,20 @@
 /**
- * KQM's artifact standard: KQM Standards place 20 rolls for damage, at most 2 per piece whose
- * main stat is not that stat; a higher standard (25, 30, 40 or a custom number) places more, its
- * per-piece cap one higher per 10 rolls (rounded up), at most the game's 5 upgrades a piece.
+ * KQM's artifact standard: KQM Standards place 20 rolls for damage on top of 2 fixed of every
+ * substat, at most 2 per piece whose main stat is not that stat. The tiers (Good, Great, Top,
+ * Perfect) build each piece as the game makes one: 4 lines and 4 or 5 upgrades, more of them on
+ * wanted stats at each step, Perfect at the highest roll values.
  */
 import type { SubstatKey } from '@genshin-optimizer/gi/consts'
 import {
-  KQM_ROLLS,
+  KQM_STANDARDS,
+  KQM_TIERS,
   type KqmMains,
   type KqmMainValues,
   type KqmProblem,
-  kqmPieceCap,
+  type KqmStandard,
   kqmRarity,
-  kqmRollBudget,
   kqmRollCaps,
+  kqmStandardOf,
   placeRolls,
 } from '@genshin-optimizer/gi/solver'
 import { describe, expect, it } from 'vitest'
@@ -31,7 +33,7 @@ const mains: KqmMains = {
   circlet: 'critRate_',
 }
 /** Damage from ATK% and CRIT (capped at 100% CRIT Rate), no requirements */
-const problem = (rolls?: number): KqmProblem => {
+const problem = (standard: KqmStandard = 'kqms'): KqmProblem => {
   const out = new Float64Array(1)
   const columns = ['atk_', 'critRate_', 'critDMG_']
   const valuesAt = (V: Float64Array) => {
@@ -51,7 +53,7 @@ const problem = (rolls?: number): KqmProblem => {
     nTerms: 1,
     mins: [],
     scales: new Set(columns),
-    rolls,
+    standard,
   }
 }
 const count = (rolls: Partial<Record<SubstatKey, number>>) =>
@@ -59,43 +61,40 @@ const count = (rolls: Partial<Record<SubstatKey, number>>) =>
 
 describe('the artifact standard', () => {
   it('KQM Standards by default: 20 rolls, at most 2 a piece', () => {
-    expect(kqmRollBudget(undefined)).toBe(KQM_ROLLS)
-    expect(kqmRollBudget(Number.NaN)).toBe(KQM_ROLLS)
-    expect(kqmRollBudget(25.4)).toBe(25)
-    expect(kqmPieceCap()).toBe(2)
+    expect(kqmStandardOf(undefined)).toBe('kqms')
+    expect(kqmStandardOf('best')).toBe('kqms')
+    expect(kqmStandardOf('top')).toBe('top')
     // (CRIT Rate on 4 pieces: the circlet is CRIT Rate; ATK% on 4: the sands)
     const caps = kqmRollCaps(mains)
     expect(caps.critRate_).toBe(8)
     expect(caps.critDMG_).toBe(10)
     expect(caps.atk_).toBe(8)
+    const placed = placeRolls(problem(), {}, mains, mainValues)
+    expect(count(placed.rolls)).toBe(20)
+    for (const [k, n] of Object.entries(placed.rolls))
+      expect(n).toBeLessThanOrEqual(caps[k as SubstatKey])
   })
-  it('a higher standard’s per-piece cap: one more per 10 rolls, at most 5', () => {
-    expect([10, 20, 25, 30, 40, 45, 60].map(kqmPieceCap)).toEqual([
-      1, 2, 3, 3, 4, 5, 5,
-    ])
-    expect(kqmRollCaps(mains, 40).critDMG_).toBe(20)
-    expect(kqmRollCaps(mains, 25).critRate_).toBe(12)
+  it('a tier’s caps: what its pieces can hold of a stat (a line and every upgrade)', () => {
+    expect(kqmRollCaps(mains, 'top').critDMG_).toBe(30)
+    expect(kqmRollCaps(mains, 'top').critRate_).toBe(24)
+    expect(kqmRollCaps(mains, 'good').critDMG_).toBe(25)
   })
-  it('4★ pieces: 2 rolls fewer each, whatever the standard', () => {
+  it('4★ pieces: 2 rolls fewer each in KQM Standards', () => {
     const sets = { Instructor: 4 }
     const values = { ...mainValues, fourStarSets: ['Instructor'] }
     expect(kqmRarity(sets, values).rolls).toBe(20 - 2 * 4)
-    expect(kqmRarity(sets, values, 30).rolls).toBe(30 - 2 * 4)
   })
-  it('places every roll of the budget within its caps, and more rolls do more damage', () => {
+  it('each tier places the rolls its pieces have, and does more damage than the one before', () => {
     let last = 0
-    for (const budget of [20, 25, 30, 40]) {
-      const placed = placeRolls(problem(budget), {}, mains, mainValues)
-      expect(count(placed.rolls)).toBe(budget)
-      const caps = kqmRollCaps(placed.mains, budget)
-      for (const [k, n] of Object.entries(placed.rolls))
-        expect(n).toBeLessThanOrEqual(caps[k as SubstatKey])
+    for (const standard of KQM_STANDARDS) {
+      const placed = placeRolls(problem(standard), {}, mains, mainValues)
+      if (standard !== 'kqms')
+        expect(count(placed.rolls)).toBeCloseTo(
+          5 * KQM_TIERS[standard].pieceRolls,
+          9
+        )
       expect(placed.score.total).toBeGreaterThan(last)
       last = placed.score.total
     }
-    // (absent: as KQM Standards)
-    expect(placeRolls(problem(), {}, mains, mainValues).score.total).toBe(
-      placeRolls(problem(20), {}, mains, mainValues).score.total
-    )
   })
 })

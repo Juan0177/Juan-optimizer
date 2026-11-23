@@ -1,9 +1,13 @@
 import type {
   ArtifactSetKey,
+  KqmStandardKey,
   MainStatKey,
   SubstatKey,
 } from '@genshin-optimizer/gi/consts'
-import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
+import {
+  allKqmStandardKeys,
+  allSubstatKeys,
+} from '@genshin-optimizer/gi/consts'
 
 /*
  * The KQM search kernel: a member's free rolls, main stats and sets for one compiled problem
@@ -13,19 +17,42 @@ import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 
 /** Rolls placed freely on top of the fixed ones (KQMS) */
 export const KQM_ROLLS = 20
-/**
- * Distributed rolls a stat may get per piece whose main stat is not that stat: 2 at KQMS's 20,
- * one more per 10 rolls in a higher standard (rounded up), at most the game's 5 upgrades a piece
- */
-export const kqmPieceCap = (rolls = KQM_ROLLS) =>
-  Math.min(5, Math.max(1, Math.ceil(rolls / 10)))
-/** A distributed-roll budget as set (absent or invalid: KQMS's 20) */
-export const kqmRollBudget = (rolls?: number) =>
-  rolls !== undefined && Number.isFinite(rolls) && rolls >= 0
-    ? Math.round(rolls)
-    : KQM_ROLLS
+/** KQMS: distributed rolls a stat may get per piece whose main stat is not that stat */
+export const KQM_PIECE_CAP = 2
 /** Fixed rolls of every substat (KQMS) */
 export const KQM_FIXED_ROLLS = 2
+
+export const KQM_STANDARDS = allKqmStandardKeys
+export type KqmStandard = KqmStandardKey
+/**
+ * A tier's five artifacts, each modelled as the game makes them: 4 lines (substats other than its
+ * main stat, each 1 roll) and upgrades (5 at +20; 4 when it started with 3 lines). Of each
+ * piece's lines, `lines` are on stats the build wants and the rest random (spread evenly over the
+ * substats it can still have, as KQMS's fixed rolls are); of its upgrades, `ups` land on those
+ * wanted lines and the rest on any of its 4 lines at even odds (the game's rule). `highest`: every
+ * roll at its highest value instead of the average.
+ */
+export interface KqmTier {
+  /** A piece's rolls: its 4 lines and its upgrades */
+  pieceRolls: number
+  lines: number
+  ups: number
+  highest?: boolean
+}
+export const KQM_TIERS: Record<Exclude<KqmStandard, 'kqms'>, KqmTier> = {
+  good: { pieceRolls: 8, lines: 2, ups: 3 },
+  great: { pieceRolls: 9, lines: 3, ups: 4 },
+  top: { pieceRolls: 9, lines: 4, ups: 5 },
+  perfect: { pieceRolls: 9, lines: 4, ups: 5, highest: true },
+}
+/** A standard's tier (undefined: KQMS) */
+export const kqmTier = (standard?: KqmStandard) =>
+  standard && standard !== 'kqms' ? KQM_TIERS[standard] : undefined
+/** A standard as set (absent or unknown: KQMS) */
+export const kqmStandardOf = (standard?: string): KqmStandard =>
+  (KQM_STANDARDS as readonly string[]).includes(standard ?? '')
+    ? (standard as KqmStandard)
+    : 'kqms'
 /** Main stats kept after the screening of a set's main stats, then searched with refined rolls */
 export const MAINS_SEARCHED = 6
 
@@ -43,6 +70,22 @@ export const KQM_SUBSTAT_ROLLS: Record<SubstatKey, number> = {
   enerRech_: 0.0551,
 }
 const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key]
+/** A five-star roll's highest value (the game's top tier) */
+export const KQM_SUBSTAT_MAX: Record<SubstatKey, number> = {
+  hp_: 0.0583,
+  hp: 298.75,
+  atk_: 0.0583,
+  atk: 19.45,
+  def_: 0.0729,
+  def: 23.15,
+  eleMas: 23.31,
+  critRate_: 0.0389,
+  critDMG_: 0.0777,
+  enerRech_: 0.0648,
+}
+/** A roll's value in a standard (a 5★ one: a tier's rolls count 4★ pieces' at 0.8 already) */
+export const kqmRollValue = (key: SubstatKey, standard?: KqmStandard) =>
+  (kqmTier(standard)?.highest ? KQM_SUBSTAT_MAX : KQM_SUBSTAT_ROLLS)[key]
 
 export interface KqmMains {
   sands: MainStatKey
@@ -56,8 +99,17 @@ export interface KqmMains {
 }
 /** Set piece counts: one set at 4, two at 2 (2+2), or none */
 export type KqmSets = Partial<Record<ArtifactSetKey, number>>
-/** The rolls placed freely, per substat (the fixed 2 of each are not in it) */
+/**
+ * The rolls placed freely, per substat: in KQMS on top of the fixed 2 of each; in a tier every
+ * roll the set has, its random lines' and upgrades' expected share included, a 4★ piece's counted
+ * at 0.8 (so fractional)
+ */
 export type KqmRolls = Partial<Record<SubstatKey, number>>
+/** A tier's piece (flower, plume, sands, goblet, circlet): its wanted lines and their upgrades */
+export interface KqmPiece {
+  lines: SubstatKey[]
+  ups: KqmRolls
+}
 /**
  * A 5★ +20 main stat's value, per main stat (`getMainStatValue(key, 5, 20)`); and for builds with
  * 4★ sets, which sets those are and a 4★ +16 main stat's values
@@ -89,18 +141,24 @@ export function kqmFourStarPieces(
  * KQMS for a build's artifact rarities: its substats' scale (the average of 1 a 5★ piece and 0.8
  * a 4★ one) and its distributed rolls (2 fewer a 4★ piece)
  */
-export function kqmRarity(
-  sets: KqmSets,
-  mainValues: KqmMainValues,
-  /** The standard's distributed rolls (KQMS: 20) */
-  budget = KQM_ROLLS
-) {
+export function kqmRarity(sets: KqmSets, mainValues: KqmMainValues) {
   const four = kqmFourStarPieces(sets, mainValues)
   return {
     four,
     subScale: (5 - four + KQM_FOUR_STAR_SCALE * four) / 5,
-    rolls: Math.max(0, budget - KQM_FOUR_STAR_ROLLS_LESS * four),
+    rolls: Math.max(0, KQM_ROLLS - KQM_FOUR_STAR_ROLLS_LESS * four),
   }
+}
+/** Which of the five pieces are 4★: the flower and plume first, then all but the 5★ off-piece */
+const fourStarSlots = (four: number, mains: KqmMains) => {
+  const off = mains.off ?? 'circlet'
+  return [
+    four >= 1,
+    four >= 2,
+    four >= 4 && off !== 'sands',
+    four >= 4 && off !== 'goblet',
+    four >= 4 && off !== 'circlet',
+  ]
 }
 
 const slotMains = (m: KqmMains): MainStatKey[] => [
@@ -110,26 +168,30 @@ const slotMains = (m: KqmMains): MainStatKey[] => [
   m.goblet,
   m.circlet,
 ]
-/** How many free rolls a substat may get with these main stats */
+/**
+ * How many free rolls a substat may get with these main stats: KQMS's 2 a piece; in a tier what a
+ * piece can hold of one stat (its line and every upgrade)
+ */
 export function kqmRollCaps(
   mains: KqmMains,
-  /** The standard's distributed rolls (KQMS: 20), for its per-piece cap */
-  budget = KQM_ROLLS
+  standard?: KqmStandard
 ): Record<SubstatKey, number> {
   const all = slotMains(mains)
+  const tier = kqmTier(standard)
+  const perPiece = tier ? tier.pieceRolls - 3 : KQM_PIECE_CAP
   return Object.fromEntries(
     allSubstatKeys.map((k) => [
       k,
-      (5 - all.filter((s) => s === k).length) * kqmPieceCap(budget),
+      (5 - all.filter((s) => s === k).length) * perPiece,
     ])
   ) as Record<SubstatKey, number>
 }
 export function cappedRolls(
   rolls: KqmRolls,
   mains: KqmMains,
-  budget = KQM_ROLLS
+  standard?: KqmStandard
 ): KqmRolls {
-  const caps = kqmRollCaps(mains, budget)
+  const caps = kqmRollCaps(mains, standard)
   const out: KqmRolls = {}
   for (const [k, n] of Object.entries(rolls) as [SubstatKey, number][])
     if (n > 0) out[k] = Math.min(n, caps[k])
@@ -138,24 +200,25 @@ export function cappedRolls(
 
 /** A build's artifact stats, as the solver reads them (`dyn`: fractions for % stats) */
 export function kqmStatValues(
-  build: { sets: KqmSets; mains: KqmMains; rolls: KqmRolls },
+  build: {
+    sets: KqmSets
+    mains: KqmMains
+    rolls: KqmRolls
+    standard?: KqmStandard
+  },
   mainValues: KqmMainValues
 ): Record<string, number> {
   const values: Record<string, number> = {}
   const { four, subScale } = kqmRarity(build.sets, mainValues)
-  for (const k of allSubstatKeys)
-    values[k] =
-      (KQM_FIXED_ROLLS + (build.rolls[k] ?? 0)) * subRoll(k) * subScale
-  // the 4★ pieces: the flower and plume first, then all but the 5★ off-piece
-  const off = build.mains.off ?? 'circlet'
+  if (kqmTier(build.standard))
+    for (const k of allSubstatKeys)
+      values[k] = (build.rolls[k] ?? 0) * kqmRollValue(k, build.standard)
+  else
+    for (const k of allSubstatKeys)
+      values[k] =
+        (KQM_FIXED_ROLLS + (build.rolls[k] ?? 0)) * subRoll(k) * subScale
   const slots = slotMains(build.mains)
-  const slotIsFour = [
-    four >= 1,
-    four >= 2,
-    four >= 4 && off !== 'sands',
-    four >= 4 && off !== 'goblet',
-    four >= 4 && off !== 'circlet',
-  ]
+  const slotIsFour = fourStarSlots(four, build.mains)
   slots.forEach((k, i) => {
     const main = slotIsFour[i]
       ? (mainValues.fourStarMains?.[k] ?? 0)
@@ -175,8 +238,8 @@ export interface KqmProblemSpec {
   mins: number[]
   /** The stats the damage or a requirement reads */
   scales: string[]
-  /** The artifact standard's distributed rolls (absent: KQMS's 20) */
-  rolls?: number
+  /** The artifact standard (absent: KQMS) */
+  standard?: KqmStandard
 }
 /** The rotation's damage and a member's requirements as a function of its artifacts */
 export interface KqmProblem {
@@ -201,8 +264,8 @@ export interface KqmProblem {
   nTerms: number
   mins: number[]
   scales: Set<string>
-  /** The artifact standard's distributed rolls (absent: KQMS's 20) */
-  rolls?: number
+  /** The artifact standard */
+  standard: KqmStandard
 }
 /** `precompute`'s read of a stat (one artifact slot, no initial value), as KQM compiles it */
 const STAT_READ = /\(b\[0\]\.values\["([^"]*)"\] \?\? 0\)/g
@@ -282,7 +345,7 @@ export function kqmProblem(spec: Omit<KqmProblemSpec, 'id'>): KqmProblem {
     nTerms,
     mins,
     scales: new Set(spec.scales),
-    rolls: kqmRollBudget(spec.rolls),
+    standard: kqmStandardOf(spec.standard),
   }
 }
 
@@ -335,8 +398,13 @@ export function placeRolls(
   given: KqmMains,
   mainValues: KqmMainValues,
   refine = true
-): { rolls: KqmRolls; score: KqmScore; mains: KqmMains } {
-  const rarity = kqmRarity(sets, mainValues, problem.rolls)
+): {
+  rolls: KqmRolls
+  score: KqmScore
+  mains: KqmMains
+  layout?: KqmPiece[]
+} {
+  const rarity = kqmRarity(sets, mainValues)
   // four 4★ pieces: each slot tried as the one 5★ off-piece, the best kept
   if (rarity.four >= 4 && !given.off) {
     let best: ReturnType<typeof placeRolls> | undefined
@@ -352,10 +420,13 @@ export function placeRolls(
     }
     return best!
   }
+  const tier = kqmTier(problem.standard)
+  if (tier)
+    return placeTierRolls(problem, sets, given, mainValues, tier, refine)
   const mains = given
   const budget = rarity.rolls
   const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * rarity.subScale
-  const caps = kqmRollCaps(mains, problem.rolls)
+  const caps = kqmRollCaps(mains)
   const subs = allSubstatKeys.filter(
     (k) => caps[k] > 0 && problem.scales.has(k)
   )
@@ -426,6 +497,331 @@ export function placeRolls(
   return { rolls, score, mains }
 }
 
+/** A tier's piece as the search sees it: what it can roll, how many upgrades, its scale */
+interface PieceSpec {
+  /** The substats it can have (not its main stat), in `allSubstatKeys` order */
+  eligible: SubstatKey[]
+  /** Upgrades landing on its wanted lines, and on any line at even odds */
+  wantedUps: number
+  randomUps: number
+  /** 0.8 for a 4★ piece */
+  scale: number
+  /** Pieces with the same `kind` and the same lines are interchangeable */
+  kind: string
+}
+function pieceSpecs(
+  sets: KqmSets,
+  mains: KqmMains,
+  mainValues: KqmMainValues,
+  tier: KqmTier
+): PieceSpec[] {
+  const four = fourStarSlots(kqmFourStarPieces(sets, mainValues), mains)
+  return slotMains(mains).map((main, i) => {
+    // a 4★ piece: 2 fewer upgrades (the random ones first), its rolls 0.8 of a 5★ one's
+    const ups = tier.pieceRolls - 4 - (four[i] ? KQM_FOUR_STAR_ROLLS_LESS : 0)
+    const wantedUps = Math.min(tier.ups, ups)
+    const eligible = allSubstatKeys.filter((k) => k !== main)
+    return {
+      eligible,
+      wantedUps,
+      randomUps: ups - wantedUps,
+      scale: four[i] ? KQM_FOUR_STAR_SCALE : 1,
+      kind: `${eligible.length < allSubstatKeys.length ? main : '-'}|${four[i]}`,
+    }
+  })
+}
+/**
+ * A piece's rolls per substat (`allSubstatKeys` order, its scale applied): its wanted lines with
+ * their upgrades, its random lines spread evenly over the substats it can still have, and its
+ * random upgrades a quarter on each line. `settled`: wanted lines or upgrades left unplaced are
+ * random too (as the finished build has them); while searching they count nothing yet.
+ */
+function pieceRolls(
+  piece: KqmPiece,
+  spec: PieceSpec,
+  tier: KqmTier,
+  into: Float64Array,
+  settled = false
+) {
+  into.fill(0)
+  const placedUps = Object.values(piece.ups).reduce((a, n) => a + (n ?? 0), 0)
+  const randomLines = settled ? 4 - piece.lines.length : 4 - tier.lines
+  const randomUps = spec.randomUps + (settled ? spec.wantedUps - placedUps : 0)
+  const perLine = 1 + randomUps / 4
+  const others = spec.eligible.length - piece.lines.length
+  const share = others > 0 ? (randomLines / others) * perLine : 0
+  for (const k of spec.eligible) {
+    const j = SUBSTAT_INDEX[k]
+    into[j] = piece.lines.includes(k)
+      ? (perLine + (piece.ups[k] ?? 0)) * spec.scale
+      : share * spec.scale
+  }
+  return into
+}
+const SUBSTAT_INDEX = Object.fromEntries(
+  allSubstatKeys.map((k, i) => [k, i])
+) as Record<SubstatKey, number>
+/** A tier's rolls per substat, from its pieces (see `KqmRolls`) */
+export function kqmTierRolls(
+  layout: readonly KqmPiece[],
+  sets: KqmSets,
+  mains: KqmMains,
+  mainValues: KqmMainValues,
+  standard: KqmStandard
+): KqmRolls {
+  const tier = kqmTier(standard)
+  if (!tier) return {}
+  const specs = pieceSpecs(sets, mains, mainValues, tier)
+  const sum = new Float64Array(allSubstatKeys.length)
+  const one = new Float64Array(allSubstatKeys.length)
+  layout.forEach((piece, i) => {
+    pieceRolls(piece, specs[i], tier, one, true)
+    for (let j = 0; j < sum.length; j++) sum[j] += one[j]
+  })
+  const rolls: KqmRolls = {}
+  allSubstatKeys.forEach((k, j) => {
+    if (sum[j] > 1e-12) rolls[k] = sum[j]
+  })
+  return rolls
+}
+
+/**
+ * Of a tier's rolls, those it chose: each wanted line's roll and the upgrades placed on it (a 4★
+ * piece's at 0.8). The rest are its random lines' and random upgrades'.
+ */
+export function kqmWantedRolls(
+  layout: readonly KqmPiece[],
+  sets: KqmSets,
+  mains: KqmMains,
+  mainValues: KqmMainValues,
+  standard: KqmStandard
+): KqmRolls {
+  const tier = kqmTier(standard)
+  if (!tier) return {}
+  const specs = pieceSpecs(sets, mains, mainValues, tier)
+  const rolls: KqmRolls = {}
+  layout.forEach((piece, i) => {
+    for (const k of piece.lines)
+      rolls[k] = (rolls[k] ?? 0) + (1 + (piece.ups[k] ?? 0)) * specs[i].scale
+  })
+  return rolls
+}
+
+/**
+ * A tier's rolls for these sets and main stats, piece by piece so that every piece is one the
+ * game can make: greedily the wanted line or upgrade (on a piece's wanted line) that helps most,
+ * the requirements first; then a wanted line swapped for another stat or an upgrade moved between
+ * a piece's lines, while that helps. Only stats the formulas read are wanted.
+ */
+function placeTierRolls(
+  problem: KqmProblem,
+  sets: KqmSets,
+  mains: KqmMains,
+  mainValues: KqmMainValues,
+  tier: KqmTier,
+  refine: boolean
+): {
+  rolls: KqmRolls
+  score: KqmScore
+  mains: KqmMains
+  layout: KqmPiece[]
+} {
+  const specs = pieceSpecs(sets, mains, mainValues, tier)
+  const layout: KqmPiece[] = specs.map(() => ({ lines: [], ups: {} }))
+  const n = allSubstatKeys.length
+  const value = allSubstatKeys.map((k) => kqmRollValue(k, problem.standard))
+  const column = allSubstatKeys.map((k) => problem.columnOf(k))
+  const wanted = allSubstatKeys.map(
+    (k) => column[SUBSTAT_INDEX[k]] >= 0 && problem.scales.has(k)
+  )
+  const current = specs.map((spec, i) =>
+    pieceRolls(layout[i], spec, tier, new Float64Array(n))
+  )
+  const stats = problem.statsOf(
+    kqmStatValues(
+      { sets, mains, rolls: {}, standard: problem.standard },
+      mainValues
+    )
+  )
+  const shift = (from: Float64Array, to: Float64Array) => {
+    for (let j = 0; j < n; j++) {
+      const c = column[j]
+      if (c >= 0 && to[j] !== from[j]) stats[c] += (to[j] - from[j]) * value[j]
+    }
+  }
+  for (const piece of current) shift(new Float64Array(n), piece)
+  let score = scoreAt(problem, stats)
+  const trial = new Float64Array(n)
+  /**
+   * The score with piece `i` changed to `piece` (the stats left as they were). A change whose
+   * stats were scored already in this step (`scored`: the same stat changes on another piece)
+   * reuses that score.
+   */
+  const tryPiece = (
+    i: number,
+    piece: KqmPiece,
+    scored: Map<string, KqmScore>
+  ) => {
+    pieceRolls(piece, specs[i], tier, trial)
+    let key = ''
+    for (let j = 0; j < n; j++)
+      if (column[j] >= 0)
+        key += `${Math.round((trial[j] - current[i][j]) * 1e9)},`
+    const known = scored.get(key)
+    if (known) return known
+    shift(current[i], trial)
+    const s = scoreAt(problem, stats)
+    shift(trial, current[i])
+    scored.set(key, s)
+    return s
+  }
+  const setPiece = (i: number, piece: KqmPiece, settled = false) => {
+    pieceRolls(piece, specs[i], tier, trial, settled)
+    shift(current[i], trial)
+    current[i].set(trial)
+    layout[i] = piece
+  }
+  const upsOf = (piece: KqmPiece) =>
+    Object.values(piece.ups).reduce((a, x) => a + (x ?? 0), 0)
+  const signature = (i: number, withUps: boolean) =>
+    `${specs[i].kind}|${layout[i].lines.join(',')}|${
+      withUps ? JSON.stringify(layout[i].ups) : upsOf(layout[i])
+    }`
+  // greedily: a wanted line, or an upgrade on one. Each try changes the stats in place and back
+  // (no new pieces: millions of tries a run); a change already scored in this step, the same one
+  // on another piece, is not scored again.
+  const readCols = allSubstatKeys.map((_, j) => wanted[j])
+  const upsUsed = layout.map(() => 0)
+  const randomLines = 4 - tier.lines
+  const perLine = specs.map((spec) => 1 + spec.randomUps / 4)
+  const eligibleIdx = specs.map((spec) =>
+    spec.eligible.map((k) => SUBSTAT_INDEX[k])
+  )
+  const hasLine = layout.map(() => new Uint8Array(n))
+  /** The random share of each line a piece's random lines can be, with `lines` wanted lines */
+  const shareOf = (i: number, lines: number) => {
+    const others = specs[i].eligible.length - lines
+    return others > 0 ? (randomLines / others) * perLine[i] : 0
+  }
+  /** Adds (`sign` 1) or takes back (-1) a wanted line of stat `j` on piece `i` */
+  const moveLine = (i: number, j: number, sign: number) => {
+    const lines = layout[i].lines.length
+    const before = shareOf(i, lines)
+    const after = shareOf(i, lines + 1)
+    const scale = specs[i].scale
+    for (const e of eligibleIdx[i]) {
+      if (!readCols[e] || hasLine[i][e]) continue
+      const c = column[e]
+      if (e === j) stats[c] += sign * (perLine[i] - before) * scale * value[e]
+      else if (after !== before)
+        stats[c] += sign * (after - before) * scale * value[e]
+    }
+  }
+  /** A line try's key: the stat, and what decides its other stats' share on that piece */
+  const lineKey = (i: number, j: number) => {
+    let mask = 0
+    if (randomLines > 0)
+      for (const e of eligibleIdx[i])
+        if (readCols[e] && !hasLine[i][e] && e !== j) mask |= 1 << e
+    const m = specs[i].eligible.length - layout[i].lines.length
+    return (
+      ((((mask * 16 + j) * 16 + m) * 8 + specs[i].randomUps) * 2 +
+        (specs[i].scale === 1 ? 0 : 1)) *
+      2
+    )
+  }
+  const upKey = (i: number, j: number) =>
+    (j * 2 + (specs[i].scale === 1 ? 0 : 1)) * 2 + 1
+  for (;;) {
+    let best: { i: number; j: number; up: boolean; score: KqmScore } | undefined
+    const scored = new Map<number, KqmScore>()
+    const consider = (i: number, j: number, up: boolean) => {
+      const key = up ? upKey(i, j) : lineKey(i, j)
+      let s = scored.get(key)
+      if (!s) {
+        const c = column[j]
+        if (up) stats[c] += specs[i].scale * value[j]
+        else moveLine(i, j, 1)
+        s = scoreAt(problem, stats)
+        if (up) stats[c] -= specs[i].scale * value[j]
+        else moveLine(i, j, -1)
+        scored.set(key, s)
+      }
+      if (!best || betterScore(s, best.score)) best = { i, j, up, score: s }
+    }
+    // (the wanted lines first, then their upgrades)
+    for (let i = 0; i < layout.length; i++)
+      if (layout[i].lines.length < tier.lines)
+        for (const j of eligibleIdx[i])
+          if (readCols[j] && !hasLine[i][j]) consider(i, j, false)
+    if (!best)
+      for (let i = 0; i < layout.length; i++)
+        if (upsUsed[i] < specs[i].wantedUps)
+          for (const k of layout[i].lines) consider(i, SUBSTAT_INDEX[k], true)
+    if (!best) break
+    const { i, j, up } = best
+    const k = allSubstatKeys[j]
+    const piece = layout[i]
+    if (up)
+      setPiece(i, {
+        lines: piece.lines,
+        ups: { ...piece.ups, [k]: (piece.ups[k] ?? 0) + 1 },
+      })
+    else setPiece(i, { lines: [...piece.lines, k], ups: piece.ups })
+    if (up) upsUsed[i]++
+    else hasLine[i][j] = 1
+    score = best.score
+  }
+  // a wanted line swapped for another stat (its upgrades with it), or an upgrade moved
+  for (let iter = 0; refine && iter < 40; iter++) {
+    let best: { i: number; piece: KqmPiece; score: KqmScore } | undefined
+    const seen = new Set<string>()
+    const scored = new Map<string, KqmScore>()
+    for (let i = 0; i < layout.length; i++) {
+      const sig = signature(i, true)
+      if (seen.has(sig)) continue
+      seen.add(sig)
+      const piece = layout[i]
+      for (const a of piece.lines) {
+        for (const b of specs[i].eligible) {
+          if (!wanted[SUBSTAT_INDEX[b]] || piece.lines.includes(b)) continue
+          const ups = { ...piece.ups }
+          const moved = ups[a] ?? 0
+          delete ups[a]
+          if (moved) ups[b] = moved
+          const c = { lines: piece.lines.map((k) => (k === a ? b : k)), ups }
+          const s = tryPiece(i, c, scored)
+          if (betterScore(s, best?.score ?? score))
+            best = { i, piece: c, score: s }
+        }
+        if (!piece.ups[a]) continue
+        for (const b of piece.lines) {
+          if (b === a) continue
+          const ups = { ...piece.ups, [a]: piece.ups[a]! - 1 }
+          ups[b] = (ups[b] ?? 0) + 1
+          if (!ups[a]) delete ups[a]
+          const c = { lines: piece.lines, ups }
+          const s = tryPiece(i, c, scored)
+          if (betterScore(s, best?.score ?? score))
+            best = { i, piece: c, score: s }
+        }
+      }
+    }
+    if (!best) break
+    setPiece(best.i, best.piece)
+    score = best.score
+  }
+  // what stayed unplaced (nothing more the build reads) is random, as the finished build has it
+  for (let i = 0; i < layout.length; i++) setPiece(i, layout[i], true)
+  score = scoreAt(problem, stats)
+  const rolls: KqmRolls = {}
+  allSubstatKeys.forEach((k, j) => {
+    const total = current.reduce((a, piece) => a + piece[j], 0)
+    if (total > 1e-12) rolls[k] = total
+  })
+  return { rolls, score, mains, layout }
+}
+
 /**
  * Main stat choices that score the same for this problem count once: a main stat nothing reads
  * (an HP% sands for an ATK scaler) is as good as any other unread one. The first of each kind is
@@ -450,6 +846,8 @@ export function distinctMains(
 export interface KqmSetSearch {
   mains: KqmMains
   rolls: KqmRolls
+  /** A tier's pieces */
+  layout?: KqmPiece[]
   score: KqmScore
   /** Builds tried (main stats screened and refined) */
   tried: number
@@ -481,9 +879,16 @@ export function searchSet(
       rolls,
       score,
       mains: placed,
+      layout,
     } = placeRolls(problem, sets, m, mainValues)
     if (!best || betterScore(score, best.score))
-      best = { mains: placed, rolls, score, tried: 0 }
+      best = {
+        mains: placed,
+        rolls,
+        ...(layout && { layout }),
+        score,
+        tried: 0,
+      }
   }
   if (best) best.tried = choices.length + kept.length
   return best

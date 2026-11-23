@@ -7,12 +7,7 @@ import type {
   KqmSetSearch,
   KqmSets,
 } from './search.js'
-import {
-  KQM_ROLLS,
-  kqmRollBudget,
-  MAINS_SEARCHED,
-  searchSet,
-} from './search.js'
+import { kqmStandardOf, MAINS_SEARCHED, searchSet } from './search.js'
 
 /*
  * The KQM searches' workers: a set's main stat and roll search (`searchSet`) runs in a pool of
@@ -188,13 +183,13 @@ export function queueKqmSetTasks(
 }
 
 /**
- * A problem's key in the workers: its id, and its distributed rolls when not KQMS's (a worker
- * keeps problems by key, so a run with another artifact standard never reuses one)
+ * A problem's key in the workers: its id, and its artifact standard when not KQMS (a worker keeps
+ * problems by key, so a run with another artifact standard never reuses one)
  */
-const keyOf = (problem: KqmProblemSpec) =>
-  kqmRollBudget(problem.rolls) === KQM_ROLLS
-    ? problem.id
-    : `${problem.id}|rolls ${kqmRollBudget(problem.rolls)}`
+const keyOf = (problem: KqmProblemSpec) => {
+  const standard = kqmStandardOf(problem.standard)
+  return standard === 'kqms' ? problem.id : `${problem.id}|${standard}`
+}
 
 /** Takes the next job for a worker: one whose problem it already has, else the first */
 function nextJob(slot: Slot): Job | undefined {

@@ -225,16 +225,34 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     for (const bad of [{ Xingqiu: 'NoSuchSword' }, {}, 'Xingqiu', undefined])
       expect(kqm(bad)?.lockedWeapons).toBeUndefined()
   })
-  it('keeps each member’s artifact rolls, dropping unknown members and invalid counts', () => {
-    const kqm = (memberRolls: unknown) =>
+  it('keeps each member’s artifact standard, dropping unknown members and standards', () => {
+    const kqm = (memberStandards: unknown) =>
       validateTeamOpt({
-        kqm: { refinement5: 1, refinement4: 5, memberRolls },
+        kqm: { refinement5: 1, refinement4: 5, memberStandards },
       })?.kqm
     expect(
-      kqm({ Xingqiu: 40, Bennett: 20, Nobody: 30, Xiangling: 2.5 })?.memberRolls
-    ).toEqual({ Xingqiu: 40, Bennett: 20 })
-    for (const bad of [{ Xingqiu: 61 }, { Xingqiu: -1 }, {}, 30, undefined])
-      expect(kqm(bad)?.memberRolls).toBeUndefined()
+      kqm({ Xingqiu: 'top', Bennett: 'kqms', Nobody: 'good', Xiangling: 40 })
+        ?.memberStandards
+    ).toEqual({ Xingqiu: 'top', Bennett: 'kqms' })
+    for (const bad of [{ Xingqiu: 'best' }, {}, 'top', undefined])
+      expect(kqm(bad)?.memberStandards).toBeUndefined()
+  })
+  it('reads a standard saved as placed rolls as the nearest tier', () => {
+    const kqm = (rolls: unknown, memberRolls?: unknown) =>
+      validateTeamOpt({
+        kqm: { refinement5: 1, refinement4: 5, rolls, memberRolls },
+      })?.kqm
+    expect(kqm(20)?.standard).toBeUndefined()
+    expect(kqm(25)?.standard).toBe('good')
+    expect(kqm(30)?.standard).toBe('great')
+    expect(kqm(40)?.standard).toBe('top')
+    expect(kqm(50)?.standard).toBe('top')
+    expect(kqm(23)?.standard).toBe('good')
+    expect(kqm(12)?.standard).toBeUndefined()
+    const mixed = kqm(30, { Xingqiu: 40, Bennett: 20, Nobody: 25 })
+    expect(mixed?.memberStandards).toEqual({ Xingqiu: 'top', Bennett: 'kqms' })
+    expect(mixed).not.toHaveProperty('rolls')
+    expect(mixed).not.toHaveProperty('memberRolls')
   })
   it('drops rotation times that are not durations', () => {
     for (const rotationTime of [-3, 0, 'x', Number.NaN, 9999])
