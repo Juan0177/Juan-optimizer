@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.35.2",
+    "date": "2026-11-23",
+    "fixed": [
+      "KQM share pictures name the artifact standard the builds used (Good, Great, Top, Perfect, Custom or Mixed) instead of always KQM Standards, and KQM's tooltips describe the new standards."
+    ]
+  },
+  {
     "version": "1.35.1",
     "date": "2026-11-23"
   },

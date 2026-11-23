@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.35.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.35.2) (2026-11-23)
+
+### Fixed
+
+- KQM share pictures name the artifact standard the builds used (Good, Great, Top, Perfect, Custom or Mixed) instead of always KQM Standards, and KQM's tooltips describe the new standards.
+
 ## [v1.35.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.35.0) (2026-11-23)
 
 ### New
