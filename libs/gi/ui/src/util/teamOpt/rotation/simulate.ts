@@ -9,11 +9,7 @@ import { kitFramesInto, kitModels } from './kits/index'
 import { NORMAL_START_DELAYS } from './normalDelays'
 import type { ParsedRotation, RotationAction } from './parse'
 import { rotationRandom, stratifiedRandoms } from './random'
-import {
-  type AuraTrace,
-  elementalReactions,
-  reactionEnablers,
-} from './reactions'
+import { type AuraTrace, elementalReactions } from './reactions'
 import type {
   ActionResult,
   ActionVariant,
@@ -1616,6 +1612,8 @@ export function simulateRotation({
       notes.add(
         `${characterKey}: high and low plunges and the collision hit are not modelled for this character; "${action.text}" played as the kit's usual plunge.`
       )
+    // "N3-4": the string carries on from its 3rd hit, whatever came before
+    if (action.kind === 'normal' && action.from) normalCounter = action.from - 1
     const kitResult = kit.act(
       edit?.hitDelay
         ? {

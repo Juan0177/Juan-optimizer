@@ -51,6 +51,29 @@ describe('walks (WK, gcsim walk)', () => {
   })
 })
 
+describe('a string carrying on (N3-4)', () => {
+  const normals = (text: string) =>
+    simulateRotation({
+      rotation: parse(text, ['Bennett']),
+      members: ['Bennett'],
+      elements: { Bennett: 'pyro' },
+      constellations: {},
+      repeats: 1,
+      keep: 'all',
+      reactions: { onHit() {} },
+    })
+      .hits.filter((h) => h.tag === 'normal')
+      .map((h) => h.label)
+  it('plays the hits it names, whatever came before; Nn still starts over after a Skill', () => {
+    expect(normals('Bennett N2 E N3-4')).toEqual(['N1', 'N2', 'N3', 'N4'])
+    expect(normals('Bennett N2 E N2')).toEqual(['N1', 'N2', 'N1', 'N2'])
+    expect(normals('Bennett N2-3 N2')).toEqual(['N2', 'N3', 'N4', 'N5'])
+    const r = parse('Bennett N3-4 N4-3', ['Bennett'])
+    expect(r.steps[0].actions.map((a) => [a.count, a.from])).toEqual([[2, 3]])
+    expect(r.warnings.join(' ')).toContain('runs forward')
+  })
+})
+
 describe("Chasca's bullets (CA[bullets=N], gcsim aim[bullets=N])", () => {
   const charged = (text: string, who: CharacterKey[] = ['Chasca']) => {
     const r = parse(text, who)

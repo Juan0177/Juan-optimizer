@@ -123,11 +123,11 @@ describe('Danica', () => {
     expect(e.start).toBeGreaterThan(entry.start)
     const windows = (path: string) =>
       sim.buffWindows.filter((w) => w.path.join('.') === `Danica.${path}`)
-    // Royal Guard from the Entry until the E's re-summon (22 frames in), then no form
+    // Royal Guard from the Entry until the E's re-summon (its Anchor lands 50 frames in), then no form
     const guard = windows('maidForm').filter((w) => w.value === 'defense')
     expect(guard).toHaveLength(1)
     expect(guard[0].start).toBe(entry.start)
-    expect(guard[0].end).toBe(e.start + 22)
+    expect(guard[0].end).toBe(e.start + 50)
     // the Q after it has no form to light: no Royal Guard ATK at any time
     expect(windows('burstEnhanced').some((w) => w.value === 'on')).toBe(false)
     // the Royal Aegis ends with the form (a 0-frame shield of the same kind)
@@ -136,7 +136,7 @@ describe('Danica', () => {
       .map((h) => [h.t, +h.path[2]])
     expect(shields).toEqual([
       [entry.start, 1500],
-      [e.start + 22, 0],
+      [e.start + 50, 0],
     ])
   })
 
@@ -420,5 +420,63 @@ describe('Danica', () => {
       'Bennett',
     ])
     expect(plain.notes.join(' ')).not.toContain('no entry action')
+  })
+
+  it('says why her Anchor ran out when a swap-in finds it gone, once per Anchor', () => {
+    const expired = (sim: ReturnType<typeof run>) =>
+      sim.notes.filter((n) => n.includes('Storm Anchor ran out'))
+    // no swap-in while it was out
+    const away = run('Danica E -> Bennett E W27 -> Danica N1', [
+      'Danica',
+      'Bennett',
+    ])
+    expect(expired(away)).toHaveLength(1)
+    expect(expired(away)[0]).toContain('wasn’t swapped in while it was out')
+    // a swap-in with Will to Cleanse not full (Bennett's Pyro hits don't fill it), then it ran out
+    const short = run(
+      'Danica E -> Bennett E -> Danica N1 -> Bennett W25 -> Danica N1',
+      ['Danica', 'Bennett']
+    )
+    expect(expired(short)).toHaveLength(1)
+    expect(expired(short)[0]).toContain('Will to Cleanse wasn’t full')
+    // refreshed in time: nothing to say
+    const kept = run('Danica E -> Odette E E -> Danica N1', [
+      'Danica',
+      'Odette',
+    ])
+    expect(expired(kept)).toEqual([])
+  })
+
+  it('on the field plays as a game recording: E, the Anchor string, five Purges, the Burst', () => {
+    const sim = run(
+      'Odette E E -> YaeMiko E E E -> Danica E N4 E N2 E N2 E N1 E N1 E Q W3',
+      ['Danica', 'Odette', 'YaeMiko']
+    )
+    expect(sim.warnings).toEqual([])
+    const press = sim.actions
+      .filter((a) => a.characterKey === 'Danica')
+      .map((a) => a.start)
+    const at = (label: RegExp) =>
+      sim.hits
+        .filter((h) => h.characterKey === 'Danica' && label.test(h.label ?? ''))
+        .map((h) => h.t)
+    const [e, , purge1, , purge2, , purge3, , , , purge5, q] = press
+    const anchor = at(/^Anchor N/)
+    // E: the Anchor lands at 50, the first Anchor N1 hit at 65
+    expect(at(/^Anchor Skill$/)[0] - e).toBe(50)
+    expect(anchor[0] - e).toBe(65)
+    // hit to hit: N1→N2 34, N2→N3 46, N3's second +5, N3→N4 25
+    expect(anchor.slice(0, 5).map((t, i) => t - (anchor[i - 1] ?? t))).toEqual([
+      0, 34, 46, 5, 20,
+    ])
+    // Purge lands at 33; after the 3rd (3 A4 stacks) the next string starts at N4, its hit at 99
+    const purges = at(/On-Field Skill E2/)
+    expect(purges).toHaveLength(5)
+    expect(purges[0] - purge1).toBe(33)
+    expect(purges[1] - purge2).toBe(33)
+    expect(anchor.find((t) => t > purges[2])! - purge3).toBe(99)
+    // the Burst usable 59 after the 5th Purge, its hits at +102/112/120/134/169
+    expect(q - purge5).toBe(59)
+    expect(at(/^Burst$/).map((t) => t - q)).toEqual([102, 112, 120, 134, 169])
   })
 })

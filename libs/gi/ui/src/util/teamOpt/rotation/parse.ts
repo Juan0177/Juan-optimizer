@@ -8,6 +8,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  * without spaces between them:
  *   E / tE  Elemental Skill, tapped          hE   Elemental Skill, held
  *   Q       Elemental Burst                  N1–N6  a Normal Attack string of that many hits
+ *   N3-4    the string carrying on: its 3rd to 4th hits (after an action that keeps the string)
  *   CA / C  Charged Attack                   P    Plunging Attack
  *   HP / LP  a high or low plunge (P: the kit's usual one); HP[collision] adds the hit on the way
  *                down (HP[collision=0.5]: on half of them, as gcsim's collision=rand()>0.5)
@@ -53,6 +54,11 @@ export interface RotationAction {
   stacks?: number
   /** Normal: how many hits of the string (N4 = 4); wait: seconds */
   count?: number
+  /**
+   * Normal: the hit of the string it starts at ("N3-4": the 3rd, to the 4th), when the string
+   * carries on (absent: where the string is, the 1st after anything but a Normal Attack)
+   */
+  from?: number
   /** Wait: a walk ("WK", gcsim's walk), not idle time */
   walk?: boolean
   /** Used only when ready ("E?", "Q?"): left out, not waited for, when it is not */
@@ -330,7 +336,7 @@ function parseActions(
     .map((word) => (SKILL_BURST_ALT.test(word) ? word : word.split('/')[0]))
     .join(' ')
   const token =
-    /\s*(?:(w)\s*((?:k\s*)?[\d.]+f?|k)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6])|(ca|c)(\d+)?(f)?(?:\[\s*(?:((?:beams|bullets)\s*=\s*\d+)|(cancel|early_cancel\s*=\s*1)|(weakspot(?:\s*=\s*1)?))\s*\])?|([hl])?(p)(\[\s*collision(?:\s*=\s*([\d.]+))?\s*\])?|(d)(\?)?|(j))/iy
+    /\s*(?:(w)\s*((?:k\s*)?[\d.]+f?|k)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6](?:-[1-6])?)|(ca|c)(\d+)?(f)?(?:\[\s*(?:((?:beams|bullets)\s*=\s*\d+)|(cancel|early_cancel\s*=\s*1)|(weakspot(?:\s*=\s*1)?))\s*\])?|([hl])?(p)(\[\s*collision(?:\s*=\s*([\d.]+))?\s*\])?|(d)(\?)?|(j))/iy
   let i = 0
   const s = expandRepeats(cleaned, warnings, who).trim()
   while (i < s.length) {
@@ -461,9 +467,23 @@ function parseActions(
         ...(optional && { optional: true }),
         ...(otherwise && { otherwise }),
       })
-    } else if (m[8])
-      actions.push({ kind: 'normal', count: Number(m[9]), text: raw })
-    else if (m[10] && (m[11] !== undefined || m[12])) {
+    } else if (m[8]) {
+      // "N3-4": the string carrying on from its 3rd hit to its 4th
+      const [first, last] = m[9].split('-').map(Number)
+      if (last === undefined)
+        actions.push({ kind: 'normal', count: first, text: raw })
+      else if (last >= first)
+        actions.push({
+          kind: 'normal',
+          count: last - first + 1,
+          from: first,
+          text: raw,
+        })
+      else
+        warnings.push(
+          `${who}: "${raw}": a string runs forward, as N3-4 (hits 3 to 4) (skipped)`
+        )
+    } else if (m[10] && (m[11] !== undefined || m[12])) {
       // (KQM's held Charged Attack: "C3F" spins 3 times, then its finisher)
       const spins = m[11] !== undefined ? Number(m[11]) : 1
       const most = characterKey && CHARGE_SPINS[characterKey]

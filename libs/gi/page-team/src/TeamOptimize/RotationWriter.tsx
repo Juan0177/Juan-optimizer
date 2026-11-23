@@ -3284,6 +3284,13 @@ function SyntaxSheet() {
       ),
     ],
     [
+      'N3-4',
+      t(
+        'teamOpt.writer.syntax.normalFrom',
+        'The string carrying on: its 3rd to 4th hits, after an action that keeps it going (N2 after a Skill starts over)'
+      ),
+    ],
+    [
       'hE[stacks=1]',
       t(
         'teamOpt.writer.syntax.stacks',
@@ -3334,7 +3341,13 @@ function SyntaxSheet() {
         'A group that many times (up to 20), as N5 CD four times'
       ),
     ],
-    ['W1.5 · W90f', t('teamOpt.writer.syntax.wait', 'Wait 1.5 s · 90 frames')],
+    [
+      'W1.5 · W90f',
+      t(
+        'teamOpt.writer.syntax.wait',
+        'Wait 1.5 s · 90 frames, from when the next action could start (gcsim’s wait)'
+      ),
+    ],
     [
       'WK · WK11f',
       t(
