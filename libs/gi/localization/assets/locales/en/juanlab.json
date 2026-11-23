@@ -140,6 +140,34 @@
     "entries": [
       {
         "date": "2026-11-23",
+        "title": "Update to Stellar Optimizer 1.37",
+        "summary": "Stellar Optimizer’s releases 1.37.0 to 1.37.2 arrive.",
+        "sections": [
+          {
+            "kind": "improved",
+            "items": [
+              "**Versions: Run all is always there**, so every version can run again even when they are all up to date.",
+              "**Faster team searches on the GPU**: a member’s next weapons are solved alongside, and teams with long rotations no longer fall back to the CPU."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Rotations**: a character’s buffs from their Skill or Burst only count when the rotation uses that Skill or Burst. A buff left on in the character’s own settings no longer adds damage to a rotation without it.",
+              "**Team optimize**: opening a grouped attack row no longer crashes the page on some imported teams."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**KQM versions: keep teammates’ gear**: in New version, tick it and the members shared with the original keep its builds; only the changed ones (another character, constellation or signature) are searched. Handy for C0 with signature vs C1 without.",
+              "The new texts are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-23",
         "title": "Update to Stellar Optimizer 1.36",
         "summary": "Stellar Optimizer’s releases 1.36.0 to 1.36.2 arrive.",
         "sections": [
