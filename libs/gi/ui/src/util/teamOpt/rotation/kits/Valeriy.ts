@@ -95,14 +95,28 @@ function special(hit: SimHit) {
     (hit.path[1] === 'mortarDmg' || hit.path[1] === 'shellDmg')
   )
 }
-function shells(c: SimContext, s: State, token: number) {
-  if (!s.burstActive || s.burstToken !== token) return
+/**
+ * The Burst's turret (dump SkillObj_Valeriy_Funnel): spawned 0.9 s into the cast, it waits 1 s;
+ * then its handler, for the Burst's 12 s + 0.5, fires a three-shell volley at once and every 2 s
+ * (not back to back, as kqmsim), each shell landing 0.15 s after it is fired
+ */
+const FUNNEL_SPAWN = 54
+const FUNNEL_DELAY = 60
+const VOLLEY_EVERY = 120
+const HANDLER_FRAMES = 750
+/**
+ * The Burst's Impact Momentum listener: put on the active character as the handler starts and
+ * again every 1 s (3 s each), the last at 12 s: it ends 15 s in
+ */
+const LISTENER_FRAMES = 900
+function volley(c: SimContext, s: State, token: number) {
+  if (s.burstToken !== token) return
   const [first, second] = rhythms[s.rhythm++ % rhythms.length]
   for (const delay of [0, first, first + second].map((d) =>
     Math.round((d + 0.15) * 60)
   ))
     c.at(delay, (at) => {
-      if (!s.burstActive || s.burstToken !== token) return
+      if (s.burstToken !== token) return
       at.hit(0, {
         path: ['burst', 'shellDmg'],
         tag: 'burst',
@@ -113,7 +127,17 @@ function shells(c: SimContext, s: State, token: number) {
         label: 'Burst (Tick)',
       })
     })
-  c.at(Math.round((first + second + 0.2) * 60), (at) => shells(at, s, token))
+}
+/** The turret's handler: the volleys, and the Burst's Impact Momentum window (its listener) */
+function funnel(c: SimContext, s: State, token: number) {
+  if (s.burstToken !== token) return
+  s.burstActive = true
+  s.burstMomentum = 0
+  for (let t = 0; t < HANDLER_FRAMES; t += VOLLEY_EVERY)
+    c.at(t, (at) => volley(at, s, token))
+  c.at(LISTENER_FRAMES, () => {
+    if (s.burstToken === token) s.burstActive = false
+  })
 }
 
 /** Direct-Fire Mortar: Point-Blank Bombardment (native specialChargeAttack: 43 / 67 frames) */
@@ -221,16 +245,11 @@ export const kit: KitModel = {
             icd: 'none',
             label: 'Burst',
           })
-          at.at(0, (after) => {
-            const token = ++s.burstToken
-            s.burstActive = true
-            s.burstMomentum = 0
-            shells(after, s, token)
-            after.atCharacter('Valeriy', 720, () => {
-              if (s.burstToken === token) s.burstActive = false
-            })
-          })
         })
+        const token = ++s.burstToken
+        c.atCharacter('Valeriy', FUNNEL_SPAWN, (at) =>
+          at.at(FUNNEL_DELAY, (handler) => funnel(handler, s, token))
+        )
         s.convertUntil = c.now + 60 + CONVERT_WINDOW
         return { frames: 60, cooldown: { key: 'burst', frames: 900 } }
       }
