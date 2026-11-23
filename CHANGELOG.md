@@ -4,6 +4,15 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.38.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.38.0) (2026-11-24)
+
+### Improved
+
+- Optimize team dialog redesigned: each member on one line with its sets, set effects, main stats and minimum ER (100% unless you set one), the inventory options side by side, and the weapons list opens at once.
+- Artifact sets dialog is simpler: one switch per set in alphabetical order, set effects turned on right in the set's row (which also lets the optimizer use that set), and the 2-piece/4-piece choices under Advanced.
+- Mixed builds (one or no set bonus) are always considered now: the optimizer keeps them only when they are better.
+- A member's Constraints button opens just its minimum stats.
+
 ## [v1.37.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.4) (2026-11-23)
 
 ### Fixed
