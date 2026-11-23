@@ -237,7 +237,11 @@
       "rankingFailed": "B's rankings failed: {{message}}"
     },
     "fragmentOpener": "{{name}}'s actions in the opener",
-    "fragmentOpenerTip": "{{name}} is in “First rotation only” too: what the entering member does there"
+    "fragmentOpenerTip": "{{name}} is in “First rotation only” too: what the entering member does there",
+    "optimizedB": "B plays a rotation found by Optimize rotation",
+    "optimizedBTip": "B’s rotation is no longer the swap’s: it is the one picked in Optimize rotation, with the same opener and timing. A stays as it is. Changing the swap (who leaves, who enters, the steps) goes back to the swap’s rotation.",
+    "optimizedBReset": "Back to the swap’s rotation",
+    "optimizeHint": "Looks for a better rotation for B. The best ones get their own builds as the comparison finds them: only {{name}} is searched, the teammates keep A’s builds. Use runs the comparison again with that rotation."
   },
   "changelog": {
     "title": "What’s new",
@@ -321,6 +325,7 @@
             "kind": "juanlab",
             "items": [
               "Every new text is in Italian too (220 texts).",
+              "**KQM Compare**: team B gets **Optimize rotation** too. The best rotations get builds as the comparison finds them (only the member entering is searched), and Use runs the comparison again with the rotation picked; the swap’s rotation is one click away.",
               "The **Feedback** button is back: it opens a GitHub issue and posts to JuanLab’s Discord.",
               "The home page and the footer invite you to JuanLab’s **Discord server**.",
               "**KQM Compare**: the member leaving can be in the opener too, and no more Rotation changed warning with a saved opener or timing."

@@ -744,6 +744,54 @@ describe('compareSwapKqm', () => {
     expect(snapshot(s)).toEqual(before)
   }, 300_000)
 
+  // (KQM Compare's Optimize rotation: B's rotation found by the search, Odette played first)
+  const OPTIMIZED =
+    'Odette E E -> Danica E -> Mitya E Q -> Danica Q -> Anastasya hE N2 Q N5 E E E N2'
+
+  it('plays B’s rotation from Optimize rotation in place of the swap’s', async () => {
+    const s = await setup()
+    const before = snapshot(s)
+    const timing = { edits: {} }
+    const swap = await compareSwapKqm({ ...argsOf(s), headlineOnly: true })
+    const out = await compareSwapKqm({
+      ...argsOf(s),
+      rotationB: { text: OPTIMIZED, timing },
+      headlineOnly: true,
+    })
+    expect(snapshot(s)).toEqual(before)
+    if ('error' in out || 'error' in swap) throw new Error('refused')
+    // B plays the rotation given, its opener the swap's; A is the same
+    expect(swap.rotationB.text).not.toBe(OPTIMIZED)
+    expect(out.rotationB).toEqual({ text: OPTIMIZED, opener: '', timing })
+    expect(out.b.rotation).toBe(OPTIMIZED)
+    expect(out.b.turn).toBeUndefined()
+    expect(out.a).toEqual(swap.a)
+    // its play is the new rotation's (Odette first: another order, not the swap's play)
+    expect(out.resultB.played?.rotationTime).toBeGreaterThan(0)
+    expect(out.resultB.played).not.toEqual(swap.resultB.played)
+    const savedBuilds = (s.saved.run.result as unknown as KqmResult).builds
+    for (const k of FIXED) expect(out.resultB.builds[k]).toEqual(savedBuilds[k])
+  }, 300_000)
+
+  it('gives only B’s builds, no rankings, when only the headline is asked', async () => {
+    const s = await setup()
+    for (const swapIn of [MITYA, { ...MITYA, weapon: 'auto', sets: 'auto' }] as const) {
+      const previews: Preview[] = []
+      const out = await compareSwapKqm({
+        ...argsOf(s),
+        swapIn,
+        headlineOnly: true,
+        onPreview: (p) => previews.push(p),
+      })
+      if ('error' in out) throw new Error(out.error)
+      expect(out.resultB.rankings).toEqual({})
+      expect(out.resultB.builds.Mitya).toBeTruthy()
+      expect(out.b.dpr).toBeGreaterThan(0)
+      // (the pick's comparison gives its headline before it stops; the search gives its builds)
+      expect(previews.length).toBeLessThanOrEqual(1)
+    }
+  }, 300_000)
+
   it('fails with a code the page can say in the user’s language', async () => {
     const s = await setup()
     const failure = await compareSwapKqm({

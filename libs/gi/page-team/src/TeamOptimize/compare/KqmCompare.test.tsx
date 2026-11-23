@@ -53,6 +53,8 @@ const mocks = vi.hoisted(() => {
   return {
     state,
     compare: vi.fn(),
+    /** Optimize rotation's button for team B, as last given its props */
+    search: [] as Record<string, unknown>[],
     /** The comparison card's data, as asked for (its context: the stats given) */
     cardData: vi.fn((_a: unknown, _b: unknown, ctx: { teamName: string }) => ({
       name: ctx.teamName,
@@ -125,6 +127,18 @@ vi.mock('../RotationWriter', () => ({
     opener: localStorage.getItem(`teamOptRotationOpener_${teamId}`) ?? '',
     timing: { edits: {} },
   }),
+  kqmRotationId: (teamId: string) => `${teamId}_kqm`,
+  useRotationSettings: () => ({
+    opener: '',
+    timing: { edits: {} },
+    frameData: { shared: 1 },
+  }),
+}))
+vi.mock('../RotationSearch', () => ({
+  RotationSearchButton: (props: Record<string, unknown>) => {
+    mocks.search.push(props)
+    return <span data-testid="rotation-search" />
+  },
 }))
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mocks.database,
@@ -331,6 +345,7 @@ vi.mock('../KqmMode', () => ({
 vi.mock('./compareSwapKqm', () => ({
   compareSwapKqm: mocks.compare,
   swapSettings: mocks.settings,
+  swapAttackStates: () => [{ owner: 'Mitya', state: 'wolf' }],
 }))
 
 const build = (weapon: string) => ({
@@ -372,6 +387,7 @@ afterEach(() => {
   mocks.compare.mockReset()
   mocks.replay.mockReset()
   mocks.results.length = 0
+  mocks.search.length = 0
   mocks.records.length = 0
   mocks.cardData.mockClear()
   mocks.outOfCombat.mockClear()
@@ -1251,6 +1267,76 @@ describe('KqmCompare: B’s KQM results', () => {
     expect(props['headingLevel']).toBe(4)
     expect(props['unfinished']).toBe(false)
     expect(props['preliminaryFinalLabel']).toBe('kqmCompare.results.readyLabel')
+  })
+
+  it('Optimize rotation for B: on its sandbox with its rotation; Use runs B with it, and it can go back', async () => {
+    withRun()
+    const out = outcome()
+    mocks.compare.mockResolvedValue(out)
+    await runOnce()
+    await screen.findByRole('table')
+    const props = mocks.search.at(-1)!
+    // (B's rotation, results and copy of the database; the frame data the page has)
+    expect(props['database']).toBe(out.sandbox)
+    expect(props['text']).toBe(TEXT)
+    expect(props['kqmResult']).toBe(out.resultB)
+    expect(props['kqmTeamOpt']).toBe(out.teamOptB)
+    expect(props['saved']).toEqual({
+      opener: '',
+      timing: { edits: {} },
+      frameData: { shared: 1 },
+    })
+    expect(
+      (props['names'] as { characterKey: string }[]).map((m) => m.characterKey)
+    ).toEqual(MEMBERS_B)
+    expect(props['disabled']).toBe(false)
+    expect(
+      (props['attackStates'] as { current: unknown }).current
+    ).toEqual([{ owner: 'Mitya', state: 'wolf' }])
+    // a rotation it found gets B's builds as the comparison finds them: its headline only
+    const confirm = props['confirm'] as (
+      text: string,
+      o: { isCancelled: () => boolean }
+    ) => Promise<unknown>
+    const calls = mocks.compare.mock.calls.length
+    await expect(
+      confirm('Odette E E -> Mitya E Q', { isCancelled: () => false })
+    ).resolves.toBe(out.resultB)
+    const confirmArgs = mocks.compare.mock.calls[calls][0]
+    expect(confirmArgs.rotationB).toEqual({
+      text: 'Odette E E -> Mitya E Q',
+      timing: { edits: {} },
+    })
+    expect(confirmArgs.headlineOnly).toBe(true)
+    expect(screen.queryByText('kqmCompare.optimizedB')).toBeNull()
+    // Use: the comparison again, B playing the rotation picked
+    await act(async () => {
+      ;(props['onUse'] as (text: string) => void)('Odette E E -> Mitya E Q')
+    })
+    await waitFor(() =>
+      expect(mocks.compare.mock.calls.at(-1)![0].headlineOnly).toBeUndefined()
+    )
+    const used = mocks.compare.mock.calls.at(-1)![0]
+    expect(used.rotationB).toEqual({
+      text: 'Odette E E -> Mitya E Q',
+      timing: { edits: {} },
+    })
+    expect(used.headlineOnly).toBeUndefined()
+    expect(await screen.findByText('kqmCompare.optimizedB')).toBeTruthy()
+    // (the result is current: not said to be for other settings)
+    expect(screen.queryByText('kqmCompare.staleResult')).toBeNull()
+    // back to the swap's rotation: run again without it
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'kqmCompare.optimizedBReset' })
+      )
+    })
+    await waitFor(() =>
+      expect(mocks.compare.mock.calls.at(-1)![0].rotationB).toBeUndefined()
+    )
+    await waitFor(() =>
+      expect(screen.queryByText('kqmCompare.optimizedB')).toBeNull()
+    )
   })
 
   it('announces the rankings’ end in the same status region that said their progress', async () => {
