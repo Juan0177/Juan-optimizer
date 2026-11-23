@@ -381,6 +381,11 @@ interface SwapArgs {
   openerFragment?: string
   /** KQM Theorycrafting's rotation timing (frame edits, swap time); absent: the team's saved one */
   timing?: RotationTimingSettings
+  /**
+   * Team B's rotation in place of the swap's: one Optimize rotation found for B, with the timing
+   * it was searched with. The opener stays the swap's; the swap is still checked as written.
+   */
+  rotationB?: { text: string; timing: RotationTimingSettings }
 }
 
 /** A swap that passed its checks: the team's keys, B's rotation, how the entering member is found */
@@ -402,6 +407,7 @@ function checkSwap({
   opener,
   fragment,
   openerFragment,
+  ...args
 }: SwapArgs): CheckedSwap | CompareSwapRefusal {
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const key = swapIn.key
@@ -423,7 +429,15 @@ function checkSwap({
       : { error: swapped.error }
   const search = searchOf(swapIn)
   if (!search) return { error: 'unsupported' }
-  return { keys, swapped, search }
+  // (B's rotation optimized: the entering member's turn is no longer the swap's)
+  const rotationB = args.rotationB
+  return {
+    keys,
+    swapped: rotationB
+      ? { ...swapped, text: rotationB.text, insertedTurn: undefined }
+      : swapped,
+    search,
+  }
 }
 
 /**
@@ -457,10 +471,12 @@ function teamB(args: SwapArgs, { keys, swapped, search }: CheckedSwap) {
   )
   const sandbox = sandboxOf(database, teamId, out, swapIn, teamOpt)
   // (the team's frame edits, each on its own action of B's rotation)
-  const timing = timingForSwap(
-    args.timing ?? readKqmRotation(database, teamId).timing,
-    swapped
-  )
+  const timing =
+    args.rotationB?.timing ??
+    timingForSwap(
+      args.timing ?? readKqmRotation(database, teamId).timing,
+      swapped
+    )
   const replayOf = (settings: TeamOpt) =>
     kqmReplayOf(
       sandbox,
@@ -543,6 +559,19 @@ export function swapSettings(args: SwapArgs):
 }
 
 /**
+ * A's run states (Wolf's Gravestone's uptime against the team's enemy, as KQM Theorycrafting ran
+ * it), the entering member's in the leaving member's place: B plays the fight A did
+ */
+export const swapAttackStates = (
+  resultA: KqmResult,
+  out: CharacterKey,
+  key: CharacterKey
+) =>
+  playedAttackStates(resultA.played)?.map((s) =>
+    s.owner === out ? { ...s, owner: key } : s
+  )
+
+/**
  * B's headline: both sides, and B's KQM result (its rankings not yet: `rankings` has none), with
  * B's sandbox for its results screen while the rankings are worked out
  */
@@ -574,15 +603,21 @@ export type CompareSwapOutcome = CompareSwapPreview
  */
 export async function compareSwapKqm({
   onStep,
-  isCancelled = () => false,
+  isCancelled: cancelledByCaller = () => false,
   onPreview,
+  headlineOnly = false,
   ...args
 }: SwapArgs & {
   onStep?: (s: KqmStep) => void
   isCancelled?: () => boolean
   /** B's headline, as soon as the entering member's build is found (before its rankings) */
   onPreview?: (preview: CompareSwapPreview) => void
+  /** Only B's builds, no rankings (Optimize rotation's own builds for a rotation it found) */
+  headlineOnly?: boolean
 }): Promise<CompareSwapOutcome | CompareSwapRefusal> {
+  // (only the headline: the run stops as soon as it is known)
+  let headline = false
+  const isCancelled = () => cancelledByCaller() || (headlineOnly && headline)
   const { gender, teamId, text, swapIn } = args
   const key = swapIn.key
   const checked = checkSwap(args)
@@ -631,14 +666,11 @@ export async function compareSwapKqm({
   let preview: KqmResult | undefined
   const previewed = (p: KqmResult) => {
     preview = p
+    headline = true
     // (a fixed member's build changed: the comparison fails at the end, no headline)
     if (onPreview && !changedBuild(p)) onPreview(viewOf(p))
   }
-  // A's run states (Wolf's Gravestone's uptime against the team's enemy, as KQM Theorycrafting
-  // ran it), the entering member's in the leaving member's place: B plays the fight A did
-  const attackStates = playedAttackStates(run.result.played)?.map((s) =>
-    s.owner === args.out ? { ...s, owner: key } : s
-  )
+  const attackStates = swapAttackStates(run.result, args.out, key)
   const common = {
     database: sandbox,
     teamId,
@@ -691,7 +723,8 @@ export async function compareSwapKqm({
         ...common,
         from: teammates,
         only: key,
-        rankOnly: true,
+        // (only the headline: no rankings at all)
+        rankOnly: !headlineOnly,
         onPreview: previewed,
       })
   } catch (e) {
@@ -700,7 +733,7 @@ export async function compareSwapKqm({
     if (!preview) return { error: 'cancelled' }
     result = preview
   }
-  if (isCancelled() && !preview) return { error: 'cancelled' }
+  if (cancelledByCaller() && !preview) return { error: 'cancelled' }
   if (!result)
     throw new CompareSwapFailure('noResult', 'KQM could not evaluate team B.')
   const changed = changedBuild(result)

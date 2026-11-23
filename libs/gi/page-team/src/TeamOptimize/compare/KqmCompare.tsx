@@ -20,6 +20,9 @@ import type {
   KqmResult,
   KqmSets,
   KqmStep,
+  RotationMember,
+  RotationTimingSettings,
+  RunAttackState,
   TeamData,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
@@ -68,7 +71,13 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { KqmResults } from '../KqmMode'
 import { MemberAvatar } from '../MemberAvatar'
-import { readKqmRotation } from '../RotationWriter'
+import type { RotationConfirm } from '../rotationConfirm'
+import { RotationSearchButton } from '../RotationSearch'
+import {
+  kqmRotationId,
+  readKqmRotation,
+  useRotationSettings,
+} from '../RotationWriter'
 import { useSimText } from '../simText'
 import {
   BetaBadge,
@@ -95,7 +104,7 @@ import { CompareCardButton } from './CompareCardButton'
 import { Overview } from './CompareOverview'
 import { compareFailureText } from './compareError'
 import type { CompareSwapPreview, Side, SwapIn } from './compareSwapKqm'
-import { compareSwapKqm } from './compareSwapKqm'
+import { compareSwapKqm, swapAttackStates } from './compareSwapKqm'
 import { srOnly, WarningLine } from './compareUi'
 import type { EnteringPassives, EnteringWeaponEnergy } from './EnteringSettings'
 import { EnteringSettings } from './EnteringSettings'
@@ -217,6 +226,14 @@ type RunState =
   | { type: 'error'; message: string }
 
 const PROGRESS_MS = 120
+
+/** Team B's rotation chosen in Optimize rotation, and the swap it was found for (`swapInputs`) */
+interface OptimizedRotationB {
+  text: string
+  /** The timing it was searched with (B's) */
+  timing: RotationTimingSettings
+  for: string
+}
 
 /**
  * Two plays of a rotation alike: the same time, each member's hits of each attack (however its buff
@@ -503,6 +520,9 @@ export default function KqmCompare({
 
   // the run
   const [state, setState] = useState<RunState>({ type: 'idle' })
+  /** B's rotation chosen in Optimize rotation (for the swap `for`): the comparison plays it */
+  const [optimizedRotationB, setOptimizedRotationB] =
+    useState<OptimizedRotationB>()
   const [step, setStep] = useState<KqmStep>()
   const job = useRef<{ cancelled: boolean }>()
   // leaving the tab cancels the run
@@ -585,8 +605,8 @@ export default function KqmCompare({
     !!out &&
     !!swapIn &&
     !!swapped?.ok
-  /** What a result is for: when these change, it is the previous settings' */
-  const inputs = JSON.stringify([
+  /** The swap's settings, B's rotation aside */
+  const swapInputs = JSON.stringify([
     saved?.savedAt,
     out,
     swapIn,
@@ -595,16 +615,28 @@ export default function KqmCompare({
     fragment,
     openerFragment,
   ])
+  /** B's rotation as Optimize rotation found it, while the swap is the one it was found for */
+  const optimizedB =
+    optimizedRotationB?.for === swapInputs ? optimizedRotationB : undefined
+  /** What a result is for: when these change, it is the previous settings' */
+  const inputsFor = (rotationB?: OptimizedRotationB) =>
+    JSON.stringify([swapInputs, rotationB?.text ?? ''])
+  const inputs = inputsFor(optimizedB)
 
-  const start = async () => {
+  /**
+   * Runs the comparison; `rotationB`: B's rotation from Optimize rotation (absent: the one in use,
+   * `null`: the swap's own)
+   */
+  const start = async (rotationB?: OptimizedRotationB | null) => {
     if (!canRun || !saved || !out || !swapIn) return
+    const playedB = rotationB === null ? undefined : (rotationB ?? optimizedB)
     // (KQM Theorycrafting may have saved another result meanwhile, in another tab: A is read
     // again, and confirmed again)
     if (savedRunFor(database, teamId)?.savedAt !== saved.savedAt) {
       setReread((n) => n + 1)
       return
     }
-    const runFor = inputs
+    const runFor = inputsFor(playedB)
     // (a run going on, its rankings included, is replaced; its B and sandbox dropped)
     if (job.current) job.current.cancelled = true
     const mine = { cancelled: false }
@@ -661,6 +693,9 @@ export default function KqmCompare({
         opener,
         fragment,
         openerFragment,
+        ...(playedB && {
+          rotationB: { text: playedB.text, timing: playedB.timing },
+        }),
         onStep,
         isCancelled: () => mine.cancelled,
         // (the summary as soon as B's build is known: the rankings follow)
@@ -788,6 +823,59 @@ export default function KqmCompare({
   const notPlayed = !!run && run.rotation !== 'played'
   /** The result shown is for settings changed since */
   const stale = state.type === 'done' && state.for !== inputs
+
+  // Optimize rotation for team B: on B's copy of the database, with B's rotation (its opener and
+  // timing), each rotation it finds given B's own builds as the comparison finds them (only the
+  // entering member searched, its teammates on A's builds)
+  const { frameData } = useRotationSettings(kqmRotationId(teamId))
+  const resultsB = state.type === 'done' ? state.resultsB : undefined
+  const attackStatesB = useRef<readonly RunAttackState[] | undefined>()
+  attackStatesB.current =
+    run && state.type === 'done'
+      ? swapAttackStates(run.result, state.out, state.in)
+      : undefined
+  const namesB: RotationMember[] = useMemo(
+    () =>
+      (resultsB?.members ?? []).map(({ characterKey }) => ({
+        characterKey,
+        name: nameOf(characterKey),
+      })),
+    [resultsB, nameOf]
+  )
+  const confirmB: RotationConfirm = async (rotation, { isCancelled }) => {
+    if (!saved || !out || !swapIn || !resultsB) return undefined
+    const found = await compareSwapKqm({
+      database,
+      teamId,
+      gender,
+      i18n: i18n as I18n,
+      saved,
+      out,
+      swapIn,
+      text,
+      opener,
+      fragment,
+      openerFragment,
+      rotationB: { text: rotation, timing: resultsB.rotation.timing },
+      headlineOnly: true,
+      isCancelled,
+    })
+    return 'error' in found ? undefined : found.resultB
+  }
+  const pickRotationB = (rotation: string) => {
+    if (!resultsB) return
+    const chosen = {
+      text: rotation,
+      timing: resultsB.rotation.timing,
+      for: swapInputs,
+    }
+    setOptimizedRotationB(chosen)
+    start(chosen)
+  }
+  const resetRotationB = () => {
+    setOptimizedRotationB(undefined)
+    start(null)
+  }
   // (while ranking: the rankings' own progress, from the headline to the end)
   const from = state.type === 'done' ? state.rankingFrom : 0
   const progress = ranking
@@ -1333,7 +1421,7 @@ export default function KqmCompare({
                       : `${titleId}-problem`
                 }
                 endIcon={<ArrowForwardIcon />}
-                onClick={start}
+                onClick={() => start()}
                 sx={{ ...giCtaSx, minHeight: 38, px: 2.25 }}
               >
                 {t('kqmCompare.run')}
@@ -1401,6 +1489,32 @@ export default function KqmCompare({
               <InfoTooltipInline title={t('kqmCompare.staleResultTip')} />
             </Box>
           )}
+          {optimizedB && state.for === inputs && (
+            <Box
+              role="status"
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1,
+                mb: 1,
+                fontSize: 13,
+                color: 'text.secondary',
+              }}
+            >
+              <Box component="span">{t('kqmCompare.optimizedB')}</Box>
+              <InfoTooltipInline title={t('kqmCompare.optimizedBTip')} />
+              <Button
+                size="small"
+                variant="text"
+                disabled={running || ranking}
+                onClick={resetRotationB}
+                sx={{ textTransform: 'none', minWidth: 0, px: 1 }}
+              >
+                {t('kqmCompare.optimizedBReset')}
+              </Button>
+            </Box>
+          )}
           <Overview
             a={state.a}
             b={state.b}
@@ -1439,6 +1553,37 @@ export default function KqmCompare({
               })}
               sx={{ mb: 0 }}
             />
+            {/* B's rotation searched with B's builds; the one picked is played by the comparison */}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 1,
+                mt: 1,
+              }}
+            >
+              <RotationSearchButton
+                teamId={teamId}
+                text={state.resultsB.rotation.text}
+                names={namesB}
+                kqmResult={state.resultsB.result}
+                kqmTeamOpt={state.resultsB.teamOpt}
+                attackStates={attackStatesB}
+                database={state.resultsB.database}
+                saved={{
+                  opener: state.resultsB.rotation.opener,
+                  timing: state.resultsB.rotation.timing,
+                  frameData,
+                }}
+                confirm={confirmB}
+                disabled={running || ranking || stale || kqmRunning}
+                onUse={pickRotationB}
+              />
+              <Typography sx={{ ...type.label, fontWeight: 400 }}>
+                {t('kqmCompare.optimizeHint', { name: nameOf(state.in) })}
+              </Typography>
+            </Box>
             {/* (announced by the status region above) */}
             {state.rankings === 'cancelled' && (
               <Typography sx={{ ...type.label, mt: 0.5 }}>

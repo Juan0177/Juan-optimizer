@@ -1,16 +1,18 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { TeamOpt } from '@genshin-optimizer/gi/db'
+import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   ErPrice,
+  FrameData,
   KqmResult,
   RotationCandidate,
   RotationEditKinds,
   RotationMember,
   RotationSearchProgress,
   RotationSearchResult,
+  RotationTimingSettings,
   RotationWordStep,
   RunAttackState,
 } from '@genshin-optimizer/gi/ui'
@@ -53,7 +55,11 @@ import { DialogHead } from './OptionTile'
 import { Arrow, mono } from './RotationInline'
 import { laneColor } from './RotationTimeline'
 import { kqmRotationId, useRotationSettings } from './RotationWriter'
-import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
+import {
+  kqmResultDps,
+  kqmRotationRun,
+  type RotationConfirm,
+} from './rotationConfirm'
 import { type FullSearchStage, fullRotationSearch } from './rotationSearchFull'
 import { kqmRollGains } from './TeamSensitivity'
 import { focusSx, insetSx, numSx, quickSx, Segmented, tokens, type } from './ui'
@@ -78,6 +84,23 @@ const erPrices = new WeakMap<
 >()
 
 /**
+ * Where a search plays its rotations, when not on the team as saved (KQM Compare's team B): its
+ * database copy, its rotation's opener and timing, and how a rotation found gets its own builds
+ */
+interface SearchContext {
+  /** Absent: the page's database */
+  database?: ArtCharDatabase
+  /** Absent: the KQM rotation's saved opener, timing and frame data */
+  saved?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
+  /** Absent: a KQM run of the team's settings (`kqmRotationRun`) */
+  confirm?: RotationConfirm
+}
+
+/**
  * The KQM tab's rotation search, from the rotation in the writer: thousands of rotations a change
  * or a few away, played with the KQM builds shown (`searchRotations`), the best offered to use
  */
@@ -91,6 +114,9 @@ export function RotationSearchButton({
   compact,
   disabled,
   attackStates,
+  database,
+  saved,
+  confirm,
 }: {
   teamId: string
   text: string
@@ -105,7 +131,7 @@ export function RotationSearchButton({
   /** On the rotation's line: a pill like its other settings */
   compact?: boolean
   disabled?: boolean
-}) {
+} & SearchContext) {
   const { t } = useTranslation('page_team')
   const [open, setOpen] = useState(false)
   const written = !!text.trim()
@@ -194,6 +220,9 @@ export function RotationSearchButton({
           kqmResult={kqmResult}
           kqmTeamOpt={kqmTeamOpt}
           attackStates={attackStates}
+          database={database}
+          saved={saved}
+          confirm={confirm}
           onClose={() => setOpen(false)}
           onUse={(chosen) => {
             onUse(chosen)
@@ -214,6 +243,9 @@ function RotationSearchDialog({
   attackStates,
   onClose,
   onUse,
+  database: givenDatabase,
+  saved: givenSaved,
+  confirm,
 }: {
   teamId: string
   seed: string
@@ -223,11 +255,13 @@ function RotationSearchDialog({
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
   onClose: () => void
   onUse: (text: string) => void
-}) {
+} & SearchContext) {
   const { t, i18n } = useTranslation('page_team')
-  const database = useDatabase()
+  const pageDatabase = useDatabase()
+  const database = givenDatabase ?? pageDatabase
   const { gender } = useDBMeta()
-  const saved = useRotationSettings(kqmRotationId(teamId))
+  const stored = useRotationSettings(kqmRotationId(teamId))
+  const saved = givenSaved ?? stored
   const [budget, setBudget] = useState<(typeof BUDGETS)[number]>(120)
   const [run, setRun] = useState<SearchRun>()
   const [running, setRunning] = useState(false)
@@ -297,6 +331,7 @@ function RotationSearchDialog({
       onThreads: setThreads,
       onConfirmed: (dps) =>
         setConfirmed({ total: Object.keys(dps).length, dps }),
+      confirm,
       onProgress: (p) => {
         if (p.round === 0) setYours((y) => y ?? p.seed)
         const now = Date.now()
@@ -428,16 +463,22 @@ function RotationSearchDialog({
       for (const c of best) {
         if (cancelled.current) break
         setConfirmed({ total: best.length, dps: { ...dps } })
-        const run = await kqmRotationRun({
-          database,
-          gender,
-          i18n,
-          teamId,
-          teamOpt: kqmTeamOpt,
-          text: c.text,
-          attackStates: attackStates?.current ?? undefined,
-          isCancelled: () => cancelled.current,
-        }).catch(() => undefined)
+        const isCancelled = () => cancelled.current
+        const states = attackStates?.current ?? undefined
+        const run = await (
+          confirm
+            ? confirm(c.text, { attackStates: states, isCancelled })
+            : kqmRotationRun({
+                database,
+                gender,
+                i18n,
+                teamId,
+                teamOpt: kqmTeamOpt,
+                text: c.text,
+                attackStates: states,
+                isCancelled,
+              })
+        ).catch(() => undefined)
         if (cancelled.current) break
         dps[c.text] = run ? kqmResultDps(run) : null
       }

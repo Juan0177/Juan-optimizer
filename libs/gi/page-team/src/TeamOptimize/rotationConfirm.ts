@@ -6,6 +6,18 @@ import type { i18n } from 'i18next'
 import { kqmRotationEnergyOf, teamCalculator } from './kqmEnergy'
 import { kqmReplayOf } from './useKqmRun'
 
+/**
+ * How a rotation a search found gets its own KQM builds (`kqmRotationRun`'s, unless given: KQM
+ * Compare's team B searches only its entering member, as the comparison does)
+ */
+export type RotationConfirm = (
+  text: string,
+  options: {
+    attackStates?: readonly RunAttackState[]
+    isCancelled: () => boolean
+  }
+) => Promise<KqmResult | undefined>
+
 /** A KQM result's team DPS, as the KQM tab shows it */
 export const kqmResultDps = (result: KqmResult) => {
   const time = result.played?.rotationTime

@@ -237,7 +237,11 @@
       "rankingFailed": "Classifiche di B non riuscite: {{message}}"
     },
     "fragmentOpener": "Azioni di {{name}} nell'apertura",
-    "fragmentOpenerTip": "{{name}} c'è anche in «Solo prima rotazione»: cosa fa chi entra lì"
+    "fragmentOpenerTip": "{{name}} c'è anche in «Solo prima rotazione»: cosa fa chi entra lì",
+    "optimizedB": "B gioca una rotazione trovata con Ottimizza rotazione",
+    "optimizedBTip": "La rotazione di B non è più quella dello scambio: è quella scelta in Ottimizza rotazione, con la stessa apertura e gli stessi tempi. A resta com'è. Cambiando lo scambio (chi esce, chi entra, i passaggi) si torna alla rotazione dello scambio.",
+    "optimizedBReset": "Torna alla rotazione dello scambio",
+    "optimizeHint": "Cerca una rotazione migliore per B. Le rotazioni migliori ricevono build proprie come nel confronto: si cerca solo {{name}}, i compagni tengono le build di A. «Usa» rifà il confronto con quella rotazione."
   },
   "changelog": {
     "title": "Novità",
@@ -321,6 +325,7 @@
             "kind": "juanlab",
             "items": [
               "Tutti i testi nuovi sono in italiano (220 testi).",
+              "**KQM Compare**: anche la squadra B ha **Ottimizza rotazione**. Le rotazioni migliori ricevono build come nel confronto (si cerca solo chi entra), e «Usa» rifà il confronto con la rotazione scelta; si può tornare a quella dello scambio.",
               "Torna il pulsante **Feedback**: crea una issue su GitHub e manda il messaggio sul Discord di JuanLab.",
               "Nella home e nel piè di pagina c'è l'invito al **server Discord** di JuanLab.",
               "**KQM Compare**: chi esce può comparire anche nell'apertura, e niente più avviso «rotazione cambiata» con un'apertura o dei tempi salvati."
