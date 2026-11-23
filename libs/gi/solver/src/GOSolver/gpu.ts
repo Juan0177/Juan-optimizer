@@ -677,6 +677,26 @@ function wlit(v: number): string | undefined {
   return s.startsWith('-') ? `(${s})` : s
 }
 
+/**
+ * Operands per expression: a longer one is computed in steps (same order), as compilers nest each
+ * operation of `a+b+c+…` (Metal allows 256 levels, and a team's damage can sum more attacks)
+ */
+const CHAIN = 64
+
+/** `ops` combined left to right by `join`, each step of `CHAIN` operands kept by `keep` */
+function chain(
+  ops: string[],
+  join: (a: string, b: string) => string,
+  keep: (e: string) => string
+): string {
+  let e = ops[0]
+  for (let j = 1; j < ops.length; j++) {
+    if (j % CHAIN === 0) e = keep(e)
+    e = join(e, ops[j])
+  }
+  return e
+}
+
 function shaderSource(
   nodes: OptNode[],
   mins: number[],
@@ -704,6 +724,11 @@ function shaderSource(
     if (got !== undefined) return got
     const ops = (n.operands as OptNode[]).map(visit)
     let e: string
+    const keep = (x: string) => {
+      const nm = `x${i++}`
+      lines.push(`let ${nm}:f32=${x};`)
+      return nm
+    }
     switch (n.operation) {
       case 'const': {
         const l = wlit(n.value)
@@ -715,14 +740,14 @@ function shaderSource(
         names.set(n, `r${col.get(n.path[1] as string)}`)
         return names.get(n)!
       case 'add':
-        e = ops.join('+')
+        e = chain(ops, (a, b) => `${a}+${b}`, keep)
         break
       case 'mul':
-        e = ops.join('*')
+        e = chain(ops, (a, b) => `${a}*${b}`, keep)
         break
       case 'min':
       case 'max':
-        e = ops.reduce((a, b) => `${n.operation}(${a},${b})`)
+        e = chain(ops, (a, b) => `${n.operation}(${a},${b})`, keep)
         break
       case 'res':
         e = `resf(${ops[0]})`
@@ -761,6 +786,11 @@ function shaderSource(
     if (got) return got
     const ops = (n.operands as OptNode[]).map(ivisit)
     let lo: string, hi: string
+    const keep = (x: string) => {
+      const w = `ws${ii++}`
+      ilines.push(`let ${w}:f32=${x};`)
+      return w
+    }
     switch (n.operation) {
       case 'const': {
         const l = wlit(n.value) ?? '0.0'
@@ -773,8 +803,16 @@ function shaderSource(
         return [`l${c}`, `h${c}`]
       }
       case 'add':
-        lo = ops.map((o) => o[0]).join('+')
-        hi = ops.map((o) => o[1]).join('+')
+        lo = chain(
+          ops.map((o) => o[0]),
+          (a, b) => `${a}+${b}`,
+          keep
+        )
+        hi = chain(
+          ops.map((o) => o[1]),
+          (a, b) => `${a}+${b}`,
+          keep
+        )
         break
       case 'mul': {
         // left to right, as the scalar code: [a, b]·[c, d] spans its corners' products
@@ -793,8 +831,16 @@ function shaderSource(
       }
       case 'min':
       case 'max':
-        lo = ops.map((o) => o[0]).reduce((x, y) => `${n.operation}(${x},${y})`)
-        hi = ops.map((o) => o[1]).reduce((x, y) => `${n.operation}(${x},${y})`)
+        lo = chain(
+          ops.map((o) => o[0]),
+          (x, y) => `${n.operation}(${x},${y})`,
+          keep
+        )
+        hi = chain(
+          ops.map((o) => o[1]),
+          (x, y) => `${n.operation}(${x},${y})`,
+          keep
+        )
         break
       case 'res':
         // decreasing
@@ -1017,3 +1063,5 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
 }
 `
 }
+
+export const testing = { shaderSource }

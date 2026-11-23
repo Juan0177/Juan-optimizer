@@ -464,6 +464,11 @@ const QUICK_FROM_BUILDS = 5e9
 const QUICK_FROM_BUILDS_CPU = 1e8
 /** Team Optimize's searches go to the GPU from this many builds (`GOSolver`'s `gpuMinTotal`) */
 export const TEAM_GPU_MIN_TOTAL = 2_000_000
+/**
+ * A member's weapons solved at once, on the GPU: each solve mostly waits (its worker preparing the
+ * problem, the browser compiling its shader), so the next ones overlap that instead of queuing
+ */
+const PARALLEL_SOLVES = 3
 /** Forgets every solve done (tests; or to measure a run from scratch) */
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
@@ -1538,17 +1543,13 @@ export async function optimizeTeam({
           )
             best = { value: top.current, weaponId: top.weapon.id }
         }
-        for (const [w, { weapon, problem }] of candidates.entries()) {
-          if (isCancelled()) throw new TeamOptCancelled()
-          const weaponStep: TeamOptStep =
-            weaponChoices.length > 1
-              ? { ...step, weapon: w + 1, weapons: weaponChoices.length }
-              : step
-          if (weaponChoices.length > 1 && w) await onStep?.(weaponStep)
-          if (!problem) continue
-          const { objective, constraints } = problem
-          // only a build that beats the floor is of interest: it also prunes the search
-          const beat = beatOf(floor)
+        /**
+         * A candidate weapon's place in the loop: none (it breaks a requirement), solved with the
+         * members whose Energy Recharge requirement it changes (`affected`), or solved on its own
+         */
+        const plan = (c: (typeof candidates)[number]) => {
+          const { weapon, problem } = c
+          if (!problem) return undefined
           // The other members whose Energy Recharge requirement this weapon changes (it is an
           // energy weapon, or it replaces one)
           const needWith = teamEnergyNeeds(
@@ -1571,7 +1572,7 @@ export async function optimizeTeam({
                 !unmetBefore().has(m.characterKey)
             )
           )
-            continue
+            return undefined
           const affected = order.filter((m) => changes.includes(m))
           // a weapon that leaves another member's requirement unmet (one it met) is not one, unless
           // that member is re-optimized with it below (the energy it gives changes the requirement)
@@ -1582,17 +1583,56 @@ export async function optimizeTeam({
                 !affected.some((m) => m.characterKey === key)
             )
           )
-            continue
-          const input = {
-            characterKey,
-            arts,
-            objective,
-            constraints: Number.isFinite(beat)
-              ? [...constraints, { value: objective, min: beat }]
-              : constraints,
-            exclusion: optConfig.artSetExclusion,
-            mainStatAssumptionLevel,
+            return undefined
+          return { problem, needWith, affected }
+        }
+        const plans = candidates.map(plan)
+        // only a build that beats the floor is of interest: it also prunes the search
+        const inputFor = (
+          { objective, constraints }: Problem,
+          beat: number
+        ): TeamOptSolveInput => ({
+          characterKey,
+          arts,
+          objective,
+          constraints: Number.isFinite(beat)
+            ? [...constraints, { value: objective, min: beat }]
+            : constraints,
+          exclusion: optConfig.artSetExclusion,
+          mainStatAssumptionLevel,
+        })
+        // The next weapons solved on their own start early, above the floor known then: a floor
+        // only prunes, so each finds what it would have found later, and is then held to the
+        // floor reached by its turn (as when solved one after another)
+        const parallel = optimizerGpuSupported() ? PARALLEL_SOLVES : 1
+        const early = new Map<number, ReturnType<TeamOptSolver>>()
+        const startEarly = (from: number) => {
+          for (
+            let j = from + 1;
+            j < candidates.length && j < from + parallel;
+            j++
+          ) {
+            const p = plans[j]
+            if (!p || p.affected.length || early.has(j)) continue
+            const solving = solve(inputFor(p.problem, beatOf(floor)))
+            // (a run cancelled meanwhile stops it: nobody waits for it then)
+            solving.catch(() => {})
+            early.set(j, solving)
           }
+        }
+        for (const [w, { weapon }] of candidates.entries()) {
+          if (isCancelled()) throw new TeamOptCancelled()
+          const weaponStep: TeamOptStep =
+            weaponChoices.length > 1
+              ? { ...step, weapon: w + 1, weapons: weaponChoices.length }
+              : step
+          if (weaponChoices.length > 1 && w) await onStep?.(weaponStep)
+          const p = plans[w]
+          if (!p) continue
+          const { problem, needWith, affected } = p
+          const { constraints } = problem
+          const beat = beatOf(floor)
+          const input = inputFor(problem, beat)
           if (affected.length) {
             // What the weapon is worth to the team is known once the members whose requirement it
             // changes are re-optimized with it, along with this one (in order, each taking what it
@@ -1635,7 +1675,9 @@ export async function optimizeTeam({
             }
             continue
           }
-          const result = await solve(input)
+          startEarly(w)
+          const result = await (early.get(w) ?? solve(input))
+          early.delete(w)
           if (isCancelled()) throw new TeamOptCancelled()
           if (result && result.value >= beat) {
             best = { ...result, weaponId: weapon.id }

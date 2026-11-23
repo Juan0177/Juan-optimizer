@@ -10,14 +10,17 @@ import type { OptProblemInput, Setup } from '../type.js'
  * Dominance pruning is skipped when plotting: an artifact dominated by `topN` others can
  * still be part of the best build at some plot value.
  */
-export function preprocess({
-  plotBase,
-  optimizationTarget,
-  arts,
-  topN,
-  exclusion,
-  constraints,
-}: OptProblemInput): Setup {
+export function preprocess(
+  {
+    plotBase,
+    optimizationTarget,
+    arts,
+    topN,
+    exclusion,
+    constraints,
+  }: OptProblemInput,
+  pruneArtRange = true
+): Setup {
   constraints = constraints.filter((x) => x.min > Number.NEGATIVE_INFINITY)
 
   let nodes = [...constraints.map((x) => x.value), optimizationTarget]
@@ -37,7 +40,7 @@ export function preprocess({
     exclusion,
     {
       reaffine: true,
-      pruneArtRange: true,
+      pruneArtRange,
       pruneNodeRange: true,
       pruneOrder: true,
     }

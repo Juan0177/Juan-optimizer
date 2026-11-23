@@ -1660,7 +1660,9 @@
       "undoSwap": "Tieni questo membro",
       "keptTag": "Gear compagni fisso",
       "keepTeammates": "Tieni fisso il gear dei compagni",
-      "keepTeammatesHint": "I membri in comune con l'originale tengono le sue build (arma, set, statistiche): si ricalcolano solo quelli cambiati. Esegui prima l'originale."
+      "keepTeammatesHint": "I membri in comune con l'originale tengono le sue build (arma, set, statistiche): si ricalcolano solo quelli cambiati. Esegui prima l'originale.",
+      "allRun": "Tutte eseguite con queste impostazioni",
+      "runEvery": "Esegui tutte"
     }
   },
   "tcNoOptimize": {

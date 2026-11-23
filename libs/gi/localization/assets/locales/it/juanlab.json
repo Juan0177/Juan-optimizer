@@ -140,6 +140,34 @@
     "entries": [
       {
         "date": "2026-11-23",
+        "title": "Aggiornamento a Stellar Optimizer 1.37",
+        "summary": "Arrivano le versioni da 1.37.0 a 1.37.2 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "improved",
+            "items": [
+              "**Versioni: Esegui tutte c’è sempre**, così puoi rieseguire ogni versione anche quando sono tutte aggiornate.",
+              "**Ricerche di squadra più veloci sulla GPU**: le armi successive di un membro si calcolano insieme, e le squadre con rotazioni lunghe non ripiegano più sulla CPU."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Rotazioni**: i buff di un personaggio legati alla sua Abilità o al suo Tripudio contano solo se la rotazione li usa. Un buff lasciato attivo nelle impostazioni del personaggio non aggiunge più danni a una rotazione che non lo attiva.",
+              "**Ottimizza squadra**: aprire una riga di attacchi raggruppati non manda più in crash la pagina con alcune squadre importate."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Versioni KQM: gear dei compagni fisso**: in Nuova versione spunta l’opzione e i membri in comune con l’originale tengono le sue build; si ricalcolano solo quelli cambiati (altro personaggio, costellazione o signature). Utile per confrontare C0 con signature e C1 senza.",
+              "I nuovi testi sono anche in italiano."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-23",
         "title": "Aggiornamento a Stellar Optimizer 1.36",
         "summary": "Arrivano le versioni da 1.36.0 a 1.36.2 di Stellar Optimizer.",
         "sections": [
