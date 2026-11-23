@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.36.1",
+    "date": "2026-11-23",
+    "fixed": [
+      "Cyno's C1: a Judication now gives his Normal Attack SPD bonus on its own, without his Burst, as in the game; and Together We Rise passes once, to the first character switched in after him, who keeps it until it ends."
+    ]
+  },
+  {
     "version": "1.36.0",
     "date": "2026-11-23",
     "new": [

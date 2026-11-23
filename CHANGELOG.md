@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.36.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.1) (2026-11-23)
+
+### Fixed
+
+- Cyno's C1: a Judication now gives his Normal Attack SPD bonus on its own, without his Burst, as in the game; and Together We Rise passes once, to the first character switched in after him, who keeps it until it ends.
+
 ## [v1.36.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.0) (2026-11-23)
 
 ### New
