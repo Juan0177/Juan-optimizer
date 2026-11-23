@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.37.3",
+    "date": "2026-11-23",
+    "fixed": [
+      "Valeriy's Burst fires 21 shells, starting about 2 s after it's cast, as in the game (it fired too many, too soon). Its Impact Momentum gain starts with its turret too."
+    ]
+  },
+  {
     "version": "1.37.2",
     "date": "2026-11-23",
     "fixed": [

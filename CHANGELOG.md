@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.37.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.3) (2026-11-23)
+
+### Fixed
+
+- Valeriy's Burst fires 21 shells, starting about 2 s after it's cast, as in the game (it fired too many, too soon). Its Impact Momentum gain starts with its turret too.
+
 ## [v1.37.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.2) (2026-11-23)
 
 ### Fixed
