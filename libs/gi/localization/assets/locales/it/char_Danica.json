@@ -9,5 +9,5 @@
   "a4Cond": "E2 in campo usata in forma Pulizie (cariche di VEL d'attacco)",
   "c2ToastCond": "Carica di \"Toast\" consumata da una reazione di Astroconduzione",
   "c2SelfToastCond": "Cariche di \"Toast\" che Danica consuma col suo colpo di Astroconduzione (Pulizie, fino a 2)",
-  "c2DecreeDmg": "E2 in campo con Decreto delle pulizie (una volta per combattimento, 150%)"
+  "c2DecreeDmg": "E2 in campo con Decreto delle pulizie (non di nuovo finché dura l'Ancora, 150%)"
 }
