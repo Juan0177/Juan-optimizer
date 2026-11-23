@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.34.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.3) (2026-11-23)
+
+### Improved
+
+- Iansan: her Kinetic Energy Scale now restores Nightsoul points from the on-field member's movement, as in gcsim. Each action counts as 6 m of movement unless you write [movement=N] after it ([movement=0] for none), so her Burst's ATK bonus no longer drains away during a normal rotation.
+
 ## [v1.34.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.1) (2026-11-23)
 
 ### Fixed

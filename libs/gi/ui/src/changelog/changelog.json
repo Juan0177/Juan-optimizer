@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.34.3",
+    "date": "2026-11-23",
+    "improved": [
+      "Iansan: her Kinetic Energy Scale now restores Nightsoul points from the on-field member's movement, as in gcsim. Each action counts as 6 m of movement unless you write [movement=N] after it ([movement=0] for none), so her Burst's ATK bonus no longer drains away during a normal rotation."
+    ]
+  },
+  {
     "version": "1.34.2",
     "date": "2026-11-23"
   },
