@@ -15,7 +15,8 @@ import {
 function run(
   text: string,
   members: CharacterKey[],
-  cons: Partial<Record<CharacterKey, number>> = {}
+  cons: Partial<Record<CharacterKey, number>> = {},
+  repeats = 1
 ) {
   return simulateRotation({
     rotation: parseRotation(
@@ -25,7 +26,7 @@ function run(
     members,
     elements: Object.fromEntries(members.map((k) => [k, getCharEle(k)])),
     constellations: cons,
-    repeats: 1,
+    repeats,
     keep: 'all',
   })
 }
@@ -445,6 +446,60 @@ describe('Danica', () => {
       'Odette',
     ])
     expect(expired(kept)).toEqual([])
+  })
+
+  // (dump Avatar_Danica_Constellation_2: UNIQUE_Danica_C2_EntryReady from entering combat until
+  // its Will to Protect)
+  it('C2: her first swap-in of the fight plays Will to Protect with no Anchor out or Will to Cleanse, once', () => {
+    // (Bennett's Pyro hits never fill Will to Cleanse: no later Will to Protect at C0 rules)
+    const members: CharacterKey[] = ['Danica', 'Bennett']
+    const text = 'Bennett E -> Danica Q W2 -> Bennett E -> Danica W1'
+    const entries = (sim: ReturnType<typeof run>) =>
+      sim.actions.filter(
+        (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+      )
+    expect(entries(run(text, members))).toEqual([])
+    const sim = run(text, members, { Danica: 2 }, 2)
+    expect(sim.warnings).toEqual([])
+    const [entry, ...later] = entries(sim)
+    expect(later).toEqual([])
+    const swapIn = sim.actions.find(
+      (a) => a.characterKey === 'Danica' && a.text === 'Q'
+    )!
+    expect(entry.start).toBeLessThan(swapIn.start)
+    const guard = sim.buffWindows.filter(
+      (w) => w.path.join('.') === 'Danica.maidForm' && w.value === 'defense'
+    )
+    expect(guard[0].start).toBe(entry.start)
+    const anchor = sim.buffWindows.find(
+      (w) => w.path.join('.') === 'Danica.anchor' && w.value === 'on'
+    )!
+    expect(anchor.start).toBe(entry.start)
+    const entryHits = sim.hits.filter(
+      (h) => h.path.join('.') === 'skill.entryDmg'
+    )
+    expect(entryHits.map((h) => h.t)).toEqual([entry.start + 42])
+    expect(sim.notes.join(' ')).toContain(
+      'her first swap-in of the fight plays Will to Protect'
+    )
+  })
+
+  it('C2: that first swap-in also ends Maid: Cleaner for Royal Guard', () => {
+    const members: CharacterKey[] = ['Danica', 'Kaeya', 'Lisa']
+    const text = 'Danica E N4 E -> Kaeya E -> Danica Q W2'
+    const form = (sim: ReturnType<typeof run>, value: string) =>
+      sim.buffWindows.filter(
+        (w) => w.path.join('.') === 'Danica.maidForm' && w.value === value
+      )
+    const c0 = run(text, members)
+    expect(c0.actions.some((a) => a.text === 'Entry')).toBe(false)
+    expect(form(c0, 'defense')).toEqual([])
+    const sim = run(text, members, { Danica: 2 })
+    const entry = sim.actions.find(
+      (a) => a.characterKey === 'Danica' && a.text === 'Entry'
+    )!
+    expect(form(sim, 'battle')[0].end).toBe(entry.start)
+    expect(form(sim, 'defense')[0].start).toBe(entry.start)
   })
 
   it('on the field plays as a game recording: E, the Anchor string, five Purges, the Burst', () => {
