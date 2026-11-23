@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.37.2",
+    "date": "2026-11-23",
+    "fixed": [
+      "Rotations: a character's buffs from their Skill or Burst now count only when the rotation uses that Skill or Burst. Before, a buff left on in the character's own settings could apply to a rotation without it, so some teams showed more damage than they would deal."
+    ]
+  },
+  {
     "version": "1.37.1",
     "date": "2026-11-23"
   },

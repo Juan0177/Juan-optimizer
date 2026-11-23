@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.37.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.2) (2026-11-23)
+
+### Fixed
+
+- Rotations: a character's buffs from their Skill or Burst now count only when the rotation uses that Skill or Burst. Before, a buff left on in the character's own settings could apply to a rotation without it, so some teams showed more damage than they would deal.
+
 ## [v1.37.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.0) (2026-11-23)
 
 ### Improved
