@@ -1,13 +1,13 @@
 # JuanLab: avvisa su Discord (#commit-stellar) quando Stellar Optimizer ha commit nuovi. Non unisce niente:
 # il sync resta quello a mano di juanlab-pages.yml.
-# - Ogni 2 ore, e a mano (Actions > "JuanLab - avvisi commit di Stellar" > Run workflow).
+# - Ogni ora (GitHub può ritardare un giro programmato), e a mano (Actions > "JuanLab - avvisi commit di Stellar" > Run workflow).
 # - Ogni commit è annunciato una volta: l'ultimo annunciato resta nella cache delle Actions.
 # - Serve il secret STELLAR_DISCORD_WEBHOOK (l'URL del webhook del canale); senza, non invia niente.
 name: JuanLab - avvisi commit di Stellar
 
 on:
   schedule:
-    - cron: '23 */2 * * *'
+    - cron: '23 * * * *'
   workflow_dispatch:
 
 permissions:
