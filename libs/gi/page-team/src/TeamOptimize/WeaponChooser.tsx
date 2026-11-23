@@ -403,11 +403,17 @@ export function WeaponGroup({
   setWeaponEnergy,
   virtual = false,
   tooFew,
+  minTicked,
+  note,
   sourceOf,
   onRefinement,
   visible,
   selectionCounts,
 }: {
+  /** Fewer ticked than this shows `tooFew` (default: one per member, KQM's one) */
+  minTicked?: number
+  /** A line under the header */
+  note?: ReactNode
   selectionCounts?: { allowed: number; total: number }
   /** Only the first rows are rendered (the rest come in later batches) */
   visible?: number
@@ -439,7 +445,7 @@ export function WeaponGroup({
   const ticked =
     selectionCounts?.allowed ??
     weapons.filter((w) => !excluded.has(w.id)).length
-  const tooFewTicked = ticked < (virtual ? 1 : members.length)
+  const tooFewTicked = ticked < (minTicked ?? (virtual ? 1 : members.length))
   return (
     <Box component="section">
       <Box
@@ -496,6 +502,7 @@ export function WeaponGroup({
         </Typography>
         {!virtual && <AddWeaponButton type={type} />}
       </Box>
+      {note && <Box sx={{ ...typo.label, fontWeight: 400, mb: 1.5 }}>{note}</Box>}
       {tooFewTicked && (
         <Box
           sx={{

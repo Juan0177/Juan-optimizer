@@ -74,6 +74,53 @@ describe('candidate set effects in the rotation', () => {
   })
 })
 
+describe('a candidate Archaic Petra', () => {
+  const members: CharacterKey[] = ['Navia', 'Chiori', 'Bennett', 'Fischl']
+  const play = (gear: Partial<Record<CharacterKey, SimGear>>) =>
+    rotationAttacks(
+      simulateRotation({
+        rotation: parseRotation(
+          'Chiori E -> Fischl E -> Bennett Q E -> Navia Q hE N3 D N2 hE N3 D N2 -> Chiori',
+          members.map((characterKey) => ({ characterKey, name: characterKey }))
+        ),
+        members,
+        constellations: {},
+        elements: Object.fromEntries(
+          members.map((m) => [m, getCharEle(m)])
+        ) as never,
+        gear,
+      })
+    )
+  // hits per attack and the states no set's or weapon's own sheet gates
+  const shared = (attacks: TeamOpt['attacks']) => {
+    const hits = new Map<string, number>()
+    for (const [ck, list] of Object.entries(attacks))
+      for (const a of list ?? []) {
+        const states = (a.states ?? [])
+          .filter((s) => s.path[0] !== 'ArchaicPetra')
+          .map((s) => `${s.owner}:${s.path.join('.')}=${s.value}`)
+          .sort()
+          .join(',')
+        const key = `${ck}|${a.path.join('.')}|${states}`
+        hits.set(key, (hits.get(key) ?? 0) + a.hits)
+      }
+    return Object.fromEntries(
+      [...hits].map(([k, n]) => [k, +n.toFixed(6)]).sort()
+    )
+  }
+
+  it("opens its own window, but leaves the shards, their shields and Navia's take of them as without the set", () => {
+    const none = play({})
+    const tried = play({ Bennett: { candidates: { sets: ['ArchaicPetra'] } } })
+    const worn = play({ Bennett: { sets: { ArchaicPetra: 4 } } })
+    expect(statePaths(tried)).toContain('Bennett:ArchaicPetra.element')
+    expect(statePaths(worn)).toContain('Bennett:ArchaicPetra.element')
+    expect(shared(tried)).toEqual(shared(none))
+    // (worn, its holder picks the shards up: the play changes)
+    expect(shared(worn)).not.toEqual(shared(none))
+  })
+})
+
 describe("a problem's attacks", () => {
   const build = (sets: KqmBuild['sets'], weapon: string): KqmBuild => ({
     weapon: { key: weapon as never, refinement: 1 },
@@ -140,6 +187,50 @@ describe("a problem's attacks", () => {
     expect(
       kqmProblemAttacks(attacks, 'YumemizukiMizuki', state).Odette
     ).toHaveLength(2)
+  })
+
+  it('drops the limits of gear no build in it can have, and the member’s own sets outside its sets', () => {
+    const attack = (
+      limits: { owner: string; path: string[]; hits: number }[],
+      hits = 1
+    ) => ({
+      path: ['skill', 'dmg'],
+      hits,
+      hitMode: 'avgHit' as const,
+      limits: limits as never,
+    })
+    const state = {
+      YumemizukiMizuki: build({ BlizzardStrayer: 4 }, 'BlackmarrowLantern'),
+      Odette: build({ GladiatorsFinale: 4 }, 'SacrificialSword'),
+    }
+    const vv = { owner: 'YumemizukiMizuki', path: ['ViridescentVenerer', 'x'] }
+    const noblesse = { owner: 'Odette', path: ['NoblesseOblige', 'set4'] }
+    const attacks: TeamOpt['attacks'] = {
+      Odette: [
+        attack([{ ...vv, hits: 0 }]),
+        attack([]),
+        attack([{ ...noblesse, hits: 0 }]),
+      ],
+    }
+    // Mizuki's VV limit (not on her) is dropped: the first two are one of 2 hits
+    const pruned = kqmProblemAttacks(attacks, 'Odette', state).Odette!
+    expect(pruned.map((a) => a.hits)).toEqual([2, 1])
+    expect(pruned[1].limits).toEqual([{ ...noblesse, hits: 0 }])
+    // Odette's Noblesse outside her sets: dropped too, all three are one
+    const narrowed = kqmProblemAttacks(
+      attacks,
+      'Odette',
+      state,
+      new Set(['GladiatorsFinale'])
+    ).Odette!
+    expect(narrowed.map((a) => a.hits)).toEqual([3])
+    // a limit on some of an attack's hits: those attacks stay apart (merged, it would cover fewer)
+    const partial = kqmProblemAttacks(
+      { Odette: [0, 1].map(() => attack([{ ...noblesse, hits: 1 }], 2)) },
+      'Odette',
+      state
+    ).Odette!
+    expect(partial.map((a) => a.hits)).toEqual([2, 2])
   })
 })
 
@@ -208,6 +299,61 @@ describe('one-copy weapons', () => {
           result.rankings[k]?.weapons.map((o) => o.weapon.key)
         ).not.toContain('ExaiphanesBlade')
     }
+  }, 300_000)
+
+  it('a one-copy weapon locked for one member is no one else’s; locked for two, the run is refused', async () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage({}))
+    const members = ['KamisatoAyaka', 'Keqing'] as const
+    for (const key of members)
+      database.chars.set(key, {
+        key,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
+      })
+    const teamId = database.teams.new({
+      loadoutData: members.map((k) => ({
+        teamCharId: database.teamChars.new(k),
+      })) as LoadoutDatum[],
+    })
+    const teamOpt = initTeamOpt()
+    teamOpt.kqm = {
+      refinement4: 1,
+      refinement5: 1,
+      energyRecharge: { KamisatoAyaka: 100, Keqing: 100 },
+      excludedWeapons: allWeaponKeys.filter(
+        (k) => !['ExaiphanesBlade', 'FavoniusSword'].includes(k)
+      ),
+      weaponList: 2,
+      lockedWeapons: { Keqing: 'ExaiphanesBlade' },
+    }
+    teamOpt.attacks = {
+      KamisatoAyaka: [{ path: ['skill', 'press'], hits: 4, hitMode: 'avgHit' }],
+      Keqing: [{ path: ['skill', 'stiletto'], hits: 4, hitMode: 'avgHit' }],
+    }
+    const run = () =>
+      optimizeTeamKqm({ database, teamId, gender: 'F', teamOpt, maxRounds: 2 })
+    const result = (await run())!
+    expect(result.builds.Keqing!.weapon.key).toBe('ExaiphanesBlade')
+    expect(
+      new Set(result.rankings.Keqing!.weapons.map((o) => o.weapon.key))
+    ).toEqual(new Set(['ExaiphanesBlade']))
+    expect(result.builds.KamisatoAyaka!.weapon.key).toBe('FavoniusSword')
+    expect(
+      result.rankings.KamisatoAyaka!.weapons.map((o) => o.weapon.key)
+    ).not.toContain('ExaiphanesBlade')
+    teamOpt.kqm.lockedWeapons = {
+      Keqing: 'ExaiphanesBlade',
+      KamisatoAyaka: 'ExaiphanesBlade',
+    }
+    await expect(run()).rejects.toThrow('there is only one')
+    // (Ayaka's list holds only the blade locked for Keqing: nothing is left for her)
+    teamOpt.kqm.lockedWeapons = { Keqing: 'ExaiphanesBlade' }
+    teamOpt.kqm.excludedWeapons = allWeaponKeys.filter(
+      (k) => k !== 'ExaiphanesBlade'
+    )
+    await expect(run()).rejects.toThrow('locked for another member')
   }, 300_000)
 })
 

@@ -1,6 +1,13 @@
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  critChance,
+  flatEnergy,
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/klee. */
 
@@ -67,6 +74,8 @@ interface KleeState {
   sparkReady: number
   /** C1: the chance of the next roll (10%, +8% per failure) */
   c1Chance: number
+  /** A4's Energy ICD (0.6 s, Klee's clock) */
+  a4Ready: number
 }
 
 /** Hexerei: Secret Rite (2 Hexerei members) */
@@ -163,6 +172,15 @@ function chargeHit(
 ) {
   const spark = sparkCount(ctx, s) > 0
   if (spark && (ctx.constellation('Klee') < 6 || ctx.random() < 0.5)) s.sparks--
+  // A4: a CRIT charged attack gives the party 2 Energy each (0.6 s ICD), by its chance
+  const at = ctx.characterFrame('Klee') + delay
+  if (at >= s.a4Ready) {
+    s.a4Ready = at + 37
+    flatEnergy(ctx, delay, 2 * critChance(ctx, 'Klee'), 'Klee A4', {
+      owner: 'Klee',
+      to: 'team',
+    })
+  }
   ctx.hit(delay, {
     path: spark ? ['passive1', 'dmg'] : ['charged', 'dmg'],
     tag: 'charged',
@@ -225,6 +243,7 @@ export const kit: KitModel = {
     sparkUntil: -1,
     sparkReady: -1,
     c1Chance: 0.1,
+    a4Ready: -1,
   }),
   onHit(ctx, s: KleeState, hit) {
     if (hit.characterKey !== 'Klee' || hit.path[0].startsWith('_')) return
@@ -388,9 +407,17 @@ export const kit: KitModel = {
             wave(c2, 24, 1, capturedAt, capturedActive)
             if (c2.random() < 0.5) wave(c2, 24, 1, capturedAt, capturedActive)
           })
-        // C6: the team's Pyro DMG +10% for 25 s (Klee's own +50% with Secret Rite, by the sheet)
-        if (ctx.constellation('Klee') >= 6)
+        // C6: the team's Pyro DMG +10% for 25 s (Klee's own +50% with Secret Rite, by the sheet),
+        // and 3 Energy to the others every 3 s while it lasts
+        if (ctx.constellation('Klee') >= 6) {
           ctx.buff('Klee', ['Klee', 'BlazingDelight'], 'on', 0, 25 * 60)
+          const end = s.burstEnd
+          for (const at of [326, 506, 686])
+            ctx.at(at, (c2) => {
+              if (s.burstEnd === end && c2.now < end)
+                flatEnergy(c2, 0, 3, 'Klee C6', { owner: 'Klee', to: 'others' })
+            })
+        }
         c1(ctx, s, 99)
         // C4 (Hexerei, assumed): the explosion when the burst ends with Klee on the field
         const end = s.burstEnd

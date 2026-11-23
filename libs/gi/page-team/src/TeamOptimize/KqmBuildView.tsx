@@ -3,7 +3,12 @@ import {
   InfoTooltipInline,
 } from '@genshin-optimizer/common/ui'
 import { artifactAsset } from '@genshin-optimizer/gi/assets'
-import type { ArtifactSetKey, CharacterKey } from '@genshin-optimizer/gi/consts'
+import type {
+  ArtifactSetKey,
+  CharacterKey,
+  SubstatKey,
+} from '@genshin-optimizer/gi/consts'
+import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
 import { getArtSetStat } from '@genshin-optimizer/gi/stats'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
 import type { KqmBuild } from '@genshin-optimizer/gi/ui'
@@ -13,6 +18,7 @@ import {
   KQM_FIXED_ROLLS,
   kqmArtifactStats,
   kqmBuildRarity,
+  kqmChosenRolls,
   kqmWeaponData,
   quickTooltipProps,
   statName,
@@ -38,13 +44,10 @@ export function KqmBuildView({
   characterKey,
   build,
   equipment,
-  rolls,
 }: {
   characterKey: CharacterKey
   build: KqmBuild
   equipment?: ReactNode
-  /** The run's artifact standard: its distributed rolls (absent: KQMS's 20) */
-  rolls?: number
 }) {
   const { t } = useTranslation('page_team')
   const weapon = kqmWeaponData(build.weapon, characterKey)
@@ -62,7 +65,8 @@ export function KqmBuildView({
     'def',
   ]
   // (a 4★ set: four of its pieces are 4★, one of sands, goblet and circlet the 5★ off-piece)
-  const rarity = kqmBuildRarity(build, rolls)
+  const rarity = kqmBuildRarity(build)
+  const tier = !!build.standard && build.standard !== 'kqms'
   const fourStar = rarity.four
   const slotFour = (slot: 'sands' | 'goblet' | 'circlet') =>
     fourStar >= 4 && (build.mains.off ?? 'circlet') !== slot
@@ -94,12 +98,20 @@ export function KqmBuildView({
           </Typography>
           {fourStar > 0 && (
             <InfoTooltipInline
-              title={t('teamOpt.kqm.fourStarTip', {
-                defaultValue:
-                  '{{count}} of the five artifacts are 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}.',
-                count: fourStar,
-                rolls: rarity.rolls,
-              })}
+              title={
+                tier
+                  ? t('teamOpt.kqm.fourStarTipTier', {
+                      defaultValue:
+                        '{{count}} of the five artifacts are 4★ (this set’s pieces): a 4★ piece has a +16 main stat, 2 fewer upgrades, and each roll 0.8 of a 5★ one’s.',
+                      count: fourStar,
+                    })
+                  : t('teamOpt.kqm.fourStarTip', {
+                      defaultValue:
+                        '{{count}} of the five artifacts are 4★ (this set’s pieces). By KQM Standards a 4★ piece has a +16 main stat, 0.8 of a 5★ piece’s substats and 2 fewer distributed rolls: this build places {{rolls}}.',
+                      count: fourStar,
+                      rolls: rarity.rolls,
+                    })
+              }
             />
           )}
         </Box>
@@ -156,10 +168,17 @@ export function KqmBuildView({
             {t('teamOpt.kqm.artifactTotals', 'Artifact totals')}
           </Typography>
           <InfoTooltipInline
-            title={t(
-              'teamOpt.kqm.artifactTotalsTip',
-              'Main stats, fixed and distributed rolls from all five artifacts. Excludes weapon, character and set bonuses.'
-            )}
+            title={
+              tier
+                ? t(
+                    'teamOpt.kqm.artifactTotalsTipTier',
+                    'All five artifacts: main stats and every substat roll (each piece’s 4 lines and its upgrades). Excludes character, weapon and set bonuses. Hover a stat for its breakdown.'
+                  )
+                : t(
+                    'teamOpt.kqm.artifactTotalsTip',
+                    'Main stats, fixed and distributed rolls from all five artifacts. Excludes weapon, character and set bonuses.'
+                  )
+            }
           />
           {/* where this build's added rolls went (redistributed for another weapon or set) */}
           <Box sx={{ ml: 'auto' }}>
@@ -189,13 +208,25 @@ export function KqmBuildView({
                 >
                   <span>{t('teamOpt.kqm.mainStats', 'Main stats')}</span>
                   <span>{artifactStatValue(key, main)}</span>
-                  <span>{t('teamOpt.kqm.fixedRolls', 'Fixed rolls')}</span>
-                  <span>{artifactStatValue(key, fixed)}</span>
-                  <span>
-                    {t('teamOpt.kqm.distributedRolls', 'Distributed rolls')} (
-                    {rolls})
-                  </span>
-                  <span>{artifactStatValue(key, distributed)}</span>
+                  {tier ? (
+                    <>
+                      <span>
+                        {t('teamOpt.kqm.substatRolls', 'Substat rolls')} (
+                        {rollCount(rolls)})
+                      </span>
+                      <span>{artifactStatValue(key, distributed)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{t('teamOpt.kqm.fixedRolls', 'Fixed rolls')}</span>
+                      <span>{artifactStatValue(key, fixed)}</span>
+                      <span>
+                        {t('teamOpt.kqm.distributedRolls', 'Distributed rolls')}{' '}
+                        ({rolls})
+                      </span>
+                      <span>{artifactStatValue(key, distributed)}</span>
+                    </>
+                  )}
                 </Box>
               }
             >
@@ -241,21 +272,42 @@ export function KqmBuildView({
   )
 }
 
+/** A roll count as shown: whole, or to one decimal (a tier's random share, a 4★ piece's 0.8) */
+const rollCount = (n: number) =>
+  Math.abs(n - Math.round(n)) < 0.05 ? `${Math.round(n)}` : n.toFixed(1)
+
 /**
- * Where a build's distributed rolls went, compactly: each substat given any, as its icon and count
- * (most first). The hover card adds the fixed rolls every substat has.
+ * Where a build's rolls went, compactly: each substat given any, as its icon and count (most
+ * first). KQMS: its distributed rolls, the hover card adding the 2 fixed of every substat. A tier:
+ * each stat's rolls, the hover card splitting them into the wanted lines and upgrades it chose and
+ * the random ones, with the set's total.
  */
-export function KqmRollLine({ build }: { build: Pick<KqmBuild, 'rolls'> }) {
+export function KqmRollLine({
+  build,
+}: {
+  build: Pick<KqmBuild, 'rolls' | 'sets' | 'mains' | 'standard' | 'layout'>
+}) {
   const { t } = useTranslation('page_team')
-  const given = (
-    Object.entries(build.rolls) as [keyof KqmBuild['rolls'], number][]
-  )
+  const tier = !!build.standard && build.standard !== 'kqms'
+  const chosen = kqmChosenRolls(build)
+  const fixed = tier ? 0 : KQM_FIXED_ROLLS
+  const totalOf = (key: SubstatKey) =>
+    tier ? (build.rolls[key] ?? 0) : fixed + (build.rolls[key] ?? 0)
+  const given = (Object.entries(chosen) as [SubstatKey, number][])
     .filter(([, n]) => n > 0)
+    .map(([key]) => [key, tier ? totalOf(key) : chosen[key]!] as const)
     .sort(([, a], [, b]) => b - a)
   if (!given.length) return null
+  const rows = tier
+    ? allSubstatKeys
+        .filter((key) => totalOf(key) >= 0.05)
+        .sort((a, b) => totalOf(b) - totalOf(a))
+    : given.map(([key]) => key)
+  const setTotal = allSubstatKeys.reduce((a, key) => a + totalOf(key), 0)
   const name = (key: string) =>
     `${statName(key)}${['hp_', 'atk_', 'def_'].includes(key) ? '%' : ''}`
   const head = { fontSize: 11, color: 'text.secondary', textAlign: 'right' }
+  const cell = { textAlign: 'right', py: 0.5, borderTop: hairline }
   return (
     <BootstrapTooltip
       placement="bottom"
@@ -276,68 +328,73 @@ export function KqmRollLine({ build }: { build: Pick<KqmBuild, 'rolls'> }) {
             }}
           >
             <span />
-            <Box sx={head}>{t('teamOpt.kqm.rollsFixed', 'Fixed')}</Box>
-            <Box sx={head}>{t('teamOpt.kqm.rollsAdded', 'Added')}</Box>
+            <Box sx={head}>
+              {tier
+                ? t('teamOpt.kqm.rollsRandom', 'Random')
+                : t('teamOpt.kqm.rollsFixed', 'Fixed')}
+            </Box>
+            <Box sx={head}>
+              {tier
+                ? t('teamOpt.kqm.rollsWanted', 'Wanted')
+                : t('teamOpt.kqm.rollsAdded', 'Added')}
+            </Box>
             <Box sx={head}>{t('teamOpt.kqm.rollsTotal', 'Total')}</Box>
-            {given.map(([key, n]) => (
-              <Fragment key={key}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.75,
-                    minWidth: 0,
-                    py: 0.5,
-                    borderTop: hairline,
-                    '& svg': { fontSize: 14, flexShrink: 0 },
-                  }}
-                >
-                  <StatIcon statKey={key} />
+            {rows.map((key) => {
+              const total = totalOf(key)
+              const wanted = chosen[key] ?? 0
+              return (
+                <Fragment key={key}>
                   <Box
-                    component="span"
                     sx={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      minWidth: 0,
+                      py: 0.5,
+                      borderTop: hairline,
+                      '& svg': { fontSize: 14, flexShrink: 0 },
                     }}
                   >
-                    {name(key)}
+                    <StatIcon statKey={key} />
+                    <Box
+                      component="span"
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {name(key)}
+                    </Box>
                   </Box>
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: 'right',
-                    py: 0.5,
-                    borderTop: hairline,
-                    color: 'text.secondary',
-                  }}
-                >
-                  {KQM_FIXED_ROLLS}
-                </Box>
-                <Box sx={{ textAlign: 'right', py: 0.5, borderTop: hairline }}>
-                  {n}
-                </Box>
-                <Box
-                  sx={{
-                    textAlign: 'right',
-                    py: 0.5,
-                    borderTop: hairline,
-                    fontWeight: 600,
-                  }}
-                >
-                  {KQM_FIXED_ROLLS + n}
-                </Box>
-              </Fragment>
-            ))}
+                  <Box sx={{ ...cell, color: 'text.secondary' }}>
+                    {rollCount(tier ? total - wanted : fixed)}
+                  </Box>
+                  <Box sx={cell}>{rollCount(wanted)}</Box>
+                  <Box sx={{ ...cell, fontWeight: 600 }}>
+                    {rollCount(total)}
+                  </Box>
+                </Fragment>
+              )
+            })}
           </Box>
+          <Typography sx={{ ...type.label, mt: 0.75 }}>
+            {t('teamOpt.kqm.rollsSetTotal', {
+              defaultValue:
+                '{{rolls}} rolls on the five artifacts (45 at most)',
+              rolls: rollCount(setTotal),
+            })}
+          </Typography>
         </Box>
       }
     >
       <Box
         component="span"
-        aria-label={t('teamOpt.kqm.rollsLabel', {
-          defaultValue: 'Rolls added: {{rolls}}',
-          rolls: given.map(([key, n]) => `${name(key)} ${n}`).join(', '),
+        aria-label={t('teamOpt.kqm.rollsLabelStandard', {
+          defaultValue: 'Substat rolls: {{rolls}}',
+          rolls: given
+            .map(([key, n]) => `${name(key)} ${rollCount(n)}`)
+            .join(', '),
         })}
         sx={{
           display: 'flex',
@@ -365,7 +422,7 @@ export function KqmRollLine({ build }: { build: Pick<KqmBuild, 'rolls'> }) {
             }}
           >
             <StatIcon statKey={key} />
-            {n}
+            {rollCount(n)}
           </Box>
         ))}
       </Box>

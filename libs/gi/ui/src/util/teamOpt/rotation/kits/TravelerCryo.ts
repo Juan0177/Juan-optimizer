@@ -1,6 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, withHitlag } from './common'
+import {
+  flatEnergy,
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  withHitlag,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/cryo/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -50,6 +56,8 @@ const cryoNormals: NormalHit[] = [
 
 /** Frostglow stacks (max 8) build from the ice crystals; the Frostbound Javelin consumes them */
 interface CryoState {
+  /** C1: its Energy's 0.5 s ICD ends (the Traveler's clock) */
+  c1Ready: number
   frostglow: number
   coordReady: number
   icepoint: number
@@ -74,6 +82,7 @@ export const kit: KitModel = {
   element: 'cryo',
   source: `${KQMSIM}/traveler/common/cryo`,
   init: (): CryoState => ({
+    c1Ready: -1,
     frostglow: 0,
     skillSrc: -1,
     skillUntil: -1,
@@ -377,6 +386,16 @@ export const kit: KitModel = {
       hit.tag === 'directStellarConduct' ||
       hit.tag === 'directStellarSwirl' ||
       (hit.path[0] === 'reaction' && hit.path[1].startsWith('stellar'))
+    // C1: the Traveler's own Stellar Glimmer DMG restores 5 Energy, once per 0.5 s
+    if (
+      stellarDamage &&
+      hit.characterKey === 'TravelerCryo' &&
+      ctx.constellation('TravelerCryo') >= 1 &&
+      frame >= s.c1Ready
+    ) {
+      s.c1Ready = frame + 31
+      flatEnergy(ctx, 0, 5, 'Traveler (Cryo) C1', { owner: 'TravelerCryo' })
+    }
     if (stellarDamage && frame >= s.icepointReady) {
       s.icepointReady = frame + 120
       s.icepoint = Math.min(3, s.icepoint + 1)

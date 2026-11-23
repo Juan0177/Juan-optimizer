@@ -1,10 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
   templateJump,
+  turretParticles,
   withHitlag,
 } from './common'
 
@@ -114,6 +116,7 @@ function c4Heal(c: SimContext, s: DehyaState) {
     healTargets: ['Dehya'],
     label: 'An Oath Abiding (C4 heal)',
   })
+  flatEnergy(c, 0, 1.5, 'Dehya C4', { owner: 'Dehya' })
 }
 
 /** C6 state on a Leonine Bite hit: the CRIT DMG stacks so far */
@@ -468,6 +471,8 @@ export const kit: KitModel = {
     )
       return
     s.dotUntil = hit.t + 150
+    // its particle: 1 per DoT (kqmsim skill.go, under the DoT's 2.5 s ICD)
+    turretParticles(ctx, 2, 1, 'Dehya')
     if (ctx.constellation('Dehya') >= 2)
       ctx.note(
         'Dehya C2: the Fiery Sanctum DoT +50% (when the active character is hit in the field) is not modelled.'

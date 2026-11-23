@@ -120,6 +120,14 @@ export const sword1: WeaponModule[] = [
           const name = CHRYSALIS[i]
           if (name)
             windows.open(actor, ['BeyondTheChrysalis', name], ctx.now, 600)
+          else
+            ctx.hit(0, {
+              characterKey: actor,
+              path: ['_marker', 'weaponEnergy', 'BeyondTheChrysalis'],
+              tag: 'other',
+              element: 'physical',
+              label: 'Winds of Plenty Energy',
+            })
         },
         onSwap: (t, from) => {
           if (!holders.includes(from)) return

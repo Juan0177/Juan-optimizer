@@ -1,6 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { HitElement, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -317,5 +318,8 @@ export const kit: KitModel = {
       [...ctx.members],
       'Someone More Capable (A1, Heal)'
     )
+    // C4: 1.2 Energy with it
+    if (ctx.constellation('Sayu') >= 4)
+      flatEnergy(ctx, 0, 1.2, 'Sayu C4', { owner: 'Sayu' })
   },
 }

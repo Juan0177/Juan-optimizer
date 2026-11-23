@@ -22,6 +22,7 @@ import type {
 import {
   optimizeTeam,
   runEnemyOf,
+  TEAM_GPU_MIN_TOTAL,
   TeamOptCancelled,
   TeamOptSetRulesUnmet,
   teamOptMembers,
@@ -100,7 +101,10 @@ function inventoryResultFits(
   },
   roster: string | undefined
 ) {
-  const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  // (a run's builds: its members not on a theorycraft build, which it keeps as they are)
+  const members = teamOptMembers(database, teamId)
+    .filter((m) => !m.isTc)
+    .map((m) => m.characterKey)
   return (
     sameBuildRoster(result.builds, members) &&
     (roster === undefined || roster === teamRoster(database, teamId)) &&
@@ -259,9 +263,12 @@ export function useTeamOptRun(teamId: string) {
           }
           Object.assign(status.current, initStatus())
           // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
-          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches)
+          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
+          // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
+          // small searches)
           const solver = new GOSolver(problem, status.current, maxWorkers, {
             gpu: true,
+            gpuMinTotal: TEAM_GPU_MIN_TOTAL,
           })
           stopSolver = () => solver.cancel(new TeamOptCancelled())
           const t0 = performance.now()

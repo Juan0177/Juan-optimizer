@@ -1,94 +1,245 @@
-import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { allKqmStandardKeys } from '@genshin-optimizer/gi/consts'
+import type { TeamOpt, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
+import type { KqmStandard } from '@genshin-optimizer/gi/solver'
+import { KQM_CUSTOM_ROLLS, kqmStandardOf } from '@genshin-optimizer/gi/solver'
+import { kqmMemberStandard } from '@genshin-optimizer/gi/ui'
 import {
-  KQM_ROLLS,
-  kqmPieceCap,
-  kqmRollBudget,
-} from '@genshin-optimizer/gi/solver'
-import { Box, MenuItem, TextField } from '@mui/material'
+  Box,
+  InputAdornment,
+  MenuItem,
+  TextField,
+  Tooltip,
+} from '@mui/material'
 import type { TFunction } from 'i18next'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FieldLabel, numSx, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
-/**
- * The artifact standard: how many rolls KQM mode places for damage on top of the 2 fixed rolls
- * of every substat. KQM Standards' 20 (at most 2 a piece per stat), higher presets, or a custom
- * number; the per-piece cap grows one per 10 rolls (`kqmPieceCap`).
+/*
+ * The artifact standard: KQM Standards (2 fixed rolls of every substat and 20 placed), a tier
+ * built piece by piece as the game makes artifacts, up to Perfect, the best the game can make, or
+ * Custom: how many of the set's 45 rolls land on wanted stats, typed in per member
  */
-export const KQM_ROLL_PRESETS = [20, 25, 30, 40] as const
-/** A custom standard's range */
-export const KQM_CUSTOM_ROLLS = { min: 10, max: 50 } as const
 
-/** A standard's name: KQM Standard, Good, Great, Top, else its number of rolls */
-export function kqmStandardName(t: TFunction, rolls: number) {
-  switch (rolls) {
-    case 20:
-      return t('teamOpt.kqm.standard20', 'KQM Standard')
-    case 25:
-      return t('teamOpt.kqm.standard25', 'Good')
-    case 30:
-      return t('teamOpt.kqm.standard30', 'Great')
-    case 40:
-      return t('teamOpt.kqm.standard40', 'Top')
+/** A standard's name (Custom with its wanted rolls) */
+export function kqmStandardName(t: TFunction, standard: KqmStandard) {
+  if (typeof standard === 'number')
+    return t('teamOpt.kqm.customNamed', {
+      defaultValue: 'Custom ({{rolls}})',
+      rolls: standard,
+    })
+  switch (standard) {
+    case 'good':
+      return t('teamOpt.kqm.tierGood', 'Good')
+    case 'great':
+      return t('teamOpt.kqm.tierGreat', 'Great')
+    case 'top':
+      return t('teamOpt.kqm.tierTop', 'Top')
+    case 'perfect':
+      return t('teamOpt.kqm.tierPerfect', 'Perfect')
     default:
-      return t('teamOpt.kqm.standardCustom', 'Custom')
+      return t('teamOpt.kqm.standard20', 'KQM Standard')
   }
 }
-/** "20 rolls, at most 2 a piece per stat" */
-export const kqmStandardDetail = (t: TFunction, rolls: number) =>
-  t('teamOpt.kqm.standardDetail', {
-    defaultValue: '{{rolls}} rolls, at most {{cap}} a piece per stat',
-    rolls,
-    cap: kqmPieceCap(rolls),
-  })
+/** A standard's name in a member's row: KQMS for KQM Standard */
+const kqmStandardShort = (t: TFunction, standard: KqmStandard) =>
+  standard === 'kqms'
+    ? t('teamOpt.kqm.standard20Short', 'KQMS')
+    : kqmStandardName(t, standard)
+/** What a standard's artifacts are, in a line */
+export function kqmStandardDetail(t: TFunction, standard: KqmStandard) {
+  if (typeof standard === 'number')
+    return t('teamOpt.kqm.customDetail', {
+      defaultValue:
+        '{{rolls}} of the set’s 45 rolls on wanted stats, the rest random',
+      rolls: standard,
+    })
+  switch (standard) {
+    case 'good':
+      return t(
+        'teamOpt.kqm.tierGoodDetail',
+        '8 rolls a piece: 2 of its 4 lines on wanted stats, 3 of its 4 upgrades on them'
+      )
+    case 'great':
+      return t(
+        'teamOpt.kqm.tierGreatDetail',
+        '9 rolls a piece: 3 of its 4 lines on wanted stats, 4 of its 5 upgrades on them'
+      )
+    case 'top':
+      return t(
+        'teamOpt.kqm.tierTopDetail',
+        '9 rolls a piece: every line on a wanted stat, every upgrade on them'
+      )
+    case 'perfect':
+      return t(
+        'teamOpt.kqm.tierPerfectDetail',
+        'Top with every roll at its highest value: the best the game can make'
+      )
+    default:
+      return t(
+        'teamOpt.kqm.tierKqmsDetail',
+        '2 rolls of every substat and 20 placed, at most 2 a piece per stat'
+      )
+  }
+}
 
-/** A team's artifact standard: its distributed rolls (KQMS: 20) */
-export const kqmStandardRolls = (kqm: Pick<TeamOptKqm, 'rolls'> | undefined) =>
-  kqmRollBudget(kqm?.rolls)
+/** The members' standards, in their order */
+const memberStandards = (
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined,
+  keys: readonly CharacterKey[]
+) => keys.map((k) => kqmMemberStandard(k, kqm))
 
-/** Whether a team's KQM settings use KQM Standards' artifacts */
-export const isKqmStandard = (kqm: Pick<TeamOptKqm, 'rolls'> | undefined) =>
-  kqmRollBudget(kqm?.rolls) === KQM_ROLLS
+/** Whether the members' artifact standards differ */
+export function kqmStandardsMixed(
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined,
+  keys: readonly CharacterKey[]
+) {
+  const all = memberStandards(kqm, keys)
+  return all.some((s) => s !== all[0])
+}
+
+/** The members' standard by name, or Mixed when they differ */
+export function kqmStandardText(
+  t: TFunction,
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined,
+  keys: readonly CharacterKey[]
+) {
+  return kqmStandardsMixed(kqm, keys)
+    ? t('teamOpt.kqm.standardMixed', 'Mixed')
+    : kqmStandardName(
+        t,
+        keys.length
+          ? kqmMemberStandard(keys[0], kqm)
+          : kqmStandardOf(kqm?.standard)
+      )
+}
+
+/**
+ * Custom's wanted rolls closest to a standard (KQMS about 20; Good's split on 9-roll pieces 25,
+ * Great 35, Top 45): where its box starts
+ */
+const customRollsFor = (standard: KqmStandard) =>
+  typeof standard === 'number'
+    ? standard
+    : ({ kqms: 20, good: 25, great: 35, top: 45, perfect: 45 } as const)[
+        standard
+      ]
+
+/** Whether the standards are typed in, one box per member: Custom was picked, or a member is at one */
+export function useKqmCustom(
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined,
+  keys: readonly CharacterKey[]
+) {
+  const typed = memberStandards(kqm, keys).some((s) => typeof s === 'number')
+  const [picked, setPicked] = useState(typed)
+  return [picked || typed, setPicked] as const
+}
+
+/** Every member at `standard` */
+function setAllStandards(o: TeamOpt, standard: KqmStandard) {
+  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+  settings.standard = standard === 'kqms' ? undefined : standard
+  settings.memberStandards = undefined
+}
+/** One member at `standard` (all the same again: one standard for the team) */
+function setMemberStandard(
+  o: TeamOpt,
+  keys: readonly CharacterKey[],
+  characterKey: CharacterKey,
+  standard: KqmStandard
+) {
+  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+  const next = {
+    ...settings,
+    memberStandards: { ...settings.memberStandards, [characterKey]: standard },
+  }
+  const all = memberStandards(next, keys)
+  if (all.every((s) => s === all[0])) setAllStandards(o, all[0])
+  else settings.memberStandards = next.memberStandards
+}
+/** Custom for every member, each at the wanted rolls closest to its standard */
+function setAllCustom(o: TeamOpt, keys: readonly CharacterKey[]) {
+  const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+  const all = memberStandards(settings, keys).map(customRollsFor)
+  if (all.every((n) => n === all[0])) setAllStandards(o, all[0] ?? 20)
+  else {
+    settings.standard = undefined
+    settings.memberStandards = Object.fromEntries(
+      keys.map((k, i) => [k, all[i]])
+    )
+  }
+}
 
 const CUSTOM = 'custom'
+const MIXED = 'mixed'
+const validCustom = (n: number) =>
+  Number.isInteger(n) && n >= KQM_CUSTOM_ROLLS.min && n <= KQM_CUSTOM_ROLLS.max
+
+/** The standards with what each one's artifacts are, then Custom: a standard menu's items */
+function standardItems(t: TFunction) {
+  const item = (value: string, name: string, detail: string) => (
+    <MenuItem
+      key={value}
+      value={value}
+      sx={{ display: 'block', maxWidth: 360, whiteSpace: 'normal' }}
+    >
+      <Box component="span" sx={{ display: 'block' }}>
+        {name}
+      </Box>
+      <Box component="span" sx={{ ...type.label, display: 'block' }}>
+        {detail}
+      </Box>
+    </MenuItem>
+  )
+  return [
+    ...allKqmStandardKeys.map((standard) =>
+      item(
+        standard,
+        kqmStandardName(t, standard),
+        kqmStandardDetail(t, standard)
+      )
+    ),
+    item(
+      CUSTOM,
+      t('teamOpt.kqm.standardCustom', 'Custom'),
+      t('teamOpt.kqm.customItemDetail', {
+        defaultValue:
+          'Type how many of each member’s 45 rolls land on wanted stats, {{min}} to {{max}}',
+        ...KQM_CUSTOM_ROLLS,
+      })
+    ),
+  ]
+}
+
+/** The artifact standard for every member at once (Mixed while they differ) */
 export function KqmArtifactStandard({
   kqm,
+  members,
+  custom,
+  setCustom,
   setTeamOpt,
 }: {
   kqm: TeamOptKqm | undefined
+  members: readonly CharacterKey[]
+  /** The standards are typed in, per member (`useKqmCustom`) */
+  custom: boolean
+  setCustom: (custom: boolean) => void
   setTeamOpt: (update: TeamOptUpdate) => void
 }) {
   const { t } = useTranslation('page_team')
-  const rolls = kqmRollBudget(kqm?.rolls)
-  const isPreset = (KQM_ROLL_PRESETS as readonly number[]).includes(rolls)
-  const [custom, setCustom] = useState(!isPreset)
-  const [text, setText] = useState(`${rolls}`)
-  useEffect(() => {
-    setText(`${rolls}`)
-    if (!(KQM_ROLL_PRESETS as readonly number[]).includes(rolls))
-      setCustom(true)
-  }, [rolls])
-  const save = (n: number) =>
-    setTeamOpt((o) => {
-      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-      settings.rolls = n === KQM_ROLLS ? undefined : n
-    })
-  const typed = Number(text)
-  const invalid =
-    custom &&
-    !(
-      Number.isInteger(typed) &&
-      typed >= KQM_CUSTOM_ROLLS.min &&
-      typed <= KQM_CUSTOM_ROLLS.max
-    )
+  const mixed = kqmStandardsMixed(kqm, members)
+  const standard = members.length
+    ? kqmMemberStandard(members[0], kqm)
+    : kqmStandardOf(kqm?.standard)
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <FieldLabel
         tip={t(
-          'teamOpt.kqm.standardTip',
-          'How many substat rolls each build places for damage, on top of 2 fixed rolls of every substat. KQM Standards place 20, at most 2 on a piece per stat; a higher standard places more, and up to one more per piece for every 10 rolls (at most 5). Every roll is an average roll; a 4★ piece has 2 fewer.'
+          'teamOpt.kqm.standardAllTipCustom',
+          'Sets every member’s artifacts; each can be changed in its row. KQM Standard is KQM’s own: 2 rolls of every substat and 20 placed for damage, at most 2 a piece per stat. Good, Great, Top and Perfect are this site’s: each piece is built as the game makes one (4 different lines, never its main stat, and 4 or 5 upgrades), with more of its lines and upgrades on the stats the build wants at each step. Perfect is the best five artifacts the game can make. Custom: type how many of a member’s 45 rolls land on wanted stats (each piece an even share, the rest random). A 4★ piece has 2 fewer rolls, each 0.8 of a 5★ one.'
         )}
       >
         {t('teamOpt.kqm.standard', 'Artifacts')}
@@ -96,23 +247,29 @@ export function KqmArtifactStandard({
       <TextField
         select
         size="small"
-        value={custom ? CUSTOM : rolls}
+        value={custom ? CUSTOM : mixed ? MIXED : standard}
         onChange={(e) => {
           if (e.target.value === CUSTOM) {
             setCustom(true)
+            setTeamOpt((o) => setAllCustom(o, members))
             return
           }
           setCustom(false)
-          save(Number(e.target.value))
+          setTeamOpt((o) => setAllStandards(o, kqmStandardOf(e.target.value)))
         }}
         SelectProps={{
           renderValue: (v) =>
             v === CUSTOM
-              ? kqmStandardName(t, 0)
-              : `${kqmStandardName(t, Number(v))} (${v})`,
+              ? t('teamOpt.kqm.standardCustom', 'Custom')
+              : v === MIXED
+                ? t('teamOpt.kqm.standardMixed', 'Mixed')
+                : kqmStandardName(t, kqmStandardOf(v)),
         }}
         inputProps={{
-          'aria-label': t('teamOpt.kqm.standard', 'Artifacts'),
+          'aria-label': t(
+            'teamOpt.kqm.standardAll',
+            'Every member’s artifacts'
+          ),
         }}
         sx={{
           minWidth: 150,
@@ -120,52 +277,122 @@ export function KqmArtifactStandard({
           '& .MuiSelect-select': { py: 0.5 },
         }}
       >
-        {KQM_ROLL_PRESETS.map((n) => (
-          <MenuItem key={n} value={n} sx={{ display: 'block' }}>
-            <Box component="span" sx={{ display: 'block' }}>
-              {kqmStandardName(t, n)} ({n})
-            </Box>
-            <Box component="span" sx={{ ...type.label, display: 'block' }}>
-              {kqmStandardDetail(t, n)}
-            </Box>
-          </MenuItem>
-        ))}
-        <MenuItem value={CUSTOM}>{kqmStandardName(t, 0)}</MenuItem>
+        {standardItems(t)}
+        <MenuItem value={MIXED} sx={{ display: 'none' }} />
       </TextField>
-      {custom && (
-        <TextField
-          size="small"
-          value={text}
-          error={invalid}
-          helperText={
-            invalid
-              ? t('teamOpt.kqm.standardRange', {
-                  defaultValue: '{{min}} to {{max}}',
-                  ...KQM_CUSTOM_ROLLS,
-                })
-              : undefined
-          }
-          onChange={(e) => {
-            setText(e.target.value)
-            const n = Number(e.target.value)
-            if (
-              Number.isInteger(n) &&
-              n >= KQM_CUSTOM_ROLLS.min &&
-              n <= KQM_CUSTOM_ROLLS.max
-            )
-              save(n)
-          }}
-          inputProps={{
-            inputMode: 'numeric',
-            'aria-label': t('teamOpt.kqm.standardRolls', 'Rolls placed'),
-          }}
-          sx={{
-            width: 72,
-            '& .MuiInputBase-root': { fontSize: 13 },
-            '& .MuiInputBase-input': { py: 0.5, textAlign: 'right', ...numSx },
-          }}
-        />
-      )}
     </Box>
+  )
+}
+
+/** A member's artifact standard in its row: a named one, or its wanted rolls typed in (Custom) */
+export function KqmMemberStandard({
+  characterKey,
+  members,
+  kqm,
+  custom,
+  setCustom,
+  setTeamOpt,
+}: {
+  characterKey: CharacterKey
+  members: readonly CharacterKey[]
+  kqm: TeamOptKqm | undefined
+  custom: boolean
+  setCustom: (custom: boolean) => void
+  setTeamOpt: (update: TeamOptUpdate) => void
+}) {
+  const { t } = useTranslation('page_team')
+  const standard = kqmMemberStandard(characterKey, kqm)
+  const rolls = customRollsFor(standard)
+  const [text, setText] = useState(`${rolls}`)
+  useEffect(() => setText(`${rolls}`), [rolls])
+  const label = t('teamOpt.kqm.memberArtifacts', {
+    defaultValue: '{{character}} artifacts',
+    character: characterKey,
+  })
+  if (!custom)
+    return (
+      <TextField
+        select
+        size="small"
+        fullWidth
+        value={standard}
+        onChange={(e) => {
+          if (e.target.value === CUSTOM) {
+            setCustom(true)
+            setTeamOpt((o) => setAllCustom(o, members))
+            return
+          }
+          setTeamOpt((o) =>
+            setMemberStandard(
+              o,
+              members,
+              characterKey,
+              kqmStandardOf(e.target.value)
+            )
+          )
+        }}
+        SelectProps={{
+          renderValue: (v) => kqmStandardShort(t, kqmStandardOf(v)),
+        }}
+        inputProps={{ 'aria-label': label }}
+        sx={{
+          '& .MuiInputBase-root': { fontSize: 14 },
+          '& .MuiSelect-select': { py: 0.875, ...numSx },
+        }}
+      >
+        {standardItems(t)}
+      </TextField>
+    )
+  const invalid = !validCustom(Number(text))
+  return (
+    <Tooltip
+      arrow
+      title={
+        invalid
+          ? t('teamOpt.kqm.standardRange', {
+              defaultValue: '{{min}} to {{max}}',
+              ...KQM_CUSTOM_ROLLS,
+            })
+          : kqmStandardDetail(t, rolls)
+      }
+    >
+      <TextField
+        size="small"
+        fullWidth
+        value={text}
+        error={invalid}
+        onChange={(e) => {
+          setText(e.target.value)
+          const n = Number(e.target.value)
+          if (validCustom(n))
+            setTeamOpt((o) => setMemberStandard(o, members, characterKey, n))
+        }}
+        inputProps={{
+          inputMode: 'numeric',
+          'aria-label': t('teamOpt.kqm.memberRollsInput', {
+            defaultValue: '{{character}} artifact rolls',
+            character: characterKey,
+          }),
+        }}
+        InputProps={{
+          endAdornment: (
+            <InputAdornment position="end">
+              <Box component="span" sx={type.label}>
+                {t('teamOpt.kqm.wantedUnit', 'wanted')}
+              </Box>
+            </InputAdornment>
+          ),
+        }}
+        sx={{
+          '& .MuiInputBase-root': { fontSize: 14, px: { xs: 1, sm: 1.25 } },
+          '& .MuiInputBase-input': {
+            py: 0.875,
+            px: 0,
+            textAlign: 'right',
+            ...numSx,
+          },
+        }}
+      />
+    </Tooltip>
   )
 }

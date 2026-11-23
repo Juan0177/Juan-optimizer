@@ -5,6 +5,7 @@ import {
   normalString,
   shieldMarker,
   templateJump,
+  turretParticles,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/ineffa, main as of 2026-11-10. */
@@ -83,6 +84,8 @@ function summonBirgitta(ctx: SimContext, s: IneffaState) {
       icd: 'none',
       label: 'Birgitta Discharge',
     })
+    // its particles: a 66% chance of 1 (kqmsim baseParticleCB; its 0.3 s ICD never binds)
+    turretParticles(c, 0, 0.66, 'Ineffa')
     // A1: with the Lunar-Charged cloud up at the discharge, Birgitta follows up 38 frames later
     // (a direct Lunar-Charged hit, no element application)
     if (c.now < s.lcUntil)

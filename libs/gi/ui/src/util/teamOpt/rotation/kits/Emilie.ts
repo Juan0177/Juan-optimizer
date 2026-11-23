@@ -5,6 +5,8 @@ import {
   type NormalHit,
   normalString,
   templateJump,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/emilie, main as of 2026-11-10. */
@@ -45,6 +47,8 @@ const emilieNormals: NormalHit[] = [
 ]
 
 interface EmilieState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** Lumidouce Case generation: a new case stops the ticks of the one before */
   level: number
   scents: number
@@ -89,6 +93,17 @@ function c6Covers(s: EmilieState, t: number): boolean {
   if (t >= s.c6End || s.c6Left <= 0) return false
   s.c6Left--
   return true
+}
+
+/**
+ * The case's particle from its hit `delay` frames on (its Skill's and its Burst's): 1, 2.5 s ICD
+ * on Emilie's clock (kqmsim particleCB)
+ */
+function caseParticle(ctx: SimContext, s: EmilieState, delay: number) {
+  ctx.at(delay, (c) => {
+    if (turretReady(s.particles, 'case', c.characterFrame('Emilie'), 150))
+      turretParticles(c, 0, 1, 'Emilie')
+  })
 }
 
 /** C6: Fragrance Extraction or Aromatic Explication opens the window (5 s, 4 attacks, 12 s ICD) */
@@ -153,7 +168,7 @@ function spawnCase(
   // (the case's attacks, scents and collection are character tasks: Emilie's hitlag delays them)
   const tick = (c: SimContext) => {
     if (gen !== s.gen || c.now > s.caseEnd) return
-    for (const delay of s.level === 2 ? [5, 23] : [5])
+    for (const delay of s.level === 2 ? [5, 23] : [5]) {
       c.hit(delay, {
         path: ['skill', s.level === 2 ? 'level2Dmg' : 'level1Dmg'],
         tag: 'skill',
@@ -163,6 +178,8 @@ function spawnCase(
         icdGroup: 'EmilieLumidouce',
         label: `Lumidouce Case (Level ${s.level})`,
       })
+      caseParticle(c, s, delay)
+    }
     collect(c)
     c.atCharacter('Emilie', 90, tick)
   }
@@ -175,6 +192,7 @@ export const kit: KitModel = {
   element: 'dendro',
   source: `${GCSIM}/emilie`,
   init: (): EmilieState => ({
+    particles: new Map(),
     gen: 0,
     level: 1,
     scents: 0,
@@ -342,7 +360,7 @@ export const kit: KitModel = {
               )
             const collateral = !targeted && s.collateralCredit >= 1
             if (collateral) s.collateralCredit--
-            if (targeted || collateral)
+            if (targeted || collateral) {
               c3.hit(12, {
                 path: ['burst', 'level3Dmg'],
                 tag: 'burst',
@@ -351,6 +369,8 @@ export const kit: KitModel = {
                 icd: 'burst',
                 label: 'Lumidouce Case (Level 3)',
               })
+              caseParticle(c3, s, 12)
+            }
             if (targeted || collateral) c2Shred(c3, 12)
             c3.atCharacter('Emilie', 18, tick)
           }

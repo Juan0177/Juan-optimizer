@@ -2,7 +2,13 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import type { RotationAction } from '../parse'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, particleMarker } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/xilonen, main as of 2026-11-10. */
 
@@ -241,7 +247,10 @@ function rollerHit(ctx: SimContext, s: XilonenState, c: number) {
     // C2: Electro members get their Elemental Burst CD reduced by 6 s (and 25 Energy)
     if (c >= 2)
       for (const m of ctx.members)
-        if (getCharEle(m) === 'electro') ctx.reduceCooldown('burst', 360, m)
+        if (getCharEle(m) === 'electro') {
+          ctx.reduceCooldown('burst', 360, m)
+          flatEnergy(ctx, 0, 25, 'Xilonen C2', { owner: 'Xilonen', to: m })
+        }
     if (ctx.now >= s.a4Until) {
       s.a4Until = ctx.now + 14 * 60
       ctx.nightsoulBurst()
@@ -418,9 +427,7 @@ export const kit: KitModel = {
           return { frames: 1 }
         }
         // Yohual's Scratch: enters Nightsoul (its Geo hit at 6 frames)
-        ctx.note(
-          'Xilonen: A1 and A4 are assumed unlocked; energy (C2 Electro refund) is not modelled.'
-        )
+        ctx.note('Xilonen: A1 and A4 are assumed unlocked.')
         s.ns = {
           points: nsStartPoints,
           at: ctx.now,

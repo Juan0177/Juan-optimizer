@@ -105,7 +105,7 @@ export function BasicFieldDisplay({
       }}
       component={component}
     >
-      <Typography color={`${variant}.main`}>
+      <Typography color={variant}>
         {text}
         {suffix}
       </Typography>

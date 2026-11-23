@@ -189,6 +189,41 @@ function inactiveIn(
   return undefined
 }
 
+/**
+ * Switches the rotation sets for itself that stand for a sheet conditional in one of its states:
+ * the timeline names and describes them as that one
+ */
+const SHOWN_AS: Partial<
+  Record<string, { path: readonly string[]; value: string }>
+> = {
+  // the member Bennett's field reached at its last tick: his "active character in the field"
+  'Bennett.fieldRecipient': {
+    path: ['Bennett', 'activeInArea'],
+    value: 'activeInArea',
+  },
+}
+
+/** `describe` for a buff the simulation timed: its own switches as the conditional they stand for */
+export function describeTimed(
+  ref: BuffRef,
+  value: string,
+  teamData: TeamData
+): Omit<TeamBuff, 'ref' | 'key' | 'value'> {
+  const shownAs = SHOWN_AS[ref.path.join('.')]
+  if (!shownAs) return describe(ref, value, teamData)
+  const shown = describe(
+    { ...ref, path: [...shownAs.path] },
+    shownAs.value,
+    teamData
+  )
+  return {
+    ...shown,
+    ...(shown.fields && {
+      fields: { [value]: shown.fields[shownAs.value] ?? [] },
+    }),
+  }
+}
+
 /** A conditional's name, source and states as its sheet gives them (by its path if it has none) */
 export function describe(
   ref: BuffRef,

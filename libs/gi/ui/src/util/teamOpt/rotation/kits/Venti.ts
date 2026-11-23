@@ -1,6 +1,13 @@
+import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { HEXEREI_CHARACTERS } from '../gearEffects'
-import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import type { HitElement, KitModel, SimContext } from '../types'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/venti, main as of 2026-11-10. */
 
@@ -24,6 +31,8 @@ interface VentiState {
   extensions: number
   extensionReady: number
   extraAbsorbedTicks: number
+  /** The element the running Burst absorbed (A4's Energy goes to the party's members of it) */
+  absorbed?: HitElement
   swirlEnd: number
   /** C2 (Hexerei): Wherever a Breeze Blows (the next tap E deals 300%) until (Venti's clock) */
   breezeUntil: number
@@ -284,6 +293,20 @@ export const kit: KitModel = {
           c.at(24, tick)
         }
         ctx.at(106, tick)
+        s.absorbed = undefined
+        // A4: as it ends, 15 Energy to each member of the absorbed element (Venti's own 15 is the
+        // ER calculator's Burst discount)
+        const a4 = (c: SimContext) => {
+          if (token !== s.token) return
+          if (c.now < s.burstEnd) {
+            c.at(s.burstEnd - c.now, a4)
+            return
+          }
+          for (const m of c.members)
+            if (m !== 'Venti' && s.absorbed && getCharEle(m) === s.absorbed)
+              flatEnergy(c, 0, 15, 'Venti A4', { owner: 'Venti', to: m })
+        }
+        ctx.at(93 + 480, a4)
         const check = (c: SimContext, count: number) => {
           if (token !== s.token || count >= Math.floor((480 - 96) / 18)) return
           const element = c.absorb()
@@ -291,6 +314,7 @@ export const kit: KitModel = {
             c.at(18, (next) => check(next, count + 1))
             return
           }
+          s.absorbed = element
           const absorbed = (at: SimContext, left: number) => {
             if (token !== s.token) return
             at.hit(0, {

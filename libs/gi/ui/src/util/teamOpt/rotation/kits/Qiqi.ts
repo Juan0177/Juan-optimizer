@@ -1,10 +1,13 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
   templateJump,
+  turretParticles,
+  turretReady,
   withHitlag,
 } from './common'
 
@@ -54,6 +57,8 @@ const qiqiNormals: NormalHit[] = [
 ]
 
 interface QiqiState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The newest Herald of Frost (its tick chain stops when a newer one is cast) */
   heraldSrc: number
   heraldStart: number
@@ -82,11 +87,27 @@ const qiqiHeal = (
     label,
   })
 
+/** Herald of Frost's particles from a hit now: 2, 6 s ICD on Qiqi's clock (kqmsim particleCB) */
+function heraldParticles(ctx: SimContext, s: QiqiState) {
+  if (turretReady(s.particles, 'herald', ctx.characterFrame('Qiqi'), 360))
+    turretParticles(ctx, 0, 2, 'Qiqi')
+  // C1: a hit on the Talisman-marked enemy restores 2 Energy; (Revelation) in a radiance, 6 more
+  // once per 6 s
+  if (ctx.constellation('Qiqi') < 1) return
+  if (s.talismanOn) flatEnergy(ctx, 0, 2, 'Qiqi C1', { owner: 'Qiqi' })
+  if (
+    ctx.radiance &&
+    turretReady(s.particles, 'c1', ctx.characterFrame('Qiqi'), 360)
+  )
+    flatEnergy(ctx, 0, 6, 'Qiqi C1 (Stellar Glimmer)', { owner: 'Qiqi' })
+}
+
 export const kit: KitModel = {
   characterKey: 'Qiqi',
   element: 'cryo',
   source: `${KQMSIM}/qiqi`,
   init: (): QiqiState => ({
+    particles: new Map(),
     heraldSrc: -1,
     heraldStart: -1,
     heraldEnd: -1,
@@ -179,6 +200,7 @@ export const kit: KitModel = {
               enemyAnimationPause: 7,
               label: 'Qiqi Herald tick hitlag',
             })
+            heraldParticles(t, s)
             const next = last === 60 ? 135 : 60
             if (t.now + next < s.heraldEnd) t.at(next, (t2) => tick(t2, next))
           }
@@ -191,6 +213,7 @@ export const kit: KitModel = {
             label: 'Herald of Frost',
             statSnapshots,
           })
+          heraldParticles(c2, s)
           c2.hit(0, {
             path: ['_marker', 'hitlag'],
             tag: 'other',

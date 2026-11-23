@@ -180,6 +180,12 @@ export default defineConfig(() => ({
           src: normalizePath(resolve('../../apps/frontend/assets/*')),
           dest: 'assets',
         },
+        // the team link format, for other sites' "Open in Stellar Optimizer" buttons: /import-spec/
+        {
+          src: normalizePath(resolve('../../docs/import-spec.html')),
+          dest: 'import-spec',
+          rename: 'index.html',
+        },
       ],
       // Force page to reload if we change any of the above files
       watch: {

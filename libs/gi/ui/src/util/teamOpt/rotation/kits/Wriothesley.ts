@@ -15,7 +15,7 @@ import {
  * pinned kqmsim has none of it): in a Polestar Field (Stellar-Conduct radiance) Chilling
  * Penalty's N3 / N5 become Stellar-Conduct DMG (60% / 80%; C2 at 5 Edict stacks: 90% / 120%),
  * and below 60% HP the charged attack is Luster: Vaulting Fist (Stellar-Conduct DMG, heals 30%
- * Max HP, 2 s ICD), with C1's 5 s cross bonuses and C6's extra 60% hits. Outside radiance, C2 at
+ * Max HP, 2 s ICD), with C1's 5 s cross bonuses and C6's extra 20% icicles. Outside radiance, C2 at
  * 5 Edict stacks makes Chilling Penalty's normals deal 125% and charged attacks 130% (the sheet).
  * HP thresholds need health tracking (A1's Rebuke and Luster are skipped without it).
  */
@@ -102,6 +102,9 @@ interface WriothesleyState {
   c15HitUntil: number
   /** The particle ICD (2 s) runs until this frame (his own clock) */
   particleUntil: number
+  /** C4 (outside radiance): an overflowing heal's ATK SPD, his own (on field) or the party's */
+  c4SelfUntil: number
+  c4TeamUntil: number
 }
 
 /** His hits that make a particle (gcsim's particleCB), by the ER sheet's option they are */
@@ -161,6 +164,8 @@ export const kit: KitModel = {
     c1LusterUntil: -1,
     c15HitUntil: -1,
     particleUntil: -1,
+    c4SelfUntil: -1,
+    c4TeamUntil: -1,
   }),
   onStart(ctx) {
     // Revelation is unlocked (gcsim's default)
@@ -226,7 +231,27 @@ export const kit: KitModel = {
         label: 'Chilling Penalty',
       })
   },
+  // C4: in radiance (dump: _Is_In_StarSCMode) +20% ATK SPD for him and +10% for the others, no
+  // heal needed; outside it, an overflowing heal gives +20% for 4 s on field or the party +10% for
+  // 6 s off field, which do not stack
+  normalAttackSpeed(ctx, s: WriothesleyState, attacker) {
+    if (ctx.constellation('Wriothesley') < 4) return 0
+    if (stellar(ctx)) return attacker === 'Wriothesley' ? 0.2 : 0.1
+    if (attacker === 'Wriothesley' && ctx.now < s.c4SelfUntil) return 0.2
+    return ctx.now < s.c4TeamUntil ? 0.1 : 0
+  },
   onHpChange(ctx, s: WriothesleyState, change) {
+    if (
+      change.kind === 'heal' &&
+      change.characterKey === 'Wriothesley' &&
+      change.overheal > 0 &&
+      ctx.constellation('Wriothesley') >= 4 &&
+      !stellar(ctx)
+    ) {
+      const onField = ctx.onField === 'Wriothesley'
+      s.c4SelfUntil = onField ? ctx.now + 240 : -1
+      s.c4TeamUntil = onField ? -1 : ctx.now + 360
+    }
     if (
       change.characterKey !== 'Wriothesley' ||
       ctx.onField !== 'Wriothesley' ||
@@ -283,7 +308,7 @@ export const kit: KitModel = {
                 ],
               })
               if (n5) {
-                // C6: an extra 60% hit (deployable)
+                // C6: an icicle of 20% of its DMG
                 if (c >= 6)
                   ctx.hit(d, {
                     path: ['constellation6', 'hit5'],
@@ -349,8 +374,8 @@ export const kit: KitModel = {
               },
             ],
           })
-          // C6: an extra 60% hit while in Chilling Penalty
-          if (c >= 6 && clock(ctx) + 19 < s.skillEnd)
+          // C6: an icicle of 20% of its DMG (in or out of Chilling Penalty)
+          if (c >= 6)
             ctx.hit(19, {
               path: ['constellation6', 'lusterDmg'],
               tag: 'directStellarConduct',

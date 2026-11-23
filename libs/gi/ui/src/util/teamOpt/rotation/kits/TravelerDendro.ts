@@ -1,6 +1,6 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { flatEnergy, GCSIM, type NormalHit, normalString } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/dendro/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -189,6 +189,9 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Razorgrass Blade',
         })
+        // C1: 3.5 Energy as it hits
+        if (ctx.constellation('TravelerDendro') >= 1)
+          flatEnergy(ctx, 28, 3.5, 'Traveler (Dendro) C1')
         return {
           cooldown: { key: 'skill', frames: 480, delay: 25 },
           frames: 37,

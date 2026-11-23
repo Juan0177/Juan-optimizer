@@ -184,3 +184,18 @@ export const allMainSubStatKeys = Array.from(
   new Set([...allSubstatKeys, ...allMainStatKeys] as const)
 )
 export type MainSubStatKey = (typeof allMainSubStatKeys)[number]
+
+/**
+ * KQM mode's artifact standards: KQM Standards' own, then tiers up to the best artifacts the game
+ * can make (Good, Great, Top, Perfect)
+ */
+export const allKqmStandardKeys = [
+  'kqms',
+  'good',
+  'great',
+  'top',
+  'perfect',
+] as const
+export type KqmStandardKey = (typeof allKqmStandardKeys)[number]
+/** KQM mode's Custom standard: how many of the set's 45 rolls land on wanted stats */
+export const kqmCustomRollRange = { min: 10, max: 45 } as const

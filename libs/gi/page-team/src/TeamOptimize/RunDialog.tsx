@@ -72,6 +72,7 @@ export function RunDialog({
   teamOpt,
   setTeamOpt,
   poolSize,
+  evaluateOnly,
 }: {
   open: boolean
   onClose: () => void
@@ -82,6 +83,8 @@ export function RunDialog({
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
   poolSize: number
+  /** With no member to optimize, Start still computes the team as it is (an imported team's builds) */
+  evaluateOnly?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const builds = teamOpt.topN ?? 1
@@ -113,7 +116,8 @@ export function RunDialog({
       pool.some((art) => art.slotKey === slot)
     )
   })
-  const canStart = toOptimize.length > 0 && eligible
+  const asItIs = !!evaluateOnly && !toOptimize.length
+  const canStart = (toOptimize.length > 0 && eligible) || asItIs
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   return (
     <ModalWrapper
@@ -263,6 +267,42 @@ export function RunDialog({
               }))}
             />
           </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FieldLabel
+              tip={t(
+                'teamOpt.run.searchTip',
+                'Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.'
+              )}
+            >
+              {t('teamOpt.kqm.search', 'Search')}
+            </FieldLabel>
+            <Segmented
+              size="small"
+              aria-label={t('teamOpt.kqm.search', 'Search')}
+              value={teamOpt.fullSearch ? 'full' : 'quick'}
+              onChange={(search) =>
+                setTeamOpt((o) => {
+                  if (search === 'full') o.fullSearch = true
+                  else delete o.fullSearch
+                })
+              }
+              options={[
+                {
+                  value: 'quick',
+                  label: t('teamOpt.kqm.searchQuick', 'Quick'),
+                },
+                { value: 'full', label: t('teamOpt.kqm.searchFull', 'Full') },
+              ]}
+            />
+          </Box>
+          {asItIs && (
+            <Alert severity="info" role="status">
+              {t(
+                'teamOpt.runDialog.asItIs',
+                'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
+              )}
+            </Alert>
+          )}
           {!!toOptimize.length && !eligible && (
             <Alert severity="info" role="status">
               {artifacts.length

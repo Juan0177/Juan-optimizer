@@ -29,7 +29,10 @@ import {
   kqmDefaultExcludedWeapons,
   kqmExcludedWeapons,
   kqmGroupRefinements,
+  kqmLockedWeapon,
   kqmMemberConstellation,
+  kqmMemberStandard,
+  kqmResultStandardChanged,
   kqmRefinement,
   kqmRollCaps,
   kqmSets,
@@ -331,6 +334,120 @@ describe('KQM Standards builds', () => {
     }
   })
 
+  it('a locked weapon: every build and ranking of that member uses it, even off in the list, and the others are searched around it', async () => {
+    const { database, teamId, teamOpt } = setup()
+    // (an event-wish 5★: off in KQM's default list)
+    expect(kqmWeapons(ayaka, teamOpt.kqm).map((w) => w.key)).not.toContain(
+      'MistsplitterReforged'
+    )
+    teamOpt.kqm!.lockedWeapons = { [ayaka]: 'MistsplitterReforged' }
+    teamOpt.kqm!.refinements = { MistsplitterReforged: 3 }
+    expect(kqmWeapons(ayaka, teamOpt.kqm)).toEqual([
+      { key: 'MistsplitterReforged', refinement: 3 },
+    ])
+    for (const fullSearch of [false, true]) {
+      const result = (await run(database, teamId, {
+        ...teamOpt,
+        kqm: { ...teamOpt.kqm!, fullSearch },
+      }))!
+      expectKqms(result)
+      expect(result.builds[ayaka]!.weapon).toEqual({
+        key: 'MistsplitterReforged',
+        refinement: 3,
+      })
+      expect(
+        new Set(
+          result.rankings[ayaka]!.weapons.map(
+            (o) => `${o.weapon.key}@${o.weapon.refinement}`
+          )
+        )
+      ).toEqual(new Set(['MistsplitterReforged@3']))
+      expect(result.screenedOut?.[ayaka]?.weapons ?? []).toEqual([])
+      expect(result.rankings[shenhe]!.weapons.length).toBeGreaterThan(1)
+    }
+    // (a weapon of another type, as saved from elsewhere: no lock)
+    teamOpt.kqm!.lockedWeapons = { [ayaka]: 'CalamityQueller' }
+    expect(kqmLockedWeapon(ayaka, teamOpt.kqm)).toBeUndefined()
+    expect(kqmWeapons(ayaka, teamOpt.kqm).length).toBeGreaterThan(1)
+  }, 300_000)
+
+  it('standards set per member: each member’s builds and rankings are its own standard’s', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const kqm = {
+      ...teamOpt.kqm!,
+      standard: 'great' as const,
+      memberStandards: { [ayaka]: 'top' as const },
+    }
+    expect(kqmMemberStandard(ayaka, kqm)).toBe('top')
+    expect(kqmMemberStandard(shenhe, kqm)).toBe('great')
+    expect(kqmMemberStandard(shenhe, teamOpt.kqm)).toBe('kqms')
+    const result = (await run(database, teamId, { ...teamOpt, kqm }))!
+    const placed = (b: KqmBuild) =>
+      Object.values(b.rolls).reduce((a, n) => a + (n ?? 0), 0)
+    for (const [ck, standard] of [
+      [ayaka, 'top'],
+      [shenhe, 'great'],
+    ] as const) {
+      const b = result.builds[ck]!
+      expect(b.standard).toBe(standard)
+      expect(b.layout).toHaveLength(5)
+      // (no 4★ sets here: 9 rolls a piece, never more than 45 on the set)
+      expect(placed(b)).toBeCloseTo(45, 6)
+      const caps = kqmRollCaps(b.mains, standard)
+      for (const [k, n] of Object.entries(b.rolls) as [SubstatKey, number][])
+        expect(n).toBeLessThanOrEqual(caps[k] + 1e-9)
+      for (const o of result.rankings[ck]!.sets) {
+        expect(o.standard).toBe(standard)
+        expect(placed(o)).toBeLessThanOrEqual(45 + 1e-9)
+      }
+    }
+    expect(kqmResultStandardChanged(result, kqm)).toBe(false)
+    expect(kqmResultStandardChanged(result, teamOpt.kqm)).toBe(true)
+    // (a better standard on one member: more damage than the team's Great for both)
+    const even = (await run(database, teamId, {
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm!, standard: 'great' },
+    }))!
+    expect(result.after.total).toBeGreaterThan(even.after.total)
+  }, 300_000)
+
+  it('a pick of a screened-out set after a quick search counts its effects, as after a full search', async () => {
+    const { database, teamId, teamOpt } = setup()
+    // (weak sets here: their 35% only on the 2 Skill hits)
+    teamOpt.attacks[ayaka] = [
+      { path: ['burst', 'cutting'], hits: 19, hitMode: 'avgHit' },
+      {
+        path: ['skill', 'press'],
+        hits: 2,
+        hitMode: 'avgHit',
+        states: [
+          { owner: ayaka, path: ['Lavawalker', 'state'], value: 'on' },
+          { owner: ayaka, path: ['Thundersoother', 'state'], value: 'on' },
+        ],
+      },
+    ]
+    const result = (await run(database, teamId, teamOpt))!
+    const set = (['Lavawalker', 'Thundersoother'] as const).find((k) =>
+      result.screenedOut?.[ayaka]?.sets.includes(k)
+    )
+    expect(set).toBeTruthy()
+    const pick = (fullSearch: boolean) =>
+      compareTeamKqm({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt: { ...teamOpt, kqm: { ...teamOpt.kqm!, fullSearch } },
+        result,
+        characterKey: ayaka,
+        weapon: result.builds[ayaka]!.weapon,
+        sets: { [set!]: 4 },
+      }) as Promise<KqmResult>
+    const quick = await pick(false)
+    const full = await pick(true)
+    expect(quick.builds[ayaka]!.sets).toEqual({ [set!]: 4 })
+    expect(quick.after.total).toBeCloseTo(full.after.total, 6)
+  }, 300_000)
+
   it('pairs two sets with the same 2-piece bonus (2-piece ATK + 2-piece ATK)', async () => {
     const { database, teamId, teamOpt } = setup()
     // (two ATK% 2-pieces and one Cryo DMG 2-piece: one bonus class each, ATK% twice)
@@ -406,28 +523,26 @@ describe('KQM Standards builds', () => {
     expect(refit.after.total).toBeGreaterThan(first.after.total)
   })
 
-  it('ranks a group’s weapons at every refinement ticked, building at the group’s default one (else the highest)', async () => {
+  it('ranks a group’s weapons at every refinement ticked, building at the highest', async () => {
     // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too. The
-    // Battle Pass's R1 + R5, saved with the highest as the setting, as before: still built at R1)
+    // Battle Pass's R1 + R5 saved with R1 as the setting, as an older version did: built at R5)
     const kqm = {
       refinement5: 1,
       refinement4: 5,
       compareRefinements: { standard4: [1, 5], bp: [1, 5] },
-      refinementBp: 5,
+      refinementBp: 1,
     }
     expect(kqmWeaponGroup('FavoniusSword')).toBe('standard4')
     expect(kqmRefinement('FavoniusSword', kqm)).toBe(5)
     expect(kqmGroupRefinements('standard4', kqm)).toEqual([1, 5])
     expect(kqmCompareRefinements('FavoniusSword', kqm)).toEqual([1])
     expect(kqmWeaponGroup('TheBlackSword')).toBe('bp')
-    expect(kqmRefinement('TheBlackSword', kqm)).toBe(1)
+    expect(kqmRefinement('TheBlackSword', kqm)).toBe(5)
     expect(kqmGroupRefinements('bp', kqm)).toEqual([1, 5])
-    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([5])
-    // (the default one when ticked: Battle Pass R1, 4★ standard wish R5; else the highest)
-    expect(kqmBuiltRefinement('bp', [1, 5])).toBe(1)
-    expect(kqmBuiltRefinement('bp', [3, 5])).toBe(5)
-    expect(kqmBuiltRefinement('standard4', [1, 5])).toBe(5)
-    expect(kqmBuiltRefinement('standard4', [1, 3])).toBe(3)
+    expect(kqmCompareRefinements('TheBlackSword', kqm)).toEqual([1])
+    expect(kqmBuiltRefinement([1, 5])).toBe(5)
+    expect(kqmBuiltRefinement([1, 3])).toBe(3)
+    expect(kqmBuiltRefinement([2])).toBe(2)
     // (a weapon with its own refinement is not compared; a group with one ticked neither)
     expect(
       kqmCompareRefinements('FavoniusSword', {
@@ -453,10 +568,10 @@ describe('KQM Standards builds', () => {
     const blackSword = weapons.filter((o) => o.weapon.key === 'TheBlackSword')
     expect(blackSword.map((o) => o.weapon.refinement).sort()).toEqual([1, 5])
     expect(blackSword.find((o) => o.weapon.refinement === 1)?.compare).toBe(
-      undefined
+      true
     )
     expect(blackSword.find((o) => o.weapon.refinement === 5)?.compare).toBe(
-      true
+      undefined
     )
     for (const ck of [ayaka, shenhe]) {
       const built = result.builds[ck]!.weapon

@@ -1,6 +1,7 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { SimHit } from '../types'
 import type { WeaponModule } from '../weaponEffects'
+import { stoicSymbols } from './sword3'
 
 /**
  * A reaction its character triggers, as kqmsim's reaction events: a reaction mark (not Moondrift,
@@ -22,6 +23,7 @@ const stellarReaction = (hit: SimHit) =>
 
 /** Weapon audit batch claymore3 (2026-11-16), as kqmsim and the game's text */
 export const claymore3: WeaponModule[] = [
+  stoicSymbols('PortablePowerSaw'),
   {
     // Blade of Atonement (kqmsim bladeofatonement.go): EM for 12 s after any reaction the wielder
     // triggers, ATK for 12 s after its Stellar-Conduct or Stellar Swirl (off the field too, both

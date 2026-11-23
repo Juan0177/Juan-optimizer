@@ -124,15 +124,18 @@ export class GOSolver {
 
   /** Whether this search may use the GPU (default: the user's setting, see `optimizerGpuEnabled`) */
   private readonly useGpu: boolean | undefined
+  /** The GPU takes searches of at least this many builds (default `GPU_MIN_TOTAL`) */
+  private readonly gpuMinTotal: number
   constructor(
     problem: OptProblemInput,
     status: Status,
     numWorker: number,
-    { gpu }: { gpu?: boolean } = {}
+    { gpu, gpuMinTotal }: { gpu?: boolean; gpuMinTotal?: number } = {}
   ) {
     this.problem = problem
     this.status = status
     this.useGpu = gpu
+    this.gpuMinTotal = gpuMinTotal ?? GPU_MIN_TOTAL
     // one core is left for the browser (drawing the page, the GPU process): with every core busy
     // computing, the whole tab stutters while the optimizer runs
     const cores = globalThis.navigator?.hardwareConcurrency || 8
@@ -392,7 +395,7 @@ export class GOSolver {
       if (r.resultType === 'prepared') {
         if (waitForCPU) {
           leadWaiting = true
-          if (r.fullTotal >= GPU_MIN_TOTAL) {
+          if (r.fullTotal >= this.gpuMinTotal) {
             // (the lead finishes listing the items, then idles until `proceed`)
             this.busy.delete(w)
             void raceGPU(r.setup, r.plot, r.fullTotal)

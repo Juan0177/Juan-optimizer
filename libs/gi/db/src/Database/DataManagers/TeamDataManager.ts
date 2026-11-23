@@ -119,6 +119,23 @@ export interface Team {
   enemyHp?: number
   /** How the team plays a boss's mechanics where its fight cannot tell (the Moongecko's) */
   fightSettings?: TeamFightSettings
+  /**
+   * The team this one is a version of (KQM's versions: one or two members swapped, compared under
+   * the original's settings): the original's id. Absent: not a version
+   */
+  versionOf?: string
+  /** A version's own constellations, over the original's KQM ones (the rest are shared) */
+  versionCons?: Partial<Record<CharacterKey, number>>
+  /**
+   * Imported from a team link (another site's): its members start on that site's builds as
+   * theorycraft builds, and Optimize team switches the members the player has to their own gear
+   */
+  importedFrom?: {
+    name?: string
+    url?: string
+    /** The characters the player did not have: the import added them (not theirs until built) */
+    added?: CharacterKey[]
+  }
 }
 export type { TeamFightSettings } from './TeamEnemy'
 export { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
@@ -288,7 +305,8 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
-    const { enemyPreset, enemyHp } = obj as Team
+    const { enemyPreset, enemyHp, versionOf, versionCons, importedFrom } =
+      obj as Team
     const fightSettings = validateFightSettings((obj as Team).fightSettings)
 
     const validated: Team = {
@@ -311,6 +329,38 @@ export class TeamDataManager extends DataManager<
         ? { enemyHp: Math.round(enemyHp) }
         : {}),
       ...(fightSettings ? { fightSettings } : {}),
+      ...(typeof versionOf === 'string' &&
+      versionOf.startsWith('team_') &&
+      versionOf.length <= 64 &&
+      versionOf !== key
+        ? { versionOf }
+        : {}),
+    }
+    if (importedFrom && typeof importedFrom === 'object') {
+      const text = (v: unknown, max: number) =>
+        typeof v === 'string' && v.length <= max ? v : undefined
+      const name = text(importedFrom.name, 60)
+      const url = text(importedFrom.url, 500)
+      const added = Array.isArray(importedFrom.added)
+        ? importedFrom.added.filter((k) => allCharacterKeys.includes(k))
+        : []
+      validated.importedFrom = {
+        ...(name ? { name } : {}),
+        ...(url?.startsWith('https://') ? { url } : {}),
+        ...(added.length ? { added } : {}),
+      }
+    }
+    if (validated.versionOf && versionCons && typeof versionCons === 'object') {
+      const cons = Object.fromEntries(
+        Object.entries(versionCons).filter(
+          ([k, n]) =>
+            allCharacterKeys.includes(k as CharacterKey) &&
+            Number.isInteger(n) &&
+            (n as number) >= 0 &&
+            (n as number) <= 6
+        )
+      )
+      if (Object.keys(cons).length) validated.versionCons = cons
     }
     const equipmentUndo = teamEquipmentUndoSchema.safeParse(
       (obj as Team).equipmentUndo
@@ -464,6 +514,13 @@ export class TeamDataManager extends DataManager<
     if (removed) {
       this.database.teamOptResults?.setRun(key, undefined)
       this.database.teamKqmResults?.setRun(key, undefined)
+      this.database.teamKqmResults?.setSummary(key, undefined)
+      // (its versions stay, as teams of their own)
+      for (const id of this.keys)
+        if (this.get(id)?.versionOf === key)
+          this.set(id, (team) => {
+            delete team.versionOf
+          })
     }
     return removed
   }
@@ -496,6 +553,9 @@ export class TeamDataManager extends DataManager<
       loadoutData,
       rotationDocuments,
       equipmentUndo: _undo,
+      // (an id of this database's: a team exported alone is not a version)
+      versionOf: _versionOf,
+      versionCons: _versionCons,
       ...rest
     } = this.deCache(team)
     const documents = deepClone(rotationDocuments ?? {})
@@ -558,7 +618,13 @@ export class TeamDataManager extends DataManager<
     }
     // Validate the team itself before importing its loadouts, which create database records.
     const team = this.validate(
-      { ...rest, equipmentUndo: undefined, loadoutData: [] },
+      {
+        ...rest,
+        equipmentUndo: undefined,
+        versionOf: undefined,
+        versionCons: undefined,
+        loadoutData: [],
+      },
       ''
     )
     if (!team) return ''

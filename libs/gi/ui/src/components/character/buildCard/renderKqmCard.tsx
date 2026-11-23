@@ -139,10 +139,11 @@ export const GAME_ELEMENT: Record<string, string> = {
   physical: '#a8aab3',
 }
 /** A member's cells: the game's hue lightened (the portrait more, its rows less) */
-const tonesOf = (m: KqmCardMember) => {
+export const kqmCardTones = (m: { element: string; elementColor: string }) => {
   const hue = GAME_ELEMENT[m.element] ?? m.elementColor
   return { portrait: pastel(hue, 0.34), row: pastel(hue, 0.16) }
 }
+const tonesOf = kqmCardTones
 
 /** A color, as a pale cell (an element without its own tones) */
 function pastel(hex: string, amount = 0.2) {

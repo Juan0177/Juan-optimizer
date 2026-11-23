@@ -1,6 +1,12 @@
 import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/lisa, main as of 2026-11-10. */
 
@@ -144,6 +150,9 @@ function act(
       ctx.at(117, () => {
         s.conductive = 0
       })
+      // C1: 2 Energy per opponent it hits, 0.4 s after
+      if (ctx.constellation('Lisa') >= 1)
+        flatEnergy(ctx, 117 + 24, 2, 'Lisa C1')
       if (ctx.constellation('Lisa') >= 2)
         ctx.buff('Lisa', ['Lisa', 'LisaC2'], 'on', 0, 126)
       return {

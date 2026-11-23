@@ -14,6 +14,8 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   CA[beams=2]  Sandrone's charge released after 2 condensed beams (3 by default; up to 6 from C1)
  *   CA[bullets=4]  Chasca's Shadowhunt fired after loading 4 bullets (6 by default)
  *   CA[weakspot]  an aimed shot that hits a weak point (Prototype Crescent's passive)
+ *   N3[movement=4]  after any action: the metres the active member moves with it, each normal attack
+ *                of a string counted (gcsim's movement param; only Iansan's Scale uses it)
  *   CA[cancel]  Arlecchino's Charged Attack cancelled early: she absorbs the Blood-Debt Directive
  *                and the attack never hits (gcsim's charge[early_cancel=1], also accepted)
  *   C3 / C3F / CF  Mavuika's Flamestrider Charged Attack held for 3 spins (1 by default), then
@@ -47,6 +49,8 @@ export interface RotationAction {
   kind: RotationActionKind
   /** Skill: tapped or held */
   hold?: boolean
+  /** Skill: the stacks a hold is held for (Beidou's Polaris, "hE[stacks=1]"; the kit's most when absent) */
+  stacks?: number
   /** Normal: how many hits of the string (N4 = 4); wait: seconds */
   count?: number
   /** Wait: a walk ("WK", gcsim's walk), not idle time */
@@ -55,6 +59,8 @@ export interface RotationAction {
   optional?: boolean
   /** An optional action's alternative ("Q?/N3", "E?/N2 CA"): played instead when it is not ready */
   otherwise?: RotationAction[]
+  /** The metres the active member moves with it, per normal attack of a string ("N3[movement=4]") */
+  movement?: number
   /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
   beams?: number
   /** Charged: Chasca's Shadowhunt bullets loaded before she fires ("CA[bullets=4]") */
@@ -222,6 +228,32 @@ const CHARGE_BULLETS: Partial<Record<CharacterKey, number>> = { Chasca: 6 }
 const CHARGE_SPINS: Partial<Record<CharacterKey, number>> = { Mavuika: 8 }
 /** Members whose Charged Attack can be cancelled before it hits ("CA[cancel]") */
 const CHARGE_CANCEL: Partial<Record<CharacterKey, true>> = { Arlecchino: true }
+/** Members whose held Skill is held for a number of stacks ("hE[stacks=1]"), and the most */
+const SKILL_STACKS: Partial<Record<CharacterKey, number>> = { Beidou: 2 }
+/** "[movement=6]" after an action (gcsim's movement param), with a Skill's or Burst's "?" after it */
+const MOVEMENT_WORD = /\[\s*movement\s*=\s*([^\]]*?)\s*\](\?)?/iy
+
+/**
+ * The ways a member's kit lets its actions be written beyond the plain ones, for a rotation
+ * search to try: Charged Attacks with beams (Sandrone) or bullets (Chasca), Flamestrider spins and
+ * finisher (Mavuika), a cancelled Charged Attack (Arlecchino, then a dash), a held Skill's stacks
+ * (Beidou). What the member's constellations do not allow, the simulation warns about.
+ */
+export function actionVariants(characterKey: CharacterKey): string[] {
+  const out: string[] = []
+  const counted = (most: number | undefined, word: (n: number) => string) => {
+    for (let n = 1; most && n <= most; n++) out.push(word(n))
+  }
+  counted(CHARGE_BEAMS[characterKey], (n) => `CA[beams=${n}]`)
+  counted(CHARGE_BULLETS[characterKey], (n) => `CA[bullets=${n}]`)
+  const spins = CHARGE_SPINS[characterKey]
+  counted(spins, (n) => `C${n}`)
+  counted(spins, (n) => `C${n}F`)
+  if (spins) out.push('CF')
+  if (CHARGE_CANCEL[characterKey]) out.push('CA[cancel] D')
+  counted(SKILL_STACKS[characterKey], (n) => `hE[stacks=${n}]`)
+  return out
+}
 
 /** The most times one group is repeated ("4[N5CD]", "4N5CD") */
 const MAX_REPEAT = 20
@@ -280,7 +312,7 @@ export function expandRepeats(
 }
 
 /** A Skill or Burst with an alternative after "/" ("Q?/N3", "Q/N3", "hE/N2CA"): the alternative is played when it is not ready */
-const SKILL_BURST_ALT = /^(?:(?:[ht]?e|q)\??|d\?)\/./i
+const SKILL_BURST_ALT = /^(?:(?:[ht]?e|q)(?:\[[^\]]*\])*\??|d\?)\/./i
 
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
@@ -323,6 +355,25 @@ function parseActions(
     }
     i = token.lastIndex
     const raw = m[0].trim()
+    const pushed = actions.length
+    /** "[movement=6]" at `i`, as written and in metres (undefined: not written or unreadable) */
+    const takeMovement = (written: string, question: boolean) => {
+      MOVEMENT_WORD.lastIndex = i
+      const mv = MOVEMENT_WORD.exec(s)
+      if (!mv) return undefined
+      // (a "?" after it only makes a Skill or Burst optional)
+      const optional = !!mv[2] && question
+      i = MOVEMENT_WORD.lastIndex - (mv[2] && !question ? 1 : 0)
+      const text = mv[0].replace(/\?$/, '')
+      const n = Number(mv[1])
+      if (mv[1] === '' || !Number.isFinite(n) || n < 0) {
+        warnings.push(
+          `${who}: "${written}${text}": write the metres it moves, as [movement=6] (played without it)`
+        )
+        return { text: '', optional }
+      }
+      return { movement: n, text, optional }
+    }
     /** What follows "/" up to the next space, as actions (undefined: none) */
     const takeAlternative = () => {
       const end = s.indexOf(' ', i)
@@ -356,18 +407,57 @@ function parseActions(
           `${who}: "${raw}" is not a wait: write its length, as W1.5 or W90f (skipped)`
         )
     } else if (m[4] || m[6]) {
+      // a hold's stacks ("hE[stacks=1]", "hE[stacks=1]?")
+      const stacksWord = /\[\s*stacks\s*=\s*(\d+)\s*\](\?)?/iy
+      stacksWord.lastIndex = i
+      const st = m[4] && !m[5] ? stacksWord.exec(s) : null
+      if (st) i = stacksWord.lastIndex
+      const stacksText = st ? st[0].trim() : ''
+      const mv = takeMovement(
+        `${raw}${stacksText}`,
+        !(m[4] ? m[5] || st?.[2] : m[7])
+      )
+      const movement = mv?.movement
+      const written = `${raw}${st ? stacksText.replace(/\?$/, '') : ''}${mv?.text ?? ''}${
+        (st?.[2] || mv?.optional) && !/\?$/.test(raw) ? '?' : ''
+      }`
+      const hold = !!m[4] && m[3]?.toLowerCase() === 'h'
+      let stacks: number | undefined
+      if (st) {
+        const n = Number(st[1])
+        const most = characterKey && SKILL_STACKS[characterKey]
+        if (!most)
+          warnings.push(
+            `${who}: "${written}": only Beidou's held Skill has stacks (played without them)`
+          )
+        else if (!hold)
+          warnings.push(
+            `${who}: "${written}": stacks come from holding, write hE${st[0].replace(/\?$/, '')} (played as a tap)`
+          )
+        else if (n < 1 || n > most)
+          warnings.push(
+            `${who}: "${written}": 1 to ${most} stacks (played as hE, ${most} stacks)`
+          )
+        else stacks = n
+      }
       // its alternative: what follows "/" up to the next space ("Q?/N3", "E?/N2CA"; without the "?"
       // too, "Q/N3": an alternative makes it optional)
       const hasAlt = s[i] === '/'
-      const optional = !!(m[4] ? m[5] : m[7]) || hasAlt
+      const optional =
+        !!(m[4] ? m[5] || st?.[2] : m[7]) || !!mv?.optional || hasAlt
       const otherwise = hasAlt ? takeAlternative() : undefined
       actions.push({
         ...(m[4]
-          ? { kind: 'skill' as const, hold: m[3]?.toLowerCase() === 'h' }
+          ? {
+              kind: 'skill' as const,
+              hold,
+              ...(stacks !== undefined && { stacks }),
+            }
           : { kind: 'burst' as const }),
+        ...(movement !== undefined && { movement }),
         text: otherwise
-          ? `${raw}/${otherwise.map((a) => a.text).join(' ')}`
-          : raw,
+          ? `${written}/${otherwise.map((a) => a.text).join(' ')}`
+          : written,
         ...(optional && { optional: true }),
         ...(otherwise && { otherwise }),
       })
@@ -453,6 +543,21 @@ function parseActions(
         ...(otherwise && { otherwise }),
       })
     } else if (m[22]) actions.push({ kind: 'jump', text: raw })
+    // any other action's movement ("N3[movement=4]", "D[movement=8]"); a wait other than a walk
+    // has none
+    const last =
+      actions.length > pushed ? actions[actions.length - 1] : undefined
+    if (last && last.movement === undefined && !m[4] && !m[6]) {
+      const mv = takeMovement(last.text ?? raw, false)
+      if (mv && last.kind === 'wait' && !last.walk)
+        warnings.push(
+          `${who}: "${raw}${mv.text}": a wait doesn't move, a walk does (WK) (played without it)`
+        )
+      else if (mv) {
+        if (mv.movement !== undefined) last.movement = mv.movement
+        last.text = `${last.text ?? raw}${mv.text}`
+      }
+    }
   }
   return actions
 }
@@ -521,6 +626,175 @@ export function parseRotation(
     )
   }
   return { steps, loopsTo, warnings }
+}
+
+/** A written step's member and the rest of its text, named as `parseRotation` reads it */
+function stepHead(part: string, members: readonly RotationMember[]) {
+  const words = part.split(/\s+/)
+  for (let n = Math.min(words.length, 3); n >= 1; n--) {
+    const characterKey = matchMember(words.slice(0, n).join(' '), members)
+    if (characterKey) return { characterKey, rest: words.slice(n).join(' ') }
+  }
+  return undefined
+}
+const writtenSteps = (text: string, members: readonly RotationMember[]) =>
+  text
+    .split(SEPARATOR)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .flatMap((p) => splitOnNames(p, members))
+
+/** A written rotation's step as words (`rotationWords`) */
+export interface RotationWordStep {
+  characterKey: CharacterKey
+  /** The member's name as written */
+  name: string
+  /** One action or group a word ("E", "4[N5 CA]", "Q?/N3"); none: the loop back to the member */
+  words: string[]
+}
+
+/** Words split at spaces outside brackets ("4[N5 CA]" and "CA[beams=2]" stay one word) */
+function bracketWords(text: string) {
+  const words: string[] = []
+  let word = ''
+  let depth = 0
+  for (const ch of text) {
+    if (/\s/.test(ch) && !depth) {
+      if (word) words.push(word)
+      word = ''
+      continue
+    }
+    if (ch === '[') depth++
+    else if (ch === ']') depth = Math.max(0, depth - 1)
+    word += ch
+  }
+  if (word) words.push(word)
+  return words
+}
+
+/** A step's actions one word each: "EQ" is "E", "Q"; a group "4N5CA" is "4[N5 CA]" */
+function actionWords(
+  text: string,
+  who: string,
+  characterKey: CharacterKey
+): string[] {
+  return bracketWords(text).flatMap((word) => {
+    const group = /^(\d+)\[(.*)\]$/.exec(word)
+    if (group)
+      return [
+        `${group[1]}[${actionWords(group[2], who, characterKey).join(' ')}]`,
+      ]
+    const glued = /^(\d+)([a-z].*)$/i.exec(word)
+    if (glued && !/[[/]/.test(word))
+      return [
+        `${glued[1]}[${actionWords(glued[2], who, characterKey).join(' ')}]`,
+      ]
+    if (/[[/]/.test(word)) return [word]
+    const actions = parseActions(word, [], who, characterKey)
+    return actions.length > 1 ? actions.map((a) => a.text) : [word]
+  })
+}
+
+/**
+ * A written rotation as its steps' words, to change it a word at a time (a rotation search):
+ * each step's member, its name as written and its actions, one word each. Notes in parentheses
+ * are left out; a step naming no member is skipped.
+ */
+export function rotationWords(
+  text: string,
+  members: readonly RotationMember[]
+): RotationWordStep[] {
+  return writtenSteps(text, members).flatMap((part) => {
+    const head = stepHead(part, members)
+    if (!head) return []
+    const name = part.slice(0, part.length - head.rest.length).trim()
+    const rest = head.rest.replace(/\([^)]*\)/g, ' ').trim()
+    return [
+      {
+        characterKey: head.characterKey,
+        name,
+        words: rest ? actionWords(rest, name, head.characterKey) : [],
+      },
+    ]
+  })
+}
+
+/** `rotationWords` written back as a rotation */
+export const wordsRotationText = (steps: readonly RotationWordStep[]) =>
+  steps.map((s) => [s.name, ...s.words].join(' ')).join(' -> ')
+
+/** A member's steps in a rotation, as written without its name ("E Q") */
+export function memberSteps(
+  text: string,
+  members: readonly RotationMember[],
+  characterKey: CharacterKey
+): string[] {
+  return writtenSteps(text, members).flatMap((part) => {
+    const head = stepHead(part, members)
+    return head?.characterKey === characterKey && head.rest ? [head.rest] : []
+  })
+}
+
+/**
+ * The rotation with members swapped (`members`: the team's before): a step of each one swapped out
+ * becomes its replacement's `part`, under the replacement's `name` (its first step, or with
+ * `longest` its longest: a main DPS's field time); its other steps are left out, and a loop back to
+ * it loops back to the rotation's first member. A replacement for a member without a step plays
+ * its part last. Without a `part` (an opener's setup), the member's steps are only left out. The
+ * other steps stay as written.
+ */
+export function swapRotationMembers(
+  text: string,
+  members: readonly RotationMember[],
+  swaps: readonly {
+    from: CharacterKey
+    name: string
+    part?: string
+    longest?: boolean
+  }[]
+): string {
+  const parts = writtenSteps(text, members)
+  const heads = parts.map((part) => stepHead(part, members))
+  const size = (rest: string) =>
+    expandRepeats(rest).split(/\s+/).filter(Boolean).length
+  // (the step each replacement plays its part at)
+  const at = new Map<CharacterKey, number>()
+  for (const swap of swaps) {
+    if (swap.part === undefined) continue
+    heads.forEach((head, i) => {
+      if (head?.characterKey !== swap.from || !head.rest) return
+      const best = at.get(swap.from)
+      if (
+        best === undefined ||
+        (swap.longest && size(head.rest) > size(heads[best]!.rest))
+      )
+        at.set(swap.from, i)
+    })
+  }
+  const out: { text: string; name: string }[] = []
+  let loop: string | undefined
+  let loopSwapped = false
+  parts.forEach((part, index) => {
+    const head = heads[index]
+    const swap = head && swaps.find((s) => s.from === head.characterKey)
+    if (head && !head.rest && index === parts.length - 1) {
+      if (swap) loopSwapped = true
+      else loop = part
+      return
+    }
+    if (!swap) {
+      const name = head ? part.slice(0, part.length - head.rest.length) : part
+      out.push({ text: part, name: name.trim() })
+      return
+    }
+    if (at.get(swap.from) === index)
+      out.push({ text: `${swap.name} ${swap.part}`.trim(), name: swap.name })
+  })
+  for (const swap of swaps)
+    if (swap.part !== undefined && !at.has(swap.from) && text.trim())
+      out.push({ text: `${swap.name} ${swap.part}`.trim(), name: swap.name })
+  if (loopSwapped && out.length) loop = out[0].name
+  return [...out.map((o) => o.text), ...(loop ? [loop] : [])].join(' -> ')
 }
 
 /** What a piece of rotation text is, as the writer colours it */

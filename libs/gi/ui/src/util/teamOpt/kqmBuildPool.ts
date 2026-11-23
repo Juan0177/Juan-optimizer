@@ -33,7 +33,8 @@ export type KqmBuildReply =
   | { type: 'missing'; id: number }
   | { type: 'error'; id: number; message: string }
 
-interface Snapshot {
+/** A copy of the database for workers (`databaseSnapshot`) */
+export interface Snapshot {
   key: string
   dbIndex: 1 | 2 | 3 | 4
   entries: Record<string, string>
@@ -139,8 +140,8 @@ function hash(text: string, h: number) {
   return h >>> 0
 }
 
-/** The database as it is now, for the builders (the last copy when nothing changed) */
-function snapshot(database: ArtCharDatabase): Snapshot {
+/** The database as it is now, for workers (the last copy when nothing changed) */
+export function databaseSnapshot(database: ArtCharDatabase): Snapshot {
   const entries = database.storage.entries
   let h = 2166136261
   let size = 0
@@ -179,7 +180,7 @@ export function kqmProblemBuilder(
       clearTimeout(idleTimer)
       if (!workersUsable())
         return inline(database, teamId, gender, settings, isCancelled)
-      copy ??= snapshot(database)
+      copy ??= databaseSnapshot(database)
       return new Promise((resolve, reject) => {
         queue.push({
           id: nextId++,

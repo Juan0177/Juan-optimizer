@@ -11,6 +11,7 @@ import type {
   CharacterKey,
   ElementWithPhyKey,
   InfusionAuraElementKey,
+  KqmStandardKey,
   LocationCharacterKey,
   MultiOptHitModeKey,
   WeaponKey,
@@ -22,7 +23,9 @@ import {
   allCharacterKeys,
   allElementWithPhyKeys,
   allInfusionAuraElementKeys,
+  allKqmStandardKeys,
   allLocationCharacterKeys,
+  kqmCustomRollRange,
   allMultiOptHitModeKeys,
   allWeaponKeys,
   defaultOptArtifactLevel,
@@ -157,6 +160,11 @@ export interface TeamOpt {
   /** How many team builds to find, best first (2 to 5); absent: 1 */
   topN?: number
   /**
+   * Search every artifact (exact); absent: Quick, which first narrows each slot to the artifacts
+   * that can matter (it may rarely miss the best build, by a little)
+   */
+  fullSearch?: boolean
+  /**
    * Where the members' Energy Recharge requirements come from: the ER calculator (`energyCalculator`,
    * worked out for the weapons each build holds), or each member's own Optimize settings
    * (`manual`); absent: the calculator once a written rotation fills it in
@@ -186,6 +194,11 @@ export const teamOptEnergyRotationFields = [
   'favoniusProcs',
   'favoniusCatchBy',
   'weaponTriggers',
+  'turretParticles',
+  'scaledEnergy',
+  'catchShares',
+  'turretCatchShares',
+  'favoniusCatchShares',
 ] as const
 export type TeamOptEnergyRotationField =
   (typeof teamOptEnergyRotationFields)[number]
@@ -209,6 +222,27 @@ export interface TeamOptEnergyMember {
   weaponTriggers?: Partial<Record<WeaponKey, number>>
   favoniusCatchBy?: CharacterKey
   flatEnergy: number
+  /**
+   * The particles the member's turret made a rotation, as the written rotation played it (its kit
+   * marks them where they drop): counted in place of its Skill options' rate for its uses, unless
+   * the Skill uses are set by hand
+   */
+  turretParticles?: number
+  /**
+   * Energy from members whose gift grows with their Energy Recharge (Raiden's Musou Isshin, Sara's
+   * A4), per rotation at their base amount, by giver
+   */
+  scaledEnergy?: Partial<Record<CharacterKey, number>>
+  /**
+   * Who is on the field when the member's Skill particles arrive, as the written rotation plays
+   * them: each member's share (%) of them. Counted in place of `catchBy` and `funnelShare` unless
+   * one of those is set by hand
+   */
+  catchShares?: Partial<Record<CharacterKey, number>>
+  /** The same for the particles its turret made (`turretParticles`), in place of field time */
+  turretCatchShares?: Partial<Record<CharacterKey, number>>
+  /** The same for its Favonius triggers' particles, unless `favoniusCatchBy` is set by hand */
+  favoniusCatchShares?: Partial<Record<CharacterKey, number>>
   /** Inputs set by hand: the written rotation no longer fills them in */
   edited?: TeamOptEnergyRotationField[]
 }
@@ -220,6 +254,8 @@ export interface TeamOptEnergyCalculator {
   rng: 'average' | 'safe' | 'worst'
   /** Zero disables Electro resonance particle generation. */
   electroInterval: number
+  /** Nightsoul Bursts a rotation, as the written rotation plays them (Scroll of the Hero of Cinder City) */
+  nightsoulBursts?: number
   members: Partial<Record<CharacterKey, TeamOptEnergyMember>>
   /** Encounter inputs set by hand: the written rotation no longer fills them in */
   edited?: 'electroInterval'[]
@@ -264,10 +300,15 @@ export interface TeamOptKqm {
    */
   fullSearch?: boolean
   /**
-   * The artifact standard: rolls placed for damage on top of the fixed ones (absent: KQM
-   * Standards' 20; 25, 30 and 40 are the higher presets, any other a custom one)
+   * The artifact standard (absent: KQM Standards); a number is Custom: how many of the set's 45
+   * rolls land on wanted stats
    */
-  rolls?: number
+  standard?: KqmStandardKey | number
+  /**
+   * The artifact standard set per member instead (a member without one: `standard`). Absent: the
+   * team's one standard
+   */
+  memberStandards?: Partial<Record<CharacterKey, KqmStandardKey | number>>
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
   /**
@@ -305,6 +346,17 @@ export interface TeamOptKqm {
   weaponList?: 2
   /** A refinement per weapon, over the default for its source and rarity */
   refinements?: Partial<Record<WeaponKey, number>>
+  /**
+   * A weapon per member that its builds always use, whatever the weapon list (at its refinement
+   * above); absent: the search chooses among the list's
+   */
+  lockedWeapons?: Partial<Record<CharacterKey, WeaponKey>>
+  /**
+   * Per member, its signature weapon (gi/consts `signatureWeapons`): its builds use it at this
+   * refinement (1–5, over `lockedWeapons`), or never (0). A team's own: a KQM version's choice,
+   * not shared with its family.
+   */
+  signature?: Partial<Record<CharacterKey, number>>
   /** Artifact sets left out of the choice */
   excludedSets?: ArtifactSetKey[]
   /**
@@ -326,6 +378,43 @@ export interface TeamOptKqm {
 export const defaultTeamOptKqm: TeamOptKqm = { refinement5: 1, refinement4: 5 }
 
 const reactionKeys = [...allAmpReactionKeys, ...allAdditiveReactions] as const
+/** A Custom standard's wanted rolls, if `value` is one (a whole number in its range) */
+const kqmCustomRolls = (value: unknown) =>
+  typeof value === 'number' &&
+  Number.isInteger(value) &&
+  value >= kqmCustomRollRange.min &&
+  value <= kqmCustomRollRange.max
+    ? value
+    : undefined
+/** A saved standard: a named one, or Custom's rolls */
+const kqmStandardValue = (value: unknown) =>
+  allKqmStandardKeys.includes(value as KqmStandardKey)
+    ? (value as KqmStandardKey)
+    : kqmCustomRolls(value)
+/**
+ * A standard saved before the tiers, as its number of placed rolls: the presets (20 KQM
+ * Standards, 25 Good, 30 Great, 40 Top) as they were named, any other number as Custom's (within
+ * its range)
+ */
+function kqmStandardFromRolls(
+  rolls: unknown
+): KqmStandardKey | number | undefined {
+  if (typeof rolls !== 'number' || !Number.isFinite(rolls)) return undefined
+  const preset = (
+    { 20: 'kqms', 25: 'good', 30: 'great', 40: 'top' } as Record<
+      number,
+      KqmStandardKey
+    >
+  )[rolls]
+  return (
+    preset ??
+    Math.min(
+      kqmCustomRollRange.max,
+      Math.max(kqmCustomRollRange.min, Math.round(rolls))
+    )
+  )
+}
+
 const ownerKeys = [...allCharacterKeys, 'team'] as const
 
 const buffLimitSchema = z.object({
@@ -459,6 +548,23 @@ const energyMemberSchema = z.object({
     .catch(undefined),
   favoniusCatchBy: z.enum(allCharacterKeys).optional(),
   flatEnergy: z.number().finite(),
+  turretParticles: z.number().finite().min(0).optional().catch(undefined),
+  scaledEnergy: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  catchShares: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  turretCatchShares: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
+  favoniusCatchShares: z
+    .partialRecord(z.enum(allCharacterKeys), z.number().finite().min(0))
+    .optional()
+    .catch(undefined),
   edited: z
     .array(z.enum(teamOptEnergyRotationFields))
     .optional()
@@ -470,6 +576,7 @@ const energyCalculatorSchema = z.object({
   enemyParticles: z.number().finite().min(0),
   rng: z.enum(['average', 'safe', 'worst']),
   electroInterval: z.number().finite().min(0),
+  nightsoulBursts: z.number().finite().min(0).optional().catch(undefined),
   edited: z
     .array(z.enum(['electroInterval']))
     .optional()
@@ -583,6 +690,7 @@ const teamOptSchema = z.object({
     .optional()
     .catch(undefined),
   topN: z.number().int().min(2).max(5).optional().catch(undefined),
+  fullSearch: z.boolean().optional().catch(undefined),
   energySource: z.enum(['manual', 'calculator']).optional().catch(undefined),
   energyCalculator: energyCalculatorSchema.optional().catch(undefined),
   energyRotation: z.string().optional().catch(undefined),
@@ -661,7 +769,27 @@ const teamOptSchema = z.object({
         .optional()
         .catch(undefined),
       fullSearch: z.boolean().optional().catch(undefined),
-      rolls: z.number().int().min(0).max(60).optional().catch(undefined),
+      standard: z
+        .unknown()
+        .optional()
+        .transform((value) => kqmStandardValue(value)),
+      memberStandards: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['memberStandards']> = {}
+          for (const [key, value] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(key as CharacterKey) &&
+              kqmStandardValue(value) !== undefined
+            )
+              result[key as CharacterKey] = kqmStandardValue(value)!
+          return Object.keys(result).length ? result : undefined
+        }),
+      // (before the tiers: a number of placed rolls, read as the nearest tier)
+      rolls: z.unknown().optional(),
+      memberRolls: z.unknown().optional(),
       energySource: z
         .enum(['manual', 'calculator'])
         .optional()
@@ -741,6 +869,37 @@ const teamOptSchema = z.object({
               result[key as WeaponKey] = r
           return Object.keys(result).length ? result : undefined
         }),
+      signature: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['signature']> = {}
+          for (const [ck, r] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(ck as CharacterKey) &&
+              typeof r === 'number' &&
+              Number.isInteger(r) &&
+              r >= 0 &&
+              r <= 5
+            )
+              result[ck as CharacterKey] = r
+          return Object.keys(result).length ? result : undefined
+        }),
+      lockedWeapons: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['lockedWeapons']> = {}
+          for (const [ck, key] of Object.entries(record))
+            if (
+              allCharacterKeys.includes(ck as CharacterKey) &&
+              allWeaponKeys.includes(key as WeaponKey)
+            )
+              result[ck as CharacterKey] = key as WeaponKey
+          return Object.keys(result).length ? result : undefined
+        }),
       weaponEnergy: z
         .unknown()
         .optional()
@@ -793,7 +952,26 @@ const teamOptSchema = z.object({
     })
     .optional()
     .catch(undefined)
-    .transform((kqm) => kqm && (stripUndefined(kqm) as TeamOptKqm)),
+    .transform((kqm) => {
+      if (!kqm) return kqm
+      const { rolls, memberRolls, ...rest } = kqm
+      const standard = rest.standard ?? kqmStandardFromRolls(rolls)
+      let memberStandards = rest.memberStandards
+      if (!memberStandards && typeof memberRolls === 'object' && memberRolls) {
+        const result: NonNullable<TeamOptKqm['memberStandards']> = {}
+        for (const [key, value] of Object.entries(memberRolls)) {
+          const member = kqmStandardFromRolls(value)
+          if (allCharacterKeys.includes(key as CharacterKey) && member)
+            result[key as CharacterKey] = member
+        }
+        if (Object.keys(result).length) memberStandards = result
+      }
+      return stripUndefined({
+        ...rest,
+        standard: standard === 'kqms' ? undefined : standard,
+        memberStandards,
+      }) as TeamOptKqm
+    }),
   bonusStats: teamBonusStatsSchema,
 })
 

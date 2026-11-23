@@ -1,5 +1,5 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import { flatEnergy, GCSIM, type NormalHit, normalString } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kaeya, main as of 2026-11-10. */
 
@@ -147,6 +147,8 @@ export const kit: KitModel = {
           c.at(120, tick)
         }
         for (let i = 0; i < icicles; i++) ctx.at(53 + offset * i, tick)
+        // C6: 15 Energy back once it is cast
+        if (ctx.constellation('Kaeya') >= 6) flatEnergy(ctx, 52, 15, 'Kaeya C6')
         return {
           cooldown: { key: 'burst', frames: 900, delay: 48 },
           frames: 78,

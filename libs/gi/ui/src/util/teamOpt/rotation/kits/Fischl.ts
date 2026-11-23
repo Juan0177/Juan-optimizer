@@ -8,6 +8,7 @@ import {
   normalString,
   templateJump,
   watchAction,
+  turretParticles,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/fischl, main as of 2026-11-10. */
@@ -104,6 +105,8 @@ function ozTicks(ctx: SimContext, s: FischlState, firstTick: number) {
       label: 'Oz',
       statSnapshots: ozStats(s),
     })
+    // its particles: a 67% chance of 1 per hit (kqmsim particleCB; its 0.1 s ICD never binds)
+    turretParticles(c, 10, 0.67)
     c.at(59, tick)
   }
   ctx.at(firstTick, tick)

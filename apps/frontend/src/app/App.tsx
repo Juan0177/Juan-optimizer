@@ -93,6 +93,11 @@ const PageCharacters = lazyPage(
 )
 const PageTeams = lazyPage(() => import('@genshin-optimizer/gi/page-teams'))
 const PageTeam = lazyPage(() => import('@genshin-optimizer/gi/page-team'))
+const PageTeamImport = lazyPage(() =>
+  import('@genshin-optimizer/gi/page-team').then((m) => ({
+    default: m.TeamLinkImportPage,
+  }))
+)
 
 // Most visited first. Prefetched one at a time while the browser is idle (see usePrefetchPages).
 const prefetchOrder = [
@@ -321,6 +326,7 @@ function Content() {
               <Route path="/characters/*" element={<PageCharacters />} />
               <Route path="/teams/*">
                 <Route index element={<PageTeams />} />
+                <Route path="import" element={<PageTeamImport />} />
                 <Route path=":teamId/*" element={<PageTeam />} />
               </Route>
               <Route path="/archive/*" element={<PageArchive />} />

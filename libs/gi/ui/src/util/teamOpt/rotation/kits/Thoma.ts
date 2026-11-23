@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   type NormalWatcher,
@@ -152,6 +153,8 @@ export const kit: KitModel = {
           icd: 'none',
           label: 'Crimson Ooyoroi',
         })
+        // C4: 15 Energy back once it is cast
+        if (c >= 4) flatEnergy(ctx, 8, 15, 'Thoma C4')
         return {
           // C1: 17 s (gcsim's sim value for the shield-triggered cut)
           cooldown: { key: 'burst', frames: c >= 1 ? 1020 : 1200 },

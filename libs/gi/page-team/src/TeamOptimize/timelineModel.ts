@@ -47,7 +47,7 @@ export function timelineTracks(sim: SimulationResult): TimelineTrack[] {
   const to = sim.start + sim.frames
   const byRef = new Map<string, SimulationResult['buffWindows']>()
   for (const w of sim.buffWindows) {
-    if (w.path[1]?.startsWith('_') || w.end <= w.start) continue
+    if (w.path[1]?.startsWith('_') || w.end <= w.start || w.offOnly) continue
     if (w.end <= from || w.start >= to || !w.value) continue
     const key = refKey(w)
     const list = byRef.get(key)

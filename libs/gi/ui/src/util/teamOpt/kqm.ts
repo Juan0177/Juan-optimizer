@@ -12,6 +12,7 @@ import {
   allMainStatKeys,
   allSubstatKeys,
   allWeaponKeys,
+  signatureWeapons,
 } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
@@ -27,6 +28,7 @@ import { getArtSheet, getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import type {
   KqmMains,
   KqmMainValues,
+  KqmPiece,
   KqmProblem,
   KqmProblemSpec,
   KqmRolls,
@@ -34,6 +36,7 @@ import type {
   KqmSetSearch,
   KqmSets,
   KqmSetTask,
+  KqmStandard,
 } from '@genshin-optimizer/gi/solver'
 import {
   betterScore,
@@ -46,9 +49,12 @@ import {
   KqmSearchCancelled,
   kqmProblem,
   kqmRarity,
-  kqmRollBudget,
   kqmRollCaps,
+  kqmRollValue,
+  kqmStandardOf,
   kqmStatValues,
+  kqmTier,
+  kqmWantedRolls,
   queueKqmSetTasks,
   releaseKqmWorkers,
   scoreOf,
@@ -89,7 +95,7 @@ import {
 } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
-import type { SimGear } from './rotation/types'
+import type { RotationCalculation, SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
@@ -99,7 +105,9 @@ import { withEnergyRelief } from './weapons'
  * any weapon of its type (at the refinement set for its rarity), all chosen for the team's
  * rotation damage. KQM Standards (KQMS): five 5★ artifacts at +20 (HP flower, ATK plume), 2
  * rolls of every substat (average roll value), and 20 more rolls placed freely, at most 2 per
- * piece whose main stat is not that stat (10 for a stat no main stat has).
+ * piece whose main stat is not that stat (10 for a stat no main stat has). The other artifact
+ * standards (`TeamOptKqm.standard`: Good, Great, Top, Perfect) build each piece as the game makes
+ * one, more of its lines and upgrades on wanted stats at each (`KQM_TIERS`).
  */
 
 export type { KqmMains, KqmRolls, KqmSets } from '@genshin-optimizer/gi/solver'
@@ -181,6 +189,26 @@ export const kqmTalentLevel = (
   kqm: Pick<TeamOptKqm, 'talents'> | undefined
 ): 9 | 10 => kqm?.talents ?? KQM_TALENT_DEFAULT
 
+/**
+ * Whether a result's builds were made for another artifact standard than `kqm` sets (a run saved
+ * before the tiers: its higher standards placed rolls no set of artifacts can have)
+ */
+export const kqmResultStandardChanged = (
+  result: Pick<KqmResult, 'builds' | 'optimized'>,
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined
+) =>
+  result.optimized.some(
+    (ck) =>
+      !!result.builds[ck] &&
+      kqmStandardOf(result.builds[ck]!.standard) !== kqmMemberStandard(ck, kqm)
+  )
+
+/** A member's artifact standard: its own when set per member, else the team's */
+export const kqmMemberStandard = (
+  key: CharacterKey,
+  kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined
+): KqmStandard => kqmStandardOf(kqm?.memberStandards?.[key] ?? kqm?.standard)
+
 /** A valid total ER target: finite and at least 100%. */
 export const kqmHasEnergyRequirement = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 100
@@ -233,6 +261,10 @@ export interface KqmBuild {
   sets: KqmSets
   mains: KqmMains
   rolls: KqmRolls
+  /** Its artifact standard (absent: KQMS) */
+  standard?: KqmStandard
+  /** A tier's five pieces (flower, plume, sands, goblet, circlet), as the search placed them */
+  layout?: KqmPiece[]
 }
 /** Another build for one member (the others at their best), and the team's damage with it */
 export interface KqmCatchUp {
@@ -320,6 +352,11 @@ export interface KqmReplayInput {
   constellations: Partial<Record<CharacterKey, number>>
   gear: Partial<Record<CharacterKey, SimGear>>
   overrides: TeamDataOverrides
+  /**
+   * The stats the play reads, kept across plays with these same builds (a rotation search's);
+   * absent: read anew
+   */
+  calculate?: RotationCalculation
 }
 /** A KQM run's progress */
 export interface KqmStep {
@@ -379,15 +416,38 @@ const kqmMainValues = () =>
     ),
   })
 /** KQMS for a build's artifact rarities (see `kqmRarity`): its substat scale and its rolls */
-export const kqmBuildRarity = (
-  build: Pick<KqmBuild, 'sets'>,
-  /** The artifact standard's distributed rolls (`TeamOptKqm.rolls`; KQMS: 20) */
-  rolls?: number
-) => kqmRarity(build.sets, kqmMainValues(), kqmRollBudget(rolls))
+export const kqmBuildRarity = (build: Pick<KqmBuild, 'sets'>) =>
+  kqmRarity(build.sets, kqmMainValues())
+
+/** One of a build's rolls of `key` (KQMS: its 4★ pieces' share in; a tier's rolls count it already) */
+export const kqmBuildRollValue = (
+  build: Pick<KqmBuild, 'sets' | 'standard'>,
+  key: SubstatKey
+) =>
+  kqmTier(build.standard)
+    ? kqmRollValue(key, build.standard)
+    : KQM_SUBSTAT_ROLLS[key] * kqmBuildRarity(build).subScale
+
+/**
+ * Of a build's rolls, those placed where it wants them (KQMS: its distributed rolls; a tier: its
+ * wanted lines and the upgrades on them, the rest being random)
+ */
+export const kqmChosenRolls = (
+  build: Pick<KqmBuild, 'sets' | 'mains' | 'rolls' | 'standard' | 'layout'>
+): KqmRolls =>
+  kqmTier(build.standard)
+    ? kqmWantedRolls(
+        build.layout ?? [],
+        build.sets,
+        build.mains,
+        kqmMainValues(),
+        kqmStandardOf(build.standard)
+      )
+    : build.rolls
 
 /** A build's artifact stats, as the solver reads them (`dyn`: fractions for % stats) */
 export function kqmValues(
-  build: Pick<KqmBuild, 'sets' | 'mains' | 'rolls'>
+  build: Pick<KqmBuild, 'sets' | 'mains' | 'rolls' | 'standard'>
 ): Record<string, number> {
   return kqmStatValues(build, kqmMainValues())
 }
@@ -401,15 +461,21 @@ export interface KqmArtifactStat {
   rolls: number
 }
 
-/** Artifact contributions only, without character base stats, weapons or set bonuses. */
+/**
+ * Artifact contributions only, without character base stats, weapons or set bonuses. In a tier
+ * there are no fixed rolls: every roll is in `distributed` (`rolls` of them, fractional).
+ */
 export function kqmArtifactStats(
-  build: Pick<KqmBuild, 'mains' | 'rolls'> & Partial<Pick<KqmBuild, 'sets'>>
+  build: Pick<KqmBuild, 'mains' | 'rolls'> &
+    Partial<Pick<KqmBuild, 'sets' | 'standard'>>
 ): KqmArtifactStat[] {
   // (4★ sets: their pieces' main stats and the substats' scale, as the search counts them)
   const sets = build.sets ?? {}
   const { subScale } = kqmBuildRarity({ sets })
+  const tier = !!kqmTier(build.standard)
+  const fixedRolls = tier ? 0 : KQM_FIXED_ROLLS
   const asBuilt = kqmStatValues(
-    { sets, mains: build.mains, rolls: {} },
+    { sets, mains: build.mains, rolls: {}, standard: build.standard },
     kqmMainValues()
   )
   const keys = [
@@ -421,12 +487,15 @@ export function kqmArtifactStats(
   return keys
     .map((key) => {
       const mainCount = slotMains(build.mains).filter((k) => k === key).length
-      const rollValue = (KQM_SUBSTAT_ROLLS[key as SubstatKey] ?? 0) * subScale
+      const sub = allSubstatKeys.includes(key as SubstatKey)
+      const rollValue = !sub
+        ? 0
+        : tier
+          ? kqmRollValue(key as SubstatKey, build.standard)
+          : KQM_SUBSTAT_ROLLS[key as SubstatKey] * subScale
       // (its main stats: what the build has of it beyond its two fixed rolls)
-      const main = mainCount
-        ? (asBuilt[key] ?? 0) - KQM_FIXED_ROLLS * rollValue
-        : 0
-      const fixed = KQM_FIXED_ROLLS * rollValue
+      const main = mainCount ? (asBuilt[key] ?? 0) - fixedRolls * rollValue : 0
+      const fixed = fixedRolls * rollValue
       const rolls = build.rolls[key as SubstatKey] ?? 0
       const distributed = rolls * rollValue
       return {
@@ -452,16 +521,13 @@ export function estimateKqmCatchUp(
   evaluate: (values: Record<string, number>) => {
     total: number
     valid: boolean
-  },
-  /** The artifact standard's distributed rolls (KQMS: 20), for its caps */
-  budget = KQM_ROLLS
+  }
 ): KqmCatchUp {
   const values = kqmValues(build)
   const rolls: KqmRolls = {}
-  const caps = kqmRollCaps(build.mains, budget)
+  const caps = kqmRollCaps(build.mains, build.standard)
   // (a roll is worth what this build's rolls are: less with 4★ pieces)
-  const { subScale } = kqmBuildRarity(build)
-  const subRoll = (key: SubstatKey) => KQM_SUBSTAT_ROLLS[key] * subScale
+  const subRoll = (key: SubstatKey) => kqmBuildRollValue(build, key)
   let { total, valid } = evaluate(values)
   const tolerance = Math.max(1e-6, Math.abs(target) * 1e-9)
   const result = (status: KqmCatchUp['status']): KqmCatchUp => ({
@@ -511,7 +577,7 @@ export function estimateKqmCatchUp(
 
 /** A build's artifacts as calculation data (what `getTeamDataWith` takes for a member) */
 export function kqmArtData(
-  build: Pick<KqmBuild, 'sets' | 'mains' | 'rolls'>
+  build: Pick<KqmBuild, 'sets' | 'mains' | 'rolls' | 'standard'>
 ): Data {
   const values = kqmValues(build)
   const art: Record<string, ReturnType<typeof constant>> = {}
@@ -541,17 +607,9 @@ export function kqmWeaponData(
 /** Weapons that are not in the game (Genshin Optimizer's April Fools catalyst): never offered */
 export const KQM_NOT_IN_GAME: readonly WeaponKey[] = ['QuantumCatalyst']
 
-/**
- * The weapons a member may get: every 4★ and 5★ of its type, plus the 3★ Harbinger of Dawn,
- * Slingshot and Thrilling Tales of Dragon Slayers (`KQM_THREE_STARS`), at the settings' refinement
- */
-export function kqmWeapons(
-  characterKey: CharacterKey,
-  kqm: TeamOptKqm = defaultTeamOptKqm,
-  { all = false }: { all?: boolean } = {}
-): KqmWeapon[] {
+const kqmOfType = (characterKey: CharacterKey) => {
   const type = getCharWeaponType(characterKey)
-  const ofType = (allWeaponKeys as readonly WeaponKey[]).filter((key) => {
+  return (allWeaponKeys as readonly WeaponKey[]).filter((key) => {
     const stat = getWeaponStat(key)
     return (
       stat?.weaponType === type &&
@@ -559,7 +617,42 @@ export function kqmWeapons(
       ((stat?.rarity ?? 0) >= 4 || KQM_THREE_STARS.includes(key))
     )
   })
+}
+
+/**
+ * The weapon a member's builds are locked to, if one of its type: its signature at the refinement
+ * chosen (`TeamOptKqm.signature`), else `TeamOptKqm.lockedWeapons`'
+ */
+export function kqmLockedWeapon(
+  characterKey: CharacterKey,
+  kqm: TeamOptKqm = defaultTeamOptKqm
+): KqmWeapon | undefined {
+  const sig = signatureWeapons[characterKey]
+  const sigRefinement = kqm.signature?.[characterKey]
+  if (sig && sigRefinement && kqmOfType(characterKey).includes(sig))
+    return { key: sig, refinement: sigRefinement }
+  const key = kqm.lockedWeapons?.[characterKey]
+  if (!key || !kqmOfType(characterKey).includes(key)) return undefined
+  return { key, refinement: kqmRefinement(key, kqm) }
+}
+
+/**
+ * The weapons a member may get: every 4★ and 5★ of its type, plus the 3★ Harbinger of Dawn,
+ * Slingshot and Thrilling Tales of Dragon Slayers (`KQM_THREE_STARS`), at the settings' refinement;
+ * a locked member only its locked one. `all`: every weapon of its type, locked or not.
+ */
+export function kqmWeapons(
+  characterKey: CharacterKey,
+  kqm: TeamOptKqm = defaultTeamOptKqm,
+  { all = false }: { all?: boolean } = {}
+): KqmWeapon[] {
+  const locked = !all && kqmLockedWeapon(characterKey, kqm)
+  if (locked) return [locked]
+  const ofType = kqmOfType(characterKey)
   const excluded = kqmExcludedWeapons(kqm)
+  // (its signature left out: `TeamOptKqm.signature` 0)
+  const sig = signatureWeapons[characterKey]
+  if (sig && kqm.signature?.[characterKey] === 0) excluded.add(sig)
   const allowed = ofType.filter((key) => !excluded.has(key))
   return (
     (all ? ofType : allowed)
@@ -625,19 +718,15 @@ function groupSetting(group: KqmWeaponGroup, kqm: TeamOptKqm): number {
   }
 }
 /**
- * The refinement a group's weapons are built at among several ticked (one at least): the group's
- * default one if ticked (Battle Pass R1 with R5: R5 is compared, never built), else the highest
+ * The refinement a group's weapons are built at among several ticked (one at least): the highest
+ * (Battle Pass R1 with R5: built at R5, R1 compared)
  */
-export function kqmBuiltRefinement(
-  group: KqmWeaponGroup,
-  ticked: readonly number[]
-): number {
-  const usual = groupSetting(group, defaultTeamOptKqm)
-  return ticked.includes(usual) ? usual : Math.max(...ticked)
+export function kqmBuiltRefinement(ticked: readonly number[]): number {
+  return Math.max(...ticked)
 }
 /**
  * The refinement a group's weapons are built at: its setting, else the group's default; with
- * several ticked, the default one when ticked (a setting saved as the highest ticked included)
+ * several ticked, the highest
  */
 export function kqmGroupRefinement(
   group: KqmWeaponGroup,
@@ -645,13 +734,11 @@ export function kqmGroupRefinement(
 ): number {
   const setting = groupSetting(group, kqm)
   const ticked = kqm.compareRefinements?.[group]
-  return ticked?.length
-    ? kqmBuiltRefinement(group, [...ticked, setting])
-    : setting
+  return ticked?.length ? kqmBuiltRefinement([...ticked, setting]) : setting
 }
 /**
- * The refinements ticked for a group: the one its builds use (its default one when ticked), and
- * any others its weapons are ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
+ * The refinements ticked for a group: the one its builds use (the highest), and any others its
+ * weapons are ranked at too for comparison (`TeamOptKqm.compareRefinements`), lowest first
  */
 export function kqmGroupRefinements(
   group: KqmWeaponGroup,
@@ -800,10 +887,10 @@ const better = betterScore
 
 let problemCount = 0
 /** A built problem, compiled here and given its id (it goes to the search workers) */
-function compile(built: KqmBuiltProblem, rolls: number): Problem {
+function compile(built: KqmBuiltProblem, standard: KqmStandard): Problem {
   const { paths, ...rest } = built
-  // (the artifact standard's distributed rolls go with the spec to the search workers)
-  const spec: KqmProblemSpec = { id: `kqm${++problemCount}`, ...rest, rolls }
+  // (the artifact standard goes with the spec to the search workers)
+  const spec: KqmProblemSpec = { id: `kqm${++problemCount}`, ...rest, standard }
   return { ...kqmProblem(spec), spec, paths }
 }
 
@@ -1024,12 +1111,13 @@ export function kqmTeamOverrides(
  * Only the KQM settings decide it (never the member's own gear), so a run's builds are the same
  * whatever the user has equipped.
  */
-function startBuild(space: MemberSpace): KqmBuild {
+function startBuild(space: MemberSpace, standard: KqmStandard): KqmBuild {
   return {
     weapon: space.weapons[0],
     sets: space.four[0] ? { [space.four[0]]: 4 } : {},
     mains: { ...space.mains[0] },
     rolls: {},
+    ...(standard !== 'kqms' && { standard }),
   }
 }
 
@@ -1038,27 +1126,34 @@ const SET_KEYS: ReadonlySet<string> = new Set(allArtifactSetKeys)
 const WEAPON_KEYS: ReadonlySet<string> = new Set(allWeaponKeys)
 
 /**
- * A problem's attacks, where only `dyn`'s artifacts vary: a buff state of a set or weapon that no
- * build in it can have (another member's set or weapon not on it, a weapon `dyn` does not hold)
- * counts nothing there (its sheet needs the pieces or the weapon), so it is dropped, and the
+ * A problem's attacks, where only `dyn`'s artifacts vary: a buff state or limit of a set or weapon
+ * that no build in it can have (another member's set or weapon not on it, a weapon `dyn` does not
+ * hold) counts nothing there (its sheet needs the pieces or the weapon), so it is dropped, and the
  * attacks it split are merged again. (A replay's candidate windows split them for every option.)
+ * `dynSets`: the sets `dyn` may have in it (absent: any). An attack with a limit on some of its
+ * hits is not merged: the limit would cover fewer of them.
  */
 export function kqmProblemAttacks(
   attacks: TeamOpt['attacks'],
   dyn: CharacterKey,
-  state: Partial<Record<CharacterKey, KqmBuild>>
+  state: Partial<Record<CharacterKey, KqmBuild>>,
+  dynSets?: ReadonlySet<string>
 ): TeamOpt['attacks'] {
-  const keep = (s: TeamOptBuffState) => {
+  const keep = (s: Pick<TeamOptBuffState, 'owner' | 'path'>) => {
     if (s.owner === 'team') return true
     const build = state[s.owner as CharacterKey]
     const key = s.path[0]
     if (!build || !key) return true
     if (WEAPON_KEYS.has(key)) return build.weapon.key === key
     if (SET_KEYS.has(key))
-      return s.owner === dyn || !!build.sets[key as ArtifactSetKey]
+      return s.owner === dyn
+        ? !dynSets || dynSets.has(key)
+        : !!build.sets[key as ArtifactSetKey]
     return true
   }
-  const prune = (list: TeamOptBuffState[]) => list.filter(keep)
+  const prune = <T extends Pick<TeamOptBuffState, 'owner' | 'path'>>(
+    list: T[]
+  ) => list.filter(keep)
   const out: TeamOpt['attacks'] = {}
   for (const [ck, list] of Object.entries(attacks) as [
     CharacterKey,
@@ -1069,6 +1164,7 @@ export function kqmProblemAttacks(
     for (const a of list) {
       const next: TeamOptAttack = { ...a }
       if (a.states) next.states = prune(a.states)
+      if (a.limits) next.limits = prune(a.limits)
       if (a.reactionContributorStates)
         next.reactionContributorStates = Object.fromEntries(
           Object.entries(a.reactionContributorStates).map(([k, v]) => [
@@ -1081,7 +1177,10 @@ export function kqmProblemAttacks(
           ...snap,
           states: prune(snap.states),
         }))
-      const id = JSON.stringify({ ...next, hits: 0 })
+      const partial = next.limits?.some((l) => l.hits > 0 && l.hits < a.hits)
+      const id = partial
+        ? `#${merged.size}`
+        : JSON.stringify({ ...next, hits: 0 })
       const same = merged.get(id)
       if (same) same.hits += a.hits
       else merged.set(id, next)
@@ -1194,8 +1293,12 @@ const SETS_SEARCHED = 6
 const TWO_PIECE_CLASSES = 5
 /** Problems a run keeps compiled (the rounds' and rankings' for every weapon of the team fit) */
 const PROBLEMS_KEPT = 200
-/** Times a ranked option better than its member's build is taken, and the rounds go on */
-const ADOPT_PASSES = 2
+/**
+ * Times a ranked option better than its member's build is taken, and the rounds go on (passes stop
+ * as soon as none is found; each takes the first kind found, so a Favonius and a ranked option
+ * taken first still leave passes for a set handed to a teammate)
+ */
+const ADOPT_PASSES = 4
 /**
  * A member's best ranked weapons and sets searched as pairs at the end (the rankings hold each
  * weapon with the build's sets and each set with the build's weapon: a pair that only wins
@@ -1352,8 +1455,8 @@ async function runKqm({
     })
   const tick = ticker(isCancelled)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
-  /** The artifact standard's distributed rolls (KQMS: 20) */
-  const rollBudget = kqmRollBudget(kqm.rolls)
+  /** A member's artifact standard */
+  const standardOf = (ck: CharacterKey) => kqmMemberStandard(ck, kqm)
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
   // The rotation the builds are for: as played for them (`replay`), else the team's attacks. A
@@ -1396,6 +1499,18 @@ async function runKqm({
       throw new Error(
         `Select at least one weapon for ${m.characterKey} in KQM settings.`
       )
+  // (a one-copy weapon locked for a member is no one else's)
+  const lockedOnce = new Map<WeaponKey, CharacterKey>()
+  for (const { characterKey: ck } of optimized) {
+    const key = kqmLockedWeapon(ck, kqm)?.key
+    if (!key || !KQM_ONE_COPY.includes(key)) continue
+    const other = lockedOnce.get(key)
+    if (other)
+      throw new Error(
+        `${key} is locked for both ${other} and ${ck}, but there is only one.`
+      )
+    lockedOnce.set(key, ck)
+  }
   const characters = Object.fromEntries(
     optimized.map(({ characterKey }) => [
       characterKey,
@@ -1430,8 +1545,19 @@ async function runKqm({
   ) as Partial<Record<CharacterKey, StatFilters>>
   const bonusStats = teamOptBonusStats(teamOpt, keys)
   const spaces = new Map(
-    optimized.map((m) => [m.characterKey, memberSpace(m, kqm)])
+    optimized.map((m) => {
+      const space = memberSpace(m, kqm)
+      const weapons = space.weapons.filter(
+        (w) => (lockedOnce.get(w.key) ?? m.characterKey) === m.characterKey
+      )
+      return [m.characterKey, { ...space, weapons }]
+    })
   )
+  for (const [ck, { weapons }] of spaces)
+    if (!weapons.length)
+      throw new Error(
+        `Select another weapon for ${ck} in KQM settings: its only one is locked for another member.`
+      )
   // (members refitted: their weapons and sets as they were, their main stats free; the others
   // keep their builds)
   const refitted =
@@ -1529,16 +1655,18 @@ async function runKqm({
     for (const m of optimized) {
       const space = spaces.get(m.characterKey)!
       const start = from?.[m.characterKey]
-      // (another run's build, while its weapon is allowed here)
+      const standard = standardOf(m.characterKey)
+      // (another run's build, while its weapon is allowed here and its standard the same)
       builds[m.characterKey] =
         start &&
+        kqmStandardOf(start.standard) === standard &&
         space.weapons.some(
           (w) =>
             w.key === start.weapon.key &&
             w.refinement === start.weapon.refinement
         )
           ? structuredClone(start)
-          : startBuild(space)
+          : startBuild(space, standard)
     }
 
   const gearOf = (state: Partial<Record<CharacterKey, KqmBuild>>) => {
@@ -1654,11 +1782,13 @@ async function runKqm({
   const root = comparison
     ? (rootOf.get(comparison.result) ?? comparison.result)
     : undefined
+  // (a run's own too: a play switched back to finds its problems)
+  const runPlays = new Map<string, KqmWork>()
   const workFor = (key: string): KqmWork => {
     const fresh = () => ({ problems: new Map(), searches: new Map() })
-    if (!root) return fresh()
-    if (lastWork?.root !== root) lastWork = { root, byPlayed: new Map() }
-    const { byPlayed } = lastWork
+    if (root && lastWork?.root !== root)
+      lastWork = { root, byPlayed: new Map() }
+    const byPlayed = root ? lastWork!.byPlayed : runPlays
     const found = byPlayed.get(key)
     if (found) {
       // (the latest used last)
@@ -1682,6 +1812,22 @@ async function runKqm({
   const workKey = (p: KqmPlayed | undefined) => `${teamStamp}\n${playedKey(p)}`
   let work = workFor(workKey(played))
 
+  // (the sets a member's problem holds the effects of: its space's, fewer once narrowed)
+  const spaceSets = new WeakMap<
+    MemberSpace,
+    { sets: Set<string>; id: string }
+  >()
+  const setsOf = (ck: CharacterKey) => {
+    const space = spaces.get(ck)
+    if (!space) return undefined
+    let found = spaceSets.get(space)
+    if (!found) {
+      const sets = new Set<string>([...space.four, ...space.two])
+      found = { sets, id: [...sets].sort().join(',') }
+      spaceSets.set(space, found)
+    }
+    return found
+  }
   /** The team's damage as a function of `ck`'s artifacts, with `weapon` on it, the others as in `state` */
   const problemKey = (
     ck: CharacterKey,
@@ -1692,7 +1838,7 @@ async function runKqm({
       .filter(([k]) => k !== ck)
       .map(([k, b]) => `${k}=${buildId(b!)}`)
       .sort()
-      .join(';')}`
+      .join(';')}|${setsOf(ck)?.id ?? ''}`
   // (built in the builders' workers, several at once: see `kqmBuildPool`)
   const builder = kqmProblemBuilder(database, isCancelled)
   const problemFor = (
@@ -1715,7 +1861,12 @@ async function runKqm({
     const built = builder.build(teamId, gender, {
       dyn: ck,
       arts,
-      attacks: kqmProblemAttacks(attacksNow(), ck, withWeapon),
+      attacks: kqmProblemAttacks(
+        attacksNow(),
+        ck,
+        withWeapon,
+        setsOf(ck)?.sets
+      ),
       statFilters: calculator
         ? filtersFor(withWeapon)
         : { [ck]: filtersFor(withWeapon)[ck] ?? {} },
@@ -1727,7 +1878,7 @@ async function runKqm({
       onField: teamOpt.onField,
       bonusStats,
     })
-    const problem = built.then((b) => b && compile(b, rollBudget))
+    const problem = built.then((b) => b && compile(b, standardOf(ck)))
     // (one that failed is built again when asked for again; a wait that was cancelled is no error)
     problem.catch(() => {
       if (problemCache.get(cacheKey) === problem) problemCache.delete(cacheKey)
@@ -1888,7 +2039,8 @@ async function runKqm({
         kqmValues({
           sets,
           mains,
-          rolls: cappedRolls(current.rolls, mains, rollBudget),
+          rolls: cappedRolls(current.rolls, mains, current.standard),
+          standard: current.standard,
         })
       )
     const combos = setsList ?? setCombos(problem, space, current)
@@ -1910,6 +2062,10 @@ async function runKqm({
                     sets: screened[i].sets,
                     mains: r.mains,
                     rolls: r.rolls,
+                    ...(problem.standard !== 'kqms' && {
+                      standard: problem.standard,
+                    }),
+                    ...(r.layout && { layout: r.layout }),
                   },
                   score: r.score,
                 },
@@ -1930,9 +2086,12 @@ async function runKqm({
     space: MemberSpace,
     current: KqmBuild
   ): KqmSets[] => {
-    const rolls = current.rolls
+    const { rolls, standard } = current
     const value = (sets: KqmSets) =>
-      scoreOf(problem, kqmValues({ sets, mains: current.mains, rolls })).total
+      scoreOf(
+        problem,
+        kqmValues({ sets, mains: current.mains, rolls, standard })
+      ).total
     const none = value({})
     const scored = space.two
       .map((k) => ({ k, v: value({ [k]: 2 }) }))
@@ -2450,15 +2609,10 @@ async function runKqm({
             ...current.team,
           })
           if (!own) continue
-          current.behind = estimateKqmCatchUp(
-            current,
-            best.total,
-            (values) => {
-              const score = scoreOf(own, values)
-              return { total: score.total, valid: meetsAsChosen(score) }
-            },
-            rollBudget
-          )
+          current.behind = estimateKqmCatchUp(current, best.total, (values) => {
+            const score = scoreOf(own, values)
+            return { total: score.total, valid: meetsAsChosen(score) }
+          })
         }
         return options
       }
@@ -2503,8 +2657,20 @@ async function runKqm({
         if (!allowed.some((w) => w.key === option.weapon.key)) continue
         const gain = option.total / score.total - 1
         if (gain > 1e-9 && (!found || gain > found.gain)) {
-          const { weapon, sets, mains, rolls, team } = option
-          found = { ck, build: { weapon, sets, mains, rolls }, gain, team }
+          const { weapon, sets, mains, rolls, standard, layout, team } = option
+          found = {
+            ck,
+            build: {
+              weapon,
+              sets,
+              mains,
+              rolls,
+              ...(standard && { standard }),
+              ...(layout && { layout }),
+            },
+            gain,
+            team,
+          }
         }
       }
     }
@@ -2769,6 +2935,8 @@ async function runKqm({
     return { state, score }
   }
 
+  let replayedFor: string | undefined
+  let lastReplayed: Partial<Record<CharacterKey, KqmBuild>> = {}
   /**
    * The rotation played for `state` (with its weapons and sets when `withGear`): when it plays
    * differently from before, the run counts it from now on (its time, the ER calculator's targets
@@ -2779,6 +2947,14 @@ async function runKqm({
     withGear: boolean
   ) => {
     if (!replay) return false
+    const replaying = withGear
+      ? optimized
+          .map(({ characterKey: ck }) => (state[ck] ? buildId(state[ck]!) : ''))
+          .join(';')
+      : ''
+    if (withGear && replaying === replayedFor) return false
+    replayedFor = replaying
+    if (withGear) lastReplayed = { ...state }
     const { arts, weapons } = gearOf(state)
     const next = replay({
       constellations,
@@ -2817,6 +2993,50 @@ async function runKqm({
     work = workFor(workKey(played))
     setSearches.clear()
     return true
+  }
+
+  /**
+   * The builds' score on the rotation as they play it (damage per second: plays differ in length)
+   */
+  const ownPlayScore = async () => {
+    const score = await teamScore(builds)
+    const time = rotationTimeNow()
+    return score && time ? { ...score, total: score.total / time } : score
+  }
+  /**
+   * When the builds still play differently from the rotation played last (gear that changes the
+   * play can flip two builds, each the better on the other's play): each scored on its own play,
+   * the better one kept, with its play
+   */
+  const lostOnOwnPlay = new Set<string>()
+  const gearId = (ck: CharacterKey, b: KqmBuild) =>
+    `${ck}|${b.weapon.key}@${b.weapon.refinement}|${kqmSetsId(b.sets)}`
+  const settlePlay = async () => {
+    const now = { ...builds }
+    const last = lastReplayed
+    if (optimized.some(({ characterKey: ck }) => !last[ck])) return
+    // (only a play that changes with them can flip the builds)
+    if (!replayFor(builds, true)) return
+    const after = await ownPlayScore()
+    Object.assign(builds, last)
+    replayFor(builds, true)
+    const then = await ownPlayScore()
+    const keepLast = !!then && (!after || better(then, after))
+    const [kept, lost] = keepLast ? [last, now] : [now, last]
+    // (the loser's weapons and sets: a ranking judged on the winner's play would take them again)
+    for (const { characterKey: ck } of optimized)
+      if (gearId(ck, lost[ck]!) !== gearId(ck, kept[ck]!))
+        lostOnOwnPlay.add(gearId(ck, lost[ck]!))
+    if (!keepLast) {
+      Object.assign(builds, now)
+      replayFor(builds, true)
+      return
+    }
+    for (const { characterKey: ck } of optimized)
+      if (buildId(now[ck]!) !== buildId(last[ck]!)) {
+        lastChange[ck] = ++changes
+        delete settled[ck]
+      }
   }
 
   /** The team with its builds now: its figures, ER and what was assumed (with `rankings`) */
@@ -2983,6 +3203,24 @@ async function runKqm({
     }
     // (from another run's builds: its rounds only, or with `rankOnly` one ranking pass)
     for (let pass = 0; !from || rankRefitted; pass++) {
+      // (played again with the builds as they are now, while that changes the play: the rankings
+      // and the result count what the builds taken on do to it, not the play of the ones before;
+      // not from another run's builds, which are kept as they are)
+      for (
+        let r = 0;
+        !from &&
+        !comparison &&
+        maxRounds > 0 &&
+        r < REPLAYS &&
+        replayFor(builds, true);
+        r++
+      ) {
+        for (const ck of Object.keys(settled) as CharacterKey[])
+          delete settled[ck]
+        plannedRounds = rounds + ADOPT_ROUNDS
+        await descend(rounds + 1, rounds + ADOPT_ROUNDS)
+      }
+      if (!from && !comparison && maxRounds > 0) await settlePlay()
       await rankAll()
       if (comparison || from || pass >= ADOPT_PASSES) break
       // (the builds so far, with these rankings, while a better one is looked for: later
@@ -2996,7 +3234,7 @@ async function runKqm({
         (await missedBest()) ??
         (await missedPair()) ??
         (await missedHandoff())
-      if (!missed) break
+      if (!missed || lostOnOwnPlay.has(gearId(missed.ck, missed.build))) break
       // taken, and the rounds go on from there (the others' best builds may change with it)
       builds[missed.ck] = missed.build
       lastChange[missed.ck] = ++changes

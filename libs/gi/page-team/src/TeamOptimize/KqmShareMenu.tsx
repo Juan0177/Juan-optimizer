@@ -93,6 +93,7 @@ import {
   shareStamp,
   writeKqmCardView,
 } from './kqmTeamCard'
+import { kqmStandardText } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
 import { useMemberNames } from './RotationWriter'
 import { Disclosure, hairline, insetSx, Segmented, type } from './ui'
@@ -472,14 +473,22 @@ function useShareText(props: ShareProps) {
       charName,
       weaponName,
       setName,
-      standard: kqmStandardNote(t as unknown as TFunction, talents),
+      standard: kqmStandardNote(
+        t as unknown as TFunction,
+        talents,
+        kqmStandardText(
+          t as unknown as TFunction,
+          setup.kqm,
+          members.map((m) => m.characterKey)
+        )
+      ),
       teamLine: keys.map((ck) => `C${cons(ck)} ${charName(ck)}`).join('  ·  '),
     }
   }, [t, locale, gender, team?.name, setup, members, result])
 }
 
 /** The written rotation, its members' turns apart */
-function rotationTurns(text: string | undefined) {
+export function rotationTurns(text: string | undefined) {
   return (text ?? '')
     .split(/\s*(?:->|→|\n)+\s*/)
     .map((turn) => turn.replace(/^>\s*/, '').trim())

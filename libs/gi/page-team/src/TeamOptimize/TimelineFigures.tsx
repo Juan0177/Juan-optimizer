@@ -25,7 +25,7 @@ import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HitStats } from './AttackEditor'
 import type { BuffEffect } from './buffs'
-import { buffEffects, describe } from './buffs'
+import { buffEffects, describeTimed } from './buffs'
 import { basicStats } from './ResultDetails'
 import type { MomentStat, TimelineMoment } from './RotationTimeline'
 import type { MomentEffects } from './timelineModel'
@@ -341,7 +341,7 @@ export function useMomentFigures(
         const owner = buff.owner === 'team' ? active : buff.owner
         const target = ui[owner]?.target
         if (!target) continue
-        const { fields } = describe(
+        const { fields } = describeTimed(
           { owner: buff.owner, path: buff.path },
           buff.value,
           sheets

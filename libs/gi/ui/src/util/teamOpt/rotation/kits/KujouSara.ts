@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/sara, main as of 2026-11-10. */
 
@@ -25,6 +31,8 @@ interface SaraState {
   coverEnd: number
   /** C1's 3 s cooldown ends (Sara's clock) */
   c1Ready: number
+  /** A4's 3 s cooldown ends (Sara's clock) */
+  a4Ready: number
 }
 
 /** The Fully-Charged Aimed Shot's Electro hit */
@@ -71,14 +79,26 @@ function tengu(
 /** A Tengu Juurai hit on the enemy (C1 on hit) */
 function juurai(ctx: SimContext, s: SaraState, delay: number, hit: Hit) {
   ctx.hit(delay, hit)
-  ctx.at(delay, (c) => c1(c, s))
+  ctx.at(delay, (c) => {
+    c1(c, s)
+    // A4: 1.2 Energy to the party for every 100% of her Energy Recharge, once per 3 s
+    const frame = c.characterFrame('KujouSara')
+    if (frame >= s.a4Ready) {
+      s.a4Ready = frame + 181
+      flatEnergy(c, 0, 1.2, 'Kujou Sara A4', {
+        owner: 'KujouSara',
+        to: 'team',
+        scaled: true,
+      })
+    }
+  })
 }
 
 export const kit: KitModel = {
   characterKey: 'KujouSara',
   element: 'electro',
   source: `${GCSIM}/sara`,
-  init: (): SaraState => ({ coverEnd: -1, c1Ready: 0 }),
+  init: (): SaraState => ({ coverEnd: -1, c1Ready: 0, a4Ready: -1 }),
   onStart(ctx) {
     ctx.state('KujouSara', ['KujouSara', 'timeline'], 'on')
     ctx.state('KujouSara', ['KujouSara', 'tenguRecipient'], '')

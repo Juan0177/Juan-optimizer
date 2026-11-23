@@ -2,6 +2,7 @@ import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext } from '../types'
 import {
   atkSpdAdjust,
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
@@ -29,6 +30,8 @@ const PLUNGE_WINDOW = 26
 const AURA = ['pyro', 'hydro', 'electro', 'cryo'] as const
 
 interface IfaState {
+  /** C1: its Energy's 8 s ICD ends (Ifa's clock) */
+  c1Ready: number
   /** Nightsoul Blessing is on */
   ns: boolean
   /** Frame its points run out (dashes bring it earlier) */
@@ -114,6 +117,7 @@ export const kit: KitModel = {
     ctx.buff('Ifa', ['Ifa', 'a4NsBurst'], 'on', 0, 600, { hitlag: 'recipient' })
   },
   init: (): IfaState => ({
+    c1Ready: -1,
     ns: false,
     nsEnd: 0,
     token: 0,
@@ -122,6 +126,17 @@ export const kit: KitModel = {
     c6Acc: 0,
   }),
   onHit(ctx, s: IfaState, hit) {
+    // C1: his normal and charged hits restore 6 Energy, once per 8 s
+    const frame = ctx.characterFrame('Ifa')
+    if (
+      hit.characterKey === 'Ifa' &&
+      (hit.tag === 'normal' || hit.tag === 'charged') &&
+      ctx.constellation('Ifa') >= 1 &&
+      frame >= s.c1Ready
+    ) {
+      s.c1Ready = frame + 481
+      flatEnergy(ctx, 0, 6, 'Ifa C1', { owner: 'Ifa' })
+    }
     const c2 = ctx.constellation('Ifa') >= 2
     const points = ctx.teamNightsoul
     const essentials =

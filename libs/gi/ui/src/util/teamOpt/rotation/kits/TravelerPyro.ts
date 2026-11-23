@@ -1,5 +1,11 @@
 import type { HitElement, KitModel, SimContext, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString, particleMarker } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/pyro/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -62,6 +68,8 @@ interface PyroState {
   scorchToken: number
   /** C2: points from party Pyro reactions until this frame (12 s after E), at most twice */
   c2Until: number
+  /** A4: its reaction Energy's 12 s ICD ends (the Traveler's clock) */
+  a4Ready: number
   c2Count: number
   /** Foreign Starfire: Blade of the Sacred Flame stacks, and when Inferno is next ready */
   blades: number
@@ -132,6 +140,7 @@ export const kit: KitModel = {
     scorchReady: true,
     scorchToken: 0,
     c2Until: -1,
+    a4Ready: -1,
     c2Count: 0,
     blades: 0,
     infernoReady: -1,
@@ -315,9 +324,11 @@ export const kit: KitModel = {
         return { frames: 30 }
     }
   },
-  onNightsoulBurst(_ctx, s: PyroState) {
+  onNightsoulBurst(ctx, s: PyroState) {
     // Foreign Starfire: a Blade of the Sacred Flame stack per party Nightsoul Burst (max 2)
     s.blades = Math.min(2, s.blades + 1)
+    // A4: 4 Energy on a party Nightsoul Burst
+    flatEnergy(ctx, 0, 4, 'Traveler (Pyro) A4', { owner: 'TravelerPyro' })
   },
   onBeforeHit(ctx, s: PyroState, hit: SimHit) {
     // C1: while the Traveler's blessing is up, the active member deals +6% DMG, and +9% more if
@@ -352,6 +363,21 @@ export const kit: KitModel = {
     ) {
       s.particleUntil = ctx.characterFrame('TravelerPyro') + 175
       particleMarker(ctx, 0, 'Threshold particle')
+    }
+    // A4: a Pyro reaction by the active member while the Traveler's Thresholds are up (its
+    // blessing) restores 5 Energy, once per 12 s
+    const frame = ctx.characterFrame('TravelerPyro')
+    if (
+      s.active &&
+      hit.characterKey === hit.onField &&
+      frame >= s.a4Ready &&
+      ((hit.path[0] === '_reaction' &&
+        C2_REACTIONS.includes(hit.path[1]) &&
+        (hit.path[1] !== 'crystallize' || hit.element === 'pyro')) ||
+        hit.path.join('.') === 'reaction.burgeon')
+    ) {
+      s.a4Ready = frame + 721
+      flatEnergy(ctx, 0, 5, 'Traveler (Pyro) A4', { owner: 'TravelerPyro' })
     }
     // C2: a party Pyro reaction within 12 s of E restores 14 points (twice per E)
     if (

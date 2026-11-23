@@ -1,6 +1,12 @@
 import { REACTION_MARK } from '../lunarCrystallize'
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/navia, main as of 2026-11-10. */
 
@@ -112,8 +118,10 @@ function naviaFire(c: SimContext, s: NaviaState) {
     )
   }
   // C1: each stack consumed (3 at most) cuts the burst cooldown by 1 s (and restores 3 Energy)
-  if (c.constellation('Navia') >= 1 && n > 0)
+  if (c.constellation('Navia') >= 1 && n > 0) {
     c.reduceCooldown('burst', 60 * Math.min(n, 3))
+    flatEnergy(c, 0, 3 * Math.min(n, 3), 'Navia C1', { owner: 'Navia' })
+  }
   // C2: one Cannon Fire Support shot 30 frames after the first shard hit
   if (c.constellation('Navia') >= 2) {
     c.hit(39, {
@@ -141,7 +149,7 @@ function naviaFire(c: SimContext, s: NaviaState) {
 const a1Geo = (ctx: SimContext, s: NaviaState, d: number) =>
   ctx.characterFrame('Navia') + d <= s.a1Until
 
-// Not modelled: C1's energy (no energy simulation) and her Charged Attack (gcsim has none).
+// Not modelled: her Charged Attack (gcsim has none).
 // Crystallize shards are picked up by her held skill and by the party's dashes (the engine's).
 export const kit: KitModel = {
   characterKey: 'Navia',

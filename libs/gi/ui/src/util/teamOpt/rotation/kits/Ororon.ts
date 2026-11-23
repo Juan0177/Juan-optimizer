@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -29,6 +30,10 @@ interface OroronState {
   gainReady: number
   damageReady: number
   burstHits: number
+  /** A4 Aspect Sigil: up until (Ororon's clock), its triggers so far, the next one's earliest */
+  sigilEnd: number
+  sigilProcs: number
+  sigilReady: number
 }
 function hypersense(ctx: SimContext, c6 = false) {
   ctx.hit(12, {
@@ -70,6 +75,9 @@ export const kit: KitModel = {
     gainReady: -1,
     damageReady: -1,
     burstHits: 0,
+    sigilEnd: -1,
+    sigilProcs: 0,
+    sigilReady: -1,
   }),
   nightsoul: (ctx, s: OroronState) => ({
     active: ctx.now < s.blessingEnd,
@@ -79,6 +87,28 @@ export const kit: KitModel = {
     s.points = Math.min(80, s.points + 40)
   },
   onHit(ctx, s: OroronState, hit) {
+    // A4 Aspect Sigil (15 s from the Spirit Orb's hit): the active member's normal, charged or
+    // plunging hits give it 3 Energy, once per 1 s, 3 times. (Ororon's own 3 a trigger is the ER
+    // calculator's Press option.)
+    const frame = ctx.characterFrame('Ororon')
+    if (hit.characterKey === 'Ororon' && hit.path.join('.') === 'skill.dmg') {
+      s.sigilEnd = frame + 900
+      s.sigilProcs = 0
+    } else if (
+      hit.characterKey === hit.onField &&
+      ['normal', 'charged', 'plunge'].includes(hit.tag) &&
+      frame < s.sigilEnd &&
+      frame >= s.sigilReady &&
+      s.sigilProcs < 3
+    ) {
+      s.sigilProcs++
+      s.sigilReady = frame + 61
+      if (hit.characterKey !== 'Ororon')
+        flatEnergy(ctx, 0, 3, 'Ororon A4', {
+          owner: 'Ororon',
+          to: hit.characterKey,
+        })
+    }
     if (hit.characterKey === 'Ororon') {
       if (
         hit.path[0] === 'skill' &&
@@ -201,6 +231,9 @@ export const kit: KitModel = {
           },
         }
       case 'burst': {
+        // C4: 8 Energy back as the Ritual hits
+        if (ctx.constellation('Ororon') >= 4)
+          flatEnergy(ctx, 36, 8, 'Ororon C4')
         // Ritual at frame 36, then a Soundwave Collision every 60 frames (45 with C4) while it lasts
         ctx.hit(36, {
           path: ['burst', 'activationDmg'],

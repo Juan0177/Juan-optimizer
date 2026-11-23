@@ -5,6 +5,10 @@ import type {
   GenderKey,
   SubstatKey,
 } from '@genshin-optimizer/gi/consts'
+import {
+  talentLimits,
+  validateCharLevelAsc,
+} from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   ICachedArtifact,
@@ -16,9 +20,16 @@ import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
 import type { RollSize } from '../substatValue'
 import type { CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
+import type { KqmResult } from './kqm'
+import { kqmArtData, kqmTeamOverrides } from './kqm'
+import { withAttackStates } from './lowHpUptime'
 import { teamRotationNodes } from './objective'
 import type { TeamOptResult } from './solve'
-import { evaluateTeamRotation, teamOptArtValues } from './solve'
+import {
+  evaluateTeamNodes,
+  evaluateTeamRotation,
+  teamOptArtValues,
+} from './solve'
 
 /** The substats whose extra roll is valued */
 export const sensitivitySubstats: readonly SubstatKey[] = [
@@ -45,7 +56,7 @@ export const MAX_TALENT_LEVEL = 10
  * rotation's damage with the change, everything else as in the result (builds, weapons, buffs,
  * on-field members, extra buffs). The changes: one more substat roll on the member's artifacts
  * (of the Improve tab's size: a 5★ average roll by default), one more talent level (with its
- * constellation boosts), another level (the same ascension).
+ * constellation boosts), another level (with the ascension it needs).
  *
  * Substat rolls are cheap: the member's problem is compiled once (the team's damage as a function
  * of its artifacts, the buffs it gives the others included, as the optimizer sees it), then
@@ -57,7 +68,7 @@ export function teamSensitivity(
   teamId: string,
   gender: GenderKey,
   teamOpt: TeamOpt,
-  result: Pick<TeamOptResult, 'builds' | 'weapons'>,
+  result: Pick<TeamOptResult, 'builds' | 'weapons' | 'attackStates'>,
   {
     rarity = 5,
     rollSize = 'mid',
@@ -88,7 +99,7 @@ export function teamSensitivity(
   ) as Partial<Record<CharacterKey, ICachedWeapon>>
   const bonusStats = teamOptBonusStats(teamOpt, memberKeys)
   const common = {
-    attacks: teamOpt.attacks,
+    attacks: withAttackStates(teamOpt.attacks, result.attackStates),
     mainStatAssumptionLevel,
     weapons,
     onField: teamOpt.onField,
@@ -167,7 +178,7 @@ export function teamSensitivity(
     },
     /**
      * The rotation's damage with `member` changed: one more level of a talent (undefined at its
-     * highest), or another level
+     * highest, or the highest its ascension allows), or another level
      */
     character(
       member: TeamOptMember,
@@ -179,7 +190,10 @@ export function teamSensitivity(
       if (!character) return undefined
       if ('talent' in change) {
         const now = character.talent[change.talent]
-        if (now >= MAX_TALENT_LEVEL) return undefined
+        if (
+          now >= Math.min(MAX_TALENT_LEVEL, talentLimits[character.ascension])
+        )
+          return undefined
         return evaluate({
           characters: {
             [member.characterKey]: {
@@ -188,8 +202,105 @@ export function teamSensitivity(
           },
         })
       }
+      // (with the ascension that level needs, as the character editor sets it)
       return evaluate({
-        characters: { [member.characterKey]: { level: change.level } },
+        characters: {
+          [member.characterKey]: validateCharLevelAsc(
+            change.level,
+            character.ascension
+          ),
+        },
+      })
+    },
+  }
+}
+
+/**
+ * `teamSensitivity` for a KQM result (`runTeamOpt`: the settings it was run with): the rotation as
+ * KQM played it, read with its builds, constellations, talents, switches and enemy
+ * (`kqmTeamOverrides`), never the members' own. A roll is one more KQM Standard roll on the
+ * member's KQM build (its 4★ pieces' scale included); talents and levels change KQM's.
+ */
+export function kqmTeamSensitivity(
+  database: ArtCharDatabase,
+  teamId: string,
+  gender: GenderKey,
+  runTeamOpt: TeamOpt,
+  result: KqmResult
+) {
+  const members = teamOptMembers(database, teamId)
+  const overrides = kqmTeamOverrides(database, teamId, runTeamOpt, result)
+  const attacks = result.played?.attacks ?? runTeamOpt.attacks
+  const evaluate = (
+    changes: {
+      arts?: NonNullable<typeof overrides.arts>
+      characters?: Partial<Record<CharacterKey, CharacterOverride>>
+    } = {}
+  ) => {
+    const nodes = teamRotationNodes(database, teamId, gender, {
+      ...overrides,
+      arts: { ...overrides.arts, ...changes.arts },
+      characters: { ...overrides.characters, ...changes.characters },
+      attacks,
+      onField: runTeamOpt.onField,
+    })
+    return nodes
+      ? evaluateTeamNodes(database, teamId, attacks, nodes).total
+      : undefined
+  }
+  const base = evaluate()
+  return {
+    base,
+    members,
+    /** The rotation's damage with one more KQM roll of each substat (`keys`) on `member`'s build */
+    substats(
+      member: TeamOptMember,
+      keys: readonly SubstatKey[] = sensitivitySubstats
+    ): Partial<Record<SubstatKey, number>> {
+      const { characterKey } = member
+      const build = result.builds[characterKey]
+      if (!build) return {}
+      return Object.fromEntries(
+        keys.map((key) => [
+          key,
+          evaluate({
+            arts: {
+              [characterKey]: kqmArtData({
+                ...build,
+                rolls: { ...build.rolls, [key]: (build.rolls[key] ?? 0) + 1 },
+              }),
+            },
+          }),
+        ])
+      )
+    },
+    /**
+     * The rotation's damage with `member` changed: one more level of a KQM talent (undefined at its
+     * highest), or a level above KQM's 90 (undefined at or below it)
+     */
+    character(
+      member: TeamOptMember,
+      change: { talent: SensitivityTalent } | { level: SensitivityLevel }
+    ): number | undefined {
+      const character = overrides.characters?.[member.characterKey]
+      if (!character) return undefined
+      if ('talent' in change) {
+        const now = character.talent?.[change.talent] ?? MAX_TALENT_LEVEL
+        if (now >= MAX_TALENT_LEVEL) return undefined
+        return evaluate({
+          characters: {
+            [member.characterKey]: {
+              ...character,
+              talent: { ...character.talent, [change.talent]: now + 1 },
+            },
+          },
+        })
+      }
+      if (change.level <= (character.level ?? 90)) return undefined
+      return evaluate({
+        characters: {
+          [member.characterKey]: { ...character, level: change.level },
+        },
       })
     },
   }

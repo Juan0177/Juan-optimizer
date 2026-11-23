@@ -22,6 +22,18 @@ export const kit: KitModel = {
   init: (): SucroseState => ({ c4Count: 0 }),
   charges: (cons) => ({ skill: cons >= 1 ? 2 : 1 }),
   onStart(ctx) {
+    // (off until she triggers them: a saved state must not give them to a rotation without that hit)
+    for (const condition of [
+      'skillHit',
+      'lockAfterSkill',
+      'lockAfterBurst',
+      'absorption',
+      'swirlpyro',
+      'swirlhydro',
+      'swirlelectro',
+      'swirlcryo',
+    ])
+      ctx.state('Sucrose', ['Sucrose', condition], '')
     if (ctx.constellation('Sucrose') >= 4)
       ctx.note(
         'Sucrose: C4 cooldown reduction uses the native 1–6 s distribution’s 3.5 s mean; random timing is not exact.'

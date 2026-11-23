@@ -566,9 +566,9 @@ function SubstatDisplay({
     rollColor: string
   ) => {
     if (hideValue) return undefined
-    if (numRolls && isActiveStat) return `${rollColor}.main`
+    if (numRolls && isActiveStat) return rollColor
     if (!isActiveStat) return 'secondary'
-    return 'error.main'
+    return 'error'
   }
   const statLabelSuffix = hideValue && stat.key.endsWith('_') ? '%' : ''
   return (
@@ -577,7 +577,7 @@ function SubstatDisplay({
         sx={{ flexGrow: 1 }}
         color={
           hideValue
-            ? 'roll1.main'
+            ? 'roll1'
             : getSubstatColor(numRolls, isActiveStat, rollColor)
         }
         component="span"

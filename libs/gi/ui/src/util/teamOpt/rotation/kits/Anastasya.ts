@@ -197,7 +197,7 @@ function othersSealPoints(c: SimContext, s: State, points: number) {
   s.othersShareUntil = c.now + 480
   s.doomStage = 1
   s.doomUntil = s.freezeEnd
-  s.c6HonorArmed = false
+  c6HonorLost(c, s)
   sync(c, s)
   syncAt(c, s, s.othersShareUntil)
 }
@@ -212,8 +212,16 @@ function othersUnseal(c: SimContext, s: State) {
     syncAt(c, s, s.othersShareUntil)
   }
   s.doomStage = 0
-  s.c6HonorArmed = false
+  c6HonorLost(c, s)
   sync(c, s)
+}
+/** The C6 Honor strike, unused, goes with the others' Sealing */
+function c6HonorLost(c: SimContext, s: State) {
+  if (s.c6HonorArmed && c.now < s.c6HonorEnd)
+    c.note(
+      'Anastasya C6: her Honor strike went unused: the others’ Sealing ended before her Skill was tapped. Tap E before her Normal Attacks end the Sealing (e.g. hE Q E N5).'
+    )
+  s.c6HonorArmed = false
 }
 function othersSealTick(c: SimContext, s: State, id: number) {
   if (id !== s.othersSealId || !s.othersSealed) return

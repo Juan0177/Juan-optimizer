@@ -251,6 +251,84 @@
     },
     "entries": [
       {
+        "date": "2026-11-23",
+        "title": "Update to Stellar Optimizer 1.35",
+        "summary": "Stellar Optimizer’s releases 1.24 to 1.35 arrive. The biggest is **Optimize rotation** in KQM Theorycrafting; KQM artifacts now come in tiers, and a team can have versions to compare.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              {
+                "text": "**Optimize rotation** (KQM Theorycrafting)",
+                "sub": [
+                  "Tries thousands of small changes to the written rotation (order, members coming back, attack strings, skills and kit options) and plays them with the KQM builds. The main DPS keeps its Burst and field time.",
+                  "**Quick** stops at its time limit. **Full** also tries the other member orders and the templates, then gives the best rotations their own KQM builds.",
+                  "A rotation that needs less Energy Recharge gains the damage stats that frees. The best show up while it searches, with each member’s ER need."
+                ]
+              },
+              {
+                "text": "**KQM artifact tiers**",
+                "sub": [
+                  "Besides KQM Standard: **Good**, **Great**, **Top** and **Perfect**, built piece by piece as the game makes them.",
+                  "**Custom** is back: how many of each member’s 45 rolls land on wanted stats (10 to 45), the rest random.",
+                  "Set for the whole team or per member, in the Setup members table. Share pictures say which standard the builds used."
+                ]
+              },
+              {
+                "text": "**Weapons in KQM**",
+                "sub": [
+                  "**Lock a weapon** for a member: every build of it uses that weapon, the others optimized around it.",
+                  "**Signature weapons** per member: never, or R1 to R5. With several refinements ticked, builds use the highest."
+                ]
+              },
+              {
+                "text": "**Versions of a team**",
+                "sub": [
+                  "Duplicate a team or make a version by swapping members: it shares the original’s KQM settings.",
+                  "Versions run in the background and are compared in a table (DPS, ER required, field time, share) and in a share picture.",
+                  "KQM results are kept for up to 100 teams."
+                ]
+              },
+              {
+                "text": "**Teams from a link**",
+                "sub": [
+                  "A team opened with a link from another site comes in with its builds: run them as they are (marked **TC**) or switch to My builds."
+                ]
+              },
+              {
+                "text": "**Team optimize and energy**",
+                "sub": [
+                  "**Quick** and **Full** search: Quick narrows each slot to the artifacts that can matter. Small searches use the GPU too.",
+                  "Skill particles go to whoever is on the field as the rotation plays; turrets count, and Beidou’s 1-stack hold.",
+                  "Constellation, passive, set and weapon Energy is filled in from the written rotation.",
+                  "The first rotation written apart is a setup, not counted, unless ticked.",
+                  "What raises team damage also for the KQM builds shown, saved with the run."
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Anastasya**: ascension, Vortices and C6. **Wriothesley**: C4 and C6.",
+              "**Nicole** C6, **Lohen** (both hits of the Charged Attack), **Sucrose** (her bonuses start off without her Skill or Burst), **Iansan**, **Varesa** C2 in the ER calculator.",
+              "**Silken Moon’s Serenade** triggers on zero-damage element applications too (Nilou); **Thrilling Tales of Dragon Slayers** counts only after the member swaps out.",
+              "**Optimize rotation** no longer runs the tab out of memory on teams with many buffs.",
+              "**Other**: imports no longer hide imported items behind active filters; Bennett’s Burst field shows on the timeline."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Every new text is in Italian too (220 texts).",
+              "The **Feedback** button is back: it opens a GitHub issue and posts to JuanLab’s Discord.",
+              "The home page and the footer invite you to JuanLab’s **Discord server**.",
+              "**KQM Compare**: the member leaving can be in the opener too, and no more Rotation changed warning with a saved opener or timing."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-20",
         "title": "Update to Stellar Optimizer 1.23",
         "summary": "Stellar Optimizer’s releases 1.17 to 1.23 arrive. Written rotations move into their teams by themselves; the first KQM result has to be run again, as KQM now keeps its own settings.",

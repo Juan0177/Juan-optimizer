@@ -1,6 +1,7 @@
 import { allStats } from '@genshin-optimizer/gi/stats'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -60,6 +61,8 @@ const SOULWIND = 720
 interface MikaState {
   /** Eagleplume (the burst's healing state) lasts until this frame */
   healUntil: number
+  /** C4: Energy restores left in this Eagleplume */
+  c4Left: number
   /** Each member's next Eagleplume heal (frame) */
   healReady: Record<string, number>
   /** The current Soulwind: from `soulwindStart` to `soulwindEnd` (frames) */
@@ -106,6 +109,7 @@ export const kit: KitModel = {
   element: 'cryo',
   source: `${GCSIM}/mika`,
   init: (): MikaState => ({
+    c4Left: 0,
     healUntil: -1,
     healReady: {},
     soulwindStart: -1,
@@ -245,6 +249,7 @@ export const kit: KitModel = {
       case 'burst':
         ctx.at(51, (c) => {
           s.healUntil = c.now + 900
+          s.c4Left = 5
         })
         ctx.hit(51, {
           path: ['_heal', 'burst', 'castHeal'],
@@ -317,5 +322,10 @@ export const kit: KitModel = {
       element: 'cryo',
       label: 'Eagleplume (heal)',
     })
+    // C4: 3 Energy per heal, 5 times an Eagleplume
+    if (ctx.constellation('Mika') >= 4 && s.c4Left > 0) {
+      s.c4Left--
+      flatEnergy(ctx, 0, 3, 'Mika C4', { owner: 'Mika' })
+    }
   },
 }

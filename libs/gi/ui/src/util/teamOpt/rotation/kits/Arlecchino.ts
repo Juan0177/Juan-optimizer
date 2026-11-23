@@ -1,6 +1,7 @@
 import type { RotationAction } from '../parse'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -131,6 +132,7 @@ function absorbDirective(c: SimContext, s: ArleState) {
   if (cons >= 4 && c.now >= s.c4Icd) {
     s.c4Icd = c.now + 600
     c.reduceCooldown('burst', 120)
+    flatEnergy(c, 0, 15, 'Arlecchino C4', { owner: 'Arlecchino' })
   }
   if (cons >= 2 && level >= 2 && c.now >= s.c2Icd) {
     s.c2Icd = c.now + 600

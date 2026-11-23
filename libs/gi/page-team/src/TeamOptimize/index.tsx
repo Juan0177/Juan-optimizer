@@ -28,9 +28,13 @@ import {
   enemyFight,
   evaluateTeamRotation,
   fightBuffShare,
+  kqmResultStandardChanged,
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameEnemy,
+  teamLinkOwnGear,
+  teamLinkUseImported,
+  teamLinkUseOwnGear,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
@@ -84,18 +88,25 @@ import {
 } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
+import { VersionNote, VersionsButton, VersionsDrawer } from './KqmVersionList'
+import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { KqmTimeline } from './KqmTimeline'
 import { kqmOwnSetUp } from './kqmOwn'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
+import { RotationSearchButton } from './RotationSearch'
 import { RotationTransfer } from './RotationTransfer'
 import {
   copyRotationFromKqm,
   copyRotationToKqm,
+  kqmRotationId,
   RotationConfigureButton,
   rotationIdOf,
+  type SearchButton,
   useAppliedRotation,
+  setRotationDraft,
+  useMemberNames,
   useRotationWriter,
   useSameRotations,
   useSimTeam,
@@ -179,6 +190,20 @@ export default function TeamBuildWorkspace({
     !!enemyTeam &&
     !sameEnemy(enemy.enemyOverride, enemyTeam.enemyOverride)
   const [storedTeamOpt, setStoredTeamOpt] = useTeamOpt(teamId)
+  // A version (KQM): its shared settings are its original's when it is shown, and changed here
+  // they are the original's too (so its whole family's)
+  const { i18n: namesI18n } = useTranslation('charNames_gen')
+  const { gender } = useDBMeta()
+  const rootId = versionRoot(database, teamId)
+  const versionOf = rootId !== teamId ? rootId : undefined
+  useEffect(() => {
+    if (mode !== 'kqm' || !versionOf) return
+    const names = { i18n: namesI18n, gender }
+    syncVersion(database, teamId, names)
+    return database.teams.follow(teamId, () =>
+      pushVersionSettings(database, teamId, names)
+    )
+  }, [database, mode, teamId, versionOf, namesI18n, gender])
   // Each tab has its own rotation: on the KQM tab the page reads and changes KQM's (its attacks
   // and rotation time), at its constellations; the rest of the settings are shared
   const teamOpt = useMemo(
@@ -330,6 +355,10 @@ export default function TeamBuildWorkspace({
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
   )
+  // an imported team's members on its builds: those the player has run on their own gear
+  const ownGear = team?.importedFrom
+    ? teamLinkOwnGear(database, teamId)
+    : undefined
   const poolSize = usePoolSize(members, teamOpt)
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
@@ -352,6 +381,10 @@ export default function TeamBuildWorkspace({
   // (while it runs: its builds so far once it has some, else the last result)
   const roster = teamRoster(database, teamId)
   const memberKeys = members.map((m) => m.characterKey)
+  // (a run's builds: its members not on a theorycraft build, which it keeps as they are)
+  const inventoryKeys = members
+    .filter((m) => !m.isTc)
+    .map((m) => m.characterKey)
   const kqmEarly = kqm.state.type === 'running' ? kqm.state.early : undefined
   const kqmDone =
     kqm.state.type === 'done'
@@ -388,6 +421,7 @@ export default function TeamBuildWorkspace({
     mode === 'kqm' &&
     kqmResult &&
     kqmRunKey(kqmResult.teamOpt) === kqmRunKey(teamOpt) &&
+    !kqmResultStandardChanged(kqmResult.result, teamOpt.kqm) &&
     (kqmResult.rotation === 'played') === !!writtenRotation.trim() &&
     !enemyChanged(kqmResult.enemy)
       ? kqmResult
@@ -437,6 +471,26 @@ export default function TeamBuildWorkspace({
         : undefined,
     [kqmPlayed, kqmShown]
   )
+  // (KQM's rotation search, on the rotation's line and in its writer: with the builds shown; a
+  // rotation it finds opens in the writer, to be played there and used)
+  const kqmRunTeamOpt = kqmRotation?.runTeamOpt
+  const memberNames = useMemberNames(members)
+  /** The states a KQM run gives every attack now (`lowHp`, set once it is worked out below) */
+  const attackStatesNow = useRef<readonly RunAttackState[]>()
+  const searchButton = useCallback<SearchButton>(
+    ({ text, names, setText }) => (
+      <RotationSearchButton
+        teamId={teamId}
+        text={text}
+        names={names}
+        kqmResult={kqmShown}
+        kqmTeamOpt={kqmRunTeamOpt}
+        attackStates={attackStatesNow}
+        onUse={setText}
+      />
+    ),
+    [teamId, kqmShown, kqmRunTeamOpt]
+  )
   // the rotation written as text (inline), and its writer dialog with Undo
   const writer = useRotationWriter({
     teamId,
@@ -447,6 +501,7 @@ export default function TeamBuildWorkspace({
     kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
     kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
+    searchButton: mode === 'kqm' ? searchButton : undefined,
   })
   // (the rotation's time: at the end of the written rotation's line; without one, attacks entered by
   // hand, in the row below)
@@ -568,6 +623,7 @@ export default function TeamBuildWorkspace({
         }
       : undefined
   }, [enemyTeam, fightNow, members])
+  attackStatesNow.current = lowHp?.states
   // the equipped builds' figures with that uptime too, as a run's: the fight they make sets it, so
   // it settles in a step or two (two states taking turns: the first kept)
   const wolfHistory = useRef<string[]>([])
@@ -613,7 +669,7 @@ export default function TeamBuildWorkspace({
   // a result for another line-up is of no use
   const result =
     state.type === 'done' &&
-    sameBuildRoster(state.result.builds, memberKeys) &&
+    sameBuildRoster(state.result.builds, inventoryKeys) &&
     (state.roster === undefined || state.roster === roster)
       ? state
       : undefined
@@ -846,6 +902,26 @@ export default function TeamBuildWorkspace({
             <RotationInline
               trailing={
                 <>
+                  {mode === 'kqm' && (
+                    <RotationSearchButton
+                      compact
+                      teamId={teamId}
+                      text={writtenRotation}
+                      names={memberNames}
+                      kqmResult={kqmShown}
+                      kqmTeamOpt={kqmRunTeamOpt}
+                      attackStates={attackStatesNow}
+                      disabled={running}
+                      onUse={(chosen) => {
+                        setRotationDraft(
+                          database,
+                          kqmRotationId(teamId),
+                          chosen
+                        )
+                        writer.openWriter()
+                      }}
+                    />
+                  )}
                   <RotationsSetting
                     compact
                     teamId={teamId}
@@ -1005,6 +1081,13 @@ export default function TeamBuildWorkspace({
       </Box>
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
+      {kqmTheorycraftingEnabled && mode === 'kqm' && versionOf && (
+        <VersionNote rootId={versionOf} />
+      )}
+      {/* (once on the tab, outside the results: a result coming in leaves it open) */}
+      {kqmTheorycraftingEnabled && mode === 'kqm' && (
+        <VersionsDrawer teamId={teamId} />
+      )}
       {kqmTheorycraftingEnabled && mode === 'kqm' && (
         <Box sx={{ ...sectionSx, ...stepAccentSx('setup'), p: 0 }}>
           <KqmSettings
@@ -1034,6 +1117,8 @@ export default function TeamBuildWorkspace({
           teamOpt={teamOpt}
           setTeamOpt={setTeamOpt}
           poolSize={poolSize}
+          // (an imported team: its builds can be run as they are)
+          evaluateOnly={!!team?.importedFrom}
         />
       )}
 
@@ -1066,6 +1151,7 @@ export default function TeamBuildWorkspace({
             }
             stale={
               kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+              kqmResultStandardChanged(kqmResult.result, teamOpt.kqm) ||
               (kqmResult.rotation === 'played') !== !!writtenRotation.trim() ||
               enemyChanged(kqmResult.enemy)
             }
@@ -1094,6 +1180,7 @@ export default function TeamBuildWorkspace({
               kqm.clear()
               rotationOpen.set(true)
             }}
+            actions={<VersionsButton teamId={teamId} />}
           />
         </Box>
       )}
@@ -1172,6 +1259,20 @@ export default function TeamBuildWorkspace({
           index={Math.min(pick, builds.length - 1)}
         />
       )}
+      {/* (KQM's: for its builds shown, while its result is for the rotation as it is; saved with
+          the run for its own builds, not for other equipment picked) */}
+      {mode === 'kqm' && kqmRotation && kqmShown && (
+        <TeamSensitivity
+          teamId={teamId}
+          members={members}
+          teamOpt={kqmRotation.runTeamOpt}
+          result={{ kqm: kqmShown }}
+          savedAt={
+            kqmShown === kqmRotation.result ? kqmRotation.savedAt : undefined
+          }
+          index={0}
+        />
+      )}
       {/* last on the page: it stays pinned to the window's foot while anything above scrolls */}
       {((mode === 'inventory' && !showStart) || running) && (
         <RunBar
@@ -1181,7 +1282,13 @@ export default function TeamBuildWorkspace({
           members={members}
           attackCount={attackCount}
           optimizable={optimizable}
+          ownGear={ownGear}
           onRun={() => setRunDialog(true)}
+          onBuilds={(own) =>
+            own
+              ? teamLinkUseOwnGear(database, teamId)
+              : teamLinkUseImported(database, teamId)
+          }
           onCancel={cancel}
           kqmState={kqm.state}
           onKqmCancel={kqm.cancel}
@@ -1550,6 +1657,8 @@ function RunBar({
   members,
   attackCount,
   optimizable,
+  ownGear,
+  onBuilds,
   onRun,
   onCancel,
   kqmState,
@@ -1560,6 +1669,14 @@ function RunBar({
   members: TeamOptMember[]
   attackCount: number
   optimizable: TeamOptMember[]
+  /** An imported team's members that came with builds (`teamLinkOwnGear`) */
+  ownGear?: {
+    switchable: CharacterKey[]
+    missing: CharacterKey[]
+    onOwn: CharacterKey[]
+  }
+  /** An imported team: its builds (false) or the player's own (true) */
+  onBuilds: (own: boolean) => void
   /** Opens the run's dialog (it starts the run) */
   onRun: () => void
   onCancel: () => void
@@ -1575,14 +1692,37 @@ function RunBar({
   // (members on a TC build are kept as they are: Team optimize picks real artifacts)
   const tcCount = members.filter((m) => m.isTc).length
   // can't run at all: nothing to play, or nothing it could ever optimize
+  // an imported team: on the builds it came with, or on the player's own (those they have)
+  const imported = !!ownGear
+  const builds =
+    ownGear && (ownGear.switchable.length || ownGear.onOwn.length)
+      ? ownGear.switchable.length || !ownGear.onOwn.length
+        ? 'imported'
+        : 'own'
+      : undefined
   const blocked = !attackCount
     ? t('teamOpt.run.noAttacks', 'Add the rotation’s attacks first.')
-    : tcCount === members.length
+    : tcCount === members.length && !imported
       ? t(
           'teamOpt.run.allTc',
           'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
         )
       : undefined
+  const ownGearNote =
+    imported && tcCount === members.length
+      ? t(
+          'teamOpt.run.importedBuilds',
+          'Runs the imported builds as they are: their damage, what raises it, the team card. My builds optimizes your own pieces.'
+        )
+      : imported && ownGear?.missing.length && builds === 'own'
+        ? t('teamOpt.run.importedMissing', {
+            defaultValue_one:
+              '{{count}} member you don’t have keeps the imported build.',
+            defaultValue_other:
+              '{{count}} members you don’t have keep the imported build.',
+            count: ownGear.missing.length,
+          })
+        : undefined
   // every member switched off: the button still opens Optimize team, where they are switched on
   const allOff =
     !blocked && !optimizable.length
@@ -1658,6 +1798,24 @@ function RunBar({
                 })}
               </Box>
             )}
+            {builds && (
+              <Segmented
+                size="small"
+                aria-label={t('teamOpt.run.buildsLabel', 'Builds')}
+                value={builds}
+                onChange={(value) => onBuilds(value === 'own')}
+                options={[
+                  {
+                    value: 'imported',
+                    label: t('teamOpt.run.buildsImported', 'Imported builds'),
+                  },
+                  {
+                    value: 'own',
+                    label: t('teamOpt.run.buildsOwn', 'My builds'),
+                  },
+                ]}
+              />
+            )}
             <Typography
               sx={{
                 ...type.body,
@@ -1675,6 +1833,7 @@ function RunBar({
               }}
             >
               {blocked ??
+                ownGearNote ??
                 allOff ??
                 t('teamOpt.run.toOptimize', {
                   defaultValue: '{{count}} of {{total}} to optimize',

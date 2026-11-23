@@ -1,5 +1,5 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { atkSpdAdjust, GCSIM, templateJump } from './common'
+import { atkSpdAdjust, flatEnergy, GCSIM, templateJump } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/mualani, main as of 2026-11-10. */
 
@@ -285,6 +285,8 @@ function bites(ctx: SimContext, s: MualaniState, count: number): ActionResult {
         settle(s, c2.now)
         if (s.blessing) s.points = Math.min(POINTS_MAX, s.points + 20)
       })
+      // C4: 8 Energy with each Puffer
+      if (c >= 4) flatEnergy(ctx, start + t.hit + 20, 8, 'Mualani C4')
       if (c >= 2) {
         momentum = Math.min(3, momentum + 1)
         if (second)

@@ -1,10 +1,13 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
   templateJump,
   withHitlag,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/furina, main as of 2026-11-10. */
@@ -110,6 +113,8 @@ const FANFARE_DELAY = 6
 const FANFARE_CHUNK = 30
 
 interface FurinaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** Fanfare's debounce status: added at `debounceFrom`, active through `debounceEnd` */
   debounceFrom: number
   debounceEnd: number
@@ -225,6 +230,10 @@ function salonTick(
   // the attack is dropped if the members are dismissed (a new summon, an arkhe change, the end)
   c.at(m.travel, (c2) => {
     if (src !== s.salonSrc || c2.now >= s.skillEnd) return
+    // the members' particles: 1, 2.5 s ICD on Furina's clock (kqmsim particleCB)
+    if (turretReady(s.particles, 'salon', c2.characterFrame('Furina'), 150))
+      turretParticles(c2, 0, 1, 'Furina')
+    c4Energy(c2, s)
     c2.hit(0, {
       path: ['skill', m.node],
       tag: 'skill',
@@ -248,6 +257,15 @@ function salonTick(
   c.at(Math.round(m.initial + (n + 1) * m.mean) - (c.now - src), (c2) =>
     salonTick(c2, s, src, n + 1, m)
   )
+}
+
+/** C4: 4 Energy as a Salon member hits or the Singer heals, once per 5 s (Furina's clock) */
+function c4Energy(c: SimContext, s: FurinaState) {
+  if (
+    c.constellation('Furina') >= 4 &&
+    turretReady(s.particles, 'c4', c.characterFrame('Furina'), 300)
+  )
+    flatEnergy(c, 0, 4, 'Furina C4', { owner: 'Furina' })
 }
 
 /** Summons the Salon Solitaire members `delay` frames from now: each ticks from its initial tick */
@@ -278,6 +296,7 @@ function summonSinger(ctx: SimContext, s: FurinaState, delay: number) {
         healTargets: [c2.onField],
         label: 'Singer of Many Waters',
       })
+      c4Energy(c2, s)
       const hp = c2.calculate('Furina', ['total', 'hp']) ?? 0
       const reduction = Math.min((hp / 1000) * 0.004, 0.16)
       c2.at(Math.trunc(120 * (1 - reduction) + 0.5), tick)
@@ -357,6 +376,7 @@ export const kit: KitModel = {
   element: 'hydro',
   source: `${GCSIM}/furina`,
   init: (): FurinaState => ({
+    particles: new Map(),
     fanfare: 0,
     debounceFrom: -1,
     debounceEnd: -2,

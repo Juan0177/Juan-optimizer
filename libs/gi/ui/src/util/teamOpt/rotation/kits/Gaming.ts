@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/gaming, main as of 2026-11-10. */
 
@@ -184,6 +190,9 @@ export const kit: KitModel = {
             applies: true,
             label: 'Plunging Attack: Charmed Cloudstrider',
           })
+          // C4: 2 Energy as it hits
+          if (ctx.constellation('Gaming') >= 4)
+            flatEnergy(ctx, 32, 2, 'Gaming C4')
           ctx.at(32, (c) => {
             // A1: 1.5% of his Max HP every 0.2 s for 0.8 s (not while one runs)
             if (!c.healthTracked || gamingClock(c) <= s.a1Until) return

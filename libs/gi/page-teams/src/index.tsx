@@ -25,7 +25,15 @@ import {
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
-import { CharacterMultiAutocomplete, TeamCard } from '@genshin-optimizer/gi/ui'
+import type { TeamLinkJson } from '@genshin-optimizer/gi/ui'
+import {
+  CharacterMultiAutocomplete,
+  encodeTeamLink,
+  TEAM_LINK_PARAM,
+  TEAM_LINK_PATH,
+  TeamCard,
+  teamLinkFromText,
+} from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
 import GroupsIcon from '@mui/icons-material/Groups'
 import SearchIcon from '@mui/icons-material/Search'
@@ -94,6 +102,15 @@ export default function PageTeams() {
     }
   }, [location.state, onShowImport, setData])
   const importData = () => {
+    // a team link (from another site), or its JSON: opened on the import page
+    const linked = teamLinkFromText(data)
+    if (linked) {
+      onHideImport()
+      navigate(
+        `${TEAM_LINK_PATH}?${TEAM_LINK_PARAM}=${encodeTeamLink(linked as TeamLinkJson)}`
+      )
+      return
+    }
     let dataObj: unknown
     try {
       dataObj = JSON.parse(data)

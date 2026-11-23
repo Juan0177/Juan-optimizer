@@ -1,10 +1,13 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
   templateJump,
+  turretParticles,
+  turretReady,
   withHitlag,
 } from './common'
 
@@ -50,6 +53,8 @@ const yaoyaoNormals: NormalHit[] = [
 const normalNode = (i: number, j: number) => (i === 2 ? 2 + j : i === 3 ? 4 : i)
 
 interface YaoyaoState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The cast that started Moonjade Descent (its Yuegui and A1 work only while it is that one) */
   burstTok?: number
   /** Dash and jump intervals [from, to): A1 throws a radish at a tick in one of them */
@@ -212,6 +217,13 @@ const skillThrow =
     const burst = inBurst(s, c.now + 13)
     c.at(13, (c2) => radishHeal(c2, s, burst, atPlayer))
     // under Adeptal Legacy its radishes are the burst's (Elemental Burst DMG), with its stats
+    // C2: a radish hit in Adeptal Legacy restores 3 Energy to Yaoyao, once per 0.8 s
+    if (
+      burst &&
+      c.constellation('Yaoyao') >= 2 &&
+      turretReady(s.particles, 'c2', c.now + 13, 48)
+    )
+      flatEnergy(c, 13, 3, 'Yaoyao C2', { owner: 'Yaoyao' })
     if (burst)
       throwRadish(
         c,
@@ -230,6 +242,11 @@ const skillThrow =
         'YaoyaoRadishSkill',
         snapshotAt
       )
+    // the Yuegui's particles: 1, 1.5 s ICD on Yaoyao's clock (kqmsim makeParticleCB)
+    c.at(13, (c2) => {
+      if (turretReady(s.particles, 'yuegui', c2.characterFrame('Yaoyao'), 90))
+        turretParticles(c2, 0, 1, 'Yaoyao')
+    })
     if (n === 2 || n === 5) megaRadish(c, atPlayer)
     c.at(60, skillThrow(s, end, n + 1, snapshotAt))
   }
@@ -275,7 +292,7 @@ export const kit: KitModel = {
   characterKey: 'Yaoyao',
   element: 'dendro',
   source: `${GCSIM}/yaoyao`,
-  init: (): YaoyaoState => ({ air: [], a4: {} }),
+  init: (): YaoyaoState => ({ air: [], a4: {}, particles: new Map() }),
   act(ctx, s: YaoyaoState, action, previous) {
     switch (action.kind) {
       case 'normal':

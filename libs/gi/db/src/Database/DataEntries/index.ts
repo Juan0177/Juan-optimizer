@@ -13,6 +13,7 @@ import { RESIN_MAX, timeZones } from './DisplayTool'
 import type { WeaponSortKey } from './DisplayWeaponEntry'
 import type {
   ITeamKqmResultsEntry,
+  TeamKqmRunSummary,
   TeamKqmSavedRun,
 } from './TeamKqmResultsEntry'
 import { TEAM_KQM_RUNS_KEPT } from './TeamKqmResultsEntry'
@@ -29,6 +30,7 @@ export type {
   CharacterSortKey,
   ITeamKqmResultsEntry,
   ITeamOptResultsEntry,
+  TeamKqmRunSummary,
   TeamKqmSavedRun,
   TeamOptSavedRun,
   TeamOptSavedSensitivity,

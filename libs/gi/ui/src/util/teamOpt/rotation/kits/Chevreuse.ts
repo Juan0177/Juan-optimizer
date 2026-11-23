@@ -1,5 +1,6 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -54,6 +55,8 @@ interface ChevreuseState {
   particleIcdEnd: number
   /** C2's internal cooldown ends (frame) */
   c2IcdEnd: number
+  /** C1's Energy cooldown ends (Chevreuse's clock) */
+  c1Ready: number
   /** C4: a Hold E has no cooldown until this frame, for `c4Shots` more casts */
   c4Until: number
   c4Shots: number
@@ -124,6 +127,7 @@ export const kit: KitModel = {
     bladeIcdEnd: -1,
     particleIcdEnd: -1,
     c2IcdEnd: -1,
+    c1Ready: -1,
     c4Until: -1,
     c4Shots: 0,
     healChain: false,
@@ -330,6 +334,24 @@ export const kit: KitModel = {
   },
   onHit(ctx, s: ChevreuseState, hit) {
     if (hit.path.join('.') !== '_reaction.overloaded') return
+    // C1 (Coordinated Tactics: a Pyro and Electro only party): 6 Energy to the active member when
+    // it triggers it, not Chevreuse, once per 10 s
+    if (
+      ctx.constellation('Chevreuse') >= 1 &&
+      ctx.partyCount('pyro') > 0 &&
+      ctx.partyCount('electro') > 0 &&
+      ctx.partyCount('pyro') + ctx.partyCount('electro') ===
+        ctx.members.length &&
+      hit.characterKey !== 'Chevreuse' &&
+      hit.characterKey === hit.onField &&
+      ctx.characterFrame('Chevreuse') >= s.c1Ready
+    ) {
+      s.c1Ready = ctx.characterFrame('Chevreuse') + 601
+      flatEnergy(ctx, 0, 6, 'Chevreuse C1', {
+        owner: 'Chevreuse',
+        to: hit.characterKey,
+      })
+    }
     s.ball = true
     ctx.buff('Chevreuse', ['Chevreuse', 'a1AfterOverload'], 'on', 1, 360)
   },

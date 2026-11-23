@@ -101,8 +101,10 @@ it('gains Pale Flame only from eligible skill damage, shares the gain cooldown a
     '1',
   ])
   expect(
-    attacks.find((a) => a.description === 'Normal 19')?.limits
-  ).toBeUndefined() // two stacks match saved defaults
+    attacks
+      .find((a) => a.description === 'Normal 19')
+      ?.limits?.filter((l) => l.path[0] === 'PaleFlame')
+  ).toEqual([]) // two stacks match saved defaults
   expect(
     attacks.find((a) => a.description === 'Normal 448')?.limits
   ).toContainEqual({ owner: 'Razor', path: ['PaleFlame', 'stacks'], hits: 0 })
@@ -421,7 +423,9 @@ describe('Hakushin Ring', () => {
     })
     const attacks = rotationAttacks(sim, () => 'dendro').Nahida!
     expect(attacks).toHaveLength(2)
-    expect(attacks[0].limits).toBeUndefined()
+    expect(
+      attacks[0].limits?.filter((l) => l.path[0] === 'HakushinRing')
+    ).toEqual([])
     expect(attacks[1].limits).toContainEqual({
       owner: 'Nahida',
       path: ['HakushinRing', 'SakuraSaiguu'],

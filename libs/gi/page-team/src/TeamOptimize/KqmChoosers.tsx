@@ -17,7 +17,7 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
-import { useDatabase } from '@genshin-optimizer/gi/db-ui'
+import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { getArtSheet } from '@genshin-optimizer/gi/sheets'
 import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type {
@@ -29,6 +29,7 @@ import type {
 import {
   ArtifactSetName,
   ArtifactSetTooltip,
+  CharacterName,
   KQM_WEAPON_LIST,
   kqmBuiltRefinement,
   kqmDefaultExcludedWeapons,
@@ -36,6 +37,7 @@ import {
   kqmExcludedWeapons,
   kqmGroupRefinementKey,
   kqmGroupRefinements,
+  kqmLockedWeapon,
   kqmRuleConditionals,
   kqmSets,
   kqmWeaponGroup,
@@ -46,6 +48,7 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import CloseIcon from '@mui/icons-material/Close'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -75,6 +78,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { KqmWeaponLock } from './KqmWeaponLock'
 import { MemberAvatar } from './MemberAvatar'
 import {
   EmptyLine,
@@ -389,8 +393,8 @@ function toggleKqmWeaponGroup(kqm: TeamOptKqm, keys: WeaponKey[]): TeamOptKqm {
 
 /**
  * A group's weapons counted at the refinements ticked (`values`, one at least): built at the
- * group's default one if ticked (Battle Pass R1), else the highest, ranked at the others too for
- * comparison (their own refinements, set one by one, are cleared)
+ * highest, ranked at the others too for comparison (their own refinements, set one by one, are
+ * cleared)
  */
 function setKqmGroupRefinements(
   kqm: TeamOptKqm,
@@ -407,7 +411,7 @@ function setKqmGroupRefinements(
   else delete compare[group]
   return {
     ...kqm,
-    [kqmGroupRefinementKey[group]]: kqmBuiltRefinement(group, ticked),
+    [kqmGroupRefinementKey[group]]: kqmBuiltRefinement(ticked),
     refinements: Object.keys(refinements).length ? refinements : undefined,
     compareRefinements: Object.keys(compare).length ? compare : undefined,
   }
@@ -624,11 +628,60 @@ export function KqmWeaponChooser({
           const visible = Math.max(0, shown - before)
           before += filtered.length
           if (!filtered.length) return null
+          const locks = group.members.flatMap(({ characterKey }) => {
+            const weapon = kqmLockedWeapon(characterKey, kqm)
+            return weapon ? [{ characterKey, weapon }] : []
+          })
           return (
             <WeaponGroup
               key={group.type}
               type={group.type}
               members={group.members}
+              minTicked={locks.length === group.members.length ? 0 : 1}
+              note={
+                <Box>
+                  <FieldLabel
+                    tip={t(
+                      'teamOpt.kqm.weaponLockTip',
+                      'Any: the search chooses the member’s weapon from the ticked ones below. Lock one and every build of that member uses it, even if it is not ticked; the others are optimized around it.'
+                    )}
+                  >
+                    {t('teamOpt.kqm.weaponLockRow', 'Lock a weapon')}
+                  </FieldLabel>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: 'minmax(0, 1fr)',
+                        sm: 'repeat(2, minmax(0, 1fr))',
+                        md: 'repeat(4, minmax(0, 1fr))',
+                      },
+                      gap: 1,
+                      mt: 0.75,
+                    }}
+                  >
+                    {group.members.map(({ characterKey }) => (
+                      <Box
+                        key={characterKey}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 0.75,
+                          minWidth: 0,
+                        }}
+                      >
+                        <MemberAvatar characterKey={characterKey} size={26} />
+                        <KqmWeaponLock
+                          characterKey={characterKey}
+                          members={members}
+                          kqm={kqm}
+                          setTeamOpt={setTeamOpt}
+                        />
+                      </Box>
+                    ))}
+                  </Box>
+                </Box>
+              }
               weapons={filtered}
               selectionCounts={{
                 allowed: group.weapons.filter((w) => !excluded.has(w.id))
@@ -692,6 +745,7 @@ export function KqmWeaponChooser({
     teamData,
     members,
     energy,
+    kqm,
     setTeamOpt,
     t,
   ])
@@ -1074,8 +1128,8 @@ export function kqmChooserCounts(
  * the refinement its weapons count at (a menu, R1 to R5)
  */
 /**
- * A group's refinements as toggles, several at once: the builds use the group's default one if
- * ticked, else the highest; the rankings and charts show each (one stays ticked)
+ * A group's refinements as toggles, several at once: the builds use the highest; the rankings and
+ * charts show each (one stays ticked)
  */
 function RefinementToggles({
   label,
@@ -1147,7 +1201,7 @@ function GroupPill({
   tip: string
   on: number
   total: number
-  /** the refinements ticked (the builds use the default one if ticked, else the highest; the rankings show each) */
+  /** the refinements ticked (the builds use the highest; the rankings show each) */
   refinements: number[]
   onToggle: () => void
   onRefinements: (values: number[]) => void
@@ -1289,7 +1343,8 @@ export function KqmPool({
   onWeapons: () => void
   onSets: () => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'weaponNames_gen'])
+  const { gender } = useDBMeta()
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
   const groupDefs = useKqmWeaponGroups()
   const counts = useMemo(
@@ -1319,7 +1374,16 @@ export function KqmPool({
     px: 1.5,
     py: 1.25,
   } as const
-  const name = (label: string, allowed: number, total: number) => (
+  const locks = members.flatMap(({ characterKey }) => {
+    const weapon = kqmLockedWeapon(characterKey, kqm)
+    return weapon ? [{ characterKey, weapon }] : []
+  })
+  const name = (
+    label: string,
+    allowed: number,
+    total: number,
+    extra?: ReactNode
+  ) => (
     <Box sx={{ gridArea: 'name', minWidth: 0 }}>
       <Typography sx={{ fontSize: 14, fontWeight: 600 }}>{label}</Typography>
       <Typography sx={{ ...typeScale.label, ...numSx }}>
@@ -1329,7 +1393,40 @@ export function KqmPool({
           count: total,
         })}
       </Typography>
+      {extra}
     </Box>
+  )
+  const locked = !!locks.length && (
+    <Tooltip
+      arrow
+      title={locks.map(({ characterKey, weapon }) => (
+        <Box key={characterKey}>
+          <CharacterName characterKey={characterKey} gender={gender} />
+          {`: ${t(`weaponNames_gen:${weapon.key}`, weapon.key)} R${weapon.refinement}`}
+        </Box>
+      ))}
+    >
+      <Box
+        aria-label={t('teamOpt.kqm.weaponLocked', 'Weapon locked')}
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          mt: 0.5,
+          ...typeScale.label,
+          color: 'primary.main',
+        }}
+      >
+        <LockOutlinedIcon sx={{ fontSize: 14 }} />
+        {locks.map(({ characterKey }) => (
+          <MemberAvatar
+            key={characterKey}
+            characterKey={characterKey}
+            size={18}
+          />
+        ))}
+      </Box>
+    </Tooltip>
   )
   const choose = (label: string, onClick: () => void) => (
     <Button
@@ -1378,7 +1475,8 @@ export function KqmPool({
         {name(
           t('teamOpt.kqm.weaponsList', 'Weapons'),
           counts.weapons.allowed,
-          counts.weapons.total
+          counts.weapons.total,
+          locked
         )}
         <Box
           role="group"

@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   type NormalWatcher,
@@ -71,6 +72,8 @@ interface XingqiuState {
 
 /** One Raincutter wave: its Hydro swords land 20 frames after it is summoned */
 function summonWave(c: SimContext, s: XingqiuState) {
+  // C6: the 5-sword wave restores 3 Energy to Xingqiu as it hits
+  if (s.nextWave === 5) flatEnergy(c, 20, 3, 'Xingqiu C6', { owner: 'Xingqiu' })
   for (let k = 0; k < s.nextWave; k++)
     c.hit(20, {
       path: ['burst', 'dmg'],

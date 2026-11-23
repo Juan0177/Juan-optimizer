@@ -1,5 +1,216 @@
 [
   {
+    "version": "1.35.2",
+    "date": "2026-11-23",
+    "fixed": [
+      "KQM share pictures name the artifact standard the builds used (Good, Great, Top, Perfect, Custom or Mixed) instead of always KQM Standards, and KQM's tooltips describe the new standards."
+    ]
+  },
+  {
+    "version": "1.35.1",
+    "date": "2026-11-23"
+  },
+  {
+    "version": "1.35.0",
+    "date": "2026-11-23",
+    "new": [
+      "KQM artifacts now come in five standards: KQM Standard, Good, Great, Top and Perfect. Above KQM Standard, each artifact is built as the game makes one (4 different substats and 4 or 5 upgrades), so a build never has more substat rolls than five artifacts can hold (Top used to give 60; the most is 45). Perfect is the best set the game can make. Saved settings move to the nearest standard: run them again to refresh.",
+      "Teams from other sites open with one link: preview, import, then run them on their builds or switch to your own (link format: stellaroptimizer.com/import-spec)."
+    ],
+    "fixed": [
+      "What raises team damage: Level rows count the ascension that level needs, a talent at its ascension's cap shows no gain, and Wolf's Gravestone uptime counts as it does in the run's damage.",
+      "Team optimize results now show for teams where a member uses a TC build."
+    ]
+  },
+  {
+    "version": "1.34.3",
+    "date": "2026-11-23",
+    "improved": [
+      "Iansan: her Kinetic Energy Scale now restores Nightsoul points from the on-field member's movement, as in gcsim. Each action counts as 6 m of movement unless you write [movement=N] after it ([movement=0] for none), so her Burst's ATK bonus no longer drains away during a normal rotation."
+    ]
+  },
+  {
+    "version": "1.34.2",
+    "date": "2026-11-23"
+  },
+  {
+    "version": "1.34.1",
+    "date": "2026-11-23",
+    "fixed": [
+      "Energy Recharge calculator: what a rotation filled in no longer stays once the rotation stops giving it. Lowering a character's constellation now removes that constellation's Energy, and Favonius and energy weapon triggers update the same way. Open the KQM tab and run it again to refresh its builds.",
+      "KQM Optimize rotation (Full): the better rotations found by every start stay listed while it searches, each compared with your rotation, a rotation no longer ends with a swap to someone who no longer plays first, and up to 25 are shown."
+    ]
+  },
+  {
+    "version": "1.34.0",
+    "date": "2026-11-22",
+    "new": [
+      "KQM Optimize rotation: a Full search. Besides your rotation, it tries every other member order and the built-in templates, searches from each until nothing nearby is better, then gets fresh KQM builds for the best ones and searches again with them. It finds the best rotation within reach of your plan. Quick still searches within a time limit."
+    ],
+    "improved": [
+      "KQM Optimize rotation can move a member anywhere in the order (a support played right before the character who catches its particles), bring a member back on the field to refresh a buff, and counts the damage stats a lower Energy Recharge need frees. You choose what it may change (order, coming back, attack strings, skills and kit options), and its best rotations are checked with their own KQM builds."
+    ],
+    "fixed": [
+      "KQM builds: Crystallize teams (like Navia's) now show the DPS they really get. An Archaic Petra the search was only trying used to pick up shards for the whole team, which read up to about 1.5% high.",
+      "KQM builds: the result is always scored on the rotation its final weapons and sets play. When two builds each change the rotation in the other's favor, the one that's better on its own rotation is kept."
+    ]
+  },
+  {
+    "version": "1.33.1",
+    "date": "2026-11-22",
+    "fixed": [
+      "Sucrose: the party's Elemental Mastery from her Mollis Favonius passive now applies only after her Elemental Skill or Burst hits. A rotation where she uses neither no longer gives it to the team."
+    ]
+  },
+  {
+    "version": "1.33.0",
+    "date": "2026-11-22",
+    "improved": [
+      "KQM Optimize rotation: a cleaner look. Each rotation found is shown in full with its DPS gain and the Energy Recharge each member needs, the best ones show while it searches, and the page stays smooth during the search."
+    ],
+    "fixed": [
+      "Energy Recharge calculator: during a rotation, Energy particles now go to whoever is on the field when they land, so a support that uses its skill and swaps out quickly feeds the next character and lowers that character's Energy Recharge need. Turret and Favonius particles too, and the calculator shows each catcher's share when particles are split."
+    ]
+  },
+  {
+    "version": "1.32.2",
+    "date": "2026-11-22",
+    "fixed": [
+      "Lohen: both hits of his Charged Attack in Masterstroke now gain Joy, so N1 CA N1 CA fills it for Etched Into Bone and Soul."
+    ]
+  },
+  {
+    "version": "1.32.1",
+    "date": "2026-11-22"
+  },
+  {
+    "version": "1.32.0",
+    "date": "2026-11-22",
+    "new": [
+      "KQM Theorycrafting: Optimize, on the rotation's line, looks for a better rotation. It starts from yours, tries thousands of small changes (step order, actions, Normal Attack lengths, kit options such as how many beams a Charged Attack takes) with the builds of your last KQM run, and lists the best ones with their DPS gain and the Energy Recharge each member needs. Your main DPS keeps its Burst and field time. Use one, then generate builds again for it."
+    ]
+  },
+  {
+    "version": "1.31.0",
+    "date": "2026-11-22",
+    "new": [
+      "KQM Theorycrafting: “What raises team damage” now shows under the results too. It shows what one more KQM substat roll, talent level or character level on each member's KQM build adds to the team's damage, and it is saved with the run.",
+      "Versions: choose which teams go in the share picture with tick boxes. The Versions panel and the share pictures also work better on phones."
+    ],
+    "improved": [
+      "Rotation writer: your “First rotation only” is now played before the start as a setup and not counted, unless you tick Counted. When you count rotations from the start, teams with a first rotation now count the main rotation; tick Counted to count the first rotation again."
+    ],
+    "fixed": [
+      "Team optimize with weapons: Thrilling Tales of Dragon Slayers tried on a member who doesn't hold it now only buffs the character who takes the field when that member leaves it, not everyone all the time. Press “Use this rotation” again on a saved rotation to update it.",
+      "Nicole C6: every party member gets her A1 Guidance as soon as she is upgraded.",
+      "A walk (WK) in a rotation now ends the Normal Attack string, so the next attack starts again from N1.",
+      "Rotation timeline: Bennett's burst field now shows as his buff.",
+      "Silken Moon's Serenade now triggers on elemental attacks that apply an element without dealing damage, such as Nilou's Tranquility Aura.",
+      "Duplicate and New version: picking a member of the original team for a slot now works, and the members brought in keep their loadout."
+    ]
+  },
+  {
+    "version": "1.30.2",
+    "date": "2026-11-22",
+    "fixed": [
+      "Importing a database now shows everything you imported: the Artifacts, Weapons and Characters pages open without the filters saved in the file, and your sort order is kept.",
+      "Labels with a description show it only when you point at the label itself, not at the empty space next to it."
+    ]
+  },
+  {
+    "version": "1.30.1",
+    "date": "2026-11-22",
+    "improved": [
+      "Team optimize is faster again on teams with big rotations, often by half or more: each member's search no longer starts with a slow warm-up step when your GPU does the search."
+    ]
+  },
+  {
+    "version": "1.30.0",
+    "date": "2026-11-22",
+    "fixed": [
+      "Wriothesley C4: his Attack Speed bonus is now counted. In a Polestar Field (Radiance: Stellar-Conduct) he attacks 20% faster and the rest of the party 10%; outside it, an overflowing heal gives him +20% for 4 s on the field, or the party +10% for 6 s while he is off the field.",
+      "Wriothesley C6 in Radiance: Stellar-Conduct: the Stellar-Conduct hit of his third Repelling Fist now gets the C6 CRIT Rate and CRIT DMG bonus, and Luster: Vaulting Fist makes its C6 icicle even after Icefang Rush ends.",
+      "Anastasya's Lament for the Lost: with her in the party, a new Stellar Vortex now starts at Level 2 (at most once per second), as in the game.",
+      "ER calculator: Varesa's C2 now also restores 11.5 Energy when her Volcanic Kablam hits, not only on her Plunging Attacks."
+    ]
+  },
+  {
+    "version": "1.29.0",
+    "date": "2026-11-22",
+    "new": [
+      "Team optimize: a Search setting in the Optimize team window. Quick, the default, narrows very large searches to the artifacts that can matter: much faster, and it rarely misses the best build (by a little when it does). Full always searches every artifact."
+    ],
+    "improved": [
+      "Team optimize runs are much faster: small searches now run on your GPU too, not only big ones. Runs on real inventories that took over a minute now take around 10 seconds."
+    ]
+  },
+  {
+    "version": "1.28.0",
+    "date": "2026-11-21",
+    "improved": [
+      "ER calculator: Energy from constellations, passives, artifact sets and weapons is now filled into Bonus energy from the written rotation, for the member who gets it. This covers Mitya's C1, Yae's C1 and C4, Furina's C4, Xingqiu's C6, Raiden's Burst (from her Energy Recharge), Sara's A4, Venti's A4, the Scroll of the Hero of Cinder City 2-piece, The Dockhand's Assistant, Portable Power Saw and about 60 more.",
+      "KQM Theorycrafting keeps the generated builds of your last 100 teams instead of 6, so a team you ran earlier still shows its results when you come back to it."
+    ]
+  },
+  {
+    "version": "1.27.0",
+    "date": "2026-11-21",
+    "new": [
+      "KQM Theorycrafting: Versions. From the Versions button next to Share, make versions of a team with members swapped, other constellations, or a signature weapon set to R1–R5 or left out. Each version is a team of its own with its own rotation, and every version runs under the original's KQM settings, so they compare like for like. Run them all in the background, edit a version's rotation in place, duplicate one, make any version the original, and share them all as one picture.",
+      "Rotation writer: write hE[stacks=1] for Beidou's hold with one Polaris stack (hE alone holds for two)."
+    ],
+    "improved": [
+      "ER calculator: turrets (Fischl's Oz, Raiden's Eye, Yae's Sakuras, Xiangling's Guoba, Nahida, Kokomi, Zhongli and more) now count the particles they actually make in the written rotation. A turret that needs the party's hits, ends early, or is replaced by its own Burst no longer counts a full duration of particles.",
+      "ER calculator: Beidou's Polaris Energy and Diona's C1 Energy are now filled in from the written rotation, and Beidou's 1-stack hold counts as 1 stack for her particles."
+    ],
+    "fixed": [
+      "Raiden's Eye of Stormy Judgement now lasts longer for members whose attacks pause on hit (hitlag), as in game, so it strikes more often with hard-hitting on-field characters.",
+      "Beidou's Lightning Storm bonus (A4) now starts when Tidecaller is released rather than when it hits."
+    ]
+  },
+  {
+    "version": "1.26.1",
+    "date": "2026-11-21",
+    "fixed": [
+      "Team optimize no longer counts a weapon or artifact passive that needs a shield (such as Calamity of Eshu's) while the written rotation has no shield on that member, even when its switch was left on. For a rotation written before this update, press Use this rotation once more."
+    ]
+  },
+  {
+    "version": "1.26.0",
+    "date": "2026-11-21",
+    "improved": [
+      "KQM Theorycrafting: with several refinements ticked for a weapon group, the builds now use the highest, and the lower ones are ranked for comparison (Battle Pass R1 and R5 ticked now builds at R5).",
+      "Anastasya at C6: the rotation's notes now say when her Honor strike went unused because the others' Sealing ended before her Skill was tapped, and how to keep it."
+    ],
+    "fixed": [
+      "KQM Theorycrafting no longer runs out of memory on some teams whose rotation has random hits, such as Chasca with Ororon, Furina and Bennett."
+    ]
+  },
+  {
+    "version": "1.25.0",
+    "date": "2026-11-20",
+    "new": [
+      "KQM Theorycrafting can set each member's artifacts: every member in Setup has its own Artifacts choice (KQM Standard, Good, Great, Top or a custom number of rolls), and the Artifacts menu above still sets them all at once."
+    ]
+  },
+  {
+    "version": "1.24.0",
+    "date": "2026-11-20",
+    "new": [
+      "KQM Theorycrafting can lock a member's weapon: in Choose weapons, each weapon type has a Lock a weapon row. Every build of that member then uses the locked weapon, even if it isn't ticked, and the rest of the team is optimized around it."
+    ],
+    "improved": [
+      "KQM Theorycrafting runs faster, most of all for teams with many buffs (up to about half the time)."
+    ],
+    "fixed": [
+      "Anastasya's ascension talent now adds 10% to the Stellar Swirl reaction multiplier (300% becomes 310%) instead of multiplying it, as the game does."
+    ]
+  },
+  {
+    "version": "1.23.1",
+    "date": "2026-11-20"
+  },
+  {
     "version": "1.23.0",
     "date": "2026-11-20",
     "new": [

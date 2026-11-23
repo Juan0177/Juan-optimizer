@@ -16,5 +16,6 @@
   "coreCond": "Nucleo di rilevamento in campo",
   "overloaded": "Sovraccarico",
   "perBeacon": "(per Faro a gradiente)",
-  "steady": "Stabile"
+  "steady": "Stabile",
+  "gradientAll": "Detonazione a gradiente, consumando tutti i suoi Fari a gradiente"
 }

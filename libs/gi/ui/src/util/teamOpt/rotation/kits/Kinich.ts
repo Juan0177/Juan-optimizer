@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kinich, main as of 2026-11-10. */
 
@@ -30,6 +36,14 @@ const kinichNormals: NormalHit[] = [
     frames: 79,
   },
 ]
+
+/** C4: a Loop Shot or the Cannon in the blessing restores 5 Energy, once per 2.8 s */
+function c4Energy(ctx: SimContext, s: KinichState, delay: number) {
+  const at = ctx.characterFrame('Kinich') + delay
+  if (ctx.constellation('Kinich') < 4 || at < s.c4Ready) return
+  s.c4Ready = at + 169
+  flatEnergy(ctx, delay, 5, 'Kinich C4')
+}
 
 /** Loop Shot (the normal attack in the blessing): two hits, the two shots in turn */
 const LOOP_HITMARKS = [
@@ -62,6 +76,8 @@ const BLIND_POINTS = 4
 const BURST_EXTEND = 102
 
 interface KinichState {
+  /** C4: its Energy's 2.8 s ICD ends (Kinich's clock) */
+  c4Ready: number
   /** The blessing ends at this frame (undefined: not in it) */
   blessingEnd?: number
   /** Nightsoul points as of `pointsAt` */
@@ -156,6 +172,7 @@ export const kit: KitModel = {
     }
   },
   init: (): KinichState => ({
+    c4Ready: -1,
     points: 0,
     pointsAt: 0,
     buildFrom: 0,
@@ -205,6 +222,7 @@ export const kit: KitModel = {
               s.blindAt = undefined
             }
             s.points = Math.min(POINTS_MAX, s.points + POINTS_PER_SHOT)
+            c4Energy(ctx, s, start + LOOP_HITMARKS[k][0])
             for (const hitAt of LOOP_HITMARKS[k]) {
               ctx.hit(start + hitAt, {
                 path: ['skill', 'shotDmg'],
@@ -309,6 +327,7 @@ export const kit: KitModel = {
               value: first ? 'on' : '',
             },
           ]
+          c4Energy(ctx, s, hitAt)
           ctx.hit(hitAt, {
             path: ['skill', 'cannonDmg'],
             tag: 'skill',

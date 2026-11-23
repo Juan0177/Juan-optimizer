@@ -6,6 +6,8 @@ import {
   normalString,
   shieldMarker,
   templateJump,
+  turretParticles,
+  turretReady,
 } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/zhongli, main as of 2026-11-10. */
@@ -78,6 +80,8 @@ const JADE_SHIELD = 1200
 const SHRED_FRAMES = JADE_SHIELD + 60
 
 interface ZhongliState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** Stone Steles (the ones standing are those not yet expired or replaced) */
   steles: { src: number; expiry: number }[]
   /** The latest stele's snapshot: every stele's ticks use it (gcsim's steleSnapshot) */
@@ -123,10 +127,17 @@ function newStele(ctx: SimContext, s: ZhongliState, max: number) {
     poiseDamage: 200,
     label: 'Stone Stele',
   })
+  steleParticles(ctx, s)
   ctx.at(120, steleTick(s, now))
 }
 
 /** A stele's tick: its own hit, and one resonance hit per other Geo construct of the party */
+/** A stele's particles from its hit now: a 50% chance of 1, 1.5 s ICD on Zhongli's clock (kqmsim particleCB, one per resonance) */
+function steleParticles(ctx: SimContext, s: ZhongliState) {
+  if (turretReady(s.particles, 'stele', ctx.characterFrame('Zhongli'), 90))
+    turretParticles(ctx, 0, 0.5, 'Zhongli')
+}
+
 function steleTick(s: ZhongliState, src: number): (c: SimContext) => void {
   return (c) => {
     const me = s.steles.find((x) => x.src === src)
@@ -147,6 +158,7 @@ function steleTick(s: ZhongliState, src: number): (c: SimContext) => void {
         label: k === 0 ? 'Stone Stele (tick)' : 'Stone Stele (resonance)',
         ...(s.snap ? { statSnapshots: snapshotStats(s.snap) } : {}),
       })
+    steleParticles(c, s)
     c.at(120, steleTick(s, src))
   }
 }
@@ -155,7 +167,7 @@ export const kit: KitModel = {
   characterKey: 'Zhongli',
   element: 'geo',
   source: `${GCSIM}/zhongli`,
-  init: (): ZhongliState => ({ steles: [] }),
+  init: (): ZhongliState => ({ steles: [], particles: new Map() }),
   act(ctx, s: ZhongliState, action, previous) {
     const c = ctx.constellation('Zhongli')
     const maxStele = c >= 1 ? 2 : 1

@@ -28,6 +28,61 @@ const ELEMENTAL = [
 ] as const
 
 /** Weapon audit batch sword3 (2026-11-16), as kqmsim and the game's text */
+/**
+ * The Dockhand's Assistant and Portable Power Saw (kqmsim dockhand.go): a Symbol per heal the
+ * wielder gives (each member healed) or gets, 30 s, up to 3; its Skill or Burst consumes them:
+ * Roused (EM per Symbol) for 10 s, once per 15 s, and their Energy 2 s later (the ER calculator's)
+ */
+export const stoicSymbols = (
+  weapon: 'TheDockhandsAssistant' | 'PortablePowerSaw'
+): WeaponModule => ({
+  weapon,
+  custom: ({ members, holds, window, ready, onFieldAt }) => {
+    const path = [weapon, 'symbolsConsumed']
+    const holders = members.filter(holds)
+    /** Each wielder's Symbols and when they end (its own clock: a hitlag status) */
+    const symbols = new Map<CharacterKey, { n: number; end: number }>()
+    return {
+      declare: () => {
+        for (const k of holders) window(k, path, '1', 0, 0)
+      },
+      onHit(ctx, hit) {
+        if (hit.path[0] !== '_heal') return
+        const healed = healedBy(hit, members, onFieldAt(hit.t))
+        for (const k of holders) {
+          const gain =
+            hit.characterKey === k ? healed.length : healed.includes(k) ? 1 : 0
+          if (!gain) continue
+          const own = ctx.characterFrame(k)
+          const s = symbols.get(k)
+          const held = s && own < s.end ? s.n : 0
+          symbols.set(k, { n: Math.min(3, held + gain), end: own + 1800 })
+        }
+      },
+      onAction(ctx, actor, action) {
+        if (
+          (action.kind !== 'skill' && action.kind !== 'burst') ||
+          !holders.includes(actor)
+        )
+          return
+        const own = ctx.characterFrame(actor)
+        const s = symbols.get(actor)
+        if (!s || own >= s.end || !s.n) return
+        if (!ready(`${weapon}.${actor}`, own, 900)) return
+        symbols.delete(actor)
+        ctx.buff(actor, path, String(s.n), 0, 600, { hitlag: 'recipient' })
+        ctx.hit(120, {
+          characterKey: actor,
+          path: ['_marker', 'weaponEnergy', weapon],
+          tag: 'other',
+          element: 'physical',
+          label: `${weapon} Energy`,
+        })
+      },
+    }
+  },
+})
+
 export const sword3: WeaponModule[] = [
   {
     // Athame Artis (kqmsim athameartis.go): Blade of the Daylight Hours for 3 s after each of the
@@ -336,51 +391,5 @@ export const sword3: WeaponModule[] = [
       },
     ],
   },
-  {
-    // The Dockhand's Assistant (kqmsim dockhand.go): a Symbol per heal the wielder gives (each
-    // member healed) or gets, 30 s, up to 3; its Skill or Burst consumes them: Roused (EM per
-    // Symbol) for 10 s, once per 15 s
-    weapon: 'TheDockhandsAssistant',
-    custom: ({ members, holds, window, ready, onFieldAt }) => {
-      const path = ['TheDockhandsAssistant', 'symbolsConsumed']
-      const holders = members.filter(holds)
-      /** Each wielder's Symbols and when they end (its own clock: a hitlag status) */
-      const symbols = new Map<CharacterKey, { n: number; end: number }>()
-      return {
-        declare: () => {
-          for (const k of holders) window(k, path, '1', 0, 0)
-        },
-        onHit(ctx, hit) {
-          if (hit.path[0] !== '_heal') return
-          const healed = healedBy(hit, members, onFieldAt(hit.t))
-          for (const k of holders) {
-            const gain =
-              hit.characterKey === k
-                ? healed.length
-                : healed.includes(k)
-                  ? 1
-                  : 0
-            if (!gain) continue
-            const own = ctx.characterFrame(k)
-            const s = symbols.get(k)
-            const held = s && own < s.end ? s.n : 0
-            symbols.set(k, { n: Math.min(3, held + gain), end: own + 1800 })
-          }
-        },
-        onAction(ctx, actor, action) {
-          if (
-            (action.kind !== 'skill' && action.kind !== 'burst') ||
-            !holders.includes(actor)
-          )
-            return
-          const own = ctx.characterFrame(actor)
-          const s = symbols.get(actor)
-          if (!s || own >= s.end || !s.n) return
-          if (!ready(`TheDockhandsAssistant.${actor}`, own, 900)) return
-          symbols.delete(actor)
-          ctx.buff(actor, path, String(s.n), 0, 600, { hitlag: 'recipient' })
-        },
-      }
-    },
-  },
+  stoicSymbols('TheDockhandsAssistant'),
 ]

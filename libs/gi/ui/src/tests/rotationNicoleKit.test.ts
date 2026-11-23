@@ -37,4 +37,20 @@ describe('Nicole (gcsim frames and constellations)', () => {
     expect(covered[0].label).toBe('Revelation: Uncreated Light')
     expect(covered.every((h) => h.characterKey === 'Nicole')).toBe(true)
   })
+
+  it('C6: her upgrade gives every member A1’s Guidance at once, for the rest of the skill’s buff', () => {
+    const guidance = (sim: ReturnType<typeof run>) =>
+      sim.buffWindows.filter(
+        (w) => w.path.join('.') === 'Nicole.a1GuidanceActive' && w.value
+      )
+    const skill = (sim: ReturnType<typeof run>) =>
+      sim.hits.find((h) => h.label === 'Revelation: Uncreated Light')!
+    const c6 = run('Nicole E -> Bennett N1 W4', 6)
+    const [window] = guidance(c6)
+    expect(window.start).toBe(skill(c6).t)
+    expect(window.end).toBe(1208)
+    // before C6, a member who is not Hexerei waits 3 s on the field for it
+    const c5 = run('Nicole E -> Bennett N1 W4', 5)
+    expect(guidance(c5)[0].start).toBeGreaterThan(skill(c5).t + 180)
+  })
 })

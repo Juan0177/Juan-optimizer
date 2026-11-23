@@ -542,8 +542,16 @@ export function simulateRotation({
     inNightsoul: (k, t) => inNightsoulAt(k, t),
     onField,
     cooldown: (k, key, t) => cooldowns.readyAt(`${k}.${key}`, t) - t,
-    window: (owner, path, value, start, end) =>
-      addWindow({ owner, path, value, start, end, late: true }),
+    window: (owner, path, value, start, end, offOnly) =>
+      addWindow({
+        owner,
+        path,
+        value,
+        start,
+        end,
+        late: true,
+        ...(offOnly ? { offOnly: true } : {}),
+      }),
     reduceCooldown: (k, key, frames, t) => {
       for (const linked of linkedCooldowns(k, key))
         cooldowns.reduce(`${k}.${linked}`, t, frames)
@@ -1489,6 +1497,9 @@ export function simulateRotation({
     }
     if (action.kind === 'wait') {
       lastNormalActor = undefined
+      // a walk ends the Normal Attack string (gcsim resets it on any action but an attack); idle
+      // time does not
+      if (action.walk) normalCounter = 0
       const defaultFrames = finiteFrames(Math.round((action.count ?? 0) * FPS))
       // (a length that is not a number would never end the wait: 0 instead)
       const frames = finiteFrames(
@@ -2155,7 +2166,9 @@ function windowsValue(path: string[], on: SimBuffWindow[]) {
 /** Every buff the simulation decides, and its state at each hit ('' when off) */
 function buffStates(
   sim: SimulationResult,
-  declared: { owner: SimBuffOwner; path: string[] }[] = []
+  declared: { owner: SimBuffOwner; path: string[] }[] = [],
+  /** The members' own states (`SimBuffWindow.offOnly` buffs count only where one is saved) */
+  current?: (owner: SimBuffOwner, path: string[]) => string | undefined
 ) {
   const pauses =
     sim.hitlagEvents ??
@@ -2202,6 +2215,11 @@ function buffStates(
   }
   const windowsOf = byKey(sim.buffWindows)
   const countedOf = byKey(sim.countedBuffs)
+  const blank = refs.map(
+    (ref, r) =>
+      !!windowsOf.get(keys[r])?.every((w) => w.offOnly) &&
+      !current?.(ref.owner, ref.path)
+  )
   const lateWindows = sim.buffWindows.filter((w) => w.late && w.end > w.start)
   /** The buffs with a window written after the fact (`SimBuffWindow.late`) on at `t` */
   const lateAt = (t: number, character: CharacterKey) => {
@@ -2226,6 +2244,7 @@ function buffStates(
       }
     }
     return refs.map((ref, r) => {
+      if (blank[r]) return ''
       const key = keys[r]
       const snapshot = snapshots?.get(key)
       if (snapshot !== undefined) return snapshot
@@ -2352,7 +2371,11 @@ export function rotationAttacks(
       (out[member] ??= []).push(attack)
     return out
   }
-  const { refs, keys, stateAt, valuesFrom, lateAt } = buffStates(sim, declared)
+  const { refs, keys, stateAt, valuesFrom, lateAt } = buffStates(
+    sim,
+    declared,
+    current
+  )
   const groups = new Map<
     string,
     {
