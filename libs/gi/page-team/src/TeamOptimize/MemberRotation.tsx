@@ -39,6 +39,7 @@ import {
   Collapse,
   IconButton,
   MenuItem,
+  Skeleton,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -48,6 +49,7 @@ import {
   forwardRef,
   memo,
   startTransition,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -1179,7 +1181,9 @@ const AttackGroupRow = memo(function AttackGroupRow({
             borderLeft: `1px solid ${giTokens.hairline}`,
           }}
         >
-          {children}
+          <Suspense fallback={<Skeleton variant="text" width={160} />}>
+            {children}
+          </Suspense>
         </Box>
       </Collapse>
     </>
