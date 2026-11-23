@@ -161,14 +161,19 @@ function lastRun(database: ArtCharDatabase, teamId: string): TeamOptRunState {
 
 /**
  * Team Optimize's solver for its runs: one solve per member and round, on the GPU when the browser
- * can, its live counters in `status`; `onSolver` gets the current solve's stop (undefined
- * between solves)
+ * can, its live counters in `status`; `onSolver` gets what stops the solves running (undefined
+ * between solves). A member's weapons can be solved at once: the first one running shows its
+ * counters, the others count apart.
  */
 export function teamOptSolver(
   status: TeamOptStatus,
   maxWorkers: number,
   onSolver: (stop: (() => void) | undefined) => void
 ): TeamOptSolver {
+  const running = new Set<GOSolver>()
+  const stopAll = () => {
+    for (const solver of running) solver.cancel(new TeamOptCancelled())
+  }
   return async ({
     arts,
     objective,
@@ -185,22 +190,27 @@ export function teamOptSolver(
       exclusion,
       topN,
     }
-    Object.assign(status, initStatus())
+    const shown = !running.size
+    const counters = shown ? Object.assign(status, initStatus()) : initStatus()
     // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
     // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
     // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
     // small searches)
-    const solver = new GOSolver(problem, status, maxWorkers, {
-      gpu: true,
-      gpuMinTotal: TEAM_GPU_MIN_TOTAL,
-    })
-    onSolver(() => solver.cancel(new TeamOptCancelled()))
+    const solver = new GOSolver(
+      problem,
+      counters,
+      // (one running beside another shares the cores, should the CPU take it)
+      shown ? maxWorkers : Math.max(1, Math.floor(maxWorkers / 2)),
+      { gpu: true, gpuMinTotal: TEAM_GPU_MIN_TOTAL }
+    )
+    running.add(solver)
+    onSolver(stopAll)
     const t0 = performance.now()
     try {
       const results = await solver.solve()
       onWork?.({
-        tested: status.tested,
-        total: Number.isFinite(status.total) ? status.total : 0,
+        tested: counters.tested,
+        total: Number.isFinite(counters.total) ? counters.total : 0,
       })
       const [best, ...next] = mergeBuilds(
         results.map((r) => r.builds),
@@ -209,9 +219,9 @@ export function teamOptSolver(
       if (process.env['NODE_ENV'] === 'development')
         console.log('[TeamOpt] solve', {
           arts: arts.length,
-          total: status.total,
-          tested: status.tested,
-          skipped: status.skipped,
+          total: counters.total,
+          tested: counters.tested,
+          skipped: counters.skipped,
           ms: Math.round(performance.now() - t0),
           found: !!best,
         })
@@ -230,7 +240,8 @@ export function teamOptSolver(
         }
       )
     } finally {
-      onSolver(undefined)
+      running.delete(solver)
+      if (!running.size) onSolver(undefined)
       solver.cancel()
     }
   }
