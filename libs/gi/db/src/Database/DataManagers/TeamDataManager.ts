@@ -119,6 +119,8 @@ export interface Team {
   enemyHp?: number
   /** How the team plays a boss's mechanics where its fight cannot tell (the Moongecko's) */
   fightSettings?: TeamFightSettings
+  /** The enemy can't be frozen (see `TeamEnemy.freezeImmune`) */
+  freezeImmune?: boolean
   /**
    * The team this one is a version of (KQM's versions: one or two members swapped, compared under
    * the original's settings): the original's id. Absent: not a version
@@ -305,8 +307,14 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
-    const { enemyPreset, enemyHp, versionOf, versionCons, importedFrom } =
-      obj as Team
+    const {
+      enemyPreset,
+      enemyHp,
+      versionOf,
+      versionCons,
+      importedFrom,
+      freezeImmune,
+    } = obj as Team
     const fightSettings = validateFightSettings((obj as Team).fightSettings)
 
     const validated: Team = {
@@ -329,6 +337,7 @@ export class TeamDataManager extends DataManager<
         ? { enemyHp: Math.round(enemyHp) }
         : {}),
       ...(fightSettings ? { fightSettings } : {}),
+      ...(typeof freezeImmune === 'boolean' ? { freezeImmune } : {}),
       ...(typeof versionOf === 'string' &&
       versionOf.startsWith('team_') &&
       versionOf.length <= 64 &&

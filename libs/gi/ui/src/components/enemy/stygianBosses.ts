@@ -64,6 +64,8 @@ export interface StygianBoss {
   main: StygianPhaseKey
   /** The seasons it was in (ids), oldest first */
   seasons: number[]
+  /** It can't be frozen (the game's boss type: gcsim's rule) */
+  freezeImmune: boolean
 }
 
 /** RES of `all` elements, but for the ones given */
@@ -333,6 +335,7 @@ export const stygianBosses: StygianBoss[] = (() => {
         phases: fight[0],
         main: fight[1],
         seasons,
+        freezeImmune: data.freezeImmune.includes(id),
       }
     })
 })()
@@ -356,6 +359,18 @@ export function currentStygianSeason(
 /** A team's `enemyPreset`: the boss, and its phase */
 export const stygianPresetKey = (bossId: number, phase: StygianPhaseKey) =>
   `stygian:${bossId}:${phase}`
+
+/**
+ * Whether an enemy can't be frozen: as set by hand, else as its boss preset is (a boss of the
+ * game's boss type can't: gcsim's rule), else it can be
+ */
+export function enemyFreezeImmune(
+  enemy: Pick<Team, 'freezeImmune' | 'enemyPreset'> | undefined
+): boolean {
+  if (enemy?.freezeImmune !== undefined) return enemy.freezeImmune
+  const id = enemy?.enemyPreset?.match(/^stygian:(\d+):/)?.[1]
+  return !!(id && stygianBoss(Number(id))?.freezeImmune)
+}
 
 /** The enemy a preset sets: its level and RES (its DEF changes are the team's own) */
 export function stygianEnemy(

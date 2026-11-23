@@ -87,12 +87,40 @@ for c in sorted(challenges, key=lambda c: c['scheduleId']):
 
 boss_ids = sorted({b for s in seasons for b in s['bosses']})
 
+# Which bosses can't be frozen: gcsim's rule, a monster of the game's boss type (its pipeline sets
+# FreezeResist 1 for MONSTER_BOSS). The stage config has only the boss's icon: its monsters are the
+# ones of that icon's description, else the ones named after the icon.
+monster_describes = excel('MonsterDescribeExcelConfigData')
+monsters = excel('MonsterExcelConfigData')
+
+
+def boss_types(icon):
+    # (a variant's icon, else its base monster's: as for the icons below)
+    for name in dict.fromkeys([icon, re.sub(r'_[A-Z][a-z]+$', '', icon)]):
+        describes = {d['id'] for d in monster_describes if d.get('icon') == name}
+        found = [m['type'] for m in monsters if m.get('describeId') in describes]
+        if not found:
+            base = name.replace('UI_MonsterIcon_', '')
+            found = [m['type'] for m in monsters if m.get('monsterName', '').startswith(base)]
+        if found:
+            return set(found)
+    return set()
+
+
+freeze_immune = []
+for b in boss_ids:
+    types = boss_types(configs[b]['specialMonsterIcon'])
+    assert types, f'no monster for boss {b}'
+    if types == {'MONSTER_BOSS'}:
+        freeze_immune.append(b)
+
 
 os.makedirs(os.path.join(ROOT, 'libs/gi/ui/src/components/enemy'), exist_ok=True)
 with open(os.path.join(ROOT, 'libs/gi/ui/src/components/enemy/stygianSeasons.gen.json'), 'w') as f:
     json.dump({
         'levels': level_of,
         'seasons': [{k: v for k, v in s.items() if k != 'nameHash'} for s in seasons],
+        'freezeImmune': freeze_immune,
     }, f, indent=1)
     f.write('\n')
 

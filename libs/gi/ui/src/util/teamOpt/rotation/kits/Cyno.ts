@@ -1,3 +1,4 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { KitModel, SimContext } from '../types'
 import {
   flatEnergy,
@@ -123,6 +124,13 @@ interface CynoState {
   /** C1 (Revelation): Together We Rise until (Cyno's clock, then the holder's) */
   togetherEnd: number
   togetherId: number
+  /**
+   * Who holds Together We Rise: Cyno in Pactsworn, then the first member switched in after he
+   * leaves, who keeps it to its end (the game passes it once: its transfer handler goes with it)
+   */
+  togetherHolder?: CharacterKey
+  /** Cyno has left with Together We Rise up: the next member switched in takes it */
+  togetherPass: boolean
   /** C2: Electro DMG stacks, their end (Cyno's clock) and 0.1 s ICD */
   c2Stacks: number
   c2End: number
@@ -226,19 +234,30 @@ function ppSlide(ctx: SimContext, s: CynoState, hitmark: number) {
     extendPact(ctx, s, hitmark - left + 1)
 }
 
-/** C1 (Revelation): Together We Rise (the c1Together conditional) until `end` (Cyno's clock) */
+/**
+ * C1 (Revelation): Together We Rise on Cyno until `end` (Cyno's clock): the c1Together conditional
+ * names its holder
+ */
 function setTogether(ctx: SimContext, s: CynoState, end: number) {
   const id = ++s.togetherId
   s.togetherEnd = end
-  ctx.state('Cyno', ['Cyno', 'c1Together'], 'on')
+  s.togetherHolder = 'Cyno'
+  s.togetherPass = false
+  ctx.state('Cyno', ['Cyno', 'c1Together'], 'Cyno')
   const expire = (c: SimContext) => {
     if (id !== s.togetherId) return
     const left = s.togetherEnd - clock(c)
     if (left > 0) return c.atCharacter('Cyno', left, expire)
-    c.state('Cyno', ['Cyno', 'c1Together'], '')
-    c.state('Cyno', ['Cyno', 'c2TeamHit'], '')
+    endTogether(c, s)
   }
   ctx.atCharacter('Cyno', end - clock(ctx), expire)
+}
+
+function endTogether(ctx: SimContext, s: CynoState) {
+  s.togetherHolder = undefined
+  s.togetherPass = false
+  ctx.state('Cyno', ['Cyno', 'c1Together'], '')
+  ctx.state('Cyno', ['Cyno', 'c2TeamHit'], '')
 }
 
 /** C6: Day of the Jackal: +4 stacks (8 max) for 8 s */
@@ -301,6 +320,7 @@ export const kit: KitModel = {
     c1End: -1e9,
     togetherEnd: -1e9,
     togetherId: 0,
+    togetherPass: false,
     c2Stacks: 0,
     c2End: -1e9,
     c2Icd: -1e9,
@@ -482,7 +502,9 @@ export const kit: KitModel = {
             ctx.buff('Cyno', ['Cyno', 'a1Judication'], 'on', 0, 60, {
               hitlag: 'recipient',
             })
-            if (c >= 1 && clock(ctx) < s.c1End) s.c1End = clock(ctx) + 601
+            // C1: any Judication gives its Normal Attack SPD for 10 s, a Burst or not (the
+            // game's Secret Rite applies it on every Judication; gcsim only refreshes it)
+            if (c >= 1) s.c1End = clock(ctx) + 601
             gainJackal(ctx, s)
             const starsame = stellar(ctx)
             for (let j = 0; j < 3; j++)
@@ -613,7 +635,7 @@ export const kit: KitModel = {
       } else if (
         hit.characterKey !== 'Cyno' &&
         stellar(ctx) &&
-        ctx.hasBuff('Cyno', ['Cyno', 'c1Together']) &&
+        hit.characterKey === s.togetherHolder &&
         clock(ctx) >= s.c4TeamReady
       ) {
         s.c4TeamReady = clock(ctx) + 1081
@@ -625,8 +647,7 @@ export const kit: KitModel = {
     if (
       c >= 2 &&
       (hit.tag === 'normal' || hit.tag === 'charged') &&
-      hit.characterKey === hit.onField &&
-      ctx.hasBuff('Cyno', ['Cyno', 'c1Together']) &&
+      hit.characterKey === s.togetherHolder &&
       hit.t >= s.c2TeamIcd
     ) {
       s.c2TeamIcd = hit.t + 7
@@ -690,14 +711,20 @@ export const kit: KitModel = {
       endPact(ctx, s)
     }
     const left = s.togetherEnd - clock(ctx)
-    if (left > 0) {
+    if (left > 0 && s.togetherHolder === 'Cyno') {
       const id = ++s.togetherId
       s.togetherEnd = clock(ctx)
+      s.togetherPass = true
       ctx.at(left, (c) => {
-        if (id !== s.togetherId) return
-        c.state('Cyno', ['Cyno', 'c1Together'], '')
-        c.state('Cyno', ['Cyno', 'c2TeamHit'], '')
+        if (id === s.togetherId) endTogether(c, s)
       })
     }
+  },
+  // C1 (Revelation): the member switched in after Cyno takes Together We Rise
+  onPartySwap(ctx, s: CynoState, from, to) {
+    if (from !== 'Cyno' || !s.togetherPass) return
+    s.togetherPass = false
+    s.togetherHolder = to
+    ctx.state('Cyno', ['Cyno', 'c1Together'], to)
   },
 }

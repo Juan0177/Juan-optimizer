@@ -7,6 +7,8 @@ import {
   defaultEnergyCalculator,
   withRotationEnergy,
 } from './energyCalc'
+import type { RunAttackState } from './lowHpUptime'
+import { withAttackStates } from './lowHpUptime'
 import { rotationDamage } from './objective'
 import type {
   FrameData,
@@ -16,14 +18,17 @@ import type {
 } from './rotation'
 import { rotationCalculation } from './rotationCalculation'
 import type { RotationScore } from './rotationSearch'
+import { writtenTeamReplay } from './rotationSearchTeam'
 import { writtenKqmReplay } from './writtenRotation'
 
 /**
- * What a rotation search plays its rotations with: the KQM tab's saved opener, timing and frame
- * data, and the builds shown (`kqmRotationSearchSetup`): their constellations, gear and
- * calculation data. Plain data, so a worker gets it as it is.
+ * What a rotation search plays its rotations with: the tab's saved opener, timing and frame data,
+ * and the builds shown (`kqmRotationSearchSetup`, `teamRotationSearchSetup`): their
+ * constellations, gear and calculation data. Plain data, so a worker gets it as it is.
  */
 export interface RotationSearchSetup {
+  /** As the KQM tab plays the rotation (default), or as Team optimize does (`writtenTeamReplay`) */
+  play?: 'kqm' | 'team'
   teamId: string
   gender: GenderKey
   names: RotationMember[]
@@ -35,6 +40,16 @@ export interface RotationSearchSetup {
   gear: Partial<Record<CharacterKey, SimGear>>
   /** The builds as team data (`kqmTeamOverrides`) */
   overrides: TeamDataOverrides
+  /** States every attack gets (Team optimize's run's, `TeamOptResult.attackStates`) */
+  attackStates?: RunAttackState[]
+  /**
+   * What the simulation plays the rotation with, when not the builds (Team optimize: the members'
+   * own gear and stats, as "Use this rotation" plays it; the builds count only for its damage)
+   */
+  sim?: {
+    gear: Partial<Record<CharacterKey, SimGear>>
+    overrides: TeamDataOverrides
+  }
 }
 
 /**
@@ -104,15 +119,18 @@ export function rotationScorer(
   const sets = Object.fromEntries(
     Object.entries(gear).map(([k, g]) => [k, g?.sets])
   )
-  let calculate = rotationCalculation(database, teamId, gender, overrides)
+  const sim = setup.sim ?? { gear, overrides }
+  let calculate = rotationCalculation(database, teamId, gender, sim.overrides)
   let damage = new DamageKept()
   return (text: string): RotationScore | undefined => {
     if (damage.size * DAMAGE_ENTRY + calculate.kept() > kept) {
-      calculate = rotationCalculation(database, teamId, gender, overrides)
+      calculate = rotationCalculation(database, teamId, gender, sim.overrides)
       damage = new DamageKept()
     }
     const warnings: string[] = []
-    const played = writtenKqmReplay({
+    const played = (
+      setup.play === 'team' ? writtenTeamReplay : writtenKqmReplay
+    )({
       database,
       teamId,
       members,
@@ -126,8 +144,8 @@ export function rotationScorer(
       warnings,
     })?.({
       constellations: setup.constellations,
-      gear,
-      overrides,
+      gear: sim.gear,
+      overrides: sim.overrides,
       calculate,
     })
     const time = played?.rotationTime
@@ -137,7 +155,11 @@ export function rotationScorer(
         database,
         teamId,
         gender,
-        { ...overrides, arts: overrides.arts ?? {}, attacks: played.attacks },
+        {
+          ...overrides,
+          arts: overrides.arts ?? {},
+          attacks: withAttackStates(played.attacks, setup.attackStates),
+        },
         damage
       )?.total ?? 0
     const er = played.energy

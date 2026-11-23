@@ -55,6 +55,12 @@ export interface TeamEnemy {
   enemyPreset?: string
   enemyHp?: number
   fightSettings?: TeamFightSettings
+  /**
+   * It can't be frozen, as set by hand (absent: its boss preset's, a boss as gcsim has the game's
+   * boss type; else it can be). Hydro and Cryo still react on it, but it never has the Frozen aura
+   * (no Shatter, nothing that needs it Frozen)
+   */
+  freezeImmune?: boolean
 }
 
 /** `enemyOverride` with every stat a number (level 100, no DEF changes, 10% RES by default) */
@@ -77,7 +83,7 @@ export function validateEnemyOverride(value: unknown): EnemyOverride {
 /** A `TeamEnemy` from saved data (undefined: none saved) */
 export function validateTeamEnemy(value: unknown): TeamEnemy | undefined {
   if (!value || typeof value !== 'object') return undefined
-  const { enemyOverride, enemyPreset, enemyHp, fightSettings } =
+  const { enemyOverride, enemyPreset, enemyHp, fightSettings, freezeImmune } =
     value as TeamEnemy
   const fight = validateFightSettings(fightSettings)
   return {
@@ -94,5 +100,6 @@ export function validateTeamEnemy(value: unknown): TeamEnemy | undefined {
       ? { enemyHp: Math.round(enemyHp) }
       : {}),
     ...(fight ? { fightSettings: fight } : {}),
+    ...(typeof freezeImmune === 'boolean' ? { freezeImmune } : {}),
   }
 }

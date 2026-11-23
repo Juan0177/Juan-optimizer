@@ -4,11 +4,16 @@ import type { LoadoutDatum, TeamOpt } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
 import {
+  evaluateTeamRotation,
   kqmRotationSearchSetup,
   optimizeTeamKqm,
   parseFrameData,
   parseTiming,
   rotationScorer,
+  simTeamOf,
+  teamOptMembers,
+  teamRotationSearchSetup,
+  writtenTeamReplay,
 } from '../'
 
 const ayaka: CharacterKey = 'KamisatoAyaka'
@@ -75,5 +80,95 @@ describe('a rotation search’s player', () => {
       expect(score?.dps).toBeGreaterThan(0)
       expect(anew(text)).toEqual(score)
     }
+  })
+
+  it('Team optimize’s player counts a rotation as its tab does: played with the members’ own gear, its damage with the build', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage({}))
+    for (const [key, weapon] of [
+      [ayaka, 'AmenomaKageuchi'],
+      [shenhe, 'Deathmatch'],
+    ] as const) {
+      database.chars.set(key, {
+        key,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
+      })
+      database.weapons.new({
+        key: weapon,
+        level: 90,
+        ascension: 6,
+        refinement: 1,
+        location: key,
+        lock: false,
+      })
+    }
+    // (the build's weapon, not the one Ayaka holds)
+    const mistsplitter = database.weapons.get(
+      database.weapons.new({
+        key: 'MistsplitterReforged',
+        level: 90,
+        ascension: 6,
+        refinement: 1,
+        location: '',
+        lock: false,
+      })
+    )!
+    const teamId = database.teams.new({
+      loadoutData: [
+        { teamCharId: database.teamChars.new(ayaka) },
+        { teamCharId: database.teamChars.new(shenhe) },
+      ] as LoadoutDatum[],
+    })
+    const teamOpt = initTeamOpt()
+    const names = [
+      { characterKey: ayaka, name: 'Ayaka' },
+      { characterKey: shenhe, name: 'Shenhe' },
+    ]
+    const saved = {
+      opener: '',
+      timing: parseTiming(null),
+      frameData: parseFrameData(null),
+    }
+    const overrides = { arts: {}, weapons: { [ayaka]: mistsplitter } }
+    const score = rotationScorer(
+      database,
+      teamRotationSearchSetup(
+        database,
+        teamId,
+        'F',
+        names,
+        teamOpt,
+        overrides,
+        { [ayaka]: { weapon: 'MistsplitterReforged', refinement: 1 } },
+        saved
+      )
+    )
+    const text = 'Shenhe E Q -> Ayaka E Q N2 CA'
+    const members = teamOptMembers(database, teamId)
+    const played = writtenTeamReplay({
+      database,
+      teamId,
+      members,
+      gender: 'F',
+      names,
+      teamOpt,
+      text,
+      ...saved,
+    })!({ gear: simTeamOf(members, database).gear, overrides: {} })
+    const total = evaluateTeamRotation(database, teamId, 'F', {
+      ...overrides,
+      attacks: played.attacks,
+    })!.total
+    const scored = score(text)!
+    expect(scored.time).toBe(played.rotationTime)
+    expect(scored.dps).toBeCloseTo(total / played.rotationTime!, 6)
+    // (the build counts: its weapon is not Ayaka's own)
+    const own = evaluateTeamRotation(database, teamId, 'F', {
+      arts: {},
+      attacks: played.attacks,
+    })!.total
+    expect(total).not.toBeCloseTo(own, 0)
   })
 })

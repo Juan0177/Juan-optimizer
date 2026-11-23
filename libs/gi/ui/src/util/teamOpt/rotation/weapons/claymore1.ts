@@ -31,7 +31,8 @@ const FFI_REACTIONS = [
 /**
  * A 7.3 beta claymore's "Royal Decree" (from the game's text, no reference sim): 'decree' for
  * 15 s after the wielder's Electro hits (off the field too), 'complete' from its Stellar-Conduct
- * hit while the decree is up until the decree ends (assumed kept when an Electro hit refreshes it)
+ * hit or a Stellar-Conduct reaction it triggers while the decree is up until the decree ends
+ * (assumed kept when an Electro hit refreshes it)
  */
 function royalDecree(weapon: string): WeaponModule {
   return {
@@ -59,7 +60,11 @@ function royalDecree(weapon: string): WeaponModule {
         },
         onHit(_ctx, hit) {
           const k = hit.characterKey
-          if (!holds(k) || !isDamage(hit)) return
+          // (since beta 7.2.53 the order also completes when its holder triggers a Stellar-Conduct
+          // reaction, not only on its Stellar-Conduct DMG hit)
+          const triggered =
+            hit.path[0] === '_reaction' && hit.path[1] === 'stellarConduct'
+          if (!holds(k) || (!triggered && !isDamage(hit))) return
           let d = live.get(k)
           if (d && hit.t >= d.end) {
             close(k, d, d.end)
@@ -68,10 +73,10 @@ function royalDecree(weapon: string): WeaponModule {
           if (
             d &&
             d.completeAt === undefined &&
-            hit.tag === 'directStellarConduct'
+            (triggered || hit.tag === 'directStellarConduct')
           )
             d.completeAt = hit.t
-          if (hit.element !== 'electro') return
+          if (triggered || hit.element !== 'electro') return
           if (d) d.end = hit.t + 900
           else live.set(k, { start: hit.t, end: hit.t + 900 })
         },

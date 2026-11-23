@@ -46,7 +46,7 @@ export type CompareChartData = {
   team?: { face: string; elementColor: string; label: string }[]
   /** the team and the standard, at the foot */
   footer: string
-  /** it shows unreleased content: this name ("7.3 beta v3") over the whole chart; absent: none */
+  /** it shows unreleased content: this name ("7.3 beta v4") over the whole chart; absent: none */
   beta?: string
   labels: {
     unmet: string

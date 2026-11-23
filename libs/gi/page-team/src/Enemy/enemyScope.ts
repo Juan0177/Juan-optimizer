@@ -15,6 +15,9 @@ export const enemyOfTeam = (team: Team): TeamEnemy => ({
   ...(team.fightSettings
     ? { fightSettings: structuredClone(team.fightSettings) }
     : {}),
+  ...(team.freezeImmune !== undefined
+    ? { freezeImmune: team.freezeImmune }
+    : {}),
 })
 
 /** The team with the KQM tab's own enemy in place of its own (not set up yet: the team's) */
@@ -25,6 +28,7 @@ export function kqmEnemyTeam(team: Team): Team {
     enemyPreset: _preset,
     enemyHp: _hp,
     fightSettings: _fight,
+    freezeImmune: _freeze,
     ...rest
   } = team
   return { ...rest, ...enemy }

@@ -53,20 +53,47 @@ const normals: NormalHit[] = [
     frames: 112,
   },
 ]
-/** ESTIMATE: the Special Anchor Normal Attacks reuse her normal string's timing. */
-const anchorNormals = normals
-/** ESTIMATE: On-Field Skill E2 reuses the Entry Skill E2 timing (lands at 42, 60 frames). */
-const ON_FIELD_HITMARK = 42
-const ON_FIELD_FRAMES = 60
+/**
+ * The Anchor's Normal Attacks, from a game recording: hit to next hit N1→N2 34, N2→N3 46 (an upper
+ * bound), N3→N4 25 frames, N3's second hit 5 after its first (hitlag included, so none is added);
+ * N1 lands 21 frames into its swing (E → first Anchor N1 hit 65 with E's 44 into a Normal Attack).
+ * ESTIMATE: N2–N4 land as late into theirs; N4's recovery and its cancel into the next round keep
+ * her normal string's.
+ */
+const anchorNormals: NormalHit[] = [
+  { hitmarks: [21], toNormal: 34, toCharged: 34, toAbil: 21, frames: 48 },
+  { hitmarks: [21], toNormal: 46, toCharged: 46, toAbil: 21, frames: 63 },
+  {
+    hitmarks: [21, 26],
+    worldTimeHits: true,
+    toNormal: 25,
+    toCharged: 25,
+    toAbil: 21,
+    frames: 74,
+  },
+  { hitmarks: [21], toNormal: 86, toCharged: 86, toAbil: 21, frames: 92 },
+]
+/**
+ * Will to Purge (On-Field Skill E2), from a game recording: the hit at 33, the Burst usable at 59,
+ * a Normal Attack at 78 (Purge → N4 hit 99 at 3 A4 stacks, its hit 21 into the swing)
+ */
+const ON_FIELD_HITMARK = 33
+const ON_FIELD_FRAMES = 59
+const ON_FIELD_INTO_NORMAL = 78
 const ANCHOR_DURATION = 1500
+/** Her E's Anchor lands this long after the press (game recording) */
+const ANCHOR_HITMARK = 50
 /** Entry Skill E2 (Will to Protect) cooldown: 16 s */
 const ENTRY_CD = 960
+/** Noted when her E is cast with a Storm Anchor out: it keeps its time (beta 7.2.53) */
+const E_KEEPS_ANCHOR_TIME =
+  "Danica: her E with the Storm Anchor still out didn't refresh it, as the 7.2.53 beta text says: the Anchor runs out 25 s after it was summoned or refreshed by Will to Protect, so a swap-in after that gets no Will to Protect."
 /** C2 Toast: 10 stacks per member; Danica consumes up to 2 of hers in Battle Maid */
 const TOAST_STACKS = 10
 const TOAST_SELF_MAX = 2
 /** Noted when her E ends Royal Guard: the in-game behaviour players don't expect */
 const E_ENDS_ROYAL_GUARD =
-  'Danica: her E ended Maid: Royal Guard and with it her Burst\'s party ATK bonus, as in the game (her E re-summons the Anchor, which ends either Maid form and the Burst\'s form effects). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so "Danica Q" is enough.'
+  "Danica: her E ended Maid: Royal Guard and with it her Burst's party ATK bonus, as in the game (her E ends either Maid form and the Burst's form effects, and doesn't refresh a Storm Anchor already out). To keep the bonus, skip her E on later turns: with Will to Cleanse full, a swap-in enters Royal Guard again (Will to Protect) and refreshes the Anchor, so \"Danica Q\" is enough."
 
 type Maid = '' | 'defense' | 'battle'
 interface State {
@@ -91,8 +118,14 @@ interface State {
   aegisEnd: number
   /** C2 Toast stacks per member */
   toast: Partial<Record<CharacterKey, number>>
-  /** The enemy can drop her particles again from this frame (14 s after the last drop) */
+  /** The enemy can drop her particles again from this frame (16 s after the last drop) */
   ballReady: number
+  /** Why her last swap-in with the Anchor out gave no Will to Protect (none: it did) */
+  lastBlock?: string
+  /** The Anchor whose running out a note already explained */
+  expiryNoted: number
+  /** When the Anchor her E threw lands: her Normal Attacks are the Anchor's from the press */
+  anchorLands: number
 }
 const hit = (
   c: SimContext,
@@ -178,19 +211,19 @@ const addExcite = (s: State, amount: number) => {
 /**
  * Her particles (dump Avatar_Danica_ElementalArt_DropBall_Handler): a hit with the
  * Danica_ElementalArt_DropBall tag, the Anchor Skill's (InsertClaymore) or the Entry Skill's
- * (E2_Enter_Attack), gives the enemy the Unique 14 s Avatar_Danica_ElementalArt_DropBall, whose
- * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 14 s from
- * either Skill
+ * (E2_Enter_Attack), gives the enemy the Unique Avatar_Danica_ElementalArt_DropBall, whose
+ * onAdded drops 15 Energy of Electro particles (5, the ER sheet's "Press"): once per 16 s from
+ * either Skill (14 s before beta 7.2.53)
  */
 function dropBall(c: SimContext, s: State, delay: number, skill: string) {
   c.at(delay, (c2) => {
     if (c2.now < s.ballReady) {
       c2.note(
-        `Danica: her ${skill} dropped no particles: either Skill's particles drop once per 14 s, as in the game, and the last drop was ${((c2.now - s.ballReady + 840) / 60).toFixed(1)} s before.`
+        `Danica: her ${skill} dropped no particles: either Skill's particles drop once per 16 s, as in the game, and the last drop was ${((c2.now - s.ballReady + 960) / 60).toFixed(1)} s before.`
       )
       return
     }
-    s.ballReady = c2.now + 840
+    s.ballReady = c2.now + 960
     particleMarker(c2, 0, 'Danica particles', undefined, 'Danica')
   })
 }
@@ -229,20 +262,30 @@ function onFieldE2(c: SimContext, s: State): ActionResult {
     c.at(ON_FIELD_HITMARK, (c2) => {
       s.anchorEnd = c2.now
       ++s.anchorId
+      // (destroyed by her 5th Purge, not run out: nothing for a swap-in to explain)
+      s.expiryNoted = s.anchorId
       set(c2, 'anchor', '')
       s.toast = {}
       endMaid(c2, s)
     })
-  return { frames: ON_FIELD_FRAMES }
+  return {
+    frames: ON_FIELD_FRAMES,
+    framesInto: { normal: ON_FIELD_INTO_NORMAL },
+  }
 }
+/** Her Normal Attacks are the Anchor's while it is out, or thrown by her E and still landing */
+const anchorNormal = (s: State, now: number) =>
+  now < s.anchorEnd || now < s.anchorLands
 const onFieldReady = (s: State, now: number) =>
   now < s.anchorEnd && s.excite >= 100 && s.maid !== 'defense'
 /** The anchor string with Battle Maid skips: each new round starts at stage min(uses, 3). */
-function anchorString(c: SimContext, s: State, count: number) {
+function anchorString(c: SimContext, s: State, count: number, from?: number) {
   const engineFirst = c.normalSequence(4, count)
   const skip = s.maid === 'battle' ? Math.min(3, s.battleUses) : 0
-  let stage =
-    s.maid === 'battle'
+  // ("N3-4": written to carry on from its 3rd hit)
+  let stage = from
+    ? (from - 1) % 4
+    : s.maid === 'battle'
       ? engineFirst === 0 || s.comboNext === 0
         ? skip
         : s.comboNext
@@ -303,12 +346,14 @@ export const kit: KitModel = {
     aegisEnd: -1,
     toast: {},
     ballReady: -1,
+    expiryNoted: 0,
+    anchorLands: -1,
   }),
   onStart(c) {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
     if (c.constellation('Danica') >= 2)
       c.note(
-        'Danica C2: the combat-entry Will to Protect and the Cleaning Decree Will to Purge (hold Normal Attack, 150% DMG, once per combat) are not modelled; Toast stacks are.'
+        'Danica C2: the combat-entry Will to Protect and the Cleansing Edict Will to Purge (hold Normal Attack, 150% DMG, not again while the Storm Anchor lasts) are not modelled; Raise a Chorus stacks are.'
       )
   },
   // With the Anchor out her normal attacks are the Anchor's (estimated frames of their own), and
@@ -318,7 +363,7 @@ export const kit: KitModel = {
       return onFieldReady(s, ctx.now)
         ? { key: 'battleMaid', label: 'On-Field Skill E2', mode: 'Battle Maid' }
         : undefined
-    if (action.kind === 'normal' && ctx.now < s.anchorEnd)
+    if (action.kind === 'normal' && anchorNormal(s, ctx.now))
       return { key: 'anchor', label: 'Anchor Normal Attack', mode: 'Anchor' }
     return undefined
   },
@@ -326,35 +371,46 @@ export const kit: KitModel = {
     radiance(ctx)
     switch (action.kind) {
       case 'skill':
-        if (onFieldReady(s, ctx.now)) {
-          ctx.note(
-            'Danica: On-Field Skill E2 / Battle Maid and the Anchor Normal Attacks are not in the reference; their frames are estimates.'
-          )
-          return onFieldE2(ctx, s)
-        }
-        hit(ctx, 22, ['skill', 'dmg'], 'Anchor Skill', true, 'skill')
-        dropBall(ctx, s, 22, 'Anchor Skill')
+        if (onFieldReady(s, ctx.now)) return onFieldE2(ctx, s)
+        // (the Anchor lands 50 frames after the press, from a game recording; kqmsim has 22)
+        hit(
+          ctx,
+          ANCHOR_HITMARK,
+          ['skill', 'dmg'],
+          'Anchor Skill',
+          true,
+          'skill'
+        )
+        dropBall(ctx, s, ANCHOR_HITMARK, 'Anchor Skill')
+        s.anchorLands = ctx.now + ANCHOR_HITMARK
         // Dump Avatar_Danica_ElementalArt_InsertClaymore: Will to Cleanse to 0, Will to Protect's
         // cooldown (UNIQUE_Danica_E2_GuardMaid_CD) removed, and the Anchor handler removed and
         // re-added; its removal ends either form (and with it the Burst window) and the Royal Aegis
-        // (kqmsim keeps the forms)
-        ctx.at(22, (c) => {
+        // (kqmsim keeps the forms). Since beta 7.2.53 a Storm Anchor already out keeps its time
+        // (the skill text: casting it again doesn't refresh its duration)
+        ctx.at(ANCHOR_HITMARK, (c) => {
           if (s.maid === 'defense') c.note(E_ENDS_ROYAL_GUARD)
           endMaid(c, s)
           s.excite = 0
           s.entryReady = -1
-          anchor(c, s, ANCHOR_DURATION)
+          if (c.now < s.anchorEnd) {
+            set(c, 'anchor', 'on')
+            c.note(E_KEEPS_ANCHOR_TIME)
+          } else anchor(c, s, ANCHOR_DURATION)
         })
         return withHitlag(
           {
             frames: 44,
-            framesInto: { burst: 34, dash: 34, jump: 34 },
+            // (the Burst usable at 33, from a game recording)
+            framesInto: { burst: 33, dash: 34, jump: 34 },
             cooldown: { key: 'skill', frames: 1080, delay: 20 },
           },
-          { hitmarks: [22], hitlag: [6] }
+          { hitmarks: [ANCHOR_HITMARK], hitlag: [6] }
         )
       case 'burst':
-        ;[102, 113, 127, 142, 168].forEach((delay, i) =>
+        // (the first hit 102 frames after the press, then +10/18/32/67: game recording and Lunaris
+        // runs' logs)
+        ;[102, 112, 120, 134, 169].forEach((delay, i) =>
           ctx.at(delay, (c) => {
             radiance(c)
             hit(
@@ -383,13 +439,14 @@ export const kit: KitModel = {
         syncMaid(ctx, s)
         ctx.at(1200, (c) => syncMaid(c, s))
         // (the 18 s cooldown starts 0.4 s into the cast: 18.4 s from press to press, tested in game)
+        // (the cutscene ends 99 frames after the press)
         return {
-          frames: 100,
+          frames: 99,
           cooldown: { key: 'burst', frames: 1080, delay: 24 },
         }
       case 'normal':
-        if (ctx.now < s.anchorEnd)
-          return anchorString(ctx, s, action.count ?? 1)
+        if (anchorNormal(s, ctx.now))
+          return anchorString(ctx, s, action.count ?? 1, action.from)
         return normalString(
           normals,
           action.count ?? 1,
@@ -483,13 +540,30 @@ export const kit: KitModel = {
             ? `Will to Protect was on its 16 s cooldown (${((s.entryReady - now) / 60).toFixed(1)} s left)`
             : undefined,
   onSwapIn(ctx, s: State) {
-    if (
-      ctx.now >= s.anchorEnd ||
-      s.excite < 100 ||
-      ctx.now < s.entryReady ||
-      s.maid === 'battle'
-    )
+    if (ctx.now >= s.anchorEnd) {
+      // an Anchor she had ran out: say why her swap-ins didn't refresh it (once per Anchor)
+      if (s.anchorId && s.expiryNoted !== s.anchorId) {
+        s.expiryNoted = s.anchorId
+        ctx.note(
+          `Danica: her Storm Anchor ran out before a swap-in, so Will to Protect couldn't refresh it${
+            s.lastBlock
+              ? ` (at her swap-in before, ${s.lastBlock})`
+              : ' (she wasn’t swapped in while it was out)'
+          }. Her E summons it again.`
+        )
+      }
       return
+    }
+    const block =
+      s.maid === 'battle'
+        ? 'she was in Maid: Cleaner'
+        : s.excite < 100
+          ? 'Will to Cleanse wasn’t full'
+          : ctx.now < s.entryReady
+            ? 'Will to Protect was on its 16 s cooldown'
+            : undefined
+    s.lastBlock = block
+    if (block) return
     s.excite = 0
     s.entryReady = ctx.now + ENTRY_CD
     // Entry Skill E2: Defense Maid and a refreshed Anchor; a Burst window still open lights it
@@ -503,6 +577,7 @@ export const kit: KitModel = {
     aegisOn(ctx, s, 'Defense Maid shield')
     hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
     dropBall(ctx, s, 42, 'Entry Skill')
-    return { frames: 60 }
+    // (the Burst pressed 63 frames after the swap-in: footage and Lunaris runs)
+    return { frames: 63 }
   },
 }
