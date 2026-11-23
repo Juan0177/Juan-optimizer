@@ -1,0 +1,48 @@
+# JuanLab: avvisa su Discord (#commit-stellar) quando Stellar Optimizer ha commit nuovi. Non unisce niente:
+# il sync resta quello a mano di juanlab-pages.yml.
+# - Ogni 2 ore, e a mano (Actions > "JuanLab - avvisi commit di Stellar" > Run workflow).
+# - Ogni commit è annunciato una volta: l'ultimo annunciato resta nella cache delle Actions.
+# - Serve il secret STELLAR_DISCORD_WEBHOOK (l'URL del webhook del canale); senza, non invia niente.
+name: JuanLab - avvisi commit di Stellar
+
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: juanlab-stellar-notify
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: juanlab
+          fetch-depth: 0
+          filter: blob:none
+      - name: Ultimo commit annunciato
+        uses: actions/cache/restore@v4
+        with:
+          path: .stellar-notify
+          key: stellar-notify-${{ github.run_id }}
+          restore-keys: stellar-notify-
+      - name: Commit nuovi di Stellar, avviso su Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.STELLAR_DISCORD_WEBHOOK }}
+        run: |
+          git remote add stellar https://github.com/s-naveen/stellar-optimizer.git
+          git fetch --quiet --no-tags --filter=blob:none stellar main
+          python3 .github/juanlab/stellar-notify.py --base HEAD --source stellar/main --state .stellar-notify/last
+      - name: Salva l'ultimo commit annunciato
+        if: hashFiles('.stellar-notify/last') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .stellar-notify
+          key: stellar-notify-${{ github.run_id }}
