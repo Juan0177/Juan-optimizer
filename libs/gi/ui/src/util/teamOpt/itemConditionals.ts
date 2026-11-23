@@ -15,6 +15,8 @@ export type ItemConditionalCtx = {
   attacks: Array<'normal' | 'charged' | 'plunging' | 'skill' | 'burst'>
   /** Elements / Stellar reactions on the enemy */
   auras: string[]
+  /** The enemy can't be frozen: Hydro and Cryo never make it Frozen */
+  freezeImmune?: boolean
   /** Teammates of another element than its own (default 3) */
   otherElements?: number
   /** Its own element (unknown: effects that need its own reactions are counted) */
@@ -144,7 +146,9 @@ const OVERRIDES: Partial<
   // the 4-piece procs at random: use its average
   EchoesOfAnOffering: () => 'avg',
   BlizzardStrayer: (ctx) =>
-    ctx.auras.includes('hydro') && ctx.auras.includes('cryo')
+    ctx.auras.includes('hydro') &&
+    ctx.auras.includes('cryo') &&
+    !ctx.freezeImmune
       ? 'frozen'
       : ctx.auras.includes('cryo')
         ? 'cryo'

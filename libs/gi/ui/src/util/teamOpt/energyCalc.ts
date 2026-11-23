@@ -1710,7 +1710,8 @@ const USE_OPTIONS: Partial<
       : u.hit?.path[1] === 'dmgOneHit'
         ? '1 stack'
         : '0 stacks',
-  // A4: an enemy Frozen by Frostgnaw drops 1 more particle (one enemy: 1 freeze at most)
+  // A4: an enemy Frozen by Frostgnaw drops 1 more particle (one enemy: 1 freeze at most; none
+  // from an enemy that can't be frozen: gcsim's AuraContains(Frozen))
   Kaeya: (u) =>
     u.hit &&
     u.all.some(
@@ -1718,7 +1719,8 @@ const USE_OPTIONS: Partial<
         h.characterKey === 'Kaeya' &&
         h.t === u.hit!.t &&
         h.path[0] === '_reaction' &&
-        h.path[1] === 'frozen'
+        h.path[1] === 'frozen' &&
+        !h.noFrozen
     )
       ? '1 freeze'
       : '0 freezes',

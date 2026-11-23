@@ -249,6 +249,7 @@ export function simulateRotation({
   frameOverrides = {},
   frameData = {},
   openerCounted = false,
+  freezeImmune = false,
 }: {
   rotation: ParsedRotation
   members: CharacterKey[]
@@ -287,6 +288,8 @@ export function simulateRotation({
    * rotations and not counted (a setup for the loop)
    */
   openerCounted?: boolean
+  /** The enemy can't be frozen (see `ReactionOptions.freezeImmune`) */
+  freezeImmune?: boolean
 }): SimulationResult {
   const notes = new Set<string>()
   const warnings = [...rotation.warnings]
@@ -441,6 +444,7 @@ export function simulateRotation({
     bountiful: (_m, t) => windowOn('Nilou', 'a1AfterSkill', t),
     trace: auraTrace,
     watch: auraTimeline ? (t, auras) => auraLog.push({ t, auras }) : undefined,
+    freezeImmune,
   })
   let onField: CharacterKey =
     rotation.opener?.[0]?.characterKey ??

@@ -2,7 +2,7 @@ import type { Team, TeamFightSettings } from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { FightTeam } from '@genshin-optimizer/gi/ui'
-import { MOONGECKO } from '@genshin-optimizer/gi/ui'
+import { enemyFreezeImmune, MOONGECKO } from '@genshin-optimizer/gi/ui'
 import { alpha, Box, ButtonBase, InputBase, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
@@ -278,6 +278,50 @@ function Toggle({
     >
       {children}
     </ButtonBase>
+  )
+}
+
+/**
+ * Whether the enemy can be frozen: as its boss preset is (a boss can't: gcsim's rule for the game's
+ * boss type), or as picked here (picking the preset's own clears the choice)
+ */
+export function FreezeSetting({
+  teamId,
+  team,
+  disabled,
+}: {
+  teamId: string
+  team: Team
+  disabled?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const setEnemy = useSetEnemy(teamId)
+  const immune = enemyFreezeImmune(team)
+  const set = (value: boolean) =>
+    setEnemy((enemy) => {
+      if (value === enemyFreezeImmune({ enemyPreset: enemy.enemyPreset }))
+        delete enemy.freezeImmune
+      else enemy.freezeImmune = value
+    })
+  return (
+    <Row
+      label={t('enemy.freeze', 'Frozen')}
+      hint={
+        immune
+          ? t(
+              'enemy.freezeImmuneHint',
+              'Hydro and Cryo still react, but it never becomes Frozen: no Shatter, nothing that needs it Frozen'
+            )
+          : undefined
+      }
+    >
+      <Toggle on={!immune} disabled={disabled} onClick={() => set(false)}>
+        {t('enemy.freezable', 'Can be frozen')}
+      </Toggle>
+      <Toggle on={immune} disabled={disabled} onClick={() => set(true)}>
+        {t('enemy.freezeImmune', 'Can’t be frozen')}
+      </Toggle>
+    </Row>
   )
 }
 

@@ -489,6 +489,8 @@ function StygianCatalogue({ teamId, team }: { teamId: string; team: Team }) {
         stygianEnemy(boss.id, phase, levelOf(difficulty))
       )
       team.enemyPreset = stygianPresetKey(boss.id, phase)
+      // (a new boss: whether it can be frozen is its own again, `enemyFreezeImmune`)
+      delete team.freezeImmune
     })
   const pickDifficulty = (key: StygianDifficultyKey) => {
     setDifficulty(key)

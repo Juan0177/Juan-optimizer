@@ -10,7 +10,7 @@ import {
   stygianPhaseName,
 } from './StygianPreset'
 import type { StygianRes } from './stygianBosses'
-import { appliedStygianPreset } from './stygianBosses'
+import { appliedStygianPreset, enemyFreezeImmune } from './stygianBosses'
 import type {
   FightEnemy,
   FightEstimate,
@@ -19,13 +19,20 @@ import type {
 } from './stygianFights'
 import { enemyFight, enemyHpOf, FIGHT_LIMIT, MOONGECKO } from './stygianFights'
 
-/** A team's enemy as a run used it: its level, RES and DEF, and the preset it was */
-export type RunEnemy = Pick<Team, 'enemyOverride' | 'enemyPreset'>
+/**
+ * A team's enemy as a run used it: its level, RES and DEF, the preset it was, and whether it can
+ * be frozen (absent: as its preset is, see `enemyFreezeImmune`)
+ */
+export type RunEnemy = Pick<
+  Team,
+  'enemyOverride' | 'enemyPreset' | 'freezeImmune'
+>
 
 /** The team's enemy now, to keep with a run's result */
 export const runEnemyOf = (team: RunEnemy): RunEnemy => ({
   enemyOverride: { ...team.enemyOverride },
   ...(team.enemyPreset ? { enemyPreset: team.enemyPreset } : {}),
+  freezeImmune: enemyFreezeImmune(team),
 })
 
 /** What the damage depends on, with the editor's defaults for what is not set */
@@ -38,6 +45,10 @@ const enemyValues = (e: Team['enemyOverride']) => [
 /** Whether two enemies take the same damage (level, RES, DEF) */
 export const sameEnemy = (a: Team['enemyOverride'], b: Team['enemyOverride']) =>
   enemyValues(a).every((v, i) => v === enemyValues(b)[i])
+/** Whether a run's enemy is the one now: the same damage taken, and frozen or not alike */
+export const sameRunEnemy = (a: RunEnemy, b: RunEnemy) =>
+  sameEnemy(a.enemyOverride, b.enemyOverride) &&
+  enemyFreezeImmune(a) === enemyFreezeImmune(b)
 
 /**
  * An enemy in one line: the boss it is (a preset, not edited since), its level, its RES that
@@ -106,6 +117,9 @@ export function EnemySummary({ enemy }: { enemy: RunEnemy }) {
             value: defIgn,
           })}
         </span>
+      )}
+      {enemyFreezeImmune(enemy) && (
+        <span>{t('enemyEditor.summaryFreezeImmune', 'Can’t be frozen')}</span>
       )}
     </Box>
   )

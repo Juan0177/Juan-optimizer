@@ -31,7 +31,7 @@ import {
   kqmResultStandardChanged,
   kqmTeamOverrides,
   MOONGECKO_BOSS,
-  sameEnemy,
+  sameRunEnemy,
   teamLinkOwnGear,
   teamLinkUseImported,
   teamLinkUseOwnGear,
@@ -88,10 +88,10 @@ import {
 } from './fightTeam'
 import { defaultRotationTime, formatDamage, formatRate } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
-import { VersionNote, VersionsButton, VersionsDrawer } from './KqmVersionList'
-import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { KqmTimeline } from './KqmTimeline'
+import { VersionNote, VersionsButton, VersionsDrawer } from './KqmVersionList'
 import { kqmOwnSetUp } from './kqmOwn'
+import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
@@ -104,8 +104,8 @@ import {
   RotationConfigureButton,
   rotationIdOf,
   type SearchButton,
-  useAppliedRotation,
   setRotationDraft,
+  useAppliedRotation,
   useMemberNames,
   useRotationWriter,
   useSameRotations,
@@ -186,9 +186,7 @@ export default function TeamBuildWorkspace({
   // a result found for another enemy than the tab's now (one found before enemies were kept with
   // results: not known, not flagged)
   const enemyChanged = (enemy?: RunEnemy) =>
-    !!enemy &&
-    !!enemyTeam &&
-    !sameEnemy(enemy.enemyOverride, enemyTeam.enemyOverride)
+    !!enemy && !!enemyTeam && !sameRunEnemy(enemy, enemyTeam)
   const [storedTeamOpt, setStoredTeamOpt] = useTeamOpt(teamId)
   // A version (KQM): its shared settings are its original's when it is shown, and changed here
   // they are the original's too (so its whole family's)
