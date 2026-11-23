@@ -101,6 +101,7 @@ import {
   quickSx,
   tokens,
   type as typo,
+  useBatches,
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
@@ -183,7 +184,11 @@ export function WeaponSettings({
                     'Weapons to choose from'
                   )}
                 >
-                  {`${allowed}/${total}`}
+                  {t('teamOpt.weapons.count', {
+                    defaultValue: '{{allowed}}/{{total}} weapons',
+                    allowed,
+                    total,
+                  })}
                 </TileAction>
               </span>
             </Tooltip>
@@ -267,6 +272,9 @@ function WeaponChooserModal({
     },
   ]
   const allowedCount = all.filter((w) => !excluded.has(w.id)).length
+  // (rows come in batches: the first screenful at once, the rest a batch per frame)
+  const shown = useBatches(ready ? all.length : 0, 24, 12)
+  let left = shown
   return (
     <ModalWrapper
       open
@@ -342,35 +350,43 @@ function WeaponChooserModal({
               </Box>
             ))}
           {ready &&
-            groups.map((group) => (
-              <WeaponGroup
-                key={group.type}
-                {...group}
-                teamData={teamData}
-                excluded={excluded}
-                onToggle={toggle}
-                onTickAll={(tick) => {
-                  const ids = new Set(group.weapons.map((w) => w.id))
-                  setExcluded([
-                    ...teamOpt.excludedWeapons.filter((id) => !ids.has(id)),
-                    ...(tick ? [] : ids),
-                  ])
-                }}
-                teamMembers={members}
-                weaponEnergy={teamOpt.weaponEnergy}
-                setWeaponEnergy={(id, characterKey, value) =>
-                  setTeamOpt((o) => {
-                    const perMember = { ...o.weaponEnergy[id] }
-                    if (value > 0) perMember[characterKey] = value
-                    else delete perMember[characterKey]
-                    if (Object.keys(perMember).length)
-                      o.weaponEnergy[id] = perMember
-                    else delete o.weaponEnergy[id]
-                  })
-                }
-                typeName={t(`page_weapon:weaponType.${group.type}`, group.type)}
-              />
-            ))}
+            groups.map((group) => {
+              const visible = Math.max(0, Math.min(group.weapons.length, left))
+              left -= group.weapons.length
+              return (
+                <WeaponGroup
+                  key={group.type}
+                  {...group}
+                  visible={visible}
+                  teamData={teamData}
+                  excluded={excluded}
+                  onToggle={toggle}
+                  onTickAll={(tick) => {
+                    const ids = new Set(group.weapons.map((w) => w.id))
+                    setExcluded([
+                      ...teamOpt.excludedWeapons.filter((id) => !ids.has(id)),
+                      ...(tick ? [] : ids),
+                    ])
+                  }}
+                  teamMembers={members}
+                  weaponEnergy={teamOpt.weaponEnergy}
+                  setWeaponEnergy={(id, characterKey, value) =>
+                    setTeamOpt((o) => {
+                      const perMember = { ...o.weaponEnergy[id] }
+                      if (value > 0) perMember[characterKey] = value
+                      else delete perMember[characterKey]
+                      if (Object.keys(perMember).length)
+                        o.weaponEnergy[id] = perMember
+                      else delete o.weaponEnergy[id]
+                    })
+                  }
+                  typeName={t(
+                    `page_weapon:weaponType.${group.type}`,
+                    group.type
+                  )}
+                />
+              )
+            })}
         </Box>
       </CardThemed>
     </ModalWrapper>

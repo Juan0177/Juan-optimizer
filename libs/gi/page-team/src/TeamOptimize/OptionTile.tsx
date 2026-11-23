@@ -12,15 +12,17 @@ import { focusSx, hairline, quickSx, tokens, type } from './ui'
  * to the run dialog's files; they could move to ui.tsx if other parts want them.
  */
 
-/** A tile's surface: an inset with a hairline, a quick hover */
+/** A tile's surface: an inset with a hairline, two lines (its title, then its detail) */
 export const tileSx = (theme: Theme) => ({
   display: 'flex',
-  alignItems: 'center',
-  gap: 1,
+  flexDirection: 'column' as const,
+  alignItems: 'stretch',
+  justifyContent: 'center',
+  gap: 0.75,
   minWidth: 0,
-  minHeight: 44,
-  pl: 1.5,
-  pr: 0.75,
+  minHeight: 80,
+  px: 1.75,
+  py: 1.25,
   borderRadius: tokens.radius.inset,
   bgcolor: tokens.inset,
   border: hairline,
@@ -32,6 +34,73 @@ export const tileSx = (theme: Theme) => ({
   },
 })
 
+/** A tile's two lines: its title (and what sits at its end: a switch, Edit), then its detail */
+export function TileLines({
+  title,
+  end,
+  dim,
+  children,
+}: {
+  title: ReactNode
+  end?: ReactNode
+  /** An option that is off: its title muted */
+  dim?: boolean
+  children?: ReactNode
+}) {
+  return (
+    <>
+      <Box
+        component="span"
+        sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 28 }}
+      >
+        <Box
+          component="span"
+          sx={{
+            flexGrow: 1,
+            minWidth: 0,
+            fontSize: 13.5,
+            fontWeight: 600,
+            lineHeight: 1.3,
+            color: dim ? 'text.secondary' : 'text.primary',
+            ...quickSx,
+          }}
+        >
+          {title}
+        </Box>
+        {end}
+      </Box>
+      <Box
+        component="span"
+        sx={{ display: 'flex', alignItems: 'center', minHeight: 28 }}
+      >
+        {children}
+      </Box>
+    </>
+  )
+}
+
+/** A tile's muted detail ("Off", "None") */
+export function TileNote({
+  children,
+  tone,
+}: {
+  children: ReactNode
+  tone?: 'warning'
+}) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        ...type.label,
+        ...(tone === 'warning' && { color: 'warning.main' }),
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
 /** A dialog over another one (already dimmed): a light backdrop, not a second dark one */
 export const stackedBackdrop = {
   backdrop: { sx: { backgroundColor: 'rgba(6, 7, 10, 0.3)' } },
@@ -42,8 +111,8 @@ export const floatSx = {
 } as const
 
 /**
- * An on/off option as a tile: its name, its switch, and (when on) a button of its own. The whole
- * tile toggles it; its name is brighter when on.
+ * An on/off option as a tile: its name and switch, then (when on) a button of its own, else
+ * "Off". The whole tile toggles it; its name is brighter when on.
  */
 export function OptionTile({
   label,
@@ -56,9 +125,10 @@ export function OptionTile({
   checked: boolean
   onChange: () => void
   disabled?: boolean
-  /** A button of its own (e.g. Choose), before the switch */
+  /** A button of its own (e.g. Choose), under its name while on */
   action?: ReactNode
 }) {
+  const { t } = useTranslation('page_team')
   return (
     <Box
       // (a label: a click anywhere on it toggles the switch, but not one on its own button)
@@ -77,27 +147,21 @@ export function OptionTile({
         !!disabled && { '&:hover': { borderColor: tokens.hairline } },
       ]}
     >
-      <Box
-        component="span"
-        sx={{
-          flexGrow: 1,
-          minWidth: 0,
-          fontSize: 13.5,
-          fontWeight: 600,
-          lineHeight: 1.3,
-          color: checked ? 'text.primary' : 'text.secondary',
-          ...quickSx,
-        }}
+      <TileLines
+        title={label}
+        dim={!checked}
+        end={
+          <Switch
+            size="small"
+            checked={checked}
+            disabled={disabled}
+            onChange={onChange}
+            sx={{ my: -0.5, mr: -0.75 }}
+          />
+        }
       >
-        {label}
-      </Box>
-      {action}
-      <Switch
-        size="small"
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-      />
+        {checked ? action : <TileNote>{t('teamOpt.pool.off', 'Off')}</TileNote>}
+      </TileLines>
     </Box>
   )
 }

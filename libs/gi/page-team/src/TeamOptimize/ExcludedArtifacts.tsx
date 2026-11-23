@@ -40,6 +40,8 @@ import {
   floatSx,
   stackedBackdrop,
   TileAction,
+  TileLines,
+  TileNote,
   tileSx,
 } from './OptionTile'
 import { EmptyLine, numSx, quickSx, Segmented, type } from './ui'
@@ -104,28 +106,25 @@ export function ExcludedArtsTile({
         onClick={onOpen}
         disabled={disabled}
         aria-haspopup="dialog"
-        sx={[
-          tileSx,
-          { justifyContent: 'flex-start', opacity: disabled ? 0.55 : 1 },
-        ]}
+        sx={[tileSx, { opacity: disabled ? 0.55 : 1 }]}
       >
-        <Box
-          component="span"
-          sx={{
-            flexGrow: 1,
-            minWidth: 0,
-            fontSize: 13.5,
-            fontWeight: 600,
-            lineHeight: 1.3,
-          }}
+        {/* what a click does reads as a button; the count under it */}
+        <TileLines
+          title={t('teamOpt.pool.excluded', 'Excluded artifacts')}
+          end={
+            <TileAction as="span">{t('teamOpt.pool.edit', 'Edit')}</TileAction>
+          }
         >
-          {t('teamOpt.pool.excluded', 'Excluded artifacts')}
-        </Box>
-        {/* the count, and what a click does: it reads as a button */}
-        <TileAction as="span" tone={excluded.length ? 'warning' : undefined}>
-          {excluded.length ? `${excluded.length} · ` : null}
-          {t('teamOpt.pool.edit', 'Edit')}
-        </TileAction>
+          <TileNote tone={excluded.length ? 'warning' : undefined}>
+            {excluded.length
+              ? t('teamOpt.pool.excludedCount', {
+                  defaultValue_one: '{{count}} artifact',
+                  defaultValue_other: '{{count}} artifacts',
+                  count: excluded.length,
+                })
+              : t('teamOpt.pool.excludedNone', 'None')}
+          </TileNote>
+        </TileLines>
       </ButtonBase>
 
       <ModalWrapper

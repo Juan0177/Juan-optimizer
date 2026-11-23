@@ -110,7 +110,11 @@ export function OtherCharsSettings({
                   disabled={disabled}
                   aria-label={title}
                 >
-                  {`${allowed}/${owners.length}`}
+                  {t('teamOpt.pool.othersCount', {
+                    defaultValue: '{{allowed}}/{{total}} characters',
+                    allowed,
+                    total: owners.length,
+                  })}
                 </TileAction>
               </span>
             </Tooltip>
