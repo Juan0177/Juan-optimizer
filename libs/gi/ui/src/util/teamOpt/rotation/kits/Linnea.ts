@@ -1,6 +1,13 @@
 import { HARMONY_MARK } from '../lunarCrystallize'
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), pinned by KQMSIM. */
 
@@ -19,6 +26,8 @@ const normals: NormalHit[] = [
   { hitmarks: [37], toNormal: 43, toCharged: 27, toAbil: 27, frames: 43 },
 ]
 interface LinneaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   end: number
   token: number
   recastEnd: number
@@ -49,6 +58,12 @@ const isLunarCrystallize = (hit: SimHit) =>
   hit.tag === 'reactionLunarCrystallize' ||
   (hit.path[0] === 'reaction' && hit.path[1] === 'lunarcrystallize')
 const intervals = [111, 63, 144]
+/** Lumi's particles from a hit now: 3, 9 s ICD on Linnea's clock (kqmsim particleCB) */
+function lumiParticles(ctx: SimContext, s: LinneaState) {
+  if (turretReady(s.particles, 'lumi', ctx.characterFrame('Linnea'), 540))
+    turretParticles(ctx, 0, 3, 'Linnea')
+}
+
 function lumiAttack(ctx: SimContext, s: LinneaState, token: number) {
   if (token !== s.token || ctx.now >= s.end) return
   if (!s.standard && s.index === 1) {
@@ -71,6 +86,7 @@ function lumiAttack(ctx: SimContext, s: LinneaState, token: number) {
           icd: 'skill',
           label: `Lumi Pound-Pound Pummeler ${delay ? 2 : 1}`,
         })
+        lumiParticles(c, s)
       })
   }
   const delay = s.standard ? 340 : intervals[s.index]
@@ -110,6 +126,7 @@ export const kit: KitModel = {
   element: 'geo',
   source: `${KQMSIM}/linnea`,
   init: (): LinneaState => ({
+    particles: new Map(),
     end: -1,
     token: 0,
     recastEnd: -1,
@@ -212,6 +229,7 @@ export const kit: KitModel = {
                 ctx.constellation('Linnea') >= 2 && ctx.moonsign >= 2,
               label: 'Lumi Million Ton Crush (Lunar-Crystallize)',
             })
+            ctx.at(50, (c) => lumiParticles(c, s))
           } else expireRecast(ctx, s)
           return { frames: 10 }
         }

@@ -6,7 +6,7 @@ import type {
   SimHit,
   SimSnapshot,
 } from '../types'
-import { GCSIM, templateJump } from './common'
+import { flatEnergy, GCSIM, templateJump } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/mizuki, main as of 2026-11-10. */
 
@@ -478,11 +478,20 @@ function act(
       // geometry the active character is next to the enemy, so each is picked up 0.3 s after it
       // spawns: a Munen Shockwave when the active character is above 70% HP, else a heal (twice
       // as much on Mizuki); C4: both, and (Revelation) a heal for the lowest-HP member. The
-      // shockwave's stats snapshot at the spawn. (C4's Energy is not modelled.)
+      // shockwave's stats snapshot at the spawn. C4: the first 4 pickups restore 5 Energy each.
+      let c4Left = 4
       for (let k = 1; k <= 8; k++)
         ctx.at(BURST_HIT + SNACK_INTERVAL * k, (c2) => {
           const snapshot = c2.snapshot('YumemizukiMizuki')
-          c2.at(SNACK_PICKUP, (c3) => snackPickup(c3, snapshot))
+          c2.at(SNACK_PICKUP, (c3) => {
+            snackPickup(c3, snapshot)
+            if (c3.constellation('YumemizukiMizuki') >= 4 && c4Left > 0) {
+              c4Left--
+              flatEnergy(c3, 0, 5, 'Yumemizuki Mizuki C4', {
+                owner: 'YumemizukiMizuki',
+              })
+            }
+          })
         })
       return {
         cooldown: { key: 'burst', frames: 900, delay: 1 },

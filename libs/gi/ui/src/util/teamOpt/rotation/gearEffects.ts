@@ -1,5 +1,9 @@
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
+import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
+import {
+  getCharEle,
+  getCharWeaponType,
+  getWeaponStat,
+} from '@genshin-optimizer/gi/stats'
 import { energyCalcData, isFrostbreathReaction } from '../energyCalc'
 import type { RotationAction } from './parse'
 import type {
@@ -166,7 +170,8 @@ export function gearEffects({
     path: string[],
     value: string,
     start: number,
-    end: number
+    end: number,
+    offOnly?: boolean
   ) => void
   reduceCooldown: (
     characterKey: CharacterKey,
@@ -185,6 +190,17 @@ export function gearEffects({
   const holds = (k: CharacterKey, weapon: string) =>
     gear[k]?.weapon === weapon ||
     !!gear[k]?.candidates?.weapons?.includes(weapon)
+  // Being protected by a shield, and the member taking the field when Thrilling Tales' wielder
+  // leaves it: those effects are timed for any set and any weapon of its type too, so one a build
+  // tries (Team optimize) never counts a saved switch beyond them; not held, they count only where
+  // a switch is saved (`SimBuffWindow.offOnly`)
+  const triedGear = (k: CharacterKey, item: string, set?: boolean) =>
+    (set ? opens(k, item) : holds(k, item))
+      ? 'held'
+      : set ||
+          getWeaponStat(item as WeaponKey)?.weaponType === getCharWeaponType(k)
+        ? 'unheld'
+        : undefined
   const icd = new Map<string, number>()
   /** Once per `frames` per key */
   const ready = (key: string, t: number, frames: number) => {
@@ -324,9 +340,18 @@ export function gearEffects({
     if (holds(k, 'TheWidsith')) window(k, ['TheWidsith', 'Debut'], 'avg', 0, 0)
   // Thrilling Tales of Dragon Slayers: declared off, on only for the member taking the field when
   // the wielder leaves it (below), so a saved switch never adds uptime the swaps don't give
-  for (const k of members)
-    if (holds(k, 'ThrillingTalesOfDragonSlayers'))
-      window(k, ['ThrillingTalesOfDragonSlayers', 'Heritage'], 'on', 0, 0)
+  for (const k of members) {
+    const how = triedGear(k, 'ThrillingTalesOfDragonSlayers')
+    if (how)
+      window(
+        k,
+        ['ThrillingTalesOfDragonSlayers', 'Heritage'],
+        'on',
+        0,
+        0,
+        how === 'unheld'
+      )
+  }
   for (const k of members)
     if (opens(k, 'DesertPavilionChronicle'))
       window(k, ['DesertPavilionChronicle', 'set4'], 'on', 0, 0)
@@ -378,9 +403,10 @@ export function gearEffects({
   for (const k of members) {
     for (const [item, path, value] of SHIELD_CREATED)
       if (holds(k, item)) window(k, [item, path], value, 0, 0)
-    for (const [item, path, value, set] of SHIELDED)
-      if (set ? opens(k, item) : holds(k, item))
-        window(k, [item, path], value, 0, 0)
+    for (const [item, path, value, set] of SHIELDED) {
+      const how = triedGear(k, item, set)
+      if (how) window(k, [item, path], value, 0, 0, how === 'unheld')
+    }
   }
   /** A shield marker lands: it replaces its creator's earlier one of the same kind and target */
   const shieldCreated = (ctx: SimContext, hit: SimHit) => {
@@ -618,7 +644,13 @@ export function gearEffects({
     collect(ctx, who, shard)
   }
   const pickUp = (ctx: SimContext) => {
-    if (petra.includes(active)) takeOne(ctx, active)
+    if (!petra.includes(active)) return
+    if (wears(active, 'ArchaicPetra')) return takeOne(ctx, active)
+    // (a KQM candidate's own window only: the shard, its shield and Navia's take of it stay as
+    // they are without the set)
+    const t = ctx.now
+    const shard = shards.find((x) => x.pickable <= t && t < x.expiry)
+    if (shard) petraProc(ctx, active, shard.element)
   }
 
   // Epochal Advent: a Starspark (2 at most) when the wearer uses a Skill or Burst or performs a
@@ -1075,6 +1107,16 @@ export function gearEffects({
           hitlag: 'recipient',
         })
       }
+      // Silken Moon's Serenade: on the wearer's elemental attacks landing, zero-damage ones that
+      // apply an element too (Nilou's Tranquility Aura, Xingqiu's Rain Sword orbitals)
+      if (
+        ctx.moonsign >= 1 &&
+        opens(k, 'SilkenMoonsSerenade') &&
+        hit.element !== 'physical' &&
+        (!hit.path[0].startsWith('_') ||
+          (hit.path[0] === '_marker' && hit.applies))
+      )
+        ctx.buff(k, ['SilkenMoonsSerenade', '4GleamingMoon'], 'on', 1, 480)
       if (hit.path[0].startsWith('_')) return
       // Beacon of the Reed Sea (kqmsim beacon.go): ATK for 8 s (hitlag-extended) after each of the
       // wielder's Skill hits, off the field too, from the next hit on
@@ -1089,12 +1131,6 @@ export function gearEffects({
         ctx.buff(k, ['RainbowSerpentsRainBow', 'passive'], 'on', 1, 480, {
           hitlag: 'recipient',
         })
-      if (
-        ctx.moonsign >= 1 &&
-        opens(k, 'SilkenMoonsSerenade') &&
-        hit.element !== 'physical'
-      )
-        ctx.buff(k, ['SilkenMoonsSerenade', '4GleamingMoon'], 'on', 1, 480)
       // Sacrificial procs are random in game. Use accumulated proc probability as a stable
       // expected-timing estimate, with the refinement's real ICD and on-field restriction.
       if (
@@ -1391,11 +1427,8 @@ export function gearEffects({
       if (ctx) pickUp(ctx)
       // Thrilling Tales of Dragon Slayers: the wielder's swap-out gives the incoming member
       // its ATK for 10 s (hitlag-extended), once per 20 s (gcsim)
-      if (
-        ctx &&
-        holds(from, 'ThrillingTalesOfDragonSlayers') &&
-        ready(`ttds.${from}`, t, 1200)
-      )
+      const ttds = triedGear(from, 'ThrillingTalesOfDragonSlayers')
+      if (ctx && ttds && ready(`ttds.${from}`, t, 1200))
         ctx.buff(
           from,
           ['ThrillingTalesOfDragonSlayers', 'Heritage'],
@@ -1405,6 +1438,7 @@ export function gearEffects({
           {
             recipient: to,
             hitlag: 'recipient',
+            ...(ttds === 'unheld' ? { offOnly: true } : {}),
           }
         )
       if (gleam.delete(from))
@@ -1491,20 +1525,23 @@ export function gearEffects({
       weapons.end(t)
       for (const k of members)
         for (const [item, path, value, set] of SHIELDED) {
-          if (!(set ? opens(k, item) : holds(k, item))) continue
+          const how = triedGear(k, item, set)
+          if (!how) continue
+          const offOnly = how === 'unheld'
           const spans = protectedSpans(k, t)
           if (item !== 'BeaconOfTheReedSea') {
             for (const [from, to] of spans)
-              window(k, [item, path], value, from, to)
+              window(k, [item, path], value, from, to, offOnly)
             continue
           }
           // (Beacon of the Reed Sea: while not protected)
           let from = 0
           for (const [start, to] of spans) {
-            if (start > from) window(k, [item, path], value, from, start)
+            if (start > from)
+              window(k, [item, path], value, from, start, offOnly)
             from = to
           }
-          if (t > from) window(k, [item, path], value, from, t)
+          if (t > from) window(k, [item, path], value, from, t, offOnly)
         }
       shields.length = 0
       for (const [k, s] of sparks) {

@@ -1,6 +1,12 @@
 import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext } from '../types'
-import { atkSpdAdjust, GCSIM, templateJump, withHitlag } from './common'
+import {
+  atkSpdAdjust,
+  flatEnergy,
+  GCSIM,
+  templateJump,
+  withHitlag,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/itto, main as of 2026-11-10. */
 
@@ -541,7 +547,15 @@ export const kit: KitModel = {
           ctx.at(75, () => addStacks(s, 2))
           for (const t of [135, 165, 195]) ctx.at(t, () => addStacks(s, 1))
         }
-        // C2: each Geo party member (Itto included, up to 3) cuts this cooldown by 1.5 s
+        // C2: each Geo party member (Itto included, up to 3) cuts this cooldown by 1.5 s and
+        // restores 6 Energy (the reference never applies it)
+        if (c >= 2)
+          flatEnergy(
+            ctx,
+            0,
+            6 * Math.min(3, ctx.partyCount('geo')),
+            'Arataki Itto C2'
+          )
         const reduce =
           c >= 2 ? Math.min(3, ctx.partyCount('geo')) * (1.5 * 60) : 0
         return {

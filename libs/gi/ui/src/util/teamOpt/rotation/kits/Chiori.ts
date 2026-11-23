@@ -1,5 +1,12 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/chiori, main as of 2026-11-10. */
 
@@ -52,6 +59,8 @@ const INFUSION = 300
 const SEIZE = 480
 
 interface ChioriState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** Fluttering Hasode's A1 window (Tapestry or Tailoring still to come): its token while open */
   window?: number
   windowSeq: number
@@ -95,6 +104,7 @@ const skillHit = (path: string[], label: string): Hit => ({
  */
 function tamoto(
   ctx: SimContext,
+  s: ChioriState,
   first: number,
   label: string,
   alive: () => boolean
@@ -103,6 +113,12 @@ function tamoto(
   const tick = (c: SimContext) => {
     if (!alive() || c.now >= end) return
     c.hit(5, skillHit(['skill', 'turretDmg'], label))
+    // its particles: 1, or 2 at a 20% chance, 3 s ICD on Chiori's clock (kqmsim particleCB; the
+    // Tamotos share it)
+    c.at(5, (c2) => {
+      if (turretReady(s.particles, 'tamoto', c2.characterFrame('Chiori'), 180))
+        turretParticles(c2, 0, 1.2, 'Chiori')
+    })
     c.at(TAMOTO_INTERVAL, tick)
   }
   ctx.at(first, tick)
@@ -112,7 +128,7 @@ function tamoto(
 function rockDoll(ctx: SimContext, s: ChioriState, label: string) {
   const token = ++s.rockToken
   s.rockEnd = ctx.now + TAMOTO_LIFE
-  tamoto(ctx, 72, label, () => s.rockToken === token)
+  tamoto(ctx, s, 72, label, () => s.rockToken === token)
 }
 
 /** A4: Geo DMG +20% for 20 s (Chiori's clock) */
@@ -160,6 +176,7 @@ export const kit: KitModel = {
   element: 'geo',
   source: `${GCSIM}/chiori`,
   init: (): ChioriState => ({
+    particles: new Map(),
     windowSeq: 0,
     infuseUntil: -1,
     seizeUntil: -1,
@@ -298,7 +315,7 @@ export const kit: KitModel = {
         // construct, and no additional Tamoto alive) that summons the additional one
         ctx.at(spawn, (c2) => {
           const token = ++s.dollToken
-          tamoto(c2, 36, 'Tamoto', () => s.dollToken === token)
+          tamoto(c2, s, 36, 'Tamoto', () => s.dollToken === token)
           const check = ++s.checkToken
           if (c >= 1 && c2.partyCount('geo') >= 2) {
             rockDoll(c2, s, 'Tamoto (C1)')

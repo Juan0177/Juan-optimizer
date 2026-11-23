@@ -14,6 +14,7 @@ import {
   ENERGY_CALC_SOURCE,
   ENERGY_HELP,
   energyCalcData,
+  turretParticlesOf,
   energyCalcWeapons,
   energySkillConstellation,
   isCalcEnergyWeapon,
@@ -859,6 +860,9 @@ export function MemberEnergy({
   const phone = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'))
   const [secondOpen, setSecondOpen] = useState(false)
   const data = energyCalcData[characterKey]
+  // (a turret counted as the rotation plays it: its uses no longer count)
+  const turretMade =
+    member && data ? turretParticlesOf(member, data) : undefined
   const name = t(`charNames_gen:${characterKey}`, characterKey)
   if (!member || !data)
     return (
@@ -871,6 +875,47 @@ export function MemberEnergy({
     )
   const result = estimate.members[characterKey]
   const required = estimate.targets[characterKey]
+  // (who caught its particles as the rotation played, when the catcher and its share can't say
+  // it: the calculator counts these until a catcher is set by hand)
+  const playedShares = (
+    shares: Partial<Record<CharacterKey, number>> | undefined,
+    least: number,
+    others = false
+  ) => {
+    const caught = (
+      Object.entries(shares ?? {}) as [CharacterKey, number][]
+    ).filter(([k, v]) => keys.includes(k) && v > 0)
+    const total = caught.reduce((n, [, v]) => n + v, 0)
+    if (caught.filter(([k]) => !others || k !== characterKey).length < least)
+      return undefined
+    return caught
+      .sort((a, b) => b[1] - a[1])
+      .map(
+        ([k, v]) =>
+          `${t(`charNames_gen:${k}`, k)} ${Math.round((v / total) * 100)}%`
+      )
+      .join(' · ')
+  }
+  const typed = member.edited ?? []
+  const skillShares =
+    typed.includes('catchBy') || typed.includes('funnelShare')
+      ? undefined
+      : playedShares(member.catchShares, 2, true)
+  const favoniusShares = typed.includes('favoniusCatchBy')
+    ? undefined
+    : playedShares(member.favoniusCatchShares, 2)
+  const turretShares =
+    turretMade === undefined
+      ? undefined
+      : playedShares(member.turretCatchShares, 1)
+  const asPlayed = (shares: string) => (
+    <Typography sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}>
+      {t('teamOpt.kqm.calc.asPlayed', {
+        defaultValue: 'As played: {{shares}}',
+        shares,
+      })}
+    </Typography>
+  )
   // (a partial-Energy Burst: its own field, as it is used, not a second skill to find)
   const short = shortBurstOf(characterKey)
   const shortUses =
@@ -1170,6 +1215,19 @@ export function MemberEnergy({
               tip={usesTip}
             />
           </Box>
+          {turretMade !== undefined && (
+            <Typography
+              sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}
+            >
+              {t('teamOpt.kqm.calc.turretMade', {
+                defaultValue:
+                  'Its turret: {{value}} particles a rotation, as the rotation plays it',
+                value: turretMade,
+              })}
+              {turretShares &&
+                `, ${t('teamOpt.kqm.calc.caughtBy', 'caught by')} ${turretShares}`}
+            </Typography>
+          )}
           {!showSecond && (
             <ButtonBase
               onClick={() => setSecondOpen(true)}
@@ -1360,7 +1418,7 @@ export function MemberEnergy({
           <Label
             tip={t(
               'teamOpt.kqm.calc.catcherTip',
-              'Who is on the field when this member’s skill particles arrive; the % beside it is how many go there (Fed to catcher), the rest to this member.'
+              'Who is on the field when this member’s skill particles arrive; the % beside it is how many go there (Fed to catcher), the rest to this member. When the rotation gave them to several members, “As played” lists each one’s share, counted until you set these by hand.'
             )}
           >
             {t('teamOpt.kqm.calc.catcher', 'Particle catcher')}
@@ -1377,6 +1435,7 @@ export function MemberEnergy({
               }
             />
           </Box>
+          {skillShares && asPlayed(skillShares)}
         </Box>
       </Section>
 
@@ -1440,6 +1499,7 @@ export function MemberEnergy({
               </Typography>
               <Box sx={{ flex: 1, minWidth: 0 }}>{catcherSelect(true)}</Box>
             </Box>
+            {favoniusShares && asPlayed(favoniusShares)}
           </Box>
         )}
         <Box
@@ -1486,7 +1546,7 @@ export function MemberEnergy({
             <Label
               tip={t(
                 'teamOpt.kqm.calc.flatTip',
-                'Energy per rotation from character abilities or effects shared by every build. From a written rotation it includes the random Energy of the member’s Normal and Charged Attack hits.'
+                'Energy per rotation from character abilities or effects shared by every build. From a written rotation it includes the Energy that constellations and passives restore as the rotation plays them, and the random Energy of the member’s Normal and Charged Attack hits.'
               )}
             >
               {t('teamOpt.kqm.calc.flat', 'Bonus energy')}
@@ -1500,6 +1560,19 @@ export function MemberEnergy({
                 updateMember(characterKey, { flatEnergy })
               }
             />
+            {Object.entries(member.scaledEnergy ?? {}).map(([giver, value]) => (
+              <Typography
+                key={giver}
+                sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}
+              >
+                {t('teamOpt.kqm.calc.scaledEnergy', {
+                  defaultValue:
+                    'And {{value}} from {{name}} a rotation at 100% ER, more with their Energy Recharge',
+                  value: +(value ?? 0).toFixed(1),
+                  name: t(`charNames_gen:${giver}`, giver),
+                })}
+              </Typography>
+            ))}
           </Box>
         </Box>
       </Section>

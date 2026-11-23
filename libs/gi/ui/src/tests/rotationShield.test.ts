@@ -3,10 +3,14 @@
  * create, and the shield gear times itself from those markers.
  */
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { describe, expect, it } from 'vitest'
 import { shieldMarker } from '../util/teamOpt/rotation/kits/common'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
-import { simulateRotation } from '../util/teamOpt/rotation/simulate'
+import {
+  rotationAttacks,
+  simulateRotation,
+} from '../util/teamOpt/rotation/simulate'
 import type { KitModel, SimGear } from '../util/teamOpt/rotation/types'
 
 /**
@@ -168,6 +172,75 @@ describe('shield gear', () => {
     const spans = windows('TheUnforged.WithShield')
     // (protected until the second shield's own 240 frames end, not the first's 1200)
     expect(Math.max(...spans.map((w) => w[1]))).toBe(second + 240)
+  })
+  it("times the shield effects of a weapon of the member's type it doesn't hold (one a build tries)", () => {
+    const of = (sim: ReturnType<typeof run>['sim'], path: string) =>
+      sim.buffWindows.filter(
+        (w) => w.owner === 'Flins' && w.path.join('.') === path
+      )
+    const gear = { Flins: { weapon: 'StaffOfHoma', refinement: 1 } }
+    // (no shield: declared off, so a saved switch never turns it on)
+    const none = run('Nicole N1 -> Flins N1 N1', gear).sim
+    expect(of(none, 'VortexVanquisher.WithShield').length).toBeGreaterThan(0)
+    expect(
+      of(none, 'VortexVanquisher.WithShield').every(
+        (w) => w.end === w.start && w.offOnly
+      )
+    ).toBe(true)
+    // (a claymore: never Flins's)
+    expect(of(none, 'TheBell.WithShield')).toEqual([])
+    // (under Nicole's shield: on while she is on the field and protected, as for its holder)
+    const { start, windows } = run('Nicole E -> Flins N1 N1', gear)
+    const at = start('Nicole')
+    const spans = windows('VortexVanquisher.WithShield')
+    expect(spans.length).toBeGreaterThan(0)
+    for (const [from, to] of spans) {
+      expect(from).toBeGreaterThanOrEqual(at)
+      expect(to).toBeLessThanOrEqual(at + 600)
+    }
+  })
+  it("turns off a saved shield switch for a weapon the member's attacks don't hold, without a shield", () => {
+    const play = (team: CharacterKey[], text: string, saved = 'on') =>
+      rotationAttacks(
+        simulateRotation({
+          rotation: parseRotation(
+            text,
+            team.map((characterKey) => ({ characterKey, name: characterKey }))
+          ),
+          members: team,
+          elements: Object.fromEntries(team.map((k) => [k, getCharEle(k)])),
+          constellations: {},
+          repeats: 1,
+          gear: { Skirk: { weapon: 'FinaleOfTheDeep', refinement: 5 } },
+        }),
+        (owner, path) =>
+          owner === 'Skirk' && path.join('.') === 'CalamityOfEshu.passive'
+            ? saved
+            : undefined
+      ).Skirk!
+    const off = (attack: { limits?: { path: string[]; hits: number }[] }) =>
+      !!attack.limits?.some(
+        (l) => l.path.join('.') === 'CalamityOfEshu.passive' && l.hits === 0
+      )
+    const unshielded = play(
+      ['Skirk', 'Furina', 'Mona', 'Escoffier'],
+      'Furina E N1 Q -> Escoffier E Q -> Mona E Q -> Skirk E N2 Q 3[N5 D] N2'
+    )
+    expect(unshielded.length).toBeGreaterThan(0)
+    expect(unshielded.every(off)).toBe(true)
+    // (under Zhongli's shield her switch stands)
+    const shielded = play(['Skirk', 'Zhongli'], 'Zhongli hE -> Skirk E N5')
+    expect(shielded.some((a) => !off(a))).toBe(true)
+    // (none saved: nothing of a weapon she doesn't hold, so no attack is split by it)
+    const unsaved = play(['Skirk', 'Zhongli'], 'Zhongli hE -> Skirk E N5', '')
+    expect(
+      unsaved.every(
+        (a) =>
+          ![...(a.states ?? []), ...(a.limits ?? [])].some(
+            (s) => s.path[0] === 'CalamityOfEshu'
+          )
+      )
+    ).toBe(true)
   })
   it('declares the conditionals off when no shield is ever created', () => {
     const { sim } = run('Nicole N1 -> Flins N1', {

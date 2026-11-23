@@ -365,6 +365,82 @@ export function shieldMarker(
 }
 
 /**
+ * A turret's particles from one of its hits (kqmsim's particle callback), `delay` frames from now:
+ * the expected count (its chance times its particles), for the ER calculator, which counts a
+ * marking kit's turret by these (energyCalc `TURRET_MARKED`). `owner`: whose turret, when the
+ * context may be another member's. The kit keeps the callback's ICD (`turretReady`).
+ */
+export function turretParticles(
+  ctx: SimContext,
+  delay: number,
+  expected: number,
+  owner?: CharacterKey
+) {
+  ctx.hit(delay, {
+    ...(owner && { characterKey: owner }),
+    path: ['_marker', 'turretParticles', `${expected}`],
+    tag: 'other',
+    element: 'physical',
+    label: 'Turret particles',
+  })
+}
+
+/**
+ * A member's chance to CRIT, for Energy that only a CRIT hit restores: its CRIT Rate when the
+ * simulation calculates stats, else a typical build's 60%
+ */
+export const critChance = (ctx: SimContext, key: CharacterKey) =>
+  Math.min(1, Math.max(0, ctx.calculate(key, ['total', 'critRate_']) ?? 0.6))
+
+/**
+ * Flat Energy a kit restores, `delay` frames from now, for the ER calculator (energyCalc counts
+ * these markers): to `owner` (the context's member by default), or `to` the active member, the
+ * owner's party apart from it (`others`), the whole party (`team`), or one member. `scaled`: the
+ * amount grows with the owner's Energy Recharge (energyCalc `SCALED_ENERGY`).
+ */
+export function flatEnergy(
+  ctx: SimContext,
+  delay: number,
+  amount: number,
+  label: string,
+  options: {
+    owner?: CharacterKey
+    to?: 'active' | 'others' | 'team' | CharacterKey
+    scaled?: boolean
+  } = {}
+) {
+  ctx.hit(delay, {
+    ...(options.owner && { characterKey: options.owner }),
+    path: [
+      '_marker',
+      'flatEnergy',
+      `${amount}`,
+      ...(options.to || options.scaled ? [options.to ?? ''] : []),
+      ...(options.scaled ? ['scaled'] : []),
+    ],
+    tag: 'other',
+    element: 'physical',
+    label,
+  })
+}
+
+/**
+ * A turret particle callback's ICD (kqmsim's AddStatus before the roll): whether it is ready at
+ * `now`, and if so it starts again (`frames`; gcsim's statuses are active through their expiry
+ * frame, so the next is `frames + 1` later). `clocks` keeps each turret's next ready frame.
+ */
+export function turretReady(
+  clocks: Map<string, number>,
+  key: string,
+  now: number,
+  frames: number
+) {
+  if (now < (clocks.get(key) ?? Number.NEGATIVE_INFINITY)) return false
+  clocks.set(key, now + frames + 1)
+  return true
+}
+
+/**
  * A Skill's particles made `delay` frames from now (kqmsim's QueueParticle, from the hit that
  * makes them), for the ER calculator: each marker is one use of the Skill there. Kits that mark
  * them count their uses this way; others by their Skill cooldown's starts. `option`: the ER

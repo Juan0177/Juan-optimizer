@@ -26,6 +26,7 @@ import { useState } from 'react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { KqmCompare } from './KqmComparison'
 import { KqmResults, KqmSettings } from './KqmMode'
+import { KqmWeaponLock } from './KqmWeaponLock'
 import {
   kqmShownFor,
   kqmShownView,
@@ -35,7 +36,10 @@ import {
 
 const mocks = vi.hoisted(() => {
   // the saved last runs (`database.teamKqmResults`), as the browser's storage keeps them
-  const saved: { runs: Record<string, any> } = { runs: {} }
+  const saved: {
+    runs: Record<string, any>
+    summaries: Record<string, any>
+  } = { runs: {}, summaries: {} }
   return {
     compare: vi.fn(),
     optimize: vi.fn(),
@@ -58,6 +62,11 @@ const mocks = vi.hoisted(() => {
         setRun: (teamId: string, run: unknown) => {
           if (run) saved.runs[teamId] = JSON.parse(JSON.stringify(run))
           else delete saved.runs[teamId]
+        },
+        getSummary: (teamId: string) => saved.summaries[teamId],
+        setSummary: (teamId: string, summary: unknown) => {
+          if (summary) saved.summaries[teamId] = summary
+          else delete saved.summaries[teamId]
         },
       },
     },
@@ -155,6 +164,9 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
     <>{children}</>
   ),
   statName: (key: string) => key,
+  allRotationEdits: { order: true, visits: true, attacks: true, actions: true },
+  erCostOf: () => () => 0,
+  kqmErPrices: async () => ({}),
   quickTooltipProps: {},
   weaponSheetNs: (key: string) => `weapon_${key}_gen`,
   kqmConstellation: (key: string) => (key === 'Bennett' ? 6 : 0),
@@ -186,7 +198,33 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
       ? value
       : 100
   },
-  kqmWeapons: () => [{ key: 'AmenomaKageuchi', refinement: 5 }],
+  kqmWeapons: (_key: string, _kqm: unknown, options?: { all?: boolean }) =>
+    options?.all
+      ? [
+          { key: 'AmenomaKageuchi', refinement: 5 },
+          { key: 'MistsplitterReforged', refinement: 1 },
+          { key: 'ExaiphanesBlade', refinement: 1 },
+        ]
+      : [{ key: 'AmenomaKageuchi', refinement: 5 }],
+  KQM_ONE_COPY: ['ExaiphanesBlade'],
+  kqmMemberStandard: (
+    key: string,
+    kqm?: { standard?: string; memberStandards?: Record<string, string> }
+  ) => kqm?.memberStandards?.[key] ?? kqm?.standard ?? 'kqms',
+  kqmChosenRolls: (build: { rolls: object }) => build.rolls,
+  kqmResultStandardChanged: () => false,
+  kqmLockedWeapon: (
+    key: string,
+    kqm?: {
+      lockedWeapons?: Record<string, string>
+      refinements?: Record<string, number>
+    }
+  ) => {
+    const locked = kqm?.lockedWeapons?.[key]
+    return locked
+      ? { key: locked, refinement: kqm?.refinements?.[locked] ?? 5 }
+      : undefined
+  },
   // (the run's weapons as KQM mode picks them: the default list, nothing left out by hand)
   kqmExcludedWeapons: () => new Set<string>(),
   kqmDefaultExcludedWeapons: () => [],
@@ -227,6 +265,8 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
     },
   // (no written rotation here: nothing filled in)
   withRotationEnergy: (settings: object) => settings,
+  parseTiming: () => ({ edits: {} }),
+  parseFrameData: () => ({}),
   kqmTopTeams: (result: {
     builds: Record<string, { weapon: object; sets: object }>
     after: { total: number }
@@ -412,6 +452,30 @@ function Setup({
     />
   )
 }
+/** The Weapons window's lock pickers, one per member, on their own */
+function Locks({ onChange }: { onChange?: (settings: TeamOpt) => void }) {
+  const [settings, setSettings] = useState(initial)
+  return (
+    <>
+      {members.map(({ characterKey }) => (
+        <KqmWeaponLock
+          key={characterKey}
+          characterKey={characterKey}
+          members={members}
+          kqm={settings.kqm!}
+          setTeamOpt={(update) =>
+            setSettings((previous) => {
+              const next = structuredClone(previous)
+              const updated = update(next) ?? next
+              onChange?.(updated)
+              return updated
+            })
+          }
+        />
+      ))}
+    </>
+  )
+}
 beforeAll(() => {
   window.matchMedia = vi.fn().mockImplementation(() => ({
     matches: false,
@@ -454,6 +518,152 @@ describe('KQM first-time setup', () => {
         }),
       })
     )
+  })
+  it('sets every member’s artifacts from the header, one in its row (Mixed), and types them in with Custom', async () => {
+    const start = vi.fn()
+    render(<Setup start={start} />, { wrapper: wrap })
+    const all = () =>
+      screen.getByRole('combobox', { name: 'Every member’s artifacts' })
+    const row = (key: string) =>
+      screen.queryByRole('combobox', { name: `${key} artifacts` })
+    const box = (key: string) =>
+      screen.queryByLabelText(
+        `${key} artifact rolls`
+      ) as HTMLInputElement | null
+    const choose = async (combo: HTMLElement, option: RegExp) => {
+      fireEvent.mouseDown(combo)
+      fireEvent.click(await screen.findByRole('option', { name: option }))
+    }
+    const generated = () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Generate builds' }))
+      return start.mock.lastCall![0].kqm
+    }
+    expect(all().textContent).toBe('KQM Standard')
+    for (const key of keys) expect(row(key)!.textContent).toBe('KQMS')
+    // (each standard says what its artifacts are; no free number of rolls)
+    fireEvent.mouseDown(all())
+    const options = (await screen.findAllByRole('option')).map(
+      (o) => o.textContent
+    )
+    expect(options.filter(Boolean)).toHaveLength(6)
+    expect(options.find((o) => /^Custom/.test(o ?? ''))).toMatch(/10 to 45/)
+    expect(options.find((o) => /^Perfect/.test(o ?? ''))).toMatch(
+      /highest value/
+    )
+    fireEvent.keyDown(screen.getAllByRole('listbox')[0], { key: 'Escape' })
+    await choose(all(), /^Great/)
+    for (const key of keys) expect(row(key)!.textContent).toBe('Great')
+    await choose(row('KamisatoAyaka')!, /^Top/)
+    expect(row('KamisatoAyaka')!.textContent).toBe('Top')
+    expect(row('Shenhe')!.textContent).toBe('Great')
+    expect(all().textContent).toBe('Mixed')
+    expect(generated()).toMatchObject({
+      standard: 'great',
+      memberStandards: { KamisatoAyaka: 'top' },
+    })
+    // (all the same again: one standard for the team)
+    await choose(row('KamisatoAyaka')!, /^Great/)
+    expect(all().textContent).toBe('Great')
+    expect(generated().memberStandards).toBeUndefined()
+    // Custom: a box per member, at the wanted rolls closest to its standard (Great: 35)
+    await choose(all(), /^Custom/)
+    for (const key of keys) {
+      expect(row(key)).toBeNull()
+      expect(box(key)!.value).toBe('35')
+    }
+    expect(generated()).toMatchObject({ standard: 35 })
+    fireEvent.change(box('Shenhe')!, { target: { value: '4' } })
+    expect(box('Shenhe')!.getAttribute('aria-invalid')).toBe('true')
+    fireEvent.change(box('Shenhe')!, { target: { value: '30' } })
+    expect(generated()).toMatchObject({
+      standard: 35,
+      memberStandards: { Shenhe: 30 },
+    })
+    await choose(all(), /^KQM Standard/)
+    for (const key of keys) {
+      expect(box(key)).toBeNull()
+      expect(row(key)!.textContent).toBe('KQMS')
+    }
+    const back = generated()
+    expect(back.standard).toBeUndefined()
+    expect(back.memberStandards).toBeUndefined()
+  })
+  it('locks a member’s weapon (Any by default), at a refinement, and unlocks it with Any', async () => {
+    const seen: TeamOpt[] = []
+    render(<Locks onChange={(o) => seen.push(o)} />, { wrapper: wrap })
+    // (an open picker hides the page from the accessibility tree)
+    const field = (key: string) =>
+      screen.getByRole('button', {
+        name: new RegExp(`^${key} weapon: `),
+        hidden: true,
+      })
+    const open = async (key: string) => {
+      fireEvent.click(field(key))
+      return screen.findByRole('dialog', { name: `Weapon for ${key}` })
+    }
+    for (const key of keys)
+      expect(field(key).getAttribute('aria-label')).toBe(`${key} weapon: Any`)
+    fireEvent.click(
+      within(await open('KamisatoAyaka')).getByRole('option', {
+        name: /MistsplitterReforged/,
+      })
+    )
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
+        'KamisatoAyaka weapon: MistsplitterReforged R5'
+      )
+    )
+    fireEvent.click(
+      within(await open('KamisatoAyaka')).getByRole('radio', { name: 'R1' })
+    )
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
+        'KamisatoAyaka weapon: MistsplitterReforged R1'
+      )
+    )
+    expect(seen.at(-1)?.kqm).toEqual(
+      expect.objectContaining({
+        lockedWeapons: { KamisatoAyaka: 'MistsplitterReforged' },
+        refinements: { MistsplitterReforged: 1 },
+      })
+    )
+    fireEvent.keyDown(screen.getByRole('dialog', { name: /KamisatoAyaka/ }), {
+      key: 'Escape',
+    })
+    fireEvent.click(
+      within(await open('KamisatoAyaka')).getByRole('option', { name: /^Any/ })
+    )
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
+        'KamisatoAyaka weapon: Any'
+      )
+    )
+    expect(seen.at(-1)?.kqm?.lockedWeapons).toBeUndefined()
+  })
+  it('keeps a one-copy weapon locked for one member from the others', async () => {
+    render(<Locks />, { wrapper: wrap })
+    const field = (key: string) =>
+      screen.getByRole('button', {
+        name: new RegExp(`^${key} weapon: `),
+        hidden: true,
+      })
+    fireEvent.click(field('KamisatoAyaka'))
+    fireEvent.click(
+      within(
+        await screen.findByRole('dialog', { name: 'Weapon for KamisatoAyaka' })
+      ).getByRole('option', { name: /ExaiphanesBlade/ })
+    )
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toContain(
+        'ExaiphanesBlade'
+      )
+    )
+    fireEvent.click(field('KaedeharaKazuha'))
+    const blade = within(
+      await screen.findByRole('dialog', { name: 'Weapon for KaedeharaKazuha' })
+    ).getByRole('option', { name: /ExaiphanesBlade/ })
+    expect((blade as HTMLButtonElement).disabled).toBe(true)
+    expect(blade.textContent).toContain('Locked for KamisatoAyaka')
   })
   it('opens the calculator directly and applies targets without a save step', async () => {
     render(<Setup />, { wrapper: wrap })

@@ -265,7 +265,7 @@ describe('Anastasya', () => {
     )
   })
 
-  it('sheet reflects 7.2.52 CRIT DMG ascension, A4 10% Swirl coeff, C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
+  it('sheet reflects 7.2.52 CRIT DMG ascension, A4 +10% Swirl coefficient (added), C2 50% CRIT DMG, and C6 200%/250% multipliers', () => {
     const db = new ArtCharDatabase(1, new SandboxStorage({}))
     db.chars.set('Anastasya', {
       key: 'Anastasya',
@@ -310,6 +310,15 @@ describe('Anastasya', () => {
       0.1,
       6
     )
+    // (the A4's 10% is added to each Stellar Swirl multiplier, the game's
+    // `StarSwirlDamageFactorDelta`: 75% + 10%, 200% + 10%, 300% + 10%)
+    const swirl = loveAna.getDisplay()['reaction']
+    const vortex1 = swirl['stellarswirl_vortex1'].value
+    expect(swirl['stellarswirl_vortex2'].value / vortex1).toBeCloseTo(
+      3.1 / 2.1,
+      9
+    )
+    expect(swirl['stellarswirl'].value / vortex1).toBeCloseTo(0.85 / 2.1, 9)
     expect(loveAna.get(input.total.stellarconduct_critDMG_).value).toBeCloseTo(
       0.5,
       6
@@ -387,5 +396,22 @@ describe('Anastasya: stopping Doom after two stages', () => {
       expect(ana.filter((k) => k === 'skill@doom2')).toHaveLength(2)
       expect(sim.notes.some((n) => n.startsWith('Waited'))).toBe(false)
     }
+  })
+})
+
+describe('Anastasya: Lament for the Lost raises a new Stellar Vortex to Level 2', () => {
+  // (dump: the vortex gadget's stack count is set to PermanentSkill_2_StarSwirlInitStack, 3, the
+  // Level 2 threshold, once per StarSwirlUpgradeCD, 1 s)
+  const detonations = (text: string, members: CharacterKey[]) =>
+    run(text, members)
+      .hits.filter((h) => h.path[1]?.startsWith('stellarswirl_vortex'))
+      .map((h) => h.path[1])
+  it('one Stellar Swirl detonates at Level 2 with her, Level 1 without', () => {
+    expect(
+      detonations('Anastasya E -> Sucrose E W240f', ['Anastasya', 'Sucrose'])
+    ).toEqual(['stellarswirl_vortex2'])
+    expect(
+      detonations('Ganyu E -> Sucrose E W240f', ['Odette', 'Ganyu', 'Sucrose'])
+    ).toEqual(['stellarswirl_vortex1'])
   })
 })

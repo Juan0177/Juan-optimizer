@@ -57,7 +57,7 @@ import { useTranslation } from 'react-i18next'
 import { HitLabel } from './AttackName'
 import { AURA_NAME, AuraChips, auraColor } from './auras'
 import type { TeamBuff } from './buffs'
-import { describe } from './buffs'
+import { describeTimed } from './buffs'
 import { EffectText, talentLabel } from './buffText'
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
@@ -1288,7 +1288,7 @@ const valueSx = {
 function trackInfo(track: TimelineTrack, teamData: TeamData | undefined) {
   const fallback = track.path[track.path.length - 1] as ReactNode
   if (!teamData) return { label: fallback, internal: false }
-  const info = describe(
+  const info = describeTimed(
     { owner: track.owner, path: track.path },
     track.segments[0].value,
     teamData

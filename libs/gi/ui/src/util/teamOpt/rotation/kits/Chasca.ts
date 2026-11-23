@@ -1,5 +1,11 @@
 import type { ActionResult, HitElement, KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/chasca, main as of 2026-11-10. */
 
@@ -439,6 +445,9 @@ export const kit: KitModel = {
         hitmarks.forEach((t, i) => {
           if (i < radiant) {
             const el = pool[i % pool.length]
+            // C4: 1.5 Energy as each Radiant Soulseeker Shell hits
+            if (ctx.constellation('Chasca') >= 4)
+              flatEnergy(ctx, t, 1.5, 'Chasca C4')
             ctx.hit(t, {
               path: ['burst', `radiantDmg_${el}`],
               tag: 'burst',

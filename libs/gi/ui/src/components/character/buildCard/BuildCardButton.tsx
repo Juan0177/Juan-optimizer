@@ -1,9 +1,13 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined'
+import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
+import ZoomInRoundedIcon from '@mui/icons-material/ZoomInRounded'
+import ZoomOutRoundedIcon from '@mui/icons-material/ZoomOutRounded'
 import type { ButtonProps } from '@mui/material'
 import {
   Alert,
@@ -16,6 +20,7 @@ import {
   Skeleton,
   Tooltip,
   Typography,
+  useMediaQuery,
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -169,6 +174,8 @@ export function CardImageDialog({
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState<string | undefined>()
   const [copied, setCopied] = useState(false)
+  const touch = useMediaQuery('(pointer: coarse)')
+  const [zoomed, setZoomed] = useState(false)
 
   // the shown image's URL, released when replaced or closed
   const urlRef = useRef<string | undefined>()
@@ -228,12 +235,30 @@ export function CardImageDialog({
     }
   }, [render, format])
 
+  const fullName = `${fileName}-${new Date().toISOString().slice(0, 10)}.${format === 'jpeg' ? 'jpg' : 'png'}`
   const download = () => {
     if (!png) return
     const a = document.createElement('a')
     a.href = png.url
-    a.download = `${fileName}-${new Date().toISOString().slice(0, 10)}.${format === 'jpeg' ? 'jpg' : 'png'}`
+    a.download = fullName
     a.click()
+  }
+  const shareFile = useMemo(
+    () =>
+      png && touch
+        ? new File([png.blob], fullName, { type: png.blob.type })
+        : undefined,
+    [png, touch, fullName]
+  )
+  const canShare = !!shareFile && !!navigator.canShare?.({ files: [shareFile] })
+  const share = async () => {
+    if (!shareFile) return
+    try {
+      await navigator.share({ files: [shareFile], title })
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError')
+        setError(String((e as Error)?.message ?? e))
+    }
   }
   const copy = async () => {
     if (!png) return
@@ -294,18 +319,55 @@ export function CardImageDialog({
           ) : png ? (
             <Box sx={{ position: 'relative' }}>
               <Box
-                component="img"
-                src={png.url}
-                alt={alt}
+                onClick={touch ? () => setZoomed((z) => !z) : undefined}
                 sx={{
-                  display: 'block',
-                  width: '100%',
-                  height: 'auto',
+                  overflow: zoomed ? 'auto' : 'visible',
+                  maxHeight: zoomed ? '65vh' : undefined,
                   borderRadius: 1,
-                  opacity: busy ? 0.7 : 1,
-                  transition: 'opacity 150ms',
                 }}
-              />
+              >
+                <Box
+                  component="img"
+                  src={png.url}
+                  alt={alt}
+                  sx={{
+                    display: 'block',
+                    width: zoomed
+                      ? `max(100%, ${png.canvas.width / 2}px)`
+                      : '100%',
+                    maxWidth: 'none',
+                    height: 'auto',
+                    borderRadius: 1,
+                    opacity: busy ? 0.7 : 1,
+                    transition: 'opacity 150ms',
+                  }}
+                />
+              </Box>
+              {touch && (
+                <IconButton
+                  size="small"
+                  onClick={() => setZoomed((z) => !z)}
+                  aria-label={
+                    zoomed
+                      ? t('buildCard.zoomOut', 'Fit to screen')
+                      : t('buildCard.zoomIn', 'Zoom in')
+                  }
+                  sx={{
+                    position: 'absolute',
+                    right: 8,
+                    bottom: 8,
+                    color: '#fff',
+                    bgcolor: 'rgba(0, 0, 0, 0.55)',
+                    '&:hover': { bgcolor: 'rgba(0, 0, 0, 0.7)' },
+                  }}
+                >
+                  {zoomed ? (
+                    <ZoomOutRoundedIcon fontSize="small" />
+                  ) : (
+                    <ZoomInRoundedIcon fontSize="small" />
+                  )}
+                </IconButton>
+              )}
               {busy && (
                 <LinearProgress
                   sx={{
@@ -350,17 +412,34 @@ export function CardImageDialog({
             <Button
               variant="outlined"
               color="neutral400"
-              startIcon={<ContentCopyIcon />}
+              startIcon={canShare ? undefined : <ContentCopyIcon />}
               onClick={copy}
               disabled={!png || busy || (!!placeholder && !render)}
+              aria-label={
+                canShare
+                  ? copied
+                    ? t('buildCard.copied', 'Copied')
+                    : t('buildCard.copy', 'Copy image')
+                  : undefined
+              }
+              sx={canShare ? { minWidth: 0, px: 1.25 } : undefined}
             >
-              {copied
-                ? t('buildCard.copied', 'Copied')
-                : t('buildCard.copy', 'Copy image')}
+              {canShare ? (
+                copied ? (
+                  <CheckRoundedIcon />
+                ) : (
+                  <ContentCopyIcon />
+                )
+              ) : copied ? (
+                t('buildCard.copied', 'Copied')
+              ) : (
+                t('buildCard.copy', 'Copy image')
+              )}
             </Button>
           )}
           <Button
-            variant="contained"
+            variant={canShare ? 'outlined' : 'contained'}
+            color={canShare ? 'neutral400' : undefined}
             startIcon={<DownloadIcon />}
             onClick={download}
             disabled={!png || busy || (!!placeholder && !render)}
@@ -369,6 +448,16 @@ export function CardImageDialog({
               ? t('buildCard.downloadJpg', 'Download JPG')
               : t('buildCard.download', 'Download PNG')}
           </Button>
+          {canShare && (
+            <Button
+              variant="contained"
+              startIcon={<IosShareRoundedIcon />}
+              onClick={share}
+              disabled={busy}
+            >
+              {t('buildCard.share', 'Share')}
+            </Button>
+          )}
         </CardContent>
       </CardThemed>
     </ModalWrapper>

@@ -50,12 +50,25 @@ export const betaOfBuilds = (
     ])
   )
 
-/** The sheet's notes: the KQM standard and its talents */
-export const kqmStandardNote = (t: TFunction, talents: number) =>
-  t('page_team:teamOpt.kqm.share.standard', {
-    defaultValue: 'KQM Standards · Talents {{talents}}',
-    talents: `${talents}/${talents}/${talents}`,
-  })
+/**
+ * The sheet's notes: the artifact standard the builds used and the talents. `standard`: its name
+ * (Good, Great, a member's own…); absent: KQM Standards
+ */
+export const kqmStandardNote = (
+  t: TFunction,
+  talents: number,
+  standard?: string
+) =>
+  standard
+    ? t('page_team:teamOpt.kqm.share.standardTalents', {
+        defaultValue: '{{standard}} · Talents {{talents}}',
+        standard,
+        talents: `${talents}/${talents}/${talents}`,
+      })
+    : t('page_team:teamOpt.kqm.share.standard', {
+        defaultValue: 'KQM Standards · Talents {{talents}}',
+        talents: `${talents}/${talents}/${talents}`,
+      })
 
 /** A member of the sheet, as a KQM result has it */
 export interface KqmTeamCardMember {

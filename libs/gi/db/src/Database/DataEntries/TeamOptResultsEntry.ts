@@ -45,6 +45,20 @@ export interface ITeamOptResultsEntry {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null
 
+/** A saved `TeamOptSavedSensitivity`, checked (undefined: not one) */
+export const validSensitivity = (
+  value: unknown
+): TeamOptSavedSensitivity | undefined =>
+  isObject(value) &&
+  typeof value['key'] === 'string' &&
+  isObject(value['cells'])
+    ? {
+        key: value['key'],
+        cells: value['cells'] as TeamOptSavedSensitivity['cells'],
+        done: value['done'] === true,
+      }
+    : undefined
+
 /** A run's enemy: numbers only, and a preset's name */
 const validEnemy = (
   enemy: unknown
@@ -87,17 +101,10 @@ export class TeamOptResultsEntry extends DataEntry<
       const sensitivities: Record<string, TeamOptSavedSensitivity> = {}
       for (const [index, value] of Object.entries(
         isObject(sensitivity) ? sensitivity : {}
-      ))
-        if (
-          isObject(value) &&
-          typeof value['key'] === 'string' &&
-          isObject(value['cells'])
-        )
-          sensitivities[index] = {
-            key: value['key'],
-            cells: value['cells'] as TeamOptSavedSensitivity['cells'],
-            done: value['done'] === true,
-          }
+      )) {
+        const valid = validSensitivity(value)
+        if (valid) sensitivities[index] = valid
+      }
       runs[teamId] = {
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
         ...(typeof roster === 'string' ? { roster } : {}),

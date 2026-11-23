@@ -2,6 +2,7 @@ import type { RotationAction } from '../parse'
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
 import {
   atkSpdAdjust,
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -68,6 +69,8 @@ const WINDFAVORED_MOVES: Partial<Record<RotationAction['kind'], string>> = {
 }
 
 interface WandererState {
+  /** A1 (Electro): its Energy's 0.2 s ICD ends (Wanderer's clock) */
+  a1EnergyReady: number
   /** Windfavored's points run out at this frame: undefined when it is not on */
   wfEnd?: number
   /** Windfavored's 20 s limit */
@@ -230,7 +233,7 @@ function absorbA1(c: SimContext, s: WandererState) {
   for (const ele of s.contact) {
     if (ele === 'pyro' || ele === 'cryo')
       c.state('Wanderer', contactPath(ele), ele)
-    // Hydro: +20 Kuugoryoku Points (and cap); Electro: Energy (not simulated)
+    // Hydro: +20 Kuugoryoku Points (and cap); Electro: Energy on his hits (onHit)
     if (ele === 'hydro' && s.wfEnd !== undefined) {
       s.maxPoints += 20
       s.wfEnd += 20 * POINT_FRAMES
@@ -254,6 +257,7 @@ export const kit: KitModel = {
       ? Number.POSITIVE_INFINITY
       : ctx.now,
   init: (): WandererState => ({
+    a1EnergyReady: -1,
     wfLimit: -1,
     wfId: 0,
     maxPoints: WF_POINTS,
@@ -279,8 +283,7 @@ export const kit: KitModel = {
     const now = ctx.now
     // Windfavored's points ran out: it ends as this action starts (with the fall), unless it is
     // the Skill, which ends it as its second press does (gcsim's Skill: the status is still on)
-    const lingering =
-      s.wfEnd !== undefined && !inWf(s, now) && now < s.wfLimit
+    const lingering = s.wfEnd !== undefined && !inWf(s, now) && now < s.wfLimit
     const pressEnds = lingering && action.kind === 'skill'
     if (s.wfEnd !== undefined && !inWf(s, now) && !pressEnds)
       endWf(ctx, s, lingering ? now : s.wfLimit, true)
@@ -539,6 +542,18 @@ export const kit: KitModel = {
         ? 'skill'
         : undefined,
   onHit(ctx, s: WandererState, hit: SimHit) {
+    // A1 (Electro): his normal and charged hits in Windfavored restore 0.8 Energy, once per 0.2 s
+    const frame = ctx.characterFrame('Wanderer')
+    if (
+      hit.characterKey === 'Wanderer' &&
+      (hit.tag === 'normal' || hit.tag === 'charged') &&
+      inWf(s, ctx.now) &&
+      s.contact.includes('electro') &&
+      frame >= s.a1EnergyReady
+    ) {
+      s.a1EnergyReady = frame + 13
+      flatEnergy(ctx, 0, 0.8, 'Wanderer A1 (Electro)', { owner: 'Wanderer' })
+    }
     // A4: a Kuugo: Fushoudan or Toufukai hit in Windfavored (one roll per 0.1 s) gives Descent
     // with a 16% chance, +12% per failed roll
     if (

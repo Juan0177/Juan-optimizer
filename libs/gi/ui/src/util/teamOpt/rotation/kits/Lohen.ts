@@ -69,6 +69,9 @@ interface State {
   end: number
   joy: number
   joyReady: number
+  /** Frame of the last Joy gain: that hit's own hitlag doesn't extend the 0.1 s gap (kqmsim
+   * starts the gap after it), so both hits of a charged attack gain Joy */
+  joyAt: number
   skills: number
   /** Etches allowed in this Masterstroke (3; C6 adds 2) */
   maxSkills: number
@@ -208,6 +211,7 @@ export const kit: KitModel = {
     end: -1,
     joy: 0,
     joyReady: -1,
+    joyAt: -1,
     skills: 0,
     maxSkills: 3,
     c2Until: -1,
@@ -394,7 +398,7 @@ export const kit: KitModel = {
     if (active(c, s)) s.end += frames
     for (const k of ['c2Until', 'c2Ready', 'c6Until', 'c6Ready'] as const)
       if (s[k] > c.now) s[k] += frames
-    if (s.joyReady > c.now) s.joyReady += frames
+    if (s.joyReady > c.now && c.now > s.joyAt) s.joyReady += frames
     if (s.highSpiritsReady > c.now) s.highSpiritsReady += frames
     for (const buff of s.hex) if (c.now < buff.end) buff.end += frames
   },
@@ -409,6 +413,7 @@ export const kit: KitModel = {
       ) {
         s.joy = Math.min(100, s.joy + 17)
         s.joyReady = c.now + 6
+        s.joyAt = c.now
       }
       // C2: Evilsbane Blade follows up a Masterstroke normal or charged hit (5 frames later)
       if (active(c, s) && hit.element === 'cryo' && c.now < s.c2Until) {

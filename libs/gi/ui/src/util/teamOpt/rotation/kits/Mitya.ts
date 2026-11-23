@@ -1,5 +1,11 @@
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/mitya. */
 const normals: NormalHit[] = [
@@ -21,6 +27,7 @@ interface State {
   a4End: number
   c4: number
   refundCredit: number
+  c1EnergyReady: number
 }
 const hit = (
   c: SimContext,
@@ -66,6 +73,12 @@ function consumed(c: SimContext, s: State, count: number) {
 }
 function addPrism(c: SimContext, s: State) {
   s.prisms++
+  // C1: 10 Energy as a Beacon is created, once per 8 s (the dump's Mitya_CreateShardEvent; the
+  // reference restores it as one is consumed)
+  if (c.constellation('Mitya') >= 1 && c.now >= s.c1EnergyReady) {
+    s.c1EnergyReady = c.now + 480
+    flatEnergy(c, 0, 10, 'Mitya C1')
+  }
   const max = c.constellation('Mitya') >= 1 ? 5 : 4
   if (s.prisms > max && s.mode === 'steady' && c.now < s.end) {
     s.prisms--
@@ -159,6 +172,7 @@ export const kit: KitModel = {
     a4End: -1,
     c4: 0,
     refundCredit: 0,
+    c1EnergyReady: -1,
   }),
   onStart(c) {
     if (c.constellation('Mitya') >= 4)

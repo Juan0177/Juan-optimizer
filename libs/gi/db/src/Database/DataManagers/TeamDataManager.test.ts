@@ -216,6 +216,29 @@ describe('export and import test', () => {
     expect(database.teams.get(id)?.lastEdit).toBeGreaterThan(1)
   })
 
+  test('keeps where an imported team came from: its site, an https link, the characters it added', () => {
+    const teamId = database.teams.new({
+      importedFrom: {
+        name: 'Example calcs',
+        url: 'javascript:alert(1)',
+        added: ['Bennett', 'NotACharacter' as never],
+      },
+    })
+    expect(database.teams.get(teamId)?.importedFrom).toEqual({
+      name: 'Example calcs',
+      added: ['Bennett'],
+    })
+    database.teams.set(teamId, {
+      importedFrom: { url: 'https://example.com/team' },
+    })
+    expect(database.teams.get(teamId)?.importedFrom).toEqual({
+      url: 'https://example.com/team',
+    })
+    expect(
+      database.teams.get(database.teams.new({}))?.importedFrom
+    ).toBeUndefined()
+  })
+
   test('deleting loadout does not delete builds', () => {
     const teamCharId = database.teamChars.new('HuTao')
     database.builds.new({ characterKey: 'HuTao' })
@@ -288,5 +311,63 @@ describe('export and import test', () => {
     const team = database.teams.get(teamId)!
     expect(team.loadoutData[0]?.buildId).toEqual(buildId)
     expect(team.loadoutData[1]?.buildId).toEqual(buildId)
+  })
+})
+
+describe('team versions (versionOf)', () => {
+  const team = (database: ArtCharDatabase, keys: string[]) =>
+    database.teams.new({
+      loadoutData: keys.map((k) => ({
+        teamCharId: database.teamChars.new(k as never),
+      })) as LoadoutDatum[],
+    })
+  it('keeps the link, never to itself or to something else than a team id', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const root = team(database, ['Sandrone', 'Anastasya'])
+    const version = team(database, ['Sandrone', 'Odette'])
+    expect(database.teams.set(version, { versionOf: root })).toBe(true)
+    expect(database.teams.get(version)?.versionOf).toBe(root)
+    database.teams.set(version, { versionOf: version })
+    expect(database.teams.get(version)?.versionOf).toBeUndefined()
+    database.teams.set(version, { versionOf: 'nope' as string })
+    expect(database.teams.get(version)?.versionOf).toBeUndefined()
+  })
+  it('a deleted original leaves its versions as teams of their own', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const root = team(database, ['Sandrone', 'Anastasya'])
+    const version = team(database, ['Sandrone', 'Odette'])
+    const other = team(database, ['Mitya', 'Odette'])
+    database.teams.set(version, { versionOf: root })
+    database.teams.set(other, { versionOf: version })
+    database.teams.remove(root)
+    expect(database.teams.get(version)).toBeDefined()
+    expect(database.teams.get(version)?.versionOf).toBeUndefined()
+    expect(database.teams.get(other)?.versionOf).toBe(version)
+  })
+  it('is left out of a team export and of an import', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const root = team(database, ['Sandrone', 'Anastasya'])
+    const version = team(database, ['Sandrone', 'Odette'])
+    database.teams.set(version, { versionOf: root })
+    const exported = database.teams.export(version, [
+      defLoadoutExportSetting(),
+      defLoadoutExportSetting(),
+    ])
+    expect('versionOf' in exported).toBe(false)
+    const imported = database.teams.import({ ...exported, versionOf: root })
+    expect(imported).not.toBe('')
+    expect(database.teams.get(imported)?.versionOf).toBeUndefined()
+  })
+  it('a duplicated version is a version of the same original', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const root = team(database, ['Sandrone', 'Anastasya'])
+    const version = team(database, ['Sandrone', 'Odette'])
+    database.teams.set(version, { versionOf: root })
+    expect(
+      database.teams.get(database.teams.duplicate(version))?.versionOf
+    ).toBe(root)
+    expect(
+      database.teams.get(database.teams.duplicate(root))?.versionOf
+    ).toBeUndefined()
   })
 })

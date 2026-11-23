@@ -1,5 +1,12 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/nahida, main as of 2026-11-10. */
 
@@ -32,6 +39,8 @@ const ELECTRO_CD = [0.4464, 0.6696]
 const MARK_DURATION = 1500
 
 interface NahidaState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The enemy is marked from `markedSince` until `markedUntil` (the last Seed) */
   markedSince: number
   markedUntil: number
@@ -88,6 +97,11 @@ function karmaTrigger(ctx: SimContext, s: NahidaState, t: number) {
     icd: 'NahidaSkill',
     label: 'Tri-Karma Purification',
   })
+  // its particles: 3, 7 s ICD on Nahida's clock (kqmsim particleCB)
+  ctx.at(3, (c) => {
+    if (turretReady(s.particles, 'karma', c.characterFrame('Nahida'), 420))
+      turretParticles(c, 0, 3, 'Nahida')
+  })
 }
 
 export const kit: KitModel = {
@@ -95,6 +109,7 @@ export const kit: KitModel = {
   element: 'dendro',
   source: `${GCSIM}/nahida`,
   init: (): NahidaState => ({
+    particles: new Map(),
     markedSince: -1,
     markedUntil: -1,
     karmaIcd: -1,

@@ -1,5 +1,5 @@
-import type { KitModel, SimHit } from '../types'
-import { GCSIM, type NormalHit, normalString } from './common'
+import type { KitModel, SimContext, SimHit } from '../types'
+import { flatEnergy, GCSIM, type NormalHit, normalString } from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/traveler/electro/lumine (Lumine's female frames), main as of 2026-11-10. */
 
@@ -68,6 +68,18 @@ interface ElectroState {
   /** Charged Attack: Detonate is next ready at this frame (15 s cooldown) */
   detonateReady: number
 }
+
+/** An Abundance Amulet's Energy, and a Falling Thunder's, by talent level (gcsim's) */
+const AMULET_ENERGY = [3, 3, 3, 3.5, 3.5, 3.5, 4, 4, 4, 4, 4, 4, 4, 4, 4]
+const THUNDER_ENERGY = [0.8, 0.8, 0.8, 0.9, 0.9, 0.9, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+const level = (ctx: SimContext, talent: 'skillIndex' | 'burstIndex') =>
+  Math.min(
+    14,
+    Math.max(
+      0,
+      Math.round(ctx.calculate('TravelerElectro', ['total', talent]) ?? 9)
+    )
+  )
 
 export const kit: KitModel = {
   characterKey: 'TravelerElectro',
@@ -151,8 +163,15 @@ export const kit: KitModel = {
         // Its Abundance Amulet (one per blade that hits) is picked up by the active character
         // 107 frames in (KQM's average, gcsim's amulet_delay): Energy Recharge +20% (A4: plus
         // 10% of the Traveler's) for 6 s, and A1: Lightning Blade's cooldown -1.5 s when someone
-        // else picks it up. (The flat Energy is not simulated.)
+        // else picks it up, and its Energy goes to whoever picks it up.
         ctx.at(107, (c2) => {
+          flatEnergy(
+            c2,
+            0,
+            AMULET_ENERGY[level(c2, 'skillIndex')]!,
+            'Abundance Amulet (Energy)',
+            { owner: 'TravelerElectro', to: 'active' }
+          )
           c2.buff(
             'TravelerElectro',
             ['TravelerElectro', 'electroSkillAmulet'],
@@ -245,6 +264,14 @@ export const kit: KitModel = {
       icd: 'burst',
       label: third ? 'Falling Thunder (C6)' : 'Falling Thunder',
     })
+    // each restores Energy to the active character (C6's third, 1 more)
+    flatEnergy(
+      ctx,
+      1,
+      THUNDER_ENERGY[level(ctx, 'burstIndex')]! + (third ? 1 : 0),
+      'Falling Thunder (Energy)',
+      { owner: 'TravelerElectro', to: 'active' }
+    )
     // C2 Violet Vehemence: the enemy's Electro RES -15% for 8 s after a Falling Thunder hit
     if (ctx.constellation('TravelerElectro') >= 2)
       ctx.buff(

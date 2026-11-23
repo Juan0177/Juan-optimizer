@@ -361,9 +361,18 @@ export const kit: KitModel = {
       )
       // (gcsim's C4 hook runs after the upgrade: the triggering hit can use the new Blessing)
       upgraded(ctx, s, 'Nicole', hit.characterKey === 'Nicole')
-      if (c6)
+      if (c6) {
+        // (gcsim's c6OnUpgrade: every member gets A1's Guidance for the rest of the skill's buff)
+        ctx.buff(
+          'Nicole',
+          ['Nicole', 'a1GuidanceActive'],
+          'on',
+          0,
+          s.graceEnd - ctx.now
+        )
         for (const m of ctx.members)
           if (m !== 'Nicole') upgraded(ctx, s, m, hit.characterKey === m)
+      }
     }
     // only the active character's hits trigger projections (gcsim's OnEnemyHit on the active member)
     if (hit.characterKey !== hit.onField) return

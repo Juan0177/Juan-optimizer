@@ -20,6 +20,7 @@ import {
   GcwebBuildButton,
   genInputFromKqm,
   KQM_SUBSTAT_ROLLS,
+  kqmLockedWeapon,
   kqmSetsId,
   kqmWeaponData,
   quickTooltipProps,
@@ -57,7 +58,6 @@ import {
   localizeDecimal,
 } from './format'
 import { artifactStatValue, KqmBuildView, SetLines } from './KqmBuildView'
-import { kqmStandardRolls } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
 import { WeaponDetails, WeaponThumb } from './TeamOptResults'
 import {
@@ -305,6 +305,8 @@ export function KqmCompare({
   // (a pick's rankings are a full search's: only the quick run's own leave options out)
   const screenedOut = (view.rankings[characterKey] ? view : result)
     .screenedOut?.[characterKey]
+  const locked = !!kqmLockedWeapon(characterKey, runSettings.kqm)
+  const lockedLine = t('teamOpt.kqm.weaponLocked', 'Weapon locked')
   const selectSx = compactFieldSx
   const equipment = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -313,7 +315,8 @@ export function KqmCompare({
         size="small"
         label={t('teamOpt.kqm.weaponLabel', 'Weapon')}
         value={weaponId(choice)}
-        disabled={disabled}
+        disabled={disabled || locked}
+        helperText={locked ? lockedLine : undefined}
         sx={selectSx}
         SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 380 } } } }}
         onChange={(e) => {
@@ -482,7 +485,6 @@ export function KqmCompare({
             characterKey={characterKey}
             build={build}
             equipment={equipment}
-            rolls={kqmStandardRolls(runSettings.kqm)}
           />
           {/* juanlab: the 5 artifacts of this build (the one shown, picks included) for gc-web.
               No `scales`: the run keeps no record of what the damage reads, so the used
@@ -554,7 +556,14 @@ export function KqmCompare({
                 'The Energy Recharge the teammates need with this pick, and before it: its energy (Favonius particles, a weapon’s or set’s energy) changes theirs, and their artifacts are searched again'
               )}
             >
-              <Box sx={{ mt: 1, cursor: 'help' }}>
+              <Box
+                sx={{
+                  mt: 1,
+                  cursor: 'help',
+                  width: 'fit-content',
+                  maxWidth: '100%',
+                }}
+              >
                 <Typography
                   sx={{
                     fontSize: 12.5,
@@ -704,6 +713,14 @@ export function KqmCompare({
                 )
               }
             />
+            {locked && category === 0 && (
+              <Typography sx={{ ...type.label, fontWeight: 400, mt: 1, px: 1 }}>
+                {t(
+                  'teamOpt.kqm.weaponLockedRanking',
+                  'Weapon locked in Choose weapons: no other is tried for this member.'
+                )}
+              </Typography>
+            )}
             <ScreenedOut
               keys={
                 category === 0
@@ -933,8 +950,8 @@ function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
           )}
           <Box sx={{ mt: 0.75, color: 'text.secondary' }}>
             {t(
-              'teamOpt.kqm.behindTip',
-              'Average substat rolls on top of the KQM budget, same teammates. ER requirements and per-substat caps still apply.'
+              'teamOpt.kqm.behindTipStandard',
+              'Substat rolls added to this build, each worth one of its artifact standard’s rolls; same teammates. ER requirements and per-substat caps still apply.'
             )}
           </Box>
         </Box>

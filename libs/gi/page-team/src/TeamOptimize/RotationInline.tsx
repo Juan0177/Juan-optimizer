@@ -84,7 +84,7 @@ import {
 import type { TeamOptUpdate } from './useTeamOpt'
 
 // (Windows has none of the first three: Consolas or Cascadia Mono there)
-const mono =
+export const mono =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace'
 const shortcut =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
@@ -463,13 +463,27 @@ export function RotationInline({
 const otherwiseCode = (a: RotationAction): string =>
   a.otherwise?.length ? `/${a.otherwise.map(actionCode).join('')}` : ''
 
+/** Its written movement ("[movement=4]") */
+const movementCode = (a: RotationAction): string =>
+  a.movement !== undefined ? `[movement=${a.movement}]` : ''
+
 /** An action as the writer's short code */
 const actionCode = (a: RotationAction): string => {
   switch (a.kind) {
     case 'skill':
-      return `${a.hold ? 'hE' : 'E'}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+      return `${a.hold ? 'hE' : 'E'}${a.stacks ? `[stacks=${a.stacks}]` : ''}${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'burst':
-      return `${a.optional ? 'Q?' : 'Q'}${otherwiseCode(a)}`
+      return `Q${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+    case 'dash':
+      return `D${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+    default:
+      return `${baseCode(a)}${movementCode(a)}`
+  }
+}
+
+/** An action's short code without its movement */
+const baseCode = (a: RotationAction): string => {
+  switch (a.kind) {
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':
@@ -490,8 +504,6 @@ const actionCode = (a: RotationAction): string => {
             : `[collision=${a.collision}]`
           : ''
       }`
-    case 'dash':
-      return `D${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'jump':
       return 'J'
     case 'wait': {
@@ -637,7 +649,7 @@ export function RotationReadout({
   )
 }
 
-function Arrow() {
+export function Arrow() {
   return (
     <Box
       component="span"
@@ -756,11 +768,11 @@ export function RotationsSetting({
     const { rotations: _previous, ...rest } = timing
     apply(rotations === undefined ? rest : { ...rest, rotations })
   }
-  // (counted from the start: the first rotation written apart is the first rotation, or a setup
-  // played before the start, not counted)
+  // (counted from the start: the first rotation written apart is a setup played before the start,
+  // not counted, or the first rotation)
   const setOpenerCounted = (counted: boolean) => {
-    const { openerSetup: _setup, ...rest } = timing
-    apply(counted ? rest : { ...rest, openerSetup: true })
+    const { countOpener: _count, ...rest } = timing
+    apply(counted ? { ...rest, countOpener: true } : rest)
   }
   const apply = (next: typeof timing) => {
     if (applied.trim()) {
@@ -924,16 +936,16 @@ export function RotationsSetting({
                 placement="left"
                 title={t(
                   'teamOpt.timing.openerCountedTip',
-                  'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+                  'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
                 )}
               >
                 <MenuItem
-                  onClick={() => setOpenerCounted(!!timing.openerSetup)}
+                  onClick={() => setOpenerCounted(!timing.countOpener)}
                   sx={{ fontSize: 13.5 }}
                 >
                   <Checkbox
                     size="small"
-                    checked={!timing.openerSetup}
+                    checked={!!timing.countOpener}
                     sx={{ p: 0, mr: 1 }}
                     tabIndex={-1}
                   />
@@ -992,7 +1004,7 @@ export function RotationsSetting({
               arrow
               title={t(
                 'teamOpt.timing.openerCountedTip',
-                'Your “First rotation only” (in the rotation writer). On: it is the first rotation, and counted. Off: played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations.'
+                'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
               )}
             >
               <Box
@@ -1008,7 +1020,7 @@ export function RotationsSetting({
               >
                 <Checkbox
                   size="small"
-                  checked={!timing.openerSetup}
+                  checked={!!timing.countOpener}
                   disabled={disabled}
                   onChange={(_, checked) => setOpenerCounted(checked)}
                   sx={{ p: 0.5 }}

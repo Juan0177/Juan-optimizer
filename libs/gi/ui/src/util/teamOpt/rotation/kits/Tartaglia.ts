@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/tartaglia, main as of 2026-11-10. */
 
@@ -446,6 +452,8 @@ export const kit: KitModel = {
           label: 'Flash of Havoc',
         })
         ctx.at(70, (c2) => applyRiptide(c2, s))
+        // Ranged stance: 20 Energy back once it is cast
+        flatEnergy(ctx, 4, 20, 'Flash of Havoc (Energy refund)')
         return {
           cooldown: { key: 'burst', frames: 900, delay: 0 },
           frames: 55,

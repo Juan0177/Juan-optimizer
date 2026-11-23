@@ -1,5 +1,11 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/barbara, main as of 2026-11-10. */
 
@@ -104,6 +110,9 @@ export const kit: KitModel = {
           label: 'Charged Attack',
         })
         ctx.at(55 - w, (c2) => loopHeal(c2, s, 4))
+        // C4: 1 Energy per opponent it hits
+        if (ctx.constellation('Barbara') >= 4)
+          flatEnergy(ctx, 55 - w, 1, 'Barbara C4')
         return {
           frames: 89 - w,
           framesInto: {

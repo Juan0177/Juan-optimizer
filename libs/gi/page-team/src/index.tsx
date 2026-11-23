@@ -53,6 +53,8 @@ import TeamBuildWorkspace from './TeamOptimize'
 import KqmCompare from './TeamOptimize/compare/KqmCompare'
 import TeamSetting from './TeamSetting'
 
+export { TeamLinkImportPage } from './TeamLinkImport'
+
 /** `/teams/:teamId/optimize`: Team Optimize (no character key is lowercase) */
 const TEAM_OPT_PATH = 'optimize'
 const KQM_PATH = 'kqm'

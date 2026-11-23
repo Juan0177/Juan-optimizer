@@ -1,5 +1,6 @@
 import type { KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,
@@ -129,6 +130,9 @@ interface CynoState {
   /** C2 (Revelation): Together We Rise holders' Stellar-Conduct stacks and 0.1 s ICD */
   c2TeamStacks: number
   c2TeamIcd: number
+  /** C4: Energy restores left this Sacred Rite; (Revelation) its 20 Energy's cooldown end */
+  c4Left: number
+  c4TeamReady: number
   /** C6: Day of the Jackal stacks, status end and 0.4 s bolt ICD (Cyno's clock) */
   c6Stacks: number
   c6End: number
@@ -148,6 +152,16 @@ const clock = (ctx: SimContext) => ctx.characterFrame('Cyno')
 
 /** Stellar-Conduct radiance: Cyno stands in a Polestar Field */
 const stellar = (ctx: SimContext) => ctx.radiance === 'conduct'
+const C4_REACTIONS = [
+  'electroCharged',
+  'lunarCharged',
+  'superconduct',
+  'stellarConduct',
+  'overloaded',
+  'quicken',
+  'aggravate',
+  'electroSwirl',
+]
 
 /** A1: is an Endseer window up now */
 function endseerOn(ctx: SimContext, s: CynoState) {
@@ -276,6 +290,8 @@ export const kit: KitModel = {
   normalAnimationDelay: (_ctx, s: CynoState, kind) =>
     kind === 'xingqiu' ? (s.pactActive ? 12 : 10) : 0,
   init: (): CynoState => ({
+    c4Left: 0,
+    c4TeamReady: -1,
     pactActive: false,
     pactEnd: -1e9,
     pactId: 0,
@@ -540,6 +556,7 @@ export const kit: KitModel = {
       case 'burst': {
         // Sacred Rite: Wolf's Swiftness: Pactsworn for 712 frames (no damage of its own)
         enterPact(ctx, s, 712, 2, 328)
+        s.c4Left = 5
         if (c >= 1) s.c1End = clock(ctx) + 601
         if (c >= 6) {
           s.c6Stacks = 0
@@ -583,8 +600,27 @@ export const kit: KitModel = {
       ['Cyno', 'lockStellarRadianceSc'],
       stellar(ctx) ? 'on' : ''
     )
-    if (hit.path[0].startsWith('_')) return
     const c = ctx.constellation('Cyno')
+    // C4: his Electro reactions in Pactsworn give the others 3 Energy, 5 times a Sacred Rite;
+    // (Revelation) a Together We Rise holder's give him 20, once per 18 s
+    const c4Reaction =
+      (hit.path[0] === '_reaction' && C4_REACTIONS.includes(hit.path[1])) ||
+      hit.path.join('.') === 'reaction.hyperbloom'
+    if (c >= 4 && c4Reaction) {
+      if (hit.characterKey === 'Cyno' && s.pactActive && s.c4Left > 0) {
+        s.c4Left--
+        flatEnergy(ctx, 0, 3, 'Cyno C4', { owner: 'Cyno', to: 'others' })
+      } else if (
+        hit.characterKey !== 'Cyno' &&
+        stellar(ctx) &&
+        ctx.hasBuff('Cyno', ['Cyno', 'c1Together']) &&
+        clock(ctx) >= s.c4TeamReady
+      ) {
+        s.c4TeamReady = clock(ctx) + 1081
+        flatEnergy(ctx, 0, 20, 'Cyno C4 (Together We Rise)', { owner: 'Cyno' })
+      }
+    }
+    if (hit.path[0].startsWith('_')) return
     // C2 (Revelation): Together We Rise holders' normal / charged hits: Stellar-Conduct stacks
     if (
       c >= 2 &&

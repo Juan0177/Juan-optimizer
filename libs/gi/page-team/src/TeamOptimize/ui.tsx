@@ -428,6 +428,9 @@ export function FieldLabel({
           ...type.label,
           display: 'inline-block',
           ...(tip && {
+            // (a grid or flex cell stretches it otherwise: its tip would show beside the text)
+            width: 'fit-content',
+            maxWidth: '100%',
             cursor: 'help',
             textDecoration: 'underline dotted',
             textUnderlineOffset: 3,

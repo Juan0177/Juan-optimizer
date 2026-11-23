@@ -1,5 +1,6 @@
 import type { ActionResult, KitModel, SimContext, SimHit } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
@@ -48,6 +49,8 @@ interface JahodaState {
   bounceCredit: number
   /** The Meowball's token: a new Shadow Pursuit cancels the ticks of the last one */
   meowSrc: number
+  /** A Meowball hit's 2 Energy: its 3.5 s ICD ends (Jahoda's clock) */
+  meowEnergyReady: number
 }
 
 /** Actual enemy aura, retaining the flask's original element at the front of its priority. */
@@ -94,6 +97,14 @@ function meowTick(
   ele: AbsorbEle
 ) {
   if (src !== s.meowSrc || c.now >= end) return
+  // a Meowball hit restores 2 Energy to Jahoda, once per 3.5 s
+  const at = c.characterFrame('Jahoda') + MEOWBALL_TRAVEL
+  if (at >= s.meowEnergyReady) {
+    s.meowEnergyReady = at + 211
+    flatEnergy(c, MEOWBALL_TRAVEL, 2, 'Fluffy Meowball (Energy)', {
+      owner: 'Jahoda',
+    })
+  }
   c.hit(MEOWBALL_TRAVEL, {
     characterKey: 'Jahoda',
     path: ['skill', meowNode[ele]],
@@ -137,7 +148,13 @@ function fullDrain(c: SimContext, s: JahodaState, src: number) {
     label: full ? 'Filled Treasure Flask' : 'Unfilled Treasure Flask',
   })
   // the flask's 4 particles (gcsim's ParticleCB on either flask hit)
-  particleMarker(c, full ? 2 : 4, 'Treasure Flask particles', undefined, 'Jahoda')
+  particleMarker(
+    c,
+    full ? 2 : 4,
+    'Treasure Flask particles',
+    undefined,
+    'Jahoda'
+  )
   if (full && c.moonsign >= 2 && s.flaskEle) {
     if (c.constellation('Jahoda') >= 6)
       c.buff('Jahoda', ['Jahoda', 'c6FlaskFull'], 'on', 0, 20 * 60, {
@@ -159,6 +176,7 @@ export const kit: KitModel = {
   element: 'anemo',
   source: `${KQMSIM}/jahoda`,
   init: (): JahodaState => ({
+    meowEnergyReady: -1,
     pursuit: -1,
     flaskEle: undefined,
     gauge: 0,
@@ -354,7 +372,10 @@ export const kit: KitModel = {
             if (token !== s.burstToken || at.now >= end) return
             const ele = absorbedElement(at)
             if (!ele) at.at(Math.trunc(interval / 3), absorbRobot)
-            else
+            else {
+              // C4: 4 Energy as a robot converts
+              if (at.constellation('Jahoda') >= 4)
+                flatEnergy(at, 0, 4, 'Jahoda C4', { owner: 'Jahoda' })
               at.at(41, (attack) =>
                 robotAttack(attack, ele, {
                   stat: 'atk',
@@ -363,6 +384,7 @@ export const kit: KitModel = {
                   onField: at.onField,
                 })
               )
+            }
           }
           const end = ctx.now + 790
           for (let r = 0; r < robots; r++) ctx.at(6 + 41 * r, absorbRobot)

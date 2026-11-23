@@ -4,6 +4,7 @@ import {
   zodObjectSchema,
 } from '@genshin-optimizer/common/database'
 import { allSubstatKeys } from '@genshin-optimizer/gi/consts'
+import type { IGOOD } from '@genshin-optimizer/gi/good'
 import {
   artifactSortKeys,
   filterOptionSchema,
@@ -12,6 +13,7 @@ import {
 import { z } from 'zod'
 import type { ArtCharDatabase } from '../ArtCharDatabase'
 import { DataEntry } from '../DataEntry'
+import type { IGO, ImportResult } from '../exim'
 
 const displayArtifactSchema = z.object({
   filterOption: zodObjectSchema(filterOptionSchema),
@@ -38,6 +40,12 @@ export class DisplayArtifactEntry extends DataEntry<
   override validate(obj: unknown): IDisplayArtifact | undefined {
     const result = displayArtifactSchema.safeParse(obj)
     return result.success ? result.data : undefined
+  }
+  // An import keeps the sort but not the filters: a GO export carries its own, which could hide
+  // the imported artifacts here
+  override importGOOD(go: IGO & IGOOD, result: ImportResult) {
+    super.importGOOD(go, result)
+    this.set({ action: 'reset' })
   }
   override set(
     value:

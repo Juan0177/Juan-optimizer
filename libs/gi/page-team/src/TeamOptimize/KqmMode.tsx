@@ -6,7 +6,6 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   TeamOpt,
-  TeamOptEnergyCalculator,
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
@@ -42,17 +41,17 @@ import {
   kqmDefaultExcludedWeapons,
   kqmEnergyRequirement,
   kqmExcludedWeapons,
+  kqmLockedWeapon,
   kqmHasEnergyRequirement,
   kqmMemberConstellation,
+  kqmMemberStandard,
   kqmTalentLevel,
   kqmTeamOverrides,
   kqmWeapons,
   MOONGECKO_BOSS,
   sameEnemy,
   setKqmBuildThreads,
-  syncEnergyCalculator,
   teamOptMembers,
-  withRotationEnergy,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
@@ -107,16 +106,25 @@ import {
 } from './KqmChoosers'
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
+import {
+  kqmEnergyUpdate,
+  kqmRotationEnergyOf,
+  teamCalculator,
+} from './kqmEnergy'
 import { KqmShareMenu } from './KqmShareMenu'
 import {
   KqmArtifactStandard,
+  KqmMemberStandard,
   kqmStandardName,
-  kqmStandardRolls,
+  kqmStandardsMixed,
+  kqmStandardText,
+  useKqmCustom,
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
 import {
   kqmRotationId,
+  playedRotationKey,
   useAppliedRotation,
   useRotationSettings,
 } from './RotationWriter'
@@ -145,7 +153,10 @@ import {
 } from './useKqmRun'
 import type { TeamOptUpdate } from './useTeamOpt'
 
-/** A member row's columns: name, build, constellation, minimum ER (one line from `sm`) */
+/**
+ * A member row's columns: name, constellation, artifacts, minimum ER (one line from `sm`; phones:
+ * the name above the fields)
+ */
 const memberGrid = {
   display: 'grid',
   alignItems: 'center',
@@ -153,10 +164,13 @@ const memberGrid = {
   rowGap: 1,
   gridTemplateColumns: {
     // (phones: room for "ER 139.8 %" whole)
-    xs: 'minmax(0, 1fr) 70px 122px',
-    sm: 'minmax(140px, 1fr) 84px 128px',
+    xs: '70px minmax(0, 1fr) 122px',
+    sm: 'minmax(120px, 1fr) 84px 124px 128px',
   },
-  gridTemplateAreas: { xs: '"name cons er"', sm: '"name cons er"' },
+  gridTemplateAreas: {
+    xs: '"name name name" "cons arts er"',
+    sm: '"name cons arts er"',
+  },
 } as const
 
 /** A compact outlined field: 36 px tall, tabular numbers */
@@ -165,33 +179,6 @@ const compactFieldSx = {
   '& .MuiInputBase-input': { py: 0.875, ...numSx },
   '& .MuiSelect-select': { py: 0.875, ...numSx },
 } as const
-
-/**
- * The ER calculator's settings for the team as it is now: members added since get the starting
- * assumptions, at their KQM constellation (see `syncEnergyCalculator`)
- */
-function teamCalculator(
-  members: TeamOptMember[],
-  teamOpt: TeamOpt,
-  saved: TeamOptEnergyCalculator | undefined,
-  /** The written rotation's inputs, filled in where not set by hand */
-  energy?: RotationEnergy
-) {
-  const keys = members.map((m) => m.characterKey)
-  return withRotationEnergy(
-    syncEnergyCalculator(
-      keys,
-      saved,
-      teamOpt.rotationTime ?? 20,
-      teamOpt.onField ?? keys[0],
-      Object.fromEntries(
-        keys.map((key) => [key, kqmMemberConstellation(key, teamOpt.kqm)])
-      )
-    ),
-    keys,
-    energy
-  )
-}
 
 type RotationWorked = {
   for: string
@@ -274,7 +261,7 @@ function useRotationEnergy(
     kqmRotationId(teamId)
   )
   const played = JSON.stringify([opener, timing, frameData])
-  const rotation = text.trim() ? `${text.trim()}|${played}` : ''
+  const rotation = playedRotationKey(text, opener, timing, frameData)
   const replayKey = JSON.stringify([
     gender,
     i18n?.language,
@@ -301,43 +288,14 @@ function useRotationEnergy(
     }
     let cancelled = false
     const run = () => {
-      let next: RotationEnergy | undefined
-      let seconds: number | undefined
-      try {
-        const teamOpt = latest.current
-        const played = kqmReplayOf(
-          database,
-          gender,
-          i18n,
-          teamId,
-          teamOpt
-        )?.({
-          constellations: Object.fromEntries(
-            members.map((m) => [
-              m.characterKey,
-              kqmMemberConstellation(m.characterKey, teamOpt.kqm),
-            ])
-          ),
-          gear: Object.fromEntries(
-            members.map((m) => [
-              m.characterKey,
-              {
-                candidates: {
-                  weapons: kqmWeapons(m.characterKey, teamOpt.kqm).map(
-                    (w) => w.key
-                  ),
-                },
-              },
-            ])
-          ),
-          overrides: {},
-        })
-        next = played?.energy
-        seconds = played?.rotationTime
-      } catch {
-        next = undefined
-        seconds = undefined
-      }
+      const { energy: next, rotationTime: seconds } = kqmRotationEnergyOf(
+        database,
+        gender,
+        i18n,
+        teamId,
+        latest.current,
+        members
+      )
       if (cancelled) return
       const result = { for: rotation, energy: next, rotationTime: seconds }
       const byTeam = workedReplays.get(database) ?? new Map()
@@ -436,6 +394,11 @@ export function KqmSettings({
   const titleId = useId()
   const [tab, setTab] = useState(0)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
+  const memberKeys = useMemo(
+    () => members.map((m) => m.characterKey),
+    [members]
+  )
+  const [customStandards, setCustomStandards] = useKqmCustom(kqm, memberKeys)
   // a team never set to a talent level takes the one last picked on any team (else KQM's 10)
   const unsetTalents = teamOpt.kqm?.talents === undefined
   useEffect(() => {
@@ -554,61 +517,24 @@ export function KqmSettings({
   // (over ones typed by hand: those were for the rotation before)
   const lastWritten = useRef<string>()
   useEffect(() => {
-    const kqm = teamOpt.kqm
-    const source = kqm?.energySource
     const written = writtenRotation
-    const ready = !!written && energyFor === written && !!rotationEnergy
-    // (typed by hand before the rotation was recorded, or recorded as its text alone before its
-    // opener and timing counted: kept, and the rotation is recorded now)
-    if (
-      source === 'manual' &&
-      ready &&
-      (kqm?.energyRotation === undefined ||
-        kqm.energyRotation === written.split('|')[0])
-    ) {
-      setTeamOpt((o) => {
-        o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), energyRotation: written }
-      })
-      return
-    }
-    const newRotation = ready && kqm?.energyRotation !== written
-    if (source !== 'calculator' && !(ready && (!source || newRotation))) return
-    const applied = kqm?.energyCalculator
-    const rotationTime = (ready && playedTime) || (teamOpt.rotationTime ?? 20)
-    const energyCalculator = {
-      ...teamCalculator(
-        members,
-        teamOpt,
-        applied,
-        ready ? rotationEnergy : undefined
-      ),
-      rotationTime,
-    }
-    const json = JSON.stringify(energyCalculator)
-    if (
-      source === 'calculator' &&
-      !newRotation &&
-      json === JSON.stringify(applied)
-    )
-      return
+    const update = kqmEnergyUpdate({
+      members,
+      teamOpt,
+      written,
+      ready: !!written && energyFor === written && !!rotationEnergy,
+      rotationEnergy,
+      playedTime,
+    })
+    if (!update) return
     // (written once per change: if the saved settings come back different, e.g. a value the
     // database does not keep, the same inputs are not written again, or it would loop)
-    const key = `${json}|${ready ? written : ''}`
-    if (key === lastWritten.current) return
-    lastWritten.current = key
-    const estimate = kqmEnergyEstimate(
-      members.map((m) => m.characterKey),
-      energyCalculator,
-      kqm
-    )
+    if (update.key !== undefined) {
+      if (update.key === lastWritten.current) return
+      lastWritten.current = update.key
+    }
     setTeamOpt((o) => {
-      o.kqm = {
-        ...(o.kqm ?? defaultTeamOptKqm),
-        energySource: 'calculator',
-        energyCalculator,
-        energyRecharge: estimate.targets,
-        ...(ready ? { energyRotation: written } : {}),
-      }
+      o.kqm = { ...(o.kqm ?? defaultTeamOptKqm), ...update.kqm }
     })
   }, [
     teamOpt,
@@ -712,7 +638,7 @@ export function KqmSettings({
           </StepTitle>
           <KqmAssumptions
             talents={kqmTalentLevel(kqm)}
-            rolls={kqmStandardRolls(kqm)}
+            standard={kqmStandardText(t, kqm, memberKeys)}
           />
         </Box>
         <Box
@@ -838,10 +764,10 @@ export function KqmSettings({
             >
               {t('teamOpt.kqm.membersAll', 'Members')}
               <InfoTooltipInline
-                title={t('teamOpt.kqm.membersAllHelp', {
+                title={t('teamOpt.kqm.membersAllHelpStandard', {
                   defaultValue:
-                    'Every member gets a KQM Standards build at the constellation shown: level 90, the talent levels set here, five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
-                  rolls: kqmStandardRolls(kqm),
+                    'Every member gets a KQM build at the constellation shown: level 90, the talent levels set here, five +20 artifacts at the standard set here ({{standard}}).',
+                  standard: kqmStandardText(t, kqm, memberKeys),
                 })}
               />
             </Typography>
@@ -874,7 +800,13 @@ export function KqmSettings({
                 }}
               />
             </Box>
-            <KqmArtifactStandard kqm={kqm} setTeamOpt={setTeamOpt} />
+            <KqmArtifactStandard
+              kqm={kqm}
+              members={memberKeys}
+              custom={customStandards}
+              setCustom={setCustomStandards}
+              setTeamOpt={setTeamOpt}
+            />
             {calculated && (
               <FieldLabel
                 tip={t(
@@ -912,6 +844,15 @@ export function KqmSettings({
               )}
             >
               {t('teamOpt.kqm.consColumn', 'Constellation')}
+            </FieldLabel>
+            <FieldLabel
+              sx={{ gridArea: 'arts' }}
+              tip={t(
+                'teamOpt.kqm.artifactsColumnTipStandard',
+                'This member’s artifacts: KQM Standard, a tier (Good, Great, Top, Perfect), or Custom: how many of its 45 rolls land on wanted stats. Artifacts above sets every member’s.'
+              )}
+            >
+              {t('teamOpt.kqm.artifactsLabel', 'Artifacts')}
             </FieldLabel>
             <FieldLabel
               sx={{ gridArea: 'er', justifySelf: 'end' }}
@@ -975,6 +916,16 @@ export function KqmSettings({
                           : undefined
                       })
                     }
+                  />
+                </Box>
+                <Box sx={{ gridArea: 'arts', minWidth: 0 }}>
+                  <KqmMemberStandard
+                    characterKey={characterKey}
+                    members={memberKeys}
+                    kqm={kqm}
+                    custom={customStandards}
+                    setCustom={setCustomStandards}
+                    setTeamOpt={setTeamOpt}
                   />
                 </Box>
                 <Box sx={{ gridArea: 'er', minWidth: 0 }}>
@@ -1200,11 +1151,11 @@ export function KqmSettings({
 /** The build rules under the title, in one muted line (the full rule in its tooltip) */
 function KqmAssumptions({
   talents,
-  rolls,
+  standard,
 }: {
   talents: 9 | 10
-  /** The artifact standard's distributed rolls (KQMS: 20) */
-  rolls: number
+  /** The artifact standard's name (Mixed when set per member) */
+  standard: string
 }) {
   const { t } = useTranslation('page_team')
   const labels = [
@@ -1214,20 +1165,19 @@ function KqmAssumptions({
       defaultValue: 'Talents {{level}}/{{level}}/{{level}}',
       level: talents,
     }),
-    t('teamOpt.kqm.ruleArtifacts', '+20 artifacts'),
-    t('teamOpt.kqm.ruleRolls', {
-      defaultValue: '2 fixed + {{rolls}} rolls',
-      rolls,
+    t('teamOpt.kqm.ruleArtifactsStandard', {
+      defaultValue: '+20 artifacts: {{standard}}',
+      standard,
     }),
   ]
   return (
     <FieldLabel
       // (under the step's title, aligned with its text)
       sx={{ mt: 0.75, pl: '38px', lineHeight: 1.5 }}
-      tip={t('teamOpt.kqm.subtitleCons', {
+      tip={t('teamOpt.kqm.subtitleConsStandard', {
         defaultValue:
-          'Standard KQM builds for this rotation: level 90; 4★ C6, standard 5★ C2, 5★ from the free constellation event C1, other 5★ C0 (each can be changed below); the talent levels set below; five +20 artifacts with 2 fixed rolls per substat and {{rolls}} rolls placed for damage.',
-        rolls,
+          'Standard KQM builds for this rotation: level 90; 4★ C6, standard 5★ C2, 5★ from the free constellation event C1, other 5★ C0 (each can be changed below); the talent levels set below; five +20 artifacts at the standard set below ({{standard}}).',
+        standard,
       })}
     >
       {labels.join('  ·  ')}
@@ -1286,12 +1236,19 @@ export function KqmSetupSummary({
   rotation?: 'played' | 'entered'
   sx?: SxProps<Theme>
 }) {
-  const { t, i18n } = useTranslation('page_team')
+  const { t, i18n } = useTranslation(['page_team', 'weaponNames_gen'])
   const { gender } = useDBMeta()
   const num = (value: number) => localizeDecimal(`${value}`, i18n?.language)
   const kqm = settings.kqm ?? defaultTeamOptKqm
   const nowKqm = now ? (now.kqm ?? defaultTeamOptKqm) : undefined
   const fromCalculator = kqm.energySource === 'calculator'
+  const keys = members.map((m) => m.characterKey)
+  // (members at different standards, in the run or now: each member's pill shows its own)
+  const standardsMixed =
+    kqmStandardsMixed(kqm, keys) ||
+    (!!nowKqm && kqmStandardsMixed(nowKqm, keys))
+  const standard = kqmStandardText(t, kqm, keys)
+  const nowStandard = nowKqm && kqmStandardText(t, nowKqm, keys)
   /** What it is now, if that changed */
   const nowIs = (value: ReactNode) => (
     <Box component="span" sx={{ color: tokens.gold, fontWeight: 600 }}>
@@ -1332,6 +1289,10 @@ export function KqmSetupSummary({
           const nowCons = nowKqm && kqmMemberConstellation(characterKey, nowKqm)
           const er = kqmEnergyRequirement(kqm, characterKey)
           const nowEr = nowKqm && kqmEnergyRequirement(nowKqm, characterKey)
+          const lock = kqmLockedWeapon(characterKey, kqm)
+          const memberStandard = kqmMemberStandard(characterKey, kqm)
+          const nowMemberStandard =
+            nowKqm && kqmMemberStandard(characterKey, nowKqm)
           return (
             <SuspenseTooltip
               key={characterKey}
@@ -1340,6 +1301,9 @@ export function KqmSetupSummary({
                 <>
                   <CharacterName characterKey={characterKey} gender={gender} />
                   {`: C${cons}, ${t('teamOpt.kqm.minEr', 'Min ER')} ${er}%`}
+                  {standardsMixed && `, ${kqmStandardName(t, memberStandard)}`}
+                  {lock &&
+                    `, ${t(`weaponNames_gen:${lock.key}`, lock.key)} R${lock.refinement} (${t('teamOpt.kqm.weaponLocked', 'Weapon locked')})`}
                 </>
               }
             >
@@ -1373,6 +1337,16 @@ export function KqmSetupSummary({
                   {num(er)}% {t('teamOpt.kqm.erShort', 'ER')}
                 </Box>
                 {nowEr !== undefined && nowEr !== er && nowIs(`${num(nowEr)}%`)}
+                {standardsMixed &&
+                  nowMemberStandard !== undefined &&
+                  nowMemberStandard !== memberStandard &&
+                  nowIs(kqmStandardName(t, nowMemberStandard))}
+                {lock && (
+                  <LockOutlinedIcon
+                    aria-label={t('teamOpt.kqm.weaponLocked', 'Weapon locked')}
+                    sx={{ fontSize: 14, color: 'primary.main', ml: -0.25 }}
+                  />
+                )}
               </Box>
             </SuspenseTooltip>
           )
@@ -1413,19 +1387,8 @@ export function KqmSetupSummary({
             )}
         </SpecStat>
         <SpecStat label={t('teamOpt.kqm.artifactsLabel', 'Artifacts')}>
-          {kqmStandardName(t, kqmStandardRolls(kqm))}
-          <Box
-            component="span"
-            sx={{ color: 'text.secondary', fontWeight: 500 }}
-          >
-            {t('teamOpt.kqm.rollsShort', {
-              defaultValue: '{{rolls}} rolls',
-              rolls: kqmStandardRolls(kqm),
-            })}
-          </Box>
-          {nowKqm &&
-            kqmStandardRolls(nowKqm) !== kqmStandardRolls(kqm) &&
-            nowIs(`${kqmStandardRolls(nowKqm)}`)}
+          {standard}
+          {nowStandard && nowStandard !== standard && nowIs(nowStandard)}
         </SpecStat>
         <SpecStat label={t('teamOpt.kqm.weaponsLabel', 'Weapons')}>
           {choiceLabel(kqmWeaponsCustom(kqm))}
@@ -2272,6 +2235,7 @@ function KqmResultsView({
   running,
   improving,
   onDiscard,
+  actions,
   onView,
   database: ownDatabase,
   readOnly = !!ownDatabase,
@@ -2320,6 +2284,8 @@ function KqmResultsView({
   improving?: boolean
   /** Absent (or read only): no discard */
   onDiscard?: () => void
+  /** More actions beside Share (the team's versions) */
+  actions?: ReactNode
   /** The builds shown now: the run's, or the team with other equipment picked here */
   onView?: (view: KqmResult) => void
   /**
@@ -2591,6 +2557,7 @@ function KqmResultsView({
               ml: 'auto',
             }}
           >
+            {actions}
             <KqmShareMenu
               teamId={teamId}
               result={result}

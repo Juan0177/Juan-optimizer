@@ -828,6 +828,93 @@ function rotationNodes(
 export const constValue = (node: OptNode) =>
   node.operation === 'const' ? (node.value as number) : Number.NaN
 
+/**
+ * One hit's damage of each run of an attack's hits `rotationDamage` has worked out, kept for one
+ * team and one set of builds (its settings but the attacks): another set needs another cache
+ */
+export type RotationDamageCache = Map<string, number>
+
+/**
+ * The rotation's damage with the given builds, as `evaluateTeamNodes` totals `teamRotationNodes`,
+ * with each run of an attack's hits worked out once per cache: a rotation search plays thousands
+ * of rotations with the same builds, and their attacks are mostly the same ones
+ */
+export function rotationDamage(
+  database: ArtCharDatabase,
+  teamId: string,
+  gender: GenderKey,
+  settings: TeamRotationSettings,
+  cache: RotationDamageCache
+):
+  | { total: number; members: Partial<Record<CharacterKey, number>> }
+  | undefined {
+  const memberKeys = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  const defaultActive =
+    settings.onField && memberKeys.includes(settings.onField)
+      ? settings.onField
+      : memberKeys[0]
+  if (!defaultActive) return undefined
+  const runs: { characterKey: CharacterKey; key: string; hits: number }[] = []
+  const missing = new Map<
+    string,
+    { characterKey: CharacterKey; attack: TeamOptAttack }
+  >()
+  for (const characterKey of memberKeys)
+    for (const def of settings.attacks[characterKey] ?? []) {
+      const active =
+        def.onField && memberKeys.includes(def.onField)
+          ? def.onField
+          : defaultActive
+      // (the hits and limits only split the attack into runs, each its own buffs off)
+      const { hits: _hits, limits: _limits, description: _d, ...rest } = def
+      const attackKey = JSON.stringify([characterKey, active, rest])
+      for (const { hits, excluded } of attackSegments(def)) {
+        const key = `${attackKey}|${JSON.stringify(excluded)}`
+        runs.push({ characterKey, key, hits })
+        if (!cache.has(key) && !missing.has(key))
+          missing.set(key, {
+            characterKey,
+            attack: {
+              ...def,
+              hits: 1,
+              limits: excluded.map(({ owner, path }) => ({
+                owner,
+                path: [...path],
+                hits: 0,
+              })),
+            },
+          })
+      }
+    }
+  if (missing.size) {
+    const attacks: TeamOpt['attacks'] = {}
+    const keys: Partial<Record<CharacterKey, string[]>> = {}
+    for (const [key, { characterKey, attack }] of missing) {
+      ;(attacks[characterKey] ??= []).push(attack)
+      ;(keys[characterKey] ??= []).push(key)
+    }
+    const nodes = teamRotationNodes(database, teamId, gender, {
+      ...settings,
+      attacks,
+      statFilters: {},
+    })
+    if (!nodes) return undefined
+    for (const key of missing.keys()) cache.set(key, 0)
+    for (const { characterKey, attack, node } of nodes.terms) {
+      const key = keys[characterKey]![attack]
+      cache.set(key, cache.get(key)! + (constValue(node) || 0))
+    }
+  }
+  const members: Partial<Record<CharacterKey, number>> = {}
+  let total = 0
+  for (const { characterKey, key, hits } of runs) {
+    const damage = hits * cache.get(key)!
+    total += damage
+    members[characterKey] = (members[characterKey] ?? 0) + damage
+  }
+  return { total, members }
+}
+
 /** A run of an attack's hits (`AttackSegment`) and one of them, as the app computes it */
 export interface TeamOptHit extends AttackSegment {
   /** One hit's damage, its formula included (undefined: the attack has no such node) */

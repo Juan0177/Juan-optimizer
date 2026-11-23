@@ -7,9 +7,9 @@
   "importTeamBtn": "Import Team",
   "importForm": {
     "title": "Import Team",
-    "desc": "Import a team in JSON form below.",
+    "desc": "Paste a team’s JSON (from Export team), or a team link from another site.",
     "label": "JSON Data",
-    "placeholder": "Paste your Team JSON here",
+    "placeholder": "Paste a team’s JSON or a team link here",
     "importBtn": "Import",
     "error": {
       "verifi": "This file does not contain a valid team. Check the export version, member names, and roster.",
@@ -416,6 +416,7 @@
       "alternatives": "Next best builds",
       "buildsLabel": "Builds",
       "buildsInfo": "How many team builds to find: the best one, then the next best ones (each changes one member’s artifacts).",
+      "searchTip": "Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.",
       "round": "Round {{round}}",
       "setup": "setting up the search",
       "searching": "searching {{total}} builds",
@@ -524,7 +525,9 @@
     "sens": {
       "title": "What raises team damage",
       "info": "Each cell: the team’s rotation damage with that one change on that member, against the result above (same rotation, buffs, artifacts and weapons). A roll is an average 5★ roll, as in the Improve tab’s Substat value.",
+      "infoKqm": "Each cell: the team’s rotation damage with that one change on that member’s KQM build, against the builds above (same rotation, buffs and weapons). A roll is a KQM Standard roll (0.8 of it on a 4★ piece); talents and levels go up from KQM’s.",
       "substats": "+1 substat roll",
+      "substatsKqm": "+1 KQM substat roll",
       "talents": "+1 talent level",
       "levels": "Level",
       "level": "Level {{level}}",

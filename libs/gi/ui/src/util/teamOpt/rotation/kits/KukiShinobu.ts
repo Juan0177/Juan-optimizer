@@ -1,5 +1,12 @@
 import type { KitModel, SimContext } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kuki, main as of 2026-11-10. */
 
@@ -39,6 +46,8 @@ const kukiNormals: NormalHit[] = [
 ]
 
 interface KukiState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The newest Grass Ring of Sanctification (its tick chain stops when a newer ring starts) */
   ringSrc: number
   ringStart: number
@@ -55,6 +64,7 @@ export const kit: KitModel = {
   element: 'electro',
   source: `${GCSIM}/kuki`,
   init: (): KukiState => ({
+    particles: new Map(),
     ringSrc: -1,
     ringStart: -1,
     ringEnd: -1,
@@ -165,6 +175,11 @@ export const kit: KitModel = {
             icd: 'skill',
             label: 'Grass Ring of Sanctification',
           })
+          // its particles: a 45% chance of 1, 0.2 s ICD (kqmsim particleCB)
+          t.at(2, (t2) => {
+            if (turretReady(s.particles, 'ring', t2.now, 12))
+              turretParticles(t2, 0, 0.45, 'KukiShinobu')
+          })
           if (t.now + 90 <= end) t.at(90, tick)
         }
         ctx.at(113, tick)
@@ -230,6 +245,10 @@ export const kit: KitModel = {
       applies: true,
       icd: 'none',
       label: 'Thundergrass Mark (C4)',
+    })
+    ctx.at(5, (c) => {
+      if (turretReady(s.particles, 'ring', c.now, 12))
+        turretParticles(c, 0, 0.45, 'KukiShinobu')
     })
   },
 }

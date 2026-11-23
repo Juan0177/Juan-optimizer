@@ -1,5 +1,6 @@
 import type { ActionResult, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   kitFramesInto,
   type NormalHit,
@@ -82,6 +83,9 @@ function detonate(ctx: SimContext, s: FreminetState, at: number): ActionResult {
   const stacks = s.stacks
   const lv4 = stacks === 4
   const hm = at + (lv4 ? 37 : 42)
+  // C2: 2 Energy with each (3 at Level 4)
+  if (ctx.constellation('Freminet') >= 2)
+    flatEnergy(ctx, hm, lv4 ? 3 : 2, 'Freminet C2')
   // Cryo (levels 0-3; not at 4 stacks), then Physical (levels 1-4, the Lv4 box at 4 stacks)
   if (stacks <= 3) {
     ctx.hit(hm, {

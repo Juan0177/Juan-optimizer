@@ -168,7 +168,8 @@ describe('the first rotations from the start', () => {
 /**
  * A user report: the first rotation written apart ("First rotation only") was played before the
  * rotations counted from the start, so First 1 counted the repeating rotation instead (its time,
- * none of the opener's hits). Counted from the start, the opener is the first rotation.
+ * none of the opener's hits). Counted from the start with "Counted" ticked, the opener is the
+ * first rotation; by default it is a setup before the start (a later user request).
  */
 describe('the first rotation written apart, counted from the start', () => {
   const { database, teamId, members, names } = setup()
@@ -178,7 +179,7 @@ describe('the first rotation written apart, counted from the start', () => {
     rotations: number | undefined,
     opener = OPENER,
     text = TEXT,
-    openerSetup?: boolean
+    countOpener = true
   ) =>
     simulateWritten({
       text,
@@ -186,7 +187,7 @@ describe('the first rotation written apart, counted from the start', () => {
       timing: {
         edits: {},
         ...(rotations && { rotations }),
-        ...(openerSetup && { openerSetup }),
+        ...(countOpener && { countOpener }),
       },
       frameData: {},
       team: {
@@ -250,8 +251,8 @@ describe('the first rotation written apart, counted from the start', () => {
     // (the first time through is the opener: no "without waiting" comparison)
     expect(writtenWaits(two)).toBeUndefined()
   })
-  it('not counted ("Counted" off), the opener is a setup played before the start', () => {
-    const setup = play(1, OPENER, TEXT, true)
+  it('by default ("Counted" off), the opener is a setup played before the start', () => {
+    const setup = play(1, OPENER, TEXT, false)
     expect(setup.counted!.rotations).toBe(1)
     // (the clock starts after it: the rotation's own actions, with what the setup left)
     expect(setup.counted!.sim.start).toBeGreaterThan(0)
@@ -261,7 +262,7 @@ describe('the first rotation written apart, counted from the start', () => {
     expect(written(setup).map((a) => a.text)).toEqual(
       written(play(1, '')).map((a) => a.text)
     )
-    expect(play(3, OPENER, TEXT, true).counted!.rotations).toBe(3)
+    expect(play(3, OPENER, TEXT, false).counted!.rotations).toBe(3)
   })
   it('repeating, the opener still only sets up the loop (not counted)', () => {
     const repeating = play(undefined)
@@ -277,7 +278,7 @@ describe('the first rotation written apart, counted from the start', () => {
     database.teams.setRotationField(
       `${teamId}_kqm`,
       'Timing',
-      JSON.stringify({ edits: {}, rotations: 1 })
+      JSON.stringify({ edits: {}, rotations: 1, countOpener: true })
     )
     const replay = kqmRotationReplay({
       database: database as never,
@@ -293,11 +294,11 @@ describe('the first rotation written apart, counted from the start', () => {
       overrides: {},
     } as never)
     expect(played.rotationTime).toBeCloseTo(writtenSeconds(play(1))!, 1)
-    // ("Counted" off: the rotation after the setup)
+    // ("Counted" off, the default: the rotation after the setup)
     database.teams.setRotationField(
       `${teamId}_kqm`,
       'Timing',
-      JSON.stringify({ edits: {}, rotations: 1, openerSetup: true })
+      JSON.stringify({ edits: {}, rotations: 1 })
     )
     // (a replay reads the settings when it is made)
     const setup = kqmRotationReplay({
@@ -313,7 +314,7 @@ describe('the first rotation written apart, counted from the start', () => {
       overrides: {},
     } as never)
     expect(setup.rotationTime).toBeCloseTo(
-      writtenSeconds(play(1, OPENER, TEXT, true))!,
+      writtenSeconds(play(1, OPENER, TEXT, false))!,
       1
     )
     database.teams.setRotationField(`${teamId}_kqm`, 'Opener', null)

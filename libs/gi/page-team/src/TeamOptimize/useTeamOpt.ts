@@ -38,10 +38,16 @@ export function useTeamOpt(teamId: string) {
 
 /**
  * What a run's result depends on among the settings: all but how the result is shown (its
- * rotation time), as JSON with the keys sorted. A result found with another key is out of date.
+ * rotation time) and how hard it was searched for, as JSON with the keys sorted. A result found
+ * with another key is out of date.
  */
 export function teamOptRunKey(teamOpt: TeamOpt): string {
-  const { rotationTime: _shownOnly, kqm: _kqmOnly, ...rest } = teamOpt
+  const {
+    rotationTime: _shownOnly,
+    kqm: _kqmOnly,
+    fullSearch: _searchOnly,
+    ...rest
+  } = teamOpt
   return sortedJson(rest)
 }
 
@@ -138,7 +144,8 @@ export const kqmRotationSetUp: TeamOptUpdate = (teamOpt) => {
   }
 }
 
-function sortedJson(value: unknown): string {
+/** JSON with every object's keys sorted: the same settings give the same text */
+export function sortedJson(value: unknown): string {
   return JSON.stringify(value, (_, value) =>
     value && typeof value === 'object' && !Array.isArray(value)
       ? Object.fromEntries(

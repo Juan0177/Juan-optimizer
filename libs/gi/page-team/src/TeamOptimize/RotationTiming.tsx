@@ -3,9 +3,17 @@ import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
   ParsedRotation,
   RotationAction,
+  RotationTimingSettings,
   SimulationResult,
 } from '@genshin-optimizer/gi/ui'
-import { actionFrameKey, CharacterName } from '@genshin-optimizer/gi/ui'
+import {
+  actionFrameKey,
+  CharacterName,
+  flatActions,
+  frameOverrides,
+  openerActions,
+  seconds as plainSeconds,
+} from '@genshin-optimizer/gi/ui'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import {
   alpha,
@@ -22,117 +30,30 @@ import { useTranslation } from 'react-i18next'
 import { localizeDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
 
-const FPS = 60
-
-/** A frame edit, kept only while the action at that position is still the same one */
-export interface TimingEdit {
-  characterKey: CharacterKey
-  text: string
-  frames: number
-}
-export interface RotationTimingSettings {
-  /** By the action's position in the written rotation */
-  edits: Record<number, TimingEdit>
-  /** Frames from pressing swap to the next member acting (undefined: the default 12) */
-  swapFrames?: number
-  /** The ping typed in, which set `swapFrames` (shown as typed; otherwise from the swap time) */
-  pingMs?: number
-  /**
-   * Rotations counted from the start, nothing waited for from before (a timed challenge's first
-   * rotations): 1 to 6. Undefined (or 0): the steady pace, the last STEADY_COUNTED of
-   * STEADY_REPEATS played in a row (by then each waits for what the one before left on cooldown)
-   */
-  rotations?: number
-  /**
-   * Counted from the start, the opener is a setup played before the start, not counted (what it
-   * leaves carries into the rotations). Undefined: it is the first rotation, counted
-   */
-  openerSetup?: boolean
-}
-/** The choices for `RotationTimingSettings.rotations` counted from the start */
-export const FIRST_ROTATIONS = [1, 2, 3, 4, 5, 6] as const
-/** The steady pace, the default: 4 rotations played in a row, the last 2 counted (averaged) */
-export const STEADY_REPEATS = 4
-export const STEADY_COUNTED = 2
-/** The steady pace's rotations counted, as its label names them ("Steady DPS (rot 3–4)") */
-export const STEADY_RANGE = {
-  from: STEADY_REPEATS - STEADY_COUNTED + 1,
-  to: STEADY_REPEATS,
-}
-/** The rotations a team's timing counts from the start (undefined: the steady pace) */
-export const firstRotations = (timing: RotationTimingSettings) =>
-  timing.rotations && timing.rotations > 0
-    ? Math.min(FIRST_ROTATIONS.length, Math.round(timing.rotations))
-    : undefined
-/** Whether a written opener is counted: as the first rotation, counted from the start */
-export const openerCounted = (timing: RotationTimingSettings) =>
-  firstRotations(timing) !== undefined && !timing.openerSetup
-/** KQM's standard swap: 12 frames, about 100 ms of ping */
-export const DEFAULT_SWAP_FRAMES = 12
-/**
- * A swap waits on the server (a round trip), so ping sets the swap time; other actions are not
- * delayed by it. gcsim's rule: frames = ping ms × 2 × 60 / 1000 (100 ms ≈ 12 frames)
- */
-export const pingToSwapFrames = (ms: number) =>
-  Math.round((ms * 2 * FPS) / 1000)
-export const swapFramesToPing = (frames: number) =>
-  Math.round((frames * 1000) / (2 * FPS))
-/** The ping a team's timing shows: as typed, or the swap time's */
-export const timingPing = (timing: RotationTimingSettings) =>
-  timing.pingMs ?? swapFramesToPing(timing.swapFrames ?? DEFAULT_SWAP_FRAMES)
-/** Timing with a typed ping: the swap time it gives (KQM's 12 frames: no edit) */
-export function withPing(
-  timing: RotationTimingSettings,
-  ms: number
-): RotationTimingSettings {
-  const frames = pingToSwapFrames(ms)
-  const { swapFrames: _s, pingMs: _p, ...rest } = timing
-  return frames === DEFAULT_SWAP_FRAMES
-    ? rest
-    : { ...rest, swapFrames: frames, pingMs: ms }
-}
-/** Timing with a typed swap time (the ping then follows it) */
-export function withSwapFrames(
-  timing: RotationTimingSettings,
-  frames: number
-): RotationTimingSettings {
-  const { swapFrames: _s, pingMs: _p, ...rest } = timing
-  return frames === DEFAULT_SWAP_FRAMES ? rest : { ...rest, swapFrames: frames }
-}
-
-/** The written actions in order (the simulator's action positions) */
-export function flatActions(rotation: ParsedRotation) {
-  return rotation.steps.flatMap((step) =>
-    step.actions.map((action) => ({
-      characterKey: step.characterKey,
-      action,
-    }))
-  )
-}
-
-/** The opener's actions in order (the simulator's `openerIndex` positions) */
-export const openerActions = (rotation: ParsedRotation) =>
-  flatActions({ ...rotation, steps: rotation.opener ?? [] })
-
-/** The edits that still match the written rotation, as the simulator's overrides */
-export function frameOverrides(
-  rotation: ParsedRotation,
-  edits: Record<number, TimingEdit>
-): Record<number, number> {
-  const flat = flatActions(rotation)
-  const out: Record<number, number> = {}
-  for (const [i, e] of Object.entries(edits)) {
-    const f = flat[Number(i)]
-    if (f && f.characterKey === e.characterKey && f.action.text === e.text)
-      out[Number(i)] = e.frames
-  }
-  return out
-}
+export {
+  type TimingEdit,
+  type RotationTimingSettings,
+  FIRST_ROTATIONS,
+  STEADY_REPEATS,
+  STEADY_COUNTED,
+  STEADY_RANGE,
+  firstRotations,
+  openerCounted,
+  DEFAULT_SWAP_FRAMES,
+  pingToSwapFrames,
+  swapFramesToPing,
+  timingPing,
+  withPing,
+  withSwapFrames,
+  flatActions,
+  openerActions,
+  frameOverrides,
+} from '@genshin-optimizer/gi/ui'
 
 /** Frames as seconds with 2 decimals, in the site's decimal separator ("1.25" / "1,25") */
 export const seconds = (frames: number) =>
   localizeDecimal(
-    (frames / FPS).toFixed(2),
+    plainSeconds(frames),
     i18next.isInitialized ? i18next.language : undefined
   )
 
@@ -234,7 +155,7 @@ export function StepTiming({
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ ...hintSx, textAlign: 'right' }}
+            sx={{ ...hintSx, textAlign: 'right', justifySelf: 'end' }}
           >
             {t('teamOpt.timing.start', 'Starts')}
           </Typography>
@@ -249,7 +170,7 @@ export function StepTiming({
           <Typography
             variant="caption"
             color="text.secondary"
-            sx={{ ...hintSx, textAlign: 'right' }}
+            sx={{ ...hintSx, textAlign: 'right', justifySelf: 'end' }}
           >
             {t('teamOpt.timing.frames', 'Frames')}
           </Typography>
@@ -479,9 +400,15 @@ export function actionName(
 ): string {
   switch (a.kind) {
     case 'skill':
-      return a.hold
-        ? t('teamOpt.timing.kind.skillHold', 'Skill (hold)')
-        : t('teamOpt.timing.kind.skill', 'Skill')
+      return a.stacks
+        ? t('teamOpt.timing.kind.skillHoldStacks', {
+            defaultValue: 'Skill (hold, {{count}} stacks)',
+            defaultValue_one: 'Skill (hold, {{count}} stack)',
+            count: a.stacks,
+          })
+        : a.hold
+          ? t('teamOpt.timing.kind.skillHold', 'Skill (hold)')
+          : t('teamOpt.timing.kind.skill', 'Skill')
     case 'burst':
       return t('teamOpt.timing.kind.burst', 'Burst')
     case 'normal':

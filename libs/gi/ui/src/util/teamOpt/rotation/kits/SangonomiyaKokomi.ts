@@ -1,5 +1,13 @@
 import type { KitModel, SimContext, SimCountedBuff } from '../types'
-import { GCSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  GCSIM,
+  type NormalHit,
+  normalString,
+  templateJump,
+  turretParticles,
+  turretReady,
+} from './common'
 
 /* Adapted from gcsim (https://github.com/genshinsim/gcsim, AGPLv3), internal/characters/kokomi, main as of 2026-11-10. */
 
@@ -16,6 +24,8 @@ const garmentFrames = 600
 const kurageFrames = 751
 
 interface KokomiState {
+  /** Turret particle ICDs (kqmsim's particle callbacks): each one's next ready frame */
+  particles: Map<string, number>
   /** The Ceremonial Garment is up until this frame */
   burstEnd: number
   /** Bake-Kurage is up until this frame */
@@ -24,6 +34,8 @@ interface KokomiState {
   kurageId: number
   /** Swapped out since the last action */
   away: boolean
+  /** C4: its Energy's 0.2 s ICD ends (Kokomi's clock) */
+  c4Ready: number
 }
 
 /**
@@ -75,11 +87,27 @@ export const kit: KitModel = {
     ctx.now < s.burstEnd
       ? 0.1
       : 0,
+  // C4: her normal attacks in the Garment restore 0.8 Energy, once per 0.2 s
+  onHit(ctx, s: KokomiState, hit) {
+    const frame = ctx.characterFrame('SangonomiyaKokomi')
+    if (
+      hit.characterKey === 'SangonomiyaKokomi' &&
+      hit.tag === 'normal' &&
+      ctx.constellation('SangonomiyaKokomi') >= 4 &&
+      ctx.now < s.burstEnd &&
+      frame >= s.c4Ready
+    ) {
+      s.c4Ready = frame + 13
+      flatEnergy(ctx, 0, 0.8, 'Kokomi C4', { owner: 'SangonomiyaKokomi' })
+    }
+  },
   init: (): KokomiState => ({
+    particles: new Map(),
     burstEnd: -1,
     kurageEnd: -1,
     kurageId: 0,
     away: false,
+    c4Ready: -1,
   }),
   act(ctx, s: KokomiState, action, previous) {
     const swapped = s.away
@@ -155,6 +183,11 @@ export const kit: KitModel = {
           label: 'Bake-Kurage',
           statSnapshots: kurageSnapshot(snapshot),
         })
+        // its particles: a 67% chance of 1, 1 s ICD (kqmsim particleCB)
+        ctx.at(24, (c) => {
+          if (turretReady(s.particles, 'kurage', c.now, 60))
+            turretParticles(c, 0, 0.67, 'SangonomiyaKokomi')
+        })
         const tick = (c: SimContext) => {
           if (id !== s.kurageId || c.now >= s.kurageEnd) return
           c.hit(0, {
@@ -165,6 +198,8 @@ export const kit: KitModel = {
             label: 'Bake-Kurage',
             statSnapshots: kurageSnapshot(snapshot),
           })
+          if (turretReady(s.particles, 'kurage', c.now, 60))
+            turretParticles(c, 0, 0.67, 'SangonomiyaKokomi')
           // each tick heals the active character
           c.hit(0, {
             path: ['_heal', 'skill', 'heal'],

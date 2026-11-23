@@ -6,10 +6,11 @@
 //   PORT=5000 node tools/site/feedback-viewer.mjs
 //   node tools/site/feedback-viewer.mjs --local    the local `wrangler dev` store instead
 //
-// It refreshes every 2 minutes (and on the Refresh button). Triage (new / seen / done) is kept on this
-// machine in ~/.config/stellar-feedback/state.json; Delete removes a message, its screenshots and its
-// page details for good. A message's page details (the page, the team as it was set up, the written
-// rotation, recent errors) show under it, loaded when it is opened.
+// It reads Cloudflare only while its page is open, at most every 15 minutes (and on the Refresh
+// button): Workers KV's free tier allows 1,000 key lists a day. Triage (new / seen / done) is kept
+// on this machine in ~/.config/stellar-feedback/state.json; Delete removes a message, its
+// screenshots and its page details for good. A message's page details (the page, the team as it
+// was set up, the written rotation, recent errors) show under it, loaded when it is opened.
 import { execFile } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -26,7 +27,7 @@ const PORT = Number(process.env.PORT ?? 4320)
 const WHERE = process.argv.includes('--local') ? '--local' : '--remote'
 const STATE_DIR = join(homedir(), '.config', 'stellar-feedback')
 const STATE_FILE = join(STATE_DIR, 'state.json')
-const REFRESH_MS = 120_000
+const REFRESH_MS = 15 * 60_000
 
 /** A wrangler KV command against the FEEDBACK binding (its JSON output) */
 function kv(...args) {
@@ -176,7 +177,12 @@ createServer(async (req, res) => {
     if (url.pathname === '/')
       return send(res, 200, PAGE, 'text/html; charset=utf-8')
     if (url.pathname === '/api/list') {
-      if (url.searchParams.has('refresh') || !updatedAt) await load()
+      if (
+        url.searchParams.has('refresh') ||
+        !updatedAt ||
+        Date.now() - updatedAt > REFRESH_MS
+      )
+        await load()
       return send(res, 200, {
         items,
         state: readState(),
@@ -215,8 +221,6 @@ createServer(async (req, res) => {
   console.log(
     `Feedback viewer: http://127.0.0.1:${PORT}  (${WHERE === '--local' ? 'local store' : 'Cloudflare'})`
   )
-  load()
-  setInterval(load, REFRESH_MS)
 })
 
 const PAGE = String.raw`<!doctype html>

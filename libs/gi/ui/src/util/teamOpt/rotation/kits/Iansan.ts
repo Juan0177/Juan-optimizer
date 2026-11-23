@@ -54,6 +54,10 @@ const BURST_CD = 1080
 const BURST_SAMPLE = 18
 /** The burst restores points every second */
 const RESTORE = 60
+/** Nightsoul points a metre the active member moves (gcsim's restoreNSRatio) */
+const MOVEMENT_POINTS = 0.67
+/** The metres each action of the active member moves when its [movement=N] isn't written */
+const DEFAULT_MOVEMENT = 6
 
 interface IansanState {
   /** Nightsoul's blessing is on */
@@ -76,6 +80,8 @@ interface IansanState {
   a1Token: number
   /** When A1's +4 points is next up (ICD) */
   a1Icd: number
+  /** Metres the active member moved since the last restore (gcsim's burstRestoreNS) */
+  moved: number
   /** C4 Surging Force stacks, gained once per Scale; the last restore's overflow */
   c4Stacks: number
   c4Generated: boolean
@@ -203,8 +209,8 @@ function burstSample(ctx: SimContext, s: IansanState, gen: number) {
  * The Scale's restore (every second, gcsim's restorePointsTask): +1 point while A1 is on (+4 when
  * its ICD is up: gcsim needs the active member to gain or spend Nightsoul points, which is assumed
  * whenever the ICD allows); C4: +4 per Surging Force stack and half the last restore's overflow.
- * C6: any overflow gives Extreme Force (+25% DMG for the active member, 3 s). Points from the
- * active member's movement are not modelled.
+ * C6: any overflow gives Extreme Force (+25% DMG for the active member, 3 s). Movement: 0.67
+ * points a metre the active member (not Iansan) moved since the last restore.
  */
 function restore(ctx: SimContext, s: IansanState, gen: number, c6: boolean) {
   if (gen !== s.burstGen || ctx.now >= s.burstUntil) {
@@ -219,6 +225,8 @@ function restore(ctx: SimContext, s: IansanState, gen: number, c6: boolean) {
       s.a1Icd = ctx.now + A1_ICD
     }
   }
+  gain += s.moved * MOVEMENT_POINTS
+  s.moved = 0
   if (ctx.constellation('Iansan') >= 4) {
     gain += s.overflow * 0.5
     if (s.c4Stacks > 0) {
@@ -320,6 +328,7 @@ export const kit: KitModel = {
     a1On: false,
     a1Token: 0,
     a1Icd: -1,
+    moved: 0,
     c4Stacks: 0,
     c4Generated: false,
     overflow: 0,
@@ -330,7 +339,29 @@ export const kit: KitModel = {
   onNightsoulBurst(ctx, s: IansanState) {
     s.a4Until = ctx.characterFrame('Iansan') + 600
   },
-  onPartyAction(ctx, s: IansanState, actor, action) {
+  onPartyAction(ctx, s: IansanState, actor, action, _frames, normalStarts) {
+    // movement (gcsim's OnMovement at each action's start, logged while the Scale is up and Iansan
+    // isn't the active member): each normal attack of a string is an action; a walk moves only as
+    // written
+    if (
+      ctx.now < s.burstUntil &&
+      actor !== 'Iansan' &&
+      action.kind !== 'swap' &&
+      (action.kind !== 'wait' || (action.walk && action.movement))
+    ) {
+      const metres = action.movement ?? DEFAULT_MOVEMENT
+      const starts =
+        action.kind === 'normal'
+          ? (normalStarts?.map((n) => n.offset) ??
+            Array(action.count ?? 1).fill(0))
+          : [0]
+      if (metres > 0)
+        for (const offset of starts)
+          ctx.at(offset, (c2) => {
+            if (c2.now < s.burstUntil && c2.onField !== 'Iansan')
+              s.moved += metres
+          })
+    }
     // C4 Surging Force: the active member (not Iansan) bursting while the Scale is up gives 2
     // stacks, once per Scale
     if (
@@ -360,9 +391,7 @@ export const kit: KitModel = {
       : undefined
   },
   act(ctx, s: IansanState, action, previous) {
-    ctx.note(
-      "Iansan: Nightsoul points from the active member's movement are not modelled; A1 is assumed (Ascension 1+)."
-    )
+    ctx.note('Iansan: A1 is assumed (Ascension 1+).')
     const c6 = ctx.constellation('Iansan') >= 6
     switch (action.kind) {
       case 'normal': {
@@ -430,6 +459,10 @@ export const kit: KitModel = {
         s.burstGen++
         const gen = s.burstGen
         s.burstUntil = ctx.now + BURST_DURATION + (c6 ? C6_BURST_BONUS : 0)
+        s.moved = 0
+        ctx.note(
+          `Iansan: while her Scale is up, each action of the active member is taken to move them ${DEFAULT_MOVEMENT} m (0.67 Nightsoul points a metre, gcsim's movement); write [movement=N] after an action to change it, [movement=0] for none.`
+        )
         // C4: a new Scale can gain Surging Force again; C2: Precise Movement for 15 s
         s.c4Stacks = 0
         s.c4Generated = false
