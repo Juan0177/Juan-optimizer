@@ -43,7 +43,7 @@ import { kqmReplayOf } from '../useKqmRun'
 import { CompareSwapFailure } from './compareError'
 import { savedRunOf } from './savedRun'
 import type { SwapFragmentError, SwapFragmentResult } from './swapFragment'
-import { swapFragment, timingForSwap } from './swapFragment'
+import { memberTurn, swapFragment, timingForSwap } from './swapFragment'
 
 /*
  * KQM Compare's computation: team A is KQM Theorycrafting's saved run (read only); team B is the
@@ -101,6 +101,8 @@ export interface Side {
   turn?: number
   /** The KQM talent level its settings use */
   talents?: number
+  /** The artifact standard its settings use (all members', or each one's) */
+  artifacts?: Pick<TeamOptKqm, 'standard' | 'memberStandards'>
 }
 export type CompareSwapError =
   | 'inTeam'
@@ -132,7 +134,13 @@ export function sideOf(
     dps: rotationTime > 0 ? dpr / rotationTime : 0,
     rotationTime,
     rotation,
-    ...(settings && { talents: kqmTalentLevel(settings.kqm) }),
+    ...(settings && {
+      talents: kqmTalentLevel(settings.kqm),
+      artifacts: {
+        standard: settings.kqm?.standard,
+        memberStandards: settings.kqm?.memberStandards,
+      },
+    }),
     members: keys.map((key) => {
       const damage = result.after.members[key] ?? 0
       const energy = result.energyRecharge[key]
@@ -429,12 +437,24 @@ function checkSwap({
       : { error: swapped.error }
   const search = searchOf(swapIn)
   if (!search) return { error: 'unsupported' }
-  // (B's rotation optimized: the entering member's turn is no longer the swap's)
+  // (B's rotation optimized: the entering member's turn is its first one there, as the swap's is)
   const rotationB = args.rotationB
+  const namesB = keys.map((ck) =>
+    ck === out
+      ? { characterKey: key, name: nameOf(key) }
+      : { characterKey: ck, name: nameOf(ck) }
+  )
   return {
     keys,
     swapped: rotationB
-      ? { ...swapped, text: rotationB.text, insertedTurn: undefined }
+      ? {
+          ...swapped,
+          text: rotationB.text,
+          insertedTurn:
+            swapped.turn === undefined
+              ? undefined
+              : memberTurn(rotationB.text, namesB, key),
+        }
       : swapped,
     search,
   }

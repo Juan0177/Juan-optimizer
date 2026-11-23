@@ -95,6 +95,21 @@ function find(c: Cut, out: CharacterKey, names: RotationMember[]) {
   return { acts, loop }
 }
 
+/**
+ * `member`'s first turn in `text`: its index among the turns the parser cuts it into (the KQM
+ * sheet's rotation); undefined when it does not act there
+ */
+export function memberTurn(
+  text: string,
+  names: RotationMember[],
+  member: CharacterKey
+): number | undefined {
+  const c = cut(text, names)
+  const [i] = find(c, member, names).acts
+  if (i === undefined) return undefined
+  return c.steps.filter((k) => k < i && c.parts[k].trim()).length
+}
+
 /** Where the leaving member acts: its steps in the rotation and in the opener */
 export function leavingSteps(
   text: string,

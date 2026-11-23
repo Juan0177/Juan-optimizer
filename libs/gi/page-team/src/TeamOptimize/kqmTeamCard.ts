@@ -51,8 +51,8 @@ export const betaOfBuilds = (
   )
 
 /**
- * The sheet's notes: the artifact standard the builds used and the talents. `standard`: its name
- * (Good, Great, a member's own…); absent: KQM Standards
+ * The sheet's notes: KQM's standards, the talents and the artifacts' rolls the builds used.
+ * `standard`: their name (KQM Standard, Good, Great, Mixed…); absent: not said
  */
 export const kqmStandardNote = (
   t: TFunction,
@@ -60,8 +60,8 @@ export const kqmStandardNote = (
   standard?: string
 ) =>
   standard
-    ? t('page_team:teamOpt.kqm.share.standardTalents', {
-        defaultValue: '{{standard}} · Talents {{talents}}',
+    ? t('juanlab:card.standardRolls', {
+        defaultValue: 'KQM Standards · Talents {{talents}} · Artifacts: {{standard}}',
         standard,
         talents: `${talents}/${talents}/${talents}`,
       })

@@ -433,5 +433,8 @@
         ]
       }
     ]
+  },
+  "card": {
+    "standardRolls": "KQM Standards · Talents {{talents}} · Artifacts: {{standard}}"
   }
 }

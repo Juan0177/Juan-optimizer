@@ -92,6 +92,27 @@ describe('compareCardData', () => {
     expect(d.a.card.labels.siteName).toBe('stamp')
     expect(d.siteName).toBe('stamp')
   })
+  it('says the artifacts’ rolls beside KQM’s talents, by the standard’s own name', () => {
+    const seen: [string, Record<string, unknown> | undefined][] = []
+    const tSeen = ((k: string, o?: Record<string, unknown>) => {
+      seen.push([k, o])
+      return `${k.split(/[:.]/).pop()}${o?.['standard'] ? `(${o['standard']})` : ''}`
+    }) as never
+    const great = { ...a, artifacts: { standard: 'great' as const } }
+    const mixed = {
+      ...b,
+      artifacts: { standard: 'great' as const, memberStandards: { Mitya: 'perfect' as const } },
+    }
+    const d = compareCardData(great, mixed, { ...ctx, t: tSeen })
+    // (the standards' names from KQM Theorycrafting's texts, the line from Juan-optimizer's)
+    expect(d.a.card.notes).toBe('standardRolls(tierGreat)')
+    expect(d.b.card.notes).toBe('standardRolls(standardMixed)')
+    expect(seen.map(([k]) => k)).toContain('page_team:teamOpt.kqm.tierGreat')
+    expect(seen.find(([k]) => k === 'juanlab:card.standardRolls')?.[1]).toMatchObject({
+      talents: '9/9/9',
+    })
+  })
+
   it('takes the field time from the ER calculator, on each side its own rotation', () => {
     expect(d.a.card.members.map((m) => m.field)).toEqual(['10.0s', '10.0s'])
     expect(d.b.card.members.map((m) => m.field)).toEqual(['11.0s', '8.8s'])
