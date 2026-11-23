@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.37.4",
+    "date": "2026-11-23",
+    "fixed": [
+      "Yae Miko's Charged Attack deals one hit per cast, as in the game (it was counted twice).",
+      "Danica C2: her first swap-in of a fight plays Will to Protect (Maid: Royal Guard and a Storm Anchor) even without a full Will to Cleanse or an Anchor out, as in the game."
+    ]
+  },
+  {
     "version": "1.37.3",
     "date": "2026-11-23",
     "fixed": [

@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.37.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.4) (2026-11-23)
+
+### Fixed
+
+- Yae Miko's Charged Attack deals one hit per cast, as in the game (it was counted twice).
+- Danica C2: her first swap-in of a fight plays Will to Protect (Maid: Royal Guard and a Storm Anchor) even without a full Will to Cleanse or an Anchor out, as in the game.
+
 ## [v1.37.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.37.3) (2026-11-23)
 
 ### Fixed
