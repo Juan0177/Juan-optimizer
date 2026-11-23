@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 declare const __GO_BETA_LABEL__: string
 
 /**
- * The beta's name ("7.3 beta v3"), on the beta site (gi-beta73.github.io) and local builds only. The
+ * The beta's name ("7.3 beta v4"), on the beta site (gi-beta73.github.io) and local builds only. The
  * released build (stellaroptimizer.com) has none, so these links are not in it at all: the released
  * site never points at the beta.
  */

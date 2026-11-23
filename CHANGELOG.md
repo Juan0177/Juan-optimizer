@@ -4,6 +4,14 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.36.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.2) (2026-11-23)
+
+### Improved
+
+- Beta V4 changes updated: Anastasya's Blessed Spear Stellar-Conduct and Stellar Swirl DMG is lower (hits 1–3 ×0.84, hits 4–5 ×0.88), and so are the 1st and 2nd hits of her Burst's Palestar Edict: Doom.
+- Beta V4 changes updated: Danica's C2 Maid: Cleaner bonus is 500% of her ATK, casting her Skill again no longer refreshes a Storm Anchor already out, and her Skill particles drop once every 16 s.
+- Beta V4 changes updated: Silverdawn refunds Energy once every 18 s and also works off-field, and Torrents of Spring's enhancement also comes from triggering a Stellar-Conduct reaction.
+
 ## [v1.36.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.1) (2026-11-23)
 
 ### Fixed
