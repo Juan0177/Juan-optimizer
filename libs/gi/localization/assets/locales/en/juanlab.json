@@ -140,6 +140,34 @@
     "entries": [
       {
         "date": "2026-11-23",
+        "title": "Update to Stellar Optimizer 1.36",
+        "summary": "Stellar Optimizer’s releases 1.36.0 to 1.36.2 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Optimize rotation on Team optimize too**: rotations are played with your last run’s builds, and the best get builds from your own artifacts and weapons.",
+              "**Enemies that can’t be frozen** (bosses by default, as in gcsim): Hydro and Cryo still react, but no Frozen or Shatter."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Danica**: frames from a game recording, N3-4 carries a Normal Attack string on, and her rotation says why her Anchor ran out.",
+              "**Cyno C1**: Normal Attack SPD from any Judication, no Burst needed.",
+              "**Danica, the Tsaritsa, Silverdawn and Torrents of Spring** follow beta 7.2.53. The numbers are updated; the Italian talent descriptions stay the previous beta’s until the new ones exist in Italian."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The 12 new texts are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-23",
         "title": "Update to Stellar Optimizer 1.35",
         "summary": "Stellar Optimizer’s releases 1.24 to 1.35 arrive. The biggest is **Optimize rotation** in KQM Theorycrafting; KQM artifacts now come in tiers, and a team can have versions to compare.",
         "sections": [

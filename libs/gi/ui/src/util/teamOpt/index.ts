@@ -26,6 +26,7 @@ export {
   rotationSearchThreads,
 } from './rotationSearchPool'
 export * from './rotationSearchScore'
+export * from './rotationSearchTeam'
 export * from './sensitivity'
 export * from './solve'
 export * from './weapons'

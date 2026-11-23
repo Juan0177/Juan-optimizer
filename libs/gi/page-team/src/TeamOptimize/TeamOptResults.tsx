@@ -34,7 +34,7 @@ import {
   EnemySummary,
   ExcludeIcon,
   resolveInfo,
-  sameEnemy,
+  sameRunEnemy,
   statName,
   WeaponDetails,
   WeaponName,
@@ -175,10 +175,7 @@ export function TeamOptResults({
   // the enemy the builds are for: the team's now while it takes the same damage (its preset and
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(
-    () =>
-      enemy && team && sameEnemy(enemy.enemyOverride, team.enemyOverride)
-        ? team
-        : enemy,
+    () => (enemy && team && sameRunEnemy(enemy, team) ? team : enemy),
     [enemy, team]
   )
   const fight = useMemo(

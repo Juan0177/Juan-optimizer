@@ -4,6 +4,32 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.36.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.2) (2026-11-23)
+
+### Improved
+
+- Beta V4 changes updated: Anastasya's Blessed Spear Stellar-Conduct and Stellar Swirl DMG is lower (hits 1–3 ×0.84, hits 4–5 ×0.88), and so are the 1st and 2nd hits of her Burst's Palestar Edict: Doom.
+- Beta V4 changes updated: Danica's C2 Maid: Cleaner bonus is 500% of her ATK, casting her Skill again no longer refreshes a Storm Anchor already out, and her Skill particles drop once every 16 s.
+- Beta V4 changes updated: Silverdawn refunds Energy once every 18 s and also works off-field, and Torrents of Spring's enhancement also comes from triggering a Stellar-Conduct reaction.
+
+## [v1.36.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.1) (2026-11-23)
+
+### Fixed
+
+- Cyno's C1: a Judication now gives his Normal Attack SPD bonus on its own, without his Burst, as in the game; and Together We Rise passes once, to the first character switched in after him, who keeps it until it ends.
+
+## [v1.36.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.0) (2026-11-23)
+
+### New
+
+- Optimize rotation now works on the Team optimize tab too: it tries thousands of rotations with your last run's builds and checks the best few with builds from your own artifacts and weapons.
+- The enemy can be set as one that can't be frozen (Stygian Onslaught bosses by default): Hydro and Cryo still react, but it never becomes Frozen, so no Shatter or Frozen bonuses.
+- Rotations: N3-4 plays a Normal Attack string carrying on from its 3rd hit, for strings that continue after a Skill.
+
+### Improved
+
+- Danica's Skill, Anchor Normal Attacks, Will to Purge, Burst and Entry Skill follow timings measured in the game, and her rotation says why her Anchor ran out when a swap-in couldn't refresh it.
+
 ## [v1.35.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.35.2) (2026-11-23)
 
 ### Fixed

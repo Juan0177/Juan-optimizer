@@ -77,7 +77,7 @@ export type TeamOptStatus = {
   testedPerSecond: number
   skippedPerSecond: number
 }
-const initStatus = (): TeamOptStatus => ({
+export const initStatus = (): TeamOptStatus => ({
   tested: 0,
   failed: 0,
   skipped: 0,
@@ -158,6 +158,83 @@ function lastRun(database: ArtCharDatabase, teamId: string): TeamOptRunState {
     if (saved) lastRuns[key] = saved
   }
   return lastRuns[key] ?? { type: 'idle' }
+}
+
+/**
+ * Team Optimize's solver for its runs: one solve per member and round, on the GPU when the browser
+ * can, its live counters in `status`; `onSolver` gets the current solve's stop (undefined
+ * between solves)
+ */
+export function teamOptSolver(
+  status: TeamOptStatus,
+  maxWorkers: number,
+  onSolver: (stop: (() => void) | undefined) => void
+): TeamOptSolver {
+  return async ({
+    arts,
+    objective,
+    constraints,
+    exclusion,
+    mainStatAssumptionLevel,
+    topN = 1,
+    onWork,
+  }) => {
+    const problem: OptProblemInput = {
+      arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
+      optimizationTarget: objective,
+      constraints,
+      exclusion,
+      topN,
+    }
+    Object.assign(status, initStatus())
+    // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
+    // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
+    // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
+    // small searches)
+    const solver = new GOSolver(problem, status, maxWorkers, {
+      gpu: true,
+      gpuMinTotal: TEAM_GPU_MIN_TOTAL,
+    })
+    onSolver(() => solver.cancel(new TeamOptCancelled()))
+    const t0 = performance.now()
+    try {
+      const results = await solver.solve()
+      onWork?.({
+        tested: status.tested,
+        total: Number.isFinite(status.total) ? status.total : 0,
+      })
+      const [best, ...next] = mergeBuilds(
+        results.map((r) => r.builds),
+        topN
+      )
+      if (process.env['NODE_ENV'] === 'development')
+        console.log('[TeamOpt] solve', {
+          arts: arts.length,
+          total: status.total,
+          tested: status.tested,
+          skipped: status.skipped,
+          ms: Math.round(performance.now() - t0),
+          found: !!best,
+        })
+      return (
+        best && {
+          value: best.value,
+          artifactIds: best.artifactIds,
+          ...(next.length
+            ? {
+                more: next.map(({ value, artifactIds }) => ({
+                  value,
+                  artifactIds,
+                })),
+              }
+            : {}),
+        }
+      )
+    } finally {
+      onSolver(undefined)
+      solver.cancel()
+    }
+  }
 }
 
 /** Runs Team Optimize for a team: one solver run per member and round (see `optimizeTeam`) */
@@ -245,73 +322,9 @@ export function useTeamOptRun(teamId: string) {
         // (the enemy its damage is for, as it is now)
         const team = database.teams.get(teamId)
         const enemy = team && runEnemyOf(team)
-        const solve: TeamOptSolver = async ({
-          arts,
-          objective,
-          constraints,
-          exclusion,
-          mainStatAssumptionLevel,
-          topN = 1,
-          onWork,
-        }) => {
-          const problem: OptProblemInput = {
-            arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
-            optimizationTarget: objective,
-            constraints,
-            exclusion,
-            topN,
-          }
-          Object.assign(status.current, initStatus())
-          // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
-          // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
-          // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
-          // small searches)
-          const solver = new GOSolver(problem, status.current, maxWorkers, {
-            gpu: true,
-            gpuMinTotal: TEAM_GPU_MIN_TOTAL,
-          })
-          stopSolver = () => solver.cancel(new TeamOptCancelled())
-          const t0 = performance.now()
-          try {
-            const results = await solver.solve()
-            onWork?.({
-              tested: status.current.tested,
-              total: Number.isFinite(status.current.total)
-                ? status.current.total
-                : 0,
-            })
-            const [best, ...next] = mergeBuilds(
-              results.map((r) => r.builds),
-              topN
-            )
-            if (process.env['NODE_ENV'] === 'development')
-              console.log('[TeamOpt] solve', {
-                arts: arts.length,
-                total: status.current.total,
-                tested: status.current.tested,
-                skipped: status.current.skipped,
-                ms: Math.round(performance.now() - t0),
-                found: !!best,
-              })
-            return (
-              best && {
-                value: best.value,
-                artifactIds: best.artifactIds,
-                ...(next.length
-                  ? {
-                      more: next.map(({ value, artifactIds }) => ({
-                        value,
-                        artifactIds,
-                      })),
-                    }
-                  : {}),
-              }
-            )
-          } finally {
-            stopSolver = undefined
-            solver.cancel()
-          }
-        }
+        const solve = teamOptSolver(status.current, maxWorkers, (stop) => {
+          stopSolver = stop
+        })
         const result = await optimizeTeam({
           database,
           teamId,

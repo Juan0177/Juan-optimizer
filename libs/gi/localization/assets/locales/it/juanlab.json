@@ -140,6 +140,34 @@
     "entries": [
       {
         "date": "2026-11-23",
+        "title": "Aggiornamento a Stellar Optimizer 1.36",
+        "summary": "Arrivano le versioni da 1.36.0 a 1.36.2 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Ottimizza rotazione anche in Ottimizza squadra**: le rotazioni si giocano con le build della tua ultima esecuzione, e le migliori ricevono build fatte con i tuoi manufatti e le tue armi.",
+              "**Nemici che non si possono congelare** (i boss di default, come in gcsim): Hydro e Cryo reagiscono comunque, ma niente Congelamento né Frantumazione."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Danica**: frame presi da una registrazione del gioco, N3-4 continua la sequenza di attacchi normali, e la rotazione dice perché la sua Ancora è finita.",
+              "**Cyno C1**: la VEL ATT degli attacchi normali arriva con qualsiasi Judication, anche senza Tripudio.",
+              "**Danica, la Zarina, Alba argentea e Torrents of Spring** seguono la beta 7.2.53. I numeri sono aggiornati; le descrizioni italiane dei talenti restano quelle della beta precedente, perché quelle nuove in italiano non sono ancora disponibili."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "I 12 testi nuovi sono in italiano."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-23",
         "title": "Aggiornamento a Stellar Optimizer 1.35",
         "summary": "Arrivano le versioni da 1.24 a 1.35 di Stellar Optimizer. La novità più grossa è **Ottimizza rotazione** in KQM Theorycrafting; i manufatti KQM ora hanno livelli, e una squadra può avere più versioni da confrontare.",
         "sections": [

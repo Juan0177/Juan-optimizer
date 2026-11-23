@@ -195,7 +195,8 @@
         "stacks2": "2 accumuli",
         "stacks3": "3 accumuli"
       }
-    }
+    },
+    "summaryFreezeImmune": "Non si può congelare"
   },
   "teamComponents": {
     "teamBuffs": "Buff di squadra ricevuti",
@@ -1584,7 +1585,14 @@
       "tip": "Prova migliaia di piccole modifiche a questa rotazione (ordine dei passi, azioni, lunghezza degli attacchi normali, opzioni dei kit come i raggi di Sandrone) e gioca ognuna con le build dell'ultima esecuzione KQM. Il tuo DPS principale tiene il suo Tripudio e il suo tempo in campo.",
       "title": "Ottimizza rotazione",
       "use": "Usa",
-      "yours": "La tua rotazione"
+      "yours": "La tua rotazione",
+      "teamErOver": "Più del {{has}}% della sua build: le build trovate per questa rotazione dal tuo inventario ne richiedono di più",
+      "teamHow": "Gioca migliaia di rotazioni a un cambiamento dalla tua, poi dalle migliori (quello che le lasci cambiare: l'ordine, i membri che tornano in campo, le sequenze di attacchi, le abilità e le opzioni dei kit), con le build della tua ultima esecuzione. Il tuo DPS principale tiene il suo Tripudio e il suo tempo in campo, e una rotazione non può richiedere più Ricarica di energia di quella che le build possono dare. Le migliori ricevono poi build fatte con i tuoi manufatti e le tue armi (un'esecuzione di Ottimizza squadra con quella rotazione, le tue impostazioni e i tuoi requisiti così come sono) e vengono classificate per il DPS che fanno con quelle. Rapida si ferma al limite di tempo. Completa prova anche i tuoi passi in tutti gli altri ordini e i modelli della squadra, sale dalla migliore di ognuno finché nessun cambiamento alle rotazioni migliori è meglio e anche un giro più ampio non trova niente, e cerca di nuovo con le build della migliore finché resta la migliore: la rotazione migliore a portata del tuo piano (non tutte le rotazioni possibili).",
+      "teamNeedsRun": "Prima ottimizza la squadra: la ricerca parte dalle build che trova e le usa come base.",
+      "teamNoneFull": "Nessuna rotazione migliore a portata: la tua è la migliore con build fatte dal tuo inventario.",
+      "teamOwnTip": "Con build sue fatte dal tuo inventario: {{own}} DPS, contro {{run}} con quelle della tua rotazione. Con le build della tua esecuzione fa {{dps}} DPS.",
+      "teamPlayedTip": "Giocata con le build della tua esecuzione.",
+      "teamTip": "Prova migliaia di piccole modifiche a questa rotazione (ordine dei passi, azioni, lunghezza degli attacchi normali, opzioni dei kit come i raggi di Sandrone) e gioca ognuna con le build della tua ultima esecuzione. Le migliori ricevono poi build fatte con i tuoi manufatti e le tue armi. Il tuo DPS principale tiene il suo Tripudio e il suo tempo in campo."
     },
     "versions": {
       "cancel": "Annulla",
@@ -1826,7 +1834,11 @@
     "coffinsLine": "{{broken}} su {{count}} Bare di ghiaccio infrante",
     "electroWardsLine": "{{count}} barriere infrante, ≈ {{time}} ciascuna",
     "sculpturesLine": "{{interrupted}} su {{count}} sculture trasformate in statue",
-    "sweeperLine": "{{count}} Modalità Pulizia, fermate per {{time}}"
+    "sweeperLine": "{{count}} Modalità Pulizia, fermate per {{time}}",
+    "freezable": "Si può congelare",
+    "freeze": "Congelamento",
+    "freezeImmune": "Non si può congelare",
+    "freezeImmuneHint": "Hydro e Cryo reagiscono comunque, ma non resta mai congelato: niente Frantumazione e niente che richieda il Congelamento"
   },
   "teamLink": {
     "buffs": "Buff extra",

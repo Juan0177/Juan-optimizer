@@ -7,6 +7,7 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
+import { enemyFreezeImmune } from '../../components/enemy/stygianBosses'
 import type { TeamDataOverrides, TeamOptMember } from './data'
 import type { RotationEnergy } from './energyCalc'
 import { energyFromRotation } from './energyCalc'
@@ -122,6 +123,21 @@ export type SimTeam = {
 }
 
 /**
+ * Whether the enemy a tab's damage is for can't be frozen: the team's, or on the KQM tab its own
+ * (`teamOpt.kqm.enemy`, else the team's). `teamOpt`: the settings a KQM run was made with.
+ */
+export function tabEnemyFreezeImmune(
+  database: ArtCharDatabase,
+  teamId: string,
+  kqm?: boolean,
+  teamOpt?: Pick<TeamOpt, 'kqm'>
+): boolean {
+  const team = database.teams.get(teamId)
+  const enemy = kqm ? ((teamOpt ?? team?.teamOpt)?.kqm?.enemy ?? team) : team
+  return enemyFreezeImmune(enemy)
+}
+
+/**
  * The written rotation played frame by frame: its steps, the simulation and each member's attacks
  * (only the buff states that differ from the members' own settings go on the attacks)
  */
@@ -145,6 +161,7 @@ export function simulateWritten({
   current,
   kqm,
   auraTimeline,
+  freezeImmune,
   burstEvery,
   withoutBursts,
 }: {
@@ -154,6 +171,8 @@ export function simulateWritten({
   withoutBursts?: boolean
   /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
   auraTimeline?: boolean
+  /** The enemy can't be frozen (default: as the tab's enemy is, `tabEnemyFreezeImmune`) */
+  freezeImmune?: boolean
   /**
    * Members that use their Burst only every Nth rotation (KQM's ER calculator): the written
    * rotation is played N in a row with their Burst in one of them (`loops` in the result)
@@ -253,6 +272,7 @@ export function simulateWritten({
       keep: first ? 'all' : steady ? 'last2' : keep,
       openerCounted,
       auraTimeline,
+      freezeImmune: freezeImmune ?? tabEnemyFreezeImmune(database, teamId, kqm),
     },
     // (two rotations kept: half the samples each, as much as one rotation of 64)
     // (no more than the members' kits need: a small randomness, few plays)
@@ -442,6 +462,8 @@ export function writtenKqmReplay({
   const keys = members.map((m) => m.characterKey)
   const elements = simTeamOf(members, database).elements
   const burstEvery = kqmBurstEvery(teamOpt.kqm)
+  // (the run's own enemy, as its settings have it)
+  const freezeImmune = tabEnemyFreezeImmune(database, teamId, true, teamOpt)
   return ({ constellations, gear, overrides, calculate }) => {
     // the state where no attack sets one, as KQM counts it: KQM's own switches ('' off), else
     // the rule's (never the members' or the team's own, once KQM has its own: `kqmOwnSettings`)
@@ -479,6 +501,7 @@ export function writtenKqmReplay({
       repeats: KQM_REPEATS,
       keep: 'last2',
       burstEvery,
+      freezeImmune,
       // (two rotations kept: fewer samples, as much as the writer's one rotation of 64)
       samples: 32,
     })

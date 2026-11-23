@@ -176,6 +176,11 @@ export interface ReactionOptions {
    * (by aura: pyro, hydro, frozen, quicken…) whenever an aura appears or goes
    */
   watch?: (t: number, auras: Record<string, number>) => void
+  /**
+   * The enemy can't be frozen (gcsim's FreezeResist 1, its bosses): Hydro and Cryo still react
+   * and consume each other, but no Frozen aura comes of it
+   */
+  freezeImmune?: boolean
 }
 
 export interface AuraTrace {
@@ -195,6 +200,7 @@ export function elementalReactions({
   bountiful = () => false,
   trace,
   watch,
+  freezeImmune = false,
 }: ReactionOptions): RotationReactions & {
   moondriftsAt: (t: number) => number
   verdantDewAt: (t: number) => number
@@ -378,7 +384,8 @@ export function elementalReactions({
     reaction: string,
     /** The aura element it consumed, where it matters (crystallize) */
     element: SimHit['element'] = 'physical',
-    source?: SimHit
+    source?: SimHit,
+    extra?: Pick<SimHit, 'noFrozen'>
   ) =>
     ctx.hit(0, {
       characterKey: owner,
@@ -389,6 +396,7 @@ export function elementalReactions({
       tag: 'other',
       element,
       label: reaction,
+      ...extra,
     })
   const gcd: Record<string, number> = {}
   const offGcd = (key: string, t: number, length: number) => {
@@ -674,7 +682,10 @@ export function elementalReactions({
   let vortexId = 0
   let vortexAlive = false
   let vortexUpgradeReady = -1
-  const vortexInit = Math.max(0, ...members.map((m) => vortexInitStacks[m] ?? 0))
+  const vortexInit = Math.max(
+    0,
+    ...members.map((m) => vortexInitStacks[m] ?? 0)
+  )
   const sswContributors = new Set<CharacterKey>()
   const detonate = (ctx: SimContext, id: number) => {
     if (id !== vortexId || !vortexAlive || !sswOwner) return
@@ -848,17 +859,27 @@ export function elementalReactions({
       if (!srcs.length) return
       consumed = Math.min(aura('cryo'), a.dur)
       // Freeze records its trigger. Only Cryo triggers can later contribute via Frozen.
-      attachOverlap('frozen', 2 * consumed, 0, a.hit.characterKey)
+      if (!freezeImmune)
+        attachOverlap('frozen', 2 * consumed, 0, a.hit.characterKey)
       reduceMod('cryo', consumed)
     } else if (a.element === 'cryo') {
       if (aura('hydro') < ZERO) return
       consumed = Math.min(aura('hydro'), a.dur)
-      attachOverlap('frozen', 2 * consumed, 0, a.hit.characterKey)
+      if (!freezeImmune)
+        attachOverlap('frozen', 2 * consumed, 0, a.hit.characterKey)
       reduceMod('hydro', consumed)
     } else return
     a.reacted = true
     a.dur = Math.max(0, a.dur - consumed)
-    mark(ctx, a.hit.characterKey, 'frozen')
+    // (gcsim's OnFrozen is emitted either way: what reacts to Freezing still does)
+    mark(
+      ctx,
+      a.hit.characterKey,
+      'frozen',
+      undefined,
+      undefined,
+      freezeImmune ? { noFrozen: true } : undefined
+    )
   }
   const tryQuicken = (ctx: SimContext, a: Attack) => {
     if (a.dur < ZERO) return

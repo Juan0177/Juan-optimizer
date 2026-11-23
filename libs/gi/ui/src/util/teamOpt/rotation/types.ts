@@ -94,6 +94,8 @@ export interface SimHit {
   healTargets?: CharacterKey[]
   /** Talent that triggered a reaction marker, for source-specific passives. */
   reactionSource?: { path: string[]; label: string }
+  /** A Freeze marker on an enemy that can't be frozen: the reaction, but no Frozen aura */
+  noFrozen?: true
   /**
    * gcsim's snapshotDelay: the attacker's own stats are taken this many frames after the hit is
    * queued (0: at the cast), not when it lands; enemy debuffs still count at impact.

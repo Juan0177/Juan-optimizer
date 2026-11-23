@@ -110,7 +110,7 @@ const dm = {
     battleInc: skillParam_gen.constellation1[3],
   },
   constellation2: {
-    decreeMult: skillParam_gen.constellation2[0], // Cleaning Decree Will to Purge: 150% DMG
+    decreeMult: skillParam_gen.constellation2[0], // Cleansing Edict Will to Purge: 150% DMG
     stacks: skillParam_gen.constellation2[1],
     allyAtkMult: skillParam_gen.constellation2[2],
     selfMaxStacks: skillParam_gen.constellation2[3],
@@ -260,7 +260,7 @@ const c2Toast_dmgIncDisp = greaterEq(
   ),
   { path: 'stellarconduct_dmgInc', isTeamBuff: true }
 )
-// C2: Battle Maid, Danica consumes up to 2 of her stacks on her Stellar-Conduct hit for one +350%
+// C2: Battle Maid, Danica consumes up to 2 of her stacks on her Stellar-Conduct hit for one +500%
 // ATK addition (the dump's DamageExtra adds ATK × ratio once per hit, whatever count it consumes)
 const c2SelfToast_dmgInc = greaterEq(
   input.constellation,
@@ -409,8 +409,9 @@ const dmgFormulas = {
       onFieldAddl,
       onFieldMult
     ),
-    // C2: once per combat, the Will to Purge cast with Cleaning Decree (hold Normal Attack within
-    // 6s of the combat-entry Will to Protect) deals 150% of its original DMG
+    // C2: the Will to Purge cast with Cleansing Edict (hold Normal Attack within 6s of the
+    // combat-entry Will to Protect; not again while the Storm Anchor lasts) deals 150% of its
+    // original DMG
     decreeDmg: greaterEq(
       input.constellation,
       2,

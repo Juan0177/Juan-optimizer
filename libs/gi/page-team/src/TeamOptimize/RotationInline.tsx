@@ -485,7 +485,9 @@ const actionCode = (a: RotationAction): string => {
 const baseCode = (a: RotationAction): string => {
   switch (a.kind) {
     case 'normal':
-      return `N${a.count ?? 1}`
+      return a.from
+        ? `N${a.from}-${a.from + (a.count ?? 1) - 1}`
+        : `N${a.count ?? 1}`
     case 'charged':
       return a.cancel
         ? 'CA[cancel]'

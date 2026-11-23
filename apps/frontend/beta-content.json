@@ -1,6 +1,6 @@
 {
   "about": "Unreleased content from beta data. The beta site (gi-beta73.github.io) shows it; the released-only build (GO_RELEASED=1, stellaroptimizer.com) leaves it out entirely: its code, data, text and images. When something is released, delete it here (keys as in libs/gi/consts) and redeploy. leakNames: what the leak scan looks for, besides the keys. otherNames: names released content can use too (lore mentions the Tsaritsa), so the scan skips them, but changelog lines naming them still stay off the released site. label: the beta's name, marked over share pictures that show beta content (update it with the beta data).",
-  "label": "7.3 beta v3",
+  "label": "7.3 beta v4",
   "characters": ["Danica", "Anastasya"],
   "weapons": ["TorrentsOfSpring", "Silverdawn"],
   "artifactSets": ["LegacyOfTheFirstChronicle", "PreludeOfTheKingfisherCanopy"],

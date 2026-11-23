@@ -1,6 +1,7 @@
 import { objKeyMap, range } from '@genshin-optimizer/common/util'
 import type { CharacterKey, ElementKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
+import type { NumNode } from '@genshin-optimizer/gi/wr'
 import {
   constant,
   equal,
@@ -14,6 +15,7 @@ import {
   prod,
   stellarDmgNode,
   subscript,
+  sum,
   target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
@@ -165,24 +167,34 @@ const a4_boltStellar_dmgInc = greaterEq(
 )
 
 const [condC1TogetherPath, condC1Together] = cond(key, 'c1Together')
-const c1Together_eleMasDisp = greaterEq(
+/**
+ * Together We Rise's holder: the member a rotation names (`c1Together` is its key: Cyno, then the
+ * first member switched in after him, who keeps it), or set on by hand ('on'), the active one
+ */
+const togetherHolder = (node: NumNode) =>
+  sum(
+    equal(
+      input.activeCharKey,
+      target.charKey,
+      equal(condC1Together, 'on', node)
+    ),
+    equal(condC1Together, target.charKey, node)
+  )
+const c1Together_eleMasValue = greaterEq(
   input.constellation,
   1,
   equal(
     condLockRevelation,
     'on',
-    equal(
-      condLockStellarRadianceSc,
-      'on',
-      equal(condC1Together, 'on', dm.constellation1.eleMas)
-    )
+    equal(condLockStellarRadianceSc, 'on', dm.constellation1.eleMas)
   )
 )
-const c1Together_eleMas = equal(
-  input.activeCharKey,
-  target.charKey,
-  c1Together_eleMasDisp
+const c1Together_eleMasDisp = equal(
+  condC1Together,
+  'on',
+  c1Together_eleMasValue
 )
+const c1Together_eleMas = togetherHolder(c1Together_eleMasValue)
 
 const c2NormHitStacksArr = range(1, dm.constellation2.maxStacks)
 const [condC2NormHitStacksPath, condC2NormHitStacks] = cond(
@@ -207,37 +219,32 @@ const c2_electro_dmg_ = greaterEq(
 const c2TeamHitStacksArr = range(1, 5)
 const [condC2TeamHitPath, condC2TeamHit] = cond(key, 'c2TeamHit')
 // TODO: Technically this only applies to certain hits
-const c2TeamHit_stellarconduct_dmg_disp = infoMut(
-  greaterEq(
-    input.constellation,
-    2,
+const c2TeamHit_stellarconduct_dmg_value = greaterEq(
+  input.constellation,
+  2,
+  equal(
+    condLockRevelation,
+    'on',
     equal(
-      condLockRevelation,
+      condLockStellarRadianceSc,
       'on',
-      equal(
-        condLockStellarRadianceSc,
-        'on',
-        equal(
-          condC1Together,
-          'on',
-          prod(
-            lookup(
-              condC2TeamHit,
-              objKeyMap(c2TeamHitStacksArr, (stack) => constant(stack)),
-              naught
-            ),
-            percent(dm.constellation2.stellarconduct_dmg_)
-          )
-        )
+      prod(
+        lookup(
+          condC2TeamHit,
+          objKeyMap(c2TeamHitStacksArr, (stack) => constant(stack)),
+          naught
+        ),
+        percent(dm.constellation2.stellarconduct_dmg_)
       )
     )
-  ),
+  )
+)
+const c2TeamHit_stellarconduct_dmg_disp = infoMut(
+  equal(condC1Together, 'on', c2TeamHit_stellarconduct_dmg_value),
   { path: 'stellarconduct_dmg_', isTeamBuff: true }
 )
-const c2TeamHit_stellarconduct_dmg_ = equal(
-  input.activeCharKey,
-  target.charKey,
-  c2TeamHit_stellarconduct_dmg_disp
+const c2TeamHit_stellarconduct_dmg_ = togetherHolder(
+  c2TeamHit_stellarconduct_dmg_value
 )
 
 const dmgFormulas = {

@@ -99,6 +99,7 @@ import type { RotationCalculation, SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
+import { tabEnemyFreezeImmune } from './writtenRotation'
 
 /*
  * KQM mode: every optimized member gets KQM Standards artifacts instead of the inventory's, and
@@ -976,6 +977,7 @@ function memberCtx(
   return {
     attacks: [...attacks],
     auras: [...auras],
+    freezeImmune: tabEnemyFreezeImmune(database, teamId, true),
     otherElements: new Set(elements.filter((e) => e !== own)).size,
     element: own,
     ownStellar,

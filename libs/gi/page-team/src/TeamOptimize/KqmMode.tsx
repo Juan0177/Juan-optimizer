@@ -41,15 +41,15 @@ import {
   kqmDefaultExcludedWeapons,
   kqmEnergyRequirement,
   kqmExcludedWeapons,
-  kqmLockedWeapon,
   kqmHasEnergyRequirement,
+  kqmLockedWeapon,
   kqmMemberConstellation,
   kqmMemberStandard,
   kqmTalentLevel,
   kqmTeamOverrides,
   kqmWeapons,
   MOONGECKO_BOSS,
-  sameEnemy,
+  sameRunEnemy,
   setKqmBuildThreads,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
@@ -106,11 +106,6 @@ import {
 } from './KqmChoosers'
 import { KqmCompare, setKqmPicks } from './KqmComparison'
 import { KqmEnergyCalculator, kqmEnergyEstimate } from './KqmEnergyCalculator'
-import {
-  kqmEnergyUpdate,
-  kqmRotationEnergyOf,
-  teamCalculator,
-} from './kqmEnergy'
 import { KqmShareMenu } from './KqmShareMenu'
 import {
   KqmArtifactStandard,
@@ -121,6 +116,11 @@ import {
   useKqmCustom,
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
+import {
+  kqmEnergyUpdate,
+  kqmRotationEnergyOf,
+  teamCalculator,
+} from './kqmEnergy'
 import { MemberAvatar } from './MemberAvatar'
 import {
   kqmRotationId,
@@ -2392,10 +2392,7 @@ function KqmResultsView({
   // the enemy the builds are for: the team's now while it takes the same damage (its preset and
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(
-    () =>
-      enemy && kqmTeam && sameEnemy(enemy.enemyOverride, kqmTeam.enemyOverride)
-        ? kqmTeam
-        : enemy,
+    () => (enemy && kqmTeam && sameRunEnemy(enemy, kqmTeam) ? kqmTeam : enemy),
     [enemy, kqmTeam]
   )
   const fight = useMemo(

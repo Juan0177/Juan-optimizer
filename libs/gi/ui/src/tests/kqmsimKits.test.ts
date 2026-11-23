@@ -80,7 +80,8 @@ describe('KQM-only character kits', () => {
       (a) => a.characterKey === 'Danica' && a.text === 'Q'
     )
     expect(entry).toBeTruthy()
-    expect(burst!.start).toBe(entry!.start + 60)
+    // (Entry → Burst press 63 frames: footage and Lunaris runs)
+    expect(burst!.start).toBe(entry!.start + 63)
     expect(
       sim.hits.some((h) => h.label === 'Entry Skill (Stellar-Conduct)')
     ).toBe(true)
