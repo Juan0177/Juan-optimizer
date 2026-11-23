@@ -764,6 +764,7 @@ export function teamRotationEnergy({
   gender,
   names,
   team,
+  text: given,
 }: {
   database: Database
   teamId: string
@@ -771,9 +772,15 @@ export function teamRotationEnergy({
   gender: GenderKey
   names: RotationMember[]
   team: SimTeam
+  /** Another rotation to play, with the saved opener and timing; absent: the written one */
+  text?: string
 }): { energy: RotationEnergy; rotationTime: number } | undefined {
-  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
-  const text = readStored(database, storageKey(teamId)) ?? ''
+  if (
+    given === undefined &&
+    readStored(database, manualAttacksKey(teamId)) === '1'
+  )
+    return undefined
+  const text = given ?? readStored(database, storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
   const played = simulateWritten({
     text,

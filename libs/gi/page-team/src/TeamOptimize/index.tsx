@@ -14,6 +14,7 @@ import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmResult,
+  BonusStats,
   RunAttackState,
   RunEnemy,
   SimGear,
@@ -95,12 +96,11 @@ import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
 import { RotationInline, RotationsSetting } from './RotationInline'
-import { RotationSearchButton } from './RotationSearch'
+import { type RotationSearchBase, RotationSearchButton } from './RotationSearch'
 import { RotationTransfer } from './RotationTransfer'
 import {
   copyRotationFromKqm,
   copyRotationToKqm,
-  kqmRotationId,
   RotationConfigureButton,
   rotationIdOf,
   type SearchButton,
@@ -461,25 +461,59 @@ export default function TeamBuildWorkspace({
         : undefined,
     [kqmPlayed, kqmShown]
   )
-  // (KQM's rotation search, on the rotation's line and in its writer: with the builds shown; a
-  // rotation it finds opens in the writer, to be played there and used)
+  // a result for another line-up is of no use
+  const result =
+    state.type === 'done' &&
+    sameBuildRoster(state.result.builds, inventoryKeys) &&
+    (state.roster === undefined || state.roster === roster)
+      ? state
+      : undefined
+  // which of the result's team builds is shown (the best, or one of the next ones)
+  const [pick, setPick] = useState(0)
+  const builds = result ? teamBuilds(result.result) : []
+  const shown = builds[Math.min(pick, builds.length - 1)]
+  useEffect(() => setPick(0), [result?.result])
+  // (each tab's rotation search, on the rotation's line and in its writer: with the builds shown;
+  // a rotation it finds opens in the writer, to be played there and used)
   const kqmRunTeamOpt = kqmRotation?.runTeamOpt
   const memberNames = useMemberNames(members)
-  /** The states a KQM run gives every attack now (`lowHp`, set once it is worked out below) */
+  /** The states a run gives every attack now (`lowHp`, set once it is worked out below) */
   const attackStatesNow = useRef<readonly RunAttackState[]>()
+  /** The bonus stats a run ranks builds with now (`fightBuffs`, set once worked out below) */
+  const fightBuffsNow = useRef<Partial<Record<CharacterKey, BonusStats>>>()
+  const kqmSearchBase = useMemo<RotationSearchBase | undefined>(
+    () =>
+      kqmShown && kqmRunTeamOpt
+        ? { tab: 'kqm', result: kqmShown, teamOpt: kqmRunTeamOpt }
+        : undefined,
+    [kqmShown, kqmRunTeamOpt]
+  )
+  const teamSearchBase = useMemo<RotationSearchBase | undefined>(
+    () =>
+      result && shown
+        ? {
+            tab: 'team',
+            result: shown,
+            teamOpt: result.teamOpt,
+            rankingBonusStats: fightBuffsNow,
+          }
+        : undefined,
+    [result, shown]
+  )
+  const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchButton = useCallback<SearchButton>(
     ({ text, names, setText }) => (
       <RotationSearchButton
+        tab={mode === 'kqm' ? 'kqm' : 'team'}
         teamId={teamId}
         text={text}
         names={names}
-        kqmResult={kqmShown}
-        kqmTeamOpt={kqmRunTeamOpt}
+        base={searchBase}
         attackStates={attackStatesNow}
         onUse={setText}
       />
     ),
-    [teamId, kqmShown, kqmRunTeamOpt]
+    [teamId, searchBase, mode]
   )
   // the rotation written as text (inline), and its writer dialog with Undo
   const writer = useRotationWriter({
@@ -491,7 +525,7 @@ export default function TeamBuildWorkspace({
     kqmBuilds: mode === 'kqm' ? kqmShown?.builds : undefined,
     kqmBuffs: mode === 'kqm' && kqmRotation ? kqmBuffs : undefined,
     kqmOverrides: mode === 'kqm' ? kqmOverrides : undefined,
-    searchButton: mode === 'kqm' ? searchButton : undefined,
+    searchButton,
   })
   // (the rotation's time: at the end of the written rotation's line; without one, attacks entered by
   // hand, in the row below)
@@ -639,6 +673,7 @@ export default function TeamBuildWorkspace({
         )
       : undefined
   }, [enemyTeam, fightNow, members])
+  fightBuffsNow.current = fightBuffs
   // The buffs an attack lists: the KQM builds' when a KQM result is shown; on the KQM tab
   // without one, the team's own without the passives of gear (KQM never shows the members' own
   // builds)
@@ -656,18 +691,6 @@ export default function TeamBuildWorkspace({
       },
     [setTeamOpt, running]
   )
-  // a result for another line-up is of no use
-  const result =
-    state.type === 'done' &&
-    sameBuildRoster(state.result.builds, inventoryKeys) &&
-    (state.roster === undefined || state.roster === roster)
-      ? state
-      : undefined
-  // which of the result's team builds is shown (the best, or one of the next ones)
-  const [pick, setPick] = useState(0)
-  const builds = result ? teamBuilds(result.result) : []
-  const shown = builds[Math.min(pick, builds.length - 1)]
-  useEffect(() => setPick(0), [result?.result])
   // the shown builds' rotation timeline: the written rotation played with their weapons and sets,
   // an attack's figures read with their builds (as the run counted them)
   const shownGear = useMemo(
@@ -892,26 +915,24 @@ export default function TeamBuildWorkspace({
             <RotationInline
               trailing={
                 <>
-                  {mode === 'kqm' && (
-                    <RotationSearchButton
-                      compact
-                      teamId={teamId}
-                      text={writtenRotation}
-                      names={memberNames}
-                      kqmResult={kqmShown}
-                      kqmTeamOpt={kqmRunTeamOpt}
-                      attackStates={attackStatesNow}
-                      disabled={running}
-                      onUse={(chosen) => {
-                        setRotationDraft(
-                          database,
-                          kqmRotationId(teamId),
-                          chosen
-                        )
-                        writer.openWriter()
-                      }}
-                    />
-                  )}
+                  <RotationSearchButton
+                    compact
+                    tab={mode === 'kqm' ? 'kqm' : 'team'}
+                    teamId={teamId}
+                    text={writtenRotation}
+                    names={memberNames}
+                    base={searchBase}
+                    attackStates={attackStatesNow}
+                    disabled={running}
+                    onUse={(chosen) => {
+                      setRotationDraft(
+                        database,
+                        rotationIdOf(teamId, mode === 'kqm'),
+                        chosen
+                      )
+                      writer.openWriter()
+                    }}
+                  />
                   <RotationsSetting
                     compact
                     teamId={teamId}

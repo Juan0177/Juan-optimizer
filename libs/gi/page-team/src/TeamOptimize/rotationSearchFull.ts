@@ -1,26 +1,15 @@
+import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import type {
-  CharacterKey,
-  GenderKey,
-  SubstatKey,
-} from '@genshin-optimizer/gi/consts'
-import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
-import type {
-  FrameData,
-  KqmResult,
   RotationCandidate,
   RotationEditKinds,
   RotationMember,
   RotationScore,
   RotationSearchProgress,
   RotationSearchResult,
-  RotationTimingSettings,
-  RunAttackState,
 } from '@genshin-optimizer/gi/ui'
 import {
   energyFits,
   erCostOf,
-  kqmErPrices,
-  kqmRotationSearchSetup,
   mainMember,
   releaseKqmBuilders,
   rotationGuard,
@@ -34,11 +23,10 @@ import {
   templatesForTeam,
   wordsRotationText,
 } from '@genshin-optimizer/gi/ui'
-import type { i18n } from 'i18next'
+import type { RotationSearchSource } from './rotationSearchSource'
 import { templateText } from './RotationTemplates'
-import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
 
-/** The best rotations of a search that get their own KQM builds */
+/** The best rotations of a search that get builds of their own */
 export const CONFIRMED = 3
 /** Searches with the best rotation's own builds, at most */
 const PASSES = 3
@@ -99,7 +87,7 @@ const distinct = (list: readonly RotationCandidate[]) => {
 
 /** Where a full search is */
 export interface FullSearchStage {
-  /** Its search with the builds of the best so far (1: the KQM run's) */
+  /** Its search with the builds of the best so far (1: the tab's run's) */
   pass: number
   phase: 'prices' | 'starts' | 'search' | 'builds'
   /** Of the starts climbed from, or of the builds being found */
@@ -112,24 +100,18 @@ export interface FullSearchStage {
  * the team's templates (`templateSeeds`), and climbs from the written rotation and the best of
  * those, each on its own (a start a change makes worse at first still gets its own climb), until
  * no change to the best is better and a round from more of them finds nothing either. The best few
- * of all then get their own KQM builds, and the best of them with its builds is searched again
- * (from it and the others with builds), until it stays the best. Rotations are ranked by their DPS
- * with their own builds (`confirmed`), against `result`'s for the written one.
+ * of all then get builds of their own (the tab's, `RotationSearchSource.confirm`), and the best of
+ * them with its builds is searched again (from it and the others with builds), until it stays the
+ * best. Rotations are ranked by their DPS with their own builds (`confirmed`), against `source`'s
+ * for the written one.
  */
 export async function fullRotationSearch({
   database,
-  gender,
-  i18n,
-  teamId,
   names,
-  teamOpt,
-  result,
-  saved,
+  source,
   seed,
   kinds,
-  attackStates,
   deadline,
-  gains,
   pause,
   isCancelled,
   onStage,
@@ -138,27 +120,12 @@ export async function fullRotationSearch({
   onThreads,
 }: {
   database: ArtCharDatabase
-  gender: GenderKey
-  i18n: i18n
-  teamId: string
   names: RotationMember[]
-  /** The settings the KQM run was made with */
-  teamOpt: TeamOpt
-  /** The KQM run for the written rotation */
-  result: KqmResult
-  saved: {
-    opener: string
-    timing: RotationTimingSettings
-    frameData: FrameData
-  }
+  /** The builds of the tab's run for the written rotation */
+  source: RotationSearchSource
   seed: string
   kinds: RotationEditKinds
-  attackStates?: readonly RunAttackState[]
   deadline: number
-  /** What a roll adds for `result`'s builds, where known (`kqmErPrices`) */
-  gains?: Partial<
-    Record<CharacterKey, Partial<Record<SubstatKey, number | null>>>
-  >
   pause?: () => Promise<void>
   isCancelled: () => boolean
   onStage?: (stage: FullSearchStage) => void
@@ -167,21 +134,21 @@ export async function fullRotationSearch({
   onThreads?: (threads: number) => void
 }): Promise<
   RotationSearchResult & {
-    /** Each rotation's DPS with its own KQM builds (null: none found) */
+    /** Each rotation's DPS with its own builds (null: none found) */
     confirmed: Record<string, number | null>
     /** What the last pass's estimates are against (`best` without builds of their own) */
     from: RotationCandidate
   }
 > {
-  const runDps = kqmResultDps(result)
+  const runDps = source.dps
   const plan = rotationWords(seed, names)
   const written = wordsRotationText(plan)
   const guard = rotationGuard(plan)
   const confirmed: Record<string, number | null> = {}
-  const runs = new Map<string, KqmResult>()
+  const runs = new Map<string, RotationSearchSource>()
   const found = new Map<string, RotationCandidate>()
   const stop = () => isCancelled() || Date.now() > deadline
-  let base = result
+  let base = source
   let from = written
   let yours: RotationCandidate | undefined
   let last: RotationCandidate[] = []
@@ -192,19 +159,11 @@ export async function fullRotationSearch({
   let ended: RotationSearchResult['ended'] = 'converged'
   for (let pass = 1; pass <= PASSES; pass++) {
     onStage?.({ pass, phase: 'prices' })
-    const prices = await kqmErPrices(
-      database,
-      teamId,
-      gender,
-      teamOpt,
-      base,
-      pause,
-      pass === 1 ? gains : {}
-    ).catch(() => ({}))
+    const prices = await base
+      .prices(pause ?? (async () => undefined))
+      .catch(() => ({}))
     const erCost = erCostOf(prices)
-    const funded = Object.fromEntries(
-      Object.entries(base.energyRecharge).map(([k, er]) => [k, er?.value ?? 0])
-    ) as Partial<Record<CharacterKey, number>>
+    const funded = base.funded
     if (isCancelled()) {
       ended = 'cancelled'
       break
@@ -212,18 +171,7 @@ export async function fullRotationSearch({
     // (the KQM builders of the builds just found are kept a while for the inspector: ended first,
     // or they and the search's workers hold the game data in one tab at once, more than it has)
     releaseKqmBuilders()
-    const player = rotationSearchPlayer(
-      database,
-      kqmRotationSearchSetup(
-        database,
-        teamId,
-        gender,
-        names,
-        teamOpt,
-        base,
-        saved
-      )
-    )
+    const player = rotationSearchPlayer(database, base.setup)
     onThreads?.(player.threads())
     const pool = new Map<string, RotationCandidate>()
     try {
@@ -347,19 +295,10 @@ export async function fullRotationSearch({
       .slice(0, CONFIRMED)
     for (const [i, c] of best.entries()) {
       onStage?.({ pass, phase: 'builds', done: i, total: best.length })
-      const run = await kqmRotationRun({
-        database,
-        gender,
-        i18n,
-        teamId,
-        teamOpt,
-        text: c.text,
-        attackStates,
-        isCancelled,
-      }).catch(() => undefined)
+      const run = await base.confirm(c.text, isCancelled).catch(() => undefined)
       if (isCancelled()) break
-      confirmed[c.text] = run ? kqmResultDps(run) : null
-      if (run) runs.set(c.text, run)
+      confirmed[c.text] = run ? run.dps : null
+      if (run) runs.set(c.text, run.next)
       onConfirmed?.({ ...confirmed })
     }
     if (isCancelled()) {
