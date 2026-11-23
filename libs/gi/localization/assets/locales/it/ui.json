@@ -98,7 +98,10 @@
     "pieces_other": "{{count}} pezzi",
     "rv": "RV",
     "tcBuild": "Una build theorycraft non ha manufatti da mostrare su una card",
-    "title": "Card della build"
+    "title": "Card della build",
+    "share": "Condividi",
+    "zoomIn": "Ingrandisci",
+    "zoomOut": "Adatta allo schermo"
   },
   "buyMeACoffee": "Offrimi un caffè",
   "changelog": {

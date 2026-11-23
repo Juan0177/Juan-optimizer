@@ -267,6 +267,9 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
   withRotationEnergy: (settings: object) => settings,
   parseTiming: () => ({ edits: {} }),
   parseFrameData: () => ({}),
+  // (KQM's play of a written rotation, as the real one: a replay when something is written)
+  writtenKqmReplay: ({ text }: { text: string }) =>
+    text.trim() ? () => ({ attacks: {} }) : undefined,
   kqmTopTeams: (result: {
     builds: Record<string, { weapon: object; sets: object }>
     after: { total: number }

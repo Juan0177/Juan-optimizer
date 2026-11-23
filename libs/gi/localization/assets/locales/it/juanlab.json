@@ -251,6 +251,84 @@
     },
     "entries": [
       {
+        "date": "2026-11-23",
+        "title": "Aggiornamento a Stellar Optimizer 1.35",
+        "summary": "Arrivano le versioni da 1.24 a 1.35 di Stellar Optimizer. La novità più grossa è **Ottimizza rotazione** in KQM Theorycrafting; i manufatti KQM ora hanno livelli, e una squadra può avere più versioni da confrontare.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              {
+                "text": "**Ottimizza rotazione** (KQM Theorycrafting)",
+                "sub": [
+                  "Prova migliaia di piccole modifiche alla rotazione scritta (ordine, ritorni in campo, sequenze di attacchi, abilità e opzioni dei kit) e le gioca con le build KQM. Il DPS principale tiene il suo Tripudio e il suo tempo in campo.",
+                  "**Rapida** si ferma al limite di tempo. **Completa** prova anche gli altri ordini dei membri e i modelli, poi dà alle rotazioni migliori le loro build KQM.",
+                  "Una rotazione che richiede meno Ricarica di energia guadagna le statistiche di danno che libera. Le migliori compaiono mentre cerca, con l'ER richiesta da ogni membro."
+                ]
+              },
+              {
+                "text": "**Manufatti KQM a livelli**",
+                "sub": [
+                  "Oltre allo Standard KQM: **Buono**, **Ottimo**, **Eccellente** e **Perfetto**, costruiti pezzo per pezzo come li crea il gioco.",
+                  "**Personalizzato** torna: quanti dei 45 roll di ogni membro finiscono su statistiche volute (da 10 a 45), il resto casuale.",
+                  "Si sceglie per tutta la squadra o membro per membro, nella tabella dei membri del Setup. Le immagini da condividere dicono quale standard hanno usato le build."
+                ]
+              },
+              {
+                "text": "**Armi in KQM**",
+                "sub": [
+                  "**Blocca un'arma** per un membro: ogni sua build la usa e gli altri vengono ottimizzati attorno a essa.",
+                  "**Armi signature** per membro: mai, oppure da R1 a R5. Con più raffinamenti spuntati, le build usano il più alto."
+                ]
+              },
+              {
+                "text": "**Versioni di una squadra**",
+                "sub": [
+                  "Duplica una squadra o crea una versione scambiando membri: condivide con l'originale le impostazioni KQM.",
+                  "Le versioni si eseguono in background e si confrontano in una tabella (DPS, ER richiesta, tempo in campo, quota) e in un'immagine da condividere.",
+                  "I risultati KQM restano salvati per un massimo di 100 squadre."
+                ]
+              },
+              {
+                "text": "**Squadre da un link**",
+                "sub": [
+                  "Una squadra aperta con un link da un altro sito si importa con le sue build: si eseguono così come sono (segnate **TC**) oppure si passa a «Le mie build»."
+                ]
+              },
+              {
+                "text": "**Ottimizza squadra ed energia**",
+                "sub": [
+                  "Ricerca **Rapida** e **Completa**: la Rapida restringe ogni slot ai manufatti che possono contare. Anche le ricerche piccole usano la GPU.",
+                  "Le particelle dell'abilità vanno a chi è in campo mentre la rotazione si gioca; contano le torrette e Beidou con 1 carica.",
+                  "L'energia di costellazioni, passive, set e armi si compila dalla rotazione scritta.",
+                  "La prima rotazione scritta a parte è un setup che non si conta, a meno che non la spunti.",
+                  "«Cosa aumenta il danno della squadra» anche per le build KQM mostrate, salvato con l'esecuzione."
+                ]
+              }
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Anastasya**: ascensione, Vortici e C6. **Wriothesley**: C4 e C6.",
+              "**Nicole** C6, **Lohen** (entrambi i colpi dell'attacco caricato), **Sucrose** (i bonus partono spenti senza la sua abilità o il Tripudio), **Iansan**, **Varesa** C2 nel calcolatore ER.",
+              "**Serenata della luna di seta** si attiva anche con le applicazioni elementali senza danno (Nilou); **Epiche gesta degli Ammazzadraghi** conta solo dopo che il membro esce di campo.",
+              "**Ottimizza rotazione** non esaurisce più la memoria della scheda con le squadre che hanno molti buff.",
+              "**Varie**: l'import non nasconde più gli oggetti importati con i filtri attivi; il campo del Tripudio di Bennett compare nella timeline."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Tutti i testi nuovi sono in italiano (220 testi).",
+              "Torna il pulsante **Feedback**: crea una issue su GitHub e manda il messaggio sul Discord di JuanLab.",
+              "Nella home e nel piè di pagina c'è l'invito al **server Discord** di JuanLab.",
+              "**KQM Compare**: chi esce può comparire anche nell'apertura, e niente più avviso «rotazione cambiata» con un'apertura o dei tempi salvati."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-20",
         "title": "Aggiornamento a Stellar Optimizer 1.23",
         "summary": "Arrivano le versioni da 1.17 a 1.23 di Stellar Optimizer. Le rotazioni scritte passano da sole nelle squadre; il primo risultato di KQM va rifatto, perché ora KQM ha impostazioni sue.",
