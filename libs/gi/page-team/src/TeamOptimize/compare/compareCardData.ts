@@ -21,6 +21,7 @@ import {
   kqmTeamCardData,
   shareStamp,
 } from '../kqmTeamCard'
+import { kqmStandardText } from '../KqmStandard'
 import type { Side, SideMember } from './compareSwapKqm'
 import { cut } from './swapFragment'
 
@@ -157,7 +158,18 @@ export function compareCardData(
         side.rotation,
         side.members.map((m) => ({ characterKey: m.key, name: nameOf(m.key) }))
       ),
-      notes: kqmStandardNote(t, side.talents ?? 9),
+      notes: kqmStandardNote(
+        t,
+        side.talents ?? 9,
+        side.artifacts &&
+          kqmStandardText(
+            // (the standards' names are KQM Theorycrafting's)
+            ((key: string, opts?: object) =>
+              t(`page_team:${key}`, opts as never)) as unknown as TFunction,
+            side.artifacts,
+            side.members.map((m) => m.key)
+          )
+      ),
       beta,
       siteName,
       locale,

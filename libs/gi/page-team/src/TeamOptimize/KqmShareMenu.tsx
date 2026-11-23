@@ -437,6 +437,8 @@ function useShareText(props: ShareProps) {
     'artifactNames_gen',
     // (the detailed team card's stat names)
     'keymap',
+    // (the notes' line about the artifacts' rolls)
+    'juanlab',
   ])
   const locale = i18n.language
   const { gender } = useDBMeta()

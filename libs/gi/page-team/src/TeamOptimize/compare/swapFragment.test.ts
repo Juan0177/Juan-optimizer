@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   leavingSteps,
   memberActions,
+  memberTurn,
   memberOpenerActions,
   swapFragment,
   timingForSwap,
@@ -308,6 +309,29 @@ describe('swapFragment: the replaced step’s turn', () => {
     expect(r).toMatchObject({ ok: true, where: 'opener' })
     expect(r.ok && r.turn).toBeUndefined()
     expect(r.ok && r.insertedTurn).toBeUndefined()
+  })
+})
+
+describe('memberTurn', () => {
+  const namesB: RotationMember[] = names.map((m) =>
+    m.characterKey === 'YaeMiko' ? { characterKey: 'Mitya', name: 'Mitya' } : m
+  )
+  it('is the member’s first turn in any rotation (an optimized one too), cut as the parser cuts it', () => {
+    expect(memberTurn(swapped, namesB, 'Mitya')).toBe(2)
+    // (Optimize rotation moved Odette first and Mitya after Danica's Q)
+    expect(
+      memberTurn(
+        'Odette E E -> Danica E Q -> Mitya N1 E Q -> Anastasya hE N2',
+        namesB,
+        'Mitya'
+      )
+    ).toBe(2)
+    expect(memberTurn('Danica E Odette E Mitya E', namesB, 'Mitya')).toBe(2)
+    expect(memberTurn('Mitya E -> Danica Q -> Mitya Q', namesB, 'Mitya')).toBe(0)
+  })
+  it('has none when the member does not act there', () => {
+    expect(memberTurn('Danica E -> Odette E E', namesB, 'Mitya')).toBeUndefined()
+    expect(memberTurn('Danica E -> Mitya', namesB, 'Mitya')).toBeUndefined()
   })
 })
 

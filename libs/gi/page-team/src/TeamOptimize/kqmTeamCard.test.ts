@@ -1,8 +1,10 @@
 import type { KqmMemberStats } from '@genshin-optimizer/gi/ui'
 import i18next from 'i18next'
 import { beforeEach, describe, expect, it } from 'vitest'
+import enJuanlab from '../../../localization/assets/locales/en/juanlab.json'
 import enKeymap from '../../../localization/assets/locales/en/keymap.json'
 import en from '../../../localization/assets/locales/en/page_team.json'
+import itJuanlab from '../../../localization/assets/locales/it/juanlab.json'
 import itKeymap from '../../../localization/assets/locales/it/keymap.json'
 import it_ from '../../../localization/assets/locales/it/page_team.json'
 import { formatGain, formatRateFull } from './format'
@@ -23,10 +25,10 @@ const tIn = async (lng: 'en' | 'it') => {
   await i.init({
     lng,
     fallbackLng: 'en',
-    ns: ['page_team', 'keymap'],
+    ns: ['page_team', 'keymap', 'juanlab'],
     resources: {
-      en: { page_team: en, keymap: enKeymap },
-      it: { page_team: it_, keymap: itKeymap },
+      en: { page_team: en, keymap: enKeymap, juanlab: enJuanlab },
+      it: { page_team: it_, keymap: itKeymap, juanlab: itJuanlab },
     },
     interpolation: { escapeValue: false },
   })
@@ -65,6 +67,21 @@ const card = async (lng: 'en' | 'it', stats?: (KqmMemberStats | undefined)[]) =>
     locale: lng,
   })
 
+
+describe('kqmStandardNote', () => {
+  it('says the artifacts’ rolls beside KQM’s talents, in the reader’s language', async () => {
+    expect(kqmStandardNote(await tIn('it'), 10, 'Ottimo')).toBe(
+      'Standard KQM · Talenti 10/10/10 · Manufatti: Ottimo'
+    )
+    expect(kqmStandardNote(await tIn('en'), 9, 'Great')).toBe(
+      'KQM Standards · Talents 9/9/9 · Artifacts: Great'
+    )
+    // (no standard given: the line as before)
+    expect(kqmStandardNote(await tIn('it'), 10)).toBe(
+      'Standard KQM · Talenti 10/10/10'
+    )
+  })
+})
 describe('KQM share card language', () => {
   it('writes the Italian labels and figures when the site is in Italian', async () => {
     const d = await card('it')

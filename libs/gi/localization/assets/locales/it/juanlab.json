@@ -433,5 +433,8 @@
         ]
       }
     ]
+  },
+  "card": {
+    "standardRolls": "Standard KQM · Talenti {{talents}} · Manufatti: {{standard}}"
   }
 }
