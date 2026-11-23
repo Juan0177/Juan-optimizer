@@ -36,11 +36,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import { templateText } from './RotationTemplates'
-import {
-  kqmResultDps,
-  kqmRotationRun,
-  type RotationConfirm,
-} from './rotationConfirm'
+import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
 
 /** The best rotations of a search that get their own KQM builds */
 export const CONFIRMED = 3
@@ -140,7 +136,6 @@ export async function fullRotationSearch({
   onProgress,
   onConfirmed,
   onThreads,
-  confirm,
 }: {
   database: ArtCharDatabase
   gender: GenderKey
@@ -170,8 +165,6 @@ export async function fullRotationSearch({
   onProgress?: (progress: RotationSearchProgress) => void
   onConfirmed?: (dps: Record<string, number | null>) => void
   onThreads?: (threads: number) => void
-  /** How the best rotations get their own KQM builds; absent: a KQM run of the team's settings */
-  confirm?: RotationConfirm
 }): Promise<
   RotationSearchResult & {
     /** Each rotation's DPS with its own KQM builds (null: none found) */
@@ -354,20 +347,16 @@ export async function fullRotationSearch({
       .slice(0, CONFIRMED)
     for (const [i, c] of best.entries()) {
       onStage?.({ pass, phase: 'builds', done: i, total: best.length })
-      const run = await (
-        confirm
-          ? confirm(c.text, { attackStates, isCancelled })
-          : kqmRotationRun({
-              database,
-              gender,
-              i18n,
-              teamId,
-              teamOpt,
-              text: c.text,
-              attackStates,
-              isCancelled,
-            })
-      ).catch(() => undefined)
+      const run = await kqmRotationRun({
+        database,
+        gender,
+        i18n,
+        teamId,
+        teamOpt,
+        text: c.text,
+        attackStates,
+        isCancelled,
+      }).catch(() => undefined)
       if (isCancelled()) break
       confirmed[c.text] = run ? kqmResultDps(run) : null
       if (run) runs.set(c.text, run)

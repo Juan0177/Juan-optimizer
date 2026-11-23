@@ -121,7 +121,7 @@ function lastRun(database: ArtCharDatabase, teamId: string): KqmRunState {
 
 /**
  * Per team, the team as KQM Theorycrafting's results show it with other equipment picked in the
- * inspector (in this visit): KQM Compare's A is the team as shown, not the run's own builds
+ * inspector (in this visit): shown so again when the page comes back
  */
 const shownViews: Record<string, { result: KqmResult; view: KqmResult }> = {}
 
@@ -142,28 +142,6 @@ export function kqmShownFor(
 ): KqmResult | undefined {
   const shown = shownViews[teamId]
   return shown?.result === result ? shown.view : undefined
-}
-
-/**
- * The team with the picks made in KQM Theorycrafting's results, while they are for its last run
- * (the one saved at `savedAt`); undefined: no picks, or another run's
- */
-export function kqmShownView(
-  teamId: string,
-  savedAt: number
-): KqmResult | undefined {
-  const shown = shownViews[teamId]
-  if (!shown) return undefined
-  // (the team's last run, on the database it was run on: its key names that database's scope)
-  const last = Object.entries(lastRuns).find(
-    ([key, run]) =>
-      key.endsWith(`:${teamId}`) &&
-      run.type === 'done' &&
-      run.result === shown.result
-  )?.[1]
-  return last?.type === 'done' && last.savedAt === savedAt
-    ? shown.view
-    : undefined
 }
 
 /*

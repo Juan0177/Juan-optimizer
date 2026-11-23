@@ -27,12 +27,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { KqmCompare } from './KqmComparison'
 import { KqmResults, KqmSettings } from './KqmMode'
 import { KqmWeaponLock } from './KqmWeaponLock'
-import {
-  kqmShownFor,
-  kqmShownView,
-  setKqmShownView,
-  useKqmRun,
-} from './useKqmRun'
+import { kqmShownFor, setKqmShownView, useKqmRun } from './useKqmRun'
 
 const mocks = vi.hoisted(() => {
   // the saved last runs (`database.teamKqmResults`), as the browser's storage keeps them
@@ -1140,7 +1135,7 @@ describe('KQM focused results', () => {
     expect(reloaded.result.current.lastResult).toBeUndefined()
   })
 
-  it('keeps the team as shown with its picks, for KQM Compare, while it is for the last run', async () => {
+  it('keeps the team as shown with its picks, for when the page is shown again', async () => {
     const first = sampleResult()
     mocks.optimize.mockResolvedValueOnce(first)
     const hook = renderHook(() => useKqmRun('ui-picks'))
@@ -1149,36 +1144,19 @@ describe('KQM focused results', () => {
     })
     await waitFor(() => expect(mocks.saved.runs['ui-picks']).toBeDefined())
     const last = hook.result.current.lastResult!
-    const savedAt = last.savedAt!
     // no picks: the run's own
-    expect(kqmShownView('ui-picks', savedAt)).toBeUndefined()
+    expect(kqmShownFor('ui-picks', last.result)).toBeUndefined()
     const view = { ...last.result, builds: { ...last.result.builds } }
     setKqmShownView('ui-picks', last.result, view)
-    expect(kqmShownView('ui-picks', savedAt)).toBe(view)
-    // (the page shown again: as it was left)
+    // (the page shown again: as it was left; another result: not these picks)
     expect(kqmShownFor('ui-picks', last.result)).toBe(view)
     expect(kqmShownFor('ui-picks', view)).toBeUndefined()
-    // (another saved run's: not these picks)
-    expect(kqmShownView('ui-picks', savedAt + 1)).toBeUndefined()
     // back to the run's own builds
     setKqmShownView('ui-picks', last.result, undefined)
-    expect(kqmShownView('ui-picks', savedAt)).toBeUndefined()
+    expect(kqmShownFor('ui-picks', last.result)).toBeUndefined()
     // (the run itself shown: no picks)
     setKqmShownView('ui-picks', last.result, last.result)
-    expect(kqmShownView('ui-picks', savedAt)).toBeUndefined()
-    // a new run: the picks made on the previous one are not its
-    setKqmShownView('ui-picks', last.result, view)
-    const second = sampleResult()
-    mocks.optimize.mockResolvedValueOnce(second)
-    await act(async () => {
-      await hook.result.current.run(initial())
-    })
-    await waitFor(() =>
-      expect(hook.result.current.lastResult?.result).toBe(second)
-    )
-    expect(
-      kqmShownView('ui-picks', hook.result.current.lastResult!.savedAt!)
-    ).toBeUndefined()
+    expect(kqmShownFor('ui-picks', last.result)).toBeUndefined()
     act(() => hook.result.current.clear())
   })
 

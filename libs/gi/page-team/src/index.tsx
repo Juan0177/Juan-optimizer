@@ -50,7 +50,6 @@ import { kqmTheorycraftingEnabled } from './featureFlags'
 import { TeamBuildCardButton } from './TeamBuildCardButton'
 import TeamCharacterSelector from './TeamCharacterSelector'
 import TeamBuildWorkspace from './TeamOptimize'
-import KqmCompare from './TeamOptimize/compare/KqmCompare'
 import TeamSetting from './TeamSetting'
 
 export { TeamLinkImportPage } from './TeamLinkImport'
@@ -58,7 +57,10 @@ export { TeamLinkImportPage } from './TeamLinkImport'
 /** `/teams/:teamId/optimize`: Team Optimize (no character key is lowercase) */
 const TEAM_OPT_PATH = 'optimize'
 const KQM_PATH = 'kqm'
-/** `/teams/:teamId/kqm-compare`: KQM Compare (Alpha) */
+/**
+ * `/teams/:teamId/kqm-compare`: the former KQM Compare (its comparison card is now in KQM
+ * Theorycrafting's versions panel): its links open KQM Theorycrafting
+ */
 const KQM_COMPARE_PATH = 'kqm-compare'
 
 export default function PageTeam() {
@@ -72,6 +74,7 @@ export default function PageTeam() {
   if (!team || !teamId) return <Navigate to="/teams" replace />
   if ((kqmRoute || kqmCompareRoute) && !kqmTheorycraftingEnabled)
     return <Navigate to={`/teams/${teamId}/optimize`} replace />
+  if (kqmCompareRoute) return <Navigate to={`/teams/${teamId}/kqm`} replace />
 
   return (
     <Box display="flex" flexDirection="column" gap={1}>
@@ -129,9 +132,7 @@ function Page({
   }, [])
   const isTeamOpt = characterKeyRaw === TEAM_OPT_PATH
   const isKqm = kqmTheorycraftingEnabled && characterKeyRaw === KQM_PATH
-  const isKqmCompare =
-    kqmTheorycraftingEnabled && characterKeyRaw === KQM_COMPARE_PATH
-  const isTeamBuild = isTeamOpt || isKqm || isKqmCompare
+  const isTeamBuild = isTeamOpt || isKqm
   useEffect(() => {
     if (characterKeyRaw && !loadoutDatum && !isTeamBuild)
       navigate('', { replace: true })
@@ -190,7 +191,6 @@ function Page({
   useTitle(
     useMemo(() => {
       if (isKqm) return `${team.name} - ${t('page_team:teamOpt.kqm.tab')}`
-      if (isKqmCompare) return `${team.name} - ${t('juanlab:kqmCompare.tab')}`
       if (isTeamOpt) return `${team.name} - ${t('page_team:teamOpt.title')}`
       const charName = characterKey
         ? t(
@@ -213,7 +213,6 @@ function Page({
       tab,
       isTeamOpt,
       isKqm,
-      isKqmCompare,
     ])
   )
 
@@ -250,15 +249,7 @@ function Page({
         teamId={teamId}
         characterKey={characterKey}
         tab={tab}
-        teamBuildMode={
-          isKqmCompare
-            ? 'kqm-compare'
-            : isKqm
-              ? 'kqm'
-              : isTeamOpt
-                ? 'inventory'
-                : undefined
-        }
+        teamBuildMode={isKqm ? 'kqm' : isTeamOpt ? 'inventory' : undefined}
         actions={
           // a member's tab: its build card, among the header's actions
           !isTeamBuild &&
@@ -275,9 +266,7 @@ function Page({
       {/* `clip` still clips to the rounded corners but, unlike `hidden`, is not a scroll
           container, so sticky bars inside (the optimizer's generate bar) stick to the window */}
       {/* Team optimize and KQM: their sections are panels of their own, straight on the page */}
-      {isKqmCompare ? (
-        <KqmCompare key={teamId} teamId={teamId} teamData={teamData} />
-      ) : isTeamBuild ? (
+      {isTeamBuild ? (
         <TeamBuildWorkspace
           key={teamId}
           teamId={teamId}

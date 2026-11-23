@@ -186,7 +186,7 @@ describe('renderKqmCard', () => {
 describe('drawKqmCard: the rotation’s marked turn', () => {
   const SEP = '   >   '
   /** The texts drawn, each with the font size and alignment it was drawn with */
-  function drawn(rotation: string[], rotationTurn: number) {
+  function drawn(rotation: string[], rotationTurn: number | number[]) {
     const { ctx, log } = recorder()
     drawKqmCard(
       ctx as unknown as CanvasRenderingContext2D,
@@ -251,6 +251,16 @@ describe('drawKqmCard: the rotation’s marked turn', () => {
     expect(box[2]).toBeCloseTo(width(long[turn], own.px) + 20, 3)
     expect(box[1]).toBeLessThan(own.y)
     expect(box[1] + box[3]).toBeGreaterThan(own.y)
+  })
+  it('marks several turns, each where it is drawn (a version with members swapped)', () => {
+    const rotation = ['Danica E', 'Mitya E Q', 'Odette E', 'Bennett E Q', 'Anastasya Q']
+    const { texts, boxes } = drawn(rotation, [1, 3])
+    for (const turn of [1, 3])
+      expect(texts.some((t) => t.text === rotation[turn])).toBe(true)
+    expect(texts.some((t) => t.text === rotation[0])).toBe(false)
+    // (one outline each, as one marked turn has its own)
+    const single = drawn(rotation, 1).boxes.length
+    expect(boxes.length).toBe(single + 1)
   })
   it('a line too long even at its smallest: the mark kept inside what is drawn, or left out', () => {
     const huge = `Member1 ${'E '.repeat(200).trim()}`
