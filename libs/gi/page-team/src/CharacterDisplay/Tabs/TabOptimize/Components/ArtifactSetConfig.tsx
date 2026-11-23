@@ -4,12 +4,19 @@ import {
   InfoTooltipInline,
   ModalWrapper,
 } from '@genshin-optimizer/common/ui'
-import { deepClone, isIn, objKeyMap } from '@genshin-optimizer/common/util'
+import {
+  deepClone,
+  deletePropPath,
+  evalIfFunc,
+  isIn,
+  layeredAssignment,
+  objKeyMap,
+  objPathValue,
+} from '@genshin-optimizer/common/util'
 import { artifactDefIcon } from '@genshin-optimizer/gi/assets'
 import type {
   ArtifactSetKey,
   ArtifactSlotKey,
-  SetNum,
 } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSetKeys,
@@ -26,40 +33,33 @@ import {
   useOptConfig,
 } from '@genshin-optimizer/gi/db-ui'
 import { Translate } from '@genshin-optimizer/gi/i18n'
+import type { DocumentConditional } from '@genshin-optimizer/gi/sheets'
 import { getArtSheet } from '@genshin-optimizer/gi/sheets'
 import { getArtSetStat } from '@genshin-optimizer/gi/stats'
 import { SlotIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { dataContextObj } from '@genshin-optimizer/gi/ui'
-import {
-  ArtifactSetName,
-  DataContext,
-  SetEffectDisplay,
-} from '@genshin-optimizer/gi/ui'
+import { ArtifactSetName, DataContext } from '@genshin-optimizer/gi/ui'
 import { UIData } from '@genshin-optimizer/gi/uidata'
 import { setKeysByRarities } from '@genshin-optimizer/gi/util'
 import { constant } from '@genshin-optimizer/gi/wr'
 import { allNonstackBuffs } from '@genshin-optimizer/gi/wr-types'
-import CloseIcon from '@mui/icons-material/Close'
+import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
+  alpha,
   Box,
   Button,
+  ButtonBase,
   CardContent,
-  Collapse,
-  FormControlLabel,
-  IconButton,
   InputAdornment,
   Menu,
   MenuItem,
   Skeleton,
   Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -74,6 +74,22 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import {
+  DialogHead,
+  floatSx,
+  stackedBackdrop,
+} from '../../../../TeamOptimize/OptionTile'
+import {
+  FieldLabel,
+  focusSx,
+  hairline,
+  numSx,
+  quickSx,
+  Segmented,
+  selectedSx,
+  tokens,
+  type,
+} from '../../../../TeamOptimize/ui'
 
 type View = 'owned' | 'all' | 'effects'
 type SetInfo = {
@@ -91,28 +107,23 @@ export const configurableSetKeys = Object.entries(setKeysByRarities)
     (key) => !key.includes('Prayers') && isIn(allArtifactSetExclusionKeys, key)
   )
 
-/** Set bonuses (2 / 4 pieces) whose effect has a condition the user can turn on. */
-function getCondNums(setKey: ArtifactSetKey): (2 | 4)[] {
+/** A set's effects that have a condition the user can turn on, with the bonus they belong to */
+function getConditionals(setKey: ArtifactSetKey) {
   const { setEffects } = getArtSheet(setKey)
-  return ([2, 4] as const).filter((num) =>
-    setEffects[num]?.document.some((doc) => 'states' in doc)
+  return ([2, 4] as const).flatMap((num) =>
+    (setEffects[num]?.document ?? [])
+      .filter((doc): doc is DocumentConditional => 'states' in doc)
+      .map((cond) => ({ num, cond }))
   )
 }
-const condNumsBySet = Object.fromEntries(
-  configurableSetKeys.map((setKey) => [setKey, getCondNums(setKey)])
-) as Record<ArtifactSetKey, (2 | 4)[]>
-
-const sectionLabelSx = {
-  display: 'block',
-  color: 'text.secondary',
-  fontSize: '0.8125rem',
-  fontWeight: 600,
-  mb: 1,
-} as const
+const conditionalsBySet = Object.fromEntries(
+  configurableSetKeys.map((setKey) => [setKey, getConditionals(setKey)])
+) as Record<ArtifactSetKey, ReturnType<typeof getConditionals>>
 
 /**
- * Which artifact set bonuses the optimizer may use (per set, plus "mixed pieces" builds), and the
- * conditional set effects to apply. A summary card opens a dialog with one row per set.
+ * Which artifact set bonuses the optimizer may use, and the conditional set effects to apply. A
+ * summary card opens a dialog with one row per set. Mixed builds (pieces of no bonus) are always
+ * considered: the optimizer keeps them only when they are better.
  */
 export default function ArtifactSetConfig({
   disabled,
@@ -147,8 +158,6 @@ export default function ArtifactSetConfig({
   )
   const allowed2 = configurableSetKeys.filter((k) => !isExcluded(k, 2))
   const allowed4 = configurableSetKeys.filter((k) => !isExcluded(k, 4))
-  const allowRainbow2 = !artSetExclusion.rainbow?.includes(2)
-  const allowRainbow4 = !artSetExclusion.rainbow?.includes(4)
 
   const condCountBySet = useMemo(
     () =>
@@ -175,14 +184,6 @@ export default function ArtifactSetConfig({
               count: allowed.length,
               total,
             })
-  const mixedText =
-    allowRainbow2 && allowRainbow4
-      ? t('artSetConfig.summary.mixedBoth')
-      : allowRainbow2
-        ? t('artSetConfig.summary.mixedOnly3')
-        : allowRainbow4
-          ? t('artSetConfig.summary.mixedOnly5')
-          : t('artSetConfig.summary.mixedNone')
 
   return (
     <>
@@ -227,10 +228,6 @@ export default function ArtifactSetConfig({
                 value={describe(allowed2)}
               />
               <SummaryRow
-                label={t('artSetConfig.summary.mixed')}
-                value={mixedText}
-              />
-              <SummaryRow
                 label={t('artSetConfig.summary.effects')}
                 value={
                   condTotal
@@ -247,9 +244,11 @@ export default function ArtifactSetConfig({
         open={open}
         onClose={onClose}
         containerProps={{ maxWidth: 'lg' }}
+        // (opened from another dialog: a light backdrop over its dark one)
+        slotProps={dialogOnly ? stackedBackdrop : undefined}
       >
         {/* overflow: clip (not hidden) so the toolbar and footer can stick while the dialog scrolls */}
-        <CardThemed sx={{ overflow: 'clip' }}>
+        <CardThemed sx={[{ overflow: 'clip' }, !!dialogOnly && floatSx]}>
           <Suspense
             fallback={
               <Skeleton variant="rectangular" width="100%" height={600} />
@@ -263,8 +262,6 @@ export default function ArtifactSetConfig({
               artSetExclusion={artSetExclusion}
               allowed2={allowed2.length}
               allowed4={allowed4.length}
-              allowRainbow2={allowRainbow2}
-              allowRainbow4={allowRainbow4}
               condCountBySet={condCountBySet}
               condTotal={condTotal}
               conditional={conditional}
@@ -291,6 +288,10 @@ function SummaryRow({ label, value }: { label: ReactNode; value: ReactNode }) {
   )
 }
 
+/** The rows' layout, by the list's width: one line (wide), two (narrower), three (phones) */
+const ROW_WIDE = '@container (min-width: 880px)'
+const ROW_MID = '@container (min-width: 560px)'
+
 function SetConfigDialog({
   charKey,
   dataContext,
@@ -299,8 +300,6 @@ function SetConfigDialog({
   artSetExclusion,
   allowed2,
   allowed4,
-  allowRainbow2,
-  allowRainbow4,
   condCountBySet,
   condTotal,
   conditional,
@@ -314,8 +313,6 @@ function SetConfigDialog({
   artSetExclusion: ArtSetExclusion
   allowed2: number
   allowed4: number
-  allowRainbow2: boolean
-  allowRainbow4: boolean
   condCountBySet: Record<ArtifactSetKey, number>
   condTotal: number
   conditional: Record<string, unknown>
@@ -335,7 +332,8 @@ function SetConfigDialog({
       const c = counts[art.setKey as keyof typeof counts]
       if (c) c[art.slotKey]++
     }
-    const order = new Map(configurableSetKeys.map((k, i) => [k, i]))
+    // in alphabetical order (of the names as shown)
+    const { compare } = new Intl.Collator()
     return configurableSetKeys
       .map((setKey): SetInfo => {
         const slotCount = counts[setKey as keyof typeof counts]
@@ -347,13 +345,13 @@ function SetConfigDialog({
           pieces: values.reduce((a, b) => a + b, 0),
         }
       })
-      .sort(
-        (a, b) =>
-          +(b.slotsOwned >= 2) - +(a.slotsOwned >= 2) ||
-          b.pieces - a.pieces ||
-          order.get(a.setKey)! - order.get(b.setKey)!
+      .sort((a, b) =>
+        compare(
+          t(`artifactNames_gen:${a.setKey}`),
+          t(`artifactNames_gen:${b.setKey}`)
+        )
       )
-  }, [allArts])
+  }, [allArts, t])
   const ownedCount = setInfos.filter((s) => s.slotsOwned >= 2).length
 
   const [view, setView] = useState<View>(ownedCount ? 'owned' : 'all')
@@ -372,15 +370,6 @@ function SetConfigDialog({
     if (view === 'effects') return !!condCountBySet[setKey]
     return true
   })
-
-  const [expanded, setExpanded] = useState<ArtifactSetKey[]>([])
-  const toggleExpanded = useCallback(
-    (setKey: ArtifactSetKey) =>
-      setExpanded((e) =>
-        e.includes(setKey) ? e.filter((k) => k !== setKey) : [...e, setKey]
-      ),
-    []
-  )
 
   const saveExclusion = useCallback(
     (next: ArtSetExclusion) =>
@@ -417,8 +406,37 @@ function SetConfigDialog({
     (setKey: ArtifactSetKey) => setAll(4, true, setKey),
     [setAll]
   )
-  const toggleRainbow = (num: 2 | 4) =>
-    saveExclusion(handleArtSetExclusion(artSetExclusion, 'rainbow', num))
+  // the basic view: a set used (both its bonuses allowed) or not (neither)
+  const useSets = useCallback(
+    (setKeys: readonly ArtifactSetKey[], use: boolean) => {
+      const next = deepClone(artSetExclusion)
+      for (const setKey of setKeys) {
+        const key = setKey as keyof ArtSetExclusion
+        if (use) delete next[key]
+        else next[key] = [2, 4]
+      }
+      saveExclusion(next)
+    },
+    [artSetExclusion, saveExclusion]
+  )
+  const useSet = useCallback(
+    (setKey: ArtifactSetKey, use: boolean) => useSets([setKey], use),
+    [useSets]
+  )
+  const used = configurableSetKeys.filter(
+    (k) => (artSetExclusion[k as keyof ArtSetExclusion]?.length ?? 0) < 2
+  ).length
+  const [advanced, setAdvanced] = useState(false)
+  const setCondition = useCallback(
+    (path: readonly string[], value?: string) =>
+      database.teamChars.set(teamCharId, (teamChar) => {
+        const next = deepClone(teamChar.conditional)
+        if (value) layeredAssignment(next, path, value)
+        else deletePropPath(next, path)
+        teamChar.conditional = next
+      }),
+    [database, teamCharId]
+  )
   const resetArtConds = useCallback(() => {
     const tconditional = Object.fromEntries(
       Object.entries(conditional).filter(
@@ -430,11 +448,10 @@ function SetConfigDialog({
     })
   }, [database, teamCharId, conditional])
 
-  // Shows every conditional set effect as if the full set were equipped.
-  const fakeDataContextObj = useMemo(
-    () => ({
-      ...dataContext,
-      data: new UIData(
+  // Every conditional set effect's states as if the full set were equipped.
+  const fakeData = useMemo(
+    () =>
+      new UIData(
         {
           ...dataContext.data.data[0],
           artSet: objKeyMap(allArtifactSetKeys, () => constant(4)),
@@ -442,69 +459,16 @@ function SetConfigDialog({
         },
         undefined
       ),
-    }),
     [charKey, dataContext]
   )
 
   return (
     <>
-      {/* Header */}
-      <Box
-        sx={{ display: 'flex', gap: 2, px: { xs: 2, md: 3 }, pt: 2.5, pb: 2 }}
-      >
-        <Box sx={{ flexGrow: 1 }}>
-          <Typography variant="h5" component="h2">
-            {t('artSetConfig.heading')}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            {t('artSetConfig.description')}
-          </Typography>
-        </Box>
-        <IconButton
-          onClick={onClose}
-          aria-label={t('artSetConfig.close')}
-          sx={{ alignSelf: 'flex-start' }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      {/* Mixed pieces ("rainbow" builds) */}
-      <Box sx={{ px: { xs: 2, md: 3 }, pb: 2 }}>
-        <Typography component="span" sx={sectionLabelSx}>
-          {t('artSetConfig.mixed.title')}
-        </Typography>
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-            gap: 1,
-          }}
-        >
-          <MixedOption
-            pattern="aaxxx"
-            label={t('artSetConfig.mixed.three')}
-            alias={t('artSetConfig.mixed.threeAlias')}
-            checked={allowRainbow2}
-            onChange={() => toggleRainbow(2)}
-          />
-          <MixedOption
-            pattern="xxxxx"
-            label={t('artSetConfig.mixed.five')}
-            alias={t('artSetConfig.mixed.fiveAlias')}
-            checked={allowRainbow4}
-            onChange={() => toggleRainbow(4)}
-          />
-        </Box>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}
-        >
-          <PieceDiagram pattern="a" /> {t('artSetConfig.mixed.legendSet')}
-          <PieceDiagram pattern="x" /> {t('artSetConfig.mixed.legendMixed')}
-        </Typography>
-      </Box>
+      <DialogHead
+        title={t('artSetConfig.heading')}
+        info={t('artSetConfig.description')}
+        onClose={onClose}
+      />
 
       {/* Toolbar: sticks to the top while the list scrolls (not on phones, where it is tall) */}
       <Box
@@ -513,15 +477,14 @@ function SetConfigDialog({
           top: 0,
           zIndex: 2,
           bgcolor: 'contentNormal.main',
-          borderTop: 1,
-          borderBottom: 1,
-          borderColor: 'divider',
-          px: { xs: 2, md: 3 },
+          borderBottom: hairline,
+          px: { xs: 2, sm: 3 },
           py: 1.5,
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          gap: 1.5,
+          columnGap: 2,
+          rowGap: 1.25,
         }}
       >
         <TextField
@@ -533,52 +496,110 @@ function SetConfigDialog({
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
+                <SearchIcon sx={{ fontSize: 18 }} />
               </InputAdornment>
             ),
           }}
-          sx={{ flex: '1 1 180px', maxWidth: 280 }}
+          sx={{
+            flex: '1 1 200px',
+            maxWidth: 260,
+            '& .MuiInputBase-root': {
+              height: 34,
+              fontSize: 13.5,
+              borderRadius: tokens.radius.control,
+            },
+          }}
         />
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={view}
-          onChange={(_, v: View | null) => v && setView(v)}
-          disabled={!!search}
-          aria-label={t('artSetConfig.view.label')}
-        >
-          <ToggleButton value="owned">
-            {t('artSetConfig.view.owned')}
-            <Count>{ownedCount}</Count>
-          </ToggleButton>
-          <ToggleButton value="all">
-            {t('artSetConfig.view.all')}
-            <Count>{total}</Count>
-          </ToggleButton>
-          <ToggleButton value="effects">
-            {t('artSetConfig.view.effects')}
-            <Count>{effectsSetCount}</Count>
-          </ToggleButton>
-        </ToggleButtonGroup>
+        <Box sx={{ opacity: search ? 0.5 : 1, ...quickSx }}>
+          <Segmented
+            size="small"
+            aria-label={t('artSetConfig.view.label')}
+            value={view}
+            onChange={setView}
+            options={[
+              {
+                value: 'owned',
+                label: (
+                  <ViewLabel count={ownedCount}>
+                    {t('artSetConfig.view.owned')}
+                  </ViewLabel>
+                ),
+              },
+              {
+                value: 'all',
+                label: (
+                  <ViewLabel count={total}>
+                    {t('artSetConfig.view.all')}
+                  </ViewLabel>
+                ),
+              },
+              {
+                value: 'effects',
+                label: (
+                  <ViewLabel count={effectsSetCount}>
+                    {t('artSetConfig.view.effects')}
+                  </ViewLabel>
+                ),
+              },
+            ]}
+          />
+        </Box>
         <Box sx={{ flexGrow: 1 }} />
-        <BulkControl
-          label={t('artSetConfig.bulk.label2')}
-          allowed={allowed2}
-          total={total}
-          onAll={() => setAll(2, false)}
-          onNone={() => setAll(2, true)}
-        />
-        <BulkControl
-          label={t('artSetConfig.bulk.label4')}
-          allowed={allowed4}
-          total={total}
-          onAll={() => setAll(4, false)}
-          onNone={() => setAll(4, true)}
-        />
+        {advanced ? (
+          <>
+            <BulkControl
+              label={t('artSetConfig.bulk.label4')}
+              allowed={allowed4}
+              total={total}
+              onAll={() => setAll(4, false)}
+              onNone={() => setAll(4, true)}
+            />
+            <BulkControl
+              label={t('artSetConfig.bulk.label2')}
+              allowed={allowed2}
+              total={total}
+              onAll={() => setAll(2, false)}
+              onNone={() => setAll(2, true)}
+            />
+          </>
+        ) : (
+          <BulkControl
+            label={t('artSetConfig.bulk.sets', 'Sets')}
+            allowed={used}
+            total={total}
+            onAll={() => useSets(configurableSetKeys, true)}
+            onNone={() => useSets(configurableSetKeys, false)}
+          />
+        )}
+        <Tooltip
+          title={t(
+            'artSetConfig.advancedTip',
+            'Choose the 2-piece and 4-piece bonuses separately'
+          )}
+        >
+          <Box
+            component="label"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.5,
+              cursor: 'pointer',
+              ...type.label,
+              '&:hover': { color: 'text.primary' },
+            }}
+          >
+            <Switch
+              size="small"
+              checked={advanced}
+              onChange={() => setAdvanced((a) => !a)}
+            />
+            {t('artSetConfig.advanced', 'Advanced')}
+          </Box>
+        </Tooltip>
       </Box>
 
       {/* One row per set */}
-      <Box role="list">
+      <Box role="list" sx={{ containerType: 'inline-size' }}>
         {shownSets.map(({ setKey, slotCount, slotsOwned, pieces }) => (
           <SetRow
             key={setKey}
@@ -592,18 +613,21 @@ function SetConfigDialog({
             excluded4={
               !!artSetExclusion[setKey as keyof ArtSetExclusion]?.includes(4)
             }
-            condCount={condCountBySet[setKey]}
-            expanded={expanded.includes(setKey)}
-            onToggleExpanded={toggleExpanded}
+            setConditional={
+              conditional[setKey] as Record<string, string> | undefined
+            }
+            advanced={advanced}
+            onUse={useSet}
             onToggle={toggleSet}
             onOnly4={onlyThis4}
-            fakeDataContextObj={fakeDataContextObj}
+            onCondition={setCondition}
+            fakeData={fakeData}
           />
         ))}
         {!shownSets.length && (
           <Typography
             color="text.secondary"
-            sx={{ px: { xs: 2, md: 3 }, py: 4, textAlign: 'center' }}
+            sx={{ px: { xs: 2, sm: 3 }, py: 4, textAlign: 'center' }}
           >
             {t('artSetConfig.empty')}
           </Typography>
@@ -617,9 +641,8 @@ function SetConfigDialog({
           bottom: 0,
           zIndex: 2,
           bgcolor: 'contentNormal.main',
-          borderTop: 1,
-          borderColor: 'divider',
-          px: { xs: 2, md: 3 },
+          borderTop: hairline,
+          px: { xs: 2, sm: 3 },
           py: 1.5,
           display: 'flex',
           flexWrap: 'wrap',
@@ -627,23 +650,34 @@ function SetConfigDialog({
           gap: 1,
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          {t('artSetConfig.footer.summary', {
-            four: allowed4,
-            two: allowed2,
-            total,
-          })}
+        <Typography sx={{ ...type.label, ...numSx }}>
+          {advanced
+            ? t('artSetConfig.footer.summary', {
+                four: allowed4,
+                two: allowed2,
+                total,
+              })
+            : t('artSetConfig.footer.using', {
+                defaultValue: 'Using {{count}} of {{total}} sets',
+                count: used,
+                total,
+              })}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         <Button
           variant="text"
-          color="error"
+          color="inherit"
           disabled={!condTotal}
           onClick={resetArtConds}
+          sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
         >
           {t('artSetConfig.footer.resetEffects', { count: condTotal })}
         </Button>
-        <Button variant="contained" sx={giCtaSx} onClick={onClose}>
+        <Button
+          variant="contained"
+          sx={[{ px: 2.5 }, giCtaSx]}
+          onClick={onClose}
+        >
           {t('artSetConfig.footer.done')}
         </Button>
       </Box>
@@ -651,17 +685,27 @@ function SetConfigDialog({
   )
 }
 
-function Count({ children }: { children: ReactNode }) {
+function ViewLabel({
+  children,
+  count,
+}: {
+  children: ReactNode
+  count: number
+}) {
   return (
-    <Box
-      component="span"
-      sx={{ ml: 0.75, color: 'text.secondary', fontSize: '0.75rem' }}
-    >
+    <Box component="span" sx={{ display: 'inline-flex', gap: 0.75 }}>
       {children}
+      <Box
+        component="span"
+        sx={{ color: 'text.secondary', fontWeight: 500, ...numSx }}
+      >
+        {count}
+      </Box>
     </Box>
   )
 }
 
+/** All or none of the sets' 2-piece or 4-piece bonuses */
 function BulkControl({
   label,
   allowed,
@@ -676,91 +720,32 @@ function BulkControl({
   onNone: () => void
 }) {
   const { t } = useTranslation('page_character_optimize')
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <Typography variant="body2" color="text.secondary" sx={{ mr: 0.5 }}>
-        {label}
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        color="inherit"
-        disabled={allowed === total}
-        onClick={onAll}
-      >
-        {t('artSetConfig.bulk.all')}
-      </Button>
-      <Button
-        size="small"
-        variant="outlined"
-        color="inherit"
-        disabled={allowed === 0}
-        onClick={onNone}
-      >
-        {t('artSetConfig.bulk.none')}
-      </Button>
-    </Box>
-  )
-}
-
-/** Five small squares: a = pieces of one set, x = mixed pieces from any set. */
-function PieceDiagram({ pattern }: { pattern: string }) {
-  return (
-    <Box
-      component="span"
-      aria-hidden
-      sx={{ display: 'inline-flex', gap: '3px' }}
+  const action = (text: ReactNode, onClick: () => void, off: boolean) => (
+    <ButtonBase
+      onClick={onClick}
+      disabled={off}
+      sx={{
+        height: 28,
+        px: 1,
+        borderRadius: tokens.radius.control,
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: 'text.secondary',
+        ...quickSx,
+        ...focusSx,
+        '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
+        '&.Mui-disabled': { opacity: 0.4 },
+      }}
     >
-      {[...pattern].map((p, i) => (
-        <Box
-          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed, never-reordered 5-square picture
-          key={i}
-          component="span"
-          sx={{
-            width: 10,
-            height: 10,
-            borderRadius: '3px',
-            ...(p === 'a'
-              ? { bgcolor: 'primary.main' }
-              : { border: 1, borderColor: 'text.disabled' }),
-          }}
-        />
-      ))}
-    </Box>
+      {text}
+    </ButtonBase>
   )
-}
-
-function MixedOption({
-  pattern,
-  label,
-  alias,
-  checked,
-  onChange,
-}: {
-  pattern: string
-  label: string
-  alias: string
-  checked: boolean
-  onChange: () => void
-}) {
   return (
-    <CardThemed bgt="light" sx={{ px: 1.5, py: 0.75 }}>
-      <FormControlLabel
-        sx={{ m: 0, width: '100%', gap: 1 }}
-        control={<Switch checked={checked} onChange={onChange} />}
-        label={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <PieceDiagram pattern={pattern} />
-            <Box>
-              <Typography variant="body2">{label}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {alias}
-              </Typography>
-            </Box>
-          </Box>
-        }
-      />
-    </CardThemed>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
+      <FieldLabel sx={{ mr: 0.5 }}>{label}</FieldLabel>
+      {action(t('artSetConfig.bulk.all'), onAll, allowed === total)}
+      {action(t('artSetConfig.bulk.none'), onNone, allowed === 0)}
+    </Box>
   )
 }
 
@@ -771,12 +756,13 @@ const SetRow = memo(function SetRow({
   pieces,
   excluded2,
   excluded4,
-  condCount,
-  expanded,
-  onToggleExpanded,
+  setConditional,
+  advanced,
+  onUse,
   onToggle,
   onOnly4,
-  fakeDataContextObj,
+  onCondition,
+  fakeData,
 }: {
   setKey: ArtifactSetKey
   slotCount: Record<ArtifactSlotKey, number>
@@ -784,262 +770,605 @@ const SetRow = memo(function SetRow({
   pieces: number
   excluded2: boolean
   excluded4: boolean
-  condCount: number
-  expanded: boolean
-  onToggleExpanded: (setKey: ArtifactSetKey) => void
+  /** Its effects' states (the member's conditional for this set) */
+  setConditional: Record<string, string> | undefined
+  /** Its 2-piece and 4-piece bonuses apart (else one switch: used or not) */
+  advanced: boolean
+  onUse: (setKey: ArtifactSetKey, use: boolean) => void
   onToggle: (setKey: ArtifactSetKey, num: 2 | 4) => void
   onOnly4: (setKey: ArtifactSetKey) => void
-  fakeDataContextObj: dataContextObj
+  onCondition: (path: readonly string[], value?: string) => void
+  fakeData: UIData
 }) {
   const { t } = useTranslation([
     'page_character_optimize',
     'artifactNames_gen',
     'artifact',
   ])
-  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
-  const condNums = condNumsBySet[setKey]
+  // (as the set's own text shows them: one whose condition doesn't hold for this character, or
+  // needs another of its effects on first, is not shown)
+  const conditionals = conditionalsBySet[setKey].filter(
+    ({ cond }) => !cond.canShow || fakeData.get(cond.canShow).value
+  )
   const rarities = getArtSetStat(setKey).rarities.filter((r) => r >= 3)
   const name = t(`artifactNames_gen:${setKey}`)
-  const panelId = `set-effects-${setKey}`
+  // (a set with conditions on both bonuses names which bonus each is of)
+  const bothNums = new Set(conditionals.map((c) => c.num)).size > 1
 
   return (
-    <Box
-      role="listitem"
-      sx={{ '& + &': { borderTop: 1, borderColor: 'divider' } }}
-    >
+    <Box role="listitem" sx={{ '& + &': { borderTop: hairline } }}>
       <Box
         sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
+          display: 'grid',
           alignItems: 'center',
           columnGap: 2,
           rowGap: 1,
-          px: { xs: 2, md: 3 },
-          py: 1,
+          px: { xs: 2, sm: 3 },
+          py: 1.25,
+          minHeight: 64,
+          gridTemplateColumns: '40px minmax(0, 1fr)',
+          gridTemplateAreas: '"icon name" ". pieces" ". effects"',
+          [ROW_MID]: {
+            gridTemplateColumns: '40px minmax(0, 1fr) auto',
+            gridTemplateAreas: '"icon name pieces" ". effects effects"',
+          },
+          [ROW_WIDE]: {
+            gridTemplateColumns:
+              '40px minmax(220px, 300px) minmax(0, 1fr) auto',
+            gridTemplateAreas: '"icon name effects pieces"',
+          },
         }}
       >
         <Box
+          component="img"
+          src={artifactDefIcon(setKey)}
+          alt=""
+          loading="lazy"
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            flex: '1 1 260px',
-            minWidth: 0,
+            gridArea: 'icon',
+            width: 40,
+            height: 40,
             // sets without two different pieces can't give a bonus
-            opacity: slotsOwned >= 2 ? 1 : 0.55,
+            opacity: slotsOwned >= 2 ? 1 : 0.5,
+          }}
+        />
+        <Box
+          sx={{
+            gridArea: 'name',
+            minWidth: 0,
+            opacity: slotsOwned >= 2 ? 1 : 0.6,
           }}
         >
-          <Box
-            component="img"
-            src={artifactDefIcon(setKey)}
-            alt=""
-            loading="lazy"
-            sx={{ width: 44, height: 44, flexShrink: 0 }}
-          />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
+          <Typography
+            component="div"
+            sx={{
+              fontSize: 14,
+              fontWeight: 600,
+              lineHeight: 1.35,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+            }}
+          >
+            <Box
+              component="span"
               sx={{
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.5,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
               }}
             >
-              <Box
-                component="span"
-                sx={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                <ArtifactSetName setKey={setKey} />
-              </Box>
-              <InfoTooltipInline title={<SetBonusText setKey={setKey} />} />
-            </Typography>
+              <ArtifactSetName setKey={setKey} />
+            </Box>
+            <InfoTooltipInline title={<SetBonusText setKey={setKey} />} />
+          </Typography>
+          <Tooltip
+            title={allArtifactSlotKeys
+              .map((s) => `${t(`artifact:slotName.${s}`)} ${slotCount[s]}`)
+              .join(' · ')}
+          >
             <Box
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                flexWrap: 'wrap',
-                gap: 1,
-                color: 'text.secondary',
-                fontSize: '0.75rem',
+                gap: 0.75,
+                ...type.label,
+                fontSize: 12,
+                ...numSx,
               }}
             >
               <span>{rarities.map((r) => `${r}★`).join(' · ')}</span>
-              <Tooltip
-                title={allArtifactSlotKeys
-                  .map((s) => `${t(`artifact:slotName.${s}`)} ${slotCount[s]}`)
-                  .join(' · ')}
+              <Box
+                component="span"
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
               >
-                <Box
-                  component="span"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                  }}
-                >
-                  {allArtifactSlotKeys.map((s) => (
-                    <SlotIcon
-                      key={s}
-                      slotKey={s}
-                      iconProps={{
-                        sx: {
-                          fontSize: 15,
-                          color: slotCount[s]
-                            ? 'text.primary'
-                            : 'text.disabled',
-                        },
-                      }}
-                    />
-                  ))}
-                  <span>{t('artSetConfig.row.pieces', { count: pieces })}</span>
-                </Box>
-              </Tooltip>
-            </Box>
-          </Box>
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <PieceSwitch
-            label={t('artSetConfig.row.twoPc')}
-            ariaLabel={t('artSetConfig.row.allow', { name, num: 2 })}
-            checked={!excluded2}
-            onChange={() => onToggle(setKey, 2)}
-          />
-          <PieceSwitch
-            label={t('artSetConfig.row.fourPc')}
-            ariaLabel={t('artSetConfig.row.allow', { name, num: 4 })}
-            checked={!excluded4}
-            onChange={() => onToggle(setKey, 4)}
-          />
-          <Box sx={{ width: 128, display: 'flex', justifyContent: 'flex-end' }}>
-            {!!condNums.length && (
-              <Button
-                size="small"
-                variant={condCount ? 'contained' : 'text'}
-                color={condCount ? 'primary' : 'inherit'}
-                onClick={() => onToggleExpanded(setKey)}
-                aria-expanded={expanded}
-                aria-controls={panelId}
-                endIcon={
-                  <ExpandMoreIcon
-                    sx={{
-                      transform: expanded ? 'rotate(180deg)' : undefined,
-                      transition: 'transform 150ms',
+                {allArtifactSlotKeys.map((s) => (
+                  <SlotIcon
+                    key={s}
+                    slotKey={s}
+                    iconProps={{
+                      sx: {
+                        fontSize: 13,
+                        color: slotCount[s]
+                          ? 'text.secondary'
+                          : 'text.disabled',
+                        opacity: slotCount[s] ? 1 : 0.5,
+                      },
                     }}
                   />
-                }
-              >
-                {condCount
-                  ? t('artSetConfig.row.effectsOn', { count: condCount })
-                  : t('artSetConfig.row.effects')}
-              </Button>
-            )}
-          </Box>
-          <IconButton
-            size="small"
-            aria-label={t('artSetConfig.row.more', { name })}
-            onClick={(e) => setMenuAnchor(e.currentTarget)}
-          >
-            <MoreVertIcon fontSize="small" />
-          </IconButton>
-          <Menu
-            anchorEl={menuAnchor}
-            open={!!menuAnchor}
-            onClose={() => setMenuAnchor(null)}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          >
-            <MenuItem
-              onClick={() => {
-                setMenuAnchor(null)
-                onOnly4(setKey)
-              }}
-            >
-              {t('artSetConfig.row.only4')}
-            </MenuItem>
-          </Menu>
+                ))}
+              </Box>
+              <span>{t('artSetConfig.row.pieces', { count: pieces })}</span>
+            </Box>
+          </Tooltip>
         </Box>
-      </Box>
 
-      {!!condNums.length && (
-        <Collapse in={expanded} unmountOnExit>
+        {!!conditionals.length && (
           <Box
-            id={panelId}
             sx={{
-              px: { xs: 2, md: 3 },
-              pb: 2,
-              pl: { md: 10.5 },
-              display: 'grid',
-              gap: 2,
+              gridArea: 'effects',
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 0.75,
+              minWidth: 0,
             }}
           >
-            <DataContext.Provider value={fakeDataContextObj}>
-              {condNums.map((num) => {
-                // a 2-piece effect also applies to 4-piece builds
-                const off = num === 2 ? excluded2 && excluded4 : excluded4
-                return (
-                  <Box key={num}>
-                    <Typography component="span" sx={sectionLabelSx}>
-                      {t('artSetConfig.row.effectOf', { num })}
-                      {off &&
-                        ` · ${t('artSetConfig.row.excludedNote', { num })}`}
-                    </Typography>
-                    <Suspense fallback={<Skeleton height={48} />}>
-                      <SetEffectDisplay
-                        setKey={setKey}
-                        setNumKey={num as SetNum}
-                        hideHeader
-                        conditionalsOnly
-                        disabled={off}
-                      />
-                    </Suspense>
-                  </Box>
-                )
-              })}
-            </DataContext.Provider>
+            <Suspense fallback={<Skeleton width={160} height={30} />}>
+              {conditionals.map(({ num, cond }, i) => (
+                <EffectControl
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a set's fixed list
+                  key={i}
+                  cond={cond}
+                  num={num}
+                  showNum={bothNums}
+                  // a 2-piece effect also applies to 4-piece builds
+                  off={num === 2 ? excluded2 && excluded4 : excluded4}
+                  values={setConditional}
+                  onCondition={onCondition}
+                  // an effect turned on wants its set: the set used (basic), its bonus (advanced)
+                  onAllow={() =>
+                    advanced ? onToggle(setKey, num) : onUse(setKey, true)
+                  }
+                  data={fakeData}
+                />
+              ))}
+            </Suspense>
           </Box>
-        </Collapse>
-      )}
+        )}
+
+        <Box
+          sx={{
+            gridArea: 'pieces',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.75,
+          }}
+        >
+          {advanced ? (
+            <>
+              <PieceChip
+                label={t('artSetConfig.row.twoPc')}
+                ariaLabel={t('artSetConfig.row.allow', { name, num: 2 })}
+                on={!excluded2}
+                onClick={() => onToggle(setKey, 2)}
+              />
+              <PieceChip
+                label={t('artSetConfig.row.fourPc')}
+                ariaLabel={t('artSetConfig.row.allow', { name, num: 4 })}
+                on={!excluded4}
+                onClick={() => onToggle(setKey, 4)}
+              />
+              <Tooltip title={t('artSetConfig.row.only4')}>
+                <ButtonBase
+                  onClick={() => onOnly4(setKey)}
+                  aria-label={`${t('artSetConfig.row.only4')}: ${name}`}
+                  sx={{
+                    height: 30,
+                    px: 1,
+                    ml: 0.25,
+                    borderRadius: tokens.radius.control,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    ...quickSx,
+                    ...focusSx,
+                    '&:hover': {
+                      color: 'text.primary',
+                      bgcolor: 'action.hover',
+                    },
+                  }}
+                >
+                  {t('artSetConfig.row.only', 'Only')}
+                </ButtonBase>
+              </Tooltip>
+            </>
+          ) : (
+            <UseSwitch
+              name={name}
+              on={!(excluded2 && excluded4)}
+              // (one bonus only, set in the advanced view: said, not hidden)
+              note={
+                excluded2 !== excluded4
+                  ? excluded4
+                    ? t('artSetConfig.row.only2pc', '2-pc only')
+                    : t('artSetConfig.row.only4pc', '4-pc only')
+                  : undefined
+              }
+              onChange={(use) => onUse(setKey, use)}
+            />
+          )}
+        </Box>
+      </Box>
     </Box>
   )
 })
 
-function PieceSwitch({
-  label,
-  ariaLabel,
-  checked,
+/** The basic view's one switch: the set used (its bonuses allowed) or not */
+function UseSwitch({
+  name,
+  on,
+  note,
   onChange,
 }: {
-  label: string
+  name: string
+  on: boolean
+  note?: ReactNode
+  onChange: (use: boolean) => void
+}) {
+  const { t } = useTranslation('page_character_optimize')
+  return (
+    <Box
+      component="label"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+        cursor: 'pointer',
+      }}
+    >
+      {note && (
+        <Box component="span" sx={{ ...type.label, fontSize: 12 }}>
+          {note}
+        </Box>
+      )}
+      <Switch
+        checked={on}
+        onChange={() => onChange(!on)}
+        inputProps={{
+          'aria-label': t('artSetConfig.row.use', {
+            defaultValue: 'Use {{name}}',
+            name,
+          }),
+        }}
+      />
+    </Box>
+  )
+}
+
+/** A set bonus allowed or not: a chip, one click */
+function PieceChip({
+  label,
+  ariaLabel,
+  on,
+  onClick,
+}: {
+  label: ReactNode
   ariaLabel: string
-  checked: boolean
-  onChange: () => void
+  on: boolean
+  onClick: () => void
 }) {
   return (
-    <FormControlLabel
-      sx={{ m: 0, gap: 0.25 }}
-      labelPlacement="start"
-      label={
-        <Typography
-          variant="body2"
-          color={checked ? 'text.primary' : 'text.secondary'}
-        >
-          {label}
-        </Typography>
-      }
-      control={
-        <Switch
-          size="small"
-          checked={checked}
-          onChange={onChange}
-          inputProps={{ 'aria-label': ariaLabel }}
+    <ButtonBase
+      role="switch"
+      aria-checked={on}
+      aria-label={ariaLabel}
+      onClick={onClick}
+      sx={(theme) => ({
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 0.5,
+        height: 30,
+        minWidth: 64,
+        px: 1.25,
+        borderRadius: tokens.radius.control,
+        fontSize: 12.5,
+        fontWeight: 600,
+        ...numSx,
+        ...quickSx,
+        ...focusSx,
+        ...(on
+          ? { ...selectedSx(theme), color: 'text.primary' }
+          : {
+              color: 'text.secondary',
+              boxShadow: `inset 0 0 0 1px ${tokens.hairlineStrong}`,
+            }),
+        '&:hover': {
+          color: 'text.primary',
+          bgcolor: on
+            ? alpha(theme.palette.primary.main, 0.16)
+            : 'action.hover',
+        },
+      })}
+    >
+      {on && (
+        <CheckIcon sx={{ fontSize: 15, color: 'primary.main', ml: -0.25 }} />
+      )}
+      {label}
+    </ButtonBase>
+  )
+}
+
+/** A condition's name, its element and reaction names as badges (as the effect's own text has them) */
+function condName(name: ReactNode): ReactNode {
+  if (name && typeof name === 'object' && 'props' in name) {
+    const { key18, ns, values } = (name as { props: Record<string, unknown> })
+      .props
+    if (typeof key18 === 'string' && typeof ns === 'string')
+      return (
+        <Translate
+          ns={ns}
+          key18={key18}
+          values={values as Record<string, string>}
+          useBadge
         />
+      )
+  }
+  return name
+}
+
+/**
+ * A set effect's condition, on its row: on or off in one click (one state), or its state picked
+ * from a menu (stacks). Green while on, as conditions are everywhere in the app.
+ */
+function EffectControl({
+  cond,
+  num,
+  showNum,
+  off,
+  values,
+  onCondition: setCondition,
+  onAllow,
+  data,
+}: {
+  cond: DocumentConditional
+  /** The bonus it belongs to (named when the set has conditions on both) */
+  num: 2 | 4
+  showNum: boolean
+  /** Its bonus is not allowed: it can't apply */
+  off: boolean
+  values: Record<string, string> | undefined
+  onCondition: (path: readonly string[], value?: string) => void
+  /** Allows its bonus: an effect turned on while it isn't */
+  onAllow: () => void
+  data: UIData
+}) {
+  const onCondition = (path: readonly string[], value?: string) => {
+    setCondition(path, value)
+    if (value && off) onAllow()
+  }
+  const current = (path: readonly string[]) =>
+    objPathValue({ [path[0]]: values }, path as string[]) as string | undefined
+  const prefix = showNum && (
+    <Box component="span" sx={{ color: 'text.secondary', mr: 0.5 }}>
+      {num}-pc
+    </Box>
+  )
+
+  // several conditions in one (each its own state): a chip each
+  if (!('path' in cond))
+    return (
+      <>
+        {Object.entries(evalIfFunc(cond.states, data)).map(([stateKey, st]) => {
+          const { path, name } = st
+          const on = current(path) === stateKey
+          return (
+            <EffectChip
+              key={stateKey}
+              on={on}
+              off={off}
+              num={num}
+              onClick={() => onCondition(path, on ? undefined : stateKey)}
+            >
+              {prefix}
+              {condName(name)}
+            </EffectChip>
+          )
+        })}
+      </>
+    )
+  const states = evalIfFunc(cond.states, data)
+  const entries = Object.entries(states)
+  const value = current(cond.path)
+  const state = value ? states[value] : undefined
+  if (entries.length === 1) {
+    const [stateKey] = entries[0]
+    const on = value === stateKey
+    return (
+      <EffectChip
+        on={on}
+        off={off}
+        num={num}
+        onClick={() => onCondition(cond.path, on ? undefined : stateKey)}
+      >
+        {prefix}
+        {condName(cond.name)}
+      </EffectChip>
+    )
+  }
+  return (
+    <EffectMenu
+      on={!!state}
+      off={off}
+      label={
+        <>
+          {prefix}
+          {condName(cond.name)}
+          <Box component="span" sx={{ color: 'text.secondary' }}>
+            {': '}
+          </Box>
+          {state ? (state.name ?? value) : <OffText />}
+        </>
       }
+      options={entries.map(([stateKey, st]) => ({
+        key: stateKey,
+        label: st.name ?? stateKey,
+        selected: value === stateKey,
+      }))}
+      onPick={(stateKey) => onCondition(cond.path, stateKey)}
     />
+  )
+}
+
+function OffText() {
+  const { t } = useTranslation('page_character_optimize')
+  return <>{t('artSetConfig.row.effectOff', 'Off')}</>
+}
+
+const effectSx =
+  (on: boolean, off: boolean) => (theme: Parameters<typeof selectedSx>[0]) => {
+    const { success } = theme.palette
+    return {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 0.75,
+      maxWidth: '100%',
+      minHeight: 30,
+      px: 1.25,
+      py: 0.375,
+      borderRadius: tokens.radius.control,
+      fontSize: 12.5,
+      fontWeight: 500,
+      lineHeight: 1.3,
+      textAlign: 'left' as const,
+      color: on ? 'text.primary' : 'text.secondary',
+      bgcolor: on ? alpha(success.main, 0.12) : 'transparent',
+      boxShadow: `inset 0 0 0 1px ${on ? alpha(success.main, 0.45) : tokens.hairlineStrong}`,
+      opacity: off ? 0.45 : 1,
+      ...quickSx,
+      ...focusSx,
+      '&:hover': {
+        color: 'text.primary',
+        bgcolor: on ? alpha(success.main, 0.18) : 'action.hover',
+      },
+    }
+  }
+
+/** A condition with one state: on or off */
+function EffectChip({
+  on,
+  off,
+  num,
+  onClick,
+  children,
+}: {
+  on: boolean
+  off: boolean
+  num: 2 | 4
+  onClick: () => void
+  children: ReactNode
+}) {
+  const { t } = useTranslation('page_character_optimize')
+  const chip = (
+    <ButtonBase
+      role="switch"
+      aria-checked={on}
+      onClick={onClick}
+      sx={effectSx(on, off)}
+    >
+      <Box
+        component="span"
+        sx={(theme) => ({
+          display: 'inline-grid',
+          placeItems: 'center',
+          width: 14,
+          height: 14,
+          flexShrink: 0,
+          borderRadius: '4px',
+          ...(on
+            ? {
+                bgcolor: 'success.main',
+                color: theme.palette.background.default,
+              }
+            : { boxShadow: `inset 0 0 0 1.5px ${tokens.hairlineStrong}` }),
+        })}
+      >
+        {on && <CheckIcon sx={{ fontSize: 12 }} />}
+      </Box>
+      <Box component="span" sx={{ minWidth: 0 }}>
+        {children}
+      </Box>
+    </ButtonBase>
+  )
+  return off ? (
+    <Tooltip title={t('artSetConfig.row.excludedNote', { num })}>
+      {chip}
+    </Tooltip>
+  ) : (
+    chip
+  )
+}
+
+/** A condition with several states (stacks): the current one, the others in a menu */
+function EffectMenu({
+  on,
+  off,
+  label,
+  options,
+  onPick,
+}: {
+  on: boolean
+  off: boolean
+  label: ReactNode
+  options: { key: string; label: ReactNode; selected: boolean }[]
+  onPick: (key?: string) => void
+}) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  return (
+    <>
+      <ButtonBase
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-haspopup="menu"
+        aria-expanded={!!anchor}
+        sx={effectSx(on, off)}
+      >
+        <Box component="span" sx={{ minWidth: 0 }}>
+          {label}
+        </Box>
+        <ExpandMoreIcon
+          sx={{ fontSize: 16, color: 'text.secondary', mr: -0.5 }}
+        />
+      </ButtonBase>
+      <Menu
+        anchorEl={anchor}
+        open={!!anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+      >
+        <MenuItem
+          selected={!options.some((o) => o.selected)}
+          onClick={() => {
+            setAnchor(null)
+            onPick(undefined)
+          }}
+        >
+          <OffText />
+        </MenuItem>
+        {options.map((o) => (
+          <MenuItem
+            key={o.key}
+            selected={o.selected}
+            onClick={() => {
+              setAnchor(null)
+              onPick(o.key)
+            }}
+          >
+            {o.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </>
   )
 }
 
