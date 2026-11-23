@@ -32,6 +32,9 @@ import {
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameEnemy,
+  teamLinkOwnGear,
+  teamLinkUseImported,
+  teamLinkUseOwnGear,
   teamOptBonusStats,
   teamOptCurrentWeapons,
   teamOptMembers,
@@ -352,6 +355,10 @@ export default function TeamBuildWorkspace({
   const optimizable = members.filter(
     (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
   )
+  // an imported team's members on its builds: those the player has run on their own gear
+  const ownGear = team?.importedFrom
+    ? teamLinkOwnGear(database, teamId)
+    : undefined
   const poolSize = usePoolSize(members, teamOpt)
   const [runDialog, setRunDialog] = useState(false)
   useEffect(() => setRunDialog(false), [mode])
@@ -374,6 +381,10 @@ export default function TeamBuildWorkspace({
   // (while it runs: its builds so far once it has some, else the last result)
   const roster = teamRoster(database, teamId)
   const memberKeys = members.map((m) => m.characterKey)
+  // (a run's builds: its members not on a theorycraft build, which it keeps as they are)
+  const inventoryKeys = members
+    .filter((m) => !m.isTc)
+    .map((m) => m.characterKey)
   const kqmEarly = kqm.state.type === 'running' ? kqm.state.early : undefined
   const kqmDone =
     kqm.state.type === 'done'
@@ -650,7 +661,7 @@ export default function TeamBuildWorkspace({
   // a result for another line-up is of no use
   const result =
     state.type === 'done' &&
-    sameBuildRoster(state.result.builds, memberKeys) &&
+    sameBuildRoster(state.result.builds, inventoryKeys) &&
     (state.roster === undefined || state.roster === roster)
       ? state
       : undefined
@@ -1098,6 +1109,8 @@ export default function TeamBuildWorkspace({
           teamOpt={teamOpt}
           setTeamOpt={setTeamOpt}
           poolSize={poolSize}
+          // (an imported team: its builds can be run as they are)
+          evaluateOnly={!!team?.importedFrom}
         />
       )}
 
@@ -1261,7 +1274,13 @@ export default function TeamBuildWorkspace({
           members={members}
           attackCount={attackCount}
           optimizable={optimizable}
+          ownGear={ownGear}
           onRun={() => setRunDialog(true)}
+          onBuilds={(own) =>
+            own
+              ? teamLinkUseOwnGear(database, teamId)
+              : teamLinkUseImported(database, teamId)
+          }
           onCancel={cancel}
           kqmState={kqm.state}
           onKqmCancel={kqm.cancel}
@@ -1630,6 +1649,8 @@ function RunBar({
   members,
   attackCount,
   optimizable,
+  ownGear,
+  onBuilds,
   onRun,
   onCancel,
   kqmState,
@@ -1640,6 +1661,14 @@ function RunBar({
   members: TeamOptMember[]
   attackCount: number
   optimizable: TeamOptMember[]
+  /** An imported team's members that came with builds (`teamLinkOwnGear`) */
+  ownGear?: {
+    switchable: CharacterKey[]
+    missing: CharacterKey[]
+    onOwn: CharacterKey[]
+  }
+  /** An imported team: its builds (false) or the player's own (true) */
+  onBuilds: (own: boolean) => void
   /** Opens the run's dialog (it starts the run) */
   onRun: () => void
   onCancel: () => void
@@ -1655,14 +1684,37 @@ function RunBar({
   // (members on a TC build are kept as they are: Team optimize picks real artifacts)
   const tcCount = members.filter((m) => m.isTc).length
   // can't run at all: nothing to play, or nothing it could ever optimize
+  // an imported team: on the builds it came with, or on the player's own (those they have)
+  const imported = !!ownGear
+  const builds =
+    ownGear && (ownGear.switchable.length || ownGear.onOwn.length)
+      ? ownGear.switchable.length || !ownGear.onOwn.length
+        ? 'imported'
+        : 'own'
+      : undefined
   const blocked = !attackCount
     ? t('teamOpt.run.noAttacks', 'Add the rotation’s attacks first.')
-    : tcCount === members.length
+    : tcCount === members.length && !imported
       ? t(
           'teamOpt.run.allTc',
           'Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.'
         )
       : undefined
+  const ownGearNote =
+    imported && tcCount === members.length
+      ? t(
+          'teamOpt.run.importedBuilds',
+          'Runs the imported builds as they are: their damage, what raises it, the team card. My builds optimizes your own pieces.'
+        )
+      : imported && ownGear?.missing.length && builds === 'own'
+        ? t('teamOpt.run.importedMissing', {
+            defaultValue_one:
+              '{{count}} member you don’t have keeps the imported build.',
+            defaultValue_other:
+              '{{count}} members you don’t have keep the imported build.',
+            count: ownGear.missing.length,
+          })
+        : undefined
   // every member switched off: the button still opens Optimize team, where they are switched on
   const allOff =
     !blocked && !optimizable.length
@@ -1738,6 +1790,24 @@ function RunBar({
                 })}
               </Box>
             )}
+            {builds && (
+              <Segmented
+                size="small"
+                aria-label={t('teamOpt.run.buildsLabel', 'Builds')}
+                value={builds}
+                onChange={(value) => onBuilds(value === 'own')}
+                options={[
+                  {
+                    value: 'imported',
+                    label: t('teamOpt.run.buildsImported', 'Imported builds'),
+                  },
+                  {
+                    value: 'own',
+                    label: t('teamOpt.run.buildsOwn', 'My builds'),
+                  },
+                ]}
+              />
+            )}
             <Typography
               sx={{
                 ...type.body,
@@ -1755,6 +1825,7 @@ function RunBar({
               }}
             >
               {blocked ??
+                ownGearNote ??
                 allOff ??
                 t('teamOpt.run.toOptimize', {
                   defaultValue: '{{count}} of {{total}} to optimize',

@@ -126,6 +126,16 @@ export interface Team {
   versionOf?: string
   /** A version's own constellations, over the original's KQM ones (the rest are shared) */
   versionCons?: Partial<Record<CharacterKey, number>>
+  /**
+   * Imported from a team link (another site's): its members start on that site's builds as
+   * theorycraft builds, and Optimize team switches the members the player has to their own gear
+   */
+  importedFrom?: {
+    name?: string
+    url?: string
+    /** The characters the player did not have: the import added them (not theirs until built) */
+    added?: CharacterKey[]
+  }
 }
 export type { TeamFightSettings } from './TeamEnemy'
 export { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
@@ -295,7 +305,8 @@ export class TeamDataManager extends DataManager<
 
     // optional: a team without Team Optimize settings stays without the field
     const teamOpt = validateTeamOpt((obj as Team).teamOpt)
-    const { enemyPreset, enemyHp, versionOf, versionCons } = obj as Team
+    const { enemyPreset, enemyHp, versionOf, versionCons, importedFrom } =
+      obj as Team
     const fightSettings = validateFightSettings((obj as Team).fightSettings)
 
     const validated: Team = {
@@ -324,6 +335,20 @@ export class TeamDataManager extends DataManager<
       versionOf !== key
         ? { versionOf }
         : {}),
+    }
+    if (importedFrom && typeof importedFrom === 'object') {
+      const text = (v: unknown, max: number) =>
+        typeof v === 'string' && v.length <= max ? v : undefined
+      const name = text(importedFrom.name, 60)
+      const url = text(importedFrom.url, 500)
+      const added = Array.isArray(importedFrom.added)
+        ? importedFrom.added.filter((k) => allCharacterKeys.includes(k))
+        : []
+      validated.importedFrom = {
+        ...(name ? { name } : {}),
+        ...(url?.startsWith('https://') ? { url } : {}),
+        ...(added.length ? { added } : {}),
+      }
     }
     if (validated.versionOf && versionCons && typeof versionCons === 'object') {
       const cons = Object.fromEntries(

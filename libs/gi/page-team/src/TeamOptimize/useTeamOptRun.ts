@@ -100,7 +100,10 @@ function inventoryResultFits(
   },
   roster: string | undefined
 ) {
-  const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  // (a run's builds: its members not on a theorycraft build, which it keeps as they are)
+  const members = teamOptMembers(database, teamId)
+    .filter((m) => !m.isTc)
+    .map((m) => m.characterKey)
   return (
     sameBuildRoster(result.builds, members) &&
     (roster === undefined || roster === teamRoster(database, teamId)) &&

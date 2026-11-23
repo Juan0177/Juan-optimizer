@@ -28,6 +28,7 @@ import {
 import { Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Route, Routes, useMatch } from 'react-router-dom'
+import { TeamLinkPane } from './TeamLinkPane'
 
 export default function PageDocumentation() {
   // const { t } = useTranslation("documentation")
@@ -91,6 +92,12 @@ export default function PageDocumentation() {
                     to="MaterialKey"
                   />
                   <Tab
+                    label={'Team links'}
+                    value="TeamLink"
+                    component={Link}
+                    to="TeamLink"
+                  />
+                  <Tab
                     label={'Version History'}
                     value="VersionHistory"
                     component={Link}
@@ -132,6 +139,7 @@ export default function PageDocumentation() {
                       />
                       <Route path="/StatKey" element={<StatKeyPane />} />
                       <Route path="/KeyNaming" element={<KeyNamingPane />} />
+                      <Route path="/TeamLink" element={<TeamLinkPane />} />
                     </Routes>
                   </Suspense>
                 </CardContent>

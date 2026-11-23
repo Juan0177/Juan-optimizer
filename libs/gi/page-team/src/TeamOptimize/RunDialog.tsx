@@ -72,6 +72,7 @@ export function RunDialog({
   teamOpt,
   setTeamOpt,
   poolSize,
+  evaluateOnly,
 }: {
   open: boolean
   onClose: () => void
@@ -82,6 +83,8 @@ export function RunDialog({
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
   poolSize: number
+  /** With no member to optimize, Start still computes the team as it is (an imported team's builds) */
+  evaluateOnly?: boolean
 }) {
   const { t } = useTranslation('page_team')
   const builds = teamOpt.topN ?? 1
@@ -113,7 +116,8 @@ export function RunDialog({
       pool.some((art) => art.slotKey === slot)
     )
   })
-  const canStart = toOptimize.length > 0 && eligible
+  const asItIs = !!evaluateOnly && !toOptimize.length
+  const canStart = (toOptimize.length > 0 && eligible) || asItIs
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   return (
     <ModalWrapper
@@ -291,6 +295,14 @@ export function RunDialog({
               ]}
             />
           </Box>
+          {asItIs && (
+            <Alert severity="info" role="status">
+              {t(
+                'teamOpt.runDialog.asItIs',
+                'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
+              )}
+            </Alert>
+          )}
           {!!toOptimize.length && !eligible && (
             <Alert severity="info" role="status">
               {artifacts.length

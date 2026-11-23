@@ -216,6 +216,29 @@ describe('export and import test', () => {
     expect(database.teams.get(id)?.lastEdit).toBeGreaterThan(1)
   })
 
+  test('keeps where an imported team came from: its site, an https link, the characters it added', () => {
+    const teamId = database.teams.new({
+      importedFrom: {
+        name: 'Example calcs',
+        url: 'javascript:alert(1)',
+        added: ['Bennett', 'NotACharacter' as never],
+      },
+    })
+    expect(database.teams.get(teamId)?.importedFrom).toEqual({
+      name: 'Example calcs',
+      added: ['Bennett'],
+    })
+    database.teams.set(teamId, {
+      importedFrom: { url: 'https://example.com/team' },
+    })
+    expect(database.teams.get(teamId)?.importedFrom).toEqual({
+      url: 'https://example.com/team',
+    })
+    expect(
+      database.teams.get(database.teams.new({}))?.importedFrom
+    ).toBeUndefined()
+  })
+
   test('deleting loadout does not delete builds', () => {
     const teamCharId = database.teamChars.new('HuTao')
     database.builds.new({ characterKey: 'HuTao' })
