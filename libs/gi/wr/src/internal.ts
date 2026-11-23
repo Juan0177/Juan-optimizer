@@ -127,23 +127,29 @@ export function customMapper<Context, Output, Input extends Base<Input>>(
     map: (node: Input, context: Context) => Output
   ) => Output
 ): (formula: Input, context: Context) => Output {
-  const contextMapping = new Map<Context, [Set<Input>, Map<Input, Output>]>()
+  // (a formula being mapped is marked in its context's mapping: met again, it is a cycle)
+  const visiting = {} as Output
+  const contextMapping = new Map<Context, Map<Input, Output>>()
+  // (the recursion stays in one context: its mapping is kept at hand)
+  let lastContext: Context | undefined
+  let lastMapping: Map<Input, Output> | undefined
   function internalMap(formula: Input, context: Context): Output {
-    let current = contextMapping.get(context)
-    if (!current)
-      contextMapping.set(context, (current = [new Set(), new Map()]))
-    const [visiting, mapping] = current
+    let mapping =
+      lastMapping && context === lastContext
+        ? lastMapping
+        : contextMapping.get(context)
+    if (!mapping) contextMapping.set(context, (mapping = new Map()))
+    lastContext = context
+    lastMapping = mapping
 
     const old = mapping.get(formula)
+    if (old === visiting)
+      throw new Error('Found cyclical dependency during formula mapping')
     if (old) return old
 
-    if (visiting.has(formula))
-      throw new Error('Found cyclical dependency during formula mapping')
-
-    visiting.add(formula)
+    mapping.set(formula, visiting)
     const newFormula = map(formula, context, internalMap)
     mapping.set(formula, newFormula)
-    visiting.delete(formula)
 
     return newFormula
   }

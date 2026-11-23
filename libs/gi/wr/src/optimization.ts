@@ -288,13 +288,26 @@ function deduplicate(formulas: OptNode[]): OptNode[] {
     }
   )
 
+  // (`localeCompare`'s own comparison, without a collator per call)
+  const { compare } = new Intl.Collator()
+  /** A node's operands as sort indices (sorted for commutative operations), once per node */
+  const operandKeys = new Map<OptNode, number[]>()
+  const keysOf = (n: OptNode, sorted: boolean) => {
+    let keys = operandKeys.get(n)
+    if (!keys) {
+      keys = n.operands.map((op) => nodeSortMap.get(op)!)
+      if (sorted) keys.sort((a, b) => a - b)
+      operandKeys.set(n, keys)
+    }
+    return keys
+  }
   function cmpNode(n1: OptNode, n2: OptNode): number {
     const h1 = nodeHeightMap.get(n1)!,
       h2 = nodeHeightMap.get(n2)!
     if (h1 !== h2) return h1 - h2
     const op1 = n1.operation,
       op2 = n2.operation
-    if (op1 !== op2) return op1.localeCompare(op2)
+    if (op1 !== op2) return compare(op1, op2)
 
     switch (op1) {
       case 'const':
@@ -302,25 +315,27 @@ function deduplicate(formulas: OptNode[]): OptNode[] {
         return n1.value - n2.value
       case 'read':
         if (op1 !== op2) throw Error('ily jslint')
-        return arrayCompare(n1.path, n2.path, (s1, s2) => s1.localeCompare(s2))
+        return arrayCompare(n1.path, n2.path, compare)
       case 'res':
       case 'threshold':
       case 'sum_frac': {
         if (op1 !== op2) throw Error('ily jslint')
-        const s1 = n1.operands.map((op) => nodeSortMap.get(op)!),
-          s2 = n2.operands.map((op) => nodeSortMap.get(op)!)
-        return arrayCompare(s1, s2, (n1, n2) => n1 - n2)
+        return arrayCompare(
+          keysOf(n1, false),
+          keysOf(n2, false),
+          (n1, n2) => n1 - n2
+        )
       }
       case 'add':
       case 'mul':
       case 'min':
       case 'max': {
         if (op1 !== op2) throw Error('ily jslint')
-        const s1 = n1.operands.map((op) => nodeSortMap.get(op)!),
-          s2 = n2.operands.map((op) => nodeSortMap.get(op)!)
-        s1.sort((a, b) => a - b)
-        s2.sort((a, b) => a - b)
-        return arrayCompare(s1, s2, (n1, n2) => n1 - n2)
+        return arrayCompare(
+          keysOf(n1, true),
+          keysOf(n2, true),
+          (n1, n2) => n1 - n2
+        )
       }
     }
   }
@@ -407,14 +422,12 @@ export function constantFolder(
         case 'min': {
           const f = allOperations[operation]
           const numericOperands: number[] = []
-          const formulaOperands: OptNode[] = formula.operands
-            .filter((formula) => {
-              const folded = fold(formula, context)
-              return folded.operation === 'const'
-                ? (numericOperands.push(folded.value), false)
-                : true
-            })
-            .map((x) => fold(x, context))
+          const formulaOperands: OptNode[] = []
+          for (const operand of formula.operands) {
+            const folded = fold(operand, context)
+            if (folded.operation === 'const') numericOperands.push(folded.value)
+            else formulaOperands.push(folded)
+          }
           const numericValue = f(numericOperands)
 
           // Fold degenerate cases. This may incorrectly compute NaN
