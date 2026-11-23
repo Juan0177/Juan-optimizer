@@ -40,6 +40,46 @@ describe('Cyno Revelation (upstream gcsim)', () => {
       sim.hits.find((h) => h.t >= n1.start && h.tag === 'normal')?.path
     ).toEqual(['burst', 'normal_0'])
   })
+  it('C1: a Judication gives Normal Attack SPD on its own, no Burst needed (game files)', () => {
+    const play = (cons: number) =>
+      run(
+        ['Cyno'],
+        'Cyno E W4 E N4 N1 W1',
+        { Cyno: kitModels.Cyno },
+        { Cyno: cons }
+      )
+    const c0 = play(0)
+    const c1 = play(1)
+    // the second Secret Rite is a Judication (in the Endseer window of the Pactsworn the first one
+    // started): its Duststalker Bolts
+    expect(c1.hits.some((h) => h.label.startsWith('Duststalker Bolt'))).toBe(
+      true
+    )
+    // (the N1 after the sped-up string starts sooner)
+    const next = (sim: typeof c0) => sim.actions[sim.actions.length - 1].start
+    expect(next(c1)).toBeLessThan(next(c0))
+  })
+  it('C1 (Revelation): Together We Rise passes once, to the first member switched in, who keeps it', () => {
+    const members: CharacterKey[] = ['Cyno', 'Fischl', 'Bennett']
+    const sim = simulateRotation({
+      rotation: parseRotation(
+        'Cyno Q N2 -> Fischl E -> Bennett E W1',
+        members.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members,
+      elements: { Cyno: 'electro', Fischl: 'electro', Bennett: 'pyro' },
+      constellations: { Cyno: 1 },
+      repeats: 1,
+      keep: 'all',
+      // (in a Polestar Field: Stellar-Conduct radiance)
+      reactions: { onHit() {}, radianceAt: () => 'conduct' },
+    })
+    const holders = sim.buffWindows
+      .filter((w) => w.path.join('.') === 'Cyno.c1Together' && w.value)
+      .map((w) => w.value)
+    // Cyno in Pactsworn, then Fischl (switched in first) to its end: never Bennett after her
+    expect([...new Set(holders)]).toEqual(['Cyno', 'Fischl'])
+  })
 })
 
 describe('Diona Revelation (Choice Treasures)', () => {
