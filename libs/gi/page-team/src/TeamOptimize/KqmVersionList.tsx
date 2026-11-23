@@ -458,7 +458,7 @@ export function KqmVersions({
             )}
           </Typography>
         )}
-        {(toRun.length > 0 || running) && (
+        {(hasVersions || toRun.length > 0 || running) && (
           <Box
             sx={{
               display: 'flex',
@@ -476,10 +476,12 @@ export function KqmVersions({
                       'Running {{count}} in the background: you can keep working',
                     count: queue.length,
                   })
-                : t('teamOpt.versions.toRun', {
-                    defaultValue: '{{count}} not run with these settings',
-                    count: toRun.length,
-                  })}
+                : toRun.length > 0
+                  ? t('teamOpt.versions.toRun', {
+                      defaultValue: '{{count}} not run with these settings',
+                      count: toRun.length,
+                    })
+                  : t('teamOpt.versions.allRun', 'All run with these settings')}
             </Typography>
             {running ? (
               <Button
@@ -490,18 +492,34 @@ export function KqmVersions({
                 {t('teamOpt.versions.stop', 'Stop')}
               </Button>
             ) : (
-              <Button
-                size="small"
-                variant="contained"
-                endIcon={<ArrowForwardIcon />}
-                onClick={() => run(toRun.map((r) => r.id))}
-                sx={{ ...giCtaSx, minHeight: 32 }}
-              >
-                {t('teamOpt.versions.runAll', {
-                  defaultValue: 'Run {{count}}',
-                  count: toRun.length,
-                })}
-              </Button>
+              <>
+                {toRun.length > 0 && toRun.length < all.length && (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    onClick={() => run(all.map((r) => r.id))}
+                    sx={{ minHeight: 32 }}
+                  >
+                    {t('teamOpt.versions.runEvery', 'Run all')}
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  variant="contained"
+                  endIcon={<ArrowForwardIcon />}
+                  onClick={() =>
+                    run((toRun.length > 0 ? toRun : all).map((r) => r.id))
+                  }
+                  sx={{ ...giCtaSx, minHeight: 32 }}
+                >
+                  {toRun.length > 0
+                    ? t('teamOpt.versions.runAll', {
+                        defaultValue: 'Run {{count}}',
+                        count: toRun.length,
+                      })
+                    : t('teamOpt.versions.runEvery', 'Run all')}
+                </Button>
+              </>
             )}
           </Box>
         )}
