@@ -4,6 +4,18 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.35.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.35.0) (2026-11-23)
+
+### New
+
+- KQM artifacts now come in five standards: KQM Standard, Good, Great, Top and Perfect. Above KQM Standard, each artifact is built as the game makes one (4 different substats and 4 or 5 upgrades), so a build never has more substat rolls than five artifacts can hold (Top used to give 60; the most is 45). Perfect is the best set the game can make. Saved settings move to the nearest standard: run them again to refresh.
+- Teams from other sites open with one link: preview, import, then run them on their builds or switch to your own (link format: stellaroptimizer.com/import-spec).
+
+### Fixed
+
+- What raises team damage: Level rows count the ascension that level needs, a talent at its ascension's cap shows no gain, and Wolf's Gravestone uptime counts as it does in the run's damage.
+- Team optimize results now show for teams where a member uses a TC build.
+
 ## [v1.34.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.34.3) (2026-11-23)
 
 ### Improved
