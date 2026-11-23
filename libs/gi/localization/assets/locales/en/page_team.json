@@ -431,7 +431,8 @@
       "noTeam": "The team could not be computed.",
       "allTc": "Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.",
       "allSwitchedOff": "Every member is switched off: turn members on in Optimize team.",
-      "share": "searching · {{percent}}%"
+      "share": "searching · {{percent}}%",
+      "keepNeedsOriginal": "Run the original first: this version keeps its teammates' gear from the original's result."
     },
     "slot": {
       "circlet": "Circlet",

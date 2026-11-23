@@ -16,16 +16,24 @@ import type { i18n } from 'i18next'
 import { describe, expect, it } from 'vitest'
 import {
   createVersion,
+  keepsTeammates,
+  keptTeammates,
   KQM_SHARED,
+  kqmRunFresh,
   kqmSharedKey,
   makeOriginal,
   pickVersionMember,
   pushVersionSettings,
   syncVersion,
+  versionChangedMembers,
   versionRoot,
   versionsOf,
 } from './kqmVersions'
-import { kqmRotationId, writtenRotationOf } from './RotationWriter'
+import {
+  kqmRotationId,
+  savedPlayedRotationKey,
+  writtenRotationOf,
+} from './RotationWriter'
 
 const MEMBERS: CharacterKey[] = ['Mavuika', 'Bennett', 'Citlali', 'Rosaria']
 const TEXT =
@@ -533,6 +541,108 @@ describe('KQM versions', () => {
     })
     pushVersionSettings(database, id, names)
     expect(database.teams.get(teamId)?.teamOpt?.kqm?.signature).toBeUndefined()
+  })
+})
+
+describe("a version that keeps its teammates' gear", () => {
+  // (a finished run of the original as KQM mode saves it, and its brief)
+  const saveRootRun = (database: ArtCharDatabase, teamId: string) => {
+    const builds = Object.fromEntries(
+      MEMBERS.map((k) => [k, { weapon: { key: `${k}Weapon`, refinement: 1 } }])
+    )
+    database.teamKqmResults.setRun(teamId, {
+      savedAt: 1,
+      members: [...MEMBERS],
+      run: { type: 'done', result: { builds } },
+    })
+    database.teamKqmResults.setSummary(teamId, {
+      savedAt: 1,
+      members: [...MEMBERS],
+      total: 1000,
+      memberTotals: {},
+      gear: {},
+      settings: kqmSharedKey(database, teamId),
+      rotation: savedPlayedRotationKey(database, kqmRotationId(teamId)),
+    })
+    return builds
+  }
+
+  it('searches only the members that changed: swapped in, or at another constellation or signature', () => {
+    const { database, teamId } = setup()
+    const id = createVersion(
+      database,
+      teamId,
+      [{ from: 'Rosaria', to: 'Chongyun' }],
+      names,
+      undefined,
+      { Mavuika: 1 },
+      undefined,
+      undefined,
+      { Citlali: 0 },
+      true
+    )
+    expect(id).not.toBe('')
+    expect(keepsTeammates(database, id)).toBe(true)
+    expect(keepsTeammates(database, teamId)).toBe(false)
+    expect(versionChangedMembers(database, id).sort()).toEqual(
+      ['Chongyun', 'Citlali', 'Mavuika'].sort()
+    )
+  })
+
+  it("runs from the original's saved builds, and goes stale when the original runs again", () => {
+    const { database, teamId } = setup()
+    const id = createVersion(
+      database,
+      teamId,
+      [],
+      names,
+      undefined,
+      { Mavuika: 1 },
+      undefined,
+      undefined,
+      {},
+      true
+    )
+    // (no run of the original yet: nothing to keep)
+    expect(keptTeammates(database, id)).toBe('noOriginalRun')
+    const before = kqmSharedKey(database, id)
+    const builds = saveRootRun(database, teamId)
+    expect(kqmRunFresh(database, teamId)).toBe(true)
+    expect(keptTeammates(database, id)).toEqual({
+      from: builds,
+      only: ['Mavuika'],
+    })
+    // (its freshness follows the original's run it keeps the gear of)
+    expect(kqmSharedKey(database, id)).not.toBe(before)
+    // (a version without the choice does not depend on the original's run)
+    const plain = createVersion(
+      database,
+      teamId,
+      [],
+      names,
+      undefined,
+      { Mavuika: 2 }
+    )
+    expect(keptTeammates(database, plain)).toBeUndefined()
+  })
+
+  it('made the original, it keeps nothing', () => {
+    const { database, teamId } = setup()
+    const id = createVersion(
+      database,
+      teamId,
+      [],
+      names,
+      undefined,
+      { Mavuika: 1 },
+      undefined,
+      undefined,
+      {},
+      true
+    )
+    makeOriginal(database, id, names)
+    expect(database.teams.get(id)?.teamOpt?.kqm?.keepTeammates).toBeUndefined()
+    expect(keepsTeammates(database, id)).toBe(false)
   })
 })
 

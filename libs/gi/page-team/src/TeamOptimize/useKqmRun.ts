@@ -30,7 +30,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import type { RotationTimingSettings } from './RotationTiming'
 import { kqmEnemyTeam } from '../Enemy/enemyScope'
-import { kqmSharedKey } from './kqmVersions'
+import { keptTeammates, kqmSharedKey } from './kqmVersions'
 import {
   kqmRotationId,
   kqmRotationReplay,
@@ -430,6 +430,17 @@ export async function startKqmRun(
   await nextPaint()
   try {
     if (isCancelled()) return end()
+    // (a version that keeps its teammates' gear: from its original's builds, the changed members
+    // searched)
+    const kept = keptTeammates(database, teamId)
+    if (kept === 'noOriginalRun')
+      return end({
+        type: 'error',
+        message: i18n.t('page_team:teamOpt.run.keepNeedsOriginal', {
+          defaultValue:
+            "Run the original first: this version keeps its teammates' gear from the original's result.",
+        }),
+      })
     const replay = kqmReplayOf(database, gender, i18n, teamId, teamOpt)
     const result = await optimizeTeamKqm({
       database,
@@ -438,6 +449,7 @@ export async function startKqmRun(
       teamOpt,
       replay,
       attackStates,
+      ...(kept ? { ...kept, searchOnly: true } : {}),
       isCancelled,
       onStep: (step) => {
         if (jobs.get(key) === job && !isCancelled()) setProgress(key, step)

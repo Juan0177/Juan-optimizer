@@ -523,6 +523,37 @@ describe('KQM Standards builds', () => {
     expect(refit.after.total).toBeGreaterThan(first.after.total)
   })
 
+  it('searches one member in full from a run’s builds (searchOnly): it may take another weapon, the others’ builds as they were', async () => {
+    const { database, teamId, teamOpt } = setup()
+    const first = (await run(database, teamId, teamOpt))!
+    // (its weapon left out: it must find another one)
+    const without = {
+      ...teamOpt,
+      kqm: {
+        ...teamOpt.kqm!,
+        excludedWeapons: [
+          ...(teamOpt.kqm!.excludedWeapons ?? []),
+          first.builds[ayaka]!.weapon.key,
+        ],
+      },
+    }
+    const searched = (await optimizeTeamKqm({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: without,
+      from: first.builds,
+      only: ayaka,
+      searchOnly: true,
+      maxRounds: 1,
+    }))!
+    expect(searched.builds[ayaka]!.weapon.key).not.toBe(
+      first.builds[ayaka]!.weapon.key
+    )
+    expect(searched.builds[shenhe]).toEqual(first.builds[shenhe])
+    expect(searched.rankings).toEqual({})
+  })
+
   it('ranks a group’s weapons at every refinement ticked, building at the highest', async () => {
     // (the helpers: Favonius is a 4★ standard wish weapon, R5 unless set; R1 ticked too. The
     // Battle Pass's R1 + R5 saved with R1 as the setting, as an older version did: built at R5)
