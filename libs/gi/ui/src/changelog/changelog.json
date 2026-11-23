@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.37.0",
+    "date": "2026-11-23",
+    "improved": [
+      "The KQM tab's Versions sidebar always shows Run all, so you can run every version again even when they're all up to date."
+    ],
+    "fixed": [
+      "Team optimize: opening a grouped attack row no longer crashes the page on some imported teams."
+    ]
+  },
+  {
     "version": "1.36.2",
     "date": "2026-11-23",
     "improved": [
