@@ -409,8 +409,8 @@ export function TeamSensitivity({
     <>
       {kqm
         ? t(
-            'teamOpt.sens.infoKqm',
-            'Each cell: the team’s rotation damage with that one change on that member’s KQM build, against the builds above (same rotation, buffs and weapons). A roll is a KQM Standard roll (0.8 of it on a 4★ piece); talents and levels go up from KQM’s.'
+            'teamOpt.sens.infoKqmStandard',
+            'Each cell: the team’s rotation damage with that one change on that member’s KQM build, against the builds above (same rotation, buffs and weapons). A roll is one of the member’s artifact standard’s rolls (an average one, a highest one for Perfect; 0.8 of it on a 4★ piece); talents and levels go up from KQM’s.'
           )
         : t(
             'teamOpt.sens.info',

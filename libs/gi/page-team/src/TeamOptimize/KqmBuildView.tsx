@@ -168,10 +168,17 @@ export function KqmBuildView({
             {t('teamOpt.kqm.artifactTotals', 'Artifact totals')}
           </Typography>
           <InfoTooltipInline
-            title={t(
-              'teamOpt.kqm.artifactTotalsTip',
-              'Main stats, fixed and distributed rolls from all five artifacts. Excludes weapon, character and set bonuses.'
-            )}
+            title={
+              tier
+                ? t(
+                    'teamOpt.kqm.artifactTotalsTipTier',
+                    'All five artifacts: main stats and every substat roll (each piece’s 4 lines and its upgrades). Excludes character, weapon and set bonuses. Hover a stat for its breakdown.'
+                  )
+                : t(
+                    'teamOpt.kqm.artifactTotalsTip',
+                    'Main stats, fixed and distributed rolls from all five artifacts. Excludes weapon, character and set bonuses.'
+                  )
+            }
           />
           {/* where this build's added rolls went (redistributed for another weapon or set) */}
           <Box sx={{ ml: 'auto' }}>
@@ -201,13 +208,25 @@ export function KqmBuildView({
                 >
                   <span>{t('teamOpt.kqm.mainStats', 'Main stats')}</span>
                   <span>{artifactStatValue(key, main)}</span>
-                  <span>{t('teamOpt.kqm.fixedRolls', 'Fixed rolls')}</span>
-                  <span>{artifactStatValue(key, fixed)}</span>
-                  <span>
-                    {t('teamOpt.kqm.distributedRolls', 'Distributed rolls')} (
-                    {rolls})
-                  </span>
-                  <span>{artifactStatValue(key, distributed)}</span>
+                  {tier ? (
+                    <>
+                      <span>
+                        {t('teamOpt.kqm.substatRolls', 'Substat rolls')} (
+                        {rollCount(rolls)})
+                      </span>
+                      <span>{artifactStatValue(key, distributed)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>{t('teamOpt.kqm.fixedRolls', 'Fixed rolls')}</span>
+                      <span>{artifactStatValue(key, fixed)}</span>
+                      <span>
+                        {t('teamOpt.kqm.distributedRolls', 'Distributed rolls')}{' '}
+                        ({rolls})
+                      </span>
+                      <span>{artifactStatValue(key, distributed)}</span>
+                    </>
+                  )}
                 </Box>
               }
             >

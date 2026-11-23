@@ -903,8 +903,8 @@ function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
           )}
           <Box sx={{ mt: 0.75, color: 'text.secondary' }}>
             {t(
-              'teamOpt.kqm.behindTip',
-              'Average substat rolls on top of the KQM budget, same teammates. ER requirements and per-substat caps still apply.'
+              'teamOpt.kqm.behindTipStandard',
+              'Substat rolls added to this build, each worth one of its artifact standard’s rolls; same teammates. ER requirements and per-substat caps still apply.'
             )}
           </Box>
         </Box>

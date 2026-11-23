@@ -81,6 +81,7 @@ import {
   refitConstellations,
 } from './consInvestment'
 import { formatRateFull } from './format'
+import { kqmStandardText } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
 import { useMemberNames } from './RotationWriter'
 import { Disclosure, hairline, insetSx, type } from './ui'
@@ -470,8 +471,13 @@ function useShareText(props: ShareProps) {
       charName,
       weaponName,
       setName,
-      standard: t('page_team:teamOpt.kqm.share.standard', {
-        defaultValue: 'KQM Standards · Talents {{talents}}',
+      standard: t('page_team:teamOpt.kqm.share.standardTalents', {
+        defaultValue: '{{standard}} · Talents {{talents}}',
+        standard: kqmStandardText(
+          t as unknown as TFunction,
+          setup.kqm,
+          members.map((m) => m.characterKey)
+        ),
         talents: `${talents}/${talents}/${talents}`,
       }),
       teamLine: keys.map((ck) => `C${cons(ck)} ${charName(ck)}`).join('  ·  '),

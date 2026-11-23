@@ -11,6 +11,7 @@ import {
 } from '@genshin-optimizer/gi/consts'
 import type { TeamKqmRunSummary } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { kqmStandardOf } from '@genshin-optimizer/gi/solver'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   RotationMember,
@@ -29,29 +30,29 @@ import {
   kqmTalentLevel,
   parseRotation,
   renderVersionsCard,
-  safeName,
-  versionsCardHeight,
-  versionsCardWidth,
   rotationTemplateKinds,
+  safeName,
   teamOptMembers,
   templatesForTeam,
+  versionsCardHeight,
+  versionsCardWidth,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
-import CallSplitRoundedIcon from '@mui/icons-material/CallSplitRounded'
 import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded'
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded'
+import CallSplitRoundedIcon from '@mui/icons-material/CallSplitRounded'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
+import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
 import StarOutlineRoundedIcon from '@mui/icons-material/StarOutlineRounded'
 import StarRoundedIcon from '@mui/icons-material/StarRounded'
-import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import {
   alpha,
   Box,
@@ -71,6 +72,7 @@ import {
   useMediaQuery,
   useTheme,
 } from '@mui/material'
+import type { TFunction } from 'i18next'
 import type { ReactNode } from 'react'
 import {
   Fragment,
@@ -85,6 +87,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { formatRateFull } from './format'
 import { betaOf, rotationTurns, shareStamp } from './KqmShareMenu'
+import { kqmStandardName } from './KqmStandard'
 import {
   queueVersionRuns,
   stopVersionRuns,
@@ -96,10 +99,10 @@ import {
   kqmSharedKey,
   makeOriginal,
   pickVersionMember,
+  signatureOf,
   versionName,
   versionRoot,
   versionRotation,
-  signatureOf,
   versionsOf,
 } from './kqmVersions'
 import { MemberAvatar } from './MemberAvatar'
@@ -119,6 +122,7 @@ import {
 
 const mono =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace'
+
 import {
   focusSx,
   hairline,
@@ -1585,8 +1589,15 @@ function VersionsShare({
     return {
       entries,
       notes: [
-        t('page_team:teamOpt.kqm.share.standard', {
-          defaultValue: 'KQM Standards · Talents {{talents}}',
+        t('page_team:teamOpt.kqm.share.standardTalents', {
+          defaultValue: '{{standard}} · Talents {{talents}}',
+          // (the family's: its members differ, so one set per member reads as Mixed)
+          standard: Object.keys(kqm?.memberStandards ?? {}).length
+            ? t('page_team:teamOpt.kqm.standardMixed', 'Mixed')
+            : kqmStandardName(
+                t as unknown as TFunction,
+                kqmStandardOf(kqm?.standard)
+              ),
           talents: `${talents}/${talents}/${talents}`,
         }),
         first === undefined

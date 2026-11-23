@@ -835,8 +835,8 @@ export function KqmSettings({
             <FieldLabel
               sx={{ gridArea: 'arts' }}
               tip={t(
-                'teamOpt.kqm.artifactsColumnTip',
-                'How many substat rolls this member’s build places for damage, on top of 2 fixed rolls of every substat. KQM Standards: 20. Artifacts above sets every member’s.'
+                'teamOpt.kqm.artifactsColumnTipStandard',
+                'This member’s artifacts: KQM Standard, a tier (Good, Great, Top, Perfect), or Custom: how many of its 45 rolls land on wanted stats. Artifacts above sets every member’s.'
               )}
             >
               {t('teamOpt.kqm.artifactsLabel', 'Artifacts')}
