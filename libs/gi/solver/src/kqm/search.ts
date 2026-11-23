@@ -7,6 +7,7 @@ import type {
 import {
   allKqmStandardKeys,
   allSubstatKeys,
+  kqmCustomRollRange,
 } from '@genshin-optimizer/gi/consts'
 
 /*
@@ -23,7 +24,10 @@ export const KQM_PIECE_CAP = 2
 export const KQM_FIXED_ROLLS = 2
 
 export const KQM_STANDARDS = allKqmStandardKeys
-export type KqmStandard = KqmStandardKey
+/** A named standard, or Custom: how many of the set's 45 rolls land on wanted stats */
+export type KqmStandard = KqmStandardKey | number
+/** Custom's range of wanted rolls */
+export const KQM_CUSTOM_ROLLS = kqmCustomRollRange
 /**
  * A tier's five artifacts, each modelled as the game makes them: 4 lines (substats other than its
  * main stat, each 1 roll) and upgrades (5 at +20; 4 when it started with 3 lines). Of each
@@ -38,21 +42,58 @@ export interface KqmTier {
   lines: number
   ups: number
   highest?: boolean
+  /** Custom: each piece's own wanted lines and upgrades (flower to circlet) */
+  pieces?: readonly { lines: number; ups: number }[]
 }
-export const KQM_TIERS: Record<Exclude<KqmStandard, 'kqms'>, KqmTier> = {
+export const KQM_TIERS: Record<Exclude<KqmStandardKey, 'kqms'>, KqmTier> = {
   good: { pieceRolls: 8, lines: 2, ups: 3 },
   great: { pieceRolls: 9, lines: 3, ups: 4 },
   top: { pieceRolls: 9, lines: 4, ups: 5 },
   perfect: { pieceRolls: 9, lines: 4, ups: 5, highest: true },
 }
+const customTiers = new Map<number, KqmTier>()
+/**
+ * Custom: `wanted` of the set's 45 rolls (9 a piece) on wanted stats, an even share a piece (the
+ * flower's first for what does not divide by 5), each piece's share its wanted lines first, then
+ * upgrades on them (as the tiers split theirs: 5 is 2 lines and 3 upgrades, 7 is 3 and 4, 9 is 4
+ * and 5); the rest random
+ */
+export function kqmCustomTier(wanted: number): KqmTier {
+  let tier = customTiers.get(wanted)
+  if (!tier) {
+    const pieces = [0, 1, 2, 3, 4].map((i) => {
+      const w = Math.floor(wanted / 5) + (i < wanted % 5 ? 1 : 0)
+      const lines =
+        w > 0 ? Math.max(1, Math.min(4, Math.round((w * 4) / 9))) : 0
+      return { lines, ups: w - lines }
+    })
+    tier = {
+      pieceRolls: 9,
+      lines: Math.max(...pieces.map((p) => p.lines)),
+      ups: Math.max(...pieces.map((p) => p.ups)),
+      pieces,
+    }
+    customTiers.set(wanted, tier)
+  }
+  return tier
+}
 /** A standard's tier (undefined: KQMS) */
-export const kqmTier = (standard?: KqmStandard) =>
-  standard && standard !== 'kqms' ? KQM_TIERS[standard] : undefined
-/** A standard as set (absent or unknown: KQMS) */
-export const kqmStandardOf = (standard?: string): KqmStandard =>
-  (KQM_STANDARDS as readonly string[]).includes(standard ?? '')
-    ? (standard as KqmStandard)
-    : 'kqms'
+export const kqmTier = (standard?: KqmStandard): KqmTier | undefined =>
+  typeof standard === 'number'
+    ? kqmCustomTier(standard)
+    : standard && standard !== 'kqms'
+      ? KQM_TIERS[standard]
+      : undefined
+/** A standard as set (absent or unknown: KQMS; Custom's rolls within its range) */
+export const kqmStandardOf = (standard?: unknown): KqmStandard =>
+  typeof standard === 'number' && Number.isFinite(standard)
+    ? Math.min(
+        KQM_CUSTOM_ROLLS.max,
+        Math.max(KQM_CUSTOM_ROLLS.min, Math.round(standard))
+      )
+    : (KQM_STANDARDS as readonly unknown[]).includes(standard)
+      ? (standard as KqmStandardKey)
+      : 'kqms'
 /** Main stats kept after the screening of a set's main stats, then searched with refined rolls */
 export const MAINS_SEARCHED = 6
 
@@ -502,6 +543,8 @@ interface PieceSpec {
   /** The substats it can have (not its main stat), in `allSubstatKeys` order */
   eligible: SubstatKey[]
   /** Upgrades landing on its wanted lines, and on any line at even odds */
+  /** Its lines on wanted stats */
+  lines: number
   wantedUps: number
   randomUps: number
   /** 0.8 for a 4★ piece */
@@ -519,10 +562,11 @@ function pieceSpecs(
   return slotMains(mains).map((main, i) => {
     // a 4★ piece: 2 fewer upgrades (the random ones first), its rolls 0.8 of a 5★ one's
     const ups = tier.pieceRolls - 4 - (four[i] ? KQM_FOUR_STAR_ROLLS_LESS : 0)
-    const wantedUps = Math.min(tier.ups, ups)
+    const wantedUps = Math.min(tier.pieces?.[i].ups ?? tier.ups, ups)
     const eligible = allSubstatKeys.filter((k) => k !== main)
     return {
       eligible,
+      lines: tier.pieces?.[i].lines ?? tier.lines,
       wantedUps,
       randomUps: ups - wantedUps,
       scale: four[i] ? KQM_FOUR_STAR_SCALE : 1,
@@ -539,13 +583,12 @@ function pieceSpecs(
 function pieceRolls(
   piece: KqmPiece,
   spec: PieceSpec,
-  tier: KqmTier,
   into: Float64Array,
   settled = false
 ) {
   into.fill(0)
   const placedUps = Object.values(piece.ups).reduce((a, n) => a + (n ?? 0), 0)
-  const randomLines = settled ? 4 - piece.lines.length : 4 - tier.lines
+  const randomLines = settled ? 4 - piece.lines.length : 4 - spec.lines
   const randomUps = spec.randomUps + (settled ? spec.wantedUps - placedUps : 0)
   const perLine = 1 + randomUps / 4
   const others = spec.eligible.length - piece.lines.length
@@ -575,7 +618,7 @@ export function kqmTierRolls(
   const sum = new Float64Array(allSubstatKeys.length)
   const one = new Float64Array(allSubstatKeys.length)
   layout.forEach((piece, i) => {
-    pieceRolls(piece, specs[i], tier, one, true)
+    pieceRolls(piece, specs[i], one, true)
     for (let j = 0; j < sum.length; j++) sum[j] += one[j]
   })
   const rolls: KqmRolls = {}
@@ -635,7 +678,7 @@ function placeTierRolls(
     (k) => column[SUBSTAT_INDEX[k]] >= 0 && problem.scales.has(k)
   )
   const current = specs.map((spec, i) =>
-    pieceRolls(layout[i], spec, tier, new Float64Array(n))
+    pieceRolls(layout[i], spec, new Float64Array(n))
   )
   const stats = problem.statsOf(
     kqmStatValues(
@@ -662,7 +705,7 @@ function placeTierRolls(
     piece: KqmPiece,
     scored: Map<string, KqmScore>
   ) => {
-    pieceRolls(piece, specs[i], tier, trial)
+    pieceRolls(piece, specs[i], trial)
     let key = ''
     for (let j = 0; j < n; j++)
       if (column[j] >= 0)
@@ -676,7 +719,7 @@ function placeTierRolls(
     return s
   }
   const setPiece = (i: number, piece: KqmPiece, settled = false) => {
-    pieceRolls(piece, specs[i], tier, trial, settled)
+    pieceRolls(piece, specs[i], trial, settled)
     shift(current[i], trial)
     current[i].set(trial)
     layout[i] = piece
@@ -692,7 +735,7 @@ function placeTierRolls(
   // on another piece, is not scored again.
   const readCols = allSubstatKeys.map((_, j) => wanted[j])
   const upsUsed = layout.map(() => 0)
-  const randomLines = 4 - tier.lines
+  const randomLines = specs.map((spec) => 4 - spec.lines)
   const perLine = specs.map((spec) => 1 + spec.randomUps / 4)
   const eligibleIdx = specs.map((spec) =>
     spec.eligible.map((k) => SUBSTAT_INDEX[k])
@@ -701,7 +744,7 @@ function placeTierRolls(
   /** The random share of each line a piece's random lines can be, with `lines` wanted lines */
   const shareOf = (i: number, lines: number) => {
     const others = specs[i].eligible.length - lines
-    return others > 0 ? (randomLines / others) * perLine[i] : 0
+    return others > 0 ? (randomLines[i] / others) * perLine[i] : 0
   }
   /** Adds (`sign` 1) or takes back (-1) a wanted line of stat `j` on piece `i` */
   const moveLine = (i: number, j: number, sign: number) => {
@@ -720,12 +763,14 @@ function placeTierRolls(
   /** A line try's key: the stat, and what decides its other stats' share on that piece */
   const lineKey = (i: number, j: number) => {
     let mask = 0
-    if (randomLines > 0)
+    if (randomLines[i] > 0)
       for (const e of eligibleIdx[i])
         if (readCols[e] && !hasLine[i][e] && e !== j) mask |= 1 << e
     const m = specs[i].eligible.length - layout[i].lines.length
     return (
-      ((((mask * 16 + j) * 16 + m) * 8 + specs[i].randomUps) * 2 +
+      (((((mask * 16 + j) * 16 + m) * 8 + specs[i].randomUps) * 8 +
+        randomLines[i]) *
+        2 +
         (specs[i].scale === 1 ? 0 : 1)) *
       2
     )
@@ -751,7 +796,7 @@ function placeTierRolls(
     }
     // (the wanted lines first, then their upgrades)
     for (let i = 0; i < layout.length; i++)
-      if (layout[i].lines.length < tier.lines)
+      if (layout[i].lines.length < specs[i].lines)
         for (const j of eligibleIdx[i])
           if (readCols[j] && !hasLine[i][j]) consider(i, j, false)
     if (!best)

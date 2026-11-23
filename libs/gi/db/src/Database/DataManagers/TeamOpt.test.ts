@@ -231,13 +231,31 @@ describe('team.teamOpt (Team Optimize settings)', () => {
         kqm: { refinement5: 1, refinement4: 5, memberStandards },
       })?.kqm
     expect(
-      kqm({ Xingqiu: 'top', Bennett: 'kqms', Nobody: 'good', Xiangling: 40 })
-        ?.memberStandards
-    ).toEqual({ Xingqiu: 'top', Bennett: 'kqms' })
-    for (const bad of [{ Xingqiu: 'best' }, {}, 'top', undefined])
+      kqm({
+        Xingqiu: 'top',
+        Bennett: 'kqms',
+        Nobody: 'good',
+        Xiangling: 32,
+        Sucrose: 46,
+        Chongyun: 12.5,
+      })?.memberStandards
+    ).toEqual({ Xingqiu: 'top', Bennett: 'kqms', Xiangling: 32 })
+    for (const bad of [
+      { Xingqiu: 'best' },
+      { Xingqiu: 9 },
+      {},
+      'top',
+      undefined,
+    ])
       expect(kqm(bad)?.memberStandards).toBeUndefined()
+    const team = (standard: unknown) =>
+      validateTeamOpt({ kqm: { refinement5: 1, refinement4: 5, standard } })
+        ?.kqm?.standard
+    expect(team(32)).toBe(32)
+    expect(team('perfect')).toBe('perfect')
+    expect(team(50)).toBeUndefined()
   })
-  it('reads a standard saved as placed rolls as the nearest tier', () => {
+  it('reads a standard saved as placed rolls: a preset as its tier, any other number as Custom', () => {
     const kqm = (rolls: unknown, memberRolls?: unknown) =>
       validateTeamOpt({
         kqm: { refinement5: 1, refinement4: 5, rolls, memberRolls },
@@ -246,11 +264,15 @@ describe('team.teamOpt (Team Optimize settings)', () => {
     expect(kqm(25)?.standard).toBe('good')
     expect(kqm(30)?.standard).toBe('great')
     expect(kqm(40)?.standard).toBe('top')
-    expect(kqm(50)?.standard).toBe('top')
-    expect(kqm(23)?.standard).toBe('good')
-    expect(kqm(12)?.standard).toBeUndefined()
-    const mixed = kqm(30, { Xingqiu: 40, Bennett: 20, Nobody: 25 })
-    expect(mixed?.memberStandards).toEqual({ Xingqiu: 'top', Bennett: 'kqms' })
+    expect(kqm(50)?.standard).toBe(45)
+    expect(kqm(23)?.standard).toBe(23)
+    expect(kqm(5)?.standard).toBe(10)
+    const mixed = kqm(30, { Xingqiu: 40, Bennett: 20, Nobody: 25, Sucrose: 35 })
+    expect(mixed?.memberStandards).toEqual({
+      Xingqiu: 'top',
+      Bennett: 'kqms',
+      Sucrose: 35,
+    })
     expect(mixed).not.toHaveProperty('rolls')
     expect(mixed).not.toHaveProperty('memberRolls')
   })

@@ -112,6 +112,7 @@ import {
   kqmStandardName,
   kqmStandardsMixed,
   kqmStandardText,
+  useKqmCustom,
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
 import { MemberAvatar } from './MemberAvatar'
@@ -384,6 +385,7 @@ export function KqmSettings({
     () => members.map((m) => m.characterKey),
     [members]
   )
+  const [customStandards, setCustomStandards] = useKqmCustom(kqm, memberKeys)
   // a team never set to a talent level takes the one last picked on any team (else KQM's 10)
   const unsetTalents = teamOpt.kqm?.talents === undefined
   useEffect(() => {
@@ -788,6 +790,8 @@ export function KqmSettings({
             <KqmArtifactStandard
               kqm={kqm}
               members={memberKeys}
+              custom={customStandards}
+              setCustom={setCustomStandards}
               setTeamOpt={setTeamOpt}
             />
             {calculated && (
@@ -906,6 +910,8 @@ export function KqmSettings({
                     characterKey={characterKey}
                     members={memberKeys}
                     kqm={kqm}
+                    custom={customStandards}
+                    setCustom={setCustomStandards}
                     setTeamOpt={setTeamOpt}
                   />
                 </Box>

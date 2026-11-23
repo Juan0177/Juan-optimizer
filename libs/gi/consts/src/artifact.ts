@@ -197,3 +197,5 @@ export const allKqmStandardKeys = [
   'perfect',
 ] as const
 export type KqmStandardKey = (typeof allKqmStandardKeys)[number]
+/** KQM mode's Custom standard: how many of the set's 45 rolls land on wanted stats */
+export const kqmCustomRollRange = { min: 10, max: 45 } as const

@@ -25,6 +25,7 @@ import {
   allInfusionAuraElementKeys,
   allKqmStandardKeys,
   allLocationCharacterKeys,
+  kqmCustomRollRange,
   allMultiOptHitModeKeys,
   allWeaponKeys,
   defaultOptArtifactLevel,
@@ -298,13 +299,16 @@ export interface TeamOptKqm {
    * as screened out, not ranked)
    */
   fullSearch?: boolean
-  /** The artifact standard (absent: KQM Standards) */
-  standard?: KqmStandardKey
+  /**
+   * The artifact standard (absent: KQM Standards); a number is Custom: how many of the set's 45
+   * rolls land on wanted stats
+   */
+  standard?: KqmStandardKey | number
   /**
    * The artifact standard set per member instead (a member without one: `standard`). Absent: the
    * team's one standard
    */
-  memberStandards?: Partial<Record<CharacterKey, KqmStandardKey>>
+  memberStandards?: Partial<Record<CharacterKey, KqmStandardKey | number>>
   energySource?: 'manual' | 'calculator'
   energyCalculator?: TeamOptEnergyCalculator
   /**
@@ -374,22 +378,41 @@ export interface TeamOptKqm {
 export const defaultTeamOptKqm: TeamOptKqm = { refinement5: 1, refinement4: 5 }
 
 const reactionKeys = [...allAmpReactionKeys, ...allAdditiveReactions] as const
+/** A Custom standard's wanted rolls, if `value` is one (a whole number in its range) */
+const kqmCustomRolls = (value: unknown) =>
+  typeof value === 'number' &&
+  Number.isInteger(value) &&
+  value >= kqmCustomRollRange.min &&
+  value <= kqmCustomRollRange.max
+    ? value
+    : undefined
+/** A saved standard: a named one, or Custom's rolls */
+const kqmStandardValue = (value: unknown) =>
+  allKqmStandardKeys.includes(value as KqmStandardKey)
+    ? (value as KqmStandardKey)
+    : kqmCustomRolls(value)
 /**
  * A standard saved before the tiers, as its number of placed rolls: the presets (20 KQM
- * Standards, 25 Good, 30 Great, 40 Top) as they were named, any other the nearest of them
+ * Standards, 25 Good, 30 Great, 40 Top) as they were named, any other number as Custom's (within
+ * its range)
  */
-function kqmStandardFromRolls(rolls: unknown): KqmStandardKey | undefined {
+function kqmStandardFromRolls(
+  rolls: unknown
+): KqmStandardKey | number | undefined {
   if (typeof rolls !== 'number' || !Number.isFinite(rolls)) return undefined
-  const presets: [number, KqmStandardKey][] = [
-    [20, 'kqms'],
-    [25, 'good'],
-    [30, 'great'],
-    [40, 'top'],
-  ]
-  let best = presets[0]
-  for (const p of presets)
-    if (Math.abs(p[0] - rolls) < Math.abs(best[0] - rolls)) best = p
-  return best[1]
+  const preset = (
+    { 20: 'kqms', 25: 'good', 30: 'great', 40: 'top' } as Record<
+      number,
+      KqmStandardKey
+    >
+  )[rolls]
+  return (
+    preset ??
+    Math.min(
+      kqmCustomRollRange.max,
+      Math.max(kqmCustomRollRange.min, Math.round(rolls))
+    )
+  )
 }
 
 const ownerKeys = [...allCharacterKeys, 'team'] as const
@@ -746,7 +769,10 @@ const teamOptSchema = z.object({
         .optional()
         .catch(undefined),
       fullSearch: z.boolean().optional().catch(undefined),
-      standard: z.enum(allKqmStandardKeys).optional().catch(undefined),
+      standard: z
+        .unknown()
+        .optional()
+        .transform((value) => kqmStandardValue(value)),
       memberStandards: z
         .unknown()
         .optional()
@@ -756,9 +782,9 @@ const teamOptSchema = z.object({
           for (const [key, value] of Object.entries(record))
             if (
               allCharacterKeys.includes(key as CharacterKey) &&
-              allKqmStandardKeys.includes(value as KqmStandardKey)
+              kqmStandardValue(value) !== undefined
             )
-              result[key as CharacterKey] = value as KqmStandardKey
+              result[key as CharacterKey] = kqmStandardValue(value)!
           return Object.keys(result).length ? result : undefined
         }),
       // (before the tiers: a number of placed rolls, read as the nearest tier)

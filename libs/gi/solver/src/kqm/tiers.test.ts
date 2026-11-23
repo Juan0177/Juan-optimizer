@@ -9,12 +9,14 @@ import {
 } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import {
+  KQM_CUSTOM_ROLLS,
   KQM_FIXED_ROLLS,
   KQM_TIERS,
   type KqmMains,
   type KqmStandard,
   kqmProblem,
   kqmRollValue,
+  kqmStandardOf,
   kqmTierRolls,
   placeRolls,
 } from './search'
@@ -150,5 +152,56 @@ describe('KQM artifact tiers', () => {
         Object.values(piece.ups).reduce((a, n) => a + (n ?? 0), 0)
       ).toBeLessThanOrEqual(3)
     })
+  })
+
+  it('Custom: the wanted rolls typed in, an even share a piece, as the tiers split theirs', () => {
+    // 35 is Great's split on 9-roll pieces, 45 is Top
+    for (const circlet of ['critRate_', 'atk_'] as const) {
+      expect(critValue(35, circlet)).toBeCloseTo(critValue('great', circlet), 6)
+      expect(critValue(45, circlet)).toBeCloseTo(critValue('top', circlet), 6)
+      expect(critValue(25, circlet)).toBeGreaterThanOrEqual(
+        critValue('good', circlet) - 1e-9
+      )
+      let last = 0
+      for (let n = KQM_CUSTOM_ROLLS.min; n <= KQM_CUSTOM_ROLLS.max; n++) {
+        const cv = critValue(n, circlet)
+        expect(cv).toBeGreaterThanOrEqual(last - 1e-9)
+        last = cv
+      }
+    }
+    expect(kqmStandardOf(60)).toBe(45)
+    expect(kqmStandardOf(3)).toBe(10)
+    expect(kqmStandardOf(23.4)).toBe(23)
+    for (const n of [10, 13, 23, 37, 44, 45]) {
+      const mains = mainsWith('critRate_')
+      const { rolls, layout } = placeRolls(
+        linear(
+          {
+            critRate_: 2,
+            critDMG_: 1,
+            atk_: 1,
+            enerRech_: 0.3,
+            eleMas: 0.0001,
+            hp_: 0.01,
+          },
+          n
+        ),
+        {},
+        mains,
+        {}
+      )
+      const slotMain = ['hp', 'atk', mains.sands, mains.goblet, mains.circlet]
+      let wanted = 0
+      layout!.forEach((piece, i) => {
+        expect(new Set(piece.lines).size).toBe(piece.lines.length)
+        expect(piece.lines).not.toContain(slotMain[i])
+        const ups = Object.values(piece.ups).reduce((a, x) => a + (x ?? 0), 0)
+        expect(piece.lines.length + ups).toBeLessThanOrEqual(9)
+        wanted += piece.lines.length + ups
+      })
+      expect(wanted).toBe(n)
+      const total = Object.values(rolls).reduce((a, x) => a + (x ?? 0), 0)
+      expect(total).toBeCloseTo(45, 6)
+    }
   })
 })
