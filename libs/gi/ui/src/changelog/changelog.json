@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.36.0",
+    "date": "2026-11-23",
+    "new": [
+      "Optimize rotation now works on the Team optimize tab too: it tries thousands of rotations with your last run's builds and checks the best few with builds from your own artifacts and weapons.",
+      "The enemy can be set as one that can't be frozen (Stygian Onslaught bosses by default): Hydro and Cryo still react, but it never becomes Frozen, so no Shatter or Frozen bonuses.",
+      "Rotations: N3-4 plays a Normal Attack string carrying on from its 3rd hit, for strings that continue after a Skill."
+    ],
+    "improved": [
+      "Danica's Skill, Anchor Normal Attacks, Will to Purge, Burst and Entry Skill follow timings measured in the game, and her rotation says why her Anchor ran out when a swap-in couldn't refresh it."
+    ]
+  },
+  {
     "version": "1.35.2",
     "date": "2026-11-23",
     "fixed": [

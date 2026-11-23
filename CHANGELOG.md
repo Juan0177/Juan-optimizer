@@ -4,6 +4,18 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.36.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.36.0) (2026-11-23)
+
+### New
+
+- Optimize rotation now works on the Team optimize tab too: it tries thousands of rotations with your last run's builds and checks the best few with builds from your own artifacts and weapons.
+- The enemy can be set as one that can't be frozen (Stygian Onslaught bosses by default): Hydro and Cryo still react, but it never becomes Frozen, so no Shatter or Frozen bonuses.
+- Rotations: N3-4 plays a Normal Attack string carrying on from its 3rd hit, for strings that continue after a Skill.
+
+### Improved
+
+- Danica's Skill, Anchor Normal Attacks, Will to Purge, Burst and Entry Skill follow timings measured in the game, and her rotation says why her Anchor ran out when a swap-in couldn't refresh it.
+
 ## [v1.35.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.35.2) (2026-11-23)
 
 ### Fixed
