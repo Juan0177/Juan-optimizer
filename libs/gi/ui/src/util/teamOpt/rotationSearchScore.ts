@@ -7,7 +7,6 @@ import {
   defaultEnergyCalculator,
   withRotationEnergy,
 } from './energyCalc'
-import type { RotationDamageCache } from './objective'
 import { rotationDamage } from './objective'
 import type {
   FrameData,
@@ -39,19 +38,59 @@ export interface RotationSearchSetup {
 }
 
 /**
- * Rotations a player plays before the stats and damage it keeps start over: they grow with every
- * rotation, and a full search's hundred thousand would fill the tab's memory
+ * How much of the stats and damage a player keeps before they start over, in characters of their
+ * keys (a player of a full search, one of eight in the tab, would fill the tab's memory)
  */
-const PLAYS_KEPT = 4000
+const KEPT_CHARS = 40_000_000
+/** What an attack's damage kept counts as, in characters: its hashed key and the entry */
+const DAMAGE_ENTRY = 100
+
+/** A 128-bit hash of a string (cyrb128) */
+function hash128(text: string) {
+  let h1 = 1779033703
+  let h2 = 3144134277
+  let h3 = 1013904242
+  let h4 = 2773480762
+  for (let i = 0; i < text.length; i++) {
+    const k = text.charCodeAt(i)
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067)
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233)
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213)
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179)
+  }
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067)
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233)
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213)
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179)
+  h1 ^= h2 ^ h3 ^ h4
+  return `${(h1 >>> 0).toString(36)}.${((h2 ^ h1) >>> 0).toString(36)}.${((h3 ^ h1) >>> 0).toString(36)}.${((h4 ^ h1) >>> 0).toString(36)}`
+}
+
+/**
+ * Damage by attack, kept by a hash of its key: the key has the attack's states, kilobytes with
+ * many, and a search plays tens of thousands
+ */
+class DamageKept extends Map<string, number> {
+  override get(key: string) {
+    return super.get(hash128(key))
+  }
+  override has(key: string) {
+    return super.has(hash128(key))
+  }
+  override set(key: string, value: number) {
+    return super.set(hash128(key), value)
+  }
+}
 
 /**
  * A rotation search's player: a written rotation played as the KQM tab plays it, with the
  * setup's builds, and its DPS, Energy Recharge needs and warnings. The stats the simulation reads
- * and each attack's damage are kept across the rotations it plays (`PLAYS_KEPT` at a time).
+ * and each attack's damage are kept across the rotations it plays (`kept` characters of them).
  */
 export function rotationScorer(
   database: ArtCharDatabase,
-  setup: RotationSearchSetup
+  setup: RotationSearchSetup,
+  kept = KEPT_CHARS
 ) {
   const { teamId, gender, names, teamOpt, gear, overrides } = setup
   const members = teamOptMembers(database, teamId)
@@ -66,13 +105,11 @@ export function rotationScorer(
     Object.entries(gear).map(([k, g]) => [k, g?.sets])
   )
   let calculate = rotationCalculation(database, teamId, gender, overrides)
-  let damage: RotationDamageCache = new Map()
-  let plays = 0
+  let damage = new DamageKept()
   return (text: string): RotationScore | undefined => {
-    if (++plays > PLAYS_KEPT) {
-      plays = 1
+    if (damage.size * DAMAGE_ENTRY + calculate.kept() > kept) {
       calculate = rotationCalculation(database, teamId, gender, overrides)
-      damage = new Map()
+      damage = new DamageKept()
     }
     const warnings: string[] = []
     const played = writtenKqmReplay({

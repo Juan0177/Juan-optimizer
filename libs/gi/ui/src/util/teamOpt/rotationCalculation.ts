@@ -12,15 +12,19 @@ import type { RotationCalculation } from './rotation/types'
  */
 const TEAMS_KEPT = 16
 
-/** Evaluate a heal or stat in the timeline's buff context, without changing the saved build. */
+/**
+ * Evaluate a heal or stat in the timeline's buff context, without changing the saved build.
+ * `kept`: the characters of the keys of the values and damage it keeps.
+ */
 export function rotationCalculation(
   database: ArtCharDatabase,
   teamId: string,
   gender: GenderKey,
   overrides: TeamDataOverrides = {}
-): RotationCalculation {
+): RotationCalculation & { kept: () => number } {
   const teams = new Map<string, ReturnType<typeof uiDataForTeam> | undefined>()
   const values = new Map<string, number | undefined>()
+  let kept = 0
   const calculate: RotationCalculation = (
     characterKey,
     path,
@@ -44,12 +48,13 @@ export function rotationCalculation(
     const out =
       typeof value === 'number' && Number.isFinite(value) ? value : undefined
     values.set(valueKey, out)
+    kept += valueKey.length
     return out
   }
   const damageCache = new Map<string, ReturnType<typeof attackDamageOutcomes>>()
   calculate.damage = (characterKey, attack) => {
     const key = JSON.stringify([characterKey, attack])
-    if (!damageCache.has(key))
+    if (!damageCache.has(key)) {
       damageCache.set(
         key,
         attackDamageOutcomes(
@@ -61,7 +66,9 @@ export function rotationCalculation(
           overrides
         )
       )
+      kept += key.length
+    }
     return damageCache.get(key)
   }
-  return calculate
+  return Object.assign(calculate, { kept: () => kept })
 }
