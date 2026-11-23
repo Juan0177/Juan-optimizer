@@ -3270,6 +3270,13 @@ function SyntaxSheet() {
     ],
     ['Q', t('teamOpt.writer.syntax.burst', 'Elemental Burst')],
     [
+      'N3[movement=4]',
+      t(
+        'teamOpt.writer.syntax.movement',
+        'After any action: the metres the active member moves with it, each normal attack counted (gcsim’s movement). Only Iansan’s Kinetic Energy Scale uses it: 0.67 Nightsoul points a metre while another member is on the field, 6 m an action when not written'
+      ),
+    ],
+    [
       'N1 – N6',
       t(
         'teamOpt.writer.syntax.normal',

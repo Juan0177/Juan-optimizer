@@ -460,13 +460,27 @@ export function RotationInline({
 const otherwiseCode = (a: RotationAction): string =>
   a.otherwise?.length ? `/${a.otherwise.map(actionCode).join('')}` : ''
 
+/** Its written movement ("[movement=4]") */
+const movementCode = (a: RotationAction): string =>
+  a.movement !== undefined ? `[movement=${a.movement}]` : ''
+
 /** An action as the writer's short code */
 const actionCode = (a: RotationAction): string => {
   switch (a.kind) {
     case 'skill':
-      return `${a.hold ? 'hE' : 'E'}${a.stacks ? `[stacks=${a.stacks}]` : ''}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+      return `${a.hold ? 'hE' : 'E'}${a.stacks ? `[stacks=${a.stacks}]` : ''}${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'burst':
-      return `${a.optional ? 'Q?' : 'Q'}${otherwiseCode(a)}`
+      return `Q${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+    case 'dash':
+      return `D${movementCode(a)}${a.optional ? '?' : ''}${otherwiseCode(a)}`
+    default:
+      return `${baseCode(a)}${movementCode(a)}`
+  }
+}
+
+/** An action's short code without its movement */
+const baseCode = (a: RotationAction): string => {
+  switch (a.kind) {
     case 'normal':
       return `N${a.count ?? 1}`
     case 'charged':
@@ -487,8 +501,6 @@ const actionCode = (a: RotationAction): string => {
             : `[collision=${a.collision}]`
           : ''
       }`
-    case 'dash':
-      return `D${a.optional ? '?' : ''}${otherwiseCode(a)}`
     case 'jump':
       return 'J'
     case 'wait': {
