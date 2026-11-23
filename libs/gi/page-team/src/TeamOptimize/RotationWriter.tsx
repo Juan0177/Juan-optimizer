@@ -578,27 +578,6 @@ function useStored(key: string) {
   )
   return useSyncExternalStore(subscribe, () => readStored(database, key))
 }
-/**
- * juanlab (KQM Compare): the rotation KQM Theorycrafting plays, as saved: its text and opener
- * (none when its attacks are entered by hand) and its timing. The KQM tab's own once it is set up;
- * before that (a result saved before the tabs had their own), the team's, which KQM copies.
- */
-export function readKqmRotation(database: Database, teamId: string) {
-  const kqmId = kqmRotationId(teamId)
-  const rid =
-    database.teams.get(teamId)?.teamOpt?.kqm?.attacks !== undefined ||
-    readStored(database, storageKey(kqmId)) !== null
-      ? kqmId
-      : teamId
-  const useAttacks = readStored(database, manualAttacksKey(rid)) === '1'
-  return {
-    text: useAttacks ? '' : (readStored(database, storageKey(rid)) ?? ''),
-    opener: useAttacks ? '' : (readStored(database, openerKey(rid)) ?? ''),
-    timing: parseTiming(
-      useAttacks ? null : readStored(database, timingKey(rid))
-    ),
-  }
-}
 
 /**
  * The rotation in use, not what is typed since: for what only plays it (the page, its fight and

@@ -29,35 +29,29 @@ vi.mock('@genshin-optimizer/gi/db-ui', () => ({
 const renderTabs = () =>
   render(
     <MemoryRouter>
-      <TeamCharacterSelector teamId="t1" teamBuildMode="kqm-compare" />
+      <TeamCharacterSelector teamId="t1" teamBuildMode="kqm" />
     </MemoryRouter>
   )
 
 describe('the team’s tabs', () => {
   afterEach(cleanup)
 
-  it('name KQM and KQM Compare in full on wide screens', () => {
+  it('name KQM in full on wide screens, and have no KQM Compare tab (its card is in the versions panel)', () => {
     screenSize.phone = false
     renderTabs()
     expect(
       screen.getByRole('tab', { name: 'KQM Theorycrafting (beta)' }).textContent
     ).toContain('KQM Theorycrafting')
     expect(
-      screen.getByRole('tab', { name: 'juanlab:kqmCompare.tabAlpha' })
-        .textContent
-    ).toContain('juanlab:kqmCompare.tab')
+      screen.queryByRole('tab', { name: 'juanlab:kqmCompare.tabAlpha' })
+    ).toBeNull()
+    expect(screen.queryByText(/kqmCompare/)).toBeNull()
   })
 
-  it('name them short on phones, each with its badge', () => {
+  it('name KQM short on phones, with its badge', () => {
     screenSize.phone = true
     renderTabs()
     const kqm = screen.getByRole('tab', { name: 'KQM Theorycrafting (beta)' })
     expect(kqm.textContent).toBe('KQMBeta')
-    const compare = screen.getByRole('tab', {
-      name: 'juanlab:kqmCompare.tabAlpha',
-    })
-    expect(compare.textContent).toBe(
-      'juanlab:kqmCompare.shortTabjuanlab:kqmCompare.alpha'
-    )
   })
 })

@@ -136,6 +136,18 @@ import {
   type,
 } from './ui'
 import { savedRunSummary, useKqmProgress, useKqmRun } from './useKqmRun'
+import {
+  type CompareCandidate,
+  VersionCompareButton,
+} from './compare/CompareCardButton'
+
+/** A row as the comparison card's button needs it */
+const candidateOf = (row: VersionRow): CompareCandidate => ({
+  id: row.id,
+  name: row.name,
+  fresh: row.fresh,
+  hasRun: !!row.summary,
+})
 
 /** A team of the family as its row shows it: its members, last run and whether it still holds */
 interface VersionRow {
@@ -403,6 +415,15 @@ export function KqmVersions({
           {t('teamOpt.versions.new', 'New version')}
         </Button>
         {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
+        {/* juanlab: the comparison card, the original against the team open (or a version) */}
+        {hasVersions && (
+          <VersionCompareButton
+            rootId={rootId}
+            teamId={teamId}
+            original={candidateOf(rows.root)}
+            versions={rows.versions.map(candidateOf)}
+          />
+        )}
       </Box>
       <Box sx={{ ...insetSx, overflow: 'hidden' }}>
         {all.map((row, i) => (

@@ -6,7 +6,7 @@ import {
   compareCardRecord,
   swapLabel,
 } from './compareCardData'
-import type { Side } from './compareSwapKqm'
+import type { Side } from './sides'
 
 const build = (weapon: string) =>
   ({
@@ -38,7 +38,7 @@ const side = (
   })),
   ...over,
 })
-const a = side({ turn: 1 }, [
+const a = side({ turns: [1] }, [
   ['Danica', 60000],
   ['YaeMiko', 40000],
 ])
@@ -48,7 +48,7 @@ const b = side(
     dps: 5000,
     rotationTime: 22,
     rotation: 'Danica E -> Mitya E Q',
-    turn: 1,
+    turns: [1],
   },
   [
     ['Danica', 50000, { er: 130, erValue: 125, share: 50000 / 110000 }],
@@ -62,8 +62,7 @@ const names: Record<string, string> = {
 }
 const ctx = {
   teamName: 'Team X',
-  out: 'YaeMiko' as never,
-  in: 'Mitya' as never,
+  pairs: [{ out: 'YaeMiko', in: 'Mitya' }] as never,
   gender: 'F' as const,
   siteName: 'stamp',
   t: ((k: string, o?: { value?: string }) =>
@@ -153,13 +152,13 @@ describe('compareCardData', () => {
   it('marks the swap: its member on both sheets, its step in both rotations', () => {
     expect(d.a.marks).toMatchObject({
       tag: 'A',
-      changed: { index: 1, badge: 'out' },
-      rotationTurn: 1,
+      changed: [{ index: 1, badge: 'out' }],
+      rotationTurn: [1],
     })
     expect(d.b.marks).toMatchObject({
       tag: 'B',
-      changed: { index: 1, badge: 'Yae Miko → Mitya' },
-      rotationTurn: 1,
+      changed: [{ index: 1, badge: 'Yae Miko → Mitya' }],
+      rotationTurn: [1],
     })
     expect(d.a.card.rotation).toEqual(['Danica E', 'Yae Miko E E', 'Danica Q'])
     expect(d.b.card.rotation).toEqual(['Danica E', 'Mitya E Q'])
@@ -178,21 +177,21 @@ describe('compareCardData', () => {
   it('marks the swapped step by its position, however it is written (a nickname, another language)', () => {
     // (the turn as the comparison found it: not looked up by the member's name)
     const r = compareCardData(
-      { ...a, rotation: 'Danica E -> Yae E E E -> Danica Q', turn: 1 },
-      { ...b, rotation: 'Danica E -> Mitya E Q', turn: 1 },
+      { ...a, rotation: 'Danica E -> Yae E E E -> Danica Q', turns: [1] },
+      { ...b, rotation: 'Danica E -> Mitya E Q', turns: [1] },
       ctx
     )
     expect(r.a.card.rotation).toEqual(['Danica E', 'Yae E E E', 'Danica Q'])
-    expect(r.a.marks.rotationTurn).toBe(1)
-    expect(r.b.marks.rotationTurn).toBe(1)
+    expect(r.a.marks.rotationTurn).toEqual([1])
+    expect(r.b.marks.rotationTurn).toEqual([1])
     // (none known: none marked, even where a turn starts with the member's name)
     const none = compareCardData(
-      { ...a, turn: undefined },
-      { ...b, turn: undefined },
+      { ...a, turns: undefined },
+      { ...b, turns: undefined },
       ctx
     )
-    expect(none.a.marks.rotationTurn).toBeUndefined()
-    expect(none.b.marks.rotationTurn).toBeUndefined()
+    expect(none.a.marks.rotationTurn).toEqual([])
+    expect(none.b.marks.rotationTurn).toEqual([])
   })
   it('cuts turns at every separator the parser reads, and at bare names', () => {
     const r = compareCardData(
@@ -237,8 +236,7 @@ describe('compareCardData', () => {
       teamId: 't1',
       teamName: 'Team X',
       gender: 'F',
-      out: 'YaeMiko',
-      inKey: 'Mitya',
+      pairs: [{ out: 'YaeMiko', in: 'Mitya' }],
       a,
       b,
     })
@@ -246,11 +244,73 @@ describe('compareCardData', () => {
       app: 'Juan-optimizer',
       picture: 'kqmCompare',
       team: { id: 't1', name: 'Team X' },
-      swap: { out: 'YaeMiko', in: 'Mitya' },
+      swaps: [{ out: 'YaeMiko', in: 'Mitya' }],
       a: { dpr: 100000, rotationTime: 20 },
       b: { dpr: 110000, rotationTime: 22 },
     })
     expect(rec.b.members[1]).toMatchObject({ key: 'Mitya', fieldTime: 40 })
+  })
+})
+
+describe('compareCardData: a version with several members changed, or none', () => {
+  const four = (over: Partial<Side>, keys: string[]) =>
+    side(
+      over,
+      keys.map((k) => [k, 25000] as [string, number])
+    )
+  const a4 = four(
+    { rotation: 'Danica E -> Yae Miko E E -> Odette E -> Anastasya Q' },
+    ['Danica', 'YaeMiko', 'Odette', 'Anastasya']
+  )
+  const b4 = four(
+    {
+      rotation: 'Danica E -> Mitya E Q -> Bennett E -> Anastasya Q',
+      turns: [1, 2],
+    },
+    ['Danica', 'Mitya', 'Bennett', 'Anastasya']
+  )
+  const pairs = [
+    { out: 'YaeMiko', in: 'Mitya' },
+    { out: 'Odette', in: 'Bennett' },
+  ] as never
+  const named = {
+    ...ctx,
+    t: ((k: string, o?: object) =>
+      k === 'charNames_gen:Odette'
+        ? 'Odette'
+        : k === 'charNames_gen:Bennett'
+          ? 'Bennett'
+          : (ctx.t as (k: string, o?: object) => string)(k, o)) as never,
+  }
+  it('marks every member that changed, and heads the card with each swap', () => {
+    const d = compareCardData({ ...a4, turns: [1, 2] }, b4, {
+      ...named,
+      pairs,
+    })
+    expect(d.a.marks.changed).toEqual([
+      { index: 1, badge: 'out' },
+      { index: 2, badge: 'out' },
+    ])
+    expect(d.b.marks.changed).toEqual([
+      { index: 1, badge: 'Yae Miko → Mitya' },
+      { index: 2, badge: 'Odette → Bennett' },
+    ])
+    expect(d.b.marks.rotationTurn).toEqual([1, 2])
+    expect(d.swap).toEqual({ line: 'Yae Miko → Mitya  ·  Odette → Bennett' })
+    // (each one against the member whose slot it took)
+    expect(d.b.marks.delta?.members.map((c) => c.text)).toEqual([
+      '±0%',
+      '±0%',
+      '±0%',
+      '±0%',
+    ])
+  })
+  it('the same members (another rotation): nothing marked, said in the header', () => {
+    const d = compareCardData(a4, { ...a4, dpr: 120000 }, { ...named, pairs: [] })
+    expect(d.a.marks.changed).toEqual([])
+    expect(d.b.marks.changed).toEqual([])
+    expect(d.swap).toEqual({ line: 'sameMembers' })
+    expect(d.delta.dpr).toEqual({ text: '↑ +20%', tone: 'better' })
   })
 })
 
@@ -274,42 +334,45 @@ describe('swapLabel', () => {
 })
 
 describe('compareCardData: two members sharing a name (Travelers)', () => {
-  const aT = side({ turn: 1 }, [
+  const aT = side({ turns: [1] }, [
     ['Danica', 60000],
     ['TravelerAnemo', 40000, { constellation: 0 }],
   ])
-  const bT = side({ dpr: 110000, turn: 1 }, [
+  const bT = side({ dpr: 110000, turns: [1] }, [
     ['Danica', 50000],
     ['TravelerDendro', 60000, { constellation: 6 }],
   ])
   const d = compareCardData(aT, bT, {
     ...ctx,
-    out: 'TravelerAnemo' as never,
-    in: 'TravelerDendro' as never,
+    pairs: [{ out: 'TravelerAnemo', in: 'TravelerDendro' }] as never,
     t: ((k: string) =>
       k === 'charNames_gen:TravelerF' ? 'Lumine' : ctx.t(k)) as never,
   })
   it('badges and heads the swap as two members, as before', () => {
-    expect(d.b.marks.changed).toEqual({ index: 1, badge: 'Lumine → Lumine' })
+    expect(d.b.marks.changed).toEqual([{ index: 1, badge: 'Lumine → Lumine' }])
     expect(d.swap).toEqual({ out: 'Lumine', in: 'Lumine' })
   })
 })
 
 describe('compareCardData: the same member re-entering', () => {
   const bSame = side(
-    { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turn: 1 },
+    { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turns: [1] },
     [
       ['Danica', 50000],
       ['YaeMiko', 60000, { constellation: 1 }],
     ]
   )
-  const d = compareCardData(a, bSame, { ...ctx, in: 'YaeMiko' as never })
+  const d = compareCardData(a, bSame, {
+    ...ctx,
+    pairs: [{ out: 'YaeMiko', in: 'YaeMiko' }] as never,
+  })
   it('badges the swapped member with the constellation change', () => {
-    expect(d.b.marks.changed).toEqual({ index: 1, badge: 'Yae Miko C0 → C1' })
-    expect(d.a.marks.changed).toEqual({ index: 1, badge: 'out' })
+    expect(d.b.marks.changed).toEqual([{ index: 1, badge: 'Yae Miko C0 → C1' }])
+    expect(d.a.marks.changed).toEqual([{ index: 1, badge: 'out' }])
   })
   it('heads the card with the constellation change', () => {
-    expect(`${d.swap.out} → ${d.swap.in}`).toBe('Yae Miko C0 → C1')
+    const swap = d.swap as { out: string; in: string }
+    expect(`${swap.out} → ${swap.in}`).toBe('Yae Miko C0 → C1')
   })
   it('compares the member with itself in A', () => {
     expect(d.b.marks.delta?.members.map((c) => c.text)).toEqual([
@@ -399,13 +462,14 @@ describe('compareCardData: the detailed view (each member’s stats)', () => {
     expect(r.b.card.labels.er).toBe('erBuild\nerTarget')
     expect(r.delta.dpr).toEqual({ text: '↑ +10%', tone: 'better' })
   })
-  it('a different member entering: its stats plain, nothing marked anywhere', () => {
+  it('a different member entering: its stats plain (nothing to compare with); a teammate’s changed ER marked', () => {
     const r = compareCardData(a, b, { ...ctx, statsA, statsB })
-    expect(marked(r)).toEqual([])
+    // (Mitya is new; Danica's ER out of combat went from 121.4% to 125%)
+    expect(marked(r)).toEqual(['B0:enerRech_:121.4%→125.0%'])
   })
-  it('the same member entering: only its changed stats marked, against A’s', () => {
+  it('the same member at another constellation, and a teammate with another build: their changed stats marked, against A’s', () => {
     const bSame = side(
-      { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turn: 1 },
+      { dpr: 110000, rotation: 'Danica E -> Yae Miko E E', turns: [1] },
       [
         ['Danica', 50000, { erValue: 125 }],
         ['YaeMiko', 60000, { constellation: 1 }],
@@ -413,23 +477,33 @@ describe('compareCardData: the detailed view (each member’s stats)', () => {
     )
     const r = compareCardData(a, bSame, {
       ...ctx,
-      in: 'YaeMiko' as never,
+      pairs: [{ out: 'YaeMiko', in: 'YaeMiko' }] as never,
       statsA,
-      // (its teammate's too, artificially: a teammate is never marked)
+      // (each version has its own builds: its teammate's changed too)
       statsB: {
         Danica: stats(2222, 1.25),
         YaeMiko: stats(2300, 1.214),
       } as never,
     })
-    expect(marked(r)).toEqual(['B1:atk:2,100→2,300'])
+    expect(marked(r)).toEqual([
+      'B0:atk:2,000→2,222',
+      'B0:enerRech_:121.4%→125.0%',
+      'B1:atk:2,100→2,300',
+    ])
   })
-  it('a teammate is never marked, even with other stats', () => {
+  it('a teammate with the same stats: nothing marked; with others: they are', () => {
+    const same = compareCardData(a, b, {
+      ...ctx,
+      statsA,
+      statsB: { ...(statsB as object), Danica: stats(2000, 1.214) } as never,
+    })
+    expect(marked(same)).toEqual([])
     const r = compareCardData(a, b, {
       ...ctx,
       statsA,
-      statsB: { ...(statsB as object), Danica: stats(2500, 1.25) } as never,
+      statsB: { ...(statsB as object), Danica: stats(2500, 1.214) } as never,
     })
-    expect(marked(r)).toEqual([])
+    expect(marked(r)).toEqual(['B0:atk:2,000→2,500'])
   })
   it('says on its own line when a member’s ER out of combat is not the table’s', () => {
     // (A's Yae Miko: 100% out of combat, 121% in the table; B as its table)
@@ -451,8 +525,7 @@ describe('compareCardData: the detailed view (each member’s stats)', () => {
       teamId: 't1',
       teamName: 'Team X',
       gender: 'F',
-      out: 'YaeMiko',
-      inKey: 'Mitya',
+      pairs: [{ out: 'YaeMiko', in: 'Mitya' }],
       a,
       b,
       view: 'detailed',

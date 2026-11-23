@@ -53,7 +53,7 @@ export default function TeamCharacterSelector({
   characterKey?: CharacterKey
   tab?: string
   /** The open team build workflow. */
-  teamBuildMode?: 'inventory' | 'kqm' | 'kqm-compare'
+  teamBuildMode?: 'inventory' | 'kqm'
   /** more header actions, before the team's (e.g. the open member's build card) */
   actions?: ReactNode
 }) {
@@ -69,11 +69,9 @@ export default function TeamCharacterSelector({
   const [selected, select] = useOptimisticValue<string | number>(
     teamBuildMode === 'kqm'
       ? 'kqm'
-      : teamBuildMode === 'kqm-compare'
-        ? 'kqm-compare'
-        : teamBuildMode === 'inventory'
-          ? 'teamOpt'
-          : (characterKey ?? 'team')
+      : teamBuildMode === 'inventory'
+        ? 'teamOpt'
+        : (characterKey ?? 'team')
   )
 
   return (
@@ -258,28 +256,6 @@ export default function TeamCharacterSelector({
             aria-label={t('teamOpt.kqm.tabBeta', 'KQM Theorycrafting (beta)')}
             disabled={loadoutData.every((datum) => !datum)}
             onClick={() => navigate(`/teams/${teamId}/kqm`)}
-            sx={memberTabSx}
-          />
-        )}
-        {kqmTheorycraftingEnabled && (
-          <Tab
-            icon={<TheorycraftIcon />}
-            iconPosition="start"
-            value="kqm-compare"
-            label={
-              <>
-                {compact
-                  ? t('juanlab:kqmCompare.shortTab')
-                  : t('juanlab:kqmCompare.tab')}
-                <BetaBadge
-                  label={t('juanlab:kqmCompare.alpha')}
-                  tip={t('juanlab:kqmCompare.alphaTip')}
-                />
-              </>
-            }
-            aria-label={t('juanlab:kqmCompare.tabAlpha')}
-            disabled={loadoutData.every((datum) => !datum)}
-            onClick={() => navigate(`/teams/${teamId}/kqm-compare`)}
             sx={memberTabSx}
           />
         )}

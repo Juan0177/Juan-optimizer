@@ -179,10 +179,13 @@ export type KqmCardCell = {
 export type KqmCardMarks = {
   /** "A", "B": before the sheet's name */
   tag?: string
-  /** the member that changes: its column and row outlined, a badge on its face ("Out") */
-  changed?: { index: number; badge: string }
-  /** the rotation's step that changes (its index in `rotation`) */
-  rotationTurn?: number
+  /**
+   * the members that change: each one's column and row outlined, a badge on its face ("Out"); one
+   * or several (a version of the team with more than one member swapped)
+   */
+  changed?: { index: number; badge: string } | { index: number; badge: string }[]
+  /** the rotation's steps that change (their indexes in `rotation`): one or several */
+  rotationTurn?: number | number[]
   /** a column after the damage: its header, each member's cell, the totals' (DPR, DPS) */
   delta?: {
     header: string
@@ -364,7 +367,11 @@ export function drawKqmCard(
   const rotY = top + blockH + detailsH + GAP
   const rotH = ROT_H
   const notesY = rotY + rotH
-  const changed = marks.changed
+  const changes = marks.changed
+    ? Array.isArray(marks.changed)
+      ? marks.changed
+      : [marks.changed]
+    : []
 
   const fillCell = (
     x: number,
@@ -718,8 +725,8 @@ export function drawKqmCard(
       frame(x, top + blockH, COL, detailsH)
     }
   })
-  if (changed) {
-    // (the changing member: its column outlined, a badge at the top of its face)
+  for (const changed of changes) {
+    // (each changing member: its column outlined, a badge at the top of its face)
     const x = M + changed.index * COL
     outline(x, top, COL, blockH)
     ctx.font = `700 15px ${FONT}`
@@ -816,7 +823,8 @@ export function drawKqmCard(
       else say(v, xs[c + 1] - 16, y, rowH, { align: 'right', maxWidth: w - 26 })
       frame(xs[c], y, w, rowH)
     })
-    if (changed?.index === r) outline(xs[0], y, end - xs[0], rowH)
+    if (changes.some((c) => c.index === r))
+      outline(xs[0], y, end - xs[0], rowH)
   })
   // the team's damage per rotation (DPR), then per second (DPS)
   const unitX = delta ? xs[3] : xs[2]
@@ -887,8 +895,14 @@ export function drawKqmCard(
       size--
       ctx.font = `700 ${size}px ${FONT}`
     }
-    const turn = marks.rotationTurn
-    if (turn === undefined || !data.rotation[turn])
+    const turns = (
+      Array.isArray(marks.rotationTurn)
+        ? marks.rotationTurn
+        : marks.rotationTurn === undefined
+          ? []
+          : [marks.rotationTurn]
+    ).filter((k) => data.rotation?.[k] !== undefined)
+    if (!turns.length)
       say(text, textX, rotY, rotH, { size, weight: 700, maxWidth: avail })
     else {
       // (the changing step on a tint, outlined, in the mark's color; the rest as usual). Too long
@@ -933,10 +947,10 @@ export function drawKqmCard(
             ? rotY + rotH / 2
             : rotY + rotH / 2 + (j - (lines.length - 1) / 2) * lineH
         const baseline = cy + px * 0.35
-        const k = turn - first
+        const from = first
         first += line.length
-        // (a line too long even at 13px is cut short by `ink`: the mark stays inside what is
-        // drawn, and is left out when its turn starts past the cut)
+        // (a line too long even at 13px is cut short by `ink`: the marks stay inside what is
+        // drawn, and a turn starting past the cut is left out)
         const full = widthAt(lineText, px)
         let shown = lineText
         if (full > avail) {
@@ -948,14 +962,20 @@ export function drawKqmCard(
         const kept = cut ? shown.slice(0, -1) : lineText
         const left = textX - (cut ? widthAt(shown, px) : full) / 2
         const right = left + (cut ? widthAt(kept, px) : full)
-        const before = k > 0 ? line.slice(0, k).join(SEP) + SEP : ''
-        const marked =
-          k >= 0 && k < line.length && (!cut || before.length < kept.length)
-        let startX = 0
-        let turnW = 0
-        if (marked) {
-          startX = left + (before ? widthAt(before, px) : 0)
-          turnW = Math.max(0, Math.min(widthAt(line[k], px), right - startX))
+        // (each changing turn on this line: on a tint, outlined, in the mark's color)
+        const marked = turns.flatMap((turn) => {
+          const k = turn - from
+          const before = k > 0 ? line.slice(0, k).join(SEP) + SEP : ''
+          if (!(k >= 0 && k < line.length && (!cut || before.length < kept.length)))
+            return []
+          const startX = left + (before ? widthAt(before, px) : 0)
+          const turnW = Math.max(
+            0,
+            Math.min(widthAt(line[k], px), right - startX)
+          )
+          return [{ k, startX, turnW }]
+        })
+        for (const { startX, turnW } of marked) {
           ctx.fillStyle = 'rgba(37, 87, 167, 0.14)'
           ctx.beginPath()
           if (lines.length === 1)
@@ -981,7 +1001,7 @@ export function drawKqmCard(
           maxWidth: avail,
           minSize: px,
         })
-        if (marked)
+        for (const { k, startX, turnW } of marked)
           ink(ctx, line[k], startX, baseline, {
             size: px,
             weight: 800,

@@ -22,14 +22,17 @@ import {
   shareStamp,
 } from '../kqmTeamCard'
 import { kqmStandardText } from '../KqmStandard'
-import type { Side, SideMember } from './compareSwapKqm'
-import { cut } from './swapFragment'
+import type { Side, SideMember } from './sides'
+import type { SidePair } from './versionCompare'
+import { cut } from './rotationTurns'
 
 export interface CompareCardContext {
   teamName: string
-  /** The leaving and the entering member */
-  out: CharacterKey
-  in: CharacterKey
+  /**
+   * Each slot that changed: the original's member and the version's (the same one: another
+   * constellation); none: the same members (another rotation or other settings)
+   */
+  pairs: readonly SidePair[]
   gender: GenderKey
   /**
    * Loaded for `juanlab`, `page_team`, `charNames_gen`, `weaponNames_gen` and
@@ -130,8 +133,7 @@ export function compareCardData(
     t(`juanlab:kqmCompare.card.${key}`, opts ?? {})
   const nameOf = (key: CharacterKey) =>
     t(`charNames_gen:${charKeyToLocGenderedCharKey(key, gender)}`)
-  const outName = nameOf(ctx.out)
-  const inName = nameOf(ctx.in)
+  const pairs = ctx.pairs
   const siteName = ctx.siteName ?? shareStamp(locale)
   const beta = betaOfBuilds([...a.members, ...b.members]).length > 0
 
@@ -189,40 +191,42 @@ export function compareCardData(
   }
   const cardA = cardOf(a, ctx.statsA)
   const cardB = cardOf(b, ctx.statsB)
-  // (the same member re-entering: its stats that changed marked against A's; another member
-  // entering, or a teammate (its build A's): nothing to mark)
-  const statsWas = ctx.out === ctx.in ? ctx.statsA?.[ctx.out] : undefined
-  const statsIn = ctx.statsB?.[ctx.in]
-  if (statsWas && statsIn)
-    cardB.members = cardB.members.map((m, i) =>
-      b.members[i].key === ctx.in && m.details
-        ? { ...m, details: kqmCardDetails(t, statsIn, locale, statsWas) }
-        : m
-    )
+  // (a member in both teams: its stats that changed marked against A's; another member entering:
+  // nothing to mark)
+  cardB.members = cardB.members.map((m, i) => {
+    const key = b.members[i].key
+    const was = ctx.statsA?.[key]
+    const now = ctx.statsB?.[key]
+    return was && now && m.details
+      ? { ...m, details: kqmCardDetails(t, now, locale, was) }
+      : m
+  })
   const field = (card: KqmCardData) => card.members.some((m) => m.field)
-  /** The swapped step's turn, as the comparison found it (by position, not by name) */
-  const turnOf = (card: KqmCardData, side: Side) =>
-    side.turn !== undefined && card.rotation?.[side.turn] !== undefined
-      ? side.turn
-      : undefined
+  /** The changed members' turns, as the comparison found them (by position, not by name) */
+  const turnsOf = (card: KqmCardData, side: Side) =>
+    (side.turns ?? []).filter((k) => card.rotation?.[k] !== undefined)
   /** ER below what it must reach: a warning */
   const erCell = (m: SideMember): KqmCardCell | undefined =>
     Math.round(m.erValue) < Math.round(m.er)
       ? { tone: 'warn', warn: true }
       : undefined
 
-  // B's members against A's: the same member, else the one it replaced
+  // B's members against A's: the same member, else the one whose slot it took
   const matchOf = (m: SideMember) =>
     a.members.find((x) => x.key === m.key) ??
-    a.members.find((x) => x.key === ctx.out)
+    a.members.find(
+      (x) => x.key === pairs.find((p) => p.in === m.key)?.out
+    )
   const marksA: KqmCardMarks = {
     tag: 'A',
     weights: field(cardA) ? WEIGHTS_A.field : WEIGHTS_A.none,
     er: a.members.map(erCell),
   }
-  const outIndex = a.members.findIndex((m) => m.key === ctx.out)
-  if (outIndex >= 0) marksA.changed = { index: outIndex, badge: label('out') }
-  marksA.rotationTurn = turnOf(cardA, a)
+  marksA.changed = pairs.flatMap((p) => {
+    const index = a.members.findIndex((m) => m.key === p.out)
+    return index >= 0 ? [{ index, badge: label('out') }] : []
+  })
+  marksA.rotationTurn = turnsOf(cardA, a)
 
   const changes = b.members.map((m) => {
     const was = matchOf(m)
@@ -263,11 +267,17 @@ export function compareCardData(
         : erCell(m)
     return { damage, share, field: fieldCell, er }
   })
-  const inIndex = b.members.findIndex((m) => m.key === ctx.in)
-  // (the swapped slot's constellation on each side: A's leaving member, B's entering one)
-  const consOut = a.members[outIndex]?.constellation ?? 0
-  const consIn = b.members[inIndex]?.constellation ?? 0
-  const same = ctx.out === ctx.in
+  // (each changed slot: A's member and B's, with their constellations)
+  const swaps = pairs.map((p) => {
+    const consOut = a.members.find((m) => m.key === p.out)?.constellation ?? 0
+    const consIn = b.members.find((m) => m.key === p.in)?.constellation ?? 0
+    const same = p.out === p.in
+    return {
+      index: b.members.findIndex((m) => m.key === p.in),
+      label: swapLabel(nameOf(p.out), nameOf(p.in), consOut, consIn, same),
+      sides: swapSides(nameOf(p.out), nameOf(p.in), consOut, consIn, same),
+    }
+  })
   const dpr = gainOf(a.dpr, b.dpr, locale)
   const dps = a.dps > 0 && b.dps > 0 ? gainOf(a.dps, b.dps, locale) : undefined
   const timeChange =
@@ -277,13 +287,10 @@ export function compareCardData(
   const marksB: KqmCardMarks = {
     tag: 'B',
     weights: field(cardB) ? WEIGHTS_B.field : WEIGHTS_B.none,
-    ...(inIndex >= 0 && {
-      changed: {
-        index: inIndex,
-        badge: swapLabel(outName, inName, consOut, consIn, same),
-      },
-    }),
-    rotationTurn: turnOf(cardB, b),
+    changed: swaps.flatMap((w) =>
+      w.index >= 0 ? [{ index: w.index, badge: w.label }] : []
+    ),
+    rotationTurn: turnsOf(cardB, b),
     delta: {
       header: 'Δ',
       members: changes.map((c) => c.damage),
@@ -312,7 +319,15 @@ export function compareCardData(
     secondsText(`${Math.round(s * 10) / 10}`, locale)
   return {
     name: ctx.teamName || label('title'),
-    swap: swapSides(outName, inName, consOut, consIn, same),
+    // (one change: its two sides; several: each one, in a line; none: the same members)
+    swap:
+      swaps.length === 1
+        ? swaps[0].sides
+        : {
+            line: swaps.length
+              ? swaps.map((w) => w.label).join('  ·  ')
+              : label('sameMembers'),
+          },
     siteName,
     beta: beta ? BETA_LABEL : undefined,
     labels: {
@@ -347,8 +362,7 @@ export function compareCardRecord({
   teamId,
   teamName,
   gender,
-  out,
-  inKey,
+  pairs,
   a,
   b,
   view,
@@ -356,8 +370,7 @@ export function compareCardRecord({
   teamId: string
   teamName: string
   gender: GenderKey
-  out: CharacterKey
-  inKey: CharacterKey
+  pairs: readonly SidePair[]
   a: Side
   b: Side
   /** Which sheet was drawn (the usual one, or with each member's stats) */
@@ -392,7 +405,7 @@ export function compareCardRecord({
     beta: betaOfBuilds([...a.members, ...b.members]),
     gender,
     team: { id: teamId, name: teamName },
-    swap: { out, in: inKey },
+    swaps: pairs,
     a: side(a),
     b: side(b),
   }

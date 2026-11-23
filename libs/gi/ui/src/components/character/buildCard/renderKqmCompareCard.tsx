@@ -23,7 +23,8 @@ export type KqmCompareFigure = { text: string; tone?: KqmTone }
  */
 export type KqmCompareCardData = {
   name: string
-  swap: { out: string; in: string }
+  /** the change: one swap's two sides ("Nicole → Bennett"), or a line (several, or none) */
+  swap: { out: string; in: string } | { line: string }
   /** "Juan-optimizer (Stellar v1.13.1) · 17 nov 2026" */
   siteName: string
   /** it shows unreleased content: this name over the whole picture */
@@ -133,7 +134,11 @@ function drawCompareHeader(
     maxWidth: 760,
     minSize: 20,
   })
-  ink(ctx, `${data.swap.out}  →  ${data.swap.in}`, M, M + 76, {
+  const swap =
+    'line' in data.swap
+      ? data.swap.line
+      : `${data.swap.out}  →  ${data.swap.in}`
+  ink(ctx, swap, M, M + 76, {
     size: 26,
     weight: 800,
     color: KQM_CHANGED,
