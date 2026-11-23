@@ -51,9 +51,9 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # I workflow di Stellar pubblicano i suoi siti: qui resta solo il nostro, anche se Stellar li modifica
-          # (cosi non diventano conflitti).
-          git ls-files .github/workflows | grep -v '/juanlab-pages.yml$' | xargs -r git rm -q -f --ignore-unmatch
+          # I workflow di Stellar pubblicano i suoi siti: qui restano solo i nostri (juanlab-*.yml), anche se
+          # Stellar li modifica (cosi non diventano conflitti).
+          git ls-files .github/workflows | grep -v '/juanlab-[^/]*\.yml$' | xargs -r git rm -q -f --ignore-unmatch
           # file del fork riscritti da noi (README, home, index.html, avvisi di licenza): si tiene sempre la nostra versione
           KEEP="README.md libs/gi/page-home/src/index.tsx apps/frontend/index.html NOTICE apps/frontend/public/LICENSE.txt"
           git checkout HEAD -- $KEEP && git add $KEEP
