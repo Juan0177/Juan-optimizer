@@ -83,6 +83,7 @@ import { formatGain, formatRate } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import type { ResultDetailsData } from './ResultDetails'
 import { MemberDetails, useResultDetails } from './ResultDetails'
+import { TcBuildGear } from './TcBuildGear'
 import { TeamCardButton } from './TeamCardButton'
 import {
   FieldLabel,
@@ -616,10 +617,15 @@ export function TeamOptResults({
               color: 'success.main',
             }}
           />
-          {t(
-            'teamOpt.result.noChange',
-            'The current builds are already the best ones found for this rotation.'
-          )}
+          {result.optimized.length
+            ? t(
+                'teamOpt.result.noChange',
+                'The current builds are already the best ones found for this rotation.'
+              )
+            : t(
+                'teamOpt.result.asItIs',
+                'Run as it is: no build was searched.'
+              )}
         </Typography>
       )}
 
@@ -999,6 +1005,9 @@ function MemberResult({
     ? database.buildTcs.get(loadoutDatum.buildTcId)?.character?.constellation
     : database.chars.get(characterKey)?.constellation
   const build = result.builds[characterKey]
+  const tcBuild = isTc
+    ? database.buildTcs.get(loadoutDatum.buildTcId)
+    : undefined
   const optimized = result.optimized.includes(characterKey)
   const before = result.before.members[characterKey] ?? 0
   const after = result.after.members[characterKey] ?? 0
@@ -1068,11 +1077,23 @@ function MemberResult({
                 </Tooltip>
               )}
               {!optimized && (
-                <Box component="span" sx={tagSx}>
-                  {isTc
-                    ? t('teamOpt.result.tc', 'TC build, kept')
-                    : t('teamOpt.result.kept', 'Kept')}
-                </Box>
+                <Tooltip
+                  arrow
+                  title={
+                    isTc
+                      ? t(
+                          'teamOpt.result.tcTip',
+                          'A theorycraft build: run as it is'
+                        )
+                      : ''
+                  }
+                >
+                  <Box component="span" sx={tagSx}>
+                    {isTc
+                      ? t('teamOpt.result.tcShort', 'TC')
+                      : t('teamOpt.result.kept', 'Kept')}
+                  </Box>
+                </Tooltip>
               )}
             </Box>
             <Box
@@ -1155,6 +1176,8 @@ function MemberResult({
         </Box>
       </Box>
 
+      {/* (a theorycraft build: its pieces, weapon and sets as they are) */}
+      {!build && tcBuild && <TcBuildGear buildTc={tcBuild} />}
       {build && (
         <Box
           sx={{
