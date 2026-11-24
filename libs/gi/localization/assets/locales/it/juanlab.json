@@ -139,6 +139,41 @@
     },
     "entries": [
       {
+        "date": "2026-11-25",
+        "title": "Aggiornamento a Stellar Optimizer 1.40.4",
+        "summary": "Arrivano le versioni da 1.40.2 a 1.40.4 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Un modello di rotazione Melt per Mavuika, Citlali, Xilonen e Bennett.**",
+              "**Set di manufatti avanzati**: le build possono ammettere o escludere due bonus da 2 pezzi (2+2+1, 3+2) e i pezzi misti."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Ottimizza squadra più veloce con inventari grandi**: la ricerca Rapida esamina per intero solo le armi che possono avvicinarsi alla migliore, e salta le copie più deboli.",
+              "Ottimizza squadra dà la precedenza ai requisiti di ricarica di energia e dei manufatti, si ferma subito quando un minimo non si può raggiungere e dice di quanto manca."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Mavuika**: premere l’abilità durante la Benedizione notturna cambia forma, come in gcsim, e un attacco caricato interrotto non fa più partire il colpo finale dopo.",
+              "I punti Spirito notturno di Citlali non superano più 100; Faruzan genera particelle solo dai Collassi pressurizzati.",
+              "Con tutti i set spenti tranne uno, ogni build ne porta 4 pezzi; l’analisi di un membro mette in classifica la sua build migliore tra i suoi set."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi sono in italiano."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-24",
         "title": "Aggiornamento a Stellar Optimizer 1.40.1",
         "summary": "Arriva la versione 1.40.1 di Stellar Optimizer.",
