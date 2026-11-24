@@ -4,6 +4,28 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.39.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.39.0) (2026-11-24)
+
+### New
+
+- Team optimize results now show Top builds and Damage share, as the KQM tab does: the best team, then the best builds that change one member's weapon or set. Pick one to see it.
+- After a run, pick a member to try its other weapons and artifact sets: each is ranked by team damage, and picking one shows the team with it.
+- Team optimize turns on weapon and artifact set effects automatically where you haven't set them, and times set effects from the rotation, as KQM does. Anything you set yourself still wins.
+
+### Improved
+
+- Damage share by element now keeps Stellar and Lunar damage apart from their element's other damage (for example Cryo and Stellar Cryo, Electro and Lunar-Charged).
+- The Optimize team dialog asks for the best build or all builds, instead of a number.
+- Team optimize results header is quieter: a larger team DPS figure, and warnings, your picks and Undo equip as small labels beside it instead of extra lines.
+- Team optimize results no longer jump while the members' other builds are ranked: a label shows the progress, and What raises team damage comes in once they are done.
+- Team optimize results appear with a short animation.
+
+### Fixed
+
+- Clicking a Burst on the rotation timeline opens its hit when the hit lands after the member's next action.
+- Arlecchino's Masque Normal Attack bonus and C1 now need 30% Bond of Life or more.
+- Citlali's C1 Normal Attack bonus goes to the active member only.
+
 ## [v1.38.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.38.0) (2026-11-24)
 
 ### Improved
@@ -62,7 +84,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 
 - Optimize rotation now works on the Team optimize tab too: it tries thousands of rotations with your last run's builds and checks the best few with builds from your own artifacts and weapons.
 - The enemy can be set as one that can't be frozen (Stygian Onslaught bosses by default): Hydro and Cryo still react, but it never becomes Frozen, so no Shatter or Frozen bonuses.
-- Rotations: N3-4 plays a Normal Attack string carrying on from its 3rd hit, for strings that continue after a Skill.
+- Rotations: write N3-4 to play only the 3rd and 4th hits of a Normal Attack string, for when the string carries on after a Skill instead of starting over (for example N2 E N3-4).
 
 ### Improved
 
