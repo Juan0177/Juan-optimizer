@@ -25,10 +25,10 @@ import {
   allInfusionAuraElementKeys,
   allKqmStandardKeys,
   allLocationCharacterKeys,
-  kqmCustomRollRange,
   allMultiOptHitModeKeys,
   allWeaponKeys,
   defaultOptArtifactLevel,
+  kqmCustomRollRange,
 } from '@genshin-optimizer/gi/consts'
 import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import { allInputPremodKeys } from '@genshin-optimizer/gi/wr-types'
@@ -135,6 +135,11 @@ export interface TeamOpt {
   optimizeWeapons: boolean
   /** Weapons left out of that choice */
   excludedWeapons: string[]
+  /**
+   * Per weapon (id), the members left out of using it (among those who wield its type).
+   * Absent: any wielder of its type may use a ticked weapon.
+   */
+  excludedWeaponMembers?: Record<string, CharacterKey[]>
   /**
    * Energy weapons (a Favonius weapon...): per weapon (id) and per member, how much lower the
    * member's Energy Recharge requirement may be (percent points) while someone in the team wields
@@ -339,6 +344,11 @@ export interface TeamOptKqm {
    * 5★; the standard wish pool's 4★ are in)
    */
   excludedWeapons?: WeaponKey[]
+  /**
+   * Per weapon, the members left out of using it (among those who wield its type).
+   * Absent: any wielder of its type may use a ticked weapon.
+   */
+  excludedWeaponMembers?: Partial<Record<WeaponKey, CharacterKey[]>>
   /**
    * What `excludedWeapons` was saved for: 2 since the standard wish pool's 4★ are apart from the
    * event-wish ones. Absent (an older list): those had to go with the wish ones, and are on again.
@@ -681,6 +691,28 @@ const teamOptSchema = z.object({
     .transform((ids) => [
       ...new Set(ids.filter((id): id is string => typeof id === 'string')),
     ]),
+  // (absent when empty: a result found before the map existed is not "found with other settings")
+  excludedWeaponMembers: z
+    .unknown()
+    .optional()
+    .transform((record) => {
+      if (typeof record !== 'object' || record === null) return undefined
+      const result: Record<string, CharacterKey[]> = {}
+      for (const [id, keys] of Object.entries(
+        record as Record<string, unknown>
+      )) {
+        if (!Array.isArray(keys)) continue
+        const valid = [
+          ...new Set(
+            keys.filter((k): k is CharacterKey =>
+              allCharacterKeys.includes(k as CharacterKey)
+            )
+          ),
+        ]
+        if (valid.length) result[id] = valid
+      }
+      return Object.keys(result).length ? result : undefined
+    }),
   onField: z.enum(allCharacterKeys).optional().catch(undefined),
   rotationTime: z
     .number()
@@ -839,6 +871,28 @@ const teamOptSchema = z.object({
               )
             : undefined
         ),
+      excludedWeaponMembers: z
+        .unknown()
+        .optional()
+        .transform((record) => {
+          if (typeof record !== 'object' || record === null) return undefined
+          const result: NonNullable<TeamOptKqm['excludedWeaponMembers']> = {}
+          for (const [key, keys] of Object.entries(
+            record as Record<string, unknown>
+          )) {
+            if (!allWeaponKeys.includes(key as WeaponKey)) continue
+            if (!Array.isArray(keys)) continue
+            const valid = [
+              ...new Set(
+                keys.filter((k): k is CharacterKey =>
+                  allCharacterKeys.includes(k as CharacterKey)
+                )
+              ),
+            ]
+            if (valid.length) result[key as WeaponKey] = valid
+          }
+          return Object.keys(result).length ? result : undefined
+        }),
       excludedSets: z
         .array(z.unknown())
         .optional()

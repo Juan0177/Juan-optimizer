@@ -1,5 +1,6 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
 import { getUnitStr, objPathValue } from '@genshin-optimizer/common/util'
+import { artifactAsset } from '@genshin-optimizer/gi/assets'
 import type { ArtifactSetKey, MainStatKey } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSetKeys,
@@ -18,7 +19,6 @@ import {
   useTeam,
   useTeamChar,
 } from '@genshin-optimizer/gi/db-ui'
-import { artifactAsset } from '@genshin-optimizer/gi/assets'
 import { FlowerIcon, SlotIcon, StatIcon } from '@genshin-optimizer/gi/svgicons'
 import type { TeamData, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
@@ -26,6 +26,7 @@ import {
   DataContext,
   resolveInfo,
   statName,
+  teamEnergyAuto,
 } from '@genshin-optimizer/gi/ui'
 import type { CalcResult } from '@genshin-optimizer/gi/uidata'
 import AutoModeIcon from '@mui/icons-material/AutoMode'
@@ -48,6 +49,7 @@ import {
   tileSx,
 } from './OptionTile'
 import { OtherCharsSettings } from './OtherCharsChooser'
+import type { TeamEnergy } from './TeamEnergy'
 import {
   focusSx,
   numSx,
@@ -73,6 +75,7 @@ export function PoolSettings({
   teamOpt,
   setTeamOpt,
   poolSize,
+  energy,
   disabled,
 }: {
   members: TeamOptMember[]
@@ -81,6 +84,7 @@ export function PoolSettings({
   setTeamOpt: (update: TeamOptUpdate) => void
   /** Artifacts the team may use, with these settings */
   poolSize: number
+  energy?: TeamEnergy
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
@@ -164,6 +168,7 @@ export function PoolSettings({
           teamData={teamData}
           teamOpt={teamOpt}
           setTeamOpt={setTeamOpt}
+          energy={energy}
           disabled={disabled}
         />
       </Box>
@@ -649,10 +654,13 @@ export function RequirementsModal({
   timed?: ReadonlySet<string>
   onClose: () => void
 }) {
+  const { t } = useTranslation('page_team')
   const database = useDatabase()
   const { gender } = useDBMeta()
   const team = useTeam(teamId)!
   const { characterKey, teamCharId, loadoutDatum } = member
+  // (Automatic ER: the minimum ER here is not the one a run uses)
+  const autoEnergy = !!team.teamOpt && teamEnergyAuto(team.teamOpt)
   const teamChar = database.teamChars.get(teamCharId) ?? member.teamChar
   const character = useCharacter(characterKey)
   const data = teamData?.[characterKey]?.target
@@ -702,6 +710,14 @@ export function RequirementsModal({
               />
               {/* only the stat minimums: its sets and main stats are on its row */}
               <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+                {autoEnergy && (
+                  <Typography sx={{ ...type.label, mb: 1.5 }}>
+                    {t(
+                      'teamOpt.energy.autoHere',
+                      'ER is Automatic: Team optimize does not use a minimum ER set here.'
+                    )}
+                  </Typography>
+                )}
                 <StatFilterCard />
               </Box>
             </CardThemed>

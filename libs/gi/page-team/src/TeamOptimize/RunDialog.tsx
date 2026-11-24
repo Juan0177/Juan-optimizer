@@ -20,7 +20,12 @@ import {
 import { SlotIcon } from '@genshin-optimizer/gi/svgicons'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { TeamData, TeamOptMember } from '@genshin-optimizer/gi/ui'
-import { CharacterName, teamOptPool } from '@genshin-optimizer/gi/ui'
+import {
+  CharacterName,
+  teamOptPool,
+  WeaponName,
+} from '@genshin-optimizer/gi/ui'
+import BoltIcon from '@mui/icons-material/Bolt'
 import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
@@ -47,7 +52,7 @@ import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
 import { useTimedSetEffects } from './RotationWriter'
-import type { TeamEnergy } from './TeamEnergy'
+import type { MemberErHint, TeamEnergy } from './TeamEnergy'
 import { setOptConfigEr, TeamEnergyDrawer, useTeamEnergy } from './TeamEnergy'
 import {
   PoolSettings,
@@ -192,6 +197,7 @@ export function RunDialog({
             teamOpt={teamOpt}
             setTeamOpt={setTeamOpt}
             poolSize={poolSize}
+            energy={energy}
           />
           <Box component="section">
             <PanelHeader
@@ -202,17 +208,35 @@ export function RunDialog({
               )}
               actions={
                 <>
-                  {energy.calculated && (
-                    <FieldLabel
-                      tip={t(
-                        'teamOpt.energy.active',
-                        'Calculator targets applied. ER is recalculated for the weapons each build holds during optimization. Editing a member’s minimum switches back to the members’ own ER requirements.'
-                      )}
-                      sx={{ mr: 0.5 }}
-                    >
-                      {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
-                    </FieldLabel>
-                  )}
+                  <FieldLabel
+                    tip={t(
+                      'teamOpt.energy.modeTip',
+                      'Automatic: the ER calculator works out each member’s minimum ER from the rotation, again for the weapons each build holds (Favonius and other energy weapons counted). Manual: each member’s own minimum, lowered by what you set on energy weapons in Weapons.'
+                    )}
+                  >
+                    {t('teamOpt.energy.mode', 'ER')}
+                  </FieldLabel>
+                  <Segmented
+                    size="small"
+                    aria-label={t(
+                      'teamOpt.energy.modeLabel',
+                      'ER requirements'
+                    )}
+                    value={energy.calculated ? 'auto' : 'manual'}
+                    onChange={(value) =>
+                      value === 'auto' ? energy.toAuto() : energy.toManual()
+                    }
+                    options={[
+                      {
+                        value: 'auto',
+                        label: t('teamOpt.energy.auto', 'Automatic'),
+                      },
+                      {
+                        value: 'manual',
+                        label: t('teamOpt.energy.manual', 'Manual'),
+                      },
+                    ]}
+                  />
                   <Button
                     size="small"
                     variant="outlined"
@@ -739,20 +763,34 @@ function MemberRunRow({
               </ButtonBase>
             </Box>
             {optConfig && (
-              <Box sx={cellSx('er')}>
-                <CellLabel phone>{t('teamOpt.kqm.minEr', 'Min ER')}</CellLabel>
-                <MinErField
-                  characterKey={characterKey}
-                  optConfigId={teamChar.optConfigId}
-                  statFilters={optConfig.statFilters}
-                  calculated={
-                    energy.calculated
-                      ? (energy.targets?.[characterKey] ?? 100)
-                      : undefined
-                  }
-                  onCalculatedEdit={(value) =>
-                    energy.toManual(characterKey, value)
-                  }
+              <Box
+                sx={{
+                  ...cellSx('er'),
+                  flexDirection: 'column',
+                  alignItems: { xs: 'flex-start', sm: 'flex-end' },
+                  gap: 0.25,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <CellLabel phone>
+                    {t('teamOpt.kqm.minEr', 'Min ER')}
+                  </CellLabel>
+                  <MinErField
+                    characterKey={characterKey}
+                    optConfigId={teamChar.optConfigId}
+                    statFilters={optConfig.statFilters}
+                    calculated={
+                      !energy.calculated
+                        ? undefined
+                        : energy.targets
+                          ? (energy.targets[characterKey] ?? 100)
+                          : Number.NaN
+                    }
+                  />
+                </Box>
+                <ErWeaponHint
+                  hint={energy.erHints[characterKey]}
+                  calculated={energy.calculated}
                 />
               </Box>
             )}
@@ -877,15 +915,12 @@ function MinErField({
   optConfigId,
   statFilters,
   calculated,
-  onCalculatedEdit,
 }: {
   characterKey: TeamOptMember['characterKey']
   optConfigId: string
   statFilters: StatFilters
-  /** The ER calculator's target for it (the team's ER from the calculator) */
+  /** Automatic ER: the calculator's target for it, shown (not typed); NaN: it has none */
   calculated?: number
-  /** A minimum typed over the calculator's: the team's requirements its own from now on */
-  onCalculatedEdit: (value: number | undefined) => void
 }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
@@ -904,10 +939,63 @@ function MinErField({
   const commit = () => {
     if (invalid || text === shownText) return
     const value = parsed !== undefined && parsed > BASE_ER ? parsed : undefined
-    if (calculated !== undefined) onCalculatedEdit(value)
-    else setOptConfigEr(database, optConfigId, value)
+    setOptConfigEr(database, optConfigId, value)
     setText(`${+(value ?? BASE_ER).toFixed(1)}`)
   }
+  if (calculated !== undefined)
+    return (
+      <Tooltip
+        arrow
+        title={
+          Number.isNaN(calculated)
+            ? t(
+                'teamOpt.energy.autoMissing',
+                'The ER calculator cannot work out a target yet: open Calculate ER to finish it.'
+              )
+            : t(
+                'teamOpt.energy.autoTarget',
+                'Worked out by the ER calculator for the weapons each build holds. Choose Manual to set your own.'
+              )
+        }
+      >
+        <Box
+          component="span"
+          tabIndex={0}
+          aria-label={t('teamOpt.kqm.erInput', {
+            defaultValue: '{{character}} minimum ER (%)',
+            character: characterKey,
+          })}
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 0.5,
+            width: 96,
+            height: 32,
+            px: 1,
+            borderRadius: tokens.radius.control,
+            fontSize: 13.5,
+            fontWeight: 600,
+            color: 'text.secondary',
+            bgcolor: tokens.inset,
+            cursor: 'default',
+            ...numSx,
+            ...focusSx,
+          }}
+        >
+          {Number.isNaN(calculated) ? (
+            '—'
+          ) : (
+            <>
+              {shownText}
+              <Box component="span" sx={{ ...type.label, fontSize: 12 }}>
+                %
+              </Box>
+            </>
+          )}
+        </Box>
+      </Tooltip>
+    )
   return (
     <TextField
       size="small"
@@ -949,6 +1037,89 @@ function MinErField({
         '& .MuiInputBase-input::placeholder': { opacity: 0.55 },
       }}
     />
+  )
+}
+
+/** Live note under a member's Min ER showing how a ticked energy/Favonius weapon shifts it */
+function ErWeaponHint({
+  hint,
+  calculated,
+}: {
+  hint: MemberErHint | undefined
+  calculated: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const { gender } = useDBMeta()
+  if (!hint?.lower && !hint?.higher) return null
+  const fmt = (n: number) => `${+n.toFixed(1)}%`
+  const lower = hint.lower
+  const higher = hint.higher
+  const tip = lower ? (
+    <>
+      {fmt(lower.target)}{' '}
+      {lower.holder ? (
+        <>
+          {t('teamOpt.energy.whenHolds', 'when')}{' '}
+          <CharacterName characterKey={lower.holder} gender={gender} />{' '}
+          {t('teamOpt.energy.holds', 'holds')}{' '}
+          <WeaponName weaponKey={lower.weaponKey} />
+        </>
+      ) : (
+        <>
+          {t('teamOpt.energy.withWeapon', 'with')}{' '}
+          <WeaponName weaponKey={lower.weaponKey} />
+        </>
+      )}
+      {` (−${+lower.diff.toFixed(1)}%)`}
+      {calculated &&
+        t(
+          'teamOpt.energy.perWeaponNote',
+          '. Recalculated per weapon during optimization.'
+        )}
+    </>
+  ) : (
+    higher && (
+      <>
+        {t('teamOpt.energy.withoutWeapon', {
+          defaultValue: 'Up to {{er}} without',
+          er: fmt(higher.target),
+        })}{' '}
+        <CharacterName characterKey={higher.holder} gender={gender} />{' '}
+        <WeaponName weaponKey={higher.weaponKey} />
+        {t(
+          'teamOpt.energy.perWeaponNote',
+          '. Recalculated per weapon during optimization.'
+        )}
+      </>
+    )
+  )
+  return (
+    <Tooltip arrow title={tip}>
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.25,
+          fontSize: 11.5,
+          fontWeight: 600,
+          lineHeight: 1.2,
+          color: 'text.secondary',
+          cursor: 'help',
+          whiteSpace: 'nowrap',
+          ...numSx,
+        }}
+      >
+        <BoltIcon sx={{ fontSize: 12.5, color: 'primary.main' }} />
+        {lower
+          ? fmt(lower.target)
+          : higher &&
+            t('teamOpt.energy.upTo', {
+              defaultValue: 'up to {{er}}',
+              er: fmt(higher.target),
+            })}
+      </Box>
+    </Tooltip>
   )
 }
 

@@ -4,6 +4,7 @@ import type {
   ICachedWeapon,
   StatFilters,
   TeamOpt,
+  TeamOptEnergyCalculator,
 } from '@genshin-optimizer/gi/db'
 import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type { TeamOptMember } from './data'
@@ -16,13 +17,58 @@ export function canWield(characterKey: CharacterKey, weapon: ICachedWeapon) {
   )
 }
 
+/** Whether `weaponId` is left out for `characterKey` (globally or for this member) */
+export function isWeaponExcludedFor(
+  characterKey: CharacterKey,
+  weaponId: string,
+  teamOpt: Pick<TeamOpt, 'excludedWeapons' | 'excludedWeaponMembers'>
+): boolean {
+  return (
+    teamOpt.excludedWeapons.includes(weaponId) ||
+    !!teamOpt.excludedWeaponMembers?.[weaponId]?.includes(characterKey)
+  )
+}
+
+/**
+ * Whether every member in `members` can be assigned a distinct weapon from `weapons` that is
+ * allowed for them (exact bipartite matching for a small team of up to 4 members).
+ */
+export function canAssignTeamWeapons(
+  members: readonly CharacterKey[],
+  weapons: readonly { id: string }[],
+  isAllowed: (characterKey: CharacterKey, weaponId: string) => boolean
+): boolean {
+  const n = members.length
+  if (!n) return true
+  // Order members with fewer options first so backtracking resolves at once
+  const choices = members
+    .map((ck) => weapons.filter((w) => isAllowed(ck, w.id)).map((w) => w.id))
+    .sort((a, b) => a.length - b.length)
+  if (choices.some((c) => !c.length)) return false
+  const used = new Set<string>()
+  const assign = (i: number): boolean => {
+    if (i === n) return true
+    // With at least `n` choices, a member can always pick one not used by the other `n - 1`
+    if (choices[i].length >= n) return assign(i + 1)
+    for (const id of choices[i]) {
+      if (used.has(id)) continue
+      used.add(id)
+      if (assign(i + 1)) return true
+      used.delete(id)
+    }
+    return false
+  }
+  return assign(0)
+}
+
 /**
  * The weapons a member may be given: the ticked ones of its type (not left out in the weapon
- * chooser), wherever they are (unequipped, on a teammate, or on someone outside the team: the
- * chooser lists them all), and not `taken` by another member. Its current weapon comes first (the
- * one to beat) when it is ticked. A weapon left out is never chosen; a member left without any
- * other keeps its current one (it must wield something: `teamOptUntickedWeapons` tells). A
- * teammate's weapon is not one when the current one is left out: the teammate would get it in
+ * chooser, globally or for this member), wherever they are (unequipped, on a teammate, or on
+ * someone outside the team: the chooser lists them all), and not `taken` by another member. Its
+ * current weapon comes first (the one to beat) when it is allowed for it. A weapon left out is
+ * never chosen; a member left without any other keeps its current one (it must wield something:
+ * `teamOptUntickedWeapons` tells). A teammate's weapon is not one when the current one is left out
+ * (or left out for that teammate when it has no other allowed weapon): the teammate would get it in
  * exchange. The others come strongest first (rarity, level, refinement): of weapons that are worth
  * the same to the team, the first one tried is kept, so never a 1-star for being listed first.
  */
@@ -34,10 +80,28 @@ export function teamOptWeaponCandidates(
   teamLocations: ReadonlySet<string>,
   taken: ReadonlySet<string>
 ): ICachedWeapon[] {
-  const excluded = new Set(teamOpt.excludedWeapons)
+  const excludedFor = (ck: CharacterKey, weaponId: string) =>
+    isWeaponExcludedFor(ck, weaponId, teamOpt)
   const current = database.weapons.get(currentWeaponId)
   // equipping a teammate's weapon gives it this one's: not when it is left out
-  const mayTakeTeammates = !excluded.has(currentWeaponId)
+  const currentExcluded = excludedFor(member.characterKey, currentWeaponId)
+  const holderCanSwap = (weapon: ICachedWeapon) => {
+    if (!weapon.location || weapon.location === member.location) return true
+    if (!teamLocations.has(weapon.location)) return true
+    if (currentExcluded) return false
+    const holder = database.chars.LocationToCharacterKey(weapon.location)
+    if (!current || !excludedFor(holder, current.id)) return true
+    // If giving `current` to `holder` would leave `holder` on a weapon excluded for them,
+    // allow it only when `holder` has another untaken weapon they can switch to.
+    return database.weapons.values.some(
+      (w) =>
+        w.id !== weapon.id &&
+        w.id !== current.id &&
+        !taken.has(w.id) &&
+        canWield(holder, w) &&
+        !excludedFor(holder, w.id)
+    )
+  }
   const rarity = (weapon: ICachedWeapon) =>
     getWeaponStat(weapon.key)?.rarity ?? 0
   const others = database.weapons.values
@@ -45,12 +109,9 @@ export function teamOptWeaponCandidates(
       (weapon) =>
         weapon.id !== currentWeaponId &&
         canWield(member.characterKey, weapon) &&
-        !excluded.has(weapon.id) &&
+        !excludedFor(member.characterKey, weapon.id) &&
         !taken.has(weapon.id) &&
-        (mayTakeTeammates ||
-          !weapon.location ||
-          weapon.location === member.location ||
-          !teamLocations.has(weapon.location))
+        holderCanSwap(weapon)
     )
     .sort(
       (a, b) =>
@@ -61,11 +122,11 @@ export function teamOptWeaponCandidates(
   const keepCurrent =
     current &&
     !taken.has(current.id) &&
-    (!excluded.has(current.id) || !others.length)
+    (!excludedFor(member.characterKey, current.id) || !others.length)
   const candidates = keepCurrent ? [current, ...others] : others
-  // Copies of the same weapon (key, level, ascension, refinement, energy setting) give the same
-  // builds: one of each is tried, the one that moves least: the member's own, an unequipped one,
-  // then one held outside the team, then a teammate's
+  // Copies of the same weapon (key, level, ascension, refinement, energy and member settings) give
+  // the same builds: one of each is tried, the one that moves least: the member's own, an
+  // unequipped one, then one held outside the team, then a teammate's
   const moves = (weapon: ICachedWeapon) =>
     weapon.id === currentWeaponId || weapon.location === member.location
       ? 0
@@ -74,8 +135,12 @@ export function teamOptWeaponCandidates(
         : !teamLocations.has(weapon.location)
           ? 2
           : 3
-  const copyOf = (weapon: ICachedWeapon) =>
-    `${weapon.key}|${weapon.level}|${weapon.ascension}|${weapon.refinement}|${JSON.stringify(teamOpt.weaponEnergy[weapon.id] ?? {})}`
+  const copyOf = (weapon: ICachedWeapon) => {
+    const members = [...(teamOpt.excludedWeaponMembers?.[weapon.id] ?? [])]
+      .sort()
+      .join(',')
+    return `${weapon.key}|${weapon.level}|${weapon.ascension}|${weapon.refinement}|${JSON.stringify(teamOpt.weaponEnergy[weapon.id] ?? {})}|${members}`
+  }
   const kept = new Map<string, ICachedWeapon>()
   for (const weapon of candidates) {
     const copy = copyOf(weapon)
@@ -88,7 +153,8 @@ export function teamOptWeaponCandidates(
 
 /**
  * The members that end up with a weapon left out in the weapon chooser: none of the ticked ones
- * was free for them (none of their type is ticked, or the others took them), so they kept theirs
+ * was free for them (none of their type is ticked for them, or the others took them), so they kept
+ * theirs
  */
 export function teamOptUntickedWeapons(
   members: readonly TeamOptMember[],
@@ -96,10 +162,15 @@ export function teamOptUntickedWeapons(
   teamOpt: TeamOpt
 ): CharacterKey[] {
   if (!teamOpt.optimizeWeapons) return []
-  const excluded = new Set(teamOpt.excludedWeapons)
   return members
     .filter((m) => !m.isTc)
-    .filter((m) => excluded.has(weapons[m.characterKey] ?? m.weaponId))
+    .filter((m) =>
+      isWeaponExcludedFor(
+        m.characterKey,
+        weapons[m.characterKey] ?? m.weaponId,
+        teamOpt
+      )
+    )
     .map((m) => m.characterKey)
 }
 
@@ -201,6 +272,14 @@ export function teamEnergyRelief(
 const ER_FILTER = JSON.stringify(['basic', 'enerRech_'])
 
 /**
+ * Automatic ER: the members' Energy Recharge requirements come from the team's ER calculator,
+ * worked out for the weapons each build holds; otherwise (Manual) from their own settings
+ */
+export const teamEnergyAuto = (
+  teamOpt: Pick<TeamOpt, 'energySource' | 'energyCalculator'>
+) => teamOpt.energySource === 'calculator' && !!teamOpt.energyCalculator
+
+/**
  * The members' Energy Recharge targets from the team's ER calculator, for the weapons they hold
  * (Favonius particles and energy weapons count for their wielders). Undefined: the requirements are
  * the members' own (`TeamOpt.energySource`), or the calculator cannot tell.
@@ -211,7 +290,7 @@ export function teamCalculatorTargets(
   teamOpt: Pick<TeamOpt, 'energySource' | 'energyCalculator'>
 ): Partial<Record<CharacterKey, number>> | undefined {
   const calculator = teamOpt.energyCalculator
-  if (teamOpt.energySource !== 'calculator' || !calculator) return undefined
+  if (!teamEnergyAuto(teamOpt) || !calculator) return undefined
   const held = keys.filter((k) => weapons[k])
   const result = calculateEnergyRecharge(
     keys,
@@ -288,6 +367,61 @@ export function teamStatFilters(
       ),
     ])
   ) as Partial<Record<CharacterKey, StatFilters>>
+}
+
+/**
+ * Per member, how much less Energy Recharge the ER calculator needs when `holder` equips
+ * `weaponKey` at `refinement` compared to `holder` holding no energy weapon (the other members
+ * holding `baseWeapons`). Undefined when the calculator inputs have errors.
+ */
+export interface WeaponCalculatorImpact {
+  base: Partial<Record<CharacterKey, number>>
+  withWeapon: Partial<Record<CharacterKey, number>>
+  /** Members whose required ER drops when `holder` wields the weapon */
+  changes: {
+    characterKey: CharacterKey
+    from: number
+    to: number
+    diff: number
+  }[]
+}
+
+export function weaponCalculatorImpact(
+  keys: readonly CharacterKey[],
+  calculator: TeamOptEnergyCalculator,
+  holder: CharacterKey,
+  weaponKey: WeaponKey,
+  refinement: number,
+  baseWeapons: Partial<Record<CharacterKey, WeaponKey>> = {},
+  baseRefinements: Partial<Record<CharacterKey, number>> = {}
+): WeaponCalculatorImpact | undefined {
+  const withoutWeapons = { ...baseWeapons }
+  const withoutRefinements = { ...baseRefinements }
+  delete withoutWeapons[holder]
+  delete withoutRefinements[holder]
+  const without = calculateEnergyRecharge(
+    keys,
+    calculator,
+    withoutWeapons,
+    withoutRefinements
+  )
+  if (without.errors.length) return undefined
+  const withIt = calculateEnergyRecharge(
+    keys,
+    calculator,
+    { ...withoutWeapons, [holder]: weaponKey },
+    { ...withoutRefinements, [holder]: refinement }
+  )
+  if (withIt.errors.length) return undefined
+  const changes: WeaponCalculatorImpact['changes'] = []
+  for (const ck of keys) {
+    const from = without.targets[ck]
+    const to = withIt.targets[ck]
+    if (from === undefined || to === undefined) continue
+    const diff = Math.round((from - to) * 10) / 10
+    if (diff >= 0.1) changes.push({ characterKey: ck, from, to, diff })
+  }
+  return { base: without.targets, withWeapon: withIt.targets, changes }
 }
 
 /** The members' current weapons */

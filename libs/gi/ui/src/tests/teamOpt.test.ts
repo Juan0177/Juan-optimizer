@@ -29,10 +29,13 @@ import {
   attackDamageOutcomes,
   attackHitData,
   attackSegments,
+  canAssignTeamWeapons,
   clearTeamOptSolveMemo,
+  defaultEnergyCalculator,
   evaluateTeamRotation,
   getTeamDataCalc,
   hitFormulaParts,
+  kqmWeapons,
   meetsSetRules,
   optimizeTeam,
   partTerms,
@@ -44,10 +47,12 @@ import {
   teamOptResultGear,
   teamOptRunGear,
   teamOptUIData,
+  teamEnergyAuto,
   teamOptWeaponCandidates,
   teamRotationHits,
   teamRotationNodes,
   teamSensitivity,
+  weaponCalculatorImpact,
   withAttackStates,
   wolfsGravestoneStates,
 } from '../'
@@ -1873,6 +1878,103 @@ describe('team optimize', () => {
     )!
     expect(calamityRow.unmet).toBeUndefined()
   })
+
+  it('never assigns a member a weapon excluded for them during optimizeTeam', async () => {
+    const { database, teamId, ayakaId } = setup()
+    database.chars.getWithInitWeapon('Furina')
+    const furinaId = database.teamChars.new('Furina')
+    const team = database.teams.get(teamId)!
+    database.teams.set(teamId, {
+      loadoutData: [
+        team.loadoutData[0],
+        { teamCharId: furinaId, buildType: 'equipped' } as LoadoutDatum,
+      ],
+    })
+    const mist = database.chars.get(ayaka)!.equippedWeapon
+    const fav = database.weapons.new({
+      key: 'FavoniusSword',
+      level: 90,
+      ascension: 6,
+      refinement: 5,
+      location: '',
+      lock: false,
+    })
+    // Give Ayaka a 126% ER requirement (her atk pieces give 26% ER; Favonius lets her use crit!)
+    database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
+      statFilters: {
+        [JSON.stringify(['basic', 'enerRech_'])]: [
+          { value: 126, disabled: false },
+        ],
+      },
+    })
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        useOtherChars: true,
+        optimizeWeapons: true,
+        excludedWeaponMembers: { [fav]: [ayaka] },
+        weaponEnergy: { [fav]: { [ayaka]: 26 } },
+        attacks: {
+          [ayaka]: [attack(['burst', 'cutting'], 19)],
+          Furina: [attack(['skill', 'gentilhommeDmg'], 4)],
+        },
+      },
+      solve: bruteForce,
+    }))!
+    // Furina picks up Favonius (relieving Ayaka's ER!), while Ayaka keeps Mistsplitter
+    expect(result.weapons[ayaka]).toBe(mist)
+    expect(result.weapons['Furina']).toBe(fav)
+    expect(result.after.unmet[ayaka]).toBeUndefined()
+  })
+})
+
+describe('teamOptRunGear', () => {
+  it('gives each optimized member the sets its pool can wear four of, and the weapons it may take', () => {
+    const { database, teamId, ayakaId, ids } = setup()
+    database.weapons.new({
+      key: 'FavoniusSword',
+      level: 90,
+      ascension: 6,
+      refinement: 1,
+      location: '',
+      lock: false,
+    })
+    database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
+      artSetExclusion: { BlizzardStrayer: [4] },
+    })
+    const gear = {
+      [ayaka]: { sets: { NoblesseOblige: 5 } },
+      [shenhe]: { weapon: 'CalamityQueller' },
+    }
+    // (two Gladiator's Finale pieces left out: three slots, no 4-piece)
+    const base: TeamOpt = {
+      ...initTeamOpt(),
+      excludedArts: [ids.weak.flower, ids.weak.plume],
+    }
+    const run = teamOptRunGear(database, teamId, base, gear)
+    expect(run[ayaka]).toEqual({
+      sets: { NoblesseOblige: 5 },
+      candidates: { sets: ['NoblesseOblige'], weapons: [] },
+    })
+    expect([...run[shenhe]!.candidates!.sets!].sort()).toEqual([
+      'BlizzardStrayer',
+      'NoblesseOblige',
+    ])
+    const kept = teamOptRunGear(
+      database,
+      teamId,
+      { ...base, keep: [shenhe], optimizeWeapons: true },
+      gear
+    )
+    expect(kept[shenhe]).toEqual({ weapon: 'CalamityQueller' })
+    expect([...kept[ayaka]!.candidates!.weapons!].sort()).toEqual([
+      'FavoniusSword',
+      'MistsplitterReforged',
+    ])
+  })
 })
 
 describe('teamOptRunGear', () => {
@@ -1921,48 +2023,144 @@ describe('teamOptRunGear', () => {
   })
 })
 
-describe('teamOptRunGear', () => {
-  it('gives each optimized member the sets its pool can wear four of, and the weapons it may take', () => {
-    const { database, teamId, ayakaId, ids } = setup()
-    database.weapons.new({
+describe('per-member weapon restrictions and calculator impact', () => {
+  it('excludes a weapon for one member while letting another member of the same type use it', async () => {
+    const { database, teamId } = setup()
+    // Add a second Sword user (Furina) alongside Ayaka
+    database.chars.getWithInitWeapon('Furina')
+    const furinaId = database.teamChars.new('Furina')
+    const team = database.teams.get(teamId)!
+    database.teams.set(teamId, {
+      loadoutData: [
+        team.loadoutData[0],
+        { teamCharId: furinaId, buildType: 'equipped' } as LoadoutDatum,
+      ],
+    })
+    const fav = database.weapons.new({
       key: 'FavoniusSword',
       level: 90,
       ascension: 6,
-      refinement: 1,
+      refinement: 5,
       location: '',
       lock: false,
     })
-    database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
-      artSetExclusion: { BlizzardStrayer: [4] },
-    })
-    const gear = {
-      [ayaka]: { sets: { NoblesseOblige: 5 } },
-      [shenhe]: { weapon: 'CalamityQueller' },
-    }
-    // (two Gladiator's Finale pieces left out: three slots, no 4-piece)
-    const base: TeamOpt = {
+    const mist = database.chars.get(ayaka)!.equippedWeapon
+    const teamOpt: TeamOpt = {
       ...initTeamOpt(),
-      excludedArts: [ids.weak.flower, ids.weak.plume],
+      optimizeWeapons: true,
+      // Ayaka may NOT use Favonius Sword; Furina may
+      excludedWeaponMembers: { [fav]: [ayaka] },
     }
-    const run = teamOptRunGear(database, teamId, base, gear)
-    expect(run[ayaka]).toEqual({
-      sets: { NoblesseOblige: 5 },
-      candidates: { sets: ['NoblesseOblige'], weapons: [] },
-    })
-    expect([...run[shenhe]!.candidates!.sets!].sort()).toEqual([
-      'BlizzardStrayer',
-      'NoblesseOblige',
-    ])
-    const kept = teamOptRunGear(
+    const members = teamOptMembers(database, teamId)
+    const locations = new Set(members.map((m) => m.location as string))
+    const ayakaMember = members.find((m) => m.characterKey === ayaka)!
+    const furinaMember = members.find((m) => m.characterKey === 'Furina')!
+    const ayakaCands = teamOptWeaponCandidates(
       database,
-      teamId,
-      { ...base, keep: [shenhe], optimizeWeapons: true },
-      gear
+      ayakaMember,
+      ayakaMember.weaponId,
+      teamOpt,
+      locations,
+      new Set()
+    ).map((w) => w.id)
+    const furinaCands = teamOptWeaponCandidates(
+      database,
+      furinaMember,
+      furinaMember.weaponId,
+      teamOpt,
+      locations,
+      new Set()
+    ).map((w) => w.id)
+    expect(ayakaCands).toContain(mist)
+    expect(ayakaCands).not.toContain(fav)
+    expect(furinaCands).toContain(fav)
+    // Also respects KQM per-member exclusions
+    const kqmExcluded = {
+      refinement5: 1,
+      refinement4: 5,
+      excludedWeaponMembers: { FavoniusSword: [ayaka] as CharacterKey[] },
+    }
+    expect(kqmWeapons(ayaka, kqmExcluded).map((w) => w.key)).not.toContain(
+      'FavoniusSword'
     )
-    expect(kept[shenhe]).toEqual({ weapon: 'CalamityQueller' })
-    expect([...kept[ayaka]!.candidates!.weapons!].sort()).toEqual([
-      'FavoniusSword',
-      'MistsplitterReforged',
-    ])
+    expect(kqmWeapons('Furina', kqmExcluded).map((w) => w.key)).toContain(
+      'FavoniusSword'
+    )
   })
+
+  it('checks exact bipartite assignment with canAssignTeamWeapons', () => {
+    const members: CharacterKey[] = ['Skirk', 'Furina']
+    const weapons = [{ id: 'w1' }, { id: 'w2' }]
+    // Both ticked weapons restricted to Skirk -> Furina has none
+    expect(canAssignTeamWeapons(members, weapons, (ck) => ck === 'Skirk')).toBe(
+      false
+    )
+    // Only w1 allowed for both -> 1 weapon for 2 members
+    expect(
+      canAssignTeamWeapons(members, weapons, (_ck, id) => id === 'w1')
+    ).toBe(false)
+    // w1 for Skirk only, w2 for Furina only -> assignable
+    expect(
+      canAssignTeamWeapons(
+        members,
+        weapons,
+        (ck, id) =>
+          (ck === 'Skirk' && id === 'w1') || (ck === 'Furina' && id === 'w2')
+      )
+    ).toBe(true)
+    // w1 for both, w2 for Furina only -> assignable (Skirk gets w1, Furina gets w2)
+    expect(
+      canAssignTeamWeapons(
+        members,
+        weapons,
+        (ck, id) => id === 'w1' || (ck === 'Furina' && id === 'w2')
+      )
+    ).toBe(true)
+  })
+
+  it('computes live Favonius ER savings per member with weaponCalculatorImpact', () => {
+    const keys: CharacterKey[] = ['Bennett', 'Xiangling', 'Xingqiu', 'Sucrose']
+    const calc = defaultEnergyCalculator(keys, 20)
+    calc.members.Bennett!.favoniusProcs = 1
+    calc.members.Bennett!.edited = ['favoniusProcs']
+    const impact = weaponCalculatorImpact(
+      keys,
+      calc,
+      'Bennett',
+      'FavoniusSword',
+      5
+    )
+    expect(impact).toBeDefined()
+    expect(impact!.changes.length).toBeGreaterThan(0)
+    for (const c of impact!.changes) {
+      expect(c.to).toBeLessThan(c.from)
+      expect(c.diff).toBeCloseTo(c.from - c.to, 1)
+    }
+    // Zero procs -> no ER change
+    calc.members.Bennett!.favoniusProcs = 0
+    const zero = weaponCalculatorImpact(
+      keys,
+      calc,
+      'Bennett',
+      'FavoniusSword',
+      5
+    )
+    expect(zero?.changes).toEqual([])
+  })
+})
+
+/**
+ * Automatic and Manual ER are a choice the team makes: Automatic only with the ER calculator set
+ * up (its targets for each build's weapons), Manual otherwise (the members' own minimums)
+ */
+it('ER is Automatic only with the calculator set up', () => {
+  expect(teamEnergyAuto({ energySource: 'manual' })).toBe(false)
+  expect(teamEnergyAuto({ energySource: 'calculator' })).toBe(false)
+  expect(teamEnergyAuto({})).toBe(false)
+  expect(
+    teamEnergyAuto({
+      energySource: 'calculator',
+      energyCalculator: defaultEnergyCalculator(['Bennett'], 20, 'Bennett'),
+    })
+  ).toBe(true)
 })

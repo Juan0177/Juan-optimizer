@@ -144,4 +144,17 @@ describe('Favonius particles', () => {
       screen.queryByText('As played: Bennett 70% · Xiangling 30%')
     ).toBeNull()
   })
+
+  it('shows the live ER impact of Favonius and a hint when triggers are 0', () => {
+    render(<Calculator bennett={{ favoniusProcs: 1 }} />)
+    expect(screen.getByText(/With Favonius \(R5\):/)).toBeTruthy()
+    expect(screen.getByText(/−\d+(\.\d)?%/)).toBeTruthy()
+    cleanup()
+    render(<Calculator bennett={{ favoniusProcs: 0 }} />)
+    expect(
+      screen.getByText(
+        /Set triggers above 0 to count Favonius particles when this member holds one\./
+      )
+    ).toBeTruthy()
+  })
 })

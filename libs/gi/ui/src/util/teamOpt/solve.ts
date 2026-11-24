@@ -44,6 +44,7 @@ import type { SimGear } from './rotation'
 import {
   canWield,
   hasEnergyRequirement,
+  isWeaponExcludedFor,
   teamEnergyNeeds,
   teamOptUntickedWeapons,
   teamOptWeaponCandidates,
@@ -1649,7 +1650,6 @@ export async function optimizeTeam({
             }
           }
       if (teamOpt.optimizeWeapons) {
-        const excluded = new Set(teamOpt.excludedWeapons)
         for (const [i, a] of order.entries())
           for (const b of order.slice(i + 1)) {
             const weaponA = database.weapons.get(
@@ -1659,7 +1659,11 @@ export async function optimizeTeam({
               s.weaponIds[b.characterKey] ?? ''
             )
             if (!weaponA || !weaponB || weaponA.id === weaponB.id) continue
-            if (excluded.has(weaponA.id) || excluded.has(weaponB.id)) continue
+            if (
+              isWeaponExcludedFor(a.characterKey, weaponB.id, teamOpt) ||
+              isWeaponExcludedFor(b.characterKey, weaponA.id, teamOpt)
+            )
+              continue
             if (
               !canWield(a.characterKey, weaponB) ||
               !canWield(b.characterKey, weaponA)
@@ -2055,19 +2059,21 @@ export async function optimizeTeam({
       breaksSetRules(state, start)
     )
   }
-  // A weapon left out in the weapon chooser (not ticked) is one a member only keeps when none of
-  // the ticked ones is free for it: the members' own builds are no result to fall back on when one
-  // of them holds such a weapon and the run found it a ticked one.
-  const leftOut = new Set(
-    teamOpt.optimizeWeapons ? teamOpt.excludedWeapons : []
-  )
+  // A weapon left out in the weapon chooser (globally or for this member) is one a member only
+  // keeps when none of the ticked ones is free for it: the members' own builds are no result to
+  // fall back on when one of them holds such a weapon and the run found it a ticked one.
   const weaponOf = (s: TeamState, member: TeamOptMember) =>
     s.weaponIds[member.characterKey] ?? member.weaponId
-  /** The members whose weapon in `s` is not ticked while `than` gives them a ticked one */
+  const weaponLeftOut = (member: TeamOptMember, weaponId: string) =>
+    teamOpt.optimizeWeapons &&
+    isWeaponExcludedFor(member.characterKey, weaponId, teamOpt)
+  /** The members whose weapon in `s` is not ticked for them while `than` gives them a ticked one */
   const untickedAgainst = (s: TeamState, than: TeamState) =>
     order
       .filter(
-        (m) => leftOut.has(weaponOf(s, m)) && !leftOut.has(weaponOf(than, m))
+        (m) =>
+          weaponLeftOut(m, weaponOf(s, m)) &&
+          !weaponLeftOut(m, weaponOf(than, m))
       )
       .map((m) => m.characterKey)
   if (!notBelowStart()) {

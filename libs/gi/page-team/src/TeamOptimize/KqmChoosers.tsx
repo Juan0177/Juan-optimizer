@@ -30,6 +30,8 @@ import {
   ArtifactSetName,
   ArtifactSetTooltip,
   CharacterName,
+  calculateEnergyRecharge,
+  energyCalcWeapons,
   KQM_WEAPON_LIST,
   kqmBuiltRefinement,
   kqmDefaultExcludedWeapons,
@@ -43,12 +45,13 @@ import {
   kqmWeaponGroup,
   kqmWeaponSource,
   kqmWeapons,
+  updateEnergyCalcMember,
 } from '@genshin-optimizer/gi/ui'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import CloseIcon from '@mui/icons-material/Close'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -71,10 +74,12 @@ import type { ReactNode } from 'react'
 import {
   Suspense,
   startTransition,
+  useCallback,
   useDeferredValue,
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -94,7 +99,7 @@ import {
   useBatches,
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
-import type { PassiveStore } from './WeaponChooser'
+import type { PassiveStore, WeaponCalcEnergyConfig } from './WeaponChooser'
 import {
   isConditional,
   PassiveLines,
@@ -487,12 +492,60 @@ function KqmWeaponGroups({
 }
 
 /** KQM mode's weapons: which may be chosen, their passives per member, what energy they give */
+/**
+ * Changes to KQM's settings kept here and saved once, when a chooser closes (or the page is
+ * left): a save writes the team's whole settings, the rotation's attacks with them, too slow for
+ * every click. Only KQM's own settings (`TeamOpt.kqm`) may be changed through it.
+ */
+function useKqmClicks(
+  saved: TeamOpt,
+  save: (update: TeamOptUpdate) => void
+): [TeamOpt, (update: TeamOptUpdate) => void] {
+  const [kqm, setKqm] = useState<TeamOptKqm>()
+  const teamOpt = useMemo(() => (kqm ? { ...saved, kqm } : saved), [saved, kqm])
+  const latest = useRef(teamOpt)
+  latest.current = teamOpt
+  const saveRef = useRef(save)
+  saveRef.current = save
+  const queue = useRef<TeamOptUpdate[]>([])
+  const flush = useCallback(() => {
+    const updates = queue.current
+    if (!updates.length) return
+    queue.current = []
+    saveRef.current((o: TeamOpt) => {
+      let next = o
+      for (const update of updates) next = update(next) ?? next
+      return next
+    })
+  }, [])
+  useEffect(() => {
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      // (the panel closes first, then the save)
+      requestAnimationFrame(() => setTimeout(flush))
+    }
+  }, [flush])
+  const update = useCallback((change: TeamOptUpdate) => {
+    const draft: TeamOpt = {
+      ...latest.current,
+      kqm: structuredClone(latest.current.kqm ?? defaultTeamOptKqm),
+    }
+    const next = change(draft) ?? draft
+    latest.current = next
+    queue.current.push(change)
+    setKqm(next.kqm)
+  }, [])
+  return [teamOpt, update]
+}
+
 export function KqmWeaponChooser({
   teamId,
   members,
   teamData,
-  teamOpt,
-  setTeamOpt,
+  teamOpt: savedTeamOpt,
+  setTeamOpt: saveTeamOpt,
+  onOpenCalculator,
   onClose,
   embedded = false,
 }: {
@@ -502,14 +555,20 @@ export function KqmWeaponChooser({
   teamData: TeamData | undefined
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
+  onOpenCalculator?: () => void
   onClose: () => void
 }) {
   const { t } = useTranslation(['page_team', 'page_weapon', 'weaponNames_gen'])
+  const [teamOpt, setTeamOpt] = useKqmClicks(savedTeamOpt, saveTeamOpt)
   const [search, setSearch] = useState('')
   const [selectedOnly, setSelectedOnly] = useState(false)
   const kqm = teamOpt.kqm ?? defaultTeamOptKqm
   const store = useKqmPassiveStore(teamId, teamOpt, setTeamOpt)
   const optimized = members
+  const memberKeys = useMemo(
+    () => members.map((m) => m.characterKey),
+    [members]
+  )
   const groups = useMemo(() => {
     const byType = new Map<WeaponTypeKey, TeamOptMember[]>()
     for (const m of optimized) {
@@ -533,6 +592,61 @@ export function KqmWeaponChooser({
     () => new Set([...excludedKeys].map((key) => `kqm:${key}`)),
     [excludedKeys]
   )
+  const excludedMembers = useMemo(() => {
+    const map = kqm.excludedWeaponMembers
+    if (!map) return undefined
+    return Object.fromEntries(
+      Object.entries(map).map(([key, who]) => [`kqm:${key}`, who])
+    ) as Record<string, readonly CharacterKey[] | undefined>
+  }, [kqm.excludedWeaponMembers])
+  const lockedMembers = useMemo(
+    () =>
+      Object.fromEntries(
+        members.flatMap(({ characterKey }) => {
+          const locked = kqmLockedWeapon(characterKey, kqm)
+          return locked ? [[characterKey, locked.key] as const] : []
+        })
+      ) as Partial<Record<CharacterKey, WeaponKey>>,
+    [members, kqm]
+  )
+  const calcEnergy = useMemo<WeaponCalcEnergyConfig | undefined>(() => {
+    if (kqm.energySource !== 'calculator' || !kqm.energyCalculator)
+      return undefined
+    return {
+      calculator: kqm.energyCalculator,
+      updateMember: (characterKey, values) =>
+        setTeamOpt((o) => {
+          const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+          if (!settings.energyCalculator) return
+          const nextCalc = updateEnergyCalcMember(
+            settings.energyCalculator,
+            memberKeys,
+            characterKey,
+            values
+          )
+          settings.energyCalculator = nextCalc
+          const { weapons: estWeapons, refinements: estRefs } =
+            energyCalcWeapons(memberKeys, nextCalc, (k) =>
+              kqmWeapons(k, settings)
+            )
+          const estimate = calculateEnergyRecharge(
+            memberKeys,
+            nextCalc,
+            estWeapons,
+            estRefs
+          )
+          if (!estimate.errors.length)
+            settings.energyRecharge = estimate.targets
+        }),
+      onOpenCalculator,
+    }
+  }, [
+    kqm.energySource,
+    kqm.energyCalculator,
+    memberKeys,
+    setTeamOpt,
+    onOpenCalculator,
+  ])
   // Typing only updates the field: the list follows the deferred query, in the background
   const query = useDeferredValue(search).trim().toLocaleLowerCase()
   // each weapon's searchable text (name, key, source), made once
@@ -572,11 +686,26 @@ export function KqmWeaponChooser({
     () => new Map(all.map((key) => [key, kqmEnergyRelief([key], teamOpt)])),
     [all, teamOpt]
   )
-  const setExcluded = (keys: WeaponKey[]) =>
+  const setExcluded = (
+    keys: WeaponKey[],
+    clearMembersFor?: Iterable<WeaponKey>
+  ) =>
     setTeamOpt((o) => {
+      const prev = o.kqm ?? defaultTeamOptKqm
+      const nextKeys = [...new Set(keys)]
+      let nextMembers = prev.excludedWeaponMembers
+        ? { ...prev.excludedWeaponMembers }
+        : undefined
+      if (nextMembers) {
+        for (const k of nextKeys) delete nextMembers[k]
+        if (clearMembersFor)
+          for (const k of clearMembersFor) delete nextMembers[k]
+        if (!Object.keys(nextMembers).length) nextMembers = undefined
+      }
       o.kqm = {
-        ...(o.kqm ?? defaultTeamOptKqm),
-        excludedWeapons: [...new Set(keys)],
+        ...prev,
+        excludedWeapons: nextKeys,
+        excludedWeaponMembers: nextMembers,
         weaponList: KQM_WEAPON_LIST,
       }
     })
@@ -592,12 +721,68 @@ export function KqmWeaponChooser({
   // The list, rebuilt only when what it shows changes (not on every keystroke in the search)
   // biome-ignore lint/correctness/useExhaustiveDependencies: `setExcluded` only uses `setTeamOpt` and `excludedKeys`
   const list = useMemo(() => {
-    const onToggle = (weapon: { key: WeaponKey }) =>
+    const onToggle = (
+      weapon: { key: WeaponKey },
+      wielders: TeamOptMember[]
+    ) => {
+      const blocked = kqm.excludedWeaponMembers?.[weapon.key]
+      const ticked =
+        !excludedKeys.has(weapon.key) &&
+        (!blocked?.length ||
+          wielders.some(
+            (m) =>
+              !lockedMembers[m.characterKey] &&
+              !blocked.includes(m.characterKey)
+          ))
       setExcluded(
-        excludedKeys.has(weapon.key)
-          ? [...excludedKeys].filter((k) => k !== weapon.key)
-          : [...excludedKeys, weapon.key]
+        ticked
+          ? [...excludedKeys, weapon.key]
+          : [...excludedKeys].filter((k) => k !== weapon.key),
+        [weapon.key]
       )
+    }
+    const onToggleMember = (
+      weapon: { key: WeaponKey },
+      wielders: TeamOptMember[],
+      characterKey: CharacterKey
+    ) =>
+      setTeamOpt((o) => {
+        const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+        const excl = kqmExcludedWeapons(settings)
+        const nextMap = { ...settings.excludedWeaponMembers }
+        const unlocked = wielders.filter((m) => !lockedMembers[m.characterKey])
+        const ticked =
+          !excl.has(weapon.key) &&
+          (!nextMap[weapon.key]?.length ||
+            unlocked.some(
+              (m) => !nextMap[weapon.key]!.includes(m.characterKey)
+            ))
+        if (!ticked) {
+          excl.delete(weapon.key)
+          const others = unlocked
+            .map((m) => m.characterKey)
+            .filter((k) => k !== characterKey)
+          if (others.length) nextMap[weapon.key] = others
+          else delete nextMap[weapon.key]
+        } else {
+          const blocked = new Set(nextMap[weapon.key] ?? [])
+          if (blocked.has(characterKey)) blocked.delete(characterKey)
+          else blocked.add(characterKey)
+          if (!unlocked.some((m) => !blocked.has(m.characterKey))) {
+            excl.add(weapon.key)
+            delete nextMap[weapon.key]
+          } else if (blocked.size) {
+            nextMap[weapon.key] = [...blocked]
+          } else {
+            delete nextMap[weapon.key]
+          }
+        }
+        settings.excludedWeapons = [...excl]
+        settings.weaponList = KQM_WEAPON_LIST
+        if (Object.keys(nextMap).length)
+          settings.excludedWeaponMembers = nextMap
+        else delete settings.excludedWeaponMembers
+      })
     let before = 0
     return (
       <>
@@ -662,6 +847,7 @@ export function KqmWeaponChooser({
                 </Box>
               }
               weapons={filtered}
+              allWeapons={group.weapons}
               selectionCounts={{
                 allowed: group.weapons.filter((w) => !excluded.has(w.id))
                   .length,
@@ -671,7 +857,10 @@ export function KqmWeaponChooser({
               virtual
               teamData={teamData}
               excluded={excluded}
-              onToggle={onToggle}
+              excludedMembers={excludedMembers}
+              lockedMembers={lockedMembers}
+              onToggle={(w) => onToggle(w, group.members)}
+              onToggleMember={(w, ck) => onToggleMember(w, group.members, ck)}
               teamMembers={members}
               weaponEnergy={Object.fromEntries(
                 group.weapons.map((w) => [w.id, energy.get(w.key) ?? {}])
@@ -687,6 +876,9 @@ export function KqmWeaponChooser({
                   }
                 })
               }
+              memberMinEr={kqm.energyRecharge}
+              calcEnergy={calcEnergy}
+              onOpenCalculator={onOpenCalculator}
               sourceOf={(w) => {
                 const source = kqmWeaponSource(w.key)
                 return t(`teamOpt.kqm.source.${source}`, sourceNames[source])
@@ -721,9 +913,13 @@ export function KqmWeaponChooser({
     shown,
     excluded,
     excludedKeys,
+    excludedMembers,
+    lockedMembers,
     teamData,
     members,
     energy,
+    calcEnergy,
+    onOpenCalculator,
     kqm,
     setTeamOpt,
     t,
@@ -753,12 +949,17 @@ export function KqmWeaponChooser({
         ).map(([id, label, keys]) => (
           <Pill
             key={id}
-            selected={selectionId(keys) === currentId}
+            selected={
+              selectionId(keys) === currentId &&
+              (id !== 'all' ||
+                !Object.keys(kqm.excludedWeaponMembers ?? {}).length)
+            }
             onClick={() =>
               setExcluded(
                 [...excludedKeys]
                   .filter((key) => !all.includes(key))
-                  .concat([...keys])
+                  .concat([...keys]),
+                id === 'all' || id === 'none' ? all : undefined
               )
             }
           >
@@ -806,8 +1007,8 @@ export function KqmSetChooser({
   teamId,
   members,
   teamData,
-  teamOpt,
-  setTeamOpt,
+  teamOpt: savedTeamOpt,
+  setTeamOpt: saveTeamOpt,
   onClose,
   embedded = false,
 }: {
@@ -820,6 +1021,7 @@ export function KqmSetChooser({
   onClose: () => void
 }) {
   const { t } = useTranslation(['page_team', 'artifactNames_gen'])
+  const [teamOpt, setTeamOpt] = useKqmClicks(savedTeamOpt, saveTeamOpt)
   const [search, setSearch] = useState('')
   const [selectedOnly, setSelectedOnly] = useState(false)
   const store = useKqmPassiveStore(teamId, teamOpt, setTeamOpt)

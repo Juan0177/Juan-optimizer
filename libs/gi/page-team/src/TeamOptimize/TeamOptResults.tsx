@@ -1,3 +1,4 @@
+import { useDataManagerEntries } from '@genshin-optimizer/common/database-ui'
 import { aboveBottomBar, BootstrapTooltip } from '@genshin-optimizer/common/ui'
 import { clamp, getUnitStr, objPathValue } from '@genshin-optimizer/common/util'
 import { artifactAsset, weaponAsset } from '@genshin-optimizer/gi/assets'
@@ -8,7 +9,11 @@ import type {
   SubstatKey,
 } from '@genshin-optimizer/gi/consts'
 import { allArtifactSlotKeys } from '@genshin-optimizer/gi/consts'
-import type { ICachedWeapon, TeamOpt } from '@genshin-optimizer/gi/db'
+import type {
+  ICachedWeapon,
+  StatFilters,
+  TeamOpt,
+} from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { KeyMap } from '@genshin-optimizer/gi/keymap'
 import {
@@ -30,12 +35,16 @@ import {
   ArtifactSetName,
   ArtifactSetTooltip,
   CharacterName,
+  calculateEnergyRecharge,
   EnemyDefeatTime,
   EnemySummary,
   ExcludeIcon,
+  isCalcEnergyWeapon,
+  isFavonius,
   resolveInfo,
   sameRunEnemy,
   statName,
+  teamEnergyNeeds,
   WeaponDetails,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
@@ -254,6 +263,95 @@ export function TeamOptResults({
     application === 'equip' && !team?.equipmentUndo ? undefined : application
   // artifacts excluded from this team's optimization (from here or the settings)
   const [liveTeamOpt, setTeamOpt] = useTeamOpt(teamId)
+  const optConfigs = useDataManagerEntries(database.optConfigs)
+  // Each member's ER requirement for this result's weapons (calculator or manual), plus any
+  // reduction from team energy weapons and any change in live settings since the run
+  const erMeta = useMemo<Partial<Record<CharacterKey, MemberErMeta>>>(() => {
+    const keys = members.map((m) => m.characterKey)
+    const configMap = new Map(optConfigs)
+    const baseFilters: Partial<Record<CharacterKey, StatFilters>> = {}
+    const resultWeapons: Partial<Record<CharacterKey, ICachedWeapon>> = {}
+    for (const m of members) {
+      baseFilters[m.characterKey] = m.isTc
+        ? {}
+        : (configMap.get(m.teamChar.optConfigId)?.statFilters ?? {})
+      const wid = result.weapons?.[m.characterKey] ?? m.weaponId
+      const w = wid ? database.weapons.get(wid) : undefined
+      if (w) resultWeapons[m.characterKey] = w
+    }
+    const needs = teamEnergyNeeds(baseFilters, resultWeapons, runTeamOpt)
+    const fromCalc =
+      runTeamOpt.energySource === 'calculator' && !!runTeamOpt.energyCalculator
+    const withoutEnergy =
+      fromCalc && runTeamOpt.energyCalculator
+        ? calculateEnergyRecharge(keys, runTeamOpt.energyCalculator, {}, {})
+        : undefined
+    const calcEnergyWeaponIds = fromCalc
+      ? [
+          ...new Set(
+            Object.values(resultWeapons)
+              .filter(
+                (w): w is ICachedWeapon =>
+                  !!w && (isFavonius(w.key) || isCalcEnergyWeapon(w.key))
+              )
+              .map((w) => w.id)
+          ),
+        ]
+      : []
+    const liveNeeds = stale
+      ? teamEnergyNeeds(baseFilters, resultWeapons, liveTeamOpt)
+      : undefined
+    const out: Partial<Record<CharacterKey, MemberErMeta>> = {}
+    for (const m of members) {
+      const ck = m.characterKey
+      const need = needs[ck]
+      const manualEnergy = result.energy?.[ck]
+      const calcBase =
+        withoutEnergy && !withoutEnergy.errors.length
+          ? withoutEnergy.targets[ck]
+          : undefined
+      const calcReduced =
+        fromCalc &&
+        need !== undefined &&
+        calcBase !== undefined &&
+        calcBase - need >= 0.1
+      const liveNeed = liveNeeds?.[ck]
+      out[ck] = {
+        need,
+        fromCalc,
+        burstUnused:
+          fromCalc &&
+          runTeamOpt.energyCalculator?.members[ck]?.burstEvery === 0,
+        ...(calcReduced
+          ? {
+              base: calcBase,
+              relief: Math.round((calcBase - need) * 10) / 10,
+              energyWeaponIds: calcEnergyWeaponIds,
+            }
+          : manualEnergy && need !== undefined
+            ? {
+                base: Math.round((need + manualEnergy.relief) * 10) / 10,
+                relief: manualEnergy.relief,
+                energyWeaponIds: manualEnergy.weaponIds,
+              }
+            : {}),
+        ...(liveNeed !== undefined &&
+          (need === undefined || Math.abs(liveNeed - need) >= 0.05) && {
+            liveNeed,
+          }),
+      }
+    }
+    return out
+  }, [
+    members,
+    database,
+    optConfigs,
+    result.weapons,
+    result.energy,
+    runTeamOpt,
+    stale,
+    liveTeamOpt,
+  ])
   const excludedArts = useMemo(
     () => new Set(liveTeamOpt.excludedArts),
     [liveTeamOpt.excludedArts]
@@ -295,6 +393,8 @@ export function TeamOptResults({
           alignItems: 'center',
           columnGap: 2,
           rowGap: 1.5,
+          pb: 2,
+          borderBottom: hairline,
           gridTemplateColumns: 'minmax(0, 1fr) auto',
           gridTemplateAreas: '"head close" "actions actions"',
           [theme.breakpoints.up('md')]: {
@@ -321,8 +421,8 @@ export function TeamOptResults({
                 ...numSx,
                 display: 'inline-flex',
                 alignItems: 'baseline',
-                gap: 0.75,
-                fontSize: { xs: 30, sm: 36 },
+                gap: 0.875,
+                fontSize: { xs: 30, sm: 38 },
                 fontWeight: 700,
                 letterSpacing: '-0.035em',
                 lineHeight: 1,
@@ -337,10 +437,9 @@ export function TeamOptResults({
               <Box
                 component="span"
                 sx={{
-                  fontSize: 13,
-                  fontWeight: 600,
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
+                  fontSize: 14,
+                  fontWeight: 550,
+                  letterSpacing: '-0.005em',
                   color: 'text.secondary',
                 }}
               >
@@ -528,9 +627,22 @@ export function TeamOptResults({
           <FormControlLabel
             sx={{
               m: 0,
-              gap: 0.75,
+              gap: 0.5,
+              pl: 0.75,
+              pr: 1.25,
+              minHeight: 34,
+              borderRadius: tokens.radius.control,
+              border: `1px solid ${compare ? tokens.hairlineStrong : tokens.hairline}`,
+              bgcolor: compare
+                ? alpha(giTokens.parchment, 0.07)
+                : alpha(giTokens.parchment, 0.02),
               flexBasis: { xs: '100%', md: 'auto' },
-              '& .MuiSwitch-root': { ml: -0.75 },
+              ...quickSx,
+              '&:hover': {
+                borderColor: tokens.hairlineStrong,
+                bgcolor: alpha(giTokens.parchment, 0.06),
+              },
+              '& .MuiSwitch-root': { ml: -0.25 },
             }}
             control={
               <Switch
@@ -543,8 +655,8 @@ export function TeamOptResults({
               <Typography
                 component="span"
                 sx={{
-                  fontSize: 13.5,
-                  fontWeight: 500,
+                  fontSize: 13,
+                  fontWeight: 550,
                   color: compare ? 'text.primary' : 'text.secondary',
                   ...quickSx,
                 }}
@@ -558,7 +670,7 @@ export function TeamOptResults({
             sx={{
               display: { xs: 'none', md: 'block' },
               width: '1px',
-              height: 24,
+              height: 22,
               bgcolor: tokens.hairlineStrong,
             }}
           />
@@ -567,12 +679,23 @@ export function TeamOptResults({
             sx={{
               display: 'flex',
               alignItems: 'center',
-              gap: 1,
+              gap: 0.875,
               flex: { xs: '1 1 100%', md: '0 0 auto' },
               '& > *': { flex: { xs: '1 1 auto', md: '0 0 auto' } },
               '& .MuiButton-root': {
+                minHeight: 34,
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: tokens.radius.control,
                 whiteSpace: 'nowrap',
-                px: { xs: 1.25, sm: 2 },
+                px: { xs: 1.25, sm: 1.75 },
+              },
+              '& .MuiButton-outlinedInherit': {
+                borderColor: tokens.hairlineStrong,
+                '&:hover': {
+                  borderColor: alpha(giTokens.parchment, 0.28),
+                  bgcolor: alpha(giTokens.parchment, 0.06),
+                },
               },
               // (the tooltip's wrapper takes the room; its button fills it)
               '& > span > .MuiButton-root': { width: '100%' },
@@ -607,8 +730,8 @@ export function TeamOptResults({
                   >
                     <span>
                       <Button
-                        variant="contained"
-                        color="secondary"
+                        variant="outlined"
+                        color="inherit"
                         startIcon={<SaveIcon />}
                         disabled={noChange || stale}
                         onClick={() => {
@@ -622,6 +745,13 @@ export function TeamOptResults({
                             })
                           )
                           setApplied('save')
+                        }}
+                        sx={{
+                          borderColor: tokens.hairlineStrong,
+                          '&:hover': {
+                            borderColor: alpha(giTokens.parchment, 0.28),
+                            bgcolor: alpha(giTokens.parchment, 0.06),
+                          },
                         }}
                       >
                         {t('teamOpt.result.save', 'Save as builds')}
@@ -652,13 +782,18 @@ export function TeamOptResults({
               gridArea: 'close',
               alignSelf: { xs: 'start', md: 'center' },
               justifySelf: 'end',
-              mr: -0.5,
+              width: 34,
+              height: 34,
+              borderRadius: tokens.radius.control,
               color: 'text.secondary',
               ...quickSx,
-              '&:hover': { color: 'text.primary' },
+              '&:hover': {
+                color: 'text.primary',
+                bgcolor: alpha(giTokens.parchment, 0.07),
+              },
             }}
           >
-            <CloseIcon />
+            <CloseIcon sx={{ fontSize: 19 }} />
           </IconButton>
         </Tooltip>
       </Box>
@@ -740,6 +875,7 @@ export function TeamOptResults({
               detailsToggled={showDetails}
               onToggleDetails={() => setShowDetails((v) => !v)}
               details={details}
+              erMeta={erMeta[member.characterKey]}
               compare={compare}
               excludedArts={excludedArts}
               onToggleExcluded={toggleExcluded}
@@ -1148,16 +1284,186 @@ export const elementColor = (theme: Theme, characterKey: CharacterKey) =>
     getCharEle(characterKey)
   ]?.main ?? theme.palette.text.secondary
 
-/** A small neutral tag next to a name (constellation, "Kept") */
+/** A member's ER requirement for a result (and any energy-weapon relief or live-setting change) */
+interface MemberErMeta {
+  /** Effective ER requirement (%) with the result's weapons (undefined: none set) */
+  need?: number
+  /** ER requirement (%) before team energy weapons lowered it */
+  base?: number
+  /** Percent points lowered by team energy weapons */
+  relief?: number
+  /** Whether `need` comes from the ER calculator vs manual Min ER */
+  fromCalc: boolean
+  /** Calculator mode: Burst set to Unused */
+  burstUnused?: boolean
+  /** Team energy weapons that lowered the requirement */
+  energyWeaponIds?: string[]
+  /** Current ER requirement (%) from live settings, when different from this result's */
+  liveNeed?: number
+}
+
+/** Format an ER percentage cleanly: whole when integer, else 1 decimal */
+const formatErPct = (value: number) =>
+  Math.abs(value - Math.round(value)) < 0.05
+    ? `${Math.round(value)}%`
+    : `${+value.toFixed(1)}%`
+
+/** Compact pill showing a member's ER requirement (and warning when the build falls short) */
+function MemberErPill({
+  meta,
+  shortfall,
+  actualEr,
+}: {
+  meta: MemberErMeta | undefined
+  shortfall?: TeamOptShortfall
+  /** Reached ER (%) when Final stats have loaded */
+  actualEr?: number
+}) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const need = shortfall ? shortfall.min * 100 : meta?.need
+  const isShort = !!shortfall
+  const reliefWeapons = (meta?.energyWeaponIds ?? [])
+    .map((id) => database.weapons.get(id))
+    .filter((w): w is ICachedWeapon => !!w)
+
+  const tip = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.375 }}>
+      <Box component="span" sx={{ fontWeight: 600 }}>
+        {isShort
+          ? t('teamOpt.result.erShortTip', {
+              defaultValue: 'ER {{value}} / {{min}} required (not met)',
+              value: formatErPct(shortfall.value * 100),
+              min: formatErPct(shortfall.min * 100),
+            })
+          : need !== undefined
+            ? t('teamOpt.result.erReqTip', {
+                defaultValue: 'ER requirement: {{value}}',
+                value: formatErPct(need),
+              })
+            : t('teamOpt.result.erNoneTip', 'No Energy Recharge requirement')}
+      </Box>
+      {actualEr !== undefined && !isShort && (
+        <Box component="span" sx={{ opacity: 0.85 }}>
+          {t('teamOpt.result.erReachedTip', {
+            defaultValue: 'Build reaches {{value}}',
+            value: formatErPct(actualEr),
+          })}
+        </Box>
+      )}
+      {meta?.burstUnused && (
+        <Box component="span" sx={{ opacity: 0.8 }}>
+          {t('teamOpt.result.erBurstUnused', 'Burst unused in ER calculator')}
+        </Box>
+      )}
+      {meta?.relief !== undefined &&
+        meta.relief > 0 &&
+        meta.base !== undefined && (
+          <Box component="span" sx={{ opacity: 0.85 }}>
+            {t('teamOpt.result.erReducedTip', {
+              defaultValue: 'Lowered −{{relief}}% from {{base}}',
+              relief: +meta.relief.toFixed(1),
+              base: formatErPct(meta.base),
+            })}
+            {reliefWeapons.length > 0 && (
+              <>
+                {' ('}
+                {reliefWeapons.map((w, i) => (
+                  <Fragment key={w.id}>
+                    {i > 0 && ', '}
+                    <WeaponName weaponKey={w.key} />
+                  </Fragment>
+                ))}
+                {')'}
+              </>
+            )}
+          </Box>
+        )}
+      {meta?.liveNeed !== undefined && (
+        <Box component="span" sx={{ color: 'warning.main' }}>
+          {t('teamOpt.result.erNowTip', {
+            defaultValue: 'Current setting: {{value}}',
+            value: formatErPct(meta.liveNeed),
+          })}
+        </Box>
+      )}
+    </Box>
+  )
+
+  const active = need !== undefined && need > 100
+  const label = isShort
+    ? `${formatErPct(shortfall.value * 100)} / ${formatErPct(shortfall.min * 100)}`
+    : need !== undefined
+      ? t('teamOpt.result.erPill', {
+          defaultValue: 'ER {{value}}',
+          value: formatErPct(need),
+        })
+      : t('teamOpt.result.erNoneShort', 'No ER')
+
+  return (
+    <Tooltip arrow title={tip}>
+      <Box
+        component="span"
+        aria-label={
+          need !== undefined
+            ? t('teamOpt.result.erReqTip', {
+                defaultValue: 'ER requirement: {{value}}',
+                value: formatErPct(need),
+              })
+            : t('teamOpt.result.erNoneTip', 'No Energy Recharge requirement')
+        }
+        sx={(theme) => ({
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.375,
+          height: 20,
+          px: 0.75,
+          borderRadius: tokens.radius.pill,
+          flexShrink: 0,
+          fontSize: 11.5,
+          fontWeight: 600,
+          lineHeight: 1,
+          cursor: 'help',
+          ...numSx,
+          '& svg': { fontSize: 12, flexShrink: 0 },
+          ...(isShort
+            ? {
+                color: 'warning.main',
+                bgcolor: alpha(theme.palette.warning.main, 0.14),
+                boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.45)}`,
+              }
+            : active
+              ? {
+                  color: 'text.primary',
+                  bgcolor: alpha(giTokens.parchment, 0.085),
+                  boxShadow: `inset 0 0 0 1px ${tokens.hairlineStrong}`,
+                }
+              : {
+                  color: 'text.secondary',
+                  bgcolor: alpha(giTokens.parchment, 0.05),
+                }),
+        })}
+      >
+        <StatIcon statKey="enerRech_" />
+        {label}
+      </Box>
+    </Tooltip>
+  )
+}
+
+/** A small pill next to a member's name (constellation, "Kept", "TC") */
 const tagSx: SxProps<Theme> = {
+  display: 'inline-flex',
+  alignItems: 'center',
   flexShrink: 0,
-  px: 0.625,
-  borderRadius: 1,
+  height: 20,
+  px: 0.75,
+  borderRadius: tokens.radius.pill,
   fontSize: 11.5,
   fontWeight: 650,
-  lineHeight: 1.6,
+  lineHeight: 1,
   color: 'text.secondary',
-  bgcolor: alpha(giTokens.parchment, 0.07),
+  bgcolor: alpha(giTokens.parchment, 0.065),
   ...numSx,
 }
 
@@ -1234,6 +1540,7 @@ function MemberResult({
   detailsToggled,
   onToggleDetails,
   details,
+  erMeta,
   compare,
   excludedArts,
   onToggleExcluded,
@@ -1253,6 +1560,8 @@ function MemberResult({
   detailsToggled: boolean
   onToggleDetails: () => void
   details: ResultDetailsData | undefined
+  /** ER requirement metadata for this member in this result */
+  erMeta: MemberErMeta | undefined
   /** Its changes against its equipped build are shown */
   compare: boolean
   /** Artifacts excluded from the team's optimization, and the toggle */
@@ -1295,6 +1604,14 @@ function MemberResult({
   // no build of its artifacts keeps to its set rules: it kept the one it had
   const unmet = result.after.unmet[characterKey]
   const shortfalls = result.after.shortfalls?.[characterKey]
+  const erShortfall = shortfalls?.find(
+    (s) => s.path[0] === 'basic' && s.path[1] === 'enerRech_'
+  )
+  const actualErNode = details?.after[characterKey]?.find(
+    ([k]) => k === 'enerRech_'
+  )?.[1]
+  const actualEr =
+    actualErNode !== undefined ? actualErNode.value * 100 : undefined
   const weaponId = result.weapons?.[characterKey]
   const weapon = weaponId ? database.weapons.get(weaponId) : undefined
   const newWeapon =
@@ -1306,25 +1623,38 @@ function MemberResult({
   /** Its part of the team's damage */
   const share = result.after.total > 0 ? after / result.after.total : 0
   const ownChange = before > 0 ? after / before - 1 : 0
+  const sharePct = share * 100
+  const shareDisplay =
+    sharePct >= 10 || sharePct === 0
+      ? `${Math.round(sharePct)}%`
+      : `${sharePct < 0.1 ? '<0.1' : sharePct.toFixed(1)}%`
 
   return (
     <Box
       sx={(theme) => ({
         ...insetSx,
-        p: 1.25,
+        borderRadius: 2.5,
+        p: 1.5,
         display: 'flex',
         flexDirection: 'column',
         gap: 1.25,
         minWidth: 0,
-        ...(selected && selectedSx(theme)),
+        border: `1px solid ${selected ? 'transparent' : tokens.hairline}`,
+        ...quickSx,
+        ...(selected
+          ? selectedSx(theme)
+          : onSelect && {
+              '&:hover': {
+                borderColor: tokens.hairlineStrong,
+              },
+            }),
         ...(revealDelay !== undefined && {
           ...cardInSx,
           animationDelay: `${revealDelay}ms`,
         }),
       })}
     >
-      {/* who, its own damage, and its share of the team's (the bar, in its element's colour);
-          picks the member whose equipment the inspector below compares, as the KQM tab's tiles */}
+      {/* Identity + KPI header; clicking picks the member for the equipment inspector below */}
       <Box
         {...(onSelect && {
           component: ButtonBase,
@@ -1343,24 +1673,44 @@ function MemberResult({
             width: 'calc(100% + 12px)',
             ...quickSx,
             ...focusSx,
-            '&:hover': { bgcolor: 'action.hover' },
+            '&:hover': { bgcolor: alpha(giTokens.parchment, 0.04) },
           }),
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-          <MemberAvatar characterKey={characterKey} size={36} />
+          <Box
+            sx={(theme) => ({
+              flexShrink: 0,
+              borderRadius: '50%',
+              p: '2px',
+              boxShadow: `inset 0 0 0 1.5px ${alpha(elementColor(theme, characterKey), 0.4)}`,
+            })}
+          >
+            <MemberAvatar characterKey={characterKey} size={36} />
+          </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontSize: 14.5,
+                fontWeight: 650,
+                letterSpacing: '-0.01em',
+                lineHeight: 1.25,
+                minWidth: 0,
+              }}
+              noWrap
+            >
+              <CharacterName characterKey={characterKey} gender={gender} />
+            </Typography>
             <Box
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 0.75,
+                flexWrap: 'wrap',
+                gap: 0.5,
+                mt: 0.5,
                 minWidth: 0,
               }}
             >
-              <Typography sx={{ ...type.title, minWidth: 0 }} noWrap>
-                <CharacterName characterKey={characterKey} gender={gender} />
-              </Typography>
               {constellation !== undefined && (
                 <Tooltip
                   arrow
@@ -1369,11 +1719,26 @@ function MemberResult({
                     value: constellation,
                   })}
                 >
-                  <Box component="span" sx={tagSx}>
+                  <Box
+                    component="span"
+                    sx={{
+                      ...tagSx,
+                      ...(constellation > 0 && {
+                        color: 'text.primary',
+                        bgcolor: alpha(giTokens.parchment, 0.12),
+                        boxShadow: `inset 0 0 0 1px ${tokens.hairlineStrong}`,
+                      }),
+                    }}
+                  >
                     C{constellation}
                   </Box>
                 </Tooltip>
               )}
+              <MemberErPill
+                meta={erMeta}
+                shortfall={erShortfall}
+                actualEr={actualEr}
+              />
               {!optimized && (
                 <Tooltip
                   arrow
@@ -1394,83 +1759,124 @@ function MemberResult({
                 </Tooltip>
               )}
             </Box>
+          </Box>
+        </Box>
+
+        {/* Prominent DPS figure & team share aligned cleanly over the element bar */}
+        <Box sx={{ mt: 1.25 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'baseline',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              columnGap: 1,
+              rowGap: 0.25,
+            }}
+          >
             <Box
               sx={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'baseline',
-                flexWrap: 'wrap',
-                columnGap: 0.75,
+                gap: 0.625,
+                minWidth: 0,
                 ...numSx,
               }}
             >
               <Typography
                 component="span"
-                sx={{ ...numSx, fontSize: 13.5, fontWeight: 650 }}
+                sx={{
+                  ...numSx,
+                  fontSize: 19,
+                  fontWeight: 700,
+                  letterSpacing: '-0.025em',
+                  lineHeight: 1.15,
+                }}
               >
                 {formatRate(after, rotationTime)}
+              </Typography>
+              <Typography
+                component="span"
+                sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary' }}
+              >
+                {rotationTime
+                  ? t('teamOpt.result.dpsUnit', 'DPS')
+                  : t('teamOpt.result.own', 'own damage')}
               </Typography>
               {compare && before > 0 && Math.abs(ownChange) >= 0.0005 && (
                 <Typography
                   component="span"
                   sx={{
                     ...numSx,
-                    fontSize: 12.5,
-                    fontWeight: 600,
+                    fontSize: 12,
+                    fontWeight: 650,
                     color: after > before ? 'success.main' : 'warning.main',
                   }}
                 >
                   {formatGain(ownChange)}
                 </Typography>
               )}
-              <Typography component="span" sx={type.label}>
-                {rotationTime
-                  ? t('teamOpt.result.ownDps', 'own DPS')
-                  : t('teamOpt.result.own', 'own damage')}
-              </Typography>
             </Box>
-          </Box>
-          <Tooltip
-            arrow
-            title={
-              rotationTime
-                ? t('teamOpt.result.shareDps', 'Its share of the team’s DPS')
-                : t('teamOpt.result.share', 'Its share of the team’s damage')
-            }
-          >
-            <Box sx={{ flexShrink: 0, textAlign: 'right', cursor: 'default' }}>
-              <Typography
+            <Tooltip
+              arrow
+              title={
+                rotationTime
+                  ? t('teamOpt.result.shareDps', 'Its share of the team’s DPS')
+                  : t('teamOpt.result.share', 'Its share of the team’s damage')
+              }
+            >
+              <Box
+                component="span"
                 sx={{
+                  display: 'inline-flex',
+                  alignItems: 'baseline',
+                  gap: 0.5,
+                  flexShrink: 0,
+                  cursor: 'default',
                   ...numSx,
-                  fontSize: 15,
-                  fontWeight: 650,
-                  lineHeight: 1.3,
                 }}
               >
-                {Math.round(share * 100)}%
-              </Typography>
-              <Typography sx={{ ...type.label, lineHeight: 1.3 }}>
-                {t('teamOpt.result.shareLabel', 'of team')}
-              </Typography>
-            </Box>
-          </Tooltip>
-        </Box>
-        <Box
-          sx={{
-            mt: 1,
-            height: 3,
-            borderRadius: 2,
-            overflow: 'hidden',
-            bgcolor: alpha(giTokens.parchment, 0.07),
-          }}
-        >
+                <Typography
+                  component="span"
+                  sx={{ ...numSx, fontSize: 13.5, fontWeight: 650 }}
+                >
+                  {shareDisplay}
+                </Typography>
+                <Typography
+                  component="span"
+                  sx={{
+                    fontSize: 11.5,
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {t('teamOpt.result.shareLabel', 'of team')}
+                </Typography>
+              </Box>
+            </Tooltip>
+          </Box>
           <Box
-            sx={(theme) => ({
-              height: '100%',
-              width: `${clamp(share, 0, 1) * 100}%`,
+            sx={{
+              mt: 0.75,
+              height: 4,
               borderRadius: 2,
-              bgcolor: alpha(elementColor(theme, characterKey), 0.85),
-            })}
-          />
+              overflow: 'hidden',
+              bgcolor: alpha(giTokens.parchment, 0.08),
+            }}
+          >
+            <Box
+              sx={(theme) => ({
+                height: '100%',
+                width: `${clamp(share, 0, 1) * 100}%`,
+                borderRadius: 2,
+                bgcolor: alpha(elementColor(theme, characterKey), 0.88),
+                transition: `width .35s ${tokens.ease}`,
+                '@media (prefers-reduced-motion: reduce)': {
+                  transition: 'none',
+                },
+              })}
+            />
+          </Box>
         </Box>
       </Box>
 
@@ -1481,7 +1887,7 @@ function MemberResult({
           sx={{
             display: 'grid',
             gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-            gap: 0.5,
+            gap: 0.625,
           }}
         >
           {allArtifactSlotKeys.map((slotKey) => {
@@ -1507,6 +1913,8 @@ function MemberResult({
                   },
                   '@media (hover: none)': { '& .exclude-art': { opacity: 1 } },
                   borderRadius: 1.5,
+                  overflow: 'hidden',
+                  boxShadow: `inset 0 0 0 1px ${alpha(giTokens.parchment, 0.08)}`,
                   // new to the member (comparing): a gold ring
                   outline: isNew
                     ? `2px solid ${alpha(theme.palette.primary.main, 0.8)}`
@@ -1514,7 +1922,6 @@ function MemberResult({
                   outlineOffset: 1,
                   // expanded: one tile, the icon over its stats
                   ...(showDetails && {
-                    overflow: 'hidden',
                     border: hairline,
                     bgcolor: alpha(giTokens.parchment, 0.025),
                   }),
@@ -1612,7 +2019,15 @@ function MemberResult({
 
       {/* the weapon (details on hover), the sets, the energy weapons' help */}
       {(weapon || !!sets.length || energy) && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.875,
+            pt: 1.125,
+            borderTop: hairline,
+          }}
+        >
           {weapon && (
             <BootstrapTooltip
               placement="top"
@@ -1629,10 +2044,15 @@ function MemberResult({
                   cursor: 'default',
                 }}
               >
-                <WeaponThumb weapon={weapon} highlight={newWeapon} />
+                <WeaponThumb weapon={weapon} highlight={newWeapon} size={40} />
                 <Box sx={{ minWidth: 0 }}>
                   <Typography
-                    sx={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}
+                    sx={{
+                      fontSize: 13.5,
+                      fontWeight: 600,
+                      letterSpacing: '-0.005em',
+                      lineHeight: 1.3,
+                    }}
                     noWrap
                   >
                     <WeaponName weaponKey={weapon.key} />
@@ -1641,7 +2061,8 @@ function MemberResult({
                     sx={{
                       ...type.label,
                       ...numSx,
-                      fontWeight: 400,
+                      fontSize: 12,
+                      fontWeight: 450,
                       lineHeight: 1.35,
                       color: unticked ? 'warning.main' : 'text.secondary',
                     }}
@@ -1665,46 +2086,74 @@ function MemberResult({
               </Box>
             </BootstrapTooltip>
           )}
-          {sets.map(([setKey, n]) => (
-            <ArtifactSetTooltip key={setKey} setKey={setKey} numInSet={n}>
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.75,
-                  alignSelf: 'flex-start',
-                  maxWidth: '100%',
-                  cursor: 'default',
-                }}
-              >
-                <Box
-                  component="img"
-                  src={artifactAsset(setKey, 'flower')}
-                  alt=""
-                  sx={{ width: 18, height: 18, flexShrink: 0 }}
-                />
-                <Typography
-                  sx={{ ...type.label, fontWeight: 400, ...numSx }}
-                  noWrap
-                >
-                  {n >= 4 ? 4 : 2}× <ArtifactSetName setKey={setKey} />
-                </Typography>
-              </Box>
-            </ArtifactSetTooltip>
-          ))}
+          {!!sets.length && (
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: 0.5,
+              }}
+            >
+              {sets.map(([setKey, n]) => (
+                <ArtifactSetTooltip key={setKey} setKey={setKey} numInSet={n}>
+                  <Box
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.625,
+                      px: 0.875,
+                      py: 0.375,
+                      maxWidth: '100%',
+                      borderRadius: 1.5,
+                      bgcolor: alpha(giTokens.parchment, 0.04),
+                      border: hairline,
+                      cursor: 'default',
+                    }}
+                  >
+                    <Box
+                      component="img"
+                      src={artifactAsset(setKey, 'flower')}
+                      alt=""
+                      sx={{ width: 16, height: 16, flexShrink: 0 }}
+                    />
+                    <Typography
+                      sx={{
+                        ...type.label,
+                        fontSize: 12,
+                        fontWeight: 450,
+                        lineHeight: 1.3,
+                        ...numSx,
+                      }}
+                      noWrap
+                    >
+                      <Box
+                        component="span"
+                        sx={{ fontWeight: 650, color: 'text.primary' }}
+                      >
+                        {n >= 4 ? 4 : 2}×
+                      </Box>{' '}
+                      <ArtifactSetName setKey={setKey} />
+                    </Typography>
+                  </Box>
+                </ArtifactSetTooltip>
+              ))}
+            </Box>
+          )}
           {energy && (
             <Typography
               sx={{
                 ...type.label,
-                fontWeight: 400,
+                fontSize: 12,
+                fontWeight: 450,
                 display: 'flex',
                 alignItems: 'center',
-                gap: 0.75,
+                gap: 0.5,
                 minWidth: 0,
               }}
             >
               <BoltIcon
-                sx={{ fontSize: 16, color: 'text.secondary', flexShrink: 0 }}
+                sx={{ fontSize: 15, color: 'text.secondary', flexShrink: 0 }}
               />
               <Box
                 component="span"
@@ -1783,8 +2232,8 @@ function MemberResult({
           alignItems: 'center',
           justifyContent: 'center',
           gap: 0.5,
-          mx: -1.25,
-          mb: -1.25,
+          mx: -1.5,
+          mb: -1.5,
           minHeight: 36,
           borderTop: hairline,
           borderBottomLeftRadius: 'inherit',
@@ -1795,7 +2244,7 @@ function MemberResult({
           ...quickSx,
           '&:hover': {
             color: 'text.primary',
-            bgcolor: alpha(giTokens.parchment, 0.04),
+            bgcolor: alpha(giTokens.parchment, 0.045),
           },
           ...focusSx,
         }}
@@ -1944,6 +2393,7 @@ export function WeaponThumb({
         flexShrink: 0,
         borderRadius: 1.5,
         overflow: 'hidden',
+        boxShadow: `inset 0 0 0 1px ${alpha(giTokens.parchment, 0.12)}`,
         outline: highlight
           ? `2px solid ${alpha(theme.palette.primary.main, 0.8)}`
           : undefined,

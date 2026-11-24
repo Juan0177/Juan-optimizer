@@ -1,5 +1,9 @@
+import {
+  useDataManagerEntries,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
-import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   StatFilters,
@@ -10,8 +14,13 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { RotationEnergy, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
+  canWield,
+  isCalcEnergyWeapon,
+  isFavonius,
+  isWeaponExcludedFor,
   syncEnergyCalculator,
   teamCalculatorTargets,
+  teamEnergyAuto,
   teamOptCurrentWeapons,
   teamOptWeaponCandidates,
   withRotationEnergy,
@@ -21,7 +30,11 @@ import { Box, Button, Drawer, IconButton, Typography } from '@mui/material'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { EnergyGear } from './KqmEnergyCalculator'
-import { energyEstimate, KqmEnergyCalculator } from './KqmEnergyCalculator'
+import {
+  calculatorDrawerZ,
+  energyEstimate,
+  KqmEnergyCalculator,
+} from './KqmEnergyCalculator'
 import {
   teamRotationEnergy,
   useAppliedRotation,
@@ -33,6 +46,23 @@ import { focusSx, hairline, quickSx, tokens, type } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 
 const ER_PATH = JSON.stringify(['basic', 'enerRech_'])
+
+/** How a ticked energy weapon changes a member's Min ER (shown under Min ER in RunDialog) */
+export interface MemberErHint {
+  /** Lower ER reached when a ticked energy/Favonius weapon is held */
+  lower?: {
+    target: number
+    diff: number
+    weaponKey: WeaponKey
+    holder?: CharacterKey
+  }
+  /** Higher ER needed if a currently-held energy/Favonius weapon is swapped out */
+  higher?: {
+    target: number
+    weaponKey: WeaponKey
+    holder: CharacterKey
+  }
+}
 
 /** A member's Optimize settings with its minimum Energy Recharge set (undefined: none) */
 export function setOptConfigEr(
@@ -54,10 +84,10 @@ export function setOptConfigEr(
 }
 
 /**
- * Team optimize's ER calculator, as KQM theorycrafting has it: filled in from the written rotation
- * (played with the members' own constellations and gear) unless set by hand, applied by itself
- * when the rotation is written or changed, and worked out in a run for the weapons each build
- * holds. Typing a member's minimum switches the team to its own requirements (`manual`).
+ * Team optimize's Energy Recharge, Automatic or Manual as chosen. Automatic: the ER calculator, as
+ * KQM theorycrafting has it, filled in from the written rotation (played with the members' own
+ * constellations and gear) unless set by hand, applied by itself once a rotation is written, and
+ * worked out in a run for the weapons each build holds. Manual: each member's own minimum.
  */
 export function useTeamEnergy(
   teamId: string,
@@ -67,6 +97,8 @@ export function useTeamEnergy(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
+  const inventoryWeapons = useDataManagerValues(database.weapons)
+  const optConfigs = useDataManagerEntries(database.optConfigs)
   const keys = useMemo(() => members.map((m) => m.characterKey), [members])
   const own = useSimTeam(members)
   // the weapons a member may hold in a run: its own, or (weapons chosen too) those it may wield
@@ -165,20 +197,14 @@ export function useTeamEnergy(
     [keys, teamOpt.rotationTime, teamOpt.onField, own, energy, playedTime]
   )
 
-  // Applied targets follow the rotation and the members; they apply by themselves with a written
-  // rotation, for a team that never chose its own, and when the rotation is written or changed
-  // (over ones typed by hand: those were for the rotation before)
+  // Automatic ER follows the rotation and the members: it applies by itself once a rotation is
+  // written, for a team that never chose (Manual, chosen, stays Manual)
   const lastWritten = useRef<string>()
   useEffect(() => {
     const source = teamOpt.energySource
-    if (source === 'manual' && ready && teamOpt.energyRotation === undefined) {
-      setTeamOpt((o) => {
-        o.energyRotation = written
-      })
-      return
-    }
+    if (source === 'manual') return
     const newRotation = ready && teamOpt.energyRotation !== written
-    if (source !== 'calculator' && !(ready && (!source || newRotation))) return
+    if (source !== 'calculator' && !(ready && !source)) return
     const applied = teamOpt.energyCalculator
     const energyCalculator = calculatorOf(applied)
     const json = JSON.stringify(energyCalculator)
@@ -200,20 +226,153 @@ export function useTeamEnergy(
     })
   }, [teamOpt, ready, written, calculatorOf, setTeamOpt])
 
-  const calculated =
-    teamOpt.energySource === 'calculator' && !!teamOpt.energyCalculator
+  const calculated = teamEnergyAuto(teamOpt)
   // (the members' targets with the weapons they hold now; a run works them out per weapon)
+  const currentWeapons = useMemo(
+    () => teamOptCurrentWeapons(database, members),
+    [database, members]
+  )
   const targets = useMemo(
     () =>
       calculated
-        ? teamCalculatorTargets(
+        ? teamCalculatorTargets(keys, currentWeapons, teamOpt)
+        : undefined,
+    [calculated, keys, currentWeapons, teamOpt]
+  )
+  // Per member, how a ticked energy / Favonius weapon shifts their ER requirement during a run
+  const erHints = useMemo<Partial<Record<CharacterKey, MemberErHint>>>(() => {
+    if (!teamOpt.optimizeWeapons) return {}
+    const hints: Partial<Record<CharacterKey, MemberErHint>> = {}
+    if (calculated && targets) {
+      const locations = new Set(members.map((m) => m.location as string))
+      for (const m of members) {
+        if (m.isTc || teamOpt.keep.includes(m.characterKey)) continue
+        const candidates = teamOptWeaponCandidates(
+          database,
+          m,
+          m.weaponId,
+          teamOpt,
+          locations,
+          new Set()
+        )
+        const current = currentWeapons[m.characterKey]
+        const energyCands = candidates.filter(
+          (w) => isFavonius(w.key) || isCalcEnergyWeapon(w.key)
+        )
+        for (const w of energyCands) {
+          if (
+            current &&
+            current.key === w.key &&
+            current.refinement === w.refinement
+          )
+            continue
+          const alt = teamCalculatorTargets(
             keys,
-            teamOptCurrentWeapons(database, members),
+            { ...currentWeapons, [m.characterKey]: w },
             teamOpt
           )
-        : undefined,
-    [calculated, keys, database, members, teamOpt]
-  )
+          if (!alt) continue
+          for (const ck of keys) {
+            const base = targets[ck]
+            const next = alt[ck]
+            if (base === undefined || next === undefined) continue
+            const diff = Math.round((base - next) * 10) / 10
+            if (diff >= 0.1) {
+              const prev = hints[ck]?.lower
+              if (!prev || next < prev.target)
+                hints[ck] = {
+                  ...hints[ck],
+                  lower: {
+                    target: next,
+                    diff,
+                    weaponKey: w.key,
+                    holder: m.characterKey,
+                  },
+                }
+            }
+          }
+        }
+        // If this member currently holds an energy/Fav weapon and another non-energy weapon is
+        // allowed, show the higher ER needed when they switch off it.
+        const nonEnergy =
+          current &&
+          (isFavonius(current.key) || isCalcEnergyWeapon(current.key))
+            ? candidates.find(
+                (w) => !isFavonius(w.key) && !isCalcEnergyWeapon(w.key)
+              )
+            : undefined
+        if (current && nonEnergy) {
+          const alt = teamCalculatorTargets(
+            keys,
+            { ...currentWeapons, [m.characterKey]: nonEnergy },
+            teamOpt
+          )
+          if (alt)
+            for (const ck of keys) {
+              const base = targets[ck]
+              const next = alt[ck]
+              if (base === undefined || next === undefined) continue
+              if (next - base >= 0.1) {
+                const prev = hints[ck]?.higher
+                if (!prev || next > prev.target)
+                  hints[ck] = {
+                    ...hints[ck],
+                    higher: {
+                      target: next,
+                      weaponKey: current.key,
+                      holder: m.characterKey,
+                    },
+                  }
+              }
+            }
+        }
+      }
+      return hints
+    }
+    // Manual ER mode: relief configured on any ticked inventory weapon that a member can wield
+    const usableWeapons = inventoryWeapons.filter((w) =>
+      members.some(
+        (m) =>
+          !m.isTc &&
+          !teamOpt.keep.includes(m.characterKey) &&
+          canWield(m.characterKey, w) &&
+          !isWeaponExcludedFor(m.characterKey, w.id, teamOpt) &&
+          Object.keys(teamOpt.weaponEnergy[w.id] ?? {}).length > 0
+      )
+    )
+    const configMap = new Map(optConfigs)
+    for (const m of members) {
+      if (m.isTc) continue
+      const saved = configMap
+        .get(m.teamChar.optConfigId)
+        ?.statFilters[ER_PATH]?.find((f) => !f.disabled)?.value
+      if (!(saved && saved > 100)) continue
+      for (const w of usableWeapons) {
+        const relief = teamOpt.weaponEnergy[w.id]?.[m.characterKey] ?? 0
+        if (!(relief > 0)) continue
+        const target = Math.max(100, Math.round((saved - relief) * 10) / 10)
+        const diff = Math.round((saved - target) * 10) / 10
+        if (diff >= 0.1) {
+          const prev = hints[m.characterKey]?.lower
+          if (!prev || target < prev.target)
+            hints[m.characterKey] = {
+              lower: { target, diff, weaponKey: w.key },
+            }
+        }
+      }
+    }
+    return hints
+  }, [
+    calculated,
+    targets,
+    teamOpt,
+    members,
+    database,
+    currentWeapons,
+    keys,
+    inventoryWeapons,
+    optConfigs,
+  ])
 
   const [draft, setDraft] = useState<TeamOptEnergyCalculator>()
   const openCalculator = () =>
@@ -228,25 +387,22 @@ export function useTeamEnergy(
     })
     setDraft(undefined)
   }
-  /** A minimum typed for a member: every member's requirement its own from now on */
-  const toManual = (characterKey: CharacterKey, value: number | undefined) => {
-    for (const m of members) {
-      if (m.isTc) continue
-      const target =
-        m.characterKey === characterKey ? value : targets?.[m.characterKey]
-      setOptConfigEr(
-        database,
-        m.teamChar.optConfigId,
-        target !== undefined && target > 100 ? target : undefined
-      )
-    }
+  /** Automatic ER: the calculator's targets, filled in from the rotation unless set by hand */
+  const toAuto = () =>
+    setTeamOpt((o) => {
+      o.energySource = 'calculator'
+      o.energyCalculator = calculatorOf(o.energyCalculator)
+      if (ready) o.energyRotation = written
+    })
+  /** Manual ER: each member's own minimum, and what energy weapons save them (as set on each) */
+  const toManual = () =>
     setTeamOpt((o) => {
       o.energySource = 'manual'
     })
-  }
   return {
     calculated,
     targets,
+    erHints,
     gear,
     fromRotation: ready,
     draft,
@@ -255,6 +411,7 @@ export function useTeamEnergy(
     openCalculator,
     closeCalculator,
     applyCalculator,
+    toAuto,
     toManual,
   }
 }
@@ -282,7 +439,7 @@ export function TeamEnergyDrawer({
       open={!!draft}
       onClose={energy.closeCalculator}
       // (over the run window it opens from)
-      sx={(theme) => ({ zIndex: theme.zIndex.modal + 10 })}
+      sx={(theme) => ({ zIndex: calculatorDrawerZ(theme) })}
       PaperProps={{
         role: 'dialog',
         'aria-modal': true,
