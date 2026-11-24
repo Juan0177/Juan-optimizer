@@ -56,6 +56,7 @@ const MAX_INVOCATIONS = 1 << 22
  * and the whole tab stutters while the optimizer runs.
  */
 const DISPATCH_BUILDS = 1 << 24
+const BACKGROUND_DISPATCH_BUILDS = 1 << 22
 /**
  * GPU time per slice of work while the page is visible (ms). A sweep otherwise keeps the GPU
  * fully busy and the browser cannot draw the page: the tab stutters for the whole run. Slices are
@@ -274,7 +275,8 @@ export class GPUSolver {
     arts: ArtifactsBySlot,
     threshold: number,
     onProgress?: (fraction: number) => void,
-    collect = false
+    collect = false,
+    background = false
   ): Promise<GPURun> {
     if (this.lost) throw new Error('WebGPU device lost')
     // The innermost (free) slot: the one whose pieces move the target least. Each invocation
@@ -335,7 +337,11 @@ export class GPUSolver {
       WORKGROUP,
       Math.min(
         MAX_INVOCATIONS,
-        Math.floor(DISPATCH_BUILDS / n[4] / WORKGROUP) * WORKGROUP
+        Math.floor(
+          (background ? BACKGROUND_DISPATCH_BUILDS : DISPATCH_BUILDS) /
+            n[4] /
+            WORKGROUP
+        ) * WORKGROUP
       )
     )
     for (let start = 0; start < outer; start += perDispatch) {
@@ -425,7 +431,7 @@ export class GPUSolver {
         last = at
         perSlice = Math.max(
           1,
-          Math.min(4096, Math.round((count * SLICE_MS) / ms))
+          Math.min(4096, Math.round((count * (background ? 3 : SLICE_MS)) / ms))
         )
       }
       while (i < batches.length) {
@@ -444,7 +450,10 @@ export class GPUSolver {
             .onSubmittedWorkDone()
             .then(() => performance.now()),
         })
-        if (queued.length >= 2) await retire()
+        if (queued.length >= (background ? 1 : 2)) {
+          await retire()
+          if (background) await yieldTask()
+        }
       }
       while (queued.length) await retire()
     }
@@ -522,9 +531,14 @@ export class GPUSolver {
     )
     slotRows.destroy()
     const candidates: GPUCandidate[] = []
+    let sliceStarted = performance.now()
     for (let c = 0; c < found; c++) {
-      // (exact re-evaluation runs on the page's thread: in chunks, so that it keeps drawing)
-      if (c % 20_000 === 19_999) await yieldTask()
+      // The exact formula can be expensive. Bound each slice by time on this device.
+      if (c % 32 === 0 && performance.now() - sliceStarted > 10) {
+        await yieldTask()
+        if (this.lost) throw new Error('WebGPU device lost')
+        sliceStarted = performance.now()
+      }
       let r = pairs[stride * c]
       const i3 = r % n[3]
       r = Math.floor(r / n[3])

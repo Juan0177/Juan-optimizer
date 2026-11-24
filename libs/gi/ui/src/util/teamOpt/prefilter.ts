@@ -136,7 +136,8 @@ async function climb(
       const restValues = ev.rest(build, s)
       const kept = build[s]
       let chosen = kept
-      for (const art of candidates) {
+      for (const [i, art] of candidates.entries()) {
+        if (i && i % 32 === 0) await pace()
         if (art === kept) continue
         build[s] = art
         const scored = ev.score(restValues, art, build)
@@ -167,7 +168,8 @@ async function climbs(
     await pace()
     const restValues = ev.rest(greedy, s)
     let best: { art: ICachedArtifact; scored: Scored } | undefined
-    for (const art of candidates) {
+    for (const [i, art] of candidates.entries()) {
+      if (i && i % 32 === 0) await pace()
       greedy[s] = art
       const scored = ev.score(restValues, art, greedy)
       if (!best || better(scored, best.scored)) best = { art, scored }
@@ -193,7 +195,8 @@ async function climbs(
       slots++
       const restValues = ev.rest(start, s)
       let best: { art: ICachedArtifact; scored: Scored } | undefined
-      for (const art of pieces) {
+      for (const [i, art] of pieces.entries()) {
+        if (i && i % 32 === 0) await pace()
         start[s] = art
         const scored = ev.score(restValues, art, start)
         if (!best || better(scored, best.scored)) best = { art, scored }
@@ -366,14 +369,14 @@ export async function quickPool(problem: PrefilterProblem): Promise<{
       }
       const take = (arts: readonly ICachedArtifact[]) =>
         arts.forEach((a) => keep.add(a))
+      const asIs = new Map<ICachedArtifact, number>()
+      for (const [i, art] of candidates.entries()) {
+        if (i && i % 32 === 0) await pace()
+        statsScore(art)
+        asIs.set(art, ev.outs(restValues, ev.valuesOf(art))[0])
+      }
       take(topBy(candidates, count(KEEP_BY_STATS), (a) => statsScore(a)[0]))
-      take(
-        topBy(
-          candidates,
-          count(KEEP_AS_IS),
-          (a) => ev.outs(restValues, ev.valuesOf(a))[0]
-        )
-      )
+      take(topBy(candidates, count(KEEP_AS_IS), (a) => asIs.get(a)!))
       const tradeOffs = (arts: readonly ICachedArtifact[], n: number) => {
         for (const i of requirements)
           take(

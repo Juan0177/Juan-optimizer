@@ -501,12 +501,14 @@ export default function TeamBuildWorkspace({
   }, [result?.savedAt])
   // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
   // tab's
+  const resultAttacks = result?.result.attacks
+  const resultSettings = result?.teamOpt ?? teamOpt
   const shownTeamOpt = useMemo(
     () =>
-      result?.result.attacks
-        ? { ...result.teamOpt, attacks: result.result.attacks }
-        : (result?.teamOpt ?? teamOpt),
-    [result, teamOpt]
+      resultAttacks
+        ? { ...resultSettings, attacks: resultAttacks }
+        : resultSettings,
+    [resultAttacks, resultSettings]
   )
   const shown =
     pickView && picked && Object.keys(picks).length
@@ -732,9 +734,17 @@ export default function TeamBuildWorkspace({
   )
   // the shown builds' rotation timeline: the written rotation played with their weapons and sets,
   // an attack's figures read with their builds (as the run counted them)
+  const shownBuilds = shown?.builds
+  const shownWeapons = shown?.weapons
   const shownGear = useMemo(
-    () => (shown ? teamOptResultGear(database, teamId, shown) : undefined),
-    [database, teamId, shown]
+    () =>
+      shownBuilds && shownWeapons
+        ? teamOptResultGear(database, teamId, {
+            builds: shownBuilds,
+            weapons: shownWeapons,
+          })
+        : undefined,
+    [database, teamId, shownBuilds, shownWeapons]
   )
   const shownSimGear = useMemo(() => {
     if (!shownGear) return undefined

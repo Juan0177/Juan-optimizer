@@ -191,6 +191,7 @@ export function teamOptSolver(
     mainStatAssumptionLevel,
     topN = 1,
     onWork,
+    background,
   }) => {
     const problem: OptProblemInput = {
       arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
@@ -209,8 +210,12 @@ export function teamOptSolver(
       problem,
       counters,
       // (one running beside another shares the cores, should the CPU take it)
-      shown ? maxWorkers : Math.max(1, Math.floor(maxWorkers / 2)),
-      { gpu: true, gpuMinTotal: TEAM_GPU_MIN_TOTAL }
+      background
+        ? Math.min(maxWorkers, 2)
+        : shown
+          ? maxWorkers
+          : Math.max(1, Math.floor(maxWorkers / 2)),
+      { gpu: true, gpuMinTotal: TEAM_GPU_MIN_TOTAL, background }
     )
     running.add(solver)
     onSolver(stopAll)

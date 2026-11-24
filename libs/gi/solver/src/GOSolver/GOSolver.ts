@@ -19,6 +19,7 @@ import {
   takeBatch,
   WorkHeap,
 } from './schedule.js'
+import { yieldTask } from './yieldTask.js'
 
 /** Problems up to this many builds are solved by the lead worker alone, right away */
 const LOCAL_MAX = 1_000_000
@@ -126,16 +127,22 @@ export class GOSolver {
   private readonly useGpu: boolean | undefined
   /** The GPU takes searches of at least this many builds (default `GPU_MIN_TOTAL`) */
   private readonly gpuMinTotal: number
+  private readonly background: boolean
   constructor(
     problem: OptProblemInput,
     status: Status,
     numWorker: number,
-    { gpu, gpuMinTotal }: { gpu?: boolean; gpuMinTotal?: number } = {}
+    {
+      gpu,
+      gpuMinTotal,
+      background = false,
+    }: { gpu?: boolean; gpuMinTotal?: number; background?: boolean } = {}
   ) {
     this.problem = problem
     this.status = status
     this.useGpu = gpu
     this.gpuMinTotal = gpuMinTotal ?? GPU_MIN_TOTAL
+    this.background = background
     // one core is left for the browser (drawing the page, the GPU process): with every core busy
     // computing, the whole tab stutters while the optimizer runs
     const cores = globalThis.navigator?.hardwareConcurrency || 8
@@ -345,10 +352,15 @@ export class GOSolver {
                 (Number.isFinite(status.total) ? status.total : fullTotal)
             )
             const elapsed = performance.now() - started
-            if (elapsed > 3000 && elapsed / fraction > GPU_HEDGE_MS)
+            if (
+              !this.background &&
+              elapsed > 3000 &&
+              elapsed / fraction > GPU_HEDGE_MS
+            )
               startCPU(true)
           },
-          floored
+          floored,
+          this.background
         )
         if (this.finished) return
         if (!res.ok) {
@@ -359,7 +371,16 @@ export class GOSolver {
         }
         const top: SolverBuild[] = []
         const store = plotCfg ? new PlotStore(plotCfg) : undefined
-        for (const { arts: picked, values, bin } of res.candidates) {
+        let sliceStarted = performance.now()
+        for (const [
+          i,
+          { arts: picked, values, bin },
+        ] of res.candidates.entries()) {
+          if (i % 128 === 0 && performance.now() - sliceStarted > 10) {
+            await yieldTask()
+            if (this.finished) return
+            sliceStarted = performance.now()
+          }
           if (!mins.every((m, i) => m <= values[1 + i])) continue
           const artifactIds = picked.map((a) => a.id).filter((id) => id)
           store?.add(values[1 + nCons], values[0], () => artifactIds, bin)

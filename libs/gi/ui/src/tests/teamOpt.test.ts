@@ -927,6 +927,50 @@ describe('team optimize', () => {
     ).toBeDefined()
   })
 
+  it('only searches the four required set slots when ranking a set with one missing slot', async () => {
+    const { database, teamId, ids } = setup()
+    for (const id of Object.values(ids.weak))
+      database.arts.set(id, { location: shenhe })
+    database.arts.remove(ids.crit.circlet)
+    let searched = false
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        keep: [shenhe],
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+      },
+      solve: (input) => {
+        const blizzard = input.constraints.some(
+          ({ value, min }) =>
+            value.operation === 'read' &&
+            value.path[1] === 'BlizzardStrayer' &&
+            min === 4
+        )
+        if (blizzard) {
+          searched = true
+          expect(input.background).toBe(true)
+          expect(input.arts.length).toBe(5)
+          expect(
+            input.arts.every(
+              (art) =>
+                art.setKey === 'BlizzardStrayer' || art.slotKey === 'circlet'
+            )
+          ).toBe(true)
+        }
+        return bruteForce(input)
+      },
+      onResult: () => {},
+    }))!
+    expect(searched).toBe(true)
+    expect(
+      result.options?.[ayaka]?.sets.find((o) => o.set === 'BlizzardStrayer')
+        ?.artifactIds?.circlet
+    ).toBe(ids.atk.circlet)
+  })
+
   it('forces the one set left on among those the inventory has pieces of', async () => {
     const { database, teamId } = setup()
     const { optConfigId } = teamOptMembers(database, teamId).find(

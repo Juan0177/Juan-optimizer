@@ -30,6 +30,7 @@ import type { DynMinMax } from '@genshin-optimizer/gi/solver'
 import {
   nodeRangeEvaluator,
   optimizerGpuSupported,
+  yieldTask,
 } from '@genshin-optimizer/gi/solver'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
@@ -64,6 +65,8 @@ import {
 
 /** What the optimizer of one member is given: the rest of the team is fixed */
 export interface TeamOptSolveInput {
+  /** Alternative builds are searched while the user can interact with the result. */
+  background?: boolean
   characterKey: CharacterKey
   arts: ICachedArtifact[]
   /** The team's rotation damage, as a function of the member's artifacts */
@@ -842,9 +845,11 @@ export async function optimizeTeam({
         ? await quickPool(problem)
         : {
             arts: input.arts,
-            // (a floor speeds the CPU's branch and bound; the GPU sweeps the whole space anyway)
+            // A seed can speed up the foreground CPU search. During rankings,
+            // let the worker search directly instead of climbing on the page.
             seed:
-              optimizerGpuSupported() && space >= TEAM_GPU_MIN_TOTAL
+              input.background ||
+              (optimizerGpuSupported() && space >= TEAM_GPU_MIN_TOTAL)
                 ? undefined
                 : await seedBuild(problem),
             refine: undefined,
@@ -1527,7 +1532,8 @@ export async function optimizeTeam({
     group: TeamOptMember[],
     takeable: readonly TeamOptMember[],
     unmetBefore: ReadonlySet<CharacterKey>,
-    report: (member: TeamOptMember) => void | Promise<void>
+    report: (member: TeamOptMember) => void | Promise<void>,
+    background = false
   ) => {
     for (const [j, member] of group.entries()) {
       const { characterKey } = member
@@ -1552,6 +1558,7 @@ export async function optimizeTeam({
       )
       const input = {
         characterKey,
+        background,
         arts: teamOptPool(
           allArts,
           member,
@@ -2617,7 +2624,7 @@ export async function optimizeTeam({
     const othersIn = (ck: CharacterKey) =>
       members.filter((m) => m.characterKey !== ck && !m.isTc)
     // (the page between steps: a pick's work never holds it up)
-    const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const breathe = yieldTask
     const needsIn = (s: TeamState) =>
       teamEnergyNeeds(statFilters, weaponsIn(s), teamOpt)
     /**
@@ -2631,7 +2638,8 @@ export async function optimizeTeam({
       before: TeamState,
       ck: CharacterKey,
       pick: TeamOptPick,
-      cancelled: () => boolean
+      cancelled: () => boolean,
+      background = false
     ) => {
       const was = needsIn(before)
       const now = needsIn(team)
@@ -2650,12 +2658,14 @@ export async function optimizeTeam({
           changed,
           member ? [member] : [],
           unmetBefore,
-          () => breathe()
+          () => breathe(),
+          background
         )
         if (!settled || !member) return team
         const weapon = database.weapons.get(settled.weaponIds[ck] ?? '')
         const again =
-          weapon && (await search(settled, member, weapon, pick.set))
+          weapon &&
+          (await search(settled, member, weapon, pick.set, background))
         if (again?.found) assign(settled, member, again.found.artifactIds)
         return settled
       } catch (e) {
@@ -2719,7 +2729,8 @@ export async function optimizeTeam({
       s: TeamState,
       member: TeamOptMember,
       weapon: ICachedWeapon,
-      set?: string
+      set?: string,
+      background = false
     ) => {
       const ck = member.characterKey
       const optConfig = optConfigs[ck]
@@ -2728,6 +2739,7 @@ export async function optimizeTeam({
       const pool = poolIn(s, member)
       const input: TeamOptSolveInput = {
         characterKey: ck,
+        background,
         arts: pool,
         objective: problem.objective,
         constraints: problem.constraints,
@@ -2735,6 +2747,9 @@ export async function optimizeTeam({
         mainStatAssumptionLevel,
       }
       if (!set) return { problem, found: await solve(input, true) }
+      const setArts = pool.filter((art) => art.setKey === set)
+      const setSlots = new Set(setArts.map((art) => art.slotKey))
+      if (setSlots.size < 4) return { problem, found: undefined }
       const keptKey = `${keyOf(s)}#${ck}#${weapon.id}`
       let keeping = kept.get(keptKey)
       if (!keeping) {
@@ -2747,12 +2762,11 @@ export async function optimizeTeam({
         }).then((q) => q.arts)
         kept.set(keptKey, keeping)
       }
-      const arts = [
-        ...new Set([
-          ...(await keeping),
-          ...pool.filter((a) => a.setKey === set),
-        ]),
-      ]
+      // With exactly four available set slots, each must wear a piece of the set.
+      const arts = [...new Set([...(await keeping), ...setArts])].filter(
+        (art) =>
+          setSlots.size > 4 || !setSlots.has(art.slotKey) || art.setKey === set
+      )
       // (the pool narrowed already: searched as it is)
       const found = await solve(
         {
@@ -2808,7 +2822,7 @@ export async function optimizeTeam({
       for (const w of weaponsIn_(s, member)) {
         await breathe()
         if (cancelled()) return undefined
-        const searched = await search(s, member, w, pick.set)
+        const searched = await search(s, member, w, pick.set, true)
         const option = optionOf(unmetNow, w, searched)
         if (!option) continue
         // (a weapon that changes a teammate's ER requirement: worth the team with that teammate's
@@ -2822,7 +2836,8 @@ export async function optimizeTeam({
             s,
             ck,
             { weaponId: w.id, set: pick.set },
-            cancelled
+            cancelled,
+            true
           )
           if (settled !== team) {
             const ev = evaluateIn(settled)
@@ -2845,7 +2860,7 @@ export async function optimizeTeam({
       )) {
         await breathe()
         if (cancelled()) return undefined
-        const searched = await search(s, member, weapon, set)
+        const searched = await search(s, member, weapon, set, true)
         // Keep an eligible set visible even if its builds miss a requirement.
         const option = optionOf(unmetNow, weapon, searched, set)
         if (option) sets.push(option)
