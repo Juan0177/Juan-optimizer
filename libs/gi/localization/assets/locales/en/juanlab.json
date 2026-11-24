@@ -140,6 +140,25 @@
     "entries": [
       {
         "date": "2026-11-25",
+        "title": "Mavuika’s Melt and the hit list",
+        "summary": "A fix to the rotation’s hit list, and a guide to Mavuika’s Melt with Citlali.",
+        "sections": [
+          {
+            "kind": "fixed",
+            "items": [
+              "**Hits per rotation**: reactions no longer show twice (“Frostfall Storm (Melt) (Melt)”), and melting hits sit under their attack instead of a row of their own (“Charged Attack: Cyclic, Cyclic · Melt, Final · Melt”)."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Mavuika with Citlali**: her charged attacks melt only when Citlali lays Cryo after her burst, that is with `Citlali E Q N1` (5 of 13 charged attacks, as Prydwen counts). With `Citlali E Q` or `Citlali E N1 Q` Mavuika’s Pyro aura stays on the enemy and she never melts. The full explanation is in docs/mavuika-citlali-melt.md."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-25",
         "title": "Update to Stellar Optimizer 1.40.4",
         "summary": "Stellar Optimizer’s releases 1.40.2 to 1.40.4 arrive.",
         "sections": [
