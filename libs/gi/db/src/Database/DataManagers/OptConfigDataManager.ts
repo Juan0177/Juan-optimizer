@@ -45,6 +45,19 @@ export type ArtSetExclusionKey =
   | 'rainbow'
 export type ArtSetExclusion = Partial<Record<ArtSetExclusionKey, (2 | 4)[]>>
 
+/**
+ * The set every build wears 4 pieces of: the only one left on (its 4-piece bonus allowed), every
+ * other set's bonuses turned off. Its builds then hold at most one piece of another set.
+ */
+export function forcedSet(exclusion: ArtSetExclusion) {
+  const inUse = allArtifactSetExclusionKeys.filter(
+    (key) => key !== 'rainbow' && (exclusion[key]?.length ?? 0) < 2
+  )
+  return inUse.length === 1 && !exclusion[inUse[0]]?.includes(4)
+    ? (inUse[0] as Exclude<ArtSetExclusionKey, 'rainbow'>)
+    : undefined
+}
+
 const statFilterSettingSchema = z.object({
   value: z.number().catch(0),
   disabled: zodBoolean(),
@@ -63,7 +76,7 @@ const artSetExclusionSchema = z.preprocess(
     for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
       if (!allArtifactSetExclusionKeys.includes(k as ArtSetExclusionKey))
         continue
-      // (mixed builds are always considered: the sets dialog no longer limits them)
+      // (mixed pieces are not limited by hand: only when one set is left, below)
       if (k === 'rainbow') continue
       if (!Array.isArray(v)) continue
       const filtered = [...new Set(v.filter((n) => n === 2 || n === 4))] as (
@@ -72,6 +85,7 @@ const artSetExclusionSchema = z.preprocess(
       )[]
       if (filtered.length) result[k as ArtSetExclusionKey] = filtered
     }
+    if (forcedSet(result)) result.rainbow = [2, 4]
     return result
   },
   z.record(z.string(), z.array(z.union([z.literal(2), z.literal(4)])))

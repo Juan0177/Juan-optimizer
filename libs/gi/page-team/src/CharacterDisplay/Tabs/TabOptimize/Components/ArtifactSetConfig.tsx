@@ -25,6 +25,7 @@ import {
 import type { ArtSetExclusion } from '@genshin-optimizer/gi/db'
 import {
   allArtifactSetExclusionKeys,
+  forcedSet,
   handleArtSetExclusion,
 } from '@genshin-optimizer/gi/db'
 import {
@@ -166,6 +167,7 @@ export default function ArtifactSetConfig({
   )
   const allowed2 = configurableSetKeys.filter((k) => !isExcluded(k, 2))
   const allowed4 = configurableSetKeys.filter((k) => !isExcluded(k, 4))
+  const forced = forcedSet(artSetExclusion)
 
   const condCountBySet = useMemo(
     () =>
@@ -246,6 +248,13 @@ export default function ArtifactSetConfig({
                 }
               />
             </Box>
+            {forced && (
+              <Typography variant="caption" color="text.secondary">
+                {t('artSetConfig.summary.forced', {
+                  name: t(`artifactNames_gen:${forced}`),
+                })}
+              </Typography>
+            )}
           </CardContent>
         </CardThemed>
       )}
@@ -415,9 +424,17 @@ function SetConfigDialog({
     },
     [artSetExclusion, saveExclusion]
   )
+  // (every other set off: every build wears 4 of its pieces)
   const onlyThis4 = useCallback(
-    (setKey: ArtifactSetKey) => setAll(4, true, setKey),
-    [setAll]
+    (setKey: ArtifactSetKey) =>
+      saveExclusion(
+        Object.fromEntries(
+          configurableSetKeys
+            .filter((other) => other !== setKey)
+            .map((other) => [other, [2, 4]])
+        ) as ArtSetExclusion
+      ),
+    [saveExclusion]
   )
   // the basic view: a set used (both its bonuses allowed) or not (neither)
   const useSets = useCallback(
@@ -436,6 +453,7 @@ function SetConfigDialog({
     (setKey: ArtifactSetKey, use: boolean) => useSets([setKey], use),
     [useSets]
   )
+  const forced = forcedSet(artSetExclusion)
   const used = configurableSetKeys.filter(
     (k) => (artSetExclusion[k as keyof ArtSetExclusion]?.length ?? 0) < 2
   ).length
@@ -673,17 +691,21 @@ function SetConfigDialog({
         }}
       >
         <Typography sx={{ ...type.label, ...numSx }}>
-          {advanced
-            ? t('artSetConfig.footer.summary', {
-                four: allowed4,
-                two: allowed2,
-                total,
+          {forced
+            ? t('artSetConfig.summary.forced', {
+                name: t(`artifactNames_gen:${forced}`),
               })
-            : t('artSetConfig.footer.using', {
-                defaultValue: 'Using {{count}} of {{total}} sets',
-                count: used,
-                total,
-              })}
+            : advanced
+              ? t('artSetConfig.footer.summary', {
+                  four: allowed4,
+                  two: allowed2,
+                  total,
+                })
+              : t('artSetConfig.footer.using', {
+                  defaultValue: 'Using {{count}} of {{total}} sets',
+                  count: used,
+                  total,
+                })}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         {!!condTotal && (

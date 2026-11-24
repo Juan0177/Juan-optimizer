@@ -25,6 +25,7 @@ import type {
 } from './OptConfigDataManager'
 import {
   allArtifactSetExclusionKeys,
+  forcedSet,
   handleArtSetExclusion,
   maxBuildsToShowList,
 } from './OptConfigDataManager'
@@ -173,6 +174,7 @@ export {
   defaultInitialWeaponKey,
   defaultTeamOptKqm,
   defLoadoutExportSetting,
+  forcedSet,
   handleArtSetExclusion,
   initCharTC,
   initCustomMultiTarget,

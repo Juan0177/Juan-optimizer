@@ -1,6 +1,8 @@
 import { createTestDBStorage } from '@genshin-optimizer/common/database'
 import { defaultOptArtifactLevel } from '@genshin-optimizer/gi/consts'
 import { ArtCharDatabase } from '../ArtCharDatabase'
+import type { ArtSetExclusion } from './OptConfigDataManager'
+import { allArtifactSetExclusionKeys, forcedSet } from './OptConfigDataManager'
 
 describe('OptConfigDataManager', () => {
   let database: ArtCharDatabase
@@ -119,7 +121,7 @@ describe('OptConfigDataManager', () => {
     expect(result?.excludedLocations).not.toContain(id)
   })
 
-  // (the sets dialog no longer has mixed pieces: mixed builds are always considered)
+  // (the sets dialog has no mixed pieces: they are limited only when one set is left)
   it('drops an old mixed-pieces limit and keeps every set choice', () => {
     const id = optConfigs.new()
     const saved = {
@@ -142,5 +144,31 @@ describe('OptConfigDataManager', () => {
       artSetExclusion: { ...saved.artSetExclusion, rainbow: [4] } as never,
     })
     expect(optConfigs.get(id)?.artSetExclusion).not.toHaveProperty('rainbow')
+  })
+
+  it('with every set but one off, builds wear 4 pieces of that one', () => {
+    const id = optConfigs.new()
+    const allBut = (...kept: string[]) =>
+      Object.fromEntries(
+        allArtifactSetExclusionKeys
+          .filter((key) => key !== 'rainbow' && !kept.includes(key))
+          .map((key) => [key, [2, 4]])
+      ) as ArtSetExclusion
+    optConfigs.set(id, { artSetExclusion: allBut('TenacityOfTheMillelith') })
+    const forced = optConfigs.get(id)!.artSetExclusion
+    expect(forcedSet(forced)).toBe('TenacityOfTheMillelith')
+    // (at most one piece of another set: four of the one left)
+    expect(forced.rainbow).toEqual([2, 4])
+    // its 4-piece bonus turned off too: nothing to force
+    optConfigs.set(id, {
+      artSetExclusion: { ...forced, TenacityOfTheMillelith: [4] },
+    })
+    expect(optConfigs.get(id)!.artSetExclusion).not.toHaveProperty('rainbow')
+    // another set on again: mixed pieces too
+    optConfigs.set(id, {
+      artSetExclusion: allBut('TenacityOfTheMillelith', 'NoblesseOblige'),
+    })
+    expect(forcedSet(optConfigs.get(id)!.artSetExclusion)).toBeUndefined()
+    expect(optConfigs.get(id)!.artSetExclusion).not.toHaveProperty('rainbow')
   })
 })
