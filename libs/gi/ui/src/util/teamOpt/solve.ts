@@ -445,6 +445,14 @@ export function meetsSetRules(
     if (!allowedCounts(exclusion[setKey as keyof ArtSetExclusion]).includes(n))
       return false
   const singles = [...counts.values()].filter((n) => n === 1).length
+  // (two 2-piece bonuses turned off: a full build with no 4 pieces of a set needs 2+ mixed pieces)
+  if (
+    exclusion.twoTwo?.length &&
+    arts.length === 5 &&
+    Math.max(...counts.values()) < 4 &&
+    singles < 2
+  )
+    return false
   return allowedCounts(exclusion.rainbow).includes(singles)
 }
 

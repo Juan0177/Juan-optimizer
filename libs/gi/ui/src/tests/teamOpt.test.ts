@@ -9,6 +9,7 @@ import type {
 } from '@genshin-optimizer/gi/consts'
 import { allArtifactSlotKeys } from '@genshin-optimizer/gi/consts'
 import type {
+  ArtSetExclusion,
   ICachedArtifact,
   LoadoutDatum,
   TeamOpt,
@@ -1083,6 +1084,51 @@ describe('team optimize', () => {
         exclusion
       )
     ).toBe(false)
+  })
+
+  it('keeps a member to the build shapes it allows', () => {
+    const build = (...sets: string[]) =>
+      sets.map((setKey) => ({ setKey })) as ICachedArtifact[]
+    const [a, b, c, d, e] = [
+      'GladiatorsFinale',
+      'NoblesseOblige',
+      'WanderersTroupe',
+      'EmblemOfSeveredFate',
+      'TenacityOfTheMillelith',
+    ]
+    const shapes = {
+      '5': build(a, a, a, a, a),
+      '4+1': build(a, a, a, a, b),
+      '3+2': build(a, a, a, b, b),
+      '2+2+1': build(a, a, b, b, c),
+      '3+1+1': build(a, a, a, b, c),
+      '2+1+1+1': build(a, a, b, c, d),
+      '1+1+1+1+1': build(a, b, c, d, e),
+    }
+    const allowed = (exclusion: ArtSetExclusion) =>
+      Object.entries(shapes)
+        .filter(([, arts]) => meetsSetRules(arts, exclusion))
+        .map(([name]) => name)
+    expect(allowed({})).toEqual(Object.keys(shapes))
+    expect(allowed({ twoTwo: [2, 4] })).toEqual([
+      '5',
+      '4+1',
+      '3+1+1',
+      '2+1+1+1',
+      '1+1+1+1+1',
+    ])
+    expect(allowed({ mixed: [2, 4], rainbow: [2, 4] })).toEqual([
+      '5',
+      '4+1',
+      '3+2',
+      '2+2+1',
+    ])
+    expect(allowed({ twoTwo: [2, 4], mixed: [2, 4], rainbow: [2, 4] })).toEqual(
+      ['5', '4+1']
+    )
+    // a build missing pieces is held to its sets' rules only
+    expect(meetsSetRules(build(a, a, b, b), { twoTwo: [2, 4] })).toBe(true)
+    expect(meetsSetRules([], { twoTwo: [2, 4] })).toBe(true)
   })
 
   it('respects a member’s set rules, also when its current build breaks them', async () => {

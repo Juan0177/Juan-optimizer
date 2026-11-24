@@ -239,6 +239,18 @@ export default function ArtifactSetConfig({
                 label={t('artSetConfig.summary.twoPc')}
                 value={describe(allowed2)}
               />
+              {!!artSetExclusion.twoTwo?.length && (
+                <SummaryRow
+                  label={t('artSetConfig.shapes.twoTwo', '2-piece + 2-piece')}
+                  value={t('artSetConfig.summary.mixedNone')}
+                />
+              )}
+              {!!artSetExclusion.mixed?.length && (
+                <SummaryRow
+                  label={t('artSetConfig.shapes.mixed', 'Mixed pieces')}
+                  value={t('artSetConfig.summary.mixedNone')}
+                />
+              )}
               <SummaryRow
                 label={t('artSetConfig.summary.effects')}
                 value={
@@ -435,6 +447,16 @@ function SetConfigDialog({
         ) as ArtSetExclusion
       ),
     [saveExclusion]
+  )
+  // a build shape allowed or not (both off: every build wears 4 pieces of a set)
+  const setShapeRule = useCallback(
+    (key: 'twoTwo' | 'mixed', on: boolean) => {
+      const next = deepClone(artSetExclusion)
+      if (on) delete next[key]
+      else next[key] = [2, 4]
+      saveExclusion(next)
+    },
+    [artSetExclusion, saveExclusion]
   )
   // the basic view: a set used (both its bonuses allowed) or not (neither)
   const useSets = useCallback(
@@ -636,6 +658,43 @@ function SetConfigDialog({
           </Box>
         </Tooltip>
       </Box>
+
+      {advanced && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 2,
+            rowGap: 0.5,
+            px: { xs: 2, sm: 3 },
+            py: 1,
+            borderBottom: hairline,
+          }}
+        >
+          <Typography sx={{ ...type.label, color: 'text.secondary' }}>
+            {t('artSetConfig.shapes.label', 'Builds may have')}
+          </Typography>
+          <ShapeSwitch
+            label={t('artSetConfig.shapes.twoTwo', '2-piece + 2-piece')}
+            tip={t(
+              'artSetConfig.shapes.twoTwoTip',
+              'Two 2-piece bonuses: 2+2+1 and 3+2 builds'
+            )}
+            on={!artSetExclusion.twoTwo?.length}
+            onChange={(on) => setShapeRule('twoTwo', on)}
+          />
+          <ShapeSwitch
+            label={t('artSetConfig.shapes.mixed', 'Mixed pieces')}
+            tip={t(
+              'artSetConfig.shapes.mixedTip',
+              'Pieces whose set no other piece has: 2-piece + 3 mixed, 3-piece + 2 mixed and 5 mixed builds'
+            )}
+            on={!artSetExclusion.mixed?.length}
+            onChange={(on) => setShapeRule('mixed', on)}
+          />
+        </Box>
+      )}
 
       {/* One row per set */}
       <Box role="list" sx={{ containerType: 'inline-size' }}>
@@ -1072,6 +1131,38 @@ const SetRow = memo(function SetRow({
     </Box>
   )
 })
+
+/** One of the build shapes the advanced view allows or not */
+function ShapeSwitch({
+  label,
+  tip,
+  on,
+  onChange,
+}: {
+  label: string
+  tip: string
+  on: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <Tooltip title={tip}>
+      <Box
+        component="label"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          cursor: 'pointer',
+          ...type.label,
+          '&:hover': { color: 'text.primary' },
+        }}
+      >
+        <Switch size="small" checked={on} onChange={() => onChange(!on)} />
+        {label}
+      </Box>
+    </Tooltip>
+  )
+}
 
 /** The basic view's one switch: the set used (its bonuses allowed) or not */
 function UseSwitch({

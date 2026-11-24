@@ -19,14 +19,17 @@ import type { GeneratedBuild } from './GeneratedBuildListDataManager'
 import type {
   ArtSetExclusion,
   ArtSetExclusionKey,
+  ArtSetRuleKey,
   OptConfig,
   StatFilterSetting,
   StatFilters,
 } from './OptConfigDataManager'
 import {
   allArtifactSetExclusionKeys,
+  artSetRuleKeys,
   forcedSet,
   handleArtSetExclusion,
+  isSetRule,
   maxBuildsToShowList,
 } from './OptConfigDataManager'
 import type {
@@ -120,6 +123,7 @@ export type {
   ArtifactData,
   ArtSetExclusion,
   ArtSetExclusionKey,
+  ArtSetRuleKey,
   BonusStats,
   BuildTc,
   BuildTcArtifactSlot,
@@ -169,6 +173,7 @@ export type {
 export {
   allArtifactSetExclusionKeys,
   applyTeamRotation,
+  artSetRuleKeys,
   cachedArtifact,
   defaultInitialWeapon,
   defaultInitialWeaponKey,
@@ -177,6 +182,7 @@ export {
   forcedSet,
   handleArtSetExclusion,
   initCharTC,
+  isSetRule,
   initCustomMultiTarget,
   initCustomTarget,
   initialPandoTeam,

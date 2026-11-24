@@ -161,7 +161,11 @@ export class GPUSolver {
       readKeys(nodes),
       setup.arts,
       setup.plotBase ? plot : undefined,
-      setRules && { rainbow: setRules.rainbow, maskOffset: rows },
+      setRules && {
+        rainbow: setRules.rainbow,
+        noFour: setRules.noFour,
+        maskOffset: rows,
+      },
       rows
     )
     if (!src) return undefined
@@ -639,6 +643,7 @@ type SetRules = {
   /** allowed piece counts per set index (bit `n`: `n` pieces) */
   masks: Uint32Array
   rainbow: number
+  noFour: number
 }
 function setRulesFor(
   setup: Setup,
@@ -647,7 +652,8 @@ function setRulesFor(
   if (!rules) return undefined
   const ALL = 0x3f // 0..5 pieces
   const ruled = Object.values(rules.sets).some((m) => m !== ALL)
-  if (!ruled && (rules.rainbow & ALL) === ALL) return undefined // nothing to check
+  if (!ruled && (rules.rainbow & ALL) === ALL && (rules.noFour & ALL) === ALL)
+    return undefined // nothing to check
   const index = new Map<string | undefined, number>()
   for (const slot of allArtifactSlotKeys)
     for (const art of setup.arts.values[slot])
@@ -656,7 +662,7 @@ function setRulesFor(
   for (const [set, i] of index)
     if (set !== undefined)
       masks[i] = rules.sets[set as keyof typeof rules.sets] ?? ALL
-  return { index, masks, rainbow: rules.rainbow }
+  return { index, masks, rainbow: rules.rainbow, noFour: rules.noFour }
 }
 
 /** Inverse of the shader's `enc` (order-preserving f32 <-> u32) */
@@ -704,14 +710,18 @@ function shaderSource(
   arts: ArtifactsBySlot,
   plot: PlotConfig | undefined,
   /**
-   * Set rules: the allowed rainbow piece counts (bit mask), and where the masks start in the
-   * rules buffer (after one set index per table row)
+   * Set rules: the allowed rainbow piece counts (bit mask; `noFour`: when no set has 4 pieces, as
+   * `rainbow` when omitted), and where the masks start in the rules buffer (after one set index
+   * per table row)
    */
-  setRules: { rainbow: number; maskOffset: number } | undefined,
+  setRules:
+    | { rainbow: number; noFour?: number; maskOffset: number }
+    | undefined,
   /** Table rows (artifacts): two more rows follow, the fifth slot's stat ranges (see `run`) */
   tableRows: number
 ): string | undefined {
   const rainbow = setRules?.rainbow
+  const noFour = setRules?.noFour ?? rainbow
   const K = keys.length
   const col = new Map(keys.map((k, i) => [k, i]))
   const nCons = mins.length
@@ -930,13 +940,20 @@ var<workgroup> redc: array<u32, ${WORKGROUP}>;`
     ? `let g0 = RS[w0]; let g1 = RS[w1]; let g2 = RS[w2]; let g3 = RS[w3];
     ${pairs.map(([a, b]) => `let e${a}${b} = select(0u, 1u, g${a} == g${b});`).join(' ')}`
     : ''
+  // (the mixed-piece mask, by whether a set has 4 pieces when the two differ)
+  const fourDiffers = rules && noFour !== rainbow
+  const RB_MASK = fourDiffers
+    ? `let rbm = select(${noFour! >>> 0}u, ${rainbow! >>> 0}u, max(max(c0, c1), max(max(c2, c3), c4)) >= 4u);`
+    : ''
+  const RB = fourDiffers ? 'rbm' : `${rainbow! >>> 0}u`
   const innerRules = rules
     ? `let g4 = RS[w4];
       let e04 = select(0u, 1u, g0 == g4); let e14 = select(0u, 1u, g1 == g4); let e24 = select(0u, 1u, g2 == g4); let e34 = select(0u, 1u, g3 == g4);
       let c0 = 1u + e01 + e02 + e03 + e04; let c1 = 1u + e01 + e12 + e13 + e14; let c2 = 1u + e02 + e12 + e23 + e24;
       let c3 = 1u + e03 + e13 + e23 + e34; let c4 = 1u + e04 + e14 + e24 + e34;
       let rb = select(0u, 1u, c0 == 1u) + select(0u, 1u, c1 == 1u) + select(0u, 1u, c2 == 1u) + select(0u, 1u, c3 == 1u) + select(0u, 1u, c4 == 1u);
-      if ((((${rainbow! >>> 0}u >> rb) & (RS[MOFF + g0] >> c0) & (RS[MOFF + g1] >> c1) & (RS[MOFF + g2] >> c2) & (RS[MOFF + g3] >> c3) & (RS[MOFF + g4] >> c4)) & 1u) == 0u) { continue; }
+      ${RB_MASK}
+      if ((((${RB} >> rb) & (RS[MOFF + g0] >> c0) & (RS[MOFF + g1] >> c1) & (RS[MOFF + g2] >> c2) & (RS[MOFF + g3] >> c3) & (RS[MOFF + g4] >> c4)) & 1u) == 0u) { continue; }
       allowed = allowed + 1u;`
     : ''
   return `
