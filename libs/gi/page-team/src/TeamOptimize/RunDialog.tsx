@@ -79,8 +79,7 @@ import type { TeamOptUpdate } from './useTeamOpt'
 /**
  * Before a run: what it searches. The inventory and weapons, then each member: whether it is
  * optimized, the size of its search, its sets, set effects, main stats and minimum ER (all by
- * default; fewer make its search smaller, so the run faster). Then how many team builds to find,
- * and Start.
+ * default; fewer make its search smaller, so the run faster). Then how it searches, and Start.
  */
 export function RunDialog({
   open,
@@ -107,7 +106,6 @@ export function RunDialog({
   evaluateOnly?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const builds = teamOpt.topN ?? 1
   const database = useDatabase()
   // (the set effects the rotation times in a run: their switches play no part)
   const timed = useTimedSetEffects(teamId, teamOpt, open)
@@ -293,37 +291,6 @@ export function RunDialog({
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FieldLabel
                 tip={t(
-                  'teamOpt.run.buildsInfo',
-                  'Best build: only the team’s best build, the fastest. All builds: also the next best ones (up to 4 more, each changing one member’s artifacts), which takes longer.'
-                )}
-              >
-                {t('teamOpt.run.buildsLabel', 'Builds')}
-              </FieldLabel>
-              <Segmented
-                size="small"
-                aria-label={t('teamOpt.run.buildsLabel', 'Builds')}
-                value={builds > 1 ? 'all' : 'best'}
-                onChange={(choice) =>
-                  setTeamOpt((o) => {
-                    if (choice === 'all') o.topN = ALL_BUILDS
-                    else delete o.topN
-                  })
-                }
-                options={[
-                  {
-                    value: 'best',
-                    label: t('teamOpt.run.bestBuild', 'Best build'),
-                  },
-                  {
-                    value: 'all',
-                    label: t('teamOpt.run.allBuilds', 'All builds'),
-                  },
-                ]}
-              />
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <FieldLabel
-                tip={t(
                   'teamOpt.run.searchTip',
                   'Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.'
                 )}
@@ -384,8 +351,6 @@ export function RunDialog({
   )
 }
 
-/** "All builds": the best team build and the next best ones, this many in all */
-const ALL_BUILDS = 5
 const mainSlots = ['sands', 'goblet', 'circlet'] as const
 const slotNames = { sands: 'Sands', goblet: 'Goblet', circlet: 'Circlet' }
 

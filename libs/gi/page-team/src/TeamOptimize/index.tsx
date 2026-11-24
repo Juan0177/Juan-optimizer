@@ -23,7 +23,6 @@ import type {
   TeamOptMember,
   TeamOptPicks,
   TeamOptPickView,
-  TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
@@ -481,12 +480,7 @@ export default function TeamBuildWorkspace({
     (state.roster === undefined || state.roster === roster)
       ? state
       : undefined
-  // which of the result's team builds is shown (the best, or one of the next ones)
-  const [pick, setPick] = useState(0)
-  const builds = result ? teamBuilds(result.result) : []
-  const picked = builds[Math.min(pick, builds.length - 1)]
-  // (a new run's result: its best; its other builds coming in keep the pick)
-  useEffect(() => setPick(0), [result?.savedAt])
+  const picked = result?.result
   // equipment picked by hand in a member's inspector (the best team build's), and the team with it
   const [picks, setPicks] = useState<TeamOptPicks>({})
   const [pickView, setPickView] = useState<TeamOptPickView>()
@@ -496,13 +490,13 @@ export default function TeamBuildWorkspace({
     [result, sessionOf]
   )
   const firstOptimized = result?.result.optimized[0]
-  // biome-ignore lint/correctness/useExhaustiveDependencies: another result or team build shown
+  // biome-ignore lint/correctness/useExhaustiveDependencies: another result shown
   useEffect(() => {
     setPicks({})
     setPickView(undefined)
     // (the biggest damage dealer's, as the KQM tab opens on its first member)
     setInspected(firstOptimized)
-  }, [result?.savedAt, pick])
+  }, [result?.savedAt])
   // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
   // tab's
   const shownTeamOpt = useMemo(
@@ -1250,14 +1244,6 @@ export default function TeamBuildWorkspace({
           )}
         </Alert>
       )}
-      {mode === 'inventory' && result && shown && builds.length > 1 && (
-        <TeamBuildPicker
-          builds={builds}
-          value={builds.indexOf(shown)}
-          onChange={setPick}
-          rotationTime={rotationTime}
-        />
-      )}
       {mode === 'inventory' && result && shown && (
         <Box
           key={result.seconds + (result.teamOpt ? '' : '-')}
@@ -1275,13 +1261,14 @@ export default function TeamBuildWorkspace({
             seconds={result.seconds}
             runTeamOpt={shownTeamOpt}
             rotationTime={rotationTime}
-            // (trying other equipment: for the best team build)
-            {...(pick === 0 && {
-              selected: inspected,
-              onSelect: setInspected,
-              picked: !!Object.keys(picks).length,
-              onResetPicks: () => setPicks({}),
-              inspector: inspected && picked && (
+            // (trying other equipment)
+            selected={inspected}
+            onSelect={setInspected}
+            picked={!!Object.keys(picks).length}
+            onResetPicks={() => setPicks({})}
+            inspector={
+              inspected &&
+              picked && (
                 <TeamOptInspector
                   key={inspected}
                   characterKey={inspected}
@@ -1294,8 +1281,8 @@ export default function TeamBuildWorkspace({
                   onView={setPickView}
                   rotationTime={rotationTime}
                 />
-              ),
-            })}
+              )
+            }
             ranking={
               result.optionsRunning
                 ? {
@@ -1319,28 +1306,26 @@ export default function TeamBuildWorkspace({
                       'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
                   }}
                 >
-                  {pick === 0 && result.optionsRunning && (
+                  {result.optionsRunning && (
                     <TopBuildsPending
                       done={Object.keys(result.result.options ?? {}).length}
                       total={result.result.optimized.length}
                     />
                   )}
-                  {pick === 0 &&
-                    !result.optionsRunning &&
-                    result.result.options && (
-                      <TeamOptTopBuilds
-                        members={members.map((m) => m.characterKey)}
-                        result={result.result}
-                        picks={picks}
-                        rotationTime={rotationTime}
-                        onPick={(characterKey, next) => {
-                          setPicks(
-                            characterKey && next ? { [characterKey]: next } : {}
-                          )
-                          if (characterKey) setInspected(characterKey)
-                        }}
-                      />
-                    )}
+                  {!result.optionsRunning && result.result.options && (
+                    <TeamOptTopBuilds
+                      members={members.map((m) => m.characterKey)}
+                      result={result.result}
+                      picks={picks}
+                      rotationTime={rotationTime}
+                      onPick={(characterKey, next) => {
+                        setPicks(
+                          characterKey && next ? { [characterKey]: next } : {}
+                        )
+                        if (characterKey) setInspected(characterKey)
+                      }}
+                    />
+                  )}
                   <DamageShare
                     members={members.map((m) => m.characterKey)}
                     evaluation={shown.after}
@@ -1390,7 +1375,7 @@ export default function TeamBuildWorkspace({
           teamOpt={shownTeamOpt}
           result={shown}
           savedAt={result.savedAt}
-          index={Math.min(pick, builds.length - 1)}
+          index={0}
         />
       )}
       {/* (KQM's: for its builds shown, while its result is for the rotation as it is; saved with
@@ -2172,7 +2157,6 @@ function useCurrentEvaluation(
       ]),
     [teamOpt]
   )
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `readKey` stands for `teamOpt`
   useEffect(() => {
     if (!teamData) return undefined
     const teamOpt = latestTeamOpt.current
@@ -2231,96 +2215,4 @@ function usePoolSize(members: TeamOptMember[], teamOpt: TeamOpt) {
       new Set()
     ).length
   }, [database, members, teamOpt])
-}
-
-/**
- * A result's team builds as results of their own: the best one, then its alternatives (see
- * `TeamOptResult.alternatives`). One object each, kept with the result: the views cache their
- * work by it, and one made again on every render would restart them.
- */
-const teamBuildsOf = new WeakMap<TeamOptResult, TeamOptResult[]>()
-function teamBuilds(result: TeamOptResult): TeamOptResult[] {
-  let list = teamBuildsOf.get(result)
-  if (!list) {
-    list = [
-      result,
-      ...(result.alternatives ?? []).map(({ builds, after }) => ({
-        ...result,
-        builds,
-        after,
-        alternatives: undefined,
-      })),
-    ]
-    teamBuildsOf.set(result, list)
-  }
-  return list
-}
-
-/** Picks which of a result's team builds is shown: #1 (the best), #2... with their damage */
-function TeamBuildPicker({
-  builds,
-  value,
-  onChange,
-  rotationTime,
-}: {
-  builds: TeamOptResult[]
-  value: number
-  onChange: (index: number) => void
-  rotationTime?: number
-}) {
-  const { t } = useTranslation('page_team')
-  const { gender } = useDBMeta()
-  const best = builds[0].after.total
-  const alternatives = builds[0].alternatives ?? []
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: 1,
-      }}
-    >
-      <FieldLabel>{t('teamOpt.result.builds', 'Team builds')}</FieldLabel>
-      <Box sx={{ maxWidth: '100%', overflowX: 'auto' }}>
-        <Segmented
-          size="small"
-          aria-label={t('teamOpt.result.builds', 'Team builds')}
-          value={value}
-          onChange={onChange}
-          options={builds.map((build, i) => {
-            const changed = i > 0 ? alternatives[i - 1]?.changed : undefined
-            return {
-              value: i,
-              tip: changed ? (
-                <>
-                  {t(
-                    'teamOpt.result.buildChanges',
-                    'The best build, with other artifacts on'
-                  )}{' '}
-                  <CharacterName characterKey={changed} gender={gender} />
-                </>
-              ) : (
-                t('teamOpt.result.buildBest', 'The best build found')
-              ),
-              label: (
-                <Box component="span" sx={{ ...numSx }}>
-                  #{i + 1} {formatRate(build.after.total, rotationTime)}
-                  {i > 0 && (
-                    <Box
-                      component="span"
-                      sx={{ color: 'text.secondary', fontWeight: 500 }}
-                    >
-                      {/* (the difference itself: next best builds are often within 0.1%) */}{' '}
-                      −{formatRate(best - build.after.total, rotationTime)}
-                    </Box>
-                  )}
-                </Box>
-              ),
-            }
-          })}
-        />
-      </Box>
-    </Box>
-  )
 }
