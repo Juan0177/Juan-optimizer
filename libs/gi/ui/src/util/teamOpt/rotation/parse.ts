@@ -106,6 +106,12 @@ export interface ParsedRotation {
   opener?: RotationStep[]
   /** The rotation loops back to this member (a trailing step without actions) */
   loopsTo?: CharacterKey
+  /**
+   * Optional full Bursts omitted by `everyNthBursts` when a burst-only step is dropped from a
+   * copy (per `loops`-sized pass): counted by `energyFromRotation` so it knows they were already
+   * thinned out.
+   */
+  omittedOptionalBursts?: Partial<Record<CharacterKey, number>>
   warnings: string[]
 }
 
@@ -320,6 +326,23 @@ export function expandRepeats(
 /** A Skill or Burst with an alternative after "/" ("Q?/N3", "Q/N3", "hE/N2CA"): the alternative is played when it is not ready */
 const SKILL_BURST_ALT = /^(?:(?:[ht]?e|q)(?:\[[^\]]*\])*\??|d\?)\/./i
 
+/**
+ * A Skill-with-or-without-Burst alternative ("EQ/E", "E/EQ", "QE/E", "E/QE", "hEQ/hE"):
+ * both sides play the same Skill and only the Burst is optional -> "E Q?" (or "Q? E").
+ */
+function optionalBurstAlt(word: string): string | undefined {
+  const m =
+    /^(?:([ht]?e)q\??\/\1|([ht]?e)\/\2q\??|q\??([ht]?e)\/\3|([ht]?e)\/q\??\4)$/i.exec(
+      word
+    )
+  if (!m) return undefined
+  if (m[1]) return `${m[1]} Q?`
+  if (m[2]) return `${m[2]} Q?`
+  if (m[3]) return `Q? ${m[3]}`
+  if (m[4]) return `Q? ${m[4]}`
+  return undefined
+}
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
@@ -329,11 +352,15 @@ function parseActions(
 ): RotationAction[] {
   const actions: RotationAction[] = []
   // alternatives: the first one, unless it is a Skill's or Burst's ("Q?/N3" or "Q/N3": N3 when Q
-  // is not ready)
+  // is not ready; "EQ/E" or "E/EQ": E with an optional Q)
   const cleaned = text
     .replace(/\([^)]*\)/g, ' ')
     .split(/\s+/)
-    .map((word) => (SKILL_BURST_ALT.test(word) ? word : word.split('/')[0]))
+    .map((word) => {
+      const burstAlt = optionalBurstAlt(word)
+      if (burstAlt) return burstAlt
+      return SKILL_BURST_ALT.test(word) ? word : word.split('/')[0]
+    })
     .join(' ')
   const token =
     /\s*(?:(w)\s*((?:k\s*)?[\d.]+f?|k)|(h|t)?(e)(\?)?|(q)(\?)?|(n)\s*([1-6](?:-[1-6])?)|(ca|c)(\d+)?(f)?(?:\[\s*(?:((?:beams|bullets)\s*=\s*\d+)|(cancel|early_cancel\s*=\s*1)|(weakspot(?:\s*=\s*1)?))\s*\])?|([hl])?(p)(\[\s*collision(?:\s*=\s*([\d.]+))?\s*\])?|(d)(\?)?|(j))/iy
@@ -914,8 +941,9 @@ export function rotationSpans(
         spans.push({ from: w.from, to: w.to, kind: group.kind })
       } else {
         // (an alternative: the first one is played, the rest is a note; an optional action's
-        // alternative, "Q?/N3", is played too)
-        const optionalAlt = SKILL_BURST_ALT.test(w.word)
+        // alternative, "Q?/N3" or "EQ/E", is played too)
+        const optionalAlt =
+          !!optionalBurstAlt(w.word) || SKILL_BURST_ALT.test(w.word)
         const slash = optionalAlt ? -1 : w.word.indexOf('/')
         const played = slash > 0 ? w.word.slice(0, slash) : w.word
         const problems: string[] = []
@@ -978,6 +1006,7 @@ export function everyNthBursts(
   if (loops > MAX_LOOPS) loops = Math.max(...ns)
   const steps: RotationStep[] = []
   const index: number[] = []
+  const omittedOptionalBursts: Partial<Record<CharacterKey, number>> = {}
   for (let k = 0; k < loops; k++) {
     let i = 0
     for (const step of rotation.steps) {
@@ -997,8 +1026,26 @@ export function everyNthBursts(
       // (an alternative, "Q/N1", is played instead: the step stays)
       if (actions.some((a) => !a.onlyShort || a.otherwise?.length))
         steps.push({ ...step, actions })
-      else index.splice(index.length - actions.length, actions.length)
+      else {
+        const omittedOpt = actions.filter(
+          (a) => a.kind === 'burst' && a.onlyShort && a.optional
+        ).length
+        if (omittedOpt)
+          omittedOptionalBursts[step.characterKey] =
+            (omittedOptionalBursts[step.characterKey] ?? 0) + omittedOpt
+        index.splice(index.length - actions.length, actions.length)
+      }
     }
   }
-  return { rotation: { ...rotation, steps }, loops, index }
+  return {
+    rotation: {
+      ...rotation,
+      steps,
+      ...(Object.keys(omittedOptionalBursts).length && {
+        omittedOptionalBursts,
+      }),
+    },
+    loops,
+    index,
+  }
 }

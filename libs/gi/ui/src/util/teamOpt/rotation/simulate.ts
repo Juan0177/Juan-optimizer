@@ -105,6 +105,8 @@ export interface SimulationResult {
     frameKey?: string
     /** The version its kit played (a mode or stance's), if not the ordinary one */
     variant?: ActionVariant
+    /** From an optional action ("E?", "Q?", "Q/N3", "EQ/E") */
+    optional?: true
   }[]
   /** The kept rotation's written waits (W1.5), in the same form as `actions` */
   waits?: SimulationResult['actions']
@@ -113,6 +115,12 @@ export interface SimulationResult {
    * pressed (what an ER calculator counts as a use: Durin's recast is not one)
    */
   skillUses?: { characterKey: CharacterKey; t: number; hold: boolean }[]
+  /**
+   * Optional full Bursts in the kept span that were skipped (not ready, or left out by
+   * `everyNthBursts`): lets `energyFromRotation` tell a cooldown-skipped `Q?` apart from one
+   * that fired every rotation.
+   */
+  skippedOptionalBursts?: { characterKey: CharacterKey; t: number }[]
   /**
    * The kept rotation's swaps: who to whom, when the swap began (frame), how long it took (the
    * swap time) and how long it first waited for the 1 s swap cooldown
@@ -333,8 +341,11 @@ export function simulateRotation({
   elements: Partial<Record<CharacterKey, HitElement>>
   reactions?: RotationReactions
   repeats?: number
-  /** Benchmarks retain the same complete fixed-loop interval as the native reference. */
-  keep?: 'middle' | 'all' | 'last2'
+  /**
+   * Benchmarks retain the same complete fixed-loop interval as the native reference. 'play': every
+   * rotation and the opener played before them, from the fight's start (what a timeline shows)
+   */
+  keep?: 'middle' | 'all' | 'last2' | 'play'
   kits?: Partial<Record<CharacterKey, KitModel>>
   /**
    * Frames spent swapping, with the previous member still on field (KQM's standard: 12). A swap
@@ -1431,6 +1442,9 @@ export function simulateRotation({
   if (geoTeam) refreshGeoResonance(0)
   const actions: SimulationResult['actions'] = []
   const skillUses: NonNullable<SimulationResult['skillUses']> = []
+  const skippedOptionalBursts: NonNullable<
+    SimulationResult['skippedOptionalBursts']
+  > = []
   const waits: SimulationResult['actions'] = []
   const swaps: NonNullable<SimulationResult['swaps']> = []
   /** Waits for readiness: what waited, when it began, how long */
@@ -1607,6 +1621,8 @@ export function simulateRotation({
           )
         : undefined
       if (!short || variant?.key !== short) {
+        if (action.optional)
+          skippedOptionalBursts.push({ characterKey, t: now })
         // (its alternative, "Q/N1", instead: the Burst is not used in this rotation)
         if (action.otherwise?.length) {
           if (r === Math.min(1, repeats - 1) || keep !== 'middle')
@@ -1630,6 +1646,18 @@ export function simulateRotation({
       if (readyAt <= now) break
       // an optional action ("E?"): used when ready, else left out (as a sim's "if .skill.ready")
       if (action.optional) {
+        if (action.kind === 'burst') {
+          const short = kit.shortBurstVariant
+          const variant = short
+            ? kit.variant?.(
+                ctxAt(now, characterKey),
+                states.get(characterKey),
+                action
+              )
+            : undefined
+          if (!short || variant?.key !== short)
+            skippedOptionalBursts.push({ characterKey, t: now })
+        }
         if (action.otherwise?.length) {
           // its alternative instead ("Q?/N3"), then on to what follows it
           if (r === Math.min(1, repeats - 1) || keep !== 'middle')
@@ -1744,6 +1772,7 @@ export function simulateRotation({
     if (result.failed) {
       if (
         keep === 'all' ||
+        keep === 'play' ||
         (keep === 'last2' ? r >= repeats - 2 : r === Math.min(1, repeats - 1))
       )
         warnings.push(result.failed)
@@ -1886,6 +1915,7 @@ export function simulateRotation({
       defaultFrames,
       frameKey,
       ...(variant && { variant }),
+      ...(action.optional && { optional: true }),
     })
     currentAction = { actor: characterKey, start: now }
     now += frames
@@ -1927,12 +1957,21 @@ export function simulateRotation({
       }
     }
   }
+  const recordOmittedBursts = () => {
+    if (!rotation.omittedOptionalBursts) return
+    for (const [ck, count] of Object.entries(
+      rotation.omittedOptionalBursts
+    ) as [CharacterKey, number][])
+      for (let k = 0; k < count; k++)
+        skippedOptionalBursts.push({ characterKey: ck, t: now })
+  }
   if (openerCounted && openerFlat.length) {
     // the opener as the first rotation, counted: the rotation's copies after it
     bounds.push(now)
     for (const i of openerFlat.keys()) play(openerFlat, i, 0, true)
     for (let r = 1; r < repeats; r++) {
       bounds.push(now)
+      recordOmittedBursts()
       for (const i of flat.keys()) play(flat, i, r, false)
     }
   } else {
@@ -1940,6 +1979,7 @@ export function simulateRotation({
     for (const i of openerFlat.keys()) play(openerFlat, i, -1, true)
     for (let r = 0; r < repeats; r++) {
       bounds.push(now)
+      recordOmittedBursts()
       for (const i of flat.keys()) play(flat, i, r, false)
     }
   }
@@ -1959,16 +1999,18 @@ export function simulateRotation({
   }
   // the rotations counted: all, the last two (past the start, the steady pace), or the second
   const keptLoop = Math.min(1, repeats - 1)
+  const whole = keep === 'all' || keep === 'play'
   const start =
-    bounds[
-      keep === 'all'
-        ? 0
-        : keep === 'last2'
-          ? Math.max(0, repeats - 2)
-          : keptLoop
-    ]
-  const end =
-    bounds[keep === 'all' || keep === 'last2' ? repeats : keptLoop + 1]
+    keep === 'play'
+      ? 0
+      : bounds[
+          keep === 'all'
+            ? 0
+            : keep === 'last2'
+              ? Math.max(0, repeats - 2)
+              : keptLoop
+        ]
+  const end = bounds[whole || keep === 'last2' ? repeats : keptLoop + 1]
   const kept = all.filter((h) => h.t >= start && h.t < end)
   const countedBuffs: SimCountedBuff[] = []
   for (const m of members) {
@@ -1989,9 +2031,12 @@ export function simulateRotation({
       ...auraLog.filter((a) => a.t > start && a.t < end),
     ]
   }
-  const keptFrom =
-    keep === 'all' ? 0 : keep === 'last2' ? Math.max(0, repeats - 2) : keptLoop
-  const keptTo = keep === 'all' || keep === 'last2' ? repeats : keptLoop + 1
+  const keptFrom = whole
+    ? 0
+    : keep === 'last2'
+      ? Math.max(0, repeats - 2)
+      : keptLoop
+  const keptTo = whole || keep === 'last2' ? repeats : keptLoop + 1
   return {
     ...(auras && { auras }),
     hits: kept,
@@ -2018,6 +2063,9 @@ export function simulateRotation({
     actions: actions.filter((a) => a.start >= start && a.start < end),
     waits: waits.filter((a) => a.start >= start && a.start < end),
     skillUses: skillUses.filter((u) => u.t >= start && u.t < end),
+    skippedOptionalBursts: skippedOptionalBursts.filter(
+      (s) => s.t >= start && s.t < end
+    ),
     swaps: swaps.filter((w) => w.start >= start && w.start < end),
     stalls: stalled
       .filter((w) => w.t >= start && w.t < end)
@@ -2050,7 +2098,9 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
       countedBuffs: first.countedBuffs,
       actions: first.actions,
       waits: first.waits,
+      skippedOptionalBursts: first.skippedOptionalBursts,
       swaps: first.swaps,
+      stallSpans: first.stallSpans,
       ...(first.auras && { auras: first.auras }),
       samples,
       frames: samples.reduce((n, s) => n + s.probability * s.result.frames, 0),
@@ -2116,6 +2166,9 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
     actions: sim.actions.filter((a) => within(a.start)),
     waits: sim.waits?.filter((a) => within(a.start)),
     skillUses: sim.skillUses?.filter((u) => within(u.t)),
+    skippedOptionalBursts: sim.skippedOptionalBursts?.filter((s) =>
+      within(s.t)
+    ),
     swaps: sim.swaps?.filter((w) => within(w.start)),
     stallSpans: sim.stallSpans?.filter((w) => within(w.t)),
     stalls: Object.fromEntries(

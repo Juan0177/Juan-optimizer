@@ -206,7 +206,13 @@ export const RotationTimeline = memo(function RotationTimeline({
   onPin,
   onAction,
   onHit,
+  control,
+  countedFrom,
 }: {
+  /** Beside the detailed view's button: what the timeline shows (the writer's rotations) */
+  control?: ReactNode
+  /** With several rotations shown: the first counted one (its index), each after it counted too */
+  countedFrom?: number
   /**
    * The detailed view (its own large window): the enemy's auras, every stack, resource and timed
    * buff, the damage as it adds up, and beside the chart every member at the moment shown
@@ -276,6 +282,40 @@ export const RotationTimeline = memo(function RotationTimeline({
     { length: Math.floor(totalSeconds / step) + 1 },
     (_, i) => i * step
   )
+  // with several rotations shown: where each starts (the opener played before them, its own)
+  const rotationMarks = useMemo(() => {
+    const starts = sim.rotationStarts ?? []
+    if (starts.length < 2) return []
+    return [
+      ...(opener.length && starts[0] > start
+        ? [{ t: start, label: 'opener' as const, counted: false }]
+        : []),
+      ...starts.map((t, i) => ({
+        t,
+        label: i + 1,
+        counted: countedFrom !== undefined && i >= countedFrom,
+      })),
+    ]
+  }, [sim, start, opener, countedFrom])
+  // the time spent waiting for an action (or a swap) to be ready: on its member's lane
+  const stalls = useMemo(() => {
+    const byMember = new Map<
+      CharacterKey,
+      { t: number; frames: number; action?: string }[]
+    >()
+    for (const w of sim.stallSpans ?? []) {
+      if (w.frames < 6 || w.t < start || w.t >= start + length) continue
+      // (`<member> <action>`, or `swap <member>`)
+      const [first, ...rest] = w.label.split(' ')
+      const swap = first === 'swap'
+      const characterKey = (swap ? rest[0] : first) as CharacterKey
+      byMember.set(characterKey, [
+        ...(byMember.get(characterKey) ?? []),
+        { t: w.t, frames: w.frames, action: swap ? undefined : rest.join(' ') },
+      ])
+    }
+    return byMember
+  }, [sim, start, length])
   const pct = (frame: number) =>
     `${Math.min(100, Math.max(0, ((frame - start) / length) * 100))}%`
   const span = (from: number, to: number) =>
@@ -608,6 +648,7 @@ export const RotationTimeline = memo(function RotationTimeline({
               </ButtonBase>
             </Tooltip>
           )}
+          {control}
           <Readout
             store={store}
             pin={pin}
@@ -687,8 +728,14 @@ export const RotationTimeline = memo(function RotationTimeline({
                 },
               }}
             >
-              {/* the ruler */}
-              <Box sx={{ display: 'flex', height: 26, alignItems: 'flex-end' }}>
+              {/* the ruler (each rotation's start above the seconds, when several are shown) */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  height: rotationMarks.length ? 42 : 26,
+                  alignItems: 'flex-end',
+                }}
+              >
                 <Box sx={laneLabelSx} />
                 <Box
                   sx={{
@@ -698,6 +745,34 @@ export const RotationTimeline = memo(function RotationTimeline({
                     mr: 1.5,
                   }}
                 >
+                  {rotationMarks.map((m) => (
+                    <Typography
+                      key={`r${m.t}`}
+                      component="span"
+                      sx={(theme) => ({
+                        position: 'absolute',
+                        left: pct(m.t),
+                        top: 2,
+                        pl: 0.625,
+                        fontSize: 11,
+                        fontWeight: 650,
+                        lineHeight: '15px',
+                        whiteSpace: 'nowrap',
+                        color: m.counted ? tokens.gold : 'text.secondary',
+                        borderLeft: `2px solid ${m.counted ? alpha(tokens.gold, 0.7) : alpha(theme.palette.text.primary, 0.3)}`,
+                      })}
+                    >
+                      {m.label === 'opener'
+                        ? t('teamOpt.timeline.opener', 'Opener')
+                        : t('teamOpt.timeline.rotationN', {
+                            defaultValue: 'Rotation {{n}}',
+                            n: m.label,
+                          })}
+                      {m.counted &&
+                        size !== PHONE &&
+                        ` · ${t('teamOpt.timeline.countedTag', 'counted')}`}
+                    </Typography>
+                  ))}
                   {marks.map((s) => (
                     <Typography
                       key={s}
@@ -799,6 +874,77 @@ export const RotationTimeline = memo(function RotationTimeline({
                             bgcolor: alpha(theme.palette.text.primary, 0.05),
                           })}
                         />
+                      ))}
+                      {rotationMarks.map(
+                        (m) =>
+                          m.t > start && (
+                            <Box
+                              key={`r${m.t}`}
+                              sx={(theme) => ({
+                                position: 'absolute',
+                                top: 0,
+                                bottom: 0,
+                                left: pct(m.t),
+                                borderLeft: `1px dashed ${alpha(theme.palette.text.primary, 0.3)}`,
+                              })}
+                            />
+                          )
+                      )}
+                      {(stalls.get(characterKey) ?? []).map((w) => (
+                        <Tooltip
+                          key={`stall-${w.t}`}
+                          arrow
+                          disableInteractive
+                          title={
+                            <Box sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                              <Box sx={{ fontWeight: 700 }}>
+                                {w.action
+                                  ? t('teamOpt.timeline.waitsFor', {
+                                      defaultValue:
+                                        'Waits {{seconds}} s for {{action}}',
+                                      seconds: seconds(w.frames),
+                                      action: w.action,
+                                    })
+                                  : t('teamOpt.timeline.waitsSwap', {
+                                      defaultValue:
+                                        'Waits {{seconds}} s to swap in',
+                                      seconds: seconds(w.frames),
+                                    })}
+                              </Box>
+                              <Box sx={{ color: 'text.secondary' }}>
+                                {t(
+                                  'teamOpt.timeline.waitsWhy',
+                                  'Not ready again yet: the team stands idle.'
+                                )}
+                              </Box>
+                            </Box>
+                          }
+                        >
+                          <Box
+                            aria-label={`${t('teamOpt.timing.kind.wait', 'Wait')} ${seconds(w.frames)} s`}
+                            sx={(theme) => ({
+                              position: 'absolute',
+                              top: 6,
+                              height: size.lane - 16,
+                              left: pct(w.t),
+                              width: span(w.t, w.t + w.frames),
+                              display: 'flex',
+                              alignItems: 'center',
+                              px: 0.5,
+                              overflow: 'hidden',
+                              whiteSpace: 'nowrap',
+                              borderRadius: 1,
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              ...numSx,
+                              color: 'warning.main',
+                              backgroundImage: `repeating-linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.22)} 0 4px, transparent 4px 8px)`,
+                              boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.45)}`,
+                            })}
+                          >
+                            {seconds(w.frames)} s
+                          </Box>
+                        </Tooltip>
                       ))}
                       {(swaps.get(characterKey) ?? []).map((w) => (
                         <SuspenseTooltip

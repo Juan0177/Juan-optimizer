@@ -49,6 +49,13 @@ describe('rotationSpans (the writer’s colours)', () => {
       'action:CA',
       'note:/N1',
     ])
+    expect(pieces('Odette EQ/E -> Mitya E/EQ')).toEqual([
+      'member(Odette):Odette',
+      'action:EQ/E',
+      'separator:->',
+      'member(Mitya):Mitya',
+      'action:E/EQ',
+    ])
   })
   it('covers the text exactly: every piece where the text has it', () => {
     const text = 'mit E\nOdette  E   E,Mitya Q'

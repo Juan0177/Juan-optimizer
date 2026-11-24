@@ -1,9 +1,16 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
-import type { RotationMember, RotationWordStep } from './rotation'
+import { getCharEle } from '@genshin-optimizer/gi/stats'
+import type {
+  RotationAction,
+  RotationMember,
+  RotationWordStep,
+} from './rotation'
 import {
   actionVariants,
+  kitModels,
   parseRotation,
   rotationWords,
+  simulateRotation,
   wordsRotationText,
 } from './rotation'
 
@@ -41,6 +48,46 @@ export type RotationScorer = (
 /** Actions every member may get, besides those its own steps have */
 const COMMON_WORDS = ['N1', 'N2', 'N3', 'N4', 'CA', 'E', 'hE', 'Q', 'D', 'J']
 const GROUP = /^(\d+)\[(.*)\]$/
+
+const heldSkill = new Map<CharacterKey, boolean>()
+/**
+ * Whether a member's kit plays a held Skill otherwise than a tap (its hits or its length): a kit
+ * without a held one plays "hE" as "E", so the search does not offer it
+ */
+export function holdsSkill(characterKey: CharacterKey): boolean {
+  let holds = heldSkill.get(characterKey)
+  if (holds === undefined && kitModels[characterKey]?.heldSkill) holds = true
+  if (holds === undefined) {
+    const play = (action: RotationAction) => {
+      const sim = simulateRotation({
+        rotation: {
+          steps: [{ characterKey, actions: [action] }],
+          loopsTo: characterKey,
+          warnings: [],
+        },
+        members: [characterKey],
+        elements: { [characterKey]: getCharEle(characterKey) } as never,
+        constellations: {},
+        repeats: 1,
+        keep: 'all',
+      })
+      return JSON.stringify([
+        sim.frames,
+        sim.hits.map((h) => [h.t, h.path.join('.')]),
+      ])
+    }
+    try {
+      holds =
+        play({ kind: 'skill', hold: true, text: 'hE' }) !==
+        play({ kind: 'skill', text: 'E' })
+    } catch {
+      // (a kit that can't play its Skill alone: offered, as before)
+      holds = true
+    }
+    heldSkill.set(characterKey, holds)
+  }
+  return holds
+}
 const groupWords = (inner: string) => inner.split(/\s+/).filter(Boolean)
 
 /** The field attacks (Normal, Charged and Plunging) a member's words make, a group's repeats counted */
@@ -74,14 +121,15 @@ export function mainMember(
   return main
 }
 
-/** A Normal Attack string one hit shorter and one longer ("N3": "N2", "N4") */
+/**
+ * The Normal Attack string at every other length ("N3": "N1", "N2", "N4"…): a search reaches the
+ * best length in one step, inside a repeated group too, where each change counts every repeat
+ */
 const otherStrings = (word: string) => {
   const n = /^N([1-6])$/i.exec(word)
   if (!n) return []
   const hits = Number(n[1])
-  return [hits - 1, hits + 1]
-    .filter((h) => h >= 1 && h <= 6)
-    .map((h) => `N${h}`)
+  return [1, 2, 3, 4, 5, 6].filter((h) => h !== hits).map((h) => `N${h}`)
 }
 
 /**
@@ -307,7 +355,7 @@ export function rotationVocabulary(steps: readonly RotationWordStep[]) {
       : []
     for (const word of [
       ...words,
-      ...COMMON_WORDS,
+      ...COMMON_WORDS.filter((w) => w !== 'hE' || holdsSkill(characterKey)),
       ...actionVariants(characterKey),
       ...plunges,
     ])

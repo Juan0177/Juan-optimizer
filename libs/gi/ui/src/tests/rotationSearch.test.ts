@@ -16,6 +16,7 @@ import {
   erCostOf,
   evaluateTeamNodes,
   fieldAttacks,
+  holdsSkill,
   kqmArtData,
   kqmWeaponData,
   kqmWeapons,
@@ -105,6 +106,14 @@ describe('the members’ order and visits (a player request)', () => {
   const vocabulary = rotationVocabulary(steps)
   const texts = (kinds = allRotationEdits) =>
     rotationEdits(steps, vocabulary, kinds).map(wordsRotationText)
+  it('a Normal Attack string at any length in one step, inside a repeated group too', () => {
+    expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N1 CA] -> Furina'
+    )
+    expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N6 CA] -> Furina'
+    )
+  })
   it('a step moved anywhere: a support played right before the member who catches its particles', () => {
     expect(texts()).toContain(
       'Kazuha E P -> Xianyun E -> Furina E Q -> Neuvillette 2[N3 CA] -> Kazuha'
@@ -225,6 +234,20 @@ describe('a kit’s own ways of writing an action', () => {
   )
   const vocabulary = rotationVocabulary(steps)
   const texts = rotationEdits(steps, vocabulary).map(wordsRotationText)
+  it('a held Skill only for a kit that plays one otherwise than a tap', () => {
+    expect(holdsSkill('Furina')).toBe(false)
+    expect(holdsSkill('Skirk')).toBe(true)
+    // (its hold only in Nightsoul's Blessing: declared by its kit)
+    expect(holdsSkill('Kinich')).toBe(true)
+    const furina = rotationVocabulary(
+      rotationWords('Furina E Q -> Skirk E N3', [
+        { characterKey: 'Furina', name: 'Furina' },
+        { characterKey: 'Skirk', name: 'Skirk' },
+      ])
+    )
+    expect(furina.Furina).not.toContain('hE')
+    expect(furina.Skirk).toContain('hE')
+  })
   it('are in the members’ vocabulary', () => {
     expect(vocabulary.Sandrone).toContain('CA[beams=6]')
     expect(vocabulary.Beidou).toContain('hE[stacks=1]')
@@ -238,7 +261,9 @@ describe('a kit’s own ways of writing an action', () => {
     expect(texts).toContain(
       'Xianyun E -> Beidou hE[stacks=1] -> Sandrone E 2[CA N1] HP'
     )
-    expect(texts).toContain('Xianyun hE -> Beidou hE -> Sandrone E 2[CA N1] HP')
+    expect(texts).toContain('Xianyun E -> Beidou E -> Sandrone E 2[CA N1] HP')
+    // (Xianyun's Skill has no hold: never written held)
+    expect(texts.some((t) => t.startsWith('Xianyun hE'))).toBe(false)
     expect(texts).toContain('Xianyun E -> Beidou hE -> Sandrone E 2[CA N1] LP')
   })
 })

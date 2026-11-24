@@ -134,6 +134,7 @@ function kinichExit(c: SimContext, s: KinichState) {
 
 export const kit: KitModel = {
   characterKey: 'Kinich',
+  heldSkill: true,
   element: 'dendro',
   source: `${GCSIM}/kinich`,
   nightsoul(ctx, state: KinichState) {

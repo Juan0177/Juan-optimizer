@@ -50,6 +50,7 @@ import {
 import type { CalcResult, UIData } from '@genshin-optimizer/gi/uidata'
 import { uiInput } from '@genshin-optimizer/gi/wr'
 import AddIcon from '@mui/icons-material/Add'
+import AutoModeIcon from '@mui/icons-material/AutoMode'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
@@ -221,6 +222,24 @@ const limitOf = (attack: TeamOptAttack, buff: BuffRef) =>
 /** The state of `buff` during `attack`, when it is not the rotation's */
 const stateOf = (attack: TeamOptAttack, buff: BuffRef) =>
   attack.states?.find((s) => sameBuff(s, buff))?.value
+
+/**
+ * Whether `buff` is up during `attack`: not off there; one the rotation sets (`fromRotation`) only
+ * where the attack sets it
+ */
+const buffOn = (attack: TeamOptAttack, buff: TeamBuff) => {
+  const limit = limitOf(attack, buff.ref)
+  if (limit && limit.hits <= 0) return false
+  return !buff.fromRotation || stateOf(attack, buff.ref) !== undefined
+}
+
+/** `attack` with `buff` up for all its hits (one the rotation sets: in its state) */
+const withBuffOn = (attack: TeamOptAttack, buff: TeamBuff) => {
+  const all = withBuffLimit(attack, buff.ref, undefined)
+  return buff.fromRotation && stateOf(all, buff.ref) === undefined
+    ? withBuffState(all, buff.ref, buff.value)
+    : all
+}
 
 /** `attack` with `buff` in `value` during it (undefined: the rotation's state) */
 export function withBuffState(
@@ -1475,8 +1494,7 @@ function BuffRow({
   const database = useDatabase()
   const figures = useContext(AttackFiguresContext)
   const readOnly = useContext(AttackReadOnlyContext)
-  const limit = limitOf(attack, buff.ref)
-  const on = !limit || limit.hits > 0
+  const on = buffOn(attack, buff)
   const state = stateOf(attack, buff.ref) ?? buff.value
   // No effect because the hit's CRIT Rate is over 100% even without it: says so (it is not that
   // the buff does not apply)
@@ -1541,7 +1559,17 @@ function BuffRow({
         checked={on}
         disabled={readOnly}
         onChange={(_, checked) =>
-          onChange(withBuffLimit(attack, buff.ref, checked ? undefined : 0))
+          onChange(
+            checked
+              ? withBuffOn(attack, buff)
+              : buff.fromRotation
+                ? withBuffState(
+                    withBuffLimit(attack, buff.ref, undefined),
+                    buff.ref,
+                    undefined
+                  )
+                : withBuffLimit(attack, buff.ref, 0)
+          )
         }
         inputProps={{ 'aria-label': t('teamOpt.editor.buffOn', 'Up') }}
         sx={{
@@ -1607,6 +1635,32 @@ function BuffRow({
             {source(buff)}
           </Typography>
         </SuspenseTooltip>
+        {buff.fromRotation && (
+          <SuspenseTooltip
+            arrow
+            title={t(
+              'teamOpt.editor.fromRotationTip',
+              'Its switch is off: your rotation turns it on for the hits it is up for, and off for the rest.'
+            )}
+          >
+            <Box
+              component="span"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.375,
+                alignSelf: 'center',
+                fontSize: 11.5,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                color: 'text.disabled',
+              }}
+            >
+              <AutoModeIcon sx={{ fontSize: 13 }} />
+              {t('teamOpt.editor.fromRotation', 'From rotation')}
+            </Box>
+          </SuspenseTooltip>
+        )}
         {buff.auto && (
           <Tooltip
             arrow
@@ -1719,7 +1773,7 @@ function BuffRow({
                 withBuffState(
                   attack,
                   buff.ref,
-                  value === buff.value ? undefined : value
+                  value === buff.value && !buff.fromRotation ? undefined : value
                 )
               )
             }
@@ -2456,9 +2510,10 @@ function useAttackStats(
           return
         }
         // up for every hit: the attack as it is, unless the buff is off or limited there
-        const on = limitOf(attack, buff.ref)
-          ? dataOf(withBuffLimit(attack, buff.ref, undefined))
-          : asIs
+        const on =
+          limitOf(attack, buff.ref) || !buffOn(attack, buff)
+            ? dataOf(withBuffOn(attack, buff))
+            : asIs
         const off = dataOf(withBuffLimit(attack, buff.ref, 0))
         const found = on && off ? statGains(on.target, off.target) : []
         setGains((prev) => ({ ...prev, [buff.key]: found }))

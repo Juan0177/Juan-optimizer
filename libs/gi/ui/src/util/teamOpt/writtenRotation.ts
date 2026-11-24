@@ -165,11 +165,14 @@ export function simulateWritten({
   freezeImmune,
   burstEvery,
   withoutBursts,
+  timelineOnly,
 }: {
   /** The KQM tab's: its own switches are the states where no attack sets one (`current` absent) */
   kqm?: boolean
   /** Its Bursts left out (a fight that starts with no energy: its first rotation) */
   withoutBursts?: boolean
+  /** Only shown on a timeline: no attacks worked out */
+  timelineOnly?: boolean
   /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
   auraTimeline?: boolean
   /** The enemy can't be frozen (default: as the tab's enemy is, `tabEnemyFreezeImmune`) */
@@ -196,7 +199,7 @@ export function simulateWritten({
    * result's `sim` then the last of them (what a timeline shows) and `counted` the 2.
    */
   repeats?: number
-  keep?: 'middle' | 'all' | 'last2'
+  keep?: 'middle' | 'all' | 'last2' | 'play'
   /** Seeded samples of members with random effects (default 64) */
   samples?: number
   /** The builds the simulation's stats and heals are read from (default: the members' own) */
@@ -300,7 +303,7 @@ export function simulateWritten({
       rotation,
       sim,
       own,
-      attacks: rotationAttacks(sim, own),
+      attacks: timelineOnly ? {} : rotationAttacks(sim, own),
       counted: undefined,
       loops,
       fromStart,
@@ -339,24 +342,29 @@ export const writtenSeconds = (result: WrittenRotation) =>
       ? result.sim.frames / 60
       : undefined
 /**
- * When the rotation cannot keep its pace: its first time through (nothing waited for), seconds,
- * and what waits per rotation since (seconds each, the longest first); undefined when it keeps it
+ * What the rotation waits for, per rotation as counted (an action not ready in time, or a swap):
+ * each wait (its member, its action unless it is a swap, seconds; the longest first) and their
+ * sum. Undefined when it waits less than 0.2 s.
  */
 export function writtenWaits(result: WrittenRotation) {
   const counted = result.counted
-  // (the opener counted as the first rotation is another rotation: not its first time through)
-  if (!counted || counted.openerCounted) return undefined
-  const first = (counted.sim.rotationFrames?.[0] ?? 0) / 60
-  const per = writtenSeconds(result) ?? 0
+  if (!counted) return undefined
   const waits = Object.entries(counted.sim.stalls ?? {})
-    .map(([label, frames]) => ({
-      label,
-      seconds: frames / 60 / counted.rotations,
-    }))
+    .map(([label, frames]) => {
+      // (`<member> <action>`, or `swap <member>`)
+      const [first, ...rest] = label.split(' ')
+      const swap = first === 'swap'
+      return {
+        label,
+        characterKey: (swap ? rest[0] : first) as CharacterKey,
+        action: swap ? undefined : rest.join(' '),
+        seconds: frames / 60 / counted.rotations,
+      }
+    })
     .filter((w) => w.seconds >= 0.1)
     .sort((a, b) => b.seconds - a.seconds)
-  if (!first || per - first < 0.2) return undefined
-  return { first, waits }
+  const seconds = waits.reduce((n, w) => n + w.seconds, 0)
+  return seconds >= 0.2 ? { seconds, waits } : undefined
 }
 /** A conditional's state as the member (or the team) has it set */
 export function ownConditional(
