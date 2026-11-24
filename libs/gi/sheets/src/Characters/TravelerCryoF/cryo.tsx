@@ -654,13 +654,13 @@ export default function cryo(
         fields: [
           {
             node: infoMut(dmgFormulas.lockedPassive.dmg1, {
-              name: ct.chg('auto.skillParams.5'),
+              name: ch('caDmg'),
               textSuffix: '(1)',
             }),
           },
           {
             node: infoMut(dmgFormulas.lockedPassive.dmg2, {
-              name: ct.chg('auto.skillParams.5'),
+              name: ch('caDmg'),
               textSuffix: '(2)',
             }),
           },
