@@ -54,6 +54,18 @@ const picksKey = (picks: TeamOptPicks, characterKey: CharacterKey) =>
 type Ranked = RankOption & { option: TeamOptOption }
 
 /**
+ * The set rankings with the build the team has (found with any sets) among them when it is not 4
+ * pieces of one set, best first: the best is then the build the team has, not the best 4 pieces
+ */
+export function withFoundBuild<
+  T extends { total: number; sets: Partial<Record<string, number>> },
+>(rows: readonly T[], found: T | undefined): T[] {
+  const own =
+    found && !Object.values(found.sets).some((n) => n === 4) ? [found] : []
+  return [...own, ...rows].sort((a, b) => b.total - a.total)
+}
+
+/**
  * A member's equipment, as the KQM tab's inspector: pick a weapon or an artifact set (or both) and
  * its build is searched again from the inventory for it, teammates keeping the run's builds; the
  * page's figures follow. Beside it, the rankings under the pick: each weapon (with the set
@@ -197,10 +209,25 @@ export function TeamOptInspector({
       ]
     })
   const weapons = ranked(rankings?.weapons)
-  const sets = ranked(rankings?.sets)
+  const total = (view ?? result).after.total
+  const sets = withFoundBuild(
+    ranked(rankings?.sets),
+    ranked(
+      rankings && !pick.set
+        ? [
+            {
+              weaponId: pick.weaponId,
+              artifactIds: (view ?? result).builds[characterKey] as
+                | TeamOptOption['artifactIds']
+                | undefined,
+              value: (rankings.best * total) / result.after.total,
+            },
+          ]
+        : []
+    )[0]
+  )
   const list = category === 0 ? weapons : sets
   const busy = !!pending || (!rankings && optionsRunning)
-  const total = (view ?? result).after.total
   const changed = !!picks[characterKey]
   const weaponIds = [
     ...new Set([pick.weaponId, ...weapons.map((o) => o.option.weaponId)]),
@@ -208,7 +235,8 @@ export function TeamOptInspector({
   const setKeys = [
     ...new Set([
       ...(pick.set ? [pick.set] : []),
-      ...sets.map((o) => o.option.set!),
+      // (the build found with any sets is "Best of any set", above)
+      ...sets.flatMap((o) => (o.option.set ? [o.option.set] : [])),
     ]),
   ]
   const shortfalls = (view ?? result).after.shortfalls?.[characterKey] ?? []
