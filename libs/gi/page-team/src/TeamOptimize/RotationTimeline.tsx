@@ -61,6 +61,12 @@ import { describeTimed } from './buffs'
 import { EffectText, talentLabel } from './buffText'
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
+import { reactionEvents } from './reactionEvents'
+import {
+  reactionColor,
+  useReactionName,
+  useReactionSeconds,
+} from './ReactionsSummary'
 import {
   actionName,
   flatActions,
@@ -344,6 +350,13 @@ export const RotationTimeline = memo(function RotationTimeline({
   }, [sim])
   // the hits, with their damage: per member one mark a frame (its hits there added up)
   const hits = useMemo(() => damagingHits(sim), [sim])
+  // juanlab: the reactions the on-field member triggers (a row of their own)
+  const fieldReactions = useMemo(
+    () => reactionEvents(sim, { onFieldOnly: true }),
+    [sim]
+  )
+  const reactionName = useReactionName()
+  const reactionSeconds = useReactionSeconds(sim.start)
   const { byMember, top, total, cumulative } = useMemo(() => {
     const byMember = new Map<CharacterKey, Map<number, number>>()
     let top = 0
@@ -1196,6 +1209,77 @@ export const RotationTimeline = memo(function RotationTimeline({
                   )}
                 </Box>
               ))}
+              {/* juanlab: the on-field member's reactions, a mark each where it lands */}
+              {!!fieldReactions.length && (
+                <Row
+                  top
+                  label={t('teamOpt.timeline.reactions.label', 'Reactions')}
+                  height={size.track}
+                  value={
+                    <Box
+                      component="span"
+                      sx={{ ...valueSx, color: 'text.secondary' }}
+                    >
+                      {fieldReactions.length}
+                    </Box>
+                  }
+                >
+                  {fieldReactions.map((e, i) => (
+                    <Tooltip
+                      key={`${e.t}.${i}`}
+                      disableInteractive
+                      placement="top"
+                      title={
+                        <>
+                          {reactionSeconds(e.t)} s ·{' '}
+                          <CharacterName
+                            characterKey={e.characterKey}
+                            gender={gender}
+                          />
+                          {e.label && (
+                            <>
+                              {' · '}
+                              {e.path ? (
+                                <HitLabel
+                                  label={e.label}
+                                  data={teamData?.[e.characterKey]?.target}
+                                  path={e.path}
+                                />
+                              ) : (
+                                e.label
+                              )}
+                            </>
+                          )}
+                          {' · '}
+                          {reactionName(e)}
+                        </>
+                      }
+                    >
+                      <Box
+                        aria-label={reactionName(e)}
+                        sx={(theme) => ({
+                          position: 'absolute',
+                          top: '50%',
+                          left: pct(e.t),
+                          width: 7,
+                          height: 7,
+                          transform: 'translate(-50%, -50%) rotate(45deg)',
+                          borderRadius: '1px',
+                          bgcolor: reactionColor(theme, e.reaction),
+                          // (reverse Melt and Vaporize: hollow, the weaker ×1.5)
+                          ...(e.direction === 'reverse'
+                            ? {
+                                bgcolor: 'transparent',
+                                boxShadow: `inset 0 0 0 1.5px ${reactionColor(theme, e.reaction)}`,
+                              }
+                            : {}),
+                          cursor: 'default',
+                        })}
+                      />
+                    </Tooltip>
+                  ))}
+                </Row>
+              )}
               {/* the damage as it lands (a bar a hit), and as it adds up (the line) */}
               {detail && figures && (
                 <Row

@@ -112,6 +112,7 @@ import type { i18n } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { HitLabel, useAttackInfo, variantColor } from './AttackName'
 import { attackHitGroup } from './hitLabel'
+import { ReactionsSummary } from './ReactionsSummary'
 import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
@@ -2650,6 +2651,20 @@ function WriterModal({
                     teamData={teamData}
                     attacks={result.attacks}
                     unsupported={result.sim.unsupported}
+                  />
+                </WriterSection>
+                {/* juanlab: which reactions happen and when */}
+                <WriterSection
+                  title={t('teamOpt.timeline.reactions.title', 'Reactions')}
+                  info={t(
+                    'teamOpt.timeline.reactions.info',
+                    'The reactions in the rotation shown in the timeline, in order: who triggers each one, with which hit, and when. Melt and Vaporize say their direction: forward ×2 (Pyro on Cryo, Hydro on Pyro) or reverse ×1.5. In the timeline, the Reactions row marks the on-field member’s: full for forward, hollow for reverse.'
+                  )}
+                >
+                  <ReactionsSummary
+                    sim={shown?.sim ?? result.sim}
+                    members={memberKeys}
+                    teamData={teamData}
                   />
                 </WriterSection>
                 {!!notes.length && (
