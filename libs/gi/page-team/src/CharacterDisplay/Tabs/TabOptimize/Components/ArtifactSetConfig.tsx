@@ -45,9 +45,9 @@ import { UIData } from '@genshin-optimizer/gi/uidata'
 import { setKeysByRarities } from '@genshin-optimizer/gi/util'
 import { constant } from '@genshin-optimizer/gi/wr'
 import { allNonstackBuffs } from '@genshin-optimizer/gi/wr-types'
+import AutoModeIcon from '@mui/icons-material/AutoMode'
 import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import AutoModeIcon from '@mui/icons-material/AutoMode'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -167,7 +167,10 @@ export default function ArtifactSetConfig({
   )
   const allowed2 = configurableSetKeys.filter((k) => !isExcluded(k, 2))
   const allowed4 = configurableSetKeys.filter((k) => !isExcluded(k, 4))
-  const forced = forcedSet(artSetExclusion)
+  const forced = forcedSet(
+    artSetExclusion,
+    new Set(database.arts.values.map((a) => a.setKey))
+  )
 
   const condCountBySet = useMemo(
     () =>
@@ -475,7 +478,10 @@ function SetConfigDialog({
     (setKey: ArtifactSetKey, use: boolean) => useSets([setKey], use),
     [useSets]
   )
-  const forced = forcedSet(artSetExclusion)
+  const forced = forcedSet(
+    artSetExclusion,
+    new Set(database.arts.values.map((a) => a.setKey))
+  )
   const used = configurableSetKeys.filter(
     (k) => (artSetExclusion[k as keyof ArtSetExclusion]?.length ?? 0) < 2
   ).length

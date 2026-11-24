@@ -20,11 +20,7 @@ import {
   artSlotMainKeys,
   charKeyToLocCharKey,
 } from '@genshin-optimizer/gi/consts'
-import type {
-  ArtSetExclusionKey,
-  ICachedArtifact,
-  OptConfig,
-} from '@genshin-optimizer/gi/db'
+import { withForcedSet } from '@genshin-optimizer/gi/db'
 import {
   TeamCharacterContext,
   useDatabase,
@@ -88,6 +84,7 @@ import {
   UpgradeSearchCard,
 } from './ImproveSections'
 import { SubstatValueCard } from './SubstatValueCard'
+import { setRulesPredicate } from './setRules'
 import UpgradeOptChartCard from './UpgradeOptChartCard'
 import { canReshape, UpOptCalculatorV2 } from './upOpt'
 
@@ -95,72 +92,6 @@ const filterOptionReducer = (
   state: Partial<FilterOption>,
   action: Partial<FilterOption>
 ) => ({ ...state, ...action })
-/**
- * Whether swapping an artifact into the build keeps it within the artifact set rules (the
- * set exclusions of the Artifact sets settings).
- */
-function setRulesPredicate(
-  equippedArts: Record<ArtifactSlotKey, ICachedArtifact | undefined>,
-  artSetExclusion: OptConfig['artSetExclusion']
-) {
-  const curEquipSetKeys = objKeyMap(
-    allArtifactSlotKeys,
-    (slotKey) => equippedArts[slotKey]?.setKey
-  )
-  function respectSexExclusion({
-    slotKey,
-    setKey,
-  }: {
-    slotKey: ArtifactSlotKey
-    setKey: ArtifactSetKey
-  }) {
-    const newSK = { ...curEquipSetKeys }
-    newSK[slotKey] = setKey
-    const skc: Partial<Record<ArtifactSetKey, number>> = {}
-    allArtifactSlotKeys.forEach((slotKey) => {
-      const setKey = newSK[slotKey]
-      if (!setKey) return
-      if (setKey.startsWith('Prayers')) return
-      skc[setKey] = (skc[setKey] ?? 0) + 1
-    })
-    const pass = Object.entries(skc).every(([setKey, num]) => {
-      const ex = artSetExclusion[setKey as ArtSetExclusionKey]
-      if (!ex) return true
-      switch (num) {
-        case 0:
-        case 1:
-          return true
-        case 2:
-        case 3:
-          return !ex.includes(2)
-        case 4:
-        case 5:
-          return !ex.includes(4)
-        default:
-          throw Error('error in respectSetExclude: num > 5')
-      }
-    })
-    if (!pass) return false
-
-    if (!artSetExclusion['rainbow']) return true
-    const nRainbow = Object.values(skc).reduce((a, b) => a + (b % 2), 0)
-    switch (nRainbow) {
-      case 0:
-      case 1:
-        return true
-      case 2:
-      case 3:
-        return !artSetExclusion['rainbow'].includes(2)
-      case 4:
-      case 5:
-        return !artSetExclusion['rainbow'].includes(4)
-      default:
-        throw Error('error in respectSex: nRainbow > 5')
-    }
-  }
-  return respectSexExclusion
-}
-
 export default function TabUpopt() {
   const { t } = useTranslation('page_character_optimize')
 
@@ -322,7 +253,13 @@ export default function TabUpopt() {
       .filter(notEmpty)
     const fiveStar = inRange.filter((art) => art.rarity === 5)
     const setRules = fiveStar.filter(
-      setRulesPredicate(equippedArts, artSetExclusion)
+      setRulesPredicate(
+        equippedArts,
+        withForcedSet(
+          artSetExclusion,
+          new Set(database.arts.values.map((a) => a.setKey))
+        )
+      )
     )
     const mainStats = setRules.filter(
       (art) =>
@@ -388,13 +325,19 @@ export default function TabUpopt() {
         })
     )
 
-    const respectSexExclusion = setRulesPredicate(equippedArts, artSetExclusion)
+    const respectsSetRules = setRulesPredicate(
+      equippedArts,
+      withForcedSet(
+        artSetExclusion,
+        new Set(database.arts.values.map((a) => a.setKey))
+      )
+    )
     const artifactsToConsider = filteredArts
       // retrieve the artifacts again, just incase there is an update that is not captured by UpgradeOptChartCard
       .map((art) => database.arts.get(art.id))
       .filter(notEmpty)
       .filter((art) => art.rarity === 5)
-      .filter(respectSexExclusion)
+      .filter(respectsSetRules)
       .filter(
         (art) =>
           art.slotKey === 'flower' ||
@@ -428,7 +371,7 @@ export default function TabUpopt() {
             : allArtifactSetKeys
         )
         const setKeys = allArtifactSetKeys
-          .filter((setKey) => respectSexExclusion({ slotKey, setKey }))
+          .filter((setKey) => respectsSetRules({ slotKey, setKey }))
           .filter((setKey) => filterOptionSetKeys.has(setKey))
         return {
           setKeys,

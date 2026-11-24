@@ -13,8 +13,8 @@ import {
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
-  KqmResult,
   BonusStats,
+  KqmResult,
   RunAttackState,
   RunEnemy,
   SimGear,
@@ -35,6 +35,7 @@ import {
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameRunEnemy,
+  teamEnergyAuto,
   teamLinkOwnGear,
   teamLinkUseImported,
   teamLinkUseOwnGear,
@@ -82,6 +83,7 @@ import {
   useKqmTeamBuffs,
   useTeamOptBuffs,
 } from './buffs'
+import { DamageShare } from './DamageShare'
 import { ExtraBuffs } from './ExtraBuffs'
 import { expandStore } from './expandStore'
 import {
@@ -115,11 +117,10 @@ import {
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
 import { sameBuildRoster, teamRoster } from './runScope'
-import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
-import { DamageShare } from './DamageShare'
 import { TeamOptInspector } from './TeamOptInspector'
-import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
+import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { Shortfalls, TeamEquipUndo, TeamOptResults } from './TeamOptResults'
+import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -1242,6 +1243,7 @@ export default function TeamBuildWorkspace({
             <RequirementsUnmet
               shortfalls={state.requirementsUnmet}
               teamData={teamData}
+              automaticEr={teamEnergyAuto(teamOpt)}
             />
           ) : (
             <>
@@ -2048,21 +2050,23 @@ function SetRulesUnmet({ characterKeys }: { characterKeys: CharacterKey[] }) {
 function RequirementsUnmet({
   shortfalls,
   teamData,
+  automaticEr,
 }: {
   shortfalls: Partial<Record<CharacterKey, TeamOptShortfall[]>>
   teamData: TeamData | undefined
+  automaticEr: boolean
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
   const why = t(
     'teamOpt.run.requirementsUnmetWhy',
-    'The most any build of the artifacts and weapons it may use reaches (its main stats, the sets it may use, the artifact levels and the weapons ticked). Lower the minimum on its Optimize tab, or allow more.'
+    'The search uses the allowed sets, main stats, artifact levels and weapons. To change a manual minimum, open the member’s Optimize tab.'
   )
   return (
     <>
       {t(
         'teamOpt.run.requirementsUnmet',
-        'No team build reaches the minimums of'
+        'The search did not find a build that meets the minimums for'
       )}{' '}
       {Object.keys(shortfalls).map((ck, i) => (
         <Fragment key={ck}>
@@ -2083,6 +2087,17 @@ function RequirementsUnmet({
           />
         </Box>
       ))}
+      {automaticEr &&
+        Object.values(shortfalls).some((missed) =>
+          missed?.some(({ path }) => path.at(-1) === 'enerRech_')
+        ) && (
+          <Box sx={{ mt: 0.75 }}>
+            {t(
+              'teamOpt.run.automaticErShortfall',
+              'Automatic ER gets its target from the team’s ER calculator. It can change with the rotation and the team’s weapons.'
+            )}
+          </Box>
+        )}
     </>
   )
 }

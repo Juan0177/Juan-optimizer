@@ -60,15 +60,32 @@ export const isSetRule = (key: string): key is ArtSetRuleKey =>
 
 /**
  * The set every build wears 4 pieces of: the only one left on (its 4-piece bonus allowed), every
- * other set's bonuses turned off. Its builds then hold at most one piece of another set.
+ * other set's bonuses turned off. Its builds then hold at most one piece of another set. With
+ * `owned` (the sets the inventory has pieces of), a set left on that none are of does not count.
  */
-export function forcedSet(exclusion: ArtSetExclusion) {
+export function forcedSet(
+  exclusion: ArtSetExclusion,
+  owned?: ReadonlySet<string>
+) {
   const inUse = allArtifactSetExclusionKeys.filter(
-    (key) => !isSetRule(key) && (exclusion[key]?.length ?? 0) < 2
+    (key) =>
+      !isSetRule(key) &&
+      (exclusion[key]?.length ?? 0) < 2 &&
+      (!owned || owned.has(key))
   )
   return inUse.length === 1 && !exclusion[inUse[0]]?.includes(4)
     ? (inUse[0] as Exclude<ArtSetExclusionKey, ArtSetRuleKey>)
     : undefined
+}
+
+/** `exclusion` as the solvers take it: mixed pieces limited when one owned set is left on */
+export function withForcedSet(
+  exclusion: ArtSetExclusion,
+  owned: ReadonlySet<string>
+): ArtSetExclusion {
+  return !exclusion.rainbow?.length && forcedSet(exclusion, owned)
+    ? { ...exclusion, rainbow: [2, 4] }
+    : exclusion
 }
 
 const statFilterSettingSchema = z.object({

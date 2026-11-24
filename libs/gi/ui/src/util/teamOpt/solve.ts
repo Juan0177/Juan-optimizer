@@ -21,6 +21,7 @@ import type {
   StatFilters,
   TeamOpt,
 } from '@genshin-optimizer/gi/db'
+import { withForcedSet } from '@genshin-optimizer/gi/db'
 import {
   getArtSheet,
   type IConditionalValues,
@@ -434,7 +435,7 @@ export const allowedCounts = (rule: readonly number[] | undefined) =>
  * reads them: each set's piece count, and "rainbow" for the number of pieces whose set has one
  */
 export function meetsSetRules(
-  arts: readonly ICachedArtifact[],
+  arts: readonly Pick<ICachedArtifact, 'setKey'>[],
   exclusion: ArtSetExclusion | undefined
 ): boolean {
   if (!exclusion || !Object.keys(exclusion).length) return true
@@ -953,11 +954,19 @@ export async function optimizeTeam({
     return result
   }
   const members = teamOptMembers(database, teamId)
+  // (one set left on among the sets the inventory has pieces of: its 4 pieces in every build)
+  const owned = new Set<string>(database.arts.values.map((a) => a.setKey))
   const optConfigs = Object.fromEntries(
-    members.map((m) => [
-      m.characterKey,
-      database.optConfigs.get(m.teamChar.optConfigId),
-    ])
+    members.map((m) => {
+      const optConfig = database.optConfigs.get(m.teamChar.optConfigId)
+      return [
+        m.characterKey,
+        optConfig && {
+          ...optConfig,
+          artSetExclusion: withForcedSet(optConfig.artSetExclusion, owned),
+        },
+      ]
+    })
   ) as Partial<Record<CharacterKey, OptConfig>>
   const statFilters = Object.fromEntries(
     members.map((m) => [
@@ -1969,6 +1978,7 @@ export async function optimizeTeam({
           ))
         /** What a new build must beat: the current one, then the best found so far */
         let floor = Number.NEGATIVE_INFINITY
+        let bestRepairCount = 0
         let best:
           | {
               value: number
@@ -2155,6 +2165,11 @@ export async function optimizeTeam({
             if (
               rank >= SCREEN_KEEP &&
               candidates[w].weapon.id !== currentWeaponId &&
+              !plans[w]?.affected.some(
+                ({ characterKey: key }) =>
+                  unmetBefore().has(key) &&
+                  (plans[w]?.needWith[key] ?? 0) < (need[key] ?? 0)
+              ) &&
               below(w, top)
             )
               drop(w)
@@ -2244,19 +2259,34 @@ export async function optimizeTeam({
             )
             const evaluation = reoptimized && evaluateIn(reoptimized)
             if (
-              evaluation &&
-              evaluation.total >= beat &&
-              !members.some(
+              !evaluation ||
+              members.some(
                 (m) =>
                   evaluation.unmet[m.characterKey]?.length &&
                   !unmetBefore().has(m.characterKey)
               )
+            )
+              continue
+            // An energy weapon can make a teammate's build viable even when the
+            // team deals less damage. Keep that repair ahead of damage gains.
+            const repaired = order.filter(
+              (m) =>
+                m !== member &&
+                unmetBefore().has(m.characterKey) &&
+                !evaluation.unmet[m.characterKey]?.length
+            ).length
+            if (repaired && breaksSetRules(state, next)) continue
+            if (
+              (repaired === bestRepairCount && evaluation.total >= beat) ||
+              repaired > bestRepairCount
             ) {
+              bestRepairCount = repaired
               best = { value: evaluation.total, weaponId: weapon.id, next }
-              floor = Math.max(floor, evaluation.total)
+              floor = evaluation.total
             }
             continue
           }
+          if (bestRepairCount) continue
           startEarly(w)
           const result = await (early.get(w) ?? solve(input))
           early.delete(w)
@@ -2816,8 +2846,8 @@ export async function optimizeTeam({
         await breathe()
         if (cancelled()) return undefined
         const searched = await search(s, member, weapon, set)
-        const option =
-          searched?.found && optionOf(unmetNow, weapon, searched, set)
+        // Keep an eligible set visible even if its builds miss a requirement.
+        const option = optionOf(unmetNow, weapon, searched, set)
         if (option) sets.push(option)
       }
       return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }

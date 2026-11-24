@@ -27,7 +27,7 @@ import {
   charKeyToLocCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type { GeneratedBuild, OptConfig } from '@genshin-optimizer/gi/db'
-import { maxBuildsToShowList } from '@genshin-optimizer/gi/db'
+import { maxBuildsToShowList, withForcedSet } from '@genshin-optimizer/gi/db'
 import {
   TeamCharacterContext,
   useArtifacts,
@@ -504,7 +504,11 @@ export default function TabBuild() {
       const problem: OptProblemInput = {
         arts: split,
         optimizationTarget: optimizationTargetNode,
-        exclusion: artSetExclusion,
+        // (one set left on among those the inventory has pieces of: its 4 pieces in every build)
+        exclusion: withForcedSet(
+          artSetExclusion,
+          new Set(database.arts.values.map((a) => a.setKey))
+        ),
         constraints: nodes.map((value, i) => ({ value, min: minimum[i] })),
 
         topN: maxBuildsToShow,

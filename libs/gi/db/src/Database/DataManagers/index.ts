@@ -31,6 +31,7 @@ import {
   handleArtSetExclusion,
   isSetRule,
   maxBuildsToShowList,
+  withForcedSet,
 } from './OptConfigDataManager'
 import type {
   PandoArtIds,
@@ -182,7 +183,6 @@ export {
   forcedSet,
   handleArtSetExclusion,
   initCharTC,
-  isSetRule,
   initCustomMultiTarget,
   initCustomTarget,
   initialPandoTeam,
@@ -190,6 +190,7 @@ export {
   initTeamOpt,
   initTeamOptAttack,
   isPandoTeamCharacterKey,
+  isSetRule,
   MAX_DESC_LENGTH,
   MAX_ENEMY_HP,
   MAX_NAME_LENGTH,
@@ -215,4 +216,5 @@ export {
   validateFightSettings,
   validateTeamEnemy,
   validateTeamOpt,
+  withForcedSet,
 }

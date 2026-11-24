@@ -6,6 +6,7 @@ import {
   allArtifactSetExclusionKeys,
   forcedSet,
   isSetRule,
+  withForcedSet,
 } from './OptConfigDataManager'
 
 describe('OptConfigDataManager', () => {
@@ -222,5 +223,42 @@ describe('OptConfigDataManager', () => {
     expect(forcedSet(exclusion)).toBe('NoblesseOblige')
     expect(exclusion.rainbow).toEqual([2, 4])
     expect(exclusion.twoTwo).toEqual([2, 4])
+  })
+
+  it('one owned set left on forces it, whatever unowned sets are left on', () => {
+    const allBut = (...kept: string[]) =>
+      Object.fromEntries(
+        allArtifactSetExclusionKeys
+          .filter((key) => !isSetRule(key) && !kept.includes(key))
+          .map((key) => [key, [2, 4]])
+      ) as ArtSetExclusion
+    // VV and two sets with no pieces in the inventory left on
+    const exclusion = allBut(
+      'ViridescentVenerer',
+      'LegacyOfTheFirstChronicle',
+      'PreludeOfTheKingfisherCanopy'
+    )
+    const owned = new Set([
+      'ViridescentVenerer',
+      'Instructor',
+      'NoblesseOblige',
+    ])
+    expect(forcedSet(exclusion)).toBeUndefined()
+    expect(forcedSet(exclusion, owned)).toBe('ViridescentVenerer')
+    expect(withForcedSet(exclusion, owned).rainbow).toEqual([2, 4])
+    expect(withForcedSet(exclusion, owned)).not.toBe(exclusion)
+    // two owned sets on: nothing forced, the same object
+    const two = allBut('ViridescentVenerer', 'Instructor')
+    expect(withForcedSet(two, owned)).toBe(two)
+    // its 4-piece off: nothing to force
+    const twoOnly = { ...exclusion, ViridescentVenerer: [4] } as ArtSetExclusion
+    expect(forcedSet(twoOnly, owned)).toBeUndefined()
+    // mixed pieces already off: kept as it is
+    const mixedOff = {
+      ...two,
+      mixed: [2, 4],
+      rainbow: [2, 4],
+    } as ArtSetExclusion
+    expect(withForcedSet(mixedOff, owned)).toBe(mixedOff)
   })
 })
