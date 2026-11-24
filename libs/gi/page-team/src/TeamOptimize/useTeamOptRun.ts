@@ -421,7 +421,6 @@ export function useTeamOptRun(teamId: string) {
               },
             }),
           solve,
-          builds: teamOpt.topN ?? 1,
           attackStates,
           rankingBonusStats,
           isCancelled: () => cancelled,
