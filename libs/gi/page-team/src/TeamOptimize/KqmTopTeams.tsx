@@ -70,29 +70,58 @@ export function KqmTopTeams({
   disabled?: boolean
   onPick: (option: KqmTeamOption) => void
 }) {
-  const { t } = useTranslation('page_team')
-  const [open, setOpen] = useState(false)
-  // (the teams below #1 as their change only, or with every member's gear and the change lit)
-  const [allGear, setAllGear] = useState(false)
   const options = useMemo(() => kqmTopTeams(result, MAX), [result])
-  if (options.length < 2) return null
   const members = result.optimized
   const current = options.findIndex((o) =>
     members.every((ck) => gearId(o.builds[ck]) === gearId(view.builds[ck]))
   )
+  return (
+    <TopBuilds
+      options={options}
+      members={members}
+      current={current}
+      rotationTime={rotationTime}
+      disabled={disabled}
+      onPick={onPick}
+    />
+  )
+}
+
+/**
+ * The table of `KqmTopTeams` for any ranked teams (Team optimize's too): the first few, all of
+ * them (at most `MAX`) in a window
+ */
+export function TopBuilds<T extends KqmTeamOption>({
+  options,
+  members,
+  current,
+  rotationTime,
+  disabled,
+  onPick,
+}: {
+  /** Best first: the run's team, then the teams that change one member */
+  options: T[]
+  members: CharacterKey[]
+  /** The row of the team shown now (−1: none) */
+  current: number
+  rotationTime?: number
+  disabled?: boolean
+  onPick: (option: T) => void
+}) {
+  const { t } = useTranslation('page_team')
+  const [open, setOpen] = useState(false)
+  // (the teams below #1 as their change only, or with every member's gear and the change lit)
+  const [allGear, setAllGear] = useState(false)
+  if (options.length < 2) return null
   const title = t('teamOpt.kqm.topBuilds', 'Top builds')
-  const rows = (
-    count: number,
-    pick: (option: KqmTeamOption) => void,
-    bordered = true
-  ) => (
+  const rows = (count: number, pick: (option: T) => void, bordered = true) => (
     <TeamRows
       options={options.slice(0, count)}
       members={members}
       current={current}
       rotationTime={rotationTime}
       disabled={disabled}
-      onPick={pick}
+      onPick={(option) => pick(option as T)}
       allGear={allGear}
       bordered={bordered}
     />

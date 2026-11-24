@@ -144,7 +144,8 @@
       "all": "Tutti",
       "label2": "2 pezzi",
       "label4": "4 pezzi",
-      "none": "Nessuno"
+      "none": "Nessuno",
+      "sets": "Set"
     },
     "close": "Chiudi",
     "description": "Scegli quali bonus dei set può usare l'ottimizzatore e attiva gli effetti dei set che richiedono una condizione.",
@@ -154,7 +155,8 @@
       "done": "Fatto",
       "resetEffects_one": "Disattiva {{count}} effetto dei set",
       "resetEffects_other": "Disattiva {{count}} effetti dei set",
-      "summary": "Ammessi: 4 pezzi {{four}} di {{total}} set, 2 pezzi {{two}} di {{total}}"
+      "summary": "Ammessi: 4 pezzi {{four}} di {{total}} set, 2 pezzi {{two}} di {{total}}",
+      "using": "{{count}} set su {{total}} in uso"
     },
     "heading": "Set di manufatti",
     "mixed": {
@@ -178,7 +180,14 @@
       "only4": "Usa solo questo set per i 4 pezzi",
       "pieces_one": "{{count}} pezzo",
       "pieces_other": "{{count}} pezzi",
-      "twoPc": "2 pz"
+      "twoPc": "2 pz",
+      "only": "Solo questo",
+      "only2pc": "Solo 2 pz",
+      "only4pc": "Solo 4 pz",
+      "timedTip": "Ottimizza squadra lo attiva e disattiva a ogni colpo, quando la tua rotazione lo fa scattare",
+      "timed": "Dalla rotazione",
+      "effectOff": "Spento",
+      "use": "Usa {{name}}"
     },
     "search": "Cerca set",
     "summary": {
@@ -203,7 +212,9 @@
       "effects": "Effetti attivi",
       "label": "Quali set mostrare",
       "owned": "Posseduti"
-    }
+    },
+    "advancedTip": "Scegli separatamente i bonus da 2 e da 4 pezzi",
+    "advanced": "Avanzate"
   },
   "bonusStats": {
     "title": "Statistiche bonus"

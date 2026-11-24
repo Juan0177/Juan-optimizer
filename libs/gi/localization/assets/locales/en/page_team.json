@@ -246,7 +246,11 @@
       "alsoNeeds": "Also needs",
       "aura": "Aura",
       "noAura": "None",
-      "statUnused": "Not used by this hit"
+      "statUnused": "Not used by this hit",
+      "auto": "Auto",
+      "autoTip": "Set automatically for this rotation and team. Choose a state on the character’s weapon or artifacts to use another one.",
+      "useAuto": "Use auto",
+      "useAutoTip": "Set by hand. Let Team optimize decide it for this rotation and team instead."
     },
     "empty": {
       "action": "Team settings",
@@ -415,7 +419,7 @@
       "preparing": "Preparing…",
       "alternatives": "Next best builds",
       "buildsLabel": "Builds",
-      "buildsInfo": "How many team builds to find: the best one, then the next best ones (each changes one member’s artifacts).",
+      "buildsInfo": "Best build: only the team’s best build, the fastest. All builds: also the next best ones (up to 4 more, each changing one member’s artifacts), which takes longer.",
       "searchTip": "Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.",
       "round": "Round {{round}}",
       "setup": "setting up the search",
@@ -432,7 +436,9 @@
       "allTc": "Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.",
       "allSwitchedOff": "Every member is switched off: turn members on in Optimize team.",
       "share": "searching · {{percent}}%",
-      "keepNeedsOriginal": "Run the original first: this version keeps its teammates' gear from the original's result."
+      "keepNeedsOriginal": "Run the original first: this version keeps its teammates' gear from the original's result.",
+      "bestBuild": "Best build",
+      "allBuilds": "All builds"
     },
     "slot": {
       "circlet": "Circlet",

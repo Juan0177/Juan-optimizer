@@ -25,6 +25,7 @@ import {
   teamOptBonusStats,
   teamOptMembers,
   teamOptResultGear,
+  teamOptRunGear,
   teamOptUIData,
   teamRotationSearchSetup,
   withRotationEnergy,
@@ -273,7 +274,10 @@ export async function teamRotationRun({
     teamOpt,
     text,
     ...saved,
-  })?.({ gear: own.gear, overrides: {} })
+  })?.({
+    gear: teamOptRunGear(database, teamId, teamOpt, own.gear),
+    overrides: {},
+  })
   if (!played?.rotationTime) return undefined
   const runTeamOpt: TeamOpt = {
     ...teamOpt,

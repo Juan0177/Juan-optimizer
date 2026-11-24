@@ -1,10 +1,17 @@
 import { notEmpty, objKeyMap } from '@genshin-optimizer/common/util'
 import type {
+  ArtifactSetKey,
   ArtifactSlotKey,
   CharacterKey,
   GenderKey,
+  SetNum,
 } from '@genshin-optimizer/gi/consts'
-import { allArtifactSlotKeys, artMaxLevel } from '@genshin-optimizer/gi/consts'
+import {
+  allArtifactSetKeys,
+  allArtifactSlotKeys,
+  allWeaponKeys,
+  artMaxLevel,
+} from '@genshin-optimizer/gi/consts'
 import type {
   ArtCharDatabase,
   ArtSetExclusion,
@@ -14,16 +21,26 @@ import type {
   StatFilters,
   TeamOpt,
 } from '@genshin-optimizer/gi/db'
-import type { IConditionalValues } from '@genshin-optimizer/gi/sheets'
+import {
+  getArtSheet,
+  type IConditionalValues,
+} from '@genshin-optimizer/gi/sheets'
 import { optimizerGpuSupported } from '@genshin-optimizer/gi/solver'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
-import { constant, optimize, precompute, sum } from '@genshin-optimizer/gi/wr'
+import {
+  constant,
+  dynRead,
+  optimize,
+  precompute,
+  sum,
+} from '@genshin-optimizer/gi/wr'
 import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
 import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { type PrefilterProblem, quickPool, seedBuild } from './prefilter'
+import type { SimGear } from './rotation'
 import {
   canWield,
   hasEnergyRequirement,
@@ -154,6 +171,80 @@ export interface TeamOptResult {
   alternatives?: TeamOptAlternative[]
   /** The states every attack got in the run (`optimizeTeam`'s `attackStates`): its damage has them */
   attackStates?: RunAttackState[]
+  /**
+   * The attacks the run played, when it played the written rotation itself (`teamOptRunGear`: the
+   * sets and weapons it tried timed in it); its damage is per these. Absent: the team's own.
+   */
+  attacks?: TeamOpt['attacks']
+  /** Each optimized member's other builds: with each weapon it may take, in each set it may wear */
+  options?: Partial<Record<CharacterKey, TeamOptMemberOptions>>
+}
+
+/** A member's best build with another weapon or in another set, the rest of the team as found */
+export interface TeamOptOption {
+  weaponId: string
+  /** None: no build with this weapon meets the member's requirements */
+  artifactIds?: Record<ArtifactSlotKey, string | undefined>
+  /** The team's damage as the run ranks builds (`TeamOptMemberOptions.best`: the result's) */
+  value: number
+  /** The set it has four pieces of */
+  set?: string
+  /** It leaves another member's requirement unmet */
+  unmet?: true
+}
+export interface TeamOptMemberOptions {
+  /** The result's own value, as the options are ranked */
+  best: number
+  /** Best first */
+  weapons: TeamOptOption[]
+  /** Best first */
+  sets: TeamOptOption[]
+}
+
+/** A member's equipment picked by hand: a weapon, and four pieces of a set (none: any) */
+export interface TeamOptPick {
+  weaponId: string
+  set?: string
+}
+export type TeamOptPicks = Partial<Record<CharacterKey, TeamOptPick>>
+/** The team with picks: its builds, weapons and damage as shown */
+export interface TeamOptPickView {
+  builds: TeamOptBuilds
+  weapons: Partial<Record<CharacterKey, string>>
+  after: TeamOptEvaluation
+  /**
+   * The members whose Energy Recharge requirement the picks change (an energy weapon picked or
+   * taken away): the run's, and now; their artifacts were searched again for it
+   */
+  teammatesEr?: { characterKey: CharacterKey; from: number; to: number }[]
+}
+/** A run's team to try other equipment on (`optimizeTeam`'s `onSession`) */
+export interface TeamOptSession {
+  /** The run's team value, as options are ranked */
+  best: number
+  /**
+   * The team with `picks` (each made in turn on the one before: every member not picked as the
+   * run found it, its artifacts searched again for a pick); its figures given to `onFigures` as
+   * soon as known, then `characterKey`'s rankings under its pick
+   */
+  pick(
+    picks: TeamOptPicks,
+    characterKey: CharacterKey,
+    options?: {
+      onFigures?: (view: TeamOptPickView) => void
+      isCancelled?: () => boolean
+    }
+  ): Promise<(TeamOptPickView & { rankings: TeamOptMemberOptions }) | undefined>
+  /** A member's rankings in `s` under `pick`: each weapon (with the pick's set), each set (with its weapon) */
+  rankings(
+    s: {
+      builds: TeamOptBuilds
+      weaponIds: Partial<Record<CharacterKey, string>>
+    },
+    characterKey: CharacterKey,
+    pick: TeamOptPick,
+    isCancelled?: () => boolean
+  ): Promise<TeamOptMemberOptions | undefined>
 }
 
 export class TeamOptCancelled extends Error {
@@ -367,6 +458,88 @@ export function teamOptPool(
   })
 }
 
+const SET_KEYS = new Set<string>(allArtifactSetKeys)
+const WEAPON_KEYS = new Set<string>(allWeaponKeys)
+
+/** Whether a set's `count`-piece effect has a state of its own (a switch) */
+const hasSetConditional = (setKey: string, count: SetNum) =>
+  !!getArtSheet(setKey as ArtifactSetKey)
+    ?.setEffectDocument(count)
+    ?.some((doc) => 'states' in doc)
+
+/**
+ * The sets `arts` have pieces of in four slots, their 4-piece allowed by `exclusion`; with `two`,
+ * also those in two slots whose 2-piece effect has a switch
+ */
+function wearableSets(
+  arts: readonly ICachedArtifact[],
+  exclusion: ArtSetExclusion,
+  two = false
+): string[] {
+  const slots = new Map<string, Set<ArtifactSlotKey>>()
+  for (const art of arts) {
+    const has = slots.get(art.setKey) ?? new Set()
+    slots.set(art.setKey, has.add(art.slotKey))
+  }
+  return [...slots]
+    .filter(([setKey, has]) => {
+      const allowed = allowedCounts(exclusion[setKey as keyof ArtSetExclusion])
+      return (
+        (has.size >= 4 && allowed.includes(4)) ||
+        (two &&
+          has.size >= 2 &&
+          allowed.includes(2) &&
+          hasSetConditional(setKey, 2))
+      )
+    })
+    .map(([setKey]) => setKey)
+}
+
+/**
+ * The members' sim gear for a run's play of the rotation: with, for each member it optimizes, the
+ * sets its pool can wear four of (or two, for a 2-piece effect with a switch) within its set rules,
+ * and the weapons it may take when weapons are optimized, as candidates (`SimGear.candidates`).
+ * Their effects are then timed by the rotation for every build tried, as on the KQM tab, instead of
+ * following the member's switches.
+ */
+export function teamOptRunGear(
+  database: ArtCharDatabase,
+  teamId: string,
+  teamOpt: TeamOpt,
+  gear: Partial<Record<CharacterKey, SimGear>>
+): Partial<Record<CharacterKey, SimGear>> {
+  const members = teamOptMembers(database, teamId)
+  const teamLocations = new Set(members.map((m) => m.location as string))
+  const arts = database.arts.values
+  const next = { ...gear }
+  for (const member of members) {
+    const ck = member.characterKey
+    const optConfig = database.optConfigs.get(member.teamChar.optConfigId)
+    if (member.isTc || teamOpt.keep.includes(ck) || !optConfig) continue
+    const sets = wearableSets(
+      teamOptPool(arts, member, optConfig, teamOpt, teamLocations, new Set()),
+      optConfig.artSetExclusion,
+      true
+    )
+    const weapons = teamOpt.optimizeWeapons
+      ? [
+          ...new Set(
+            teamOptWeaponCandidates(
+              database,
+              member,
+              member.weaponId,
+              teamOpt,
+              teamLocations,
+              new Set()
+            ).map((w) => w.key)
+          ),
+        ]
+      : []
+    next[ck] = { ...gear[ck], candidates: { sets, weapons } }
+  }
+  return next
+}
+
 const bySlot = (
   database: ArtCharDatabase,
   artifactIds: readonly string[]
@@ -520,6 +693,10 @@ export async function optimizeTeam({
   builds = 1,
   attackStates,
   rankingBonusStats,
+  onResult,
+  onOptions,
+  onSession,
+  from,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -541,6 +718,19 @@ export async function optimizeTeam({
    * over it, `fightBuffShare`): the damage the result shows is without them
    */
   rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
+  /**
+   * Given the result as soon as it is found: each optimized member's other builds (`options`)
+   * are then searched, and given to `onOptions` one member at a time, before the promise resolves
+   */
+  onResult?: (result: TeamOptResult) => void
+  onOptions?: (
+    characterKey: CharacterKey,
+    options: TeamOptMemberOptions
+  ) => void
+  /** Given the team found, to try other equipment on (`TeamOptSession`) */
+  onSession?: (session: TeamOptSession) => void
+  /** Start from these builds and weapons (a saved result's: with `maxRounds` 0, its session) */
+  from?: Pick<TeamOptResult, 'builds' | 'weapons'>
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -560,13 +750,16 @@ export async function optimizeTeam({
     evalMs: 0,
     t0: performance.now(),
   }
-  const quick = !teamOpt.fullSearch
   /**
    * The search `solveRaw` is given: Quick narrows each slot to the artifacts that can matter
    * (`quickPool`); both start above a good build found fast, when it meets every requirement and
    * beats `floor` (a floor cuts the next best builds: only for a top 1)
    */
-  const prepare = async (input: TeamOptSolveInput, floor: number) => {
+  const prepare = async (
+    input: TeamOptSolveInput,
+    floor: number,
+    quick = !teamOpt.fullSearch
+  ) => {
     const t0 = performance.now()
     const problem: PrefilterProblem = {
       arts: input.arts,
@@ -617,12 +810,16 @@ export async function optimizeTeam({
       refine,
     }
   }
-  const solve: TeamOptSolver = async (input) => {
+  /** `quick`: Quick or not, whatever the run's search (a preview's own search) */
+  const solve = async (
+    input: TeamOptSolveInput,
+    quick = !teamOpt.fullSearch
+  ): ReturnType<TeamOptSolver> => {
     const t0 = performance.now()
     // several builds: not in the memo (it keeps a problem's top 1)
     if ((input.topN ?? 1) > 1) {
       const result = await solveRaw(
-        (await prepare(input, Number.NEGATIVE_INFINITY)).input
+        (await prepare(input, Number.NEGATIVE_INFINITY, quick)).input
       )
       profile.solves++
       profile.solveMs += performance.now() - t0
@@ -641,7 +838,7 @@ export async function optimizeTeam({
       profile.memoHits++
       return undefined
     }
-    const prepared = await prepare(input, floor)
+    const prepared = await prepare(input, floor, quick)
     const perSlot = new Map<string, number>()
     for (const art of prepared.input.arts)
       perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
@@ -792,6 +989,18 @@ export async function optimizeTeam({
     if (database.weapons.get(member.weaponId))
       state.weaponIds[member.characterKey] = member.weaponId
   }
+  if (from) {
+    for (const [ck, build] of Object.entries(from.builds) as [
+      CharacterKey,
+      TeamOptBuilds[CharacterKey],
+    ][])
+      if (build) state.builds[ck] = { ...build }
+    for (const [ck, id] of Object.entries(from.weapons) as [
+      CharacterKey,
+      string | undefined,
+    ][])
+      if (id && database.weapons.get(id)) state.weaponIds[ck] = id
+  }
   const artsIn = (s: TeamState, characterKey: CharacterKey) =>
     Object.values(s.builds[characterKey] ?? {})
       .map((id) => id && database.arts.get(id))
@@ -824,6 +1033,61 @@ export async function optimizeTeam({
     }
     return result
   }
+  // The states of sets and weapons that `s` gives nobody (the run's candidates, `teamOptRunGear`)
+  // count nowhere: dropped, so the hits they split share buff contexts again. `dyn`'s sets stay
+  // (its artifacts are the variables).
+  const heldAttacksIn = (
+    s: TeamState,
+    weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
+    dyn?: CharacterKey
+  ): TeamOpt['attacks'] => {
+    const sets = new Map<string, Set<string>>()
+    for (const [ck, arts] of Object.entries(fixedArtsIn(s, dyn))) {
+      const counts = new Map<string, number>()
+      for (const { setKey } of arts ?? [])
+        counts.set(setKey, (counts.get(setKey) ?? 0) + 1)
+      sets.set(
+        ck,
+        new Set([...counts].filter(([, n]) => n >= 2).map(([k]) => k))
+      )
+    }
+    const held = ({
+      owner,
+      path: [key = ''],
+    }: {
+      owner: string
+      path: readonly string[]
+    }) => {
+      if (SET_KEYS.has(key))
+        return owner === dyn || (sets.get(owner)?.has(key) ?? true)
+      const weapon = weapons[owner as CharacterKey]
+      return !WEAPON_KEYS.has(key) || !weapon || weapon.key === key
+    }
+    return Object.fromEntries(
+      Object.entries(attacks).map(([ck, list]) => [
+        ck,
+        list?.map((a) => ({
+          ...a,
+          ...(a.states && { states: a.states.filter(held) }),
+          ...(a.limits && { limits: a.limits.filter(held) }),
+          ...(a.statSnapshots && {
+            statSnapshots: a.statSnapshots.map((snap) => ({
+              ...snap,
+              states: snap.states.filter(held),
+            })),
+          }),
+          ...(a.reactionContributorStates && {
+            reactionContributorStates: Object.fromEntries(
+              Object.entries(a.reactionContributorStates).map(([k, v]) => [
+                k,
+                v?.filter(held),
+              ])
+            ),
+          }),
+        })),
+      ])
+    ) as TeamOpt['attacks']
+  }
   const evaluateIn = (s: TeamState) => {
     const t0 = performance.now()
     const result = evaluateInRaw(s)
@@ -835,7 +1099,7 @@ export async function optimizeTeam({
     const weapons = weaponsIn(s)
     return evaluateTeamRotation(database, teamId, gender, {
       arts: fixedArtsIn(s),
-      attacks,
+      attacks: heldAttacksIn(s, weapons),
       mainStatAssumptionLevel,
       statFilters: teamStatFilters(statFilters, weapons, teamOpt),
       weapons,
@@ -907,7 +1171,7 @@ export async function optimizeTeam({
     const nodes = teamRotationNodes(database, teamId, gender, {
       dyn: characterKey,
       arts: fixedArtsIn(s, characterKey),
-      attacks,
+      attacks: heldAttacksIn(s, weapons, characterKey),
       mainStatAssumptionLevel,
       // the team's energy weapons lower the members' Energy Recharge requirements
       statFilters: teamStatFilters(statFilters, weapons, teamOpt),
@@ -1935,7 +2199,7 @@ export async function optimizeTeam({
     )
     .map((m) => m.characterKey)
   const startUntickedWeapons = untickedAgainst(start, state)
-  return {
+  const result: TeamOptResult = {
     builds: state.builds,
     weapons: { ...state.weaponIds },
     before: shownIn(start, before),
@@ -1950,5 +2214,330 @@ export async function optimizeTeam({
       ? { alternatives: alternatives.map(({ state: _, ...a }) => a) }
       : {}),
     ...(attackStates?.length ? { attackStates: [...attackStates] } : {}),
+  }
+  const session = sessionOf(state)
+  onSession?.(session)
+  if (!onResult) return result
+  onResult(result)
+  // each optimized member's other builds with its weapon and sets as found: its first rankings
+  const options: NonNullable<TeamOptResult['options']> = {}
+  for (const member of order) {
+    if (isCancelled()) break
+    const ck = member.characterKey
+    const weaponId = state.weaponIds[ck] ?? member.weaponId
+    const ranked = await session.rankings(state, ck, { weaponId }, isCancelled)
+    if (!ranked || isCancelled()) break
+    options[ck] = ranked
+    onOptions?.(ck, ranked)
+  }
+  if (Object.keys(options).length) result.options = options
+  return result
+
+  /**
+   * The team found, to try other equipment on (`TeamOptSession`): what a member's pick (a weapon,
+   * a set) makes of its build, the others as they are, and its rankings under it
+   */
+  function sessionOf(found: TeamState): TeamOptSession {
+    const ranked = evaluateIn(found)
+    const best = ranked?.total ?? Number.NaN
+    const keyOf = (s: TeamState) => JSON.stringify([s.builds, s.weaponIds])
+    const memberOf = (ck: CharacterKey) =>
+      members.find((m) => m.characterKey === ck)
+    const othersIn = (ck: CharacterKey) =>
+      members.filter((m) => m.characterKey !== ck && !m.isTc)
+    // (the page between steps: a pick's work never holds it up)
+    const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+    const needsIn = (s: TeamState) =>
+      teamEnergyNeeds(statFilters, weaponsIn(s), teamOpt)
+    /**
+     * `team` (`ck`'s equipment changed from `before` by `pick`) with the teammates whose Energy
+     * Recharge requirement that changes searched again, as a run does (Favonius' particles free
+     * theirs, a weapon taken away raises it): each in turn, free to take `ck`'s pieces (swapped, as
+     * equipping does), then `ck` again for its pick with what they left it
+     */
+    const settle = async (
+      team: TeamState,
+      before: TeamState,
+      ck: CharacterKey,
+      pick: TeamOptPick,
+      cancelled: () => boolean
+    ) => {
+      const was = needsIn(before)
+      const now = needsIn(team)
+      const changed = order.filter(
+        (m) =>
+          m.characterKey !== ck && was[m.characterKey] !== now[m.characterKey]
+      )
+      if (!changed.length || cancelled()) return team
+      const unmetBefore = new Set(
+        [...unmetIn(before)].map((key) => key as CharacterKey)
+      )
+      const member = memberOf(ck)
+      try {
+        const settled = await reoptimizeIn(
+          copyState(team),
+          changed,
+          member ? [member] : [],
+          unmetBefore,
+          () => breathe()
+        )
+        if (!settled || !member) return team
+        const weapon = database.weapons.get(settled.weaponIds[ck] ?? '')
+        const again =
+          weapon && (await search(settled, member, weapon, pick.set))
+        if (again?.found) assign(settled, member, again.found.artifactIds)
+        return settled
+      } catch (e) {
+        if (e instanceof TeamOptCancelled) return team
+        throw e
+      }
+    }
+    /** The teammates' Energy Recharge requirements in `team` that differ from the run's */
+    const teammatesEr = (team: TeamState) => {
+      const was = needsIn(found)
+      const now = needsIn(team)
+      return members.flatMap(({ characterKey: ck }) =>
+        was[ck] !== undefined && now[ck] !== undefined && was[ck] !== now[ck]
+          ? [{ characterKey: ck, from: was[ck]!, to: now[ck]! }]
+          : []
+      )
+    }
+    /** The artifacts the member may use in `s`: not its teammates' */
+    const poolIn = (s: TeamState, member: TeamOptMember) =>
+      teamOptPool(
+        allArts,
+        member,
+        optConfigs[member.characterKey]!,
+        teamOpt,
+        teamLocations,
+        new Set(
+          othersIn(member.characterKey)
+            .flatMap((m) => Object.values(s.builds[m.characterKey] ?? {}))
+            .filter(notEmpty)
+        )
+      )
+    /** The weapons the member may take in `s` (its own, unless weapons are optimized) */
+    const weaponsIn_ = (s: TeamState, member: TeamOptMember) => {
+      const own = database.weapons.get(
+        s.weaponIds[member.characterKey] ?? member.weaponId
+      )
+      return teamOpt.optimizeWeapons
+        ? teamOptWeaponCandidates(
+            database,
+            member,
+            own?.id ?? member.weaponId,
+            teamOpt,
+            teamLocations,
+            new Set(
+              othersIn(member.characterKey)
+                .map((m) => s.weaponIds[m.characterKey])
+                .filter(notEmpty)
+            )
+          )
+        : own
+          ? [own]
+          : []
+    }
+    // (per state, member and weapon: the pieces Quick keeps for its build, any set)
+    const kept = new Map<string, Promise<ICachedArtifact[]>>()
+    /**
+     * The member's best build in `s` with `weapon` (and four pieces of `set`): Quick narrows the
+     * search; for a set, to the pieces Quick keeps and that set's
+     */
+    const search = async (
+      s: TeamState,
+      member: TeamOptMember,
+      weapon: ICachedWeapon,
+      set?: string
+    ) => {
+      const ck = member.characterKey
+      const optConfig = optConfigs[ck]
+      const problem = problemIn(s, ck, weapon)
+      if (!problem || !optConfig) return undefined
+      const pool = poolIn(s, member)
+      const input: TeamOptSolveInput = {
+        characterKey: ck,
+        arts: pool,
+        objective: problem.objective,
+        constraints: problem.constraints,
+        exclusion: optConfig.artSetExclusion,
+        mainStatAssumptionLevel,
+      }
+      if (!set) return { problem, found: await solve(input, true) }
+      const keptKey = `${keyOf(s)}#${ck}#${weapon.id}`
+      let keeping = kept.get(keptKey)
+      if (!keeping) {
+        keeping = quickPool({
+          arts: pool,
+          objective: problem.objective,
+          constraints: problem.constraints,
+          values: (art) => teamOptArtValues(art, mainStatAssumptionLevel),
+          allowed: (build) => meetsSetRules(build, optConfig.artSetExclusion),
+        }).then((q) => q.arts)
+        kept.set(keptKey, keeping)
+      }
+      const arts = [
+        ...new Set([
+          ...(await keeping),
+          ...pool.filter((a) => a.setKey === set),
+        ]),
+      ]
+      // (the pool narrowed already: searched as it is)
+      const found = await solve(
+        {
+          ...input,
+          arts,
+          constraints: [
+            ...problem.constraints,
+            { value: dynRead(set), min: 4 },
+          ],
+        },
+        false
+      )
+      return { problem, found }
+    }
+    const unmetIn = (s: TeamState) =>
+      new Set(
+        Object.entries(evaluateIn(s)?.unmet ?? {})
+          .filter(([, unmet]) => unmet?.length)
+          .map(([key]) => key)
+      )
+    const optionOf = (
+      unmetNow: ReadonlySet<string>,
+      weapon: ICachedWeapon,
+      searched: Awaited<ReturnType<typeof search>>,
+      set?: string
+    ): TeamOptOption | undefined =>
+      searched && {
+        weaponId: weapon.id,
+        ...(searched.found && {
+          artifactIds: bySlot(database, searched.found.artifactIds),
+        }),
+        value: searched.found?.value ?? Number.NaN,
+        ...(set && { set }),
+        ...([...searched.problem.unmetOthers].some(
+          (key) => !unmetNow.has(key)
+        ) && { unmet: true as const }),
+      }
+    const byValue = (a: TeamOptOption, b: TeamOptOption) =>
+      (Number.isNaN(b.value) ? Number.NEGATIVE_INFINITY : b.value) -
+      (Number.isNaN(a.value) ? Number.NEGATIVE_INFINITY : a.value)
+    const rankings: TeamOptSession['rankings'] = async (
+      s,
+      ck,
+      pick,
+      cancelled = () => false
+    ) => {
+      const member = memberOf(ck)
+      const optConfig = optConfigs[ck]
+      const weapon = database.weapons.get(pick.weaponId)
+      if (!member || !optConfig || !weapon) return undefined
+      const unmetNow = unmetIn(s)
+      const weapons: TeamOptOption[] = []
+      for (const w of weaponsIn_(s, member)) {
+        await breathe()
+        if (cancelled()) return undefined
+        const searched = await search(s, member, w, pick.set)
+        const option = optionOf(unmetNow, w, searched)
+        if (!option) continue
+        // (a weapon that changes a teammate's ER requirement: worth the team with that teammate's
+        // artifacts searched again, as the run and the KQM tab count it)
+        if (searched?.found) {
+          const team = copyState(s)
+          team.builds[ck] = bySlot(database, searched.found.artifactIds)
+          team.weaponIds[ck] = w.id
+          const settled = await settle(
+            team,
+            s,
+            ck,
+            { weaponId: w.id, set: pick.set },
+            cancelled
+          )
+          if (settled !== team) {
+            const ev = evaluateIn(settled)
+            if (ev) {
+              option.value = ev.total
+              const unmet = Object.entries(ev.unmet).some(
+                ([key, list]) => list?.length && !unmetNow.has(key)
+              )
+              if (unmet) option.unmet = true
+              else delete option.unmet
+            }
+          }
+        }
+        weapons.push(option)
+      }
+      const sets: TeamOptOption[] = []
+      for (const set of wearableSets(
+        poolIn(s, member),
+        optConfig.artSetExclusion
+      )) {
+        await breathe()
+        if (cancelled()) return undefined
+        const searched = await search(s, member, weapon, set)
+        const option =
+          searched?.found && optionOf(unmetNow, weapon, searched, set)
+        if (option) sets.push(option)
+      }
+      return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }
+    }
+    // (a pick on a team: the team with it, per team and pick)
+    const picked = new Map<string, Promise<TeamState | undefined>>()
+    const withPick = (s: TeamState, ck: CharacterKey, pick: TeamOptPick) => {
+      const key = `${keyOf(s)}#${ck}#${pick.weaponId}#${pick.set ?? ''}`
+      let next = picked.get(key)
+      if (!next) {
+        next = (async () => {
+          const member = memberOf(ck)
+          const weapon = database.weapons.get(pick.weaponId)
+          if (!member || !weapon) return undefined
+          const searched = await search(s, member, weapon, pick.set)
+          if (!searched?.found) return undefined
+          const team = copyState(s)
+          team.builds[ck] = bySlot(database, searched.found.artifactIds)
+          team.weaponIds[ck] = weapon.id
+          // (its teammates whose ER requirement the pick changes: searched again)
+          return settle(team, s, ck, pick, () => false)
+        })()
+        picked.set(key, next)
+      }
+      return next
+    }
+    return {
+      best,
+      rankings,
+      async pick(
+        picks,
+        ck,
+        { onFigures, isCancelled: cancelled = () => false } = {}
+      ) {
+        let s: TeamState | undefined = copyState(found)
+        for (const [m, pick] of Object.entries(picks) as [
+          CharacterKey,
+          TeamOptPick,
+        ][]) {
+          if (!pick || !s) continue
+          s = await withPick(s, m, pick)
+          if (cancelled()) return undefined
+        }
+        if (!s) return undefined
+        await breathe()
+        const ev = evaluateIn(s)
+        if (!ev) return undefined
+        const er = teammatesEr(s)
+        const view: TeamOptPickView = {
+          builds: s.builds,
+          weapons: { ...s.weaponIds },
+          after: shownIn(s, ev),
+          ...(er.length && { teammatesEr: er }),
+        }
+        onFigures?.(view)
+        const own = picks[ck] ?? {
+          weaponId: s.weaponIds[ck] ?? memberOf(ck)?.weaponId ?? '',
+        }
+        const ranked = await rankings(s, ck, own, cancelled)
+        return ranked && { ...view, rankings: ranked }
+      },
+    }
   }
 }

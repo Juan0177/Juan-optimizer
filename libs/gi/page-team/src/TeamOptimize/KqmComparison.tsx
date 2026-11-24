@@ -737,7 +737,7 @@ export function KqmCompare({
 }
 
 /** A ranked weapon: its icon and name, its details (stats, passive) on hover */
-function WeaponLabel({
+export function WeaponLabel({
   weapon,
   passive,
 }: {
@@ -793,7 +793,7 @@ function WeaponLabel({
 }
 
 /** Weapons or artifact sets: two tabs on a segmented track */
-function RankTabs({
+export function RankTabs({
   value,
   onChange,
   characterKey,
@@ -973,13 +973,19 @@ function Behind({ gap, rank }: { gap?: KqmCatchUp; rank: number }) {
   )
 }
 
+/** A ranked option as the rankings show it (KQM's, or Team optimize's from the inventory) */
+export type RankOption = Pick<
+  KqmOption,
+  'weapon' | 'sets' | 'total' | 'unmet' | 'behind' | 'shortfalls'
+>
+
 /** Copies a ranking as a Markdown table (Discord, sheets, docs) */
-function CopyRankingButton({
+export function CopyRankingButton({
   options,
   kind,
   rotationTime,
 }: {
-  options: KqmOption[]
+  options: RankOption[]
   kind: 'weapons' | 'sets'
   rotationTime?: number
 }) {
@@ -991,7 +997,7 @@ function CopyRankingButton({
   const [copied, setCopied] = useState(false)
   const best = options.find((o) => !o.unmet)?.total ?? options[0]?.total ?? 0
   const copy = () => {
-    const name = (o: KqmOption) =>
+    const name = (o: RankOption) =>
       kind === 'weapons'
         ? `${i18n.t(`weaponNames_gen:${o.weapon.key}`)} R${o.weapon.refinement}`
         : Object.entries(o.sets).length
@@ -1094,7 +1100,7 @@ function CopyRankingButton({
 /** The first rows shown; the rest open below them */
 const FIRST_ROWS = 8
 
-function RankList({
+export function RankList<O extends RankOption>({
   options,
   rotationTime,
   label,
@@ -1102,11 +1108,11 @@ function RankList({
   onSelect,
   disabled,
 }: {
-  options: KqmOption[]
+  options: O[]
   rotationTime?: number
-  label: (option: KqmOption) => ReactNode
-  selected: (option: KqmOption) => boolean
-  onSelect: (option: KqmOption) => void
+  label: (option: O) => ReactNode
+  selected: (option: O) => boolean
+  onSelect: (option: O) => void
   disabled: boolean
 }) {
   const { t, i18n } = useTranslation('page_team')
@@ -1116,7 +1122,7 @@ function RankList({
     xs: '22px minmax(0, 1fr) 76px',
     sm: '28px minmax(0, 1fr) 88px 136px',
   }
-  const row = (option: KqmOption, i: number) => {
+  const row = (option: O, i: number) => {
     const active = selected(option)
     const ratio = best > 0 ? option.total / best : 0
     return (
@@ -1303,7 +1309,7 @@ function RankList({
 }
 
 /** A compact outlined field: 36 px tall */
-const compactFieldSx = {
+export const compactFieldSx = {
   '& .MuiInputBase-root': { fontSize: 13.5 },
   '& .MuiInputLabel-root': { fontSize: 13.5 },
   '& .MuiSelect-select': { py: 0.875 },

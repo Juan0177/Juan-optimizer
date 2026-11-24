@@ -118,4 +118,29 @@ describe('OptConfigDataManager', () => {
     const result = optConfigs['validate'](invalid, id)
     expect(result?.excludedLocations).not.toContain(id)
   })
+
+  // (the sets dialog no longer has mixed pieces: mixed builds are always considered)
+  it('drops an old mixed-pieces limit and keeps every set choice', () => {
+    const id = optConfigs.new()
+    const saved = {
+      ...optConfigs.get(id),
+      artSetExclusion: {
+        rainbow: [2, 4],
+        GladiatorsFinale: [4],
+        EmblemOfSeveredFate: [2],
+        NoblesseOblige: [2, 4],
+      },
+    }
+    const result = optConfigs['validate'](saved, id)
+    expect(result?.artSetExclusion).toEqual({
+      GladiatorsFinale: [4],
+      EmblemOfSeveredFate: [2],
+      NoblesseOblige: [2, 4],
+    })
+    // (saved again, as the dialog saves a change: still none)
+    optConfigs.set(id, {
+      artSetExclusion: { ...saved.artSetExclusion, rainbow: [4] } as never,
+    })
+    expect(optConfigs.get(id)?.artSetExclusion).not.toHaveProperty('rainbow')
+  })
 })

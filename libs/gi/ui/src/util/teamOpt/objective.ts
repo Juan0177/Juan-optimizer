@@ -32,6 +32,7 @@ import {
   sum,
 } from '@genshin-optimizer/gi/wr'
 import { statFilterToNumNode } from '../statFilterToNumNode'
+import { teamRuleConditionals } from './ruleConditionals'
 import type {
   BonusStats,
   BuffContext,
@@ -129,6 +130,34 @@ const viewOf = (team: Team): TeamView => ({
   team,
   fold: (nodes, data) => optimize(nodes, data, shouldFold) as NumNode[],
 })
+
+/**
+ * The weapon and set effects nobody set, by rule (`teamRuleConditionals`), under `extra`, for the
+ * members' own builds (a calculation that ignores them, KQM's, brings its own)
+ */
+function withRules(
+  database: ArtCharDatabase,
+  teamId: string,
+  attacks: TeamOpt['attacks'],
+  ownBuild: boolean | undefined,
+  extra: TeamDataOverrides['extraConditionals']
+): TeamDataOverrides['extraConditionals'] {
+  if (ownBuild === false) return extra
+  const rules = teamRuleConditionals(database, teamId, attacks)
+  if (!extra) return rules
+  const merged: NonNullable<TeamDataOverrides['extraConditionals']> = {
+    ...rules,
+  }
+  for (const [ck, values] of Object.entries(extra)) {
+    const out: Record<string, unknown> = {
+      ...(merged[ck as CharacterKey] ?? {}),
+    }
+    for (const [item, conds] of Object.entries(values ?? {}))
+      out[item] = { ...(out[item] as object), ...(conds as object) }
+    merged[ck as CharacterKey] = out as never
+  }
+  return merged
+}
 
 /** One team calculation per buff context (each folded on its own) */
 function contextSource(
@@ -709,7 +738,13 @@ function rotationNodes(
     arts: dyn ? { ...arts, [dyn]: [] } : arts,
     mainStatAssumptionLevel,
     weapons,
-    extraConditionals,
+    extraConditionals: withRules(
+      database,
+      teamId,
+      attacks,
+      ownBuild,
+      extraConditionals
+    ),
     bonusStats,
     characters,
     conditionalOverrides,

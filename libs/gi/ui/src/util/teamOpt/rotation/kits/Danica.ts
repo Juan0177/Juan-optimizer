@@ -126,6 +126,8 @@ interface State {
   expiryNoted: number
   /** When the Anchor her E threw lands: her Normal Attacks are the Anchor's from the press */
   anchorLands: number
+  /** C2: her next swap-in plays Will to Protect (once per fight) */
+  c2Entry: boolean
 }
 const hit = (
   c: SimContext,
@@ -273,6 +275,24 @@ function onFieldE2(c: SimContext, s: State): ActionResult {
     framesInto: { normal: ON_FIELD_INTO_NORMAL },
   }
 }
+/** Entry Skill E2 (Will to Protect) at a swap-in */
+function willToProtect(ctx: SimContext, s: State): ActionResult {
+  s.excite = 0
+  s.entryReady = ctx.now + ENTRY_CD
+  // Entry Skill E2: Defense Maid and a refreshed Anchor; a Burst window still open lights it
+  // (Guard_State)
+  anchor(ctx, s, ANCHOR_DURATION)
+  s.maid = 'defense'
+  s.a4 = 0
+  syncMaid(ctx, s)
+  // Defense Maid's party shield (kqmsim newShield), until the form ends: 25 s from the Entry
+  // Skill's refreshed Anchor at most
+  aegisOn(ctx, s, 'Defense Maid shield')
+  hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
+  dropBall(ctx, s, 42, 'Entry Skill')
+  // (the Burst pressed 63 frames after the swap-in: footage and Lunaris runs)
+  return { frames: 63 }
+}
 /** Her Normal Attacks are the Anchor's while it is out, or thrown by her E and still landing */
 const anchorNormal = (s: State, now: number) =>
   now < s.anchorEnd || now < s.anchorLands
@@ -348,12 +368,17 @@ export const kit: KitModel = {
     ballReady: -1,
     expiryNoted: 0,
     anchorLands: -1,
+    c2Entry: false,
   }),
-  onStart(c) {
+  onStart(c, s: State) {
     for (const name of ['c2Toast', 'c2SelfToast']) set(c, name, '')
-    if (c.constellation('Danica') >= 2)
+    // Dump Avatar_Danica_Constellation_2: entering combat removes Will to Protect's cooldown and
+    // adds UNIQUE_Danica_C2_EntryReady, whose switch-in listener plays Will to Protect whatever her
+    // Anchor, Will to Cleanse or form; its Cleansing Edict window removes it
+    s.c2Entry = c.constellation('Danica') >= 2
+    if (s.c2Entry)
       c.note(
-        'Danica C2: the combat-entry Will to Protect and the Cleansing Edict Will to Purge (hold Normal Attack, 150% DMG, not again while the Storm Anchor lasts) are not modelled; Raise a Chorus stacks are.'
+        'Danica C2: her first swap-in of the fight plays Will to Protect (Maid: Royal Guard and a Storm Anchor) without a full Will to Cleanse or an Anchor out. The Cleansing Edict after it (hold Normal Attack within 6 s for a Will to Purge at 150% DMG) is not modelled; Raise a Chorus stacks are.'
       )
   },
   // With the Anchor out her normal attacks are the Anchor's (estimated frames of their own), and
@@ -540,6 +565,13 @@ export const kit: KitModel = {
             ? `Will to Protect was on its 16 s cooldown (${((s.entryReady - now) / 60).toFixed(1)} s left)`
             : undefined,
   onSwapIn(ctx, s: State) {
+    if (s.c2Entry) {
+      s.c2Entry = false
+      s.lastBlock = undefined
+      // (E2_Initialize removes UNIQUE_Danica_CombatMaid_Form before adding Royal Guard)
+      if (s.maid === 'battle') endMaid(ctx, s)
+      return willToProtect(ctx, s)
+    }
     if (ctx.now >= s.anchorEnd) {
       // an Anchor she had ran out: say why her swap-ins didn't refresh it (once per Anchor)
       if (s.anchorId && s.expiryNoted !== s.anchorId) {
@@ -564,20 +596,6 @@ export const kit: KitModel = {
             : undefined
     s.lastBlock = block
     if (block) return
-    s.excite = 0
-    s.entryReady = ctx.now + ENTRY_CD
-    // Entry Skill E2: Defense Maid and a refreshed Anchor; a Burst window still open lights it
-    // (Guard_State)
-    anchor(ctx, s, ANCHOR_DURATION)
-    s.maid = 'defense'
-    s.a4 = 0
-    syncMaid(ctx, s)
-    // Defense Maid's party shield (kqmsim newShield), until the form ends: 25 s from the Entry
-    // Skill's refreshed Anchor at most
-    aegisOn(ctx, s, 'Defense Maid shield')
-    hit(ctx, 42, ['skill', 'entryDmg'], 'Entry Skill (Stellar-Conduct)')
-    dropBall(ctx, s, 42, 'Entry Skill')
-    // (the Burst pressed 63 frames after the swap-in: footage and Lunaris runs)
-    return { frames: 63 }
+    return willToProtect(ctx, s)
   },
 }

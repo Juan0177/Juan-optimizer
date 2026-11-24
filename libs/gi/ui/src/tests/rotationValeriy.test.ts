@@ -45,7 +45,8 @@ const probe = (tag: SimHit['tag'], count = 20, spacing = 1): KitModel => ({
 })
 
 it('preserves C4 half-point Momentum and spends it after the mortar hit', () => {
-  const sim = run('Valeriy E Q C N1 W1')
+  // (the Burst's Momentum listener comes with its turret, 1.9 s into the cast)
+  const sim = run('Valeriy E Q W2.5 C N1 W1')
   expect(sim.warnings).toEqual([])
   expect(
     state(
@@ -58,7 +59,7 @@ it('preserves C4 half-point Momentum and spends it after the mortar hit', () => 
       sim.hits.find((h) => h.label === 'Normal 1'),
       'a4Momentum'
     )
-  ).toBe('97.5')
+  ).toBe('110.5')
   const c0 = run('Valeriy E C C W1', 0)
   expect(c0.hits.filter((h) => h.label === 'Special Charge')).toHaveLength(1)
   expect(c0.hits.filter((h) => h.label === 'Charge')).toHaveLength(1)
@@ -124,7 +125,7 @@ it('leaves off-field Electro damage outside the Directive pool', () => {
 })
 
 it('does not give the first special hit its own C6 debuff', () => {
-  const sim = run('Valeriy E C Q W14')
+  const sim = run('Valeriy E C Q W20')
   const mortar = sim.hits.find((h) => h.label === 'Special Charge')
   expect(state(mortar, 'c6Hit')).toBe('')
   expect(
@@ -134,10 +135,14 @@ it('does not give the first special hit its own C6 debuff', () => {
     )
   ).toBe('on')
   const ticks = sim.hits.filter((h) => h.label === 'Burst (Tick)')
-  expect(ticks.length).toBeGreaterThan(24)
+  // the turret's volleys (dump SkillObj_Valeriy_Funnel): three shells at once and every 2 s
+  // for 12.5 s, the first landing 1.33 s after the Burst's hit
+  expect(ticks).toHaveLength(21)
   expect(ticks.every((h) => h.icdGroup === 'ValeriyBurst')).toBe(true)
+  const burst = sim.hits.find((h) => h.label === 'Burst')!
+  expect(ticks[0].t - burst.t).toBe(80)
   expect(ticks.slice(0, 6).map((h) => h.t - ticks[0].t)).toEqual([
-    0, 28, 58, 70, 110, 137,
+    0, 28, 58, 120, 160, 187,
   ])
 })
 

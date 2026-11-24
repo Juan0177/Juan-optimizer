@@ -34,6 +34,7 @@ import {
   simulateRotationSamples,
 } from './rotation'
 import { rotationCalculation } from './rotationCalculation'
+import { teamRuleConditionals } from './ruleConditionals'
 
 /*
  * A written rotation played as the writer, Team optimize and KQM play it (from its text and
@@ -373,7 +374,15 @@ export function ownConditional(
         ? database.teamChars.get(member.teamCharId)?.conditional
         : undefined
   ) as Record<string, Record<string, string>> | undefined
-  return conditional?.[path[0]]?.[path[1]]
+  const set = conditional?.[path[0]]?.[path[1]]
+  if (set !== undefined || owner === 'team') return set
+  // (a gear effect nobody set: by rule, as Team optimize counts it)
+  const rules = teamRuleConditionals(
+    database,
+    teamId,
+    database.teams.get(teamId)?.teamOpt?.attacks ?? {}
+  )[owner] as Record<string, Record<string, string>> | undefined
+  return rules?.[path[0]]?.[path[1]]
 }
 /**
  * A conditional's state as the KQM tab has it: its own team switches and members' switches

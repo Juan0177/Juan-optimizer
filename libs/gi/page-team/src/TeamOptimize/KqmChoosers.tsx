@@ -91,6 +91,7 @@ import {
   quickSx,
   tokens,
   type as typeScale,
+  useBatches,
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 import type { PassiveStore } from './WeaponChooser'
@@ -250,28 +251,6 @@ const sourceNames: Record<KqmWeaponSource, string> = {
   starglitter: 'Starglitter shop',
   standard: 'Standard wish',
   gacha: 'Event wish',
-}
-
-/**
- * How many rows to show: the first screenful at once, then a batch more every frame, up to
- * `total` (the drawer opens without rendering rows nobody sees yet). A new `key` (another search)
- * starts over from the first screenful, so a long list never renders in one go.
- */
-function useBatches(total: number, batch = 16, first = 6, key = '') {
-  const [state, setState] = useState({ key, shown: first })
-  // (adjusted while rendering: the new key's first render already shows the first screenful)
-  if (state.key !== key) setState({ key, shown: first })
-  const shown = state.key === key ? state.shown : first
-  useEffect(() => {
-    if (shown >= total) return
-    const id = requestAnimationFrame(() =>
-      startTransition(() =>
-        setState((s) => (s.key === key ? { key, shown: s.shown + batch } : s))
-      )
-    )
-    return () => cancelAnimationFrame(id)
-  }, [shown, total, batch, key])
-  return shown
 }
 
 function RowsSkeleton() {

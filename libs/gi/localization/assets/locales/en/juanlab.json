@@ -139,6 +139,46 @@
     },
     "entries": [
       {
+        "date": "2026-11-24",
+        "title": "Update to Stellar Optimizer 1.39",
+        "summary": "Stellar Optimizer’s releases 1.37.3 to 1.39.0 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Team optimize: Top builds and Damage share** in the results, as on the KQM tab: the best team, then the best builds that change one member’s weapon or set.",
+              "**Member inspector**: after a run, pick a member to rank its other weapons and artifact sets by team damage.",
+              "**Automatic gear effects**: Team optimize turns on weapon and set effects you haven’t set, and times set effects from the rotation. What you set yourself still wins."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Optimize team dialog redesigned**: one line per member with sets, set effects, main stats and minimum ER; choose Best build or All builds instead of a number.",
+              "**Simpler Artifact sets dialog**: a switch per set, effects in each row, 2-pc/4-pc under Advanced; mixed builds are always considered.",
+              "**Damage share** keeps Stellar and Lunar damage apart from their element’s other damage.",
+              "**Quieter results header**, and no jumps while the other builds are ranked."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Yae Miko**: her Charged Attack hits once per cast (it was counted twice).",
+              "**Danica C2**: her first swap-in of a fight plays Will to Protect, as in the game.",
+              "**Valeriy**: the Burst turret fires the right number of shells, at the right time.",
+              "**Arlecchino** (Masque bonus and C1 need 30% Bond of Life) and **Citlali** (C1 bonus to the active member only).",
+              "**Rotation timeline**: clicking a Burst whose hit lands after the member’s next action opens that hit."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-23",
         "title": "Update to Stellar Optimizer 1.37",
         "summary": "Stellar Optimizer’s releases 1.37.0 to 1.37.2 arrive.",

@@ -16,6 +16,7 @@ import type {
   RunAttackState,
   RunEnemy,
   TeamOptResult,
+  TeamOptSession,
   TeamOptSolver,
   TeamOptStep,
 } from '@genshin-optimizer/gi/ui'
@@ -35,6 +36,8 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { useTranslation } from 'react-i18next'
+import { teamRunAttacks } from './RotationWriter'
 import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
 import { inventoryRequirementsKey } from './useTeamOpt'
 
@@ -53,6 +56,8 @@ export type TeamOptRunState =
       enemy?: RunEnemy
       /** When it was found: which saved result it is (`database.teamOptResults`) */
       savedAt?: number
+      /** Its members' other builds are being searched (`TeamOptResult.options`) */
+      optionsRunning?: true
     }
   | {
       type: 'error'
@@ -248,17 +253,35 @@ export function teamOptSolver(
   }
 }
 
+/**
+ * The results' teams to try other equipment on (`TeamOptSession`), by when they were found: the
+ * latest few (a run's, or rebuilt for a saved result)
+ */
+const sessions = new Map<number, Promise<TeamOptSession | undefined>>()
+const SESSIONS_KEPT = 3
+const keepSession = (
+  savedAt: number,
+  session: Promise<TeamOptSession | undefined>
+) => {
+  sessions.delete(savedAt)
+  sessions.set(savedAt, session)
+  if (sessions.size > SESSIONS_KEPT)
+    sessions.delete(sessions.keys().next().value as number)
+}
+
 /** Runs Team Optimize for a team: one solver run per member and round (see `optimizeTeam`) */
 export function useTeamOptRun(teamId: string) {
   const database = useDatabase()
   const key = teamRunKey(database, teamId)
   const { gender } = useDBMeta()
+  const { i18n } = useTranslation('charNames_gen')
   const [maxWorkers] = useNumWorkers()
   const [state, setStateRaw] = useState<TeamOptRunState>(() =>
     lastRun(database, teamId)
   )
   const setState = useCallback(
-    (state: TeamOptRunState) => {
+    /** `save`: a result's update (its other builds) saved too */
+    (state: TeamOptRunState, save = false) => {
       // (a new result: when it was found says which saved one it is)
       const next: TeamOptRunState =
         state.type === 'done' && state.savedAt === undefined
@@ -270,7 +293,8 @@ export function useTeamOptRun(teamId: string) {
       // a cancel stays as it is, with what was computed for it since)
       if (
         next.type === 'done' &&
-        database.teamOptResults.get().runs[teamId]?.savedAt !== next.savedAt
+        (save ||
+          database.teamOptResults.get().runs[teamId]?.savedAt !== next.savedAt)
       )
         database.teamOptResults.setRun(teamId, {
           savedAt: next.savedAt!,
@@ -301,6 +325,8 @@ export function useTeamOptRun(teamId: string) {
   )
   const status = useRef<TeamOptStatus>(initStatus())
   const cancelRef = useRef<() => void>(() => {})
+  /** The latest run: an earlier one (its other builds stopped) leaves the state to it */
+  const latestRun = useRef(0)
   useEffect(() => () => cancelRef.current(), [])
   // load a solver worker while the user sets things up
   useEffect(() => prewarmSolver(), [])
@@ -312,6 +338,10 @@ export function useTeamOptRun(teamId: string) {
       /** Bonus stats added while builds are ranked (the fight's averaged state buffs) */
       rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
     ) => {
+      // (a result's other builds still being searched stop: this run replaces it)
+      cancelRef.current()
+      const id = ++latestRun.current
+      const mine = () => latestRun.current === id
       let cancelled = false
       const roster = teamRoster(database, teamId)
       let stopSolver: (() => void) | undefined
@@ -322,6 +352,17 @@ export function useTeamOptRun(teamId: string) {
       const stopFollowing = database.teams.follow(teamId, () => {
         if (teamRoster(database, teamId) !== roster) cancelRef.current()
       })
+      let shown: (TeamOptRunState & { type: 'done' }) | undefined
+      // its other builds done or stopped: the result as it is, saved (not over a newer run's)
+      const settle = (found: TeamOptRunState & { type: 'done' }) => {
+        const { optionsRunning: _, ...done } = found
+        if (mine()) setState(done, true)
+        else {
+          const last = lastRuns[key]
+          if (last?.type === 'done' && last.savedAt === done.savedAt)
+            lastRuns[key] = done
+        }
+      }
       const startTime = performance.now()
       let lastPaint = startTime
       status.current.step = undefined
@@ -329,6 +370,9 @@ export function useTeamOptRun(teamId: string) {
       try {
         await nextPaint()
         const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
+        // (the rotation played again with the sets and weapons the run may give each member, so
+        // their effects count as the rotation triggers them, not by the members' switches)
+        const attacks = teamRunAttacks(database, gender, i18n, teamId, teamOpt)
         const requirementsKey = inventoryRequirementsKey(database, teamId)
         // (the enemy its damage is for, as it is now)
         const team = database.teams.get(teamId)
@@ -336,11 +380,46 @@ export function useTeamOptRun(teamId: string) {
         const solve = teamOptSolver(status.current, maxWorkers, (stop) => {
           stopSolver = stop
         })
+        const seconds = () => (performance.now() - startTime) / 1000
+        // the result as soon as it is found, its members' other builds added as they come
+        let session: TeamOptSession | undefined
+        const show = (next: TeamOptRunState & { type: 'done' }) => {
+          if (!mine() || cancelled || teamRoster(database, teamId) !== roster)
+            return
+          const first = !shown
+          shown = { ...next, savedAt: shown?.savedAt ?? Date.now() }
+          if (first && session)
+            keepSession(shown.savedAt!, Promise.resolve(session))
+          setState(shown, true)
+        }
         const result = await optimizeTeam({
           database,
           teamId,
           gender,
-          teamOpt,
+          teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
+          onResult: (found) =>
+            show({
+              type: 'done',
+              roster,
+              requirementsKey,
+              result: attacks ? { ...found, attacks } : found,
+              seconds: seconds(),
+              teamOpt,
+              ...(enemy ? { enemy } : {}),
+              optionsRunning: true,
+            }),
+          onSession: (s) => {
+            session = s
+          },
+          onOptions: (ck, options) =>
+            shown &&
+            show({
+              ...shown,
+              result: {
+                ...shown.result,
+                options: { ...shown.result.options, [ck]: options },
+              },
+            }),
           solve,
           builds: teamOpt.topN ?? 1,
           attackStates,
@@ -355,6 +434,9 @@ export function useTeamOptRun(teamId: string) {
             lastPaint = performance.now()
           },
         })
+        // (stopped while its other builds were searched: the result stays, with those found)
+        if (shown) return settle(shown)
+        if (!mine()) return
         if (cancelled || teamRoster(database, teamId) !== roster)
           throw new TeamOptCancelled()
         setState(
@@ -363,8 +445,8 @@ export function useTeamOptRun(teamId: string) {
                 type: 'done',
                 roster,
                 requirementsKey,
-                result,
-                seconds: (performance.now() - startTime) / 1000,
+                result: attacks ? { ...result, attacks } : result,
+                seconds: seconds(),
                 teamOpt,
                 ...(enemy ? { enemy } : {}),
               }
@@ -376,6 +458,8 @@ export function useTeamOptRun(teamId: string) {
               }
         )
       } catch (e) {
+        if (shown) return settle(shown)
+        if (!mine()) return
         if (cancelled || e instanceof TeamOptCancelled)
           setState(lastRun(database, teamId))
         else if (e instanceof TeamOptSetRulesUnmet)
@@ -388,10 +472,44 @@ export function useTeamOptRun(teamId: string) {
           setState({ type: 'error', message: (e as Error)?.message ?? `${e}` })
       } finally {
         stopFollowing()
-        cancelRef.current = () => {}
+        if (mine()) cancelRef.current = () => {}
       }
     },
-    [database, teamId, gender, maxWorkers, setState]
+    [database, teamId, gender, i18n, maxWorkers, setState, key]
+  )
+
+  /**
+   * A result's team to try other equipment on: the run's own, else rebuilt from the saved result
+   * (its builds and weapons, no rounds)
+   */
+  const sessionOf = useCallback(
+    (run: TeamOptRunState & { type: 'done' }) => {
+      const savedAt = run.savedAt ?? 0
+      let session = sessions.get(savedAt)
+      if (!session) {
+        let made: TeamOptSession | undefined
+        session = optimizeTeam({
+          database,
+          teamId,
+          gender,
+          teamOpt: run.result.attacks
+            ? { ...run.teamOpt, attacks: run.result.attacks }
+            : run.teamOpt,
+          solve: teamOptSolver(initStatus(), maxWorkers, () => {}),
+          maxRounds: 0,
+          from: run.result,
+          attackStates: run.result.attackStates,
+          onSession: (s) => {
+            made = s
+          },
+        })
+          .then(() => made)
+          .catch(() => undefined)
+        keepSession(savedAt, session)
+      }
+      return session
+    },
+    [database, teamId, gender, maxWorkers]
   )
 
   const cancel = useCallback(() => cancelRef.current(), [])
@@ -399,5 +517,13 @@ export function useTeamOptRun(teamId: string) {
     database.teamOptResults.setRun(teamId, undefined)
     setState({ type: 'idle' })
   }, [database, teamId, setState])
-  return { state, status: status.current, run, cancel, clear, requirementsKey }
+  return {
+    state,
+    status: status.current,
+    run,
+    cancel,
+    clear,
+    requirementsKey,
+    sessionOf,
+  }
 }

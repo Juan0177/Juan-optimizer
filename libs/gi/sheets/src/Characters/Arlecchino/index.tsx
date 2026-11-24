@@ -133,10 +133,14 @@ const infusion = greaterEqStr(
   constant('pyro')
 )
 
-const bond_normal_dmgInc = prod(
-  subscript(input.total.autoIndex, dm.infusion.normal_dmgInc, { unit: '%' }),
-  input.total.atk,
-  bondPercent
+const bond_normal_dmgInc = greaterEq(
+  bondPercent,
+  dm.infusion.bondLimit,
+  prod(
+    subscript(input.total.autoIndex, dm.infusion.normal_dmgInc, { unit: '%' }),
+    input.total.atk,
+    bondPercent
+  )
 )
 
 const a0_pyro_dmg_ = percent(dm.passive3.pyro_dmg_)
@@ -144,7 +148,15 @@ const a0_pyro_dmg_ = percent(dm.passive3.pyro_dmg_)
 const c1_normal_dmgInc = greaterEq(
   input.constellation,
   1,
-  prod(percent(dm.constellation1.infusionDmgInc), input.total.atk, bondPercent)
+  greaterEq(
+    bondPercent,
+    dm.infusion.bondLimit,
+    prod(
+      percent(dm.constellation1.infusionDmgInc),
+      input.total.atk,
+      bondPercent
+    )
+  )
 )
 
 const [condC2AfterAbsorbPath, condC2AfterAbsorb] = cond(key, 'c2AfterAbsorb')

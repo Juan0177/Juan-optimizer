@@ -251,7 +251,7 @@ export const sword3: WeaponModule[] = [
         icd: 600,
       },
     ],
-    custom: ({ members, holds, window, onFieldAt }) => {
+    custom: ({ members, holds, wears, window, onFieldAt }) => {
       const path = ['FinaleOfTheDeep', 'bond']
       const holders = members.filter(holds)
       /** Each wielder's Bond left (HP; NaN: not known) */
@@ -267,7 +267,9 @@ export const sword3: WeaponModule[] = [
           if (generation.get(k) === g) c.state(k, path, '')
         })
       }
+      // (only for the weapon held: a candidate's Bond would feed other gear's effects)
       const mark = (ctx: SimContext, k: CharacterKey, change: string) =>
+        wears(k) &&
         ctx.hit(0, {
           characterKey: k,
           path: ['_marker', 'bondOfLife', change],

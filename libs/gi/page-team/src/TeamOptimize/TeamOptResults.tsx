@@ -50,6 +50,7 @@ import CheckroomIcon from '@mui/icons-material/Checkroom'
 import CloseIcon from '@mui/icons-material/Close'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import SaveIcon from '@mui/icons-material/Save'
+import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import UndoIcon from '@mui/icons-material/Undo'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
@@ -57,6 +58,7 @@ import {
   Box,
   Button,
   ButtonBase,
+  CircularProgress,
   Collapse,
   FormControlLabel,
   IconButton,
@@ -67,7 +69,15 @@ import {
 } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material/styles'
 import type { ReactNode } from 'react'
-import { Fragment, memo, useDeferredValue, useMemo, useState } from 'react'
+import {
+  Fragment,
+  memo,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import {
@@ -79,20 +89,20 @@ import {
 } from './apply'
 import type { CocoonEvaluations, FightApplications } from './fightTeam'
 import { fightTeamOf } from './fightTeam'
-import { formatGain, formatRate } from './format'
+import { formatGain, formatRate, formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import type { ResultDetailsData } from './ResultDetails'
 import { MemberDetails, useResultDetails } from './ResultDetails'
 import { TcBuildGear } from './TcBuildGear'
 import { TeamCardButton } from './TeamCardButton'
 import {
-  FieldLabel,
   focusSx,
   hairline,
   insetSx,
   numSx,
   Panel,
   quickSx,
+  selectedSx,
   stepAccentSx,
   tokens,
   type,
@@ -142,8 +152,30 @@ export function TeamOptResults({
   enemyNow,
   applications,
   cocoon,
+  selected,
+  onSelect,
+  inspector,
+  picked,
+  onResetPicks,
+  fresh,
+  supplement,
+  ranking,
 }: {
   teamId: string
+  /** The members' other builds still being ranked: how many members are done (the run's team is final) */
+  ranking?: { done: number; total: number }
+  /** Below the inspector: the top builds and how the team's damage splits */
+  supplement?: ReactNode
+  /** The member whose equipment is compared (`inspector`), and choosing one */
+  selected?: CharacterKey
+  onSelect?: (characterKey: CharacterKey | undefined) => void
+  /** Its equipment inspector, under the members */
+  inspector?: ReactNode
+  /** `result` is the team with equipment picked in the inspector, and back to the run's */
+  picked?: boolean
+  onResetPicks?: () => void
+  /** The run just finished: its result is revealed (the figure counts up, the cards come in) */
+  fresh?: boolean
   /** The written rotation's element applications per second (a Stygian boss's mechanics) */
   applications?: FightApplications
   /** The builds' damage in the Moongecko's Radiant Cocoon and Disentangled (its fight) */
@@ -172,6 +204,8 @@ export function TeamOptResults({
   const database = useDatabase()
   const team = useTeam(teamId)
   const { before, after } = result
+  // (once, as it appears: not again when the page re-renders it)
+  const [reveal] = useState(() => !!fresh && !prefersReducedMotion())
   // the enemy the builds are for: the team's now while it takes the same damage (its preset and
   // HP too: the builds do not depend on them), else the one they were found for
   const fightEnemy = useMemo(
@@ -253,7 +287,7 @@ export function TeamOptResults({
   const discardLabel = t('teamOpt.result.discard', 'Discard')
 
   return (
-    <Panel sx={stepAccentSx('result')}>
+    <Panel sx={{ ...stepAccentSx('result'), ...(reveal && sheenSx) }}>
       {/* the headline (the rotation's damage), the actions, and discard in the corner */}
       <Box
         sx={(theme) => ({
@@ -270,89 +304,215 @@ export function TeamOptResults({
         })}
       >
         <Box sx={{ gridArea: 'head', minWidth: 0 }}>
-          <FieldLabel>
-            {rotationTime
-              ? t('teamOpt.result.dps', 'Team DPS')
-              : t('teamOpt.result.total', 'Rotation damage')}
-          </FieldLabel>
+          {/* the figure, then what to know about it as pills on its row (no extra lines: the
+              header keeps its height), the whole story in each pill's tooltip */}
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'baseline',
+              alignItems: 'center',
               flexWrap: 'wrap',
-              columnGap: 1,
+              columnGap: 1.25,
+              rowGap: 0.75,
             }}
           >
-            <Typography component="p" sx={type.figure}>
-              {formatRate(after.total, rotationTime, true)}
-            </Typography>
-            {compare && (
-              <>
-                <Typography
-                  component="span"
-                  sx={{
-                    ...numSx,
-                    fontSize: 15,
-                    fontWeight: 650,
-                    color: gain > 0.0005 ? 'success.main' : 'text.secondary',
-                  }}
-                >
-                  {formatGain(gain, i18n?.language)}
-                </Typography>
-                <Typography component="span" sx={{ ...type.label, ...numSx }}>
-                  {t('teamOpt.result.from', {
-                    defaultValue: 'from {{value}}',
-                    value: formatRate(before.total, rotationTime, true),
-                  })}
-                </Typography>
-              </>
-            )}
-          </Box>
-          <Typography
-            sx={{ ...type.label, ...numSx, fontWeight: 400, mt: 0.25 }}
-          >
-            {t('teamOpt.result.meta', {
-              defaultValue: 'Found in {{seconds}} s, {{count}} rounds',
-              seconds: seconds < 10 ? seconds.toFixed(1) : Math.round(seconds),
-              count: result.rounds,
-            })}
-          </Typography>
-          {/* the enemy the damage is for (and the team's now, if it changed since) */}
-          {enemy && (
             <Typography
-              component="div"
+              component="p"
               sx={{
-                ...type.label,
                 ...numSx,
-                fontWeight: 400,
-                mt: 0.25,
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                columnGap: 0.75,
+                display: 'inline-flex',
+                alignItems: 'baseline',
+                gap: 0.75,
+                fontSize: { xs: 30, sm: 36 },
+                fontWeight: 700,
+                letterSpacing: '-0.035em',
+                lineHeight: 1,
+                fontFeatureSettings: '"tnum", "ss01"',
               }}
             >
-              <span>{t('teamOpt.result.enemy', 'For')}</span>
-              <EnemySummary enemy={enemy} />
-              {fightEnemy && (
-                <EnemyDefeatTime enemy={fightEnemy} team={fight} />
-              )}
-              {enemyNow && (
-                <Box
-                  component="span"
-                  sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    columnGap: 0.75,
-                    color: 'warning.main',
-                  }}
-                >
-                  {t('teamOpt.result.enemyNow', '→ now')}
-                  <EnemySummary enemy={enemyNow} />
-                </Box>
-              )}
+              <CountUp
+                value={after.total}
+                animate={reveal}
+                format={(v) => formatRateFull(v, rotationTime)}
+              />
+              <Box
+                component="span"
+                sx={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase',
+                  color: 'text.secondary',
+                }}
+              >
+                {rotationTime
+                  ? t('teamOpt.result.dps', 'Team DPS')
+                  : t('teamOpt.result.total', 'Rotation damage')}
+              </Box>
             </Typography>
-          )}
+            {compare && (
+              <HeadPill
+                tone={gain > 0.0005 ? 'success' : 'neutral'}
+                tip={t('teamOpt.result.from', {
+                  defaultValue: 'from {{value}}',
+                  value: formatRate(before.total, rotationTime, true),
+                })}
+              >
+                {formatGain(gain, i18n?.language)}
+              </HeadPill>
+            )}
+            {stale && (
+              <HeadPill
+                tone="warning"
+                icon={<WarningAmberRoundedIcon />}
+                tip={t(
+                  'teamOpt.result.stale',
+                  'Found with an earlier rotation or settings: what changed since is not in it.'
+                )}
+                action={
+                  onRunAgain && {
+                    label: t('teamOpt.result.runAgain', 'Run again'),
+                    onClick: onRunAgain,
+                  }
+                }
+              >
+                {t('teamOpt.result.staleShort', 'Earlier settings')}
+              </HeadPill>
+            )}
+            {belowNow && (
+              <HeadPill
+                tone="warning"
+                icon={<TrendingDownIcon />}
+                tip={
+                  <>
+                    {t('teamOpt.result.belowNow', {
+                      defaultValue: 'Below your current builds ({{value}})',
+                      value: formatRate(before.total, rotationTime, true),
+                    })}
+                    {!!result.startBreaksSetRules?.length && (
+                      <>
+                        {': '}
+                        <Names
+                          keys={result.startBreaksSetRules}
+                          gender={gender}
+                        />{' '}
+                        {t('teamOpt.result.belowNowSets', {
+                          count: result.startBreaksSetRules.length,
+                          defaultValue:
+                            'can’t keep their current build: it breaks their allowed sets (Requirements → Artifact sets)',
+                        })}
+                      </>
+                    )}
+                    {!!result.startUntickedWeapons?.length && (
+                      <>
+                        {result.startBreaksSetRules?.length ? '; ' : ': '}
+                        <Names
+                          keys={result.startUntickedWeapons}
+                          gender={gender}
+                        />{' '}
+                        {t('teamOpt.result.belowNowWeapons', {
+                          count: result.startUntickedWeapons.length,
+                          defaultValue:
+                            'can’t keep their current weapon: it isn’t ticked in Weapons to choose from',
+                        })}
+                      </>
+                    )}
+                  </>
+                }
+              >
+                {t('teamOpt.result.belowNowShort', {
+                  defaultValue: 'Below current · {{value}}',
+                  value: formatRate(before.total, rotationTime, true),
+                })}
+              </HeadPill>
+            )}
+            {picked && onResetPicks && (
+              <HeadPill
+                tone="accent"
+                tip={t(
+                  'teamOpt.inspect.showingPicks',
+                  'With the equipment you picked'
+                )}
+                action={{
+                  label: t('teamOpt.inspect.reset', 'Reset'),
+                  onClick: onResetPicks,
+                }}
+              >
+                {t('teamOpt.inspect.picksShort', 'Your picks')}
+              </HeadPill>
+            )}
+            {noChange && !applied && (
+              <HeadPill
+                tone="success"
+                icon={<CheckIcon />}
+                tip={
+                  result.optimized.length
+                    ? t(
+                        'teamOpt.result.noChange',
+                        'The current builds are already the best ones found for this rotation.'
+                      )
+                    : t(
+                        'teamOpt.result.asItIs',
+                        'Run as it is: no build was searched.'
+                      )
+                }
+              >
+                {result.optimized.length
+                  ? t('teamOpt.result.noChangeShort', 'Already the best')
+                  : t('teamOpt.result.asItIsShort', 'Run as it is')}
+              </HeadPill>
+            )}
+            <EquipUndoPill teamId={teamId} />
+          </Box>
+          {/* one quiet line: how it was found, and the enemy it is for */}
+          <Typography
+            component="div"
+            sx={{
+              ...type.label,
+              ...numSx,
+              fontWeight: 400,
+              mt: 1,
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              columnGap: 0.75,
+            }}
+          >
+            <span>
+              {t('teamOpt.result.meta', {
+                defaultValue: 'Found in {{seconds}} s, {{count}} rounds',
+                seconds:
+                  seconds < 10 ? seconds.toFixed(1) : Math.round(seconds),
+                count: result.rounds,
+              })}
+            </span>
+            {enemy && (
+              <>
+                <Box component="span" aria-hidden sx={{ opacity: 0.5 }}>
+                  ·
+                </Box>
+                <span>{t('teamOpt.result.enemy', 'For')}</span>
+                <EnemySummary enemy={enemy} />
+                {fightEnemy && (
+                  <EnemyDefeatTime enemy={fightEnemy} team={fight} />
+                )}
+                {enemyNow && (
+                  <Box
+                    component="span"
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      columnGap: 0.75,
+                      color: 'warning.main',
+                    }}
+                  >
+                    {t('teamOpt.result.enemyNow', '→ now')}
+                    <EnemySummary enemy={enemyNow} />
+                  </Box>
+                )}
+              </>
+            )}
+            <RankingStatus ranking={ranking} />
+          </Typography>
         </Box>
 
         <Box
@@ -503,54 +663,6 @@ export function TeamOptResults({
         </Tooltip>
       </Box>
 
-      {/* what to know before using it (each opens and closes smoothly) */}
-      <Collapse in={!!stale} timeout={COLLAPSE_MS} unmountOnExit>
-        <Notice
-          tone="warning"
-          actions={
-            onRunAgain && (
-              <Button size="small" color="inherit" onClick={onRunAgain}>
-                {t('teamOpt.result.runAgain', 'Run again')}
-              </Button>
-            )
-          }
-        >
-          {t(
-            'teamOpt.result.stale',
-            'Found with an earlier rotation or settings: what changed since is not in it.'
-          )}
-        </Notice>
-      </Collapse>
-      {belowNow && (
-        <Notice tone="warning">
-          {t('teamOpt.result.belowNow', {
-            defaultValue: 'Below your current builds ({{value}})',
-            value: formatRate(before.total, rotationTime, true),
-          })}
-          {!!result.startBreaksSetRules?.length && (
-            <>
-              {': '}
-              <Names keys={result.startBreaksSetRules} gender={gender} />{' '}
-              {t('teamOpt.result.belowNowSets', {
-                count: result.startBreaksSetRules.length,
-                defaultValue:
-                  'can’t keep their current build: it breaks their allowed sets (Requirements → Artifact sets)',
-              })}
-            </>
-          )}
-          {!!result.startUntickedWeapons?.length && (
-            <>
-              {result.startBreaksSetRules?.length ? '; ' : ': '}
-              <Names keys={result.startUntickedWeapons} gender={gender} />{' '}
-              {t('teamOpt.result.belowNowWeapons', {
-                count: result.startUntickedWeapons.length,
-                defaultValue:
-                  'can’t keep their current weapon: it isn’t ticked in Weapons to choose from',
-              })}
-            </>
-          )}
-        </Notice>
-      )}
       <Collapse
         in={confirm && applied !== 'equip' && !stale}
         timeout={COLLAPSE_MS}
@@ -594,38 +706,6 @@ export function TeamOptResults({
           />
         </Notice>
       </Collapse>
-      <TeamEquipUndo teamId={teamId} />
-      {noChange && !applied && (
-        <Typography
-          sx={{
-            ...type.label,
-            fontWeight: 400,
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 0.75,
-            mt: 1.25,
-          }}
-        >
-          <CheckIcon
-            sx={{
-              fontSize: 16,
-              mt: '1px',
-              flexShrink: 0,
-              color: 'success.main',
-            }}
-          />
-          {result.optimized.length
-            ? t(
-                'teamOpt.result.noChange',
-                'The current builds are already the best ones found for this rotation.'
-              )
-            : t(
-                'teamOpt.result.asItIs',
-                'Run as it is: no build was searched.'
-              )}
-        </Typography>
-      )}
-
       {/* each member: its build and its own damage */}
       <Box sx={{ containerType: 'inline-size', mt: 2 }}>
         <Box
@@ -647,9 +727,10 @@ export function TeamOptResults({
             }),
           }}
         >
-          {members.map((member) => (
+          {members.map((member, i) => (
             <MemberResult
               key={member.characterKey}
+              revealDelay={reveal ? 140 + i * 80 : undefined}
               member={member}
               result={result}
               teamData={teamData}
@@ -662,11 +743,20 @@ export function TeamOptResults({
               compare={compare}
               excludedArts={excludedArts}
               onToggleExcluded={toggleExcluded}
+              selected={selected === member.characterKey}
+              onSelect={
+                onSelect && result.optimized.includes(member.characterKey)
+                  ? () => onSelect(member.characterKey)
+                  : undefined
+              }
             />
           ))}
         </Box>
         {/* the rotation as these builds play it, then the enemy's HP over the fight (a Stygian
             boss: its states too), as KQM theorycrafting's results show them */}
+        {/* (the member picked above: its equipment, as the KQM tab's inspector, below the tiles) */}
+        {inspector && <Box sx={{ mt: 2 }}>{inspector}</Box>}
+        {supplement}
         {timeline}
         {fightEnemy && <FightTimeline enemy={fightEnemy} team={fight} />}
       </Box>
@@ -732,6 +822,120 @@ export function TeamOptResults({
         </Box>
       </Snackbar>
     </Panel>
+  )
+}
+
+/**
+ * A short fact about the result on the figure's row (a warning, the picks, a change): small, its
+ * whole text in the tooltip, an action at its end when it has one
+ */
+function HeadPill({
+  tone,
+  icon,
+  tip,
+  action,
+  children,
+}: {
+  tone: 'warning' | 'success' | 'accent' | 'neutral'
+  icon?: ReactNode
+  tip?: ReactNode
+  action?: { label: ReactNode; onClick: () => void } | false
+  children: ReactNode
+}) {
+  const pill = (
+    <Box
+      component="span"
+      sx={(theme) => {
+        const color =
+          tone === 'warning'
+            ? theme.palette.warning.main
+            : tone === 'success'
+              ? theme.palette.success.main
+              : tone === 'accent'
+                ? theme.palette.primary.main
+                : theme.palette.text.secondary
+        return {
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          height: 24,
+          pl: icon ? 0.75 : 1,
+          pr: action ? 0.25 : 1,
+          borderRadius: tokens.radius.pill,
+          fontSize: 12.5,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          color,
+          bgcolor: alpha(color, 0.1),
+          boxShadow: `inset 0 0 0 1px ${alpha(color, 0.3)}`,
+          cursor: tip ? 'help' : undefined,
+          '& > svg': { fontSize: 14 },
+          ...numSx,
+        }
+      }}
+    >
+      {icon}
+      {children}
+      {action && (
+        <ButtonBase
+          onClick={action.onClick}
+          sx={{
+            ml: 0.25,
+            px: 0.75,
+            height: 20,
+            borderRadius: tokens.radius.pill,
+            fontSize: 12,
+            fontWeight: 650,
+            color: 'text.primary',
+            bgcolor: 'action.hover',
+            ...quickSx,
+            ...focusSx,
+            '&:hover': { bgcolor: 'action.selected' },
+          }}
+        >
+          {action.label}
+        </ButtonBase>
+      )}
+    </Box>
+  )
+  return tip ? (
+    <Tooltip arrow title={tip}>
+      {pill}
+    </Tooltip>
+  ) : (
+    pill
+  )
+}
+
+/** Undo the last Equip on this team, as a pill on the figure's row */
+function EquipUndoPill({ teamId }: { teamId: string }) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const undo = useTeam(teamId)?.equipmentUndo
+  const [failed, setFailed] = useState(false)
+  if (!undo) return null
+  return (
+    <HeadPill
+      tone={failed ? 'warning' : 'neutral'}
+      icon={<UndoIcon />}
+      tip={
+        failed
+          ? t(
+              'teamOpt.result.undoEquipConflict',
+              'Gear or saved builds changed since equipping. Review the affected equipment before restoring it.'
+            )
+          : t(
+              'teamOpt.result.undoEquipHelp',
+              'Restore the equipment and saved builds from before the last Equip action on this team.'
+            )
+      }
+      action={{
+        label: t('teamOpt.result.undoEquip', 'Undo equip'),
+        onClick: () => setFailed(!undoTeamEquip(database, teamId)),
+      }}
+    >
+      {t('teamOpt.result.equippedShort', 'Equipped')}
+    </HeadPill>
   )
 }
 
@@ -957,8 +1161,71 @@ const tagSx: SxProps<Theme> = {
   ...numSx,
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+/** A member's card coming in: a fade and a short rise, after its turn (`animationDelay`) */
+const cardInSx = {
+  '@keyframes teamOptCardIn': {
+    from: { opacity: 0, transform: 'translateY(14px) scale(.98)' },
+    to: { opacity: 1, transform: 'none' },
+  },
+  animation: 'teamOptCardIn .55s cubic-bezier(.2,.7,.2,1) both',
+} as const
+
+/** A light that sweeps the result's panel once as it appears */
+const sheenSx = {
+  position: 'relative',
+  '&::after': {
+    content: '""',
+    position: 'absolute',
+    inset: 0,
+    borderRadius: 'inherit',
+    pointerEvents: 'none',
+    background:
+      'linear-gradient(105deg, transparent 35%, rgba(255, 236, 190, .09) 50%, transparent 65%)',
+    backgroundSize: '260% 100%',
+    animation: 'teamOptSheen 1.2s cubic-bezier(.3,.6,.3,1) .1s both',
+  },
+  '@keyframes teamOptSheen': {
+    from: { backgroundPosition: '130% 0', opacity: 1 },
+    to: { backgroundPosition: '-30% 0', opacity: 0 },
+  },
+} as const
+
+/** `value` counting up from 0 when `animate` (once, as it first shows), else as it is */
+function CountUp({
+  value,
+  animate,
+  format,
+}: {
+  value: number
+  animate: boolean
+  format: (value: number) => string
+}) {
+  const [shown, setShown] = useState(animate ? 0 : value)
+  const counted = useRef(!animate)
+  useEffect(() => {
+    if (counted.current) return setShown(value)
+    const start = performance.now()
+    let frame = 0
+    const step = (now: number) => {
+      const k = clamp((now - start) / COUNT_UP_MS, 0, 1)
+      setShown(value * (1 - (1 - k) ** 3))
+      if (k < 1) frame = requestAnimationFrame(step)
+      else counted.current = true
+    }
+    frame = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(frame)
+  }, [value])
+  return format(shown)
+}
+const COUNT_UP_MS = 900
+
 function MemberResult({
   member,
+  revealDelay,
   result,
   teamData,
   rotationTime,
@@ -970,8 +1237,12 @@ function MemberResult({
   compare,
   excludedArts,
   onToggleExcluded,
+  selected,
+  onSelect,
 }: {
   member: TeamOptMember
+  /** It comes in after this long (ms), as a fresh result is revealed */
+  revealDelay?: number
   result: TeamOptResult
   teamData: TeamData | undefined
   rotationTime?: number
@@ -987,6 +1258,9 @@ function MemberResult({
   /** Artifacts excluded from the team's optimization, and the toggle */
   excludedArts: ReadonlySet<string>
   onToggleExcluded: (id: string) => void
+  /** Its equipment is compared below (the inspector), and choosing it */
+  selected?: boolean
+  onSelect?: () => void
 }) {
   const {
     characterKey,
@@ -1035,17 +1309,44 @@ function MemberResult({
 
   return (
     <Box
-      sx={{
+      sx={(theme) => ({
         ...insetSx,
         p: 1.25,
         display: 'flex',
         flexDirection: 'column',
         gap: 1.25,
         minWidth: 0,
-      }}
+        ...(selected && selectedSx(theme)),
+        ...(revealDelay !== undefined && {
+          ...cardInSx,
+          animationDelay: `${revealDelay}ms`,
+        }),
+      })}
     >
-      {/* who, its own damage, and its share of the team's (the bar, in its element's colour) */}
-      <Box>
+      {/* who, its own damage, and its share of the team's (the bar, in its element's colour);
+          picks the member whose equipment the inspector below compares, as the KQM tab's tiles */}
+      <Box
+        {...(onSelect && {
+          component: ButtonBase,
+          role: 'tab',
+          'aria-selected': !!selected,
+          onClick: onSelect,
+        })}
+        sx={{
+          display: 'block',
+          width: '100%',
+          textAlign: 'left',
+          borderRadius: tokens.radius.control,
+          ...(onSelect && {
+            m: -0.75,
+            p: 0.75,
+            width: 'calc(100% + 12px)',
+            ...quickSx,
+            ...focusSx,
+            '&:hover': { bgcolor: 'action.hover' },
+          }),
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
           <MemberAvatar characterKey={characterKey} size={36} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -1679,3 +1980,67 @@ export function WeaponThumb({
 // (moved to gi/ui so the Teams page can show the same tooltip)
 // (the weapon tooltip lives in gi/ui now; this file's users still take it from here)
 export { WeaponDetails }
+
+/**
+ * After "Found in": the members' other builds (Top builds, the inspector's rankings) still being
+ * ranked, then for a moment that they are done. In the line: its height never changes.
+ */
+function RankingStatus({
+  ranking,
+}: {
+  ranking: { done: number; total: number } | undefined
+}) {
+  const { t } = useTranslation('page_team')
+  const [finished, setFinished] = useState(false)
+  const was = useRef(!!ranking)
+  useEffect(() => {
+    const before = was.current
+    was.current = !!ranking
+    if (!before || ranking) return undefined
+    setFinished(true)
+    const id = setTimeout(() => setFinished(false), 4000)
+    return () => clearTimeout(id)
+  }, [ranking])
+  if (!ranking && !finished) return null
+  const status = (
+    <Box
+      component="span"
+      role="status"
+      aria-live="polite"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        ml: 1,
+        verticalAlign: 'middle',
+        color: ranking ? tokens.gold : 'success.main',
+        fontWeight: 600,
+      }}
+    >
+      {ranking ? (
+        <CircularProgress size={10} thickness={6} sx={{ color: 'inherit' }} />
+      ) : (
+        <CheckIcon sx={{ fontSize: 13 }} />
+      )}
+      {ranking
+        ? t('teamOpt.result.ranking', {
+            defaultValue: 'Ranking other builds · {{done}} of {{total}}',
+            done: ranking.done,
+            total: ranking.total,
+          })
+        : t('teamOpt.result.ranked', 'Other builds ranked')}
+    </Box>
+  )
+  return ranking ? (
+    <Tooltip
+      title={t(
+        'teamOpt.result.rankingTip',
+        'This team and its damage are final. Each member’s other weapons and sets are still being ranked: Top builds and the equipment rankings fill in when they are done.'
+      )}
+    >
+      {status}
+    </Tooltip>
+  ) : (
+    status
+  )
+}

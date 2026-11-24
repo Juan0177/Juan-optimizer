@@ -9,7 +9,8 @@ const run = (
   members: CharacterKey[],
   text: string,
   kits: Partial<Record<CharacterKey, KitModel>>,
-  constellations: Partial<Record<CharacterKey, number>> = {}
+  constellations: Partial<Record<CharacterKey, number>> = {},
+  target?: { radius: number; distance: number }
 ) =>
   simulateRotation({
     rotation: parseRotation(
@@ -25,6 +26,7 @@ const run = (
     keep: 'all',
     kits,
     reactions: { onHit() {} },
+    target,
   })
 
 describe('Cyno Revelation (upstream gcsim)', () => {
@@ -114,12 +116,23 @@ describe('Diona Revelation (Choice Treasures)', () => {
 })
 
 describe('Yae Miko', () => {
-  it('lands only the charged attack boxes that reach the 2 m target at 2.4 m', () => {
-    const sim = run(['YaeMiko'], 'YaeMiko CA W1', {
-      YaeMiko: kitModels.YaeMiko,
-    })
-    expect(sim.hits.filter((h) => h.tag === 'charged').map((h) => h.t)).toEqual(
-      [90, 99]
-    )
+  // (kqmsim: five 2×2 m boxes 9 frames apart, centred 1.65 m further ahead each; the YaeCharged
+  // group deals damage once per 0.5 s)
+  it('a Charged Attack hits a target once, from the first of its boxes to reach it', () => {
+    const hits = (target?: { radius: number; distance: number }) =>
+      run(
+        ['YaeMiko'],
+        'YaeMiko CA W3',
+        { YaeMiko: kitModels.YaeMiko },
+        {},
+        target
+      )
+        .hits.filter((h) => h.tag === 'charged')
+        .map((h) => h.t)
+    // (the default 2 m target at 2.4 m: two boxes reach it, the second does no damage)
+    expect(hits()).toEqual([90])
+    expect(hits({ radius: 1, distance: 6 })).toEqual([108])
+    // (a target so large that the fifth box reaches it after the 0.5 s)
+    expect(hits({ radius: 4, distance: 4 })).toEqual([90, 126])
   })
 })
