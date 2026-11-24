@@ -304,6 +304,7 @@ vi.mock('@genshin-optimizer/gi/ui', () => ({
 vi.mock('./buffs', () => ({
   describe: () => ({ name: '', teamBuff: false }),
   useTeamBuffs: () => [],
+  useTeamOptBuffs: () => [],
   useKqmTeamBuffs: () => [],
   buffsForAttacker: () => [],
   buffEffects: () => [],
@@ -671,13 +672,26 @@ describe('KQM first-time setup', () => {
     ).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Apply ER targets' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    // (Automatic ER: the calculator's target, shown, not typed)
     expect(
-      (
-        screen.getByLabelText(
-          'KamisatoAyaka minimum ER (%)'
-        ) as HTMLInputElement
-      ).value
-    ).toBe('135')
+      screen
+        .getByRole('radio', { name: 'Automatic' })
+        .getAttribute('aria-checked')
+    ).toBe('true')
+    expect(
+      screen.getByLabelText('KamisatoAyaka minimum ER (%)').textContent
+    ).toContain('135')
+    // Manual: the same target, to type over
+    fireEvent.click(screen.getByRole('radio', { name: 'Manual' }))
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByLabelText(
+            'KamisatoAyaka minimum ER (%)'
+          ) as HTMLInputElement
+        ).value
+      ).toBe('135')
+    )
     expect(
       (
         screen.getByRole('button', {

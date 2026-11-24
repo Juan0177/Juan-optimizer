@@ -1,4 +1,10 @@
-import { kqmCardTones } from './renderKqmCard'
+import {
+  drawKqmCardDetails,
+  KQM_CARD_DETAILS_H,
+  KQM_CARD_NOTE_LINE,
+  type KqmCardDetails,
+  kqmCardTones,
+} from './renderKqmCard'
 import {
   betaMark,
   FONT,
@@ -27,6 +33,8 @@ export type VersionsCardMember = {
   field?: string
   /** the Energy Recharge it needs ("125%"), when known */
   er?: string
+  /** juanlab: its main stats and out-of-combat stats (the detailed sheet), under its sets */
+  details?: KqmCardDetails
 }
 
 /** A team on the versions sheet: the original or one of its versions */
@@ -45,7 +53,7 @@ export type VersionsCardData = {
   teams: VersionsCardTeam[]
   /** best first: each numbered by its place (absent: as arranged, unnumbered) */
   ranked?: boolean
-  /** what they were all run under ("KQM Standards · Talents 10/10/10 · …") */
+  /** what they were all run under ("KQM Standards · Talents 10/10/10 · …"); "\n" between lines */
   notes: string
   /** it shows unreleased content: this name over the whole sheet */
   beta?: string
@@ -80,6 +88,16 @@ const STAT_ROW = 50
 const ITEM_ROW = 52
 const ROT_ROW = 66
 const CARD_H = STRIP + PORTRAIT + NAME_ROW + STAT_ROW + 2 * ITEM_ROW + ROT_ROW
+/** juanlab: the detailed block's height under the members' sets (none unless a member has one) */
+const detailsH = (data?: Pick<VersionsCardData, 'teams'>) =>
+  data?.teams.some((t) => t.members.some((m) => m.details))
+    ? KQM_CARD_DETAILS_H
+    : 0
+/** juanlab: a card's height, its detailed block included */
+const cardH = (data?: Pick<VersionsCardData, 'teams'>) => CARD_H + detailsH(data)
+/** juanlab: the notes' height, each line after the first one more */
+const notesH = (data?: Pick<VersionsCardData, 'notes'>) =>
+  NOTES + ((data?.notes.split('\n').length ?? 1) - 1) * KQM_CARD_NOTE_LINE
 const ROT_LABEL = 104
 const ICON = 34
 
@@ -90,9 +108,12 @@ export const versionsCardWidth = (n: number) => {
   const cols = columnsFor(n)
   return 2 * M + cols * CARD_W + (cols - 1) * GAP
 }
-export const versionsCardHeight = (n: number) => {
+export const versionsCardHeight = (
+  n: number,
+  data?: Pick<VersionsCardData, 'teams' | 'notes'>
+) => {
   const rows = Math.ceil(Math.max(1, n) / columnsFor(n))
-  return M + rows * CARD_H + (rows - 1) * GAP + NOTES + M
+  return M + rows * cardH(data) + (rows - 1) * GAP + notesH(data) + M
 }
 
 /**
@@ -122,7 +143,8 @@ export async function renderVersionsCard(
   const n = data.teams.length
   const cols = columnsFor(n)
   const W = versionsCardWidth(n)
-  const H = versionsCardHeight(n)
+  const H = versionsCardHeight(n, data)
+  const DETAILS = detailsH(data)
   const { canvas, ctx } = page(W, H, scale)
   ctx.fillStyle = PAGE
   ctx.fillRect(0, 0, W, H)
@@ -298,7 +320,7 @@ export async function renderVersionsCard(
 
   data.teams.forEach((team, t) => {
     const x0 = M + (t % cols) * (CARD_W + GAP)
-    const y0 = M + Math.floor(t / cols) * (CARD_H + GAP)
+    const y0 = M + Math.floor(t / cols) * (cardH(data) + GAP)
     // ── the strip: its rank, its DPS (the figure), and against the original
     fill(x0, y0, CARD_W, STRIP, HEAD)
     frame(x0, y0, CARD_W, STRIP)
@@ -408,9 +430,16 @@ export async function renderVersionsCard(
       frame(x, ny, COL, NAME_ROW)
       frame(x, wy, COL, ITEM_ROW)
       frame(x, wy + ITEM_ROW, COL, ITEM_ROW)
+      // juanlab: the detailed sheet's block under its sets (a member without one: an empty cell)
+      if (DETAILS) {
+        const dy = wy + 2 * ITEM_ROW
+        fill(x, dy, COL, DETAILS, PAPER)
+        if (m.details) drawKqmCardDetails(ctx, m.details, x, dy, COL)
+        frame(x, dy, COL, DETAILS)
+      }
     })
     // ── its rotation: one line, else two, broken between turns
-    const ry = py + PORTRAIT + NAME_ROW + STAT_ROW + 2 * ITEM_ROW
+    const ry = py + PORTRAIT + NAME_ROW + STAT_ROW + 2 * ITEM_ROW + DETAILS
     fill(x0, ry, ROT_LABEL, ROT_ROW, HEAD)
     ink(
       ctx,
@@ -482,20 +511,23 @@ export async function renderVersionsCard(
       }
     }
   })
-  // ── what they were all run under
-  const footY = H - M - NOTES / 2 + 8
+  // ── what they were all run under (juanlab: a line each, the stamp beside the first)
+  const lines = data.notes.split('\n')
+  const footY = H - M - notesH(data) + NOTES / 2 + 8
   const stampW = ink(ctx, data.labels.stamp, W - M, footY, {
     size: 15,
     color: 'rgba(28, 35, 49, 0.45)',
     align: 'right',
   })
-  ink(ctx, data.notes, M, footY, {
-    size: 18,
-    weight: 500,
-    color: MUTED,
-    maxWidth: W - 2 * M - stampW - 40,
-    minSize: 13,
-  })
+  lines.forEach((line, k) =>
+    ink(ctx, line, M, footY + k * KQM_CARD_NOTE_LINE, {
+      size: k ? 15 : 18,
+      weight: 500,
+      color: MUTED,
+      maxWidth: W - 2 * M - (k ? 0 : stampW + 40),
+      minSize: 13,
+    })
+  )
   if (data.beta) betaMark(ctx, W, H, data.beta)
   return canvas
 }

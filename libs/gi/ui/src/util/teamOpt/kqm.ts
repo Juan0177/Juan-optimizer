@@ -649,6 +649,8 @@ export function kqmWeapons(
   if (locked) return [locked]
   const ofType = kqmOfType(characterKey)
   const excluded = kqmExcludedWeapons(kqm)
+  for (const [key, who] of Object.entries(kqm.excludedWeaponMembers ?? {}))
+    if (who?.includes(characterKey)) excluded.add(key as WeaponKey)
   // (its signature left out: `TeamOptKqm.signature` 0)
   const sig = signatureWeapons[characterKey]
   if (sig && kqm.signature?.[characterKey] === 0) excluded.add(sig)

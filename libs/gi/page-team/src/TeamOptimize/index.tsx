@@ -80,7 +80,7 @@ import {
   buffsForAttacker,
   useKqmSwitchBuffs,
   useKqmTeamBuffs,
-  useTeamBuffs,
+  useTeamOptBuffs,
 } from './buffs'
 import { ExtraBuffs } from './ExtraBuffs'
 import { expandStore } from './expandStore'
@@ -222,10 +222,13 @@ export default function TeamBuildWorkspace({
       setStoredTeamOpt(mode === 'kqm' ? kqmRotationUpdate(update) : update),
     [mode, setStoredTeamOpt]
   )
-  // `teamData` is recomputed whenever a member, a build or a conditional changes
+  // `teamData` is recomputed whenever a member, a build or a conditional changes (never for Team
+  // optimize's own settings, which are saved on the team too: the members stay the same object,
+  // and what is worked out from them, the timeline's play, is not done again)
+  const loadouts = JSON.stringify(team?.loadoutData)
   const members = useMemo(
     () => teamOptMembers(database, teamId),
-    [database, teamId, team, teamData]
+    [database, teamId, loadouts, teamData]
   )
   // (the KQM tab's rotation, the first time: a copy of Team optimize's)
   const kqmSetUp = storedTeamOpt.kqm?.attacks !== undefined
@@ -246,7 +249,8 @@ export default function TeamBuildWorkspace({
     if (mode !== 'kqm' || !kqmSetUp || kqmOwnReady) return
     kqmOwnSetUp(database, teamId)
   }, [mode, kqmSetUp, kqmOwnReady, database, teamId])
-  const buffs = useTeamBuffs(teamId, teamData)
+  // (Team optimize's: its switches, and the buffs its rotation times)
+  const buffs = useTeamOptBuffs(teamId, teamData, storedTeamOpt.attacks)
   const kqmSwitchBuffs = useKqmSwitchBuffs(
     teamId,
     teamData,
@@ -2160,8 +2164,26 @@ function useCurrentEvaluation(
     evaluation: TeamOptEvaluation | undefined
     settings: Parameters<typeof evaluateTeamRotation>[3]
   }>()
+  // (evaluated again only when what it reads changes: not for a weapon ticked in Weapons)
+  const latestTeamOpt = useRef(teamOpt)
+  latestTeamOpt.current = teamOpt
+  const readKey = useMemo(
+    () =>
+      JSON.stringify([
+        teamOpt.attacks,
+        teamOpt.assumeMaxMain,
+        teamOpt.onField,
+        teamOpt.bonusStats,
+        teamOpt.energySource,
+        teamOpt.energyCalculator,
+        teamOpt.weaponEnergy,
+      ]),
+    [teamOpt]
+  )
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `readKey` stands for `teamOpt`
   useEffect(() => {
     if (!teamData) return undefined
+    const teamOpt = latestTeamOpt.current
     const timer = setTimeout(() => {
       const members = teamOptMembers(database, teamId)
       // with what the team's energy weapons save each member
@@ -2192,7 +2214,7 @@ function useCurrentEvaluation(
       })
     }, 120)
     return () => clearTimeout(timer)
-  }, [database, teamId, gender, teamOpt, teamData, attackStates])
+  }, [database, teamId, gender, readKey, teamData, attackStates])
   // (and the settings it was found with: the Moongecko's cocoon evaluates the same)
   return [current?.evaluation, current?.settings] as const
 }

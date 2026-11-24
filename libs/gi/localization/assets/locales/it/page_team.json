@@ -435,7 +435,7 @@
         "everyTwo": "Ogni 2 rotazioni",
         "favCatcher": "Raccoglitore Favonius",
         "favProcs": "Attivazioni Favonius",
-        "favProcsTip": "Per rotazione, quando questo membro impugna un'arma di Favonius (KQM le conta per ogni arma che prova). Ognuna genera 3 particelle neutre: 6 di energia per chi le raccoglie, meno per gli altri. Al massimo una ogni 12 s (R1) fino a 6 s (R5).",
+        "favProcsTip": "Per rotazione, mentre questo membro impugna un'arma di Favonio (contate per arma durante l'ottimizzazione). Ognuna genera 3 particelle neutre: 6 di energia per chi le raccoglie, meno per gli altri. Al massimo una ogni 12 s (R1) fino a 6 s (R5).",
         "favoniusBuilds": "Solo build con Favonius",
         "favoniusIfHeld": "Contate per le build con un'arma di Favonius, non nella stima qui sopra.",
         "feed": "Al raccoglitore",
@@ -504,7 +504,12 @@
         "worst": "Caso peggiore",
         "asPlayed": "Come giocata: {{shares}}",
         "scaledEnergy": "E {{value}} da {{name}} per rotazione al 100% di ER, di più con la sua Ricarica di energia",
-        "turretMade": "La sua torretta: {{value}} particelle per rotazione, come le gioca la rotazione"
+        "turretMade": "La sua torretta: {{value}} particelle per rotazione, come le gioca la rotazione",
+        "noFavoniusTipKqm": "Non conta finché in Armi non è ammessa un'arma di Favonio per questo membro.",
+        "noFavoniusTipTeam": "Non conta finché questo membro non può impugnare un'arma di Favonio (attiva anche Armi e spuntane una per lui, o equipaggiala).",
+        "noErChange": "nessuna variazione di ER (tutti al 100%)",
+        "favZeroHint": "Imposta più di 0 attivazioni per contare le particelle di Favonio quando questo membro ne impugna una.",
+        "withFavonius": "Con Favonio (R{{r}}):"
       },
       "calculated": "Calcolata",
       "catchUp": "≈ +{{amount}} roll per il n. {{rank}}",
@@ -778,7 +783,11 @@
       "weaponNoMatch": "Nessuna arma corrisponde",
       "weaponNotTicked": "Non spuntata",
       "weaponSearch": "Cerca armi",
-      "shareStellar": "{{element}} stellare"
+      "shareStellar": "{{element}} stellare",
+      "energyModeTip": "Automatica: il calcolatore di ER ricava l'ER minima di ogni membro dalla rotazione, di nuovo per ogni arma che una build prova (Favonio e le altre armi di energia comprese). Manuale: gli obiettivi che scrivi sotto.",
+      "erAutoTarget": "Calcolata dal calcolatore di ER per questa rotazione, e di nuovo per ogni arma che una build prova. Scegli Manuale per scrivere la tua.",
+      "weaponLockedShort": "bloccato su",
+      "memberNoWeapon": "scegli almeno un'arma per lui prima di generare le build."
     },
     "card": {
       "button": "Card della squadra",
@@ -879,7 +888,17 @@
       "ranked": "Altre build classificate",
       "rankingTip": "Questa squadra e il suo danno sono definitivi. Le altre armi e gli altri set di ogni membro sono ancora in classifica: le migliori build e le classifiche dell'equipaggiamento si completano quando hanno finito.",
       "belowNowShort": "Sotto l'attuale · {{value}}",
-      "ranking": "Classifica delle altre build · {{done}} di {{total}}"
+      "ranking": "Classifica delle altre build · {{done}} di {{total}}",
+      "erNoneTip": "Nessun requisito di ricarica di energia",
+      "erBurstUnused": "Tripudio non usato nel calcolatore di ER",
+      "erNoneShort": "Niente ER",
+      "dpsUnit": "DPS",
+      "erShortTip": "ER {{value}} / {{min}} richiesta (non raggiunta)",
+      "erReqTip": "ER richiesta: {{value}}",
+      "erReachedTip": "La build arriva a {{value}}",
+      "erReducedTip": "Abbassata di −{{relief}}% da {{base}}",
+      "erNowTip": "Impostazione attuale: {{value}}",
+      "erPill": "ER {{value}}"
     },
     "editor": {
       "close": "Chiudi",
@@ -957,7 +976,9 @@
       "auto": "Auto",
       "autoTip": "Impostato in automatico per questa rotazione e squadra. Scegli uno stato sull'arma o sui manufatti del personaggio per usarne un altro.",
       "useAuto": "Usa auto",
-      "useAutoTip": "Impostato a mano. Lascia invece che sia Ottimizza squadra a deciderlo per questa rotazione e squadra."
+      "useAutoTip": "Impostato a mano. Lascia invece che sia Ottimizza squadra a deciderlo per questa rotazione e squadra.",
+      "fromRotationTip": "Il suo interruttore è spento: la tua rotazione lo attiva per i colpi in cui è attivo, e lo spegne per gli altri.",
+      "fromRotation": "Dalla rotazione"
     },
     "weapons": {
       "teamEnergyHint": "Quanta Ricarica di energia in meno serve a ogni membro mentre qualcuno in squadra impugna quest'arma.",
@@ -978,7 +999,7 @@
       "deleteLabel": "Elimina dall'inventario",
       "deleteReplaced": ", che riceve",
       "deleteTitle": "Elimina",
-      "desc": "Ogni membro prova le armi spuntate del suo tipo, insieme ai suoi manufatti. Una passiva conta solo se è attiva per quel personaggio. Un'arma a energia nella squadra riduce il requisito di Ricarica di energia di ogni membro del valore che imposti per quel membro: clicca ⚡ sull'arma.",
+      "desc": "Ogni membro prova le armi spuntate ammesse per lui, insieme ai suoi manufatti. Una passiva conta solo se è attiva per quel personaggio. Un'arma di energia in squadra abbassa l'ER richiesta di ogni membro di quanto imposti per lui: clicca ⚡ sull'arma.",
       "energy": "Energia",
       "energyAdd": "Dà energia? Imposta quanta Ricarica di energia in meno serve a ogni membro",
       "energyHint": "Dà energia o particelle: clicca per impostare quanta Ricarica di energia in meno serve a ogni membro con quest'arma in squadra.",
@@ -988,7 +1009,7 @@
       "levelRef": "Liv. {{level}} · R{{refinement}}",
       "leveled": "Livello 80 e oltre",
       "locked": "Bloccata",
-      "noEnergyNeedHint": ": nessun requisito di Ricarica di energia, quindi per ora non cambia niente",
+      "noEnergyNeedHint": ": nessuna ER minima impostata: imposta l'ER minima di questo membro per applicare questa riduzione",
       "noPassive": "Nessun effetto passivo",
       "none": "Nessuna arma di questo tipo.",
       "off": "Spenta",
@@ -1000,7 +1021,30 @@
       "settings": "Impostazioni",
       "swap": "Cambia arma",
       "teamEnergy": "ER necessaria",
-      "count": "{{allowed}}/{{total}} armi"
+      "count": "{{allowed}}/{{total}} armi",
+      "descCalc": "Ogni membro prova le armi spuntate ammesse per lui, insieme ai suoi manufatti. Una passiva conta solo se è attiva per quel personaggio. L'ER è calcolata per arma dal calcolatore di ER: clicca ⚡ su Favonio o su un'arma di energia per vederne il risparmio o regolarne le attivazioni.",
+      "calcModeTip": "I requisiti di ER sono ricalcolati per arma dal calcolatore di ER (Favonio compreso). Clicca ⚡ su Favonio o su un'arma di energia per regolarne le attivazioni, o apri il calcolatore di ER.",
+      "memberNoWeapon": "nessuna arma spuntata per lui: tiene l'arma attuale.",
+      "usableByTip": "Chi può equipaggiare quest'arma. Clicca un personaggio per ammetterlo o escluderlo.",
+      "usableBy": "Utilizzabile da",
+      "usableOn": "ammesso: clicca per escludere",
+      "usableOff": "escluso: clicca per ammettere",
+      "calcEnergyTitle": "Calcolata dal calcolatore di ER",
+      "zeroTriggersShort": "0 attivazioni",
+      "noErChangeShort": "nessuna variazione di ER",
+      "calcEnergyClickHint": "Clicca per vedere l'effetto sull'ER o regolare le attivazioni.",
+      "calcTag": "Calcolo ER",
+      "calcPanelTip": "Ricalcolata per build dal calcolatore di ER ogni volta che questo membro impugna quest'arma. Le modifiche qui aggiornano direttamente il calcolatore di ER.",
+      "calcPanelTitle": "Calcolatore di ER (per build)",
+      "perBurstAuto": "Conta da sola a ogni Tripudio",
+      "setTriggersHint": "Imposta più di 0 attivazioni per contare l'energia di quest'arma.",
+      "allAtBaseEr": "Nessuna ER risparmiata (tutti i membri sono già al 100% di ER).",
+      "lessEr": "ER in meno",
+      "useCalculatorTip": "Calcola in automatico l'ER di Favonio e delle armi di energia invece di inserire le riduzioni a mano.",
+      "noMinErShort": "Nessuna ER minima",
+      "usableByAria": "Permetti a {{character}} di usare {{weapon}}",
+      "triggersAria": "Attivazioni di {{character}} per rotazione",
+      "lessErAria": "Riduzione di ER di {{character}} (%)"
     },
     "writer": {
       "addOpener": "Aggiungi un'apertura solo per la prima rotazione",
@@ -1069,7 +1113,7 @@
         "moves": "Attacco in picchiata · scatto · salto",
         "repeat": "Un gruppo ripetuto quel numero di volte (fino a 20), come N5 CD quattro volte",
         "wait": "Attesa di 1,5 s · 90 frame",
-        "ready": "Solo quando è pronta: saltata, non attesa",
+        "ready": "Solo se pronto: saltato, non atteso (calcolatore di ER: Q? conta di base un Tripudio ogni 2)",
         "entry": "Solo entrata in campo: l'effetto di entrata del membro (un nome da solo a metà rotazione fa lo stesso)",
         "notes": "Ignorate · si gioca la prima",
         "loop": "Finisci con il primo membro: dove la rotazione ricomincia",
@@ -1077,7 +1121,7 @@
         "bullets": "Chasca: spara dopo aver caricato 4 proiettili (6 di default)",
         "cancel": "Arlecchino: annulla l'attacco caricato prima che colpisca. Assorbe comunque la Direttiva del debito di sangue (Legame di vita, il Fuoco del sangue della C2), ma l'attacco non arriva, quindi non consuma l'aura per la Fusione",
         "dashReady": "Vagabondo: scatto solo con Discesa, altrimenti un attacco caricato",
-        "otherwise": "Solo se pronta, altrimenti le azioni dopo «/» (senza spazi in mezzo)",
+        "otherwise": "Solo se pronto, altrimenti le azioni dopo \"/\" (senza spazi; il calcolatore di ER conta di base un Tripudio ogni 2)",
         "plunge": "Attacco in picchiata alto o basso (P da sola: quello solito del personaggio). HP[collision] aggiunge il colpo di discesa; HP[collision=0.5] lo conta su metà delle picchiate",
         "walk": "Camminata di 1 frame · 11 frame (un'azione: l'abilità successiva di Tartaglia è quella in camminata)",
         "movement": "Dopo qualsiasi azione: i metri che il membro attivo percorre con essa, contando ogni attacco normale (il movement di gcsim). Lo usa solo la Bilancia dell'energia cinetica di Iansan: 0,67 punti Spirito notturno a metro mentre un altro membro è in campo, 6 m ad azione se non scritto",
@@ -1096,7 +1140,11 @@
       "replayedKqm": "Rotazione copiata da Ottimizza squadra, giocata alle costellazioni di KQM ({{cons}}) · {{changes}}",
       "replayedFromKqm": "Rotazione copiata da KQM Theorycrafting, giocata alle tue costellazioni ({{cons}}) · {{changes}}",
       "replayedHits": "sono cambiati i suoi colpi",
-      "replayedOk": "OK"
+      "replayedOk": "OK",
+      "waitsSwap": "cambio",
+      "waitsShortHint": "Non pronto in tempo",
+      "waitsTip": "Giocata di seguito, un'azione può essere ancora in ricarica quando la rotazione ci arriva di nuovo (un Tripudio usato tardi in una rotazione e presto nella successiva): la squadra resta ferma finché non è pronta. Il tempo per rotazione comprende le attese, quindi abbassano il DPS. Usala più avanti nella rotazione o allunga la rotazione. La timeline mostra ogni attesa tratteggiata; Tutte le rotazioni le mostra dove avvengono.",
+      "waitsTitle": "Attende {{seconds}} s per rotazione"
     },
     "timeline": {
       "aura": {
@@ -1133,7 +1181,17 @@
       "alwaysOnCount": "Sempre attivi ({{count}})",
       "wholeTeam": "Buff per tutta la squadra",
       "full": "Schermo intero",
-      "exitFull": "Esci dallo schermo intero"
+      "exitFull": "Esci dallo schermo intero",
+      "opener": "Apertura",
+      "countedTag": "contata",
+      "waitsWhy": "Non ancora pronta: la squadra resta ferma.",
+      "rotationN": "Rotazione {{n}}",
+      "waitsFor": "Attende {{seconds}} s per {{action}}",
+      "waitsSwap": "Attende {{seconds}} s per entrare in campo",
+      "rotationsShown": "Rotazioni mostrate",
+      "lastRotation": "Ultima rotazione",
+      "allRotations": "Tutte le rotazioni",
+      "allRotationsTip": "Ogni rotazione giocata, prima l'apertura: le attese compaiono dove avvengono. Quelle contate sono segnate."
     },
     "member": {
       "setsCount": "{{allowed}}/{{total}} set",
@@ -1553,7 +1611,21 @@
     "copyKqmRotation": "Copia da KQM Theorycrafting",
     "energy": {
       "active": "Obiettivi del calcolatore applicati. L'ER viene ricalcolato durante l'ottimizzazione per le armi di ogni build. Modificare il minimo di un membro torna ai requisiti di ER dei membri.",
-      "intro": "Conferma usi delle abilità, particelle raccolte e tempo in campo per una rotazione. L'ER viene calcolato per tutta la squadra, poi nella run per le armi di ogni build. L'energia extra da abilità o effetti va in Energia bonus."
+      "intro": "Conferma usi delle abilità, particelle raccolte e tempo in campo per una rotazione. L'ER viene calcolato per tutta la squadra, poi nella run per le armi di ogni build. L'energia extra da abilità o effetti va in Energia bonus.",
+      "mode": "ER",
+      "modeLabel": "Requisiti di ER",
+      "auto": "Automatica",
+      "manual": "Manuale",
+      "modeTip": "Automatica: il calcolatore di ER ricava l'ER minima di ogni membro dalla rotazione, di nuovo per le armi di ogni build (Favonio e le altre armi di energia comprese). Manuale: il minimo di ogni membro, abbassato da quanto imposti sulle armi di energia in Armi.",
+      "autoMissing": "Il calcolatore di ER non può ancora ricavare un obiettivo: apri Calcola ER per completarlo.",
+      "autoTarget": "Calcolata dal calcolatore di ER per le armi di ogni build. Scegli Manuale per impostare la tua.",
+      "whenHolds": "quando",
+      "holds": "impugna",
+      "withWeapon": "con",
+      "perWeaponNote": ". Ricalcolata per arma durante l'ottimizzazione.",
+      "withoutWeapon": "Fino a {{er}} senza",
+      "upTo": "fino a {{er}}",
+      "autoHere": "L'ER è Automatica: Ottimizza squadra non usa un'ER minima impostata qui."
     },
     "replaceWithKqmRotation": "Sostituire la rotazione di Ottimizza squadra con quella di KQM Theorycrafting?",
     "templates": {

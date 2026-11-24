@@ -80,6 +80,7 @@ import AddIcon from '@mui/icons-material/Add'
 import CloseIcon from '@mui/icons-material/Close'
 import FullscreenExitRoundedIcon from '@mui/icons-material/FullscreenExitRounded'
 import FullscreenRoundedIcon from '@mui/icons-material/FullscreenRounded'
+import HourglassBottomRoundedIcon from '@mui/icons-material/HourglassBottomRounded'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
   alpha,
@@ -136,7 +137,15 @@ import {
   useMomentFigures,
   useTimelineFigures,
 } from './TimelineFigures'
-import { Disclosure, focusSx, numSx, quickSx, tokens, type } from './ui'
+import {
+  Disclosure,
+  focusSx,
+  numSx,
+  quickSx,
+  Segmented,
+  tokens,
+  type,
+} from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
 import { kqmRotationUpdate, kqmRotationView } from './useTeamOpt'
 
@@ -873,14 +882,27 @@ export const teamRunAttacks = (
     teamOptRunGear(database, teamId, teamOpt, own)
   )
 
-const timedSetEffects = new WeakMap<
-  object,
+const timedSetEffects = new Map<
+  string,
   Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined
 >()
 /**
+ * A saved rotation's key (its team and attacks): saved settings come back as new objects, a
+ * weapon ticked in Weapons too, so the attacks' content stands for them (worked out once each)
+ */
+const timedKeys = new WeakMap<object, string>()
+function timedKey(teamId: string, teamOpt: TeamOpt) {
+  let key = timedKeys.get(teamOpt.attacks)
+  if (key === undefined) {
+    key = `${teamId}|${JSON.stringify(teamOpt.attacks)}`
+    timedKeys.set(teamOpt.attacks, key)
+  }
+  return key
+}
+/**
  * The set effects (`set.condition`) the written rotation turns on and off for each member, for any
  * set it may wear: in a Team optimize run they follow the rotation, not the member's switches.
- * Undefined without a written rotation. Kept per saved rotation (its attacks).
+ * Undefined without a written rotation. Kept per saved rotation (`timedKey`).
  */
 export function teamTimedSetEffects(
   database: Database,
@@ -889,8 +911,8 @@ export function teamTimedSetEffects(
   teamId: string,
   teamOpt: TeamOpt
 ) {
-  if (timedSetEffects.has(teamOpt.attacks))
-    return timedSetEffects.get(teamOpt.attacks)
+  const key = timedKey(teamId, teamOpt)
+  if (timedSetEffects.has(key)) return timedSetEffects.get(key)
   const attacks = teamReplayWith(
     database,
     gender,
@@ -906,7 +928,10 @@ export function teamTimedSetEffects(
       )
   )
   const timed = attacks && timedRefs(attacks)
-  timedSetEffects.set(teamOpt.attacks, timed)
+  timedSetEffects.set(key, timed)
+  // (a few rotations kept: the ones a session goes back and forth between)
+  if (timedSetEffects.size > 8)
+    timedSetEffects.delete(timedSetEffects.keys().next().value!)
   return timed
 }
 /** `teamTimedSetEffects`, worked out after the page paints while `enabled` (undefined until then) */
@@ -920,7 +945,7 @@ export function useTimedSetEffects(
   const { i18n } = useTranslation('charNames_gen')
   const [timed, setTimed] = useState<
     Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined
-  >(() => timedSetEffects.get(teamOpt.attacks))
+  >(() => timedSetEffects.get(timedKey(teamId, teamOpt)))
   useEffect(() => {
     if (!enabled) return undefined
     const id = setTimeout(
@@ -962,7 +987,7 @@ export const writtenHits = (result: WrittenRotation) =>
   )
 
 /**
- * Uses a played rotation: its buffs on for the team, every member's attacks and the rotation time,
+ * Uses a played rotation: every member's attacks (with the buffs it times) and the rotation time,
  * the writer's settings saved. Gives back what it replaced, for Undo.
  */
 export function applyWritten({
@@ -1030,12 +1055,15 @@ export function applyWritten({
     replaced: Object.values(attacksNow()).some((a) => !!a?.length),
     handEdits: editedByHand(database, teamId, kqm),
   }
-  // The buffs the rotation times go on for the team (at the state they are in for most hits),
-  // so Team Optimize lists them on; the attacks outside them turn them off
-  const defaults = rotationBuffDefaults(sim).filter(
-    (d) => d.owner === 'team' || keys.includes(d.owner)
-  )
-  // (on the KQM tab: into its own switches, never the team's or the members')
+  // The KQM tab's own switches take the buffs the rotation times (at the state they are in for
+  // most hits), so it lists them on; the attacks outside them turn them off. Team optimize leaves
+  // the team's and members' switches as they are: its attacks carry what the rotation times, and
+  // its buff list shows them as from the rotation.
+  const defaults = kqm
+    ? rotationBuffDefaults(sim).filter(
+        (d) => d.owner === 'team' || keys.includes(d.owner)
+      )
+    : []
   if (kqm)
     setTeamOpt((o) => {
       const settings = (o.kqm ??= { ...defaultTeamOptKqm })
@@ -1049,23 +1077,6 @@ export function applyWritten({
       settings.teamConditional = teamSwitches
       settings.passives = passives
     })
-  for (const d of kqm ? [] : defaults) {
-    if (d.owner === 'team') {
-      database.teams.set(teamId, (team) => {
-        const values = deepClone(team.conditional ?? {})
-        layeredAssignment(values, d.path, d.value)
-        team.conditional = values
-      })
-      continue
-    }
-    const member = members.find((m) => m.characterKey === d.owner)
-    if (!member) continue
-    database.teamChars.set(member.teamCharId, (teamChar) => {
-      const values = deepClone(teamChar.conditional ?? {})
-      layeredAssignment(values, d.path, d.value)
-      teamChar.conditional = values
-    })
-  }
   // Hexerei: Witch's Homework is taken as done for each Hexerei member (gcsim's default), so its
   // bonuses apply even alone; their Secret Rite effects still need two (the sheets' tally)
   // (KQM's rules count it already)
@@ -1786,37 +1797,29 @@ function WriterModal({
     const id = setTimeout(() => startTransition(() => setPrimed(true)), 200)
     return () => clearTimeout(id)
   }, [])
-  const result = useMemo(
-    () => {
-      if (!primed) return undefined
-      if (closing.current && lastResult.current) return lastResult.current
-      const start = performance.now()
-      const played = simulateWritten({
-        kqm: isKqm,
-        text: deferred,
-        opener: deferredOpener,
-        timing: deferredTiming,
-        frameData: deferredFrameData,
-        team,
-        names,
-        members,
-        database,
-        teamId,
-        gender,
-        auraTimeline: true,
-        openerWarning: (warning) =>
-          t('teamOpt.writer.openerWarning', {
-            defaultValue: 'Opener: {{warning}}',
-            warning,
-          }),
-      })
-      playMs.current = performance.now() - start
-      lastResult.current = played
-      return played
-    },
+  // (what the rotation is played with: the preview's, and the whole play's on the timeline)
+  const playArgs = useMemo(
+    () => ({
+      kqm: isKqm,
+      text: deferred,
+      opener: deferredOpener,
+      timing: deferredTiming,
+      frameData: deferredFrameData,
+      team,
+      names,
+      members,
+      database,
+      teamId,
+      gender,
+      auraTimeline: true,
+      openerWarning: (warning: string) =>
+        t('teamOpt.writer.openerWarning', {
+          defaultValue: 'Opener: {{warning}}',
+          warning,
+        }),
+    }),
     // (the members' constellations are read when the text changes)
     [
-      primed,
       isKqm,
       deferred,
       deferredTiming,
@@ -1831,13 +1834,77 @@ function WriterModal({
       teamId,
     ]
   )
+  const result = useMemo(() => {
+    if (!primed) return undefined
+    if (closing.current && lastResult.current) return lastResult.current
+    const start = performance.now()
+    const played = simulateWritten(playArgs)
+    playMs.current = performance.now() - start
+    lastResult.current = played
+    return played
+  }, [primed, playArgs])
+  // (the moment pinned: the same in the timeline here and in the detailed window)
+  const [timelinePin, setTimelinePin] = useState<TimelinePin>()
+  // The timeline's rotations: the last one counted, or every one played (the opener before them)
+  // so that waits show where they happen. The whole play is played when asked for, in a task of
+  // its own after the preview's (never both in one), and is never counted (a single sample: what
+  // the timeline shows of the others too)
+  const [wholeAsked, setWholeAsked] = useState(false)
+  const [whole, setWhole] = useState<ReturnType<typeof simulateWritten>>()
+  const repeating = !!result?.counted && result.fromStart === undefined
+  useEffect(() => {
+    if (!wholeAsked || !repeating || !primed) return undefined
+    const id = setTimeout(() => {
+      if (closing.current) return
+      const played = simulateWritten({
+        ...playArgs,
+        repeats: STEADY_REPEATS,
+        keep: 'play',
+        samples: 1,
+        timelineOnly: true,
+      })
+      startTransition(() => setWhole(played))
+    }, 0)
+    return () => clearTimeout(id)
+  }, [wholeAsked, repeating, primed, playArgs])
+  const wholeShown = wholeAsked && repeating && !!whole?.sim
+  const shown = wholeShown ? whole : result
+  const rotationsControl = useMemo(
+    () =>
+      repeating ? (
+        <Segmented
+          size="small"
+          aria-label={t('teamOpt.timeline.rotationsShown', 'Rotations shown')}
+          value={wholeAsked ? 'all' : 'last'}
+          onChange={(value) => {
+            // (a pinned moment is the other play's)
+            setTimelinePin(undefined)
+            setWholeAsked(value === 'all')
+            if (value !== 'all') setWhole(undefined)
+          }}
+          options={[
+            {
+              value: 'last',
+              label: t('teamOpt.timeline.lastRotation', 'Last rotation'),
+            },
+            {
+              value: 'all',
+              label: t('teamOpt.timeline.allRotations', 'All rotations'),
+              tip: t(
+                'teamOpt.timeline.allRotationsTip',
+                'Every rotation played, the opener first: waits show where they happen. The ones counted are marked.'
+              ),
+            },
+          ]}
+        />
+      ) : undefined,
+    [repeating, wholeAsked, t]
+  )
   // the detailed timeline's window
   const [detailOpen, setDetailOpen] = useState(false)
   // (the detailed window over the whole screen: always on a small one, else when asked)
   const [detailFull, setDetailFull] = useState(false)
   const detailFullScreen = fullScreen || detailFull
-  // (the moment pinned: the same in the timeline here and in the detailed window)
-  const [timelinePin, setTimelinePin] = useState<TimelinePin>()
   // (what both timelines, the writer's and the detailed window's, are given)
   const timelineProps = (
     rotation: NonNullable<typeof result>['rotation'],
@@ -1855,6 +1922,8 @@ function WriterModal({
     damage: timelineFigures.damage,
     renderHit,
     onSelect: selectStep,
+    control: rotationsControl,
+    countedFrom: wholeShown ? STEADY_REPEATS - STEADY_COUNTED : undefined,
   })
   // the members' stats at the timeline's moment and what each buff up then gives: their own
   // builds; on the KQM tab the shown result's (none before a result)
@@ -1875,8 +1944,8 @@ function WriterModal({
   // result's (none before a result)
   const timelineFigures = useTimelineFigures(
     teamId,
-    result?.sim,
-    result?.own,
+    shown?.sim,
+    shown?.own,
     figures || !!kqmOverrides,
     figures ? undefined : kqmOverrides
   )
@@ -1940,6 +2009,11 @@ function WriterModal({
 
   const seconds = result ? writtenSeconds(result) : undefined
   const waited = result ? writtenWaits(result) : undefined
+  // (the waits have their own warning, above the timeline)
+  const notes = useMemo(
+    () => result?.sim?.notes.filter((n) => !n.startsWith('Waited ')) ?? [],
+    [result]
+  )
   const hadRotation = Object.values(scopeAttacks(database, teamId, !!kqm)).some(
     (a) => !!a?.length
   )
@@ -2377,9 +2451,6 @@ function WriterModal({
                         {Math.round(seconds * 60)}{' '}
                         {t('teamOpt.writer.frames', 'frames')}
                       </Typography>
-                      {waited && (
-                        <WaitsChip waited={waited} seconds={seconds} />
-                      )}
                     </Box>
                     {/* the frame settings it plays with: together on the right, wrapping as one */}
                     <Box
@@ -2421,8 +2492,12 @@ function WriterModal({
                       />
                     </Box>
                   </Box>
+                  {waited && <WaitsWarning waited={waited} />}
                   <RotationTimeline
-                    {...timelineProps(result.rotation, result.sim)}
+                    {...timelineProps(
+                      shown?.rotation ?? result.rotation,
+                      shown?.sim ?? result.sim
+                    )}
                     stats={detailOpen ? undefined : momentStats}
                     effects={detailOpen ? undefined : momentEffects}
                     onMoment={momentOn && !detailOpen ? setMoment : undefined}
@@ -2545,7 +2620,10 @@ function WriterModal({
                     >
                       {detailOpen && (
                         <RotationTimeline
-                          {...timelineProps(result.rotation, result.sim)}
+                          {...timelineProps(
+                            shown?.rotation ?? result.rotation,
+                            shown?.sim ?? result.sim
+                          )}
                           detail
                           // (a bar here: its step selected and its moment pinned; the window stays,
                           // where the simple timeline's bar opens the step's timing)
@@ -2574,9 +2652,9 @@ function WriterModal({
                     unsupported={result.sim.unsupported}
                   />
                 </WriterSection>
-                {!!result.sim.notes.length && (
+                {!!notes.length && (
                   <WriterSection>
-                    <RotationNotes notes={result.sim.notes} />
+                    <RotationNotes notes={notes} />
                   </WriterSection>
                 )}
               </>
@@ -2701,15 +2779,13 @@ export const editorSx = (theme: Theme) => ({
 })
 
 /**
- * The time a repeating rotation waits for cooldowns from the one before (a Burst used late in one
- * rotation and early in the next): one short chip, what waited and why on hover
+ * What the rotation waits for each time it is played (an action not ready when the rotation
+ * reaches it, or a swap), as gcsim warns of it: the time per rotation, then each wait
  */
-function WaitsChip({
+function WaitsWarning({
   waited,
-  seconds,
 }: {
   waited: NonNullable<ReturnType<typeof writtenWaits>>
-  seconds: number
 }) {
   const { t, i18n } = useTranslation('page_team')
   // "19.8" in English, "19,8" in Italian
@@ -2719,74 +2795,91 @@ function WaitsChip({
       maximumFractionDigits: 1,
     })
   return (
-    <Tooltip
-      placement="bottom-start"
-      title={
-        <Box
-          sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, py: 0.25 }}
-        >
-          <Box>
-            {t('teamOpt.writer.firstTime', {
-              defaultValue: '{{seconds}} s without waiting',
-              seconds: dec1(waited.first),
-            })}
-          </Box>
-          {!!waited.waits.length && (
-            <Box
-              component="dl"
-              sx={{
-                m: 0,
-                display: 'grid',
-                gridTemplateColumns: 'minmax(0, 1fr) auto',
-                columnGap: 2,
-                rowGap: 0.25,
-                '& dd': { m: 0, ...numSx, textAlign: 'right' },
-              }}
-            >
-              {waited.waits.map((w) => (
-                <Fragment key={w.label}>
-                  <dt>{w.label}</dt>
-                  <dd>{dec1(w.seconds)} s</dd>
-                </Fragment>
-              ))}
-            </Box>
-          )}
-          <Box sx={{ opacity: 0.75 }}>
-            {t(
-              'teamOpt.writer.waitedTip',
-              'Played several times in a row, an action can still be on cooldown when the next rotation reaches it (for example a Burst used late in one rotation and early in the next): the rotation waits for it. Its first time through, nothing waits. Team optimize and KQM count the time per rotation, waits included.'
-            )}
-          </Box>
-        </Box>
-      }
+    <Box
+      role="status"
+      sx={(theme) => ({
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        columnGap: 1.25,
+        rowGap: 0.75,
+        px: 1.5,
+        py: 1,
+        mb: 1.25,
+        borderRadius: tokens.radius.inset,
+        bgcolor: alpha(theme.palette.warning.main, 0.07),
+        border: `1px solid ${alpha(theme.palette.warning.main, 0.22)}`,
+      })}
     >
       <Box
-        component="span"
-        tabIndex={0}
-        sx={(theme) => ({
-          display: 'inline-flex',
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          color: 'warning.main',
+        }}
+      >
+        <HourglassBottomRoundedIcon sx={{ fontSize: 18 }} />
+        <Typography
+          sx={{ fontSize: 13.5, fontWeight: 650, color: 'inherit', ...numSx }}
+        >
+          {t('teamOpt.writer.waitsTitle', {
+            defaultValue: 'Waits {{seconds}} s per rotation',
+            seconds: dec1(waited.seconds),
+          })}
+        </Typography>
+      </Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+        {waited.waits.map((w) => (
+          <Box
+            key={w.label}
+            component="span"
+            sx={(theme) => ({
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.625,
+              pl: 0.375,
+              pr: 0.875,
+              height: 24,
+              borderRadius: tokens.radius.pill,
+              fontSize: 12.5,
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              bgcolor: alpha(theme.palette.warning.main, 0.1),
+              boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.28)}`,
+            })}
+          >
+            <MemberAvatar characterKey={w.characterKey} size={18} />
+            <Box
+              component="span"
+              sx={{ fontFamily: 'ui-monospace, monospace' }}
+            >
+              {w.action ?? t('teamOpt.writer.waitsSwap', 'swap')}
+            </Box>
+            <Box component="span" sx={{ color: 'text.secondary', ...numSx }}>
+              {dec1(w.seconds)} s
+            </Box>
+          </Box>
+        ))}
+      </Box>
+      <Typography
+        sx={{
+          ...type.label,
+          display: 'flex',
           alignItems: 'center',
           gap: 0.5,
-          px: 0.875,
-          height: 24,
-          borderRadius: tokens.radius.pill,
-          fontSize: 12.5,
-          fontWeight: 600,
-          whiteSpace: 'nowrap',
-          color: 'warning.main',
-          bgcolor: alpha(theme.palette.warning.main, 0.1),
-          boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.warning.main, 0.3)}`,
-          cursor: 'help',
-          ...numSx,
-          ...focusSx,
-        })}
+          ml: { sm: 'auto' },
+        }}
       >
-        {t('teamOpt.writer.waitsShort', {
-          defaultValue: '{{seconds}} s waiting for cooldowns',
-          seconds: dec1(Math.max(0, seconds - waited.first)),
-        })}
-      </Box>
-    </Tooltip>
+        {t('teamOpt.writer.waitsShortHint', 'Not ready in time')}
+        <InfoTooltipInline
+          title={t(
+            'teamOpt.writer.waitsTip',
+            'Played back to back, an action can still be on cooldown when the rotation reaches it again (a Burst used late in one rotation and early in the next): the team stands idle until it is ready. The time per rotation includes the waits, so they lower DPS. Use it later in the rotation or make the rotation longer. The timeline shows each wait hatched; All rotations shows them where they happen.'
+          )}
+        />
+      </Typography>
+    </Box>
   )
 }
 
@@ -3152,15 +3245,13 @@ function HitsSummary({
 }
 
 /**
- * What the simulation assumed or could not check, and what the rotation waited for: folded
- * behind one line, each a short row (its subject, then what it says)
+ * What the simulation assumed or could not check: folded behind one line, each a short row (its
+ * subject, then what it says)
  */
 function RotationNotes({ notes }: { notes: string[] }) {
   const { t } = useTranslation('page_team')
   const simText = useSimText()
   const [open, setOpen] = useState(false)
-  const waits = notes.filter((n) => n.startsWith('Waited '))
-  const rest = notes.filter((n) => !n.startsWith('Waited '))
   return (
     <Disclosure
       open={open}
@@ -3183,7 +3274,7 @@ function RotationNotes({ notes }: { notes: string[] }) {
           lineHeight: 1.5,
         }}
       >
-        {rest.map((note) => {
+        {notes.map((note) => {
           const text = simText(note)
           const at = text.indexOf(': ')
           const subject = at > 0 && at < 28 ? text.slice(0, at) : ''
@@ -3201,37 +3292,6 @@ function RotationNotes({ notes }: { notes: string[] }) {
             </Fragment>
           )
         })}
-        {!!waits.length && (
-          <>
-            <Box
-              component="span"
-              sx={{ fontWeight: 650, whiteSpace: 'nowrap' }}
-            >
-              {t('teamOpt.writer.waits', 'Waits')}
-            </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-              {waits.map((note) => (
-                <Box
-                  key={note}
-                  component="span"
-                  sx={(theme) => ({
-                    px: 0.875,
-                    borderRadius: 1,
-                    lineHeight: '22px',
-                    fontVariantNumeric: 'tabular-nums',
-                    color: 'text.secondary',
-                    bgcolor: alpha(theme.palette.text.primary, 0.05),
-                  })}
-                >
-                  {simText(note)
-                    .replace(/^Waited /, '')
-                    .replace(/^(Attesi|Atteso) /, '')
-                    .replace(/\.$/, '')}
-                </Box>
-              ))}
-            </Box>
-          </>
-        )}
       </Box>
     </Disclosure>
   )
@@ -3545,14 +3605,14 @@ function SyntaxSheet() {
       'E? · Q?',
       t(
         'teamOpt.writer.syntax.ready',
-        'Only when ready: left out, not waited for'
+        'Only when ready: left out, not waited for (ER calc: Q? defaults to every 2nd burst)'
       ),
     ],
     [
-      'Q?/N3 · E?/N2CA',
+      'Q?/N3 · Q/N3 · EQ/E',
       t(
         'teamOpt.writer.syntax.otherwise',
-        'Only when ready, otherwise the actions after "/" (no spaces inside)'
+        'Only when ready, otherwise the actions after "/" (no spaces inside; ER calc defaults to every 2nd burst)'
       ),
     ],
     [

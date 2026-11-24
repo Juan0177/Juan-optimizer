@@ -10,10 +10,11 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { LoadoutDatum } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
-import { teamOptMembers } from '@genshin-optimizer/gi/ui'
+import { rotationBuffDefaults, teamOptMembers } from '@genshin-optimizer/gi/ui'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { firstRotations } from './RotationTiming'
+import { firstRotations, STEADY_REPEATS } from './RotationTiming'
 import {
+  applyWritten,
   kqmRotationReplay,
   simulateWritten,
   writtenSeconds,
@@ -100,6 +101,17 @@ describe('the first rotations from the start', () => {
     expect(perRotation(first) / 60).toBeLessThan(10)
     expect(first.counted!.rotations).toBe(1)
     expect(Object.keys(first.counted!.sim.stalls ?? {})).toEqual([])
+    expect(writtenWaits(first)).toBeUndefined()
+    // (the waits shown: Sucrose's Skill, for most of the repeating rotation's extra time)
+    const waited = writtenWaits(repeating)!
+    expect(waited.waits[0]).toMatchObject({
+      characterKey: 'Sucrose',
+      action: 'E',
+    })
+    expect(waited.seconds).toBeGreaterThan(15)
+    expect(waited.seconds).toBeLessThanOrEqual(
+      (perRotation(repeating) - perRotation(first)) / 60 + 0.5
+    )
   })
   it('counts the hits per rotation of those played', () => {
     const one = play(1)
@@ -179,7 +191,8 @@ describe('the first rotation written apart, counted from the start', () => {
     rotations: number | undefined,
     opener = OPENER,
     text = TEXT,
-    countOpener = true
+    countOpener = true,
+    extra: Partial<Parameters<typeof simulateWritten>[0]> = {}
   ) =>
     simulateWritten({
       text,
@@ -204,6 +217,7 @@ describe('the first rotation written apart, counted from the start', () => {
       teamId,
       gender: 'F',
       openerWarning: (w) => w,
+      ...extra,
     })!
   const hits = (r: ReturnType<typeof play>) =>
     Object.values(r.attacks ?? {}).reduce(
@@ -248,8 +262,28 @@ describe('the first rotation written apart, counted from the start', () => {
     const opener = hits(play(1))
     const rotation = hits(play(1, ''))
     expect(hits(two) * 2).toBeGreaterThanOrEqual(opener + rotation - 1e-6)
-    // (the first time through is the opener: no "without waiting" comparison)
-    expect(writtenWaits(two)).toBeUndefined()
+    // (an opener counted or not, the waits are the rotations' own)
+    expect(writtenWaits(two)?.waits[0]?.characterKey).toBe('Sucrose')
+  })
+  it('the timeline’s whole play: the opener, then every rotation, nothing counted', () => {
+    const whole = play(undefined, OPENER, TEXT, false, {
+      repeats: STEADY_REPEATS,
+      keep: 'play',
+      samples: 1,
+      timelineOnly: true,
+    })
+    expect(whole.counted).toBeUndefined()
+    expect(whole.attacks).toEqual({})
+    expect(whole.sim!.start).toBe(0)
+    expect(whole.sim!.rotationStarts!.length).toBe(STEADY_REPEATS)
+    expect(whole.sim!.rotationStarts![0]).toBeGreaterThan(0)
+    expect(whole.sim!.actions.some((a) => a.openerIndex !== undefined)).toBe(
+      true
+    )
+    // (the rotations' waits are where they happen)
+    expect(whole.sim!.stallSpans!.some((w) => w.label === 'Sucrose E')).toBe(
+      true
+    )
   })
   it('by default ("Counted" off), the opener is a setup played before the start', () => {
     const setup = play(1, OPENER, TEXT, false)
@@ -318,5 +352,83 @@ describe('the first rotation written apart, counted from the start', () => {
       1
     )
     database.teams.setRotationField(`${teamId}_kqm`, 'Opener', null)
+  })
+})
+
+/**
+ * A user report: using a rotation kept turning Cryo resonance back on. The buffs a rotation times
+ * stay in its attacks; the team's and members' switches are left as they were.
+ */
+describe('using a rotation leaves the switches as they are', () => {
+  const { database, teamId, members, names } = setup()
+  const text = 'Bennett E Q -> Sucrose E N1 N1 N1 -> Bennett N1'
+  it('the buffs it times ride on its attacks, every switch unchanged', () => {
+    const result = simulateWritten({
+      text,
+      opener: '',
+      timing: { edits: {} },
+      frameData: {},
+      team: {
+        members: MEMBERS,
+        constellations: { Sucrose: 1, Bennett: 6 },
+        elements: Object.fromEntries(
+          MEMBERS.map((m) => [m, getCharEle(m)])
+        ) as never,
+        gear: {},
+      },
+      names,
+      members,
+      database: database as never,
+      teamId,
+      gender: 'F',
+      openerWarning: (w) => w,
+    })!
+    const timed = rotationBuffDefaults(result.counted!.sim)
+    expect(timed.length).toBeGreaterThan(0)
+    // (Hexerei members' Witch's Homework is set done, as before: not a timed buff)
+    const switches = () =>
+      JSON.stringify([
+        database.teams.get(teamId)!.conditional,
+        members.map((m) => {
+          const { lockHomework: _, ...rest } = ((
+            database.teamChars.get(m.teamCharId)!.conditional as Record<
+              string,
+              Record<string, string>
+            >
+          )[m.characterKey] ?? {}) as Record<string, string>
+          return {
+            ...database.teamChars.get(m.teamCharId)!.conditional,
+            [m.characterKey]: rest,
+          }
+        }),
+      ])
+    const before = switches()
+    applyWritten({
+      database: database as never,
+      teamId,
+      members,
+      setTeamOpt: (update) =>
+        database.teams.set(teamId, (team) => {
+          const draft = structuredClone(team.teamOpt ?? initTeamOpt())
+          team.teamOpt = update(draft) ?? draft
+        }),
+      result,
+      text,
+      opener: '',
+      timing: { edits: {} },
+      frameData: {},
+      constellations: { Sucrose: 1, Bennett: 6 },
+    })
+    expect(switches()).toBe(before)
+    const states = Object.values(database.teams.get(teamId)!.teamOpt!.attacks)
+      .flat()
+      .flatMap((a) => a?.states ?? [])
+    expect(
+      timed.some((d) =>
+        states.some(
+          (s) => s.owner === d.owner && s.path.join() === d.path.join()
+        )
+      )
+    ).toBe(true)
   })
 })

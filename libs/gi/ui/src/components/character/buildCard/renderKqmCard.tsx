@@ -324,6 +324,128 @@ function tabularInk(
 }
 
 /**
+ * A member's detailed block (its top at `y`): the main stats' title and rows, a rule, the stats'
+ * title and rows; each row its label at the left and its value at the right, the label made to
+ * fit beside the value. `col` wide: the KQM sheet's member column, or another sheet's (the versions
+ * sheet's)
+ */
+export function drawKqmCardDetails(
+  ctx: CanvasRenderingContext2D,
+  d: KqmCardDetails,
+  x: number,
+  y: number,
+  col = COL
+) {
+  const fitWidth = (value: string, opts: FitOpts) => {
+    let px = opts.size
+    const at = (size: number) => {
+      ctx.font = `${opts.weight} ${size}px ${FONT}`
+      return ctx.measureText(value).width
+    }
+    while (px > opts.minSize && at(px) > opts.maxWidth) px--
+    return Math.min(at(px), opts.maxWidth)
+  }
+  const mid = (y: number, h: number, size: number) => y + h / 2 + size * 0.35
+  const fillCell = (cx: number, cy: number, w: number, h: number, fill: string) => {
+    ctx.fillStyle = fill
+    ctx.fillRect(cx, cy, w, h)
+  }
+
+  const avail = col - 2 * DETAILS_X
+  const left = x + DETAILS_X
+  const right = x + col - DETAILS_X
+  const title = (text: string, ty: number) =>
+    ink(ctx, text, left, mid(ty, DETAILS_TITLE, 12), {
+      size: 12,
+      weight: 600,
+      color: SECONDARY,
+      align: 'left',
+      maxWidth: avail,
+      // (a narrower column, the versions sheet's: smaller rather than cut short)
+      minSize: 9,
+    })
+  /** a row: its value first measured (at most most of the row), then its label in the rest */
+  const row = (
+    label: string,
+    value: string,
+    ry: number,
+    { figures, changed }: { figures: boolean; changed?: boolean }
+  ) => {
+    if (changed) fillCell(x + 6, ry, col - 12, DETAILS_ROW, CHANGED_TINT)
+    const weight = changed ? 700 : 600
+    const valueAt = (px: number, maxWidth: number) => ({
+      size: px,
+      weight,
+      color: changed ? KQM_CHANGED : TEXT,
+      maxWidth,
+      minSize: Math.min(px, DETAILS_MIN),
+    })
+    const valueWidth = (px: number) =>
+      figures
+        ? tabularFit(ctx, value, valueAt(px, Number.POSITIVE_INFINITY)).width
+        : fitWidth(value, valueAt(px, Number.POSITIVE_INFINITY))
+    const labelWidth = (px: number) => {
+      ctx.font = `400 ${px}px ${FONT}`
+      return ctx.measureText(label).width
+    }
+    // (label and value together at the largest size both fit, down to the smallest: a changed
+    // value, "151.2% → 162.8%", beside "Energy Recharge")
+    let px = DETAILS_SIZE
+    while (
+      px > DETAILS_MIN &&
+      labelWidth(px) + DETAILS_GAP + valueWidth(px) > avail
+    )
+      px--
+    const base = mid(ry, DETAILS_ROW, px)
+    // (still too wide at the smallest: the value whole as long as it leaves the label some room,
+    // the label smaller still; cut short only past that)
+    const valueOpts = valueAt(px, avail * 0.7)
+    const valueW = figures
+      ? tabularFit(ctx, value, valueOpts).width
+      : fitWidth(value, valueOpts)
+    ink(ctx, label, left, base, {
+      size: px,
+      weight: 400,
+      color: TEXT,
+      maxWidth: Math.max(1, avail - valueW - DETAILS_GAP),
+      minSize: Math.min(px, 9),
+    })
+    if (figures) tabularInk(ctx, value, right, base, valueOpts)
+    else ink(ctx, value, right, base, { ...valueOpts, align: 'right' })
+  }
+  let ry = y + DETAILS_PAD
+  title(d.mainsTitle, ry)
+  ry += DETAILS_TITLE
+  for (const main of d.mains.slice(0, 3)) {
+    row(main.slot, main.stat, ry, { figures: false })
+    ry += DETAILS_ROW
+  }
+  fillCell(
+    left,
+    ry + DETAILS_RULE / 2 - 0.5,
+    avail,
+    1,
+    'rgba(78, 96, 128, 0.28)'
+  )
+  ry += DETAILS_RULE
+  title(d.statsTitle, ry)
+  ry += DETAILS_TITLE
+  for (const stat of d.stats.slice(0, 8)) {
+    const changed = stat.was !== undefined
+    row(
+      stat.label,
+      changed ? `${stat.was} → ${stat.value}` : stat.value,
+      ry,
+      {
+        figures: true,
+        changed,
+      }
+    )
+    ry += DETAILS_ROW
+  }
+}
+
+/**
  * A KQM result as a theorycrafting sheet to share: the members' faces with their weapon and sets
  * under them; beside them each one's damage per rotation, share, field time and Energy Recharge,
  * the team's damage per rotation and per second; under it all the rotation and the notes.
@@ -546,114 +668,6 @@ export function drawKqmCard(
     itemText(value, x + used, y, COL - used)
   }
 
-  /** a text's width as `ink` draws it in `maxWidth` (smaller down to `minSize`, else cut short) */
-  const fitWidth = (value: string, opts: FitOpts) => {
-    let px = opts.size
-    const at = (size: number) => {
-      ctx.font = `${opts.weight} ${size}px ${FONT}`
-      return ctx.measureText(value).width
-    }
-    while (px > opts.minSize && at(px) > opts.maxWidth) px--
-    return Math.min(at(px), opts.maxWidth)
-  }
-  /**
-   * A member's detailed block (its top at `y`): the main stats' title and rows, a rule, the stats'
-   * title and rows; each row its label at the left and its value at the right, the label made to
-   * fit beside the value
-   */
-  const detailsBlock = (d: KqmCardDetails, x: number, y: number) => {
-    const avail = COL - 2 * DETAILS_X
-    const left = x + DETAILS_X
-    const right = x + COL - DETAILS_X
-    const title = (text: string, ty: number) =>
-      say(text, left, ty, DETAILS_TITLE, {
-        size: 12,
-        weight: 600,
-        color: SECONDARY,
-        align: 'left',
-        maxWidth: avail,
-      })
-    /** a row: its value first measured (at most most of the row), then its label in the rest */
-    const row = (
-      label: string,
-      value: string,
-      ry: number,
-      { figures, changed }: { figures: boolean; changed?: boolean }
-    ) => {
-      if (changed) fillCell(x + 6, ry, COL - 12, DETAILS_ROW, CHANGED_TINT)
-      const weight = changed ? 700 : 600
-      const valueAt = (px: number, maxWidth: number) => ({
-        size: px,
-        weight,
-        color: changed ? KQM_CHANGED : TEXT,
-        maxWidth,
-        minSize: Math.min(px, DETAILS_MIN),
-      })
-      const valueWidth = (px: number) =>
-        figures
-          ? tabularFit(ctx, value, valueAt(px, Number.POSITIVE_INFINITY)).width
-          : fitWidth(value, valueAt(px, Number.POSITIVE_INFINITY))
-      const labelWidth = (px: number) => {
-        ctx.font = `400 ${px}px ${FONT}`
-        return ctx.measureText(label).width
-      }
-      // (label and value together at the largest size both fit, down to the smallest: a changed
-      // value, "151.2% → 162.8%", beside "Energy Recharge")
-      let px = DETAILS_SIZE
-      while (
-        px > DETAILS_MIN &&
-        labelWidth(px) + DETAILS_GAP + valueWidth(px) > avail
-      )
-        px--
-      const base = mid(ry, DETAILS_ROW, px)
-      // (still too wide at the smallest: the value whole as long as it leaves the label some room,
-      // the label smaller still; cut short only past that)
-      const valueOpts = valueAt(px, avail * 0.7)
-      const valueW = figures
-        ? tabularFit(ctx, value, valueOpts).width
-        : fitWidth(value, valueOpts)
-      ink(ctx, label, left, base, {
-        size: px,
-        weight: 400,
-        color: TEXT,
-        maxWidth: Math.max(1, avail - valueW - DETAILS_GAP),
-        minSize: Math.min(px, 9),
-      })
-      if (figures) tabularInk(ctx, value, right, base, valueOpts)
-      else ink(ctx, value, right, base, { ...valueOpts, align: 'right' })
-    }
-    let ry = y + DETAILS_PAD
-    title(d.mainsTitle, ry)
-    ry += DETAILS_TITLE
-    for (const main of d.mains.slice(0, 3)) {
-      row(main.slot, main.stat, ry, { figures: false })
-      ry += DETAILS_ROW
-    }
-    fillCell(
-      left,
-      ry + DETAILS_RULE / 2 - 0.5,
-      avail,
-      1,
-      'rgba(78, 96, 128, 0.28)'
-    )
-    ry += DETAILS_RULE
-    title(d.statsTitle, ry)
-    ry += DETAILS_TITLE
-    for (const stat of d.stats.slice(0, 8)) {
-      const changed = stat.was !== undefined
-      row(
-        stat.label,
-        changed ? `${stat.was} → ${stat.value}` : stat.value,
-        ry,
-        {
-          figures: true,
-          changed,
-        }
-      )
-      ry += DETAILS_ROW
-    }
-  }
-
   // ── the team's name (after its tag), the site
   let nameX = M
   if (marks.tag) {
@@ -721,7 +735,7 @@ export function drawKqmCard(
     if (detailsH) {
       // (the detailed sheet: the member's block under its gear; none, an empty cell)
       fillCell(x, top + blockH, COL, detailsH, CELL)
-      if (m.details) detailsBlock(m.details, x, top + blockH)
+      if (m.details) drawKqmCardDetails(ctx, m.details, x, top + blockH)
       frame(x, top + blockH, COL, detailsH)
     }
   })

@@ -4,6 +4,7 @@ import type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
 } from '@genshin-optimizer/gi/db'
+import { teamOptEnergyRotationFields } from '@genshin-optimizer/gi/db'
 import {
   getCharEle,
   getCharStat,
@@ -724,6 +725,43 @@ export function withFieldTime(
 }
 
 /**
+ * Updates one member of an ER calculator state, recording manually edited rotation fields so a
+ * written rotation no longer overwrites them, and keeping total field time at 100%.
+ */
+export function updateEnergyCalcMember(
+  previous: TeamOptEnergyCalculator,
+  keys: readonly CharacterKey[],
+  key: CharacterKey,
+  values: Partial<TeamOptEnergyMember>
+): TeamOptEnergyCalculator {
+  const member = previous.members[key]
+  if (!member) return previous
+  const { fieldTime, ...rest } = values
+  const edited = [
+    ...new Set([
+      ...(member.edited ?? []),
+      ...(Object.keys(values) as TeamOptEnergyRotationField[]).filter((field) =>
+        teamOptEnergyRotationFields.includes(field)
+      ),
+    ]),
+  ]
+  const next: TeamOptEnergyCalculator = {
+    ...previous,
+    members: {
+      ...previous.members,
+      [key]: {
+        ...member,
+        ...rest,
+        ...(edited.length ? { edited } : {}),
+      },
+    },
+  }
+  return fieldTime === undefined
+    ? next
+    : withFieldTime(next, keys, key, fieldTime)
+}
+
+/**
  * Energy a Skill use restores directly, not from particles (so not scaled by Energy Recharge): the
  * ERC sheet's "bonus non-particle energy" for these, at Skill level 9 (KQM's guides).
  * Durin: entering Confirmation of Purity or Denial of Darkness, once per 6 s (kqmsim's
@@ -1220,6 +1258,7 @@ export function energyFromRotation(
     | 'hits'
     | 'swaps'
     | 'skillUses'
+    | 'skippedOptionalBursts'
     | 'actions'
     | 'rotationStarts'
   >,
@@ -1430,11 +1469,25 @@ export function energyFromRotation(
     const shortOption = short
       ? data.skills.findIndex((s) => s.label === short.label)
       : -1
-    const shortBursts =
+    const fullBurstActions =
       shortOption >= 0
-        ? burstActions.filter((a) => a.variant?.key === short!.variant).length
-        : 0
-    const bursts = burstActions.length - shortBursts
+        ? burstActions.filter((a) => a.variant?.key !== short!.variant)
+        : burstActions
+    const shortBursts = burstActions.length - fullBurstActions.length
+    // Optional / alternative Bursts ("Q?", "Q?/N3", "Q/N3", "EQ/E") that played every time (never
+    // skipped by cooldown or `everyNthBursts`) auto-default to every 2nd burst for ER calc.
+    const optionalBursts = fullBurstActions.filter(
+      (a) => a.optional || /\?$/.test(a.text)
+    ).length
+    const mandatoryBursts = fullBurstActions.length - optionalBursts
+    const skippedOptional = (sim.skippedOptionalBursts ?? []).filter(
+      (s) => s.characterKey === key && s.t >= start && s.t < end
+    ).length
+    const bursts =
+      mandatoryBursts +
+      (optionalBursts > 0 && skippedOptional === 0
+        ? optionalBursts / 2
+        : optionalBursts)
     const member: Partial<TeamOptEnergyMember> = {
       fieldTime:
         total > 0 ? Math.round(((field.get(key) ?? 0) / total) * 1000) / 10 : 0,

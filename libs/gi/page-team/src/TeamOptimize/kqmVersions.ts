@@ -16,7 +16,7 @@ import {
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
-import { savedRunOf } from './compare/savedRun'
+import { savedRunOf } from './savedRun'
 import {
   applySavedRotation,
   kqmRotationId,
@@ -47,6 +47,7 @@ export const KQM_SHARED = [
   'refinementStandard4',
   'compareRefinements',
   'excludedWeapons',
+  'excludedWeaponMembers',
   'weaponList',
   'refinements',
   'lockedWeapons',

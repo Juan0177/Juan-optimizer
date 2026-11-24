@@ -8,7 +8,13 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 /** The attack at `path` of a member's display, and what it is called */
-export function useAttackInfo(data: UIData | undefined, path: string[]) {
+export function useAttackInfo(
+  data: UIData | undefined,
+  path: string[],
+  /** The element the rotation played it with: its color when the display has none (a hit
+   * only a state turns on, as the Cryo Traveler's Freezing Ice) */
+  playedElement?: string
+) {
   const database = useDatabase()
   return useMemo(() => {
     if (!data) return undefined
@@ -22,10 +28,10 @@ export function useAttackInfo(data: UIData | undefined, path: string[]) {
       textSuffix,
       variant,
       // (for the color only: a Stellar hit takes no amp or additive reaction)
-      element: hitColorKey(variant, subVariant),
+      element: hitColorKey(variant ?? playedElement, subVariant),
       header,
     }
-  }, [data, path, database])
+  }, [data, path, database, playedElement])
 }
 
 /**
@@ -72,15 +78,18 @@ export function AttackName({
   path,
   dense = false,
   oneLine = false,
+  playedElement,
 }: {
   data: UIData | undefined
   path: string[]
+  /** See `useAttackInfo` */
+  playedElement?: string
   /** No talent icon */
   dense?: boolean
   /** Only the attack's name (the talent it comes from is in a tooltip) */
   oneLine?: boolean
 }) {
-  const info = useAttackInfo(data, path)
+  const info = useAttackInfo(data, path, playedElement)
   if (!info)
     return (
       <Typography variant="body2" color="text.secondary" noWrap>

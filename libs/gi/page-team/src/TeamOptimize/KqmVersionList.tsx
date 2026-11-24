@@ -88,7 +88,17 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { formatRateFull } from './format'
 import { rotationTurns } from './KqmShareMenu'
-import { betaOf, shareStamp } from './kqmTeamCard'
+import {
+  betaOf,
+  ER_NOTE,
+  kqmCardDetails,
+  kqmCardFileName,
+  type KqmCardView,
+  kqmMembersStats,
+  readKqmCardView,
+  shareStamp,
+  writeKqmCardView,
+} from './kqmTeamCard'
 import { kqmStandardName } from './KqmStandard'
 import {
   queueVersionRuns,
@@ -136,19 +146,8 @@ import {
   tokens,
   type,
 } from './ui'
+import { savedRunOf } from './savedRun'
 import { savedRunSummary, useKqmProgress, useKqmRun } from './useKqmRun'
-import {
-  type CompareCandidate,
-  VersionCompareButton,
-} from './compare/CompareCardButton'
-
-/** A row as the comparison card's button needs it */
-const candidateOf = (row: VersionRow): CompareCandidate => ({
-  id: row.id,
-  name: row.name,
-  fresh: row.fresh,
-  hasRun: !!row.summary,
-})
 
 /** A team of the family as its row shows it: its members, last run and whether it still holds */
 interface VersionRow {
@@ -414,15 +413,6 @@ export function KqmVersions({
           {t('teamOpt.versions.new', 'New version')}
         </Button>
         {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
-        {/* juanlab: the comparison card, the original against the team open (or a version) */}
-        {hasVersions && (
-          <VersionCompareButton
-            rootId={rootId}
-            teamId={teamId}
-            original={candidateOf(rows.root)}
-            versions={rows.versions.map(candidateOf)}
-          />
-        )}
       </Box>
       <Box sx={{ ...insetSx, overflow: 'hidden' }}>
         {all.map((row, i) => (
@@ -1569,15 +1559,25 @@ function VersionsShare({
   rows: VersionRow[]
   rootId: string
 }) {
-  const { t } = useTranslation([
+  const { t, i18n } = useTranslation([
     'page_team',
     'charNames_gen',
     'weaponNames_gen',
     'artifactNames_gen',
+    // (juanlab: the detailed sheet's stat names)
+    'keymap',
   ])
+  const locale = i18n?.language
   const { gender } = useDBMeta()
   const database = useDatabase()
   const [open, setOpen] = useState(false)
+  // juanlab: the usual sheet, or with each member's main stats and stats out of combat (the KQM
+  // team card's choice, kept in this browser)
+  const [view, setViewState] = useState<KqmCardView>(readKqmCardView)
+  const setView = (v: KqmCardView) => {
+    setViewState(v)
+    writeKqmCardView(v)
+  }
   // the teams' order on it: best first, or as arranged
   const [order, setOrder] = useState<'dps' | 'custom'>('dps')
   const [arranged, setArranged] = useState<string[]>([])
@@ -1701,10 +1701,40 @@ function VersionsShare({
         share: t('page_team:teamOpt.versions.cellShare', 'Share'),
         field: t('page_team:teamOpt.versions.cellField', 'FT'),
         er: t('page_team:teamOpt.versions.cellEr', 'ER req'),
-        stamp: shareStamp(),
+        stamp: shareStamp(locale),
       },
     }
   }, [open])
+  // juanlab: each team's members' stats out of combat, from its saved run (the one its row shows:
+  // the same save), at the family's KQM talents; worked out once per opening and view
+  // biome-ignore lint/correctness/useExhaustiveDependencies: from the runs when the picture opens
+  const stats = useMemo(() => {
+    if (!sheet || view !== 'detailed') return undefined
+    const talent = kqmTalentLevel(database.teams.get(rootId)?.teamOpt?.kqm)
+    return new Map(
+      sheet.entries.map(({ row }) => {
+        const saved = database.teamKqmResults.getRun(row.id)
+        const result =
+          saved && saved.savedAt === row.summary?.savedAt
+            ? savedRunOf(saved).result
+            : undefined
+        return [
+          row.id,
+          result
+            ? kqmMembersStats(
+                database,
+                row.members.map((key) => ({
+                  key,
+                  build: result.builds[key],
+                  constellation: result.constellations?.[key] ?? 0,
+                })),
+                talent
+              )
+            : {},
+        ] as const
+      })
+    )
+  }, [sheet, view])
   const data = useMemo((): VersionsCardData | undefined => {
     if (!sheet) return undefined
     const { entries, ...rest } = sheet
@@ -1714,12 +1744,29 @@ function VersionsShare({
         ? arranged.filter((id) => byId.has(id))
         : entries.map((e) => e.row.id)
     ).filter((id) => !left.includes(id))
+    // juanlab: on the detailed sheet, each member's block, and what its stats leave out
+    const withDetails = ({ row, team }: (typeof entries)[number]) => {
+      const own = stats?.get(row.id)
+      if (!own) return team
+      return {
+        ...team,
+        members: team.members.map((m, i) => {
+          const ms = own[row.members[i]]
+          return ms
+            ? { ...m, details: kqmCardDetails(t as unknown as TFunction, ms, locale) }
+            : m
+        }),
+      }
+    }
     return {
       ...rest,
-      teams: ids.map((id) => byId.get(id)!.team),
+      notes: stats
+        ? `${rest.notes}\n${t('page_team:teamOpt.card.erNote', ER_NOTE)}`
+        : rest.notes,
+      teams: ids.map((id) => withDetails(byId.get(id)!)),
       ranked: order === 'dps',
     }
-  }, [sheet, order, arranged, left])
+  }, [sheet, stats, order, arranged, left, t, locale])
   const render = useMemo(
     () => (data ? () => renderVersionsCard(data) : undefined),
     [data]
@@ -1774,15 +1821,16 @@ function VersionsShare({
             defaultValue: '{{team}} and its versions, compared',
             team: rootName,
           })}
-          fileName={`${safeName(rootName)}-versions`}
-          aspectRatio={`${versionsCardWidth(data.teams.length)} / ${versionsCardHeight(data.teams.length)}`}
+          fileName={kqmCardFileName(`${safeName(rootName)}-versions`, view)}
+          aspectRatio={`${versionsCardWidth(data.teams.length)} / ${versionsCardHeight(data.teams.length, data)}`}
           render={render}
           watermark={() => ({
-            app: 'Stellar Optimizer',
+            app: 'Juan-optimizer',
             version: currentRelease.version,
             generatedAt: new Date().toISOString(),
             site: globalThis.location?.host,
             picture: 'versions',
+            view,
             gender,
             settings: database.teams.get(rootId)?.teamOpt?.kqm && {
               ...database.teams.get(rootId)!.teamOpt!.kqm!,
@@ -1799,6 +1847,24 @@ function VersionsShare({
               })),
           })}
           onClose={() => setOpen(false)}
+          header={
+            <Segmented<KqmCardView>
+              size="small"
+              value={view}
+              aria-label={t('page_team:teamOpt.card.view.label', 'Card view')}
+              options={[
+                {
+                  value: 'normal',
+                  label: t('page_team:teamOpt.card.view.normal', 'Normal'),
+                },
+                {
+                  value: 'detailed',
+                  label: t('page_team:teamOpt.card.view.detailed', 'Detailed'),
+                },
+              ]}
+              onChange={setView}
+            />
+          }
         >
           {sheet && (
             <PictureTeams

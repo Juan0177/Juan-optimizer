@@ -44,6 +44,7 @@ import type { SimGear } from './rotation'
 import {
   canWield,
   hasEnergyRequirement,
+  isWeaponExcludedFor,
   teamEnergyNeeds,
   teamOptUntickedWeapons,
   teamOptWeaponCandidates,
@@ -643,6 +644,17 @@ export const TEAM_GPU_MIN_TOTAL = 2_000_000
  */
 const PARALLEL_SOLVES = 3
 /** Forgets every solve done (tests; or to measure a run from scratch) */
+/**
+ * The page's turn between a run's heavy steps (a member's team data and formulas, built on the main
+ * thread): after ~40 ms of work, so steps answered at once cost nothing
+ */
+let lastTurn = 0
+async function pageTurn() {
+  if (performance.now() - lastTurn < 40) return
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  lastTurn = performance.now()
+}
+
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
 }
@@ -1596,9 +1608,11 @@ export async function optimizeTeam({
     // Swaps: two members trade the pieces of a slot, or their weapons
     for (let pass = 0; pass < 3; pass++) {
       let swapped = false
-      const fns = new Map(
-        order.map((m) => [m.characterKey, compileIn(s, m.characterKey)])
-      )
+      const fns = new Map<CharacterKey, ReturnType<typeof compileIn>>()
+      for (const m of order) {
+        await pageTurn()
+        fns.set(m.characterKey, compileIn(s, m.characterKey))
+      }
       const gain = (
         member: TeamOptMember,
         slotKey: ArtifactSlotKey,
@@ -1629,12 +1643,13 @@ export async function optimizeTeam({
             next.builds[b.characterKey]![slotKey] = idA
             if (accept(next)) {
               swapped = true
+              await pageTurn()
               fns.set(a.characterKey, compileIn(s, a.characterKey))
+              await pageTurn()
               fns.set(b.characterKey, compileIn(s, b.characterKey))
             }
           }
       if (teamOpt.optimizeWeapons) {
-        const excluded = new Set(teamOpt.excludedWeapons)
         for (const [i, a] of order.entries())
           for (const b of order.slice(i + 1)) {
             const weaponA = database.weapons.get(
@@ -1644,7 +1659,11 @@ export async function optimizeTeam({
               s.weaponIds[b.characterKey] ?? ''
             )
             if (!weaponA || !weaponB || weaponA.id === weaponB.id) continue
-            if (excluded.has(weaponA.id) || excluded.has(weaponB.id)) continue
+            if (
+              isWeaponExcludedFor(a.characterKey, weaponB.id, teamOpt) ||
+              isWeaponExcludedFor(b.characterKey, weaponA.id, teamOpt)
+            )
+              continue
             if (
               !canWield(a.characterKey, weaponB) ||
               !canWield(b.characterKey, weaponA)
@@ -1654,7 +1673,9 @@ export async function optimizeTeam({
             const buildB = s.builds[b.characterKey] ?? {}
             const nowA = fns.get(a.characterKey)?.(buildA)
             const nowB = fns.get(b.characterKey)?.(buildB)
+            await pageTurn()
             const thenA = compileIn(s, a.characterKey, weaponB)?.(buildA)
+            await pageTurn()
             const thenB = compileIn(s, b.characterKey, weaponA)?.(buildB)
             if (!nowA || !nowB || !thenA || !thenB) continue
             if (thenA.value - nowA.value + (thenB.value - nowB.value) <= 0)
@@ -1664,7 +1685,9 @@ export async function optimizeTeam({
             next.weaponIds[b.characterKey] = weaponA.id
             if (accept(next)) {
               swapped = true
+              await pageTurn()
               fns.set(a.characterKey, compileIn(s, a.characterKey))
+              await pageTurn()
               fns.set(b.characterKey, compileIn(s, b.characterKey))
             }
           }
@@ -1773,7 +1796,14 @@ export async function optimizeTeam({
         // own and the others' requirements met). The best of those is a floor for every weapon's
         // solve, so each solve only looks above the best team known; a weapon change alone is a
         // result too. The strongest weapons go first; on a tie the current one stays.
-        const candidates = weaponChoices.map((weapon) => {
+        const candidates: {
+          weapon: ICachedWeapon
+          problem: ReturnType<typeof problemIn>
+          current: number | undefined
+        }[] = []
+        for (const weapon of weaponChoices) {
+          // (one problem at a time: several in a row froze a phone for a second)
+          await pageTurn()
           const problem = problemIn(state, characterKey, weapon)
           let current: number | undefined
           if (problem && full) {
@@ -1784,8 +1814,8 @@ export async function optimizeTeam({
             )
               current = own.value
           }
-          return { weapon, problem, current }
-        })
+          candidates.push({ weapon, problem, current })
+        }
         const currentOf = (c: (typeof candidates)[number]) =>
           c.current ?? Number.NEGATIVE_INFINITY
         candidates.sort(
@@ -2029,19 +2059,21 @@ export async function optimizeTeam({
       breaksSetRules(state, start)
     )
   }
-  // A weapon left out in the weapon chooser (not ticked) is one a member only keeps when none of
-  // the ticked ones is free for it: the members' own builds are no result to fall back on when one
-  // of them holds such a weapon and the run found it a ticked one.
-  const leftOut = new Set(
-    teamOpt.optimizeWeapons ? teamOpt.excludedWeapons : []
-  )
+  // A weapon left out in the weapon chooser (globally or for this member) is one a member only
+  // keeps when none of the ticked ones is free for it: the members' own builds are no result to
+  // fall back on when one of them holds such a weapon and the run found it a ticked one.
   const weaponOf = (s: TeamState, member: TeamOptMember) =>
     s.weaponIds[member.characterKey] ?? member.weaponId
-  /** The members whose weapon in `s` is not ticked while `than` gives them a ticked one */
+  const weaponLeftOut = (member: TeamOptMember, weaponId: string) =>
+    teamOpt.optimizeWeapons &&
+    isWeaponExcludedFor(member.characterKey, weaponId, teamOpt)
+  /** The members whose weapon in `s` is not ticked for them while `than` gives them a ticked one */
   const untickedAgainst = (s: TeamState, than: TeamState) =>
     order
       .filter(
-        (m) => leftOut.has(weaponOf(s, m)) && !leftOut.has(weaponOf(than, m))
+        (m) =>
+          weaponLeftOut(m, weaponOf(s, m)) &&
+          !weaponLeftOut(m, weaponOf(than, m))
       )
       .map((m) => m.characterKey)
   if (!notBelowStart()) {

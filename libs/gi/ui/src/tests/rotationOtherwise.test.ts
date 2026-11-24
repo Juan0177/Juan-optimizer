@@ -34,6 +34,17 @@ describe('an optional action’s alternative', () => {
     expect(parseRotation('Bennett N2/N3', names).steps[0].actions).toEqual([
       expect.objectContaining({ kind: 'normal', count: 2 }),
     ])
+    // (Skill with or without Burst: "EQ/E", "E/EQ", "QE/E", "E/QE" make the Burst optional)
+    for (const text of ['Bennett EQ/E', 'Bennett E/EQ'])
+      expect(parseRotation(text, names).steps[0].actions).toMatchObject([
+        { kind: 'skill', hold: false },
+        { kind: 'burst', optional: true },
+      ])
+    for (const text of ['Bennett QE/E', 'Bennett E/QE'])
+      expect(parseRotation(text, names).steps[0].actions).toMatchObject([
+        { kind: 'burst', optional: true },
+        { kind: 'skill', hold: false },
+      ])
   })
   it('plays the alternative when the action is not ready, and the action when it is', () => {
     const sim = simulateRotation({

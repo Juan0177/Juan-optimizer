@@ -84,6 +84,11 @@ export interface TeamBuff {
    * `moonsign`): a character's buff is named by it ("Elemental Skill", "A1", "C2")
    */
   talent?: string
+  /**
+   * Its switch is off, and the written rotation turns it on for the hits it is up for: up only
+   * during the attacks that set it (`value`: the state it first has)
+   */
+  fromRotation?: true
   /** Nobody set it: Team optimize decides it by rule (`teamRuleConditionals`) */
   auto?: true
   /** Set by hand to another state than the rule's: the member's loadout that holds it */
@@ -436,6 +441,38 @@ export function useTeamBuffs(teamId: string, teamData: TeamData | undefined) {
     () => (teamData ? teamBuffsOf(database, teamId, teamData) : []),
     [database, teamId, teamData]
   )
+}
+
+/**
+ * Team optimize's buffs: the team's switches that are on (`useTeamBuffs`), and the ones its
+ * written rotation turns on for some hits while their switch is off (`fromRotation`)
+ */
+export function useTeamOptBuffs(
+  teamId: string,
+  teamData: TeamData | undefined,
+  attacks: Partial<Record<CharacterKey, readonly TeamOptAttack[]>>
+): TeamBuff[] {
+  const buffs = useTeamBuffs(teamId, teamData)
+  return useMemo(() => {
+    if (!teamData) return buffs
+    const known = new Set(buffs.map((b) => b.key))
+    const timed = new Map<string, TeamBuff>()
+    for (const list of Object.values(attacks))
+      for (const attack of list ?? [])
+        for (const { owner, path, value } of attack.states ?? []) {
+          const ref = { owner, path }
+          const key = buffRefKey(ref)
+          if (known.has(key) || timed.has(key)) continue
+          timed.set(key, {
+            ref,
+            key,
+            value,
+            fromRotation: true,
+            ...describeTimed(ref, value, teamData),
+          })
+        }
+    return timed.size ? [...buffs, ...timed.values()] : buffs
+  }, [buffs, attacks, teamData])
 }
 
 /** One thing a buff gives, as its sheet shows it: a stat and its value, or a line of text */

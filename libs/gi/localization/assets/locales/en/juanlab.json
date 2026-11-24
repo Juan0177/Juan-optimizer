@@ -140,6 +140,45 @@
     "entries": [
       {
         "date": "2026-11-24",
+        "title": "Update to Stellar Optimizer 1.40",
+        "summary": "Stellar Optimizer’s releases 1.39.1 and 1.40.0 arrive, and the versions picture gets the detailed view.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Usable by** on each weapon, in Team optimize and KQM: a Favonius is only tried on the members you choose.",
+              "**ER: Automatic or Manual**, in Team optimize and KQM. In Automatic, Favonius and other energy weapons show what they save each member on their card, where their triggers can be set too.",
+              "**Rotation writer**: a warning when the rotation waits for cooldowns (what waits, and how long); the timeline can show every rotation played."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "Optional Bursts (Q?, Q/N3, EQ/E) count as every 2nd Burst in the ER calculator.",
+              "Result cards are easier to read and show each member’s ER requirement.",
+              "Weapon and set lists tick instantly; Team optimize keeps phones responsive while it runs."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "Using a rotation no longer turns buffs such as Cryo resonance back on in the team settings.",
+              "Manual ER stays Manual when the rotation changes; the ER calculator’s dropdowns open on top again.",
+              "Cryo Traveler: Charged Attack: Freezing Ice shows in Cryo."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Versions → Share: Normal or Detailed**. The detailed picture adds each member’s main stats and stats out of combat, as on the KQM team card.",
+              "The Comparison card (original against one version) is gone: Stellar’s versions picture replaces it.",
+              "The new texts are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-24",
         "title": "Update to Stellar Optimizer 1.39",
         "summary": "Stellar Optimizer’s releases 1.37.3 to 1.39.0 arrive.",
         "sections": [

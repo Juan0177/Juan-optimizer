@@ -1,4 +1,7 @@
-import { useDataManagerValues } from '@genshin-optimizer/common/database-ui'
+import {
+  useDataManagerEntries,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { useBoolState } from '@genshin-optimizer/common/react-util'
 import {
   CardThemed,
@@ -20,7 +23,12 @@ import type {
   WeaponKey,
   WeaponTypeKey,
 } from '@genshin-optimizer/gi/consts'
-import type { ICachedWeapon, TeamOpt } from '@genshin-optimizer/gi/db'
+import type {
+  ICachedWeapon,
+  TeamOpt,
+  TeamOptEnergyCalculator,
+  TeamOptEnergyMember,
+} from '@genshin-optimizer/gi/db'
 import {
   defaultInitialWeaponKey,
   initialWeapon,
@@ -34,21 +42,35 @@ import {
 import type { DocumentConditional } from '@genshin-optimizer/gi/sheets'
 import { getWeaponSheet } from '@genshin-optimizer/gi/sheets'
 import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
-import type { TeamData, TeamOptMember } from '@genshin-optimizer/gi/ui'
+import type {
+  TeamData,
+  TeamOptMember,
+  WeaponCalculatorImpact,
+} from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
+  canAssignTeamWeapons,
+  energyWeaponPerBurst,
   hasEnergyRequirement,
+  isCalcEnergyWeapon,
   isEnergyWeapon,
+  isFavonius,
   LocationName,
+  teamOptCurrentWeapons,
+  updateEnergyCalcMember,
   WeaponEditor,
   WeaponName,
   WeaponSelectionModal,
+  weaponCalculatorImpact,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import AddIcon from '@mui/icons-material/Add'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import BoltIcon from '@mui/icons-material/Bolt'
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
+import RemoveIcon from '@mui/icons-material/Remove'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import type { SxProps, Theme } from '@mui/material'
 import {
@@ -65,6 +87,7 @@ import {
   DialogTitle,
   IconButton,
   InputAdornment,
+  InputBase,
   Menu,
   MenuItem,
   Select,
@@ -75,12 +98,16 @@ import {
 import type { ReactNode } from 'react'
 import {
   createContext,
+  Fragment,
+  memo,
+  useCallback,
   Suspense,
   startTransition,
   useContext,
   useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -92,6 +119,7 @@ import {
   stackedBackdrop,
   TileAction,
 } from './OptionTile'
+import type { TeamEnergy as TeamEnergyHook } from './TeamEnergy'
 import {
   FieldLabel,
   focusSx,
@@ -104,6 +132,34 @@ import {
   useBatches,
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
+
+/** ER calculator state passed to WeaponGroup when ER is calculated per weapon */
+export interface WeaponCalcEnergyConfig {
+  calculator: TeamOptEnergyCalculator
+  baseWeapons?: Partial<Record<CharacterKey, WeaponKey>>
+  baseRefinements?: Partial<Record<CharacterKey, number>>
+  updateMember: (
+    characterKey: CharacterKey,
+    values: Partial<TeamOptEnergyMember>
+  ) => void
+  onOpenCalculator?: () => void
+}
+
+const ER_FILTER_PATH = JSON.stringify(['basic', 'enerRech_'])
+
+/** Whether a weapon is usable by at least one current wielder of its type */
+function isWeaponTicked(
+  weaponId: string,
+  wielders: readonly TeamOptMember[],
+  excluded: ReadonlySet<string>,
+  excludedMembers?: Record<string, readonly CharacterKey[] | undefined>
+) {
+  if (excluded.has(weaponId)) return false
+  const blocked = excludedMembers?.[weaponId]
+  return (
+    !blocked?.length || wielders.some((m) => !blocked.includes(m.characterKey))
+  )
+}
 
 /** The inventory's weapons the members can wield, by weapon type (best first) */
 function useTeamWeapons(members: TeamOptMember[]) {
@@ -137,12 +193,14 @@ export function WeaponSettings({
   teamData,
   teamOpt,
   setTeamOpt,
+  energy,
   disabled,
 }: {
   members: TeamOptMember[]
   teamData: TeamData | undefined
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
+  energy?: TeamEnergyHook
   disabled?: boolean
 }) {
   const { t } = useTranslation('page_team')
@@ -151,7 +209,11 @@ export function WeaponSettings({
   const total = groups.reduce((n, g) => n + g.weapons.length, 0)
   const excluded = new Set(teamOpt.excludedWeapons)
   const allowed = groups.reduce(
-    (n, g) => n + g.weapons.filter((w) => !excluded.has(w.id)).length,
+    (n, g) =>
+      n +
+      g.weapons.filter((w) =>
+        isWeaponTicked(w.id, g.members, excluded, teamOpt.excludedWeaponMembers)
+      ).length,
     0
   )
   return (
@@ -202,6 +264,7 @@ export function WeaponSettings({
           teamData={teamData}
           teamOpt={teamOpt}
           setTeamOpt={setTeamOpt}
+          energy={energy}
           onClose={onHide}
         />
       )}
@@ -209,12 +272,16 @@ export function WeaponSettings({
   )
 }
 
+/** The weapons left out, for all members or some */
+type Exclusions = Pick<TeamOpt, 'excludedWeapons' | 'excludedWeaponMembers'>
+
 function WeaponChooserModal({
   groups,
   members,
   teamData,
   teamOpt,
   setTeamOpt,
+  energy,
   onClose,
 }: {
   groups: ReturnType<typeof useTeamWeapons>
@@ -222,21 +289,187 @@ function WeaponChooserModal({
   teamData: TeamData | undefined
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
+  energy?: TeamEnergyHook
   onClose: () => void
 }) {
   const { t } = useTranslation(['page_team', 'page_weapon'])
-  const excluded = new Set(teamOpt.excludedWeapons)
-  const all = groups.flatMap((g) => g.weapons)
-  const setExcluded = (ids: string[]) =>
-    setTeamOpt((o) => {
-      o.excludedWeapons = [...new Set(ids)]
+  const database = useDatabase()
+  const optConfigs = useDataManagerEntries(database.optConfigs)
+  // Clicks are kept here and saved once, when the dialog closes (or the page is left): a save
+  // writes the team's whole settings, its rotation's attacks with them, too slow for every click
+  const [pending, setPending] = useState<Exclusions>()
+  const clicked: Exclusions = pending ?? {
+    excludedWeapons: teamOpt.excludedWeapons,
+    excludedWeaponMembers: teamOpt.excludedWeaponMembers,
+  }
+  const excluded = new Set(clicked.excludedWeapons)
+  const excludedMembers = clicked.excludedWeaponMembers
+  const clickedRef = useRef(clicked)
+  clickedRef.current = clicked
+  const queue = useRef<((o: Exclusions) => void)[]>([])
+  const save = useRef(setTeamOpt)
+  save.current = setTeamOpt
+  const flush = useCallback(() => {
+    const changes = queue.current
+    if (!changes.length) return
+    queue.current = []
+    save.current((o) => {
+      for (const change of changes) change(o)
     })
-  const toggle = (weapon: ICachedWeapon) =>
-    setExcluded(
-      excluded.has(weapon.id)
-        ? teamOpt.excludedWeapons.filter((id) => id !== weapon.id)
-        : [...teamOpt.excludedWeapons, weapon.id]
-    )
+  }, [])
+  useEffect(() => {
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      // (the dialog closes first, then the save)
+      requestAnimationFrame(() => setTimeout(flush))
+    }
+  }, [flush])
+  const update = (change: (o: Exclusions) => void) => {
+    const view = structuredClone(clickedRef.current)
+    change(view)
+    clickedRef.current = view
+    queue.current.push(change)
+    setPending(view)
+  }
+  const all = groups.flatMap((g) => g.weapons)
+  const keys = useMemo(() => members.map((m) => m.characterKey), [members])
+  // (the weapon cards keep the handlers they were drawn with: these read the latest ones)
+  const latest = useRef({ energy, onClose })
+  latest.current = { energy, onClose }
+  const openCalculator = useMemo(
+    () =>
+      energy
+        ? () => {
+            latest.current.onClose()
+            latest.current.energy?.openCalculator()
+          }
+        : undefined,
+    [!!energy]
+  )
+  const setExcluded = (ids: string[], clearMembersFor?: Iterable<string>) =>
+    update((o) => {
+      const nextIds = [...new Set(ids)]
+      o.excludedWeapons = nextIds
+      if (o.excludedWeaponMembers) {
+        const next = { ...o.excludedWeaponMembers }
+        for (const id of nextIds) delete next[id]
+        if (clearMembersFor) for (const id of clearMembersFor) delete next[id]
+        if (Object.keys(next).length) o.excludedWeaponMembers = next
+        else delete o.excludedWeaponMembers
+      }
+    })
+  const toggle = (weapon: ICachedWeapon, wielders: TeamOptMember[]) =>
+    update((o) => {
+      const currentlyExcluded = new Set(o.excludedWeapons)
+      const ticked = isWeaponTicked(
+        weapon.id,
+        wielders,
+        currentlyExcluded,
+        o.excludedWeaponMembers
+      )
+      o.excludedWeapons = ticked
+        ? [...new Set([...o.excludedWeapons, weapon.id])]
+        : o.excludedWeapons.filter((id) => id !== weapon.id)
+      if (o.excludedWeaponMembers?.[weapon.id]) {
+        const next = { ...o.excludedWeaponMembers }
+        delete next[weapon.id]
+        if (Object.keys(next).length) o.excludedWeaponMembers = next
+        else delete o.excludedWeaponMembers
+      }
+    })
+  const toggleMember = (
+    weapon: ICachedWeapon,
+    wielders: TeamOptMember[],
+    characterKey: CharacterKey
+  ) =>
+    update((o) => {
+      const currentlyExcluded = new Set(o.excludedWeapons)
+      const ticked = isWeaponTicked(
+        weapon.id,
+        wielders,
+        currentlyExcluded,
+        o.excludedWeaponMembers
+      )
+      const nextMap = { ...o.excludedWeaponMembers }
+      if (!ticked) {
+        // Clicking a character on an unticked weapon ticks it for that character only
+        o.excludedWeapons = o.excludedWeapons.filter((id) => id !== weapon.id)
+        const others = wielders
+          .map((m) => m.characterKey)
+          .filter((k) => k !== characterKey)
+        if (others.length) nextMap[weapon.id] = others
+        else delete nextMap[weapon.id]
+      } else {
+        const blocked = new Set(nextMap[weapon.id] ?? [])
+        if (blocked.has(characterKey)) blocked.delete(characterKey)
+        else blocked.add(characterKey)
+        const remaining = wielders.some((m) => !blocked.has(m.characterKey))
+        if (!remaining) {
+          o.excludedWeapons = [...new Set([...o.excludedWeapons, weapon.id])]
+          delete nextMap[weapon.id]
+        } else if (blocked.size) {
+          nextMap[weapon.id] = [...blocked]
+        } else {
+          delete nextMap[weapon.id]
+        }
+      }
+      if (Object.keys(nextMap).length) o.excludedWeaponMembers = nextMap
+      else delete o.excludedWeaponMembers
+    })
+  // (saved settings come back as new objects: the calculator's content stands for it)
+  const calculatorKey = JSON.stringify(teamOpt.energyCalculator ?? null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `calculatorKey` stands for the calculator
+  const calcEnergy = useMemo<WeaponCalcEnergyConfig | undefined>(() => {
+    if (teamOpt.energySource !== 'calculator' || !teamOpt.energyCalculator)
+      return undefined
+    const current = teamOptCurrentWeapons(database, members)
+    const baseWeapons = Object.fromEntries(
+      Object.entries(current)
+        .filter(([, w]) => !!w)
+        .map(([k, w]) => [k, w!.key])
+    ) as Partial<Record<CharacterKey, WeaponKey>>
+    const baseRefinements = Object.fromEntries(
+      Object.entries(current)
+        .filter(([, w]) => !!w)
+        .map(([k, w]) => [k, w!.refinement])
+    ) as Partial<Record<CharacterKey, number>>
+    return {
+      calculator: teamOpt.energyCalculator,
+      baseWeapons,
+      baseRefinements,
+      updateMember: (characterKey, values) =>
+        setTeamOpt((o) => {
+          if (!o.energyCalculator) return
+          o.energyCalculator = updateEnergyCalcMember(
+            o.energyCalculator,
+            keys,
+            characterKey,
+            values
+          )
+        }),
+      onOpenCalculator: openCalculator,
+    }
+  }, [
+    teamOpt.energySource,
+    calculatorKey,
+    database,
+    members,
+    keys,
+    setTeamOpt,
+    openCalculator,
+  ])
+  const memberMinEr = useMemo<Partial<Record<CharacterKey, number>>>(() => {
+    const map = new Map(optConfigs)
+    const out: Partial<Record<CharacterKey, number>> = {}
+    for (const m of members) {
+      const val = map
+        .get(m.teamChar.optConfigId)
+        ?.statFilters[ER_FILTER_PATH]?.find((f) => !f.disabled)?.value
+      if (val && val > 100) out[m.characterKey] = val
+    }
+    return out
+  }, [optConfigs, members])
   // the dialog shows at once (its frame and placeholders); its rows fill in right after
   const [ready, setReady] = useState(false)
   useEffect(() => {
@@ -245,33 +478,60 @@ function WeaponChooserModal({
     )
     return () => cancelAnimationFrame(id)
   }, [])
-  // the quick picks: lit when the ticks are exactly theirs
-  const sameAs = (ids: string[]) =>
-    ids.length === excluded.size && ids.every((id) => excluded.has(id))
+  // the quick picks: lit when the ticks are exactly theirs (and for "All", no member restrictions)
+  const hasRestrictions = (exceptIds: ReadonlySet<string>) =>
+    groups.some((g) =>
+      g.weapons.some(
+        (w) =>
+          !exceptIds.has(w.id) &&
+          g.members.some((m) =>
+            excludedMembers?.[w.id]?.includes(m.characterKey)
+          )
+      )
+    )
+  const sameAs = (ids: string[], checkRestrictions = false) =>
+    ids.length === excluded.size &&
+    ids.every((id) => excluded.has(id)) &&
+    (!checkRestrictions || !hasRestrictions(new Set(ids)))
   const below5 = all
     .filter((w) => getWeaponStat(w.key).rarity < 5)
     .map((w) => w.id)
   const below80 = all.filter((w) => w.level < 80).map((w) => w.id)
   const picks = [
-    { key: 'all', label: t('teamOpt.weapons.all', 'All'), ids: [] },
+    {
+      key: 'all',
+      label: t('teamOpt.weapons.all', 'All'),
+      ids: [],
+      clearAll: true,
+    },
     {
       key: '5',
       label: t('teamOpt.weapons.fiveStar', 'Only 5★'),
       ids: below5,
+      clearAll: false,
     },
     {
       key: '80',
       label: t('teamOpt.weapons.leveled', 'Level 80 and up'),
       ids: below80,
+      clearAll: false,
     },
     // none ticked: a start for ticking only the few wanted
     {
       key: 'none',
       label: t('teamOpt.weapons.pickNone', 'None'),
       ids: all.map((w) => w.id),
+      clearAll: true,
     },
   ]
-  const allowedCount = all.filter((w) => !excluded.has(w.id)).length
+  const allowedCount = groups.reduce(
+    (n, g) =>
+      n +
+      g.weapons.filter((w) =>
+        isWeaponTicked(w.id, g.members, excluded, excludedMembers)
+      ).length,
+    0
+  )
   // (rows come in batches: the first screenful at once, the rest a batch per frame)
   const shown = useBatches(ready ? all.length : 0, 24, 12)
   let left = shown
@@ -286,10 +546,17 @@ function WeaponChooserModal({
       <CardThemed sx={floatSx}>
         <DialogHead
           title={t('teamOpt.weapons.title', 'Weapons to choose from')}
-          info={t(
-            'teamOpt.weapons.desc',
-            'Each member tries the ticked weapons of its type, along with its artifacts. A passive counts only when it is on for that character. An energy weapon in the team lowers each member’s Energy Recharge requirement by what you set for that member: click ⚡ on it.'
-          )}
+          info={
+            calcEnergy
+              ? t(
+                  'teamOpt.weapons.descCalc',
+                  'Each member tries the ticked weapons allowed for them, along with their artifacts. A passive counts only when it is on for that character. ER is calculated per weapon by the ER calculator: click ⚡ on Favonius or an energy weapon to view its savings or adjust its triggers.'
+                )
+              : t(
+                  'teamOpt.weapons.desc',
+                  'Each member tries the ticked weapons allowed for them, along with their artifacts. A passive counts only when it is on for that character. An energy weapon in the team lowers each member’s Energy Recharge requirement by what you set for them: click ⚡ on it.'
+                )
+          }
           actions={
             <Typography sx={{ ...typo.label, ...numSx, whiteSpace: 'nowrap' }}>
               {t('teamOpt.weapons.groupCount', {
@@ -315,12 +582,58 @@ function WeaponChooserModal({
           {picks.map((p) => (
             <Pill
               key={p.key}
-              selected={sameAs(p.ids)}
-              onClick={() => setExcluded(p.ids)}
+              selected={sameAs(p.ids, p.key === 'all')}
+              onClick={() =>
+                setExcluded(
+                  p.ids,
+                  p.clearAll ? all.map((w) => w.id) : undefined
+                )
+              }
             >
               {p.label}
             </Pill>
           ))}
+          {calcEnergy && (
+            <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
+              <Tooltip
+                arrow
+                title={t(
+                  'teamOpt.weapons.calcModeTip',
+                  'ER requirements are recalculated per weapon by the ER calculator (including Favonius). Click ⚡ on Favonius or an energy weapon to adjust its triggers, or open the ER calculator.'
+                )}
+              >
+                <ButtonBase
+                  onClick={openCalculator}
+                  disabled={!openCalculator}
+                  sx={(theme) => ({
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    height: 28,
+                    px: 1.125,
+                    borderRadius: tokens.radius.pill,
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    bgcolor: alpha(theme.palette.text.primary, 0.05),
+                    border: hairline,
+                    ...quickSx,
+                    ...focusSx,
+                    ...(openCalculator && {
+                      '&:hover': {
+                        color: 'text.primary',
+                        bgcolor: alpha(theme.palette.text.primary, 0.09),
+                        borderColor: tokens.hairlineStrong,
+                      },
+                    }),
+                  })}
+                >
+                  <BoltIcon sx={{ fontSize: 14, color: 'primary.main' }} />
+                  {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
+                </ButtonBase>
+              </Tooltip>
+            </Box>
+          )}
         </Box>
         <Box
           sx={{
@@ -360,13 +673,20 @@ function WeaponChooserModal({
                   visible={visible}
                   teamData={teamData}
                   excluded={excluded}
-                  onToggle={toggle}
+                  excludedMembers={excludedMembers}
+                  onToggle={(weapon) => toggle(weapon, group.members)}
+                  onToggleMember={(weapon, characterKey) =>
+                    toggleMember(weapon, group.members, characterKey)
+                  }
                   onTickAll={(tick) => {
                     const ids = new Set(group.weapons.map((w) => w.id))
-                    setExcluded([
-                      ...teamOpt.excludedWeapons.filter((id) => !ids.has(id)),
-                      ...(tick ? [] : ids),
-                    ])
+                    setExcluded(
+                      [
+                        ...clicked.excludedWeapons.filter((id) => !ids.has(id)),
+                        ...(tick ? [] : ids),
+                      ],
+                      ids
+                    )
                   }}
                   teamMembers={members}
                   weaponEnergy={teamOpt.weaponEnergy}
@@ -380,6 +700,9 @@ function WeaponChooserModal({
                       else delete o.weaponEnergy[id]
                     })
                   }
+                  memberMinEr={memberMinEr}
+                  calcEnergy={calcEnergy}
+                  onOpenCalculator={openCalculator}
                   typeName={t(
                     `page_weapon:weaponType.${group.type}`,
                     group.type
@@ -411,12 +734,19 @@ export function WeaponGroup({
   members,
   teamMembers,
   weapons,
+  allWeapons,
   teamData,
   excluded,
+  excludedMembers,
+  lockedMembers,
   onToggle,
+  onToggleMember,
   onTickAll,
   weaponEnergy,
   setWeaponEnergy,
+  memberMinEr,
+  calcEnergy,
+  onOpenCalculator,
   virtual = false,
   tooFew,
   minTicked,
@@ -445,9 +775,16 @@ export function WeaponGroup({
   members: TeamOptMember[]
   teamMembers: TeamOptMember[]
   weapons: ICachedWeapon[]
+  /** Unfiltered weapons of this type (used for counts and warnings while searching) */
+  allWeapons?: ICachedWeapon[]
   teamData: TeamData | undefined
   excluded: Set<string>
+  /** Per weapon id, members excluded from wielding it */
+  excludedMembers?: Record<string, readonly CharacterKey[] | undefined>
+  /** Members locked to a single weapon (KQM mode) */
+  lockedMembers?: Partial<Record<CharacterKey, WeaponKey>>
   onToggle: (weapon: ICachedWeapon) => void
+  onToggleMember?: (weapon: ICachedWeapon, characterKey: CharacterKey) => void
   /** Ticks (or unticks) every weapon of the type at once (absent: no All/None for the type) */
   onTickAll?: (tick: boolean) => void
   weaponEnergy: TeamOpt['weaponEnergy']
@@ -456,12 +793,53 @@ export function WeaponGroup({
     characterKey: CharacterKey,
     value: number
   ) => void
+  /** Manual Min ER per member (used in manual energy mode to preview reduced ER) */
+  memberMinEr?: Partial<Record<CharacterKey, number>>
+  /** ER calculator config when ER is calculated per weapon (replaces manual weaponEnergy UI) */
+  calcEnergy?: WeaponCalcEnergyConfig
+  /** Opens the ER calculator drawer/tab (offered as a shortcut in manual energy panels) */
+  onOpenCalculator?: () => void
 }) {
   const { t } = useTranslation('page_team')
+  const { gender } = useDBMeta()
+  const pool = allWeapons ?? weapons
+  const isAllowedFor = (ck: CharacterKey, weaponId: string) =>
+    !excluded.has(weaponId) && !excludedMembers?.[weaponId]?.includes(ck)
   const ticked =
     selectionCounts?.allowed ??
-    weapons.filter((w) => !excluded.has(w.id)).length
-  const tooFewTicked = ticked < (minTicked ?? (virtual ? 1 : members.length))
+    pool.filter((w) => isWeaponTicked(w.id, members, excluded, excludedMembers))
+      .length
+  const memberCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        members.map((m) => [
+          m.characterKey,
+          pool.filter(
+            (w) =>
+              !excluded.has(w.id) &&
+              !excludedMembers?.[w.id]?.includes(m.characterKey)
+          ).length,
+        ])
+      ) as Partial<Record<CharacterKey, number>>,
+    [members, pool, excluded, excludedMembers]
+  )
+  const unlocked = members.filter((m) => !lockedMembers?.[m.characterKey])
+  const emptyMembers = unlocked.filter(
+    (m) => (memberCounts[m.characterKey] ?? 0) === 0
+  )
+  const canAssign = virtual
+    ? emptyMembers.length === 0
+    : canAssignTeamWeapons(
+        unlocked.map((m) => m.characterKey),
+        pool,
+        isAllowedFor
+      )
+  const tooFewTicked =
+    emptyMembers.length > 0 ||
+    (minTicked !== undefined ? ticked < minTicked : !canAssign)
+  const allUnrestricted =
+    ticked === pool.length &&
+    pool.every((w) => !excludedMembers?.[w.id]?.length)
   return (
     <Box component="section">
       <Box
@@ -478,24 +856,87 @@ export function WeaponGroup({
         <Typography component="h3" sx={typo.title}>
           {typeName}
         </Typography>
-        {/* the members who wield this type: each weapon's passives are set for each of them */}
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
-          {members.map((m) => (
-            <MemberAvatar
-              key={m.characterKey}
-              characterKey={m.characterKey}
-              size={22}
-            />
-          ))}
+        {/* the members who wield this type (with per-member counts when 2+ share the type) */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          {members.map((m) => {
+            const count = memberCounts[m.characterKey] ?? 0
+            const lockedKey = lockedMembers?.[m.characterKey]
+            const showCount = members.length > 1 && !!onToggleMember
+            const warn = showCount && !lockedKey && count === 0
+            if (!showCount)
+              return (
+                <MemberAvatar
+                  key={m.characterKey}
+                  characterKey={m.characterKey}
+                  size={22}
+                />
+              )
+            return (
+              <SuspenseTooltip
+                key={m.characterKey}
+                arrow
+                title={
+                  <>
+                    <CharacterName
+                      characterKey={m.characterKey}
+                      gender={gender}
+                    />
+                    {': '}
+                    {lockedKey ? (
+                      <>
+                        {t('teamOpt.kqm.weaponLockedShort', 'locked to')}{' '}
+                        <WeaponName weaponKey={lockedKey} />
+                      </>
+                    ) : (
+                      t('teamOpt.weapons.memberAllowedCount', {
+                        defaultValue_one: '{{count}} weapon allowed',
+                        defaultValue_other: '{{count}} weapons allowed',
+                        count,
+                      })
+                    )}
+                  </>
+                }
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.375,
+                    pr: 0.75,
+                    pl: 0.25,
+                    height: 24,
+                    borderRadius: tokens.radius.pill,
+                    border: hairline,
+                    bgcolor: tokens.inset,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    ...numSx,
+                    color: warn ? 'warning.main' : 'text.secondary',
+                    ...(warn && {
+                      borderColor: (theme) =>
+                        alpha(theme.palette.warning.main, 0.5),
+                    }),
+                  }}
+                >
+                  <MemberAvatar characterKey={m.characterKey} size={18} />
+                  {lockedKey ? (
+                    <LockOutlinedIcon
+                      sx={{ fontSize: 12, color: 'primary.main' }}
+                    />
+                  ) : (
+                    count
+                  )}
+                </Box>
+              </SuspenseTooltip>
+            )
+          })}
         </Box>
         <Box sx={{ flexGrow: 1 }} />
         {/* the type's own quick picks: every weapon of it, or none (to tick a few) */}
         {onTickAll && (
           <Box sx={{ display: 'flex', gap: 0.5 }}>
-            <Pill
-              selected={ticked === weapons.length}
-              onClick={() => onTickAll(true)}
-            >
+            <Pill selected={allUnrestricted} onClick={() => onTickAll(true)}>
               {t('teamOpt.weapons.all', 'All')}
             </Pill>
             <Pill selected={ticked === 0} onClick={() => onTickAll(false)}>
@@ -518,7 +959,9 @@ export function WeaponGroup({
         </Typography>
         {!virtual && <AddWeaponButton type={type} />}
       </Box>
-      {note && <Box sx={{ ...typo.label, fontWeight: 400, mb: 1.5 }}>{note}</Box>}
+      {note && (
+        <Box sx={{ ...typo.label, fontWeight: 400, mb: 1.5 }}>{note}</Box>
+      )}
       {tooFewTicked && (
         <Box
           sx={{
@@ -531,11 +974,37 @@ export function WeaponGroup({
           }}
         >
           <WarningAmberRoundedIcon sx={{ fontSize: 16, flexShrink: 0 }} />
-          {tooFew ??
-            t(
-              'teamOpt.weapons.tooFewTicked',
-              'Tick one for each member: a member left without one keeps its current weapon.'
+          <span>
+            {emptyMembers.length > 0 && members.length > 1 ? (
+              <>
+                {emptyMembers.map((m, i) => (
+                  <Fragment key={m.characterKey}>
+                    {i > 0 && ', '}
+                    <CharacterName
+                      characterKey={m.characterKey}
+                      gender={gender}
+                    />
+                  </Fragment>
+                ))}
+                {': '}
+                {virtual
+                  ? t(
+                      'teamOpt.kqm.memberNoWeapon',
+                      'select at least one weapon for them before generating builds.'
+                    )
+                  : t(
+                      'teamOpt.weapons.memberNoWeapon',
+                      'no weapons ticked for them — they keep their current weapon.'
+                    )}
+              </>
+            ) : (
+              (tooFew ??
+              t(
+                'teamOpt.weapons.tooFewTicked',
+                'Tick one for each member: a member left without one keeps its current weapon.'
+              ))
             )}
+          </span>
         </Box>
       )}
       <Box sx={rowGridSx}>
@@ -544,8 +1013,19 @@ export function WeaponGroup({
             <WeaponRow
               key={weapon.id}
               weapon={weapon}
-              allowed={!excluded.has(weapon.id)}
+              allowed={isWeaponTicked(
+                weapon.id,
+                members,
+                excluded,
+                excludedMembers
+              )}
+              excludedFor={excludedMembers?.[weapon.id]}
+              lockedMembers={lockedMembers}
               onToggle={() => onToggle(weapon)}
+              onToggleMember={
+                onToggleMember &&
+                ((ck: CharacterKey) => onToggleMember(weapon, ck))
+              }
               wielders={members}
               teamData={teamData}
               teamMembers={teamMembers}
@@ -553,6 +1033,9 @@ export function WeaponGroup({
               setEnergy={(characterKey, value) =>
                 setWeaponEnergy(weapon.id, characterKey, value)
               }
+              memberMinEr={memberMinEr}
+              calcEnergy={calcEnergy}
+              onOpenCalculator={onOpenCalculator}
               virtual={virtual}
               source={sourceOf?.(weapon)}
               onRefinement={
@@ -571,15 +1054,48 @@ export const isConditional = (
 ): section is DocumentConditional =>
   !!section && typeof section === 'object' && 'states' in section
 
-function WeaponRow({
+/**
+ * Two weapon cards' props draw the same card: their values alike (handlers are left out: each
+ * reads the latest settings when called), so a click redraws only the card it changed
+ */
+function sameWeaponRow(
+  a: Parameters<typeof WeaponRowCard>[0],
+  b: Parameters<typeof WeaponRowCard>[0]
+) {
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const x = a[key as keyof typeof a]
+    const y = b[key as keyof typeof b]
+    if (x === y) continue
+    if (typeof x === 'function' && typeof y === 'function') continue
+    if (
+      (key === 'excludedFor' ||
+        key === 'energy' ||
+        key === 'lockedMembers' ||
+        key === 'memberMinEr') &&
+      JSON.stringify(x) === JSON.stringify(y)
+    )
+      continue
+    return false
+  }
+  return true
+}
+const WeaponRow = memo(WeaponRowCard, sameWeaponRow)
+
+function WeaponRowCard({
   weapon,
   allowed,
+  excludedFor,
+  lockedMembers,
   onToggle,
+  onToggleMember,
   wielders,
   teamData,
   teamMembers,
   energy,
   setEnergy,
+  memberMinEr,
+  calcEnergy,
+  onOpenCalculator,
   virtual = false,
   source,
   onRefinement,
@@ -591,8 +1107,12 @@ function WeaponRow({
   onRefinement?: (refinement: number) => void
   weapon: ICachedWeapon
   allowed: boolean
+  /** Members excluded from using this weapon */
+  excludedFor?: readonly CharacterKey[]
+  /** Members locked to a single weapon (KQM mode) */
+  lockedMembers?: Partial<Record<CharacterKey, WeaponKey>>
   onToggle: () => void
-  /** Whose passives are shown */
+  onToggleMember?: (characterKey: CharacterKey) => void
   /** The members who could wield it: its passives are set for each */
   wielders: TeamOptMember[]
   teamData: TeamData | undefined
@@ -600,6 +1120,9 @@ function WeaponRow({
   /** Per member, how much less Energy Recharge it needs with this weapon in the team */
   energy: Partial<Record<CharacterKey, number>> | undefined
   setEnergy: (characterKey: CharacterKey, value: number) => void
+  memberMinEr?: Partial<Record<CharacterKey, number>>
+  calcEnergy?: WeaponCalcEnergyConfig
+  onOpenCalculator?: () => void
 }) {
   const { t } = useTranslation('page_team')
   const nameId = useId()
@@ -613,7 +1136,51 @@ function WeaponRow({
   const energySet = teamMembers.filter(
     ({ characterKey }) => (energy?.[characterKey] ?? 0) > 0
   )
-  const isEnergy = isEnergyWeapon(weapon.key) || !!energySet.length
+  const isCalcWeapon = isFavonius(weapon.key) || isCalcEnergyWeapon(weapon.key)
+  const isEnergy = calcEnergy
+    ? isCalcWeapon
+    : isEnergyWeapon(weapon.key) || !!energySet.length
+  const allowedFor = (ck: CharacterKey) => allowed && !excludedFor?.includes(ck)
+  // Wielders relevant for calculator ER impact: the allowed ones (or all if unticked)
+  const calcWielders = useMemo(() => {
+    const unlocked = wielders.filter(
+      (m) =>
+        !lockedMembers?.[m.characterKey] ||
+        lockedMembers[m.characterKey] === weapon.key
+    )
+    const active = allowed
+      ? unlocked.filter((m) => !excludedFor?.includes(m.characterKey))
+      : unlocked
+    return active.length ? active : wielders
+  }, [wielders, lockedMembers, weapon.key, allowed, excludedFor])
+  const teamKeys = useMemo(
+    () => teamMembers.map((m) => m.characterKey),
+    [teamMembers]
+  )
+  const calcImpacts = useMemo(() => {
+    if (!calcEnergy || !isCalcWeapon || (!allowed && !energyOpen)) return []
+    return calcWielders.map((m) => ({
+      member: m,
+      impact: weaponCalculatorImpact(
+        teamKeys,
+        calcEnergy.calculator,
+        m.characterKey,
+        weapon.key,
+        weapon.refinement,
+        calcEnergy.baseWeapons,
+        calcEnergy.baseRefinements
+      ),
+    }))
+  }, [
+    calcEnergy,
+    isCalcWeapon,
+    allowed,
+    energyOpen,
+    calcWielders,
+    teamKeys,
+    weapon.key,
+    weapon.refinement,
+  ])
   const rowIcon = {
     color: 'text.disabled',
     ...quickSx,
@@ -628,6 +1195,9 @@ function WeaponRow({
         display: 'flex',
         flexDirection: 'column',
         minWidth: 0,
+        // (hundreds of cards: those out of view are not laid out, so a click lays out a few)
+        contentVisibility: 'auto',
+        containIntrinsicSize: 'auto 120px',
         borderRadius: tokens.radius.inset,
         bgcolor: tokens.inset,
         border: hairline,
@@ -746,14 +1316,25 @@ function WeaponRow({
               </Box>
             )}
             {/* (on this line, so that the name keeps its room) */}
-            {isEnergy && (
-              <EnergyTag
-                members={energySet}
-                energy={energy}
-                open={energyOpen}
-                onClick={() => setEnergyOpen((o) => !o)}
-              />
-            )}
+            {isEnergy &&
+              (calcEnergy ? (
+                <CalcEnergyTag
+                  weapon={weapon}
+                  allowed={allowed}
+                  wielders={calcWielders}
+                  impacts={calcImpacts}
+                  calculator={calcEnergy.calculator}
+                  open={energyOpen}
+                  onClick={() => setEnergyOpen((o) => !o)}
+                />
+              ) : (
+                <EnergyTag
+                  members={energySet}
+                  energy={energy}
+                  open={energyOpen}
+                  onClick={() => setEnergyOpen((o) => !o)}
+                />
+              ))}
             {weapon.location && !virtual && (
               <>
                 <span>·</span>
@@ -763,7 +1344,7 @@ function WeaponRow({
           </Box>
         </Box>
         {!virtual && <RemoveWeaponButton weapon={weapon} iconSx={rowIcon} />}
-        {!isEnergy && (
+        {!calcEnergy && !isEnergy && (
           <Tooltip
             arrow
             title={t(
@@ -787,6 +1368,49 @@ function WeaponRow({
           </Tooltip>
         )}
       </Box>
+      {/* When 2+ team members share this weapon type: limit who may equip this weapon */}
+      {wielders.length > 1 && onToggleMember && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            py: 0.375,
+            minHeight: 36,
+            borderTop: hairline,
+            bgcolor: (theme) => alpha(theme.palette.text.primary, 0.02),
+          }}
+        >
+          <FieldLabel
+            tip={t(
+              'teamOpt.weapons.usableByTip',
+              'Who may equip this weapon. Click a character to allow or exclude them.'
+            )}
+            sx={{ fontSize: 12.5, flex: '1 1 auto' }}
+          >
+            {t('teamOpt.weapons.usableBy', 'Usable by')}
+          </FieldLabel>
+          <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, ml: 'auto' }}>
+            {wielders.map((member) => {
+              const lockedKey = lockedMembers?.[member.characterKey]
+              const on = lockedKey
+                ? lockedKey === weapon.key
+                : allowedFor(member.characterKey)
+              return (
+                <UsableAvatarToggle
+                  key={member.characterKey}
+                  member={member}
+                  weaponKey={weapon.key}
+                  on={on}
+                  locked={lockedKey}
+                  onClick={() => onToggleMember(member.characterKey)}
+                />
+              )
+            })}
+          </Box>
+        </Box>
+      )}
       {/* (on every card, so that cards side by side line up) */}
       <Box
         sx={{
@@ -807,13 +1431,564 @@ function WeaponRow({
       </Box>
       <Collapse in={energyOpen} timeout={180} unmountOnExit>
         <Box sx={{ px: 1.5, py: 1, borderTop: hairline }}>
-          <TeamEnergy
-            members={teamMembers}
-            energy={energy}
-            setEnergy={setEnergy}
-          />
+          {calcEnergy && isCalcWeapon ? (
+            <CalcWeaponEnergy
+              weapon={weapon}
+              wielders={calcWielders}
+              teamMembers={teamMembers}
+              impacts={calcImpacts}
+              calcEnergy={calcEnergy}
+            />
+          ) : (
+            <TeamEnergy
+              members={teamMembers}
+              energy={energy}
+              setEnergy={setEnergy}
+              memberMinEr={memberMinEr}
+              onOpenCalculator={onOpenCalculator}
+            />
+          )}
         </Box>
       </Collapse>
+    </Box>
+  )
+}
+
+/** Per-weapon member allow/exclude toggle button (aligned with passive toggles below) */
+function UsableAvatarToggle({
+  member,
+  weaponKey,
+  on,
+  locked,
+  onClick,
+}: {
+  member: TeamOptMember
+  weaponKey: WeaponKey
+  on: boolean
+  locked?: WeaponKey
+  onClick: () => void
+}) {
+  const { t } = useTranslation([
+    'page_team',
+    'charNames_gen',
+    'weaponNames_gen',
+  ])
+  const { gender } = useDBMeta()
+  const charLabel = t(
+    `charNames_gen:${member.characterKey}`,
+    member.characterKey
+  )
+  const weaponLabel = t(`weaponNames_gen:${weaponKey}`, weaponKey)
+  return (
+    <SuspenseTooltip
+      arrow
+      title={
+        <>
+          <CharacterName characterKey={member.characterKey} gender={gender} />
+          {': '}
+          {locked ? (
+            <>
+              {t('teamOpt.kqm.weaponLockedShort', 'locked to')}{' '}
+              <WeaponName weaponKey={locked} />
+            </>
+          ) : on ? (
+            t('teamOpt.weapons.usableOn', 'allowed — click to exclude')
+          ) : (
+            t('teamOpt.weapons.usableOff', 'excluded — click to allow')
+          )}
+        </>
+      }
+    >
+      <span style={{ display: 'inline-flex' }}>
+        <ButtonBase
+          disabled={!!locked}
+          onClick={onClick}
+          aria-pressed={on}
+          aria-label={t('teamOpt.weapons.usableByAria', {
+            defaultValue: 'Allow {{character}} to use {{weapon}}',
+            character: charLabel,
+            weapon: weaponLabel,
+          })}
+          data-usable-member={member.characterKey}
+          sx={(theme) => ({
+            flexShrink: 0,
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            border: on
+              ? `1.5px solid ${theme.palette.primary.main}`
+              : `1px dashed ${tokens.hairlineStrong}`,
+            backgroundColor: on
+              ? alpha(theme.palette.primary.main, 0.16)
+              : 'transparent',
+            opacity: locked ? 0.45 : on ? 1 : 0.35,
+            filter: on ? 'none' : 'grayscale(1)',
+            transition:
+              'opacity .12s, border-color .12s, background-color .12s',
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            '&:hover': { opacity: locked ? 0.45 : on ? 1 : 0.8 },
+            '&.Mui-focusVisible': {
+              outline: `2px solid ${tokens.gold}`,
+              outlineOffset: 1,
+            },
+          })}
+        >
+          <MemberAvatar characterKey={member.characterKey} size={22} />
+        </ButtonBase>
+      </span>
+    </SuspenseTooltip>
+  )
+}
+
+/** Energy tag in ER calculator mode: shows live ER savings, or "0 triggers" if not yet configured */
+function CalcEnergyTag({
+  weapon,
+  allowed,
+  wielders,
+  impacts,
+  calculator,
+  open,
+  onClick,
+}: {
+  weapon: ICachedWeapon
+  allowed: boolean
+  wielders: TeamOptMember[]
+  impacts: { member: TeamOptMember; impact?: WeaponCalculatorImpact }[]
+  calculator: TeamOptEnergyCalculator
+  open: boolean
+  onClick: () => void
+}) {
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
+  const { gender } = useDBMeta()
+  const fav = isFavonius(weapon.key)
+  const perBurst = energyWeaponPerBurst(weapon.key)
+  const triggersOf = (ck: CharacterKey) => {
+    const m = calculator.members[ck]
+    if (!m) return 0
+    if (fav) return m.favoniusProcs
+    if (perBurst) return m.burstEvery > 0 ? 1 / m.burstEvery : 0
+    return (m.weaponEnergyTriggers ?? 0) > 0
+      ? m.weaponEnergyTriggers
+      : (m.weaponTriggers?.[weapon.key] ?? 0)
+  }
+  const anyTriggers = wielders.some((m) => triggersOf(m.characterKey) > 0)
+  const singleChanges =
+    impacts.length === 1 ? (impacts[0]?.impact?.changes ?? []) : []
+  const warnZero = allowed && !perBurst && !anyTriggers
+  const tooltip = (
+    <Box sx={{ py: 0.25 }}>
+      <Typography variant="caption" sx={{ fontWeight: 600, display: 'block' }}>
+        {t(
+          'teamOpt.weapons.calcEnergyTitle',
+          'Calculated by the ER calculator'
+        )}
+      </Typography>
+      {impacts.map(({ member, impact }) => (
+        <Typography
+          key={member.characterKey}
+          variant="caption"
+          component="div"
+          sx={{ color: 'text.secondary', ...numSx }}
+        >
+          <CharacterName characterKey={member.characterKey} gender={gender} />
+          {': '}
+          {impact?.changes.length
+            ? impact.changes
+                .map(
+                  ({ characterKey: ck, to, diff }) =>
+                    `${t(`charNames_gen:${ck}`, ck)} ${to}% (−${diff}%)`
+                )
+                .join(', ')
+            : !perBurst && triggersOf(member.characterKey) <= 0
+              ? t('teamOpt.weapons.zeroTriggersShort', '0 triggers')
+              : t('teamOpt.weapons.noErChangeShort', 'no ER change')}
+        </Typography>
+      ))}
+      <Typography
+        variant="caption"
+        component="div"
+        sx={{ mt: 0.5, color: 'text.secondary' }}
+      >
+        {t(
+          'teamOpt.weapons.calcEnergyClickHint',
+          'Click to view ER impact or adjust triggers.'
+        )}
+      </Typography>
+    </Box>
+  )
+  return (
+    <Tooltip arrow title={tooltip}>
+      <ButtonBase
+        onClick={onClick}
+        aria-expanded={open}
+        sx={(theme) => ({
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          height: 20,
+          px: 0.75,
+          borderRadius: 1,
+          fontSize: 12,
+          fontWeight: 600,
+          ...numSx,
+          color: warnZero
+            ? 'warning.main'
+            : singleChanges.length || open
+              ? 'text.primary'
+              : 'text.secondary',
+          backgroundColor: warnZero
+            ? alpha(theme.palette.warning.main, 0.14)
+            : alpha(theme.palette.text.primary, open ? 0.12 : 0.07),
+          flexShrink: 0,
+          ...quickSx,
+          ...focusSx,
+          '&:hover': {
+            color: warnZero ? 'warning.light' : 'text.primary',
+            backgroundColor: warnZero
+              ? alpha(theme.palette.warning.main, 0.2)
+              : alpha(theme.palette.text.primary, 0.12),
+          },
+        })}
+      >
+        <BoltIcon sx={{ fontSize: 13 }} />
+        {singleChanges.length > 0
+          ? singleChanges.map(({ characterKey, diff }) => (
+              <Box
+                key={characterKey}
+                component="span"
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+              >
+                <MemberAvatar characterKey={characterKey} size={14} />
+                {`−${diff}`}
+              </Box>
+            ))
+          : warnZero
+            ? t('teamOpt.weapons.zeroTriggersShort', '0 triggers')
+            : t('teamOpt.weapons.calcTag', 'ER calc')}
+      </ButtonBase>
+    </Tooltip>
+  )
+}
+
+/** Inline ER calculator controls on an energy/Favonius weapon card (synced directly to ER calculator) */
+function CalcWeaponEnergy({
+  weapon,
+  wielders,
+  teamMembers,
+  impacts,
+  calcEnergy,
+}: {
+  weapon: ICachedWeapon
+  wielders: TeamOptMember[]
+  teamMembers: TeamOptMember[]
+  impacts: { member: TeamOptMember; impact?: WeaponCalculatorImpact }[]
+  calcEnergy: WeaponCalcEnergyConfig
+}) {
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
+  const { gender } = useDBMeta()
+  const fav = isFavonius(weapon.key)
+  const perBurst = energyWeaponPerBurst(weapon.key)
+  const { calculator, updateMember, onOpenCalculator } = calcEnergy
+  const impactByKey = new Map(
+    impacts.map((x) => [x.member.characterKey, x.impact])
+  )
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <FieldLabel
+          tip={t(
+            'teamOpt.weapons.calcPanelTip',
+            'Recalculated per build by the ER calculator whenever this member holds this weapon. Changes here update the ER calculator directly.'
+          )}
+        >
+          {t('teamOpt.weapons.calcPanelTitle', 'ER calculator (per build)')}
+        </FieldLabel>
+        {onOpenCalculator && (
+          <Button
+            size="small"
+            color="inherit"
+            startIcon={
+              <CalculateOutlinedIcon sx={{ fontSize: '14px !important' }} />
+            }
+            onClick={onOpenCalculator}
+            sx={{
+              minHeight: 24,
+              py: 0,
+              px: 0.75,
+              fontSize: 12,
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' },
+            }}
+          >
+            {t('teamOpt.kqm.calc.tab', 'ER calculator')}
+          </Button>
+        )}
+      </Box>
+      {wielders.map((member) => {
+        const ck = member.characterKey
+        const calcMember = calculator.members[ck]
+        if (!calcMember) return null
+        const impact = impactByKey.get(ck)
+        const triggers = fav
+          ? calcMember.favoniusProcs
+          : (calcMember.weaponEnergyTriggers ?? 0) > 0
+            ? calcMember.weaponEnergyTriggers
+            : (calcMember.weaponTriggers?.[weapon.key] ?? 0)
+        const caughtShares =
+          fav &&
+          !calcMember.edited?.includes('favoniusCatchBy') &&
+          calcMember.favoniusCatchShares
+            ? Object.entries(calcMember.favoniusCatchShares).filter(
+                ([k, v]) =>
+                  teamMembers.some((m) => m.characterKey === k) && (v ?? 0) > 0
+              )
+            : []
+        const sharesTotal = caughtShares.reduce((s, [, v]) => s + (v ?? 0), 0)
+        return (
+          <Box
+            key={ck}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 0.75,
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  minWidth: 0,
+                }}
+              >
+                <MemberAvatar characterKey={ck} size={20} />
+                {wielders.length > 1 && (
+                  <Typography sx={{ fontSize: 12.5, fontWeight: 600 }} noWrap>
+                    <CharacterName characterKey={ck} gender={gender} />
+                  </Typography>
+                )}
+              </Box>
+              {perBurst ? (
+                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                  {t(
+                    'teamOpt.weapons.perBurstAuto',
+                    'Counts automatically on each Burst'
+                  )}
+                </Typography>
+              ) : (
+                <CompactTriggerStepper
+                  value={triggers}
+                  ariaLabel={t('teamOpt.weapons.triggersAria', {
+                    defaultValue: '{{character}} triggers per rotation',
+                    character: ck,
+                  })}
+                  onChange={(next) => {
+                    if (fav) updateMember(ck, { favoniusProcs: next })
+                    else updateMember(ck, { weaponEnergyTriggers: next })
+                  }}
+                />
+              )}
+              {fav && (
+                <>
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color: 'text.secondary',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {t('teamOpt.kqm.calc.caughtBy', 'caught by')}
+                  </Typography>
+                  <Select
+                    size="small"
+                    value={calcMember.favoniusCatchBy ?? ck}
+                    onChange={(e) =>
+                      updateMember(ck, {
+                        favoniusCatchBy: e.target.value as CharacterKey,
+                      })
+                    }
+                    inputProps={{
+                      'aria-label': `${ck}: ${t('teamOpt.kqm.calc.favCatcher', 'Favonius catcher')}`,
+                    }}
+                    sx={{
+                      height: 28,
+                      fontSize: 12.5,
+                      borderRadius: tokens.radius.control,
+                      '& .MuiSelect-select': {
+                        py: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                      },
+                    }}
+                  >
+                    {teamMembers.map((m) => (
+                      <MenuItem key={m.characterKey} value={m.characterKey}>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.75,
+                          }}
+                        >
+                          <MemberAvatar
+                            characterKey={m.characterKey}
+                            size={18}
+                          />
+                          <CharacterName
+                            characterKey={m.characterKey}
+                            gender={gender}
+                          />
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </>
+              )}
+            </Box>
+            {caughtShares.length >= 2 && sharesTotal > 0 && (
+              <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }}>
+                {t('teamOpt.kqm.calc.asPlayed', {
+                  defaultValue: 'As played: {{shares}}',
+                  shares: caughtShares
+                    .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+                    .map(
+                      ([k, v]) =>
+                        `${t(`charNames_gen:${k}`, k)} ${Math.round(((v ?? 0) / sharesTotal) * 100)}%`
+                    )
+                    .join(' · '),
+                })}
+              </Typography>
+            )}
+            <Typography
+              sx={{ fontSize: 12, color: 'text.secondary', ...numSx }}
+            >
+              {impact?.changes.length ? (
+                impact.changes.map(
+                  ({ characterKey: rec, from, to, diff }, i) => (
+                    <Fragment key={rec}>
+                      {i > 0 && ' · '}
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 0.375,
+                        }}
+                      >
+                        <MemberAvatar characterKey={rec} size={14} />
+                        <span>
+                          {from}% →{' '}
+                          <Box
+                            component="span"
+                            sx={{ color: 'text.primary', fontWeight: 600 }}
+                          >
+                            {to}%
+                          </Box>{' '}
+                          (−{diff}%)
+                        </span>
+                      </Box>
+                    </Fragment>
+                  )
+                )
+              ) : !perBurst && triggers <= 0 ? (
+                <Box component="span" sx={{ color: 'warning.main' }}>
+                  {t(
+                    'teamOpt.weapons.setTriggersHint',
+                    'Set triggers above 0 to count this weapon’s energy.'
+                  )}
+                </Box>
+              ) : (
+                t(
+                  'teamOpt.weapons.allAtBaseEr',
+                  'No ER saved (all members already at 100% ER).'
+                )
+              )}
+            </Typography>
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+/** Compact trigger count stepper (supports decimals and clearing while typing) */
+function CompactTriggerStepper({
+  value,
+  ariaLabel,
+  onChange,
+}: {
+  value: number
+  ariaLabel: string
+  onChange: (value: number) => void
+}) {
+  const [text, setText] = useState(`${+value.toFixed(2)}`)
+  useEffect(() => setText(`${+value.toFixed(2)}`), [value])
+  const step = (delta: number) =>
+    onChange(Math.max(0, Math.round((value + delta) * 100) / 100))
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.25,
+        height: 28,
+        px: 0.25,
+        borderRadius: tokens.radius.control,
+        border: hairline,
+        bgcolor: (theme) => alpha(theme.palette.text.primary, 0.03),
+      }}
+    >
+      <IconButton
+        size="small"
+        disabled={value <= 0}
+        aria-label={`${ariaLabel} −1`}
+        onClick={() => step(-1)}
+        sx={{ p: 0.25, color: 'text.secondary' }}
+      >
+        <RemoveIcon sx={{ fontSize: 14 }} />
+      </IconButton>
+      <InputBase
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value)
+          const n = Number(e.target.value.replace(',', '.'))
+          if (e.target.value.trim() && Number.isFinite(n) && n >= 0) onChange(n)
+        }}
+        onBlur={() => setText(`${+value.toFixed(2)}`)}
+        inputProps={{
+          inputMode: 'decimal',
+          'aria-label': ariaLabel,
+          style: { textAlign: 'center', padding: 0 },
+        }}
+        startAdornment={
+          <Box
+            component="span"
+            sx={{ ...typo.label, fontSize: 11.5, mr: 0.25 }}
+          >
+            ×
+          </Box>
+        }
+        sx={{ width: 42, fontSize: 12.5, fontWeight: 600, ...numSx }}
+      />
+      <IconButton
+        size="small"
+        aria-label={`${ariaLabel} +1`}
+        onClick={() => step(1)}
+        sx={{ p: 0.25, color: 'text.secondary' }}
+      >
+        <AddIcon sx={{ fontSize: 14 }} />
+      </IconButton>
     </Box>
   )
 }
@@ -894,70 +2069,126 @@ function EnergyTag({
 }
 
 /**
- * What an energy weapon saves each member: its particles or energy reach the whole team, each
- * member differently, so each gets its own Energy Recharge requirement reduction. One compact line
- * (the explanation is on hover).
+ * What an energy weapon saves each member (manual ER mode): its particles or energy reach the
+ * whole team, each member differently, so each gets its own Energy Recharge reduction, with a
+ * live preview of their resulting Min ER and a shortcut to the ER calculator.
  */
 function TeamEnergy({
   members,
   energy,
   setEnergy,
+  memberMinEr,
+  onOpenCalculator,
 }: {
   members: TeamOptMember[]
   energy: Partial<Record<CharacterKey, number>> | undefined
   setEnergy: (characterKey: CharacterKey, value: number) => void
+  memberMinEr?: Partial<Record<CharacterKey, number>>
+  onOpenCalculator?: () => void
 }) {
   const { t } = useTranslation('page_team')
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        columnGap: 1.5,
-        rowGap: 0.75,
-      }}
-    >
-      <FieldLabel
-        tip={t(
-          'teamOpt.weapons.teamEnergyHint',
-          'How much less Energy Recharge each member needs while someone in the team wields this weapon.'
-        )}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
       >
-        {t('teamOpt.weapons.teamEnergy', 'ER needed')}
-      </FieldLabel>
-      {members.map((member) => (
-        <MemberEnergy
-          key={member.characterKey}
-          member={member}
-          value={energy?.[member.characterKey] ?? 0}
-          setValue={(value) => setEnergy(member.characterKey, value)}
-        />
-      ))}
+        <FieldLabel
+          tip={t(
+            'teamOpt.weapons.teamEnergyHint',
+            'How much less Energy Recharge each member needs while someone in the team wields this weapon.'
+          )}
+        >
+          {t('teamOpt.weapons.lessEr', 'Less ER')}
+        </FieldLabel>
+        {onOpenCalculator && (
+          <Tooltip
+            arrow
+            title={t(
+              'teamOpt.weapons.useCalculatorTip',
+              'Calculate Favonius and energy weapon ER automatically instead of entering reductions by hand.'
+            )}
+          >
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={
+                <CalculateOutlinedIcon sx={{ fontSize: '14px !important' }} />
+              }
+              onClick={onOpenCalculator}
+              sx={{
+                minHeight: 24,
+                py: 0,
+                px: 0.75,
+                fontSize: 12,
+                color: 'text.secondary',
+                '&:hover': { color: 'text.primary' },
+              }}
+            >
+              {t('teamOpt.kqm.calc.open', 'Calculate ER')}
+            </Button>
+          </Tooltip>
+        )}
+      </Box>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(156px, 1fr))',
+          gap: 0.75,
+        }}
+      >
+        {members.map((member) => (
+          <MemberEnergy
+            key={member.characterKey}
+            member={member}
+            value={energy?.[member.characterKey] ?? 0}
+            minEr={memberMinEr?.[member.characterKey]}
+            setValue={(value) => setEnergy(member.characterKey, value)}
+          />
+        ))}
+      </Box>
     </Box>
   )
 }
 
-/** A member's avatar and how much less Energy Recharge it needs (dim: it has no ER requirement) */
+/** A member's avatar, ER reduction input (−X%), and live resulting Min ER preview */
 function MemberEnergy({
   member: { characterKey, teamChar },
   value,
+  minEr,
   setValue,
 }: {
   member: TeamOptMember
   value: number
+  minEr?: number
   setValue: (value: number) => void
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
-  // without an Energy Recharge requirement, the value has nothing to lower (yet)
-  const needsEnergy = hasEnergyRequirement(
-    useOptConfig(teamChar.optConfigId)?.statFilters
-  )
+  const optConfig = useOptConfig(teamChar.optConfigId)
+  const effectiveMinEr =
+    minEr ??
+    optConfig?.statFilters[ER_FILTER_PATH]?.find((f) => !f.disabled)?.value
+  const needsEnergy =
+    (effectiveMinEr !== undefined && effectiveMinEr > 100) ||
+    hasEnergyRequirement(optConfig?.statFilters)
+  const reduced =
+    effectiveMinEr !== undefined && effectiveMinEr > 100
+      ? Math.max(100, Math.round((effectiveMinEr - value) * 10) / 10)
+      : undefined
   return (
     <Box
       component="label"
-      sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+        minWidth: 0,
+      }}
     >
       <SuspenseTooltip
         title={
@@ -966,7 +2197,7 @@ function MemberEnergy({
             {!needsEnergy &&
               t(
                 'teamOpt.weapons.noEnergyNeedHint',
-                ': no Energy Recharge requirement, so this changes nothing yet'
+                ': no Min ER set yet — set Min ER on this member to apply this reduction'
               )}
           </>
         }
@@ -974,7 +2205,8 @@ function MemberEnergy({
         <Box
           sx={{
             display: 'flex',
-            opacity: needsEnergy ? 1 : 0.4,
+            flexShrink: 0,
+            opacity: needsEnergy ? 1 : 0.45,
             filter: needsEnergy ? 'none' : 'grayscale(1)',
           }}
         >
@@ -984,10 +2216,24 @@ function MemberEnergy({
       <NumberInputLazy
         size="small"
         float
-        // typing 20 or -20 both mean 20% less
-        value={-value}
+        // Positive input with a − prefix; typing 26 or -26 both mean 26% less
+        value={value}
         onChange={(v) => setValue(Math.min(Math.abs(v), 500))}
         InputProps={{
+          startAdornment: (
+            <InputAdornment
+              position="start"
+              sx={{
+                mr: 0.25,
+                '& .MuiTypography-root': {
+                  fontSize: 12.5,
+                  color: value > 0 ? 'text.primary' : 'text.disabled',
+                },
+              }}
+            >
+              −
+            </InputAdornment>
+          ),
           endAdornment: (
             <InputAdornment position="end" sx={{ ml: 0.25 }}>
               %
@@ -995,10 +2241,37 @@ function MemberEnergy({
           ),
         }}
         inputProps={{
-          sx: { width: '2.5em', textAlign: 'right', py: 0.25, pl: 0.75 },
+          'aria-label': t('teamOpt.weapons.lessErAria', {
+            defaultValue: '{{character}} ER reduction (%)',
+            character: characterKey,
+          }),
+          sx: {
+            width: '3em',
+            textAlign: 'right',
+            py: 0.25,
+            px: 0,
+            ...numSx,
+          },
         }}
-        sx={{ '& .MuiOutlinedInput-root': { pr: 0.75 } }}
+        sx={{
+          flexShrink: 0,
+          '& .MuiOutlinedInput-root': { pl: 0.75, pr: 0.75 },
+        }}
       />
+      <Typography
+        noWrap
+        sx={{
+          fontSize: 11.5,
+          color: value > 0 && reduced ? 'text.primary' : 'text.disabled',
+          ...numSx,
+        }}
+      >
+        {effectiveMinEr && effectiveMinEr > 100
+          ? value > 0
+            ? `→ ${reduced}%`
+            : `${+effectiveMinEr.toFixed(1)}%`
+          : t('teamOpt.weapons.noMinErShort', 'No min ER')}
+      </Typography>
     </Box>
   )
 }

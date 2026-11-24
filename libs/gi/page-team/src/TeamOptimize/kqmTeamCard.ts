@@ -223,7 +223,7 @@ export function kqmCardDetails(
   }
 }
 
-const ER_NOTE =
+export const ER_NOTE =
   "Out-of-combat stats: no conditional effects or teammates. The ER in the table is the rotation's."
 /**
  * A member whose Energy Recharge out of combat (its stats, when given) is not the table's, as the

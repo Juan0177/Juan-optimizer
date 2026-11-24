@@ -451,7 +451,8 @@ export function KqmSettings({
       ),
     [members, calculatorDraft, kqm]
   )
-  const applyCalculator = () => {
+  /** Automatic ER: the calculator's targets (its settings as they are now) */
+  const toAuto = () => {
     setTeamOpt((o) => {
       o.kqm = {
         ...(o.kqm ?? defaultTeamOptKqm),
@@ -461,6 +462,15 @@ export function KqmSettings({
       }
     })
     setCalculatorDirty(false)
+  }
+  /** Manual ER: the targets typed below (they start from the calculator's) */
+  const toManual = () =>
+    setTeamOpt((o) => {
+      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
+      settings.energySource = 'manual'
+    })
+  const applyCalculator = () => {
+    toAuto()
     setTab(0)
   }
   const leaveCalculator = () => {
@@ -494,7 +504,6 @@ export function KqmSettings({
     const value = text.trim() ? Number(text.replace(',', '.')) : undefined
     setTeamOpt((o) => {
       const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-      settings.energySource = 'manual'
       const requirements = (settings.energyRecharge ??= {})
       if (kqmHasEnergyRequirement(value)) requirements[characterKey] = value
       else delete requirements[characterKey]
@@ -807,16 +816,27 @@ export function KqmSettings({
               setCustom={setCustomStandards}
               setTeamOpt={setTeamOpt}
             />
-            {calculated && (
-              <FieldLabel
-                tip={t(
-                  'teamOpt.kqm.calc.active',
-                  'Calculator targets applied. ER is recalculated for each weapon choice during optimization. Editing a target switches back to manual ER requirements.'
-                )}
-              >
-                {t('teamOpt.kqm.erFromCalc', 'ER from the calculator')}
-              </FieldLabel>
-            )}
+            <FieldLabel
+              tip={t(
+                'teamOpt.kqm.energyModeTip',
+                'Automatic: the ER calculator works out each member’s minimum ER from the rotation, again for each weapon a build tries (Favonius and other energy weapons counted). Manual: the targets you type below.'
+              )}
+            >
+              {t('teamOpt.energy.mode', 'ER')}
+            </FieldLabel>
+            <Segmented
+              size="small"
+              aria-label={t('teamOpt.energy.modeLabel', 'ER requirements')}
+              value={kqm.energySource === 'calculator' ? 'auto' : 'manual'}
+              onChange={(value) => (value === 'auto' ? toAuto() : toManual())}
+              options={[
+                { value: 'auto', label: t('teamOpt.energy.auto', 'Automatic') },
+                {
+                  value: 'manual',
+                  label: t('teamOpt.energy.manual', 'Manual'),
+                },
+              ]}
+            />
             <Button
               size="small"
               variant="outlined"
@@ -929,68 +949,118 @@ export function KqmSettings({
                   />
                 </Box>
                 <Box sx={{ gridArea: 'er', minWidth: 0 }}>
-                  <Tooltip
-                    arrow
-                    title={
-                      invalid
-                        ? t('teamOpt.kqm.erInvalid', 'Enter 100 or more')
-                        : ''
-                    }
-                  >
-                    <TextField
-                      size="small"
-                      fullWidth
-                      value={text}
-                      error={invalid}
-                      placeholder={`${KQM_ER_DEFAULT}`}
-                      onChange={(e) => setEr(characterKey, e.target.value)}
-                      inputProps={{
-                        inputMode: 'decimal',
-                        'aria-label': t('teamOpt.kqm.erInput', {
+                  {kqm.energySource === 'calculator' ? (
+                    <Tooltip
+                      arrow
+                      title={t(
+                        'teamOpt.kqm.erAutoTarget',
+                        'Worked out by the ER calculator for this rotation, and again for each weapon a build tries. Choose Manual to type your own.'
+                      )}
+                    >
+                      <Box
+                        component="span"
+                        tabIndex={0}
+                        aria-label={t('teamOpt.kqm.erInput', {
                           defaultValue: '{{character}} minimum ER (%)',
                           character: characterKey,
-                        }),
-                      }}
-                      InputProps={{
-                        startAdornment: (
-                          <InputAdornment
-                            position="start"
-                            sx={{ display: { sm: 'none' } }}
-                          >
-                            <Box component="span" sx={type.label}>
-                              {t('teamOpt.kqm.erShort', 'ER')}
-                            </Box>
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">%</InputAdornment>
-                        ),
-                      }}
-                      sx={(theme) => ({
-                        ...compactFieldSx,
-                        '& .MuiInputBase-root': {
-                          fontSize: 14,
+                        })}
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          gap: 0.5,
+                          height: 36,
                           px: { xs: 1, sm: 1.25 },
-                        },
-                        '& .MuiInputAdornment-positionStart': {
-                          mr: { xs: 0.5, sm: 1 },
-                        },
-                        '& .MuiInputBase-input': {
-                          py: 0.875,
-                          textAlign: 'right',
+                          borderRadius: tokens.radius.control,
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: 'text.secondary',
+                          bgcolor: tokens.inset,
+                          cursor: 'default',
                           ...numSx,
-                        },
-                        ...(missing && {
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: alpha(
-                              theme.palette.warning.main,
-                              0.55
-                            ),
+                          ...focusSx,
+                        }}
+                      >
+                        <Box
+                          component="span"
+                          sx={{
+                            ...type.label,
+                            mr: 'auto',
+                            display: { sm: 'none' },
+                          }}
+                        >
+                          {t('teamOpt.kqm.erShort', 'ER')}
+                        </Box>
+                        {text || KQM_ER_DEFAULT}
+                        <Box component="span" sx={type.label}>
+                          %
+                        </Box>
+                      </Box>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip
+                      arrow
+                      title={
+                        invalid
+                          ? t('teamOpt.kqm.erInvalid', 'Enter 100 or more')
+                          : ''
+                      }
+                    >
+                      <TextField
+                        size="small"
+                        fullWidth
+                        value={text}
+                        error={invalid}
+                        placeholder={`${KQM_ER_DEFAULT}`}
+                        onChange={(e) => setEr(characterKey, e.target.value)}
+                        inputProps={{
+                          inputMode: 'decimal',
+                          'aria-label': t('teamOpt.kqm.erInput', {
+                            defaultValue: '{{character}} minimum ER (%)',
+                            character: characterKey,
+                          }),
+                        }}
+                        InputProps={{
+                          startAdornment: (
+                            <InputAdornment
+                              position="start"
+                              sx={{ display: { sm: 'none' } }}
+                            >
+                              <Box component="span" sx={type.label}>
+                                {t('teamOpt.kqm.erShort', 'ER')}
+                              </Box>
+                            </InputAdornment>
+                          ),
+                          endAdornment: (
+                            <InputAdornment position="end">%</InputAdornment>
+                          ),
+                        }}
+                        sx={(theme) => ({
+                          ...compactFieldSx,
+                          '& .MuiInputBase-root': {
+                            fontSize: 14,
+                            px: { xs: 1, sm: 1.25 },
                           },
-                        }),
-                      })}
-                    />
-                  </Tooltip>
+                          '& .MuiInputAdornment-positionStart': {
+                            mr: { xs: 0.5, sm: 1 },
+                          },
+                          '& .MuiInputBase-input': {
+                            py: 0.875,
+                            textAlign: 'right',
+                            ...numSx,
+                          },
+                          ...(missing && {
+                            '& .MuiOutlinedInput-notchedOutline': {
+                              borderColor: alpha(
+                                theme.palette.warning.main,
+                                0.55
+                              ),
+                            },
+                          }),
+                        })}
+                      />
+                    </Tooltip>
+                  )}
                 </Box>
               </Box>
             )
@@ -1069,6 +1139,7 @@ export function KqmSettings({
                 teamData={teamData}
                 teamOpt={teamOpt}
                 setTeamOpt={setTeamOpt}
+                onOpenCalculator={() => setTab(3)}
                 onClose={closePanel}
               />
             </>
@@ -1207,7 +1278,9 @@ function kqmWeaponsCustom(kqm: TeamOptKqm) {
     (kqm.refinementBp ?? 1) !== 1 ||
     (kqm.refinementStandard4 ?? 5) !== 5 ||
     Object.keys(kqm.refinements ?? {}).length > 0
-  return list || refinements
+  const memberRestrictions =
+    Object.keys(kqm.excludedWeaponMembers ?? {}).length > 0
+  return list || refinements || memberRestrictions
 }
 /** Whether any artifact set was left out of a run's choice */
 const kqmSetsCustom = (kqm: TeamOptKqm) => !!kqm.excludedSets?.length
