@@ -450,6 +450,11 @@ export interface ActionVariant {
 export interface KitModel {
   characterKey: CharacterKey
   /**
+   * Its held Skill differs from a tap only in a state of its own (Nightsoul's Blessing): played
+   * alone, the two look alike (`holdsSkill`)
+   */
+  heldSkill?: true
+  /**
    * Its timeline has random parts (ctx.random): rotations with it are averaged over seeded samples
    * (simulateRotationSamples), as the reference simulators average over trials. A number: the
    * samples its randomness needs (a small one plays a rotation fewer times; true: 64)

@@ -17,7 +17,7 @@ import {
   shortBurstOf,
   withRotationEnergy,
 } from '../util/teamOpt/energyCalc'
-import { parseRotation } from '../util/teamOpt/rotation/parse'
+import { everyNthBursts, parseRotation } from '../util/teamOpt/rotation/parse'
 import { simulateRotation } from '../util/teamOpt/rotation/simulate'
 
 /** A team's rotation, played 4 times (the last 2 kept: 2 rotations) */
@@ -1122,5 +1122,119 @@ describe('energy inputs: the Traveler’s Exaiphanes Blade', () => {
       withRotationEnergy(settings, team, energy).members.TravelerAnemo!
         .weaponEnergyTriggers
     ).toBe(counted)
+  })
+})
+
+describe('energy inputs: optional and alternative Bursts auto-default to every 2nd burst', () => {
+  const zibaiTeam: CharacterKey[] = ['Columbina', 'Illuga', 'Linnea', 'Zibai']
+
+  it('defaults Q? to every 2nd burst in ER calc while keeping mandatory Q as every rotation', () => {
+    const sim = playTeam(
+      zibaiTeam,
+      'Columbina E Q? -> Illuga E Q -> Linnea E -> Zibai E N1 E N4 E N4 E Q E N2 E'
+    )
+    const energy = energyFromRotation(sim, zibaiTeam, 2)
+    expect(energy.members.Columbina!.burstEvery).toBe(2)
+    expect(energy.members.Illuga!.burstEvery).toBe(1)
+    expect(energy.members.Linnea!.burstEvery).toBe(0)
+    expect(energy.members.Zibai!.burstEvery).toBe(1)
+  })
+
+  it('defaults Q?/alt, Q/alt, EQ/E, E/EQ, QE/E, and E/QE to every 2nd burst', () => {
+    for (const part of [
+      'Columbina E Q?/N1',
+      'Columbina E Q/N1',
+      'Columbina EQ/E',
+      'Columbina E/EQ',
+      'Columbina QE/E',
+      'Columbina E/QE',
+    ]) {
+      const sim = playTeam(
+        zibaiTeam,
+        `${part} -> Illuga E Q -> Linnea E -> Zibai E N1 E N4 E N4 E Q E N2 E`
+      )
+      const energy = energyFromRotation(sim, zibaiTeam, 2)
+      expect(energy.members.Columbina!.burstEvery, part).toBe(2)
+      expect(energy.members.Illuga!.burstEvery, part).toBe(1)
+    }
+  })
+
+  it('stays at every 2nd (fixed point) when KQM replays with everyNthBursts, including burst-only steps', () => {
+    const names = zibaiTeam.map((characterKey) => ({
+      characterKey,
+      name: characterKey,
+    }))
+    const parsed = parseRotation(
+      'Columbina E Q? -> Illuga E Q -> Linnea E -> Zibai E N1 E N4 E N4 E Q E N2 E',
+      names
+    )
+    const nth = everyNthBursts(parsed, { Columbina: 2 })!
+    const sim = simulateRotation({
+      rotation: nth.rotation,
+      members: zibaiTeam,
+      elements: Object.fromEntries(
+        zibaiTeam.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      repeats: 4,
+      keep: 'last2',
+    })
+    const energy = energyFromRotation(sim, zibaiTeam, 2 * nth.loops)
+    expect(energy.members.Columbina!.burstEvery).toBe(2)
+
+    // Burst-only step ("Ineffa Q?") omitted by everyNthBursts in the off-copy
+    const flinsTeam: CharacterKey[] = [
+      'Ineffa',
+      'Columbina',
+      'Sucrose',
+      'Flins',
+    ]
+    const burstOnly = parseRotation(
+      'Ineffa E -> Columbina E Q -> Sucrose E -> Flins E E N4 Q N4 -> Ineffa Q?',
+      flinsTeam.map((characterKey) => ({ characterKey, name: characterKey }))
+    )
+    const nthOnly = everyNthBursts(burstOnly, { Ineffa: 2 })!
+    const simOnly = simulateRotation({
+      rotation: nthOnly.rotation,
+      members: flinsTeam,
+      elements: Object.fromEntries(
+        flinsTeam.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations: {},
+      repeats: 4,
+      keep: 'last2',
+    })
+    expect(
+      energyFromRotation(simOnly, flinsTeam, 2 * nthOnly.loops).members.Ineffa!
+        .burstEvery
+    ).toBe(2)
+  })
+
+  it('does not double-halve Q? that was already skipped on cooldown in a 2-rotation text', () => {
+    const team: CharacterKey[] = ['Ineffa', 'Columbina', 'Sucrose', 'Flins']
+    // Two ~17s halves in one 34s written rotation: Sucrose's 2nd Q? is skipped on 20s CD, so
+    // she already bursts once per 34s written rotation (burstEvery = 1, i.e. every 2nd Flins half).
+    const sim = playTeam(
+      team,
+      'Ineffa Q -> Columbina E N1 -> Sucrose E N2 Q? -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA W8f -> Ineffa E N1 -> Columbina E Q -> Sucrose E N2 Q? -> Flins E E N4 D N3 Q N4 E Q N4 D N4 -> Sucrose N2 CA W8f -> Ineffa'
+    )
+    const energy = energyFromRotation(sim, team, 2)
+    expect(energy.members.Sucrose!.burstEvery).toBe(1)
+  })
+
+  it('respects a manual burstEvery override over the Q? default', () => {
+    const sim = playTeam(
+      zibaiTeam,
+      'Columbina E Q? -> Illuga E Q -> Linnea E -> Zibai E N1 E N4 E N4 E Q E N2 E'
+    )
+    const energy = energyFromRotation(sim, zibaiTeam, 2)
+    const settings = defaultEnergyCalculator(zibaiTeam, 20)
+    settings.members.Columbina = {
+      ...settings.members.Columbina!,
+      burstEvery: 1,
+      edited: ['burstEvery'],
+    }
+    const filled = withRotationEnergy(settings, zibaiTeam, energy)
+    expect(filled.members.Columbina!.burstEvery).toBe(1)
   })
 })

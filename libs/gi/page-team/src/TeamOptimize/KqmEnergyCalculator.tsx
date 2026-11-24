@@ -14,14 +14,17 @@ import {
   ENERGY_CALC_SOURCE,
   ENERGY_HELP,
   energyCalcData,
-  turretParticlesOf,
   energyCalcWeapons,
   energySkillConstellation,
+  energyWeaponPerBurst,
   isCalcEnergyWeapon,
   isFavonius,
   kqmMemberConstellation,
   kqmWeapons,
   shortBurstOf,
+  turretParticlesOf,
+  WeaponName,
+  weaponCalculatorImpact,
   withFieldTime,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
@@ -69,6 +72,13 @@ type EnergyCalcEstimate = ReturnType<typeof calculateEnergyRecharge>
  * count for a member that may use such a weapon in KQM (the run then counts them per weapon).
  * The members' own equipped weapons play no part: KQM builds use KQM's weapons.
  */
+/** The calculator's drawer: over the run window it opens from (`TeamEnergyDrawer`) */
+export const calculatorDrawerZ = (theme: Theme) => theme.zIndex.modal + 10
+/** The selects' menus: over the drawer (at the modal layer they opened behind it) */
+const menuProps = {
+  sx: (theme: Theme) => ({ zIndex: calculatorDrawerZ(theme) + 10 }),
+}
+
 export function kqmEnergyEstimate(
   keys: readonly CharacterKey[],
   settings: TeamOptEnergyCalculator,
@@ -209,6 +219,8 @@ export function KqmEnergyCalculator({
           characterKey={shown}
           keys={keys}
           gear={gear}
+          isKqm={!!kqm}
+          settings={settings}
           member={settings.members[shown]}
           rotationTime={settings.rotationTime}
           estimate={estimate}
@@ -535,6 +547,7 @@ function Opponent({
           <Select
             size="small"
             fullWidth
+            MenuProps={menuProps}
             value={settings.rng}
             onChange={(e) =>
               setSettings((s) => ({
@@ -829,6 +842,8 @@ export function MemberEnergy({
   characterKey,
   keys,
   gear,
+  isKqm,
+  settings,
   member,
   rotationTime,
   estimate,
@@ -846,6 +861,8 @@ export function MemberEnergy({
   onUseRotation: () => void
   keys: CharacterKey[]
   gear: EnergyGear
+  isKqm: boolean
+  settings: TeamOptEnergyCalculator
   member: TeamOptEnergyMember | undefined
   /** The rotation every count is per (s) */
   rotationTime: number
@@ -864,6 +881,80 @@ export function MemberEnergy({
   const turretMade =
     member && data ? turretParticlesOf(member, data) : undefined
   const name = t(`charNames_gen:${characterKey}`, characterKey)
+  // Favonius and energy weapon triggers count only with such a weapon, which the run picks from
+  // these: shown when it may hold one (or something was entered)
+  const allowedWeapons = useMemo(
+    () => gear.weapons(characterKey),
+    [gear, characterKey]
+  )
+  const bestFavonius = useMemo(
+    () =>
+      allowedWeapons
+        .filter((w) => isFavonius(w.key))
+        .sort((a, b) => b.refinement - a.refinement)[0],
+    [allowedWeapons]
+  )
+  const bestEnergyWeapon = useMemo(
+    () =>
+      allowedWeapons
+        .filter((w) => isCalcEnergyWeapon(w.key))
+        .sort((a, b) => b.refinement - a.refinement)[0],
+    [allowedWeapons]
+  )
+  // Live ER impact of this member holding their best allowed Favonius / energy weapon
+  const { weapons: previewWeapons, refinements: previewRefinements } = useMemo(
+    () => energyCalcWeapons(keys, settings, gear.weapons),
+    [keys, settings, gear]
+  )
+  const favoniusImpact = useMemo(
+    () =>
+      member && bestFavonius && member.favoniusProcs > 0
+        ? weaponCalculatorImpact(
+            keys,
+            settings,
+            characterKey,
+            bestFavonius.key,
+            bestFavonius.refinement,
+            previewWeapons,
+            previewRefinements
+          )
+        : undefined,
+    [
+      bestFavonius,
+      member,
+      keys,
+      settings,
+      characterKey,
+      previewWeapons,
+      previewRefinements,
+    ]
+  )
+  const energyWeaponImpact = useMemo(() => {
+    if (!member || !bestEnergyWeapon) return undefined
+    const hasTriggers =
+      energyWeaponPerBurst(bestEnergyWeapon.key) ||
+      (member.weaponEnergyTriggers ?? 0) > 0 ||
+      (member.weaponTriggers?.[bestEnergyWeapon.key] ?? 0) > 0
+    return hasTriggers
+      ? weaponCalculatorImpact(
+          keys,
+          settings,
+          characterKey,
+          bestEnergyWeapon.key,
+          bestEnergyWeapon.refinement,
+          previewWeapons,
+          previewRefinements
+        )
+      : undefined
+  }, [
+    bestEnergyWeapon,
+    member,
+    keys,
+    settings,
+    characterKey,
+    previewWeapons,
+    previewRefinements,
+  ])
   if (!member || !data)
     return (
       <Box sx={{ ...insetSx, p: 1.25 }}>
@@ -930,11 +1021,8 @@ export function MemberEnergy({
         index === member.skillMode ||
         index === member.secondaryMode
     )
-  // Favonius and energy weapon triggers count only with such a weapon, which KQM picks from these:
-  // shown when it may hold one (or something was entered)
-  const allowedWeapons = gear.weapons(characterKey)
-  const mayFavonius = allowedWeapons.some((w) => isFavonius(w.key))
-  const mayEnergyWeapon = allowedWeapons.some((w) => isCalcEnergyWeapon(w.key))
+  const mayFavonius = !!bestFavonius
+  const mayEnergyWeapon = !!bestEnergyWeapon
   const showFavonius = mayFavonius || member.favoniusProcs > 0
   const showEnergyWeapon =
     mayEnergyWeapon || (member.weaponEnergyTriggers ?? 0) > 0
@@ -958,6 +1046,7 @@ export function MemberEnergy({
     <Select
       size="small"
       fullWidth
+      MenuProps={menuProps}
       value={secondary ? member.secondaryMode : member.skillMode}
       onChange={(e) =>
         updateMember(characterKey, {
@@ -1031,6 +1120,7 @@ export function MemberEnergy({
     <Select
       size="small"
       fullWidth
+      MenuProps={menuProps}
       value={
         (favonius ? member.favoniusCatchBy : member.catchBy) ?? characterKey
       }
@@ -1445,16 +1535,33 @@ export function MemberEnergy({
             <Label
               tip={t(
                 'teamOpt.kqm.calc.favProcsTip',
-                'Per rotation, while this member holds a Favonius weapon (KQM counts them for each weapon it tries). Each makes 3 clear particles: 6 Energy for the catcher, less for the others. At most one per 12 s (R1) to 6 s (R5).'
+                'Per rotation, while this member holds a Favonius weapon (counted per weapon during optimization). Each makes 3 clear particles: 6 Energy for the catcher, less for the others. At most one per 12 s (R1) to 6 s (R5).'
               )}
               aside={
                 !mayFavonius ? (
-                  <Tag tone="warning">
-                    {t(
-                      'teamOpt.kqm.calc.noFavoniusShort',
-                      'No Favonius selected'
-                    )}
-                  </Tag>
+                  <Tooltip
+                    arrow
+                    title={
+                      isKqm
+                        ? t(
+                            'teamOpt.kqm.calc.noFavoniusTipKqm',
+                            'Not counted until a Favonius weapon is allowed for this member in Weapons.'
+                          )
+                        : t(
+                            'teamOpt.kqm.calc.noFavoniusTipTeam',
+                            'Not counted until this member can hold a Favonius weapon (turn on Weapons too and tick one for them, or equip one).'
+                          )
+                    }
+                  >
+                    <Box component="span" sx={{ cursor: 'help' }}>
+                      <Tag tone="warning">
+                        {t(
+                          'teamOpt.kqm.calc.noFavoniusShort',
+                          'No Favonius selected'
+                        )}
+                      </Tag>
+                    </Box>
+                  </Tooltip>
                 ) : (
                   member.favoniusProcs > 0 &&
                   !member.edited?.includes('favoniusProcs') && (
@@ -1500,6 +1607,45 @@ export function MemberEnergy({
               <Box sx={{ flex: 1, minWidth: 0 }}>{catcherSelect(true)}</Box>
             </Box>
             {favoniusShares && asPlayed(favoniusShares)}
+            {mayFavonius &&
+              bestFavonius &&
+              (member.favoniusProcs > 0 ? (
+                favoniusImpact && (
+                  <Typography
+                    sx={{
+                      mt: 0.5,
+                      fontSize: 12.5,
+                      color: 'text.secondary',
+                      ...numSx,
+                    }}
+                  >
+                    {t('teamOpt.kqm.calc.withFavonius', {
+                      defaultValue: 'With Favonius (R{{r}}):',
+                      r: bestFavonius.refinement,
+                    })}{' '}
+                    {favoniusImpact.changes.length
+                      ? favoniusImpact.changes
+                          .map(
+                            ({ characterKey: ck, to, diff }) =>
+                              `${t(`charNames_gen:${ck}`, ck)} ${to}% (−${diff}%)`
+                          )
+                          .join(' · ')
+                      : t(
+                          'teamOpt.kqm.calc.noErChange',
+                          'no ER change (all at 100%)'
+                        )}
+                  </Typography>
+                )
+              ) : (
+                <Typography
+                  sx={{ mt: 0.5, fontSize: 12.5, color: 'text.secondary' }}
+                >
+                  {t(
+                    'teamOpt.kqm.calc.favZeroHint',
+                    'Set triggers above 0 to count Favonius particles when this member holds one.'
+                  )}
+                </Typography>
+              ))}
           </Box>
         )}
         <Box
@@ -1540,6 +1686,28 @@ export function MemberEnergy({
                 prefix="×"
                 tip={usesTip}
               />
+              {mayEnergyWeapon &&
+                bestEnergyWeapon &&
+                energyWeaponImpact &&
+                energyWeaponImpact.changes.length > 0 && (
+                  <Typography
+                    sx={{
+                      mt: 0.5,
+                      fontSize: 12.5,
+                      color: 'text.secondary',
+                      ...numSx,
+                    }}
+                  >
+                    <WeaponName weaponKey={bestEnergyWeapon.key} />{' '}
+                    {`(R${bestEnergyWeapon.refinement}): `}
+                    {energyWeaponImpact.changes
+                      .map(
+                        ({ characterKey: ck, to, diff }) =>
+                          `${t(`charNames_gen:${ck}`, ck)} ${to}% (−${diff}%)`
+                      )
+                      .join(' · ')}
+                  </Typography>
+                )}
             </Box>
           )}
           <Box>

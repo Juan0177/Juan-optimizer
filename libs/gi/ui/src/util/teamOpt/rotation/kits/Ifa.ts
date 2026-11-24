@@ -105,6 +105,7 @@ const NIGHTSOUL_MOVES: Partial<Record<RotationAction['kind'], string>> = {
 
 export const kit: KitModel = {
   characterKey: 'Ifa',
+  heldSkill: true,
   element: 'anemo',
   source: `${KQMSIM}/ifa`,
   nightsoul(ctx, s: IfaState) {

@@ -96,10 +96,30 @@ export function useTeamDataNoContext(
     ]
   )
 
-  useEffect(
-    () => (teamId ? database.teams.follow(teamId, setDbDirty) : undefined),
-    [teamId, setDbDirty, database]
-  )
+  useEffect(() => {
+    if (!teamId) return undefined
+    // (Team optimize's settings are saved on the team and change often, a click at a time: they,
+    // its name and its edit time are no part of its data)
+    const dataOf = () => {
+      const {
+        teamOpt: _teamOpt,
+        lastEdit: _lastEdit,
+        name: _name,
+        description: _description,
+        rotationDocuments: _rotationDocuments,
+        equipmentUndo: _equipmentUndo,
+        ...data
+      } = database.teams.get(teamId) ?? {}
+      return JSON.stringify(data)
+    }
+    let last = dataOf()
+    return database.teams.follow(teamId, () => {
+      const next = dataOf()
+      if (next === last) return
+      last = next
+      setDbDirty()
+    })
+  }, [teamId, setDbDirty, database])
 
   useEffect(() => {
     if (!dbDirty) return () => {}

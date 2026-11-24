@@ -94,12 +94,11 @@ export function kqmRotationEnergyOf(
 }
 
 /**
- * How the KQM tab's applied ER targets follow its written rotation: they stay current when the
- * common rotation length or the rotation's inputs change, and apply by themselves with a written
- * rotation (its energy worked out) for a team that has not typed its own, and whenever the rotation
- * is saved or changed (over ones typed by hand: those were for the rotation before). The settings
- * to write, and for the calculator's a key that is the same for the same change (none: nothing
- * changes).
+ * How the KQM tab's Automatic ER targets follow its written rotation: they stay current when the
+ * common rotation length or the rotation's inputs change, and apply by themselves once a rotation
+ * is written (its energy worked out) for a team that never chose (Manual, chosen, stays Manual).
+ * The settings to write, and for the calculator's a key that is the same for the same change
+ * (none: nothing changes).
  */
 export function kqmEnergyUpdate({
   members,
@@ -120,18 +119,9 @@ export function kqmEnergyUpdate({
 }): { kqm: Partial<TeamOptKqm>; key?: string } | undefined {
   const kqm = teamOpt.kqm
   const source = kqm?.energySource
-  // (typed by hand before the rotation was recorded, or recorded as its text alone before its
-  // opener and timing counted: kept, and the rotation is recorded now)
-  if (
-    source === 'manual' &&
-    ready &&
-    (kqm?.energyRotation === undefined ||
-      kqm.energyRotation === written.split('|')[0])
-  )
-    return { kqm: { energyRotation: written } }
+  if (source === 'manual') return undefined
   const newRotation = ready && kqm?.energyRotation !== written
-  if (source !== 'calculator' && !(ready && (!source || newRotation)))
-    return undefined
+  if (source !== 'calculator' && !(ready && !source)) return undefined
   const applied = kqm?.energyCalculator
   const rotationTime = (ready && playedTime) || (teamOpt.rotationTime ?? 20)
   const energyCalculator = {

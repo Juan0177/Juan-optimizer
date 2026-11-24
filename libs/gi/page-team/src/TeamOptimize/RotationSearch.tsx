@@ -1127,7 +1127,55 @@ function useListMotion(ref: RefObject<HTMLElement>, order: string) {
 }
 
 /** A rotation as the bar shows it: each member, then their actions */
-function RotationView({ steps }: { steps: readonly RotationWordStep[] }) {
+/**
+ * Per step, which of its words `from` doesn't have at the same member's same turn on the field
+ * (those its words' longest common run leaves out): every word of a turn it doesn't have
+ */
+function changedWords(
+  steps: readonly RotationWordStep[],
+  from: readonly RotationWordStep[]
+): boolean[][] {
+  const seen = new Map<string, number>()
+  return steps.map(({ characterKey, words }) => {
+    const turn = seen.get(characterKey) ?? 0
+    seen.set(characterKey, turn + 1)
+    const before = from.filter((s) => s.characterKey === characterKey)[turn]
+      ?.words
+    if (!before) return words.map(() => true)
+    // (the longest common run of the two, by dynamic programming, then walked back)
+    const n = words.length
+    const m = before.length
+    const run = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0))
+    for (let i = n - 1; i >= 0; i--)
+      for (let j = m - 1; j >= 0; j--)
+        run[i][j] =
+          words[i] === before[j]
+            ? run[i + 1][j + 1] + 1
+            : Math.max(run[i + 1][j], run[i][j + 1])
+    const changed = words.map(() => true)
+    for (let i = 0, j = 0; i < n && j < m; )
+      if (words[i] === before[j]) {
+        changed[i] = false
+        i++
+        j++
+      } else if (run[i + 1][j] >= run[i][j + 1]) i++
+      else j++
+    return changed
+  })
+}
+
+function RotationView({
+  steps,
+  from,
+}: {
+  steps: readonly RotationWordStep[]
+  /** The rotation it is compared with: its words that differ, marked */
+  from?: readonly RotationWordStep[]
+}) {
+  const changed = useMemo(
+    () => from && changedWords(steps, from),
+    [steps, from]
+  )
   return (
     <Box
       sx={{
@@ -1183,6 +1231,15 @@ function RotationView({ steps }: { steps: readonly RotationWordStep[] }) {
                     fontSize: 13.5,
                     letterSpacing: '0.01em',
                     color: 'text.primary',
+                    // (a word your rotation doesn't have here: what this one changes)
+                    ...(changed?.[i]?.[k] && {
+                      color: tokens.gold,
+                      fontWeight: 650,
+                      px: 0.375,
+                      mx: -0.375,
+                      borderRadius: 0.75,
+                      bgcolor: alpha(giTokens.gold, 0.14),
+                    }),
                   }}
                 >
                   {word}
@@ -1301,6 +1358,10 @@ const CandidateRow = memo(function CandidateRow({
     () => rotationWords(candidate.text, names),
     [candidate.text, names]
   )
+  const seedSteps = useMemo(
+    () => rotationWords(seed.text, names),
+    [seed.text, names]
+  )
   const checked = typeof own === 'number' && runDps > 0
   const gain = checked
     ? own / runDps - 1
@@ -1372,7 +1433,7 @@ const CandidateRow = memo(function CandidateRow({
         {rank}
       </Box>
       <Box sx={{ flex: '1 1 340px', minWidth: 0, display: 'grid', gap: 0.75 }}>
-        <RotationView steps={steps} />
+        <RotationView steps={steps} from={seedSteps} />
         <Box
           sx={{
             display: 'flex',

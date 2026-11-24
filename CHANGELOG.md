@@ -4,6 +4,37 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.40.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.40.0) (2026-11-24)
+
+### New
+
+- Weapons can be limited to the members you choose ("Usable by" on each weapon), in Team optimize and KQM: a Favonius is only tried on the members you want.
+- ER is now an explicit choice, Automatic or Manual, in Team optimize and KQM. In Automatic, Favonius and other energy weapons show what they save each member right on their card, where their triggers can be set too.
+- Rotation writer: a warning shows when the rotation waits for cooldowns (what waits, and how long), and the timeline can show every rotation played, with each wait where it happens.
+
+### Improved
+
+- Optional Bursts (Q?, Q/N3, EQ/E) count as every 2nd Burst in the ER calculator.
+- Result cards are easier to read and show each member's ER requirement.
+- Ticking weapons, members and sets in the weapon and set lists is instant.
+- Rotation search no longer tries a held Skill on characters who can't hold it, and tries every Normal Attack length inside repeats such as 2[N1 C].
+
+### Fixed
+
+- Using a rotation no longer turns buffs such as Cryo resonance back on in your team settings: the rotation still times them hit by hit, shown as "From rotation".
+- Manual ER stays Manual when the rotation changes.
+- The ER calculator's dropdowns open on top of the calculator again.
+
+## [v1.39.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.39.1) (2026-11-24)
+
+### Improved
+
+- Team optimize stays responsive on phones while it runs: the page no longer freezes for a second at a time.
+
+### Fixed
+
+- Cryo Traveler: Charged Attack: Freezing Ice without Stellar Radiance showed as a plain white Charged Attack. It now shows as Freezing Ice, in Cryo.
+
 ## [v1.39.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.39.0) (2026-11-24)
 
 ### New

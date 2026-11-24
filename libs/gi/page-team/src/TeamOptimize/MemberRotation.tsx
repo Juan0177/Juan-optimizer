@@ -1036,7 +1036,12 @@ const AttackRow = memo(function AttackRow({
               <PartName part={part} onField={ownOnField} />
             ) : (
               <>
-                <AttackName data={data} path={attack.path} oneLine />
+                <AttackName
+                  data={data}
+                  path={attack.path}
+                  oneLine
+                  playedElement={attack.element}
+                />
                 <AttackMarks attack={attack} />
               </>
             )}
@@ -1154,7 +1159,12 @@ const AttackGroupRow = memo(function AttackGroupRow({
                 minWidth: 0,
               }}
             >
-              <AttackName data={data} path={attack.path} oneLine />
+              <AttackName
+                data={data}
+                path={attack.path}
+                oneLine
+                playedElement={attack.element}
+              />
               <AttackMarks attack={attack} />
             </Box>
             <Typography noWrap sx={{ ...type.label, fontSize: 12, ...numSx }}>

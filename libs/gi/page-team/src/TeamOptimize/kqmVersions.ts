@@ -47,6 +47,7 @@ export const KQM_SHARED = [
   'refinementStandard4',
   'compareRefinements',
   'excludedWeapons',
+  'excludedWeaponMembers',
   'weaponList',
   'refinements',
   'lockedWeapons',

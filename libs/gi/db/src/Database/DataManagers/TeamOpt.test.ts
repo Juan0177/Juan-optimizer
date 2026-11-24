@@ -742,3 +742,34 @@ describe('team.fightSettings (how the team plays the Moongecko)', () => {
     }
   })
 })
+
+describe('excludedWeaponMembers (per-member weapon restrictions)', () => {
+  it('validates, deduplicates and drops empty entries on TeamOpt and TeamOptKqm', () => {
+    const cleaned = validateTeamOpt({
+      excludedWeaponMembers: {
+        weapon_1: ['KamisatoAyaka', 'NotAChar', 'KamisatoAyaka'],
+        weapon_2: ['NotAChar'],
+        weapon_3: 'invalid',
+      },
+      kqm: {
+        excludedWeaponMembers: {
+          FavoniusSword: ['Skirk', 'BadChar', 'Skirk'],
+          NotAWeapon: ['Furina'],
+          Azurelight: [],
+        },
+      },
+    })
+    expect(cleaned?.excludedWeaponMembers).toEqual({
+      weapon_1: ['KamisatoAyaka'],
+    })
+    expect(cleaned?.kqm?.excludedWeaponMembers).toEqual({
+      FavoniusSword: ['Skirk'],
+    })
+    const empty = validateTeamOpt({
+      excludedWeaponMembers: { weapon_1: [] },
+      kqm: { excludedWeaponMembers: {} },
+    })
+    expect(empty?.excludedWeaponMembers).toBeUndefined()
+    expect(empty?.kqm?.excludedWeaponMembers).toBeUndefined()
+  })
+})
