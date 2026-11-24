@@ -1308,7 +1308,6 @@
       "allMembersKept": "Ogni membro resta com'è: non c'è niente da ottimizzare.",
       "alternatives": "Build alternative migliori",
       "builds": "{{done}} di {{total}} build",
-      "buildsInfo": "Build migliore: solo la build migliore della squadra, la più veloce. Tutte le build: anche le successive migliori (fino a 4 in più, ognuna cambia i manufatti di un membro), e ci vuole di più.",
       "buildsLabel": "Build",
       "button": "Ottimizza la squadra",
       "cancel": "Annulla",
@@ -1335,9 +1334,7 @@
       "buildsOwn": "Le mie build",
       "importedBuilds": "Esegue le build importate così come sono: il loro danno, cosa lo aumenta, la scheda della squadra. «Le mie build» ottimizza i tuoi pezzi.",
       "searchTip": "Rapida prima restringe ogni slot ai manufatti che possono contare, poi cerca esattamente tra quelli: molto più veloce, e manca di rado la build migliore (e di poco, quando succede). Completa cerca tra tutti i manufatti.",
-      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato.",
-      "bestBuild": "Build migliore",
-      "allBuilds": "Tutte le build"
+      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato."
     },
     "runDialog": {
       "anyMain": "Qualsiasi",

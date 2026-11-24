@@ -140,6 +140,19 @@
     "entries": [
       {
         "date": "2026-11-24",
+        "title": "Aggiornamento a Stellar Optimizer 1.40.1",
+        "summary": "Arriva la versione 1.40.1 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "improved",
+            "items": [
+              "**Risultati di Ottimizza squadra** più semplici: tolte la striscia delle build successive e la scelta Build nella finestra di avvio. Le alternative sono nelle **Migliori build**, sotto i risultati."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-24",
         "title": "Aggiornamento a Stellar Optimizer 1.40",
         "summary": "Arrivano le versioni 1.39.1 e 1.40.0 di Stellar Optimizer, e l’immagine delle versioni ha la vista dettagliata.",
         "sections": [

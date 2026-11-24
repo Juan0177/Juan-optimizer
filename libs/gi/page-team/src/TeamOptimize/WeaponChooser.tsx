@@ -337,15 +337,16 @@ function WeaponChooserModal({
   // (the weapon cards keep the handlers they were drawn with: these read the latest ones)
   const latest = useRef({ energy, onClose })
   latest.current = { energy, onClose }
+  const hasEnergy = !!energy
   const openCalculator = useMemo(
     () =>
-      energy
+      hasEnergy
         ? () => {
             latest.current.onClose()
             latest.current.energy?.openCalculator()
           }
         : undefined,
-    [!!energy]
+    [hasEnergy]
   )
   const setExcluded = (ids: string[], clearMembersFor?: Iterable<string>) =>
     update((o) => {

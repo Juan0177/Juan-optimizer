@@ -140,6 +140,19 @@
     "entries": [
       {
         "date": "2026-11-24",
+        "title": "Update to Stellar Optimizer 1.40.1",
+        "summary": "Stellar Optimizer’s release 1.40.1 arrives.",
+        "sections": [
+          {
+            "kind": "improved",
+            "items": [
+              "**Team optimize results** are simpler: the strip of the next team builds and the run window’s Builds choice are gone. The alternatives are in **Top builds**, under the results."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-24",
         "title": "Update to Stellar Optimizer 1.40",
         "summary": "Stellar Optimizer’s releases 1.39.1 and 1.40.0 arrive, and the versions picture gets the detailed view.",
         "sections": [
