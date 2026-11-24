@@ -1,5 +1,5 @@
 import type { TeamKqmSavedRun } from '@genshin-optimizer/gi/db'
-import type { KqmDoneRun } from '../useKqmRun'
+import type { KqmDoneRun } from './useKqmRun'
 
 /**
  * A run KQM Theorycrafting saved (`database.teamKqmResults`), as `useKqmRun` keeps it: its result,

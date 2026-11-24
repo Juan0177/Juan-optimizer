@@ -16,7 +16,7 @@ import {
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
-import { savedRunOf } from './compare/savedRun'
+import { savedRunOf } from './savedRun'
 import {
   applySavedRotation,
   kqmRotationId,

@@ -10,11 +10,6 @@ import {
   kqmCardHeight,
   renderKqmCard,
 } from './renderKqmCard'
-import {
-  KQM_COMPARE_CARD_HEIGHT,
-  KQM_COMPARE_SHEET_H,
-  kqmCompareCardHeight,
-} from './renderKqmCompareCard'
 
 /*
  * The KQM sheet (KQM Theorycrafting's Share → Team card) is shipped: its drawing must not change.
@@ -155,8 +150,6 @@ describe('renderKqmCard', () => {
     expect(KQM_CARD_WIDTH).toBe(1760)
     expect(KQM_CARD_HEIGHT).toBe(600)
     expect(kqmCardHeight(data)).toBe(594)
-    // (KQM Compare's card stacks two)
-    expect(KQM_COMPARE_SHEET_H).toBe(kqmCardHeight())
     const canvas = await renderKqmCard(data)
     expect([canvas.width, canvas.height]).toEqual([3520, 1188])
   })
@@ -416,14 +409,6 @@ describe('drawKqmCard: the detailed block', () => {
     expect(kqmCardHeight(data)).toBe(594)
     expect(kqmCardHeight(detailed)).toBe(594 + KQM_CARD_DETAILS_H)
     expect(kqmCardHeight(detailed)).toBeGreaterThan(kqmCardHeight(data))
-    // (KQM Compare's card: each half as tall as its sheet)
-    const side = (card: KqmCardData) => ({ card, marks: {} })
-    const compare = (a: KqmCardData, b: KqmCardData) =>
-      kqmCompareCardHeight({ a: side(a), b: side(b) })
-    expect(compare(data, data)).toBe(KQM_COMPARE_CARD_HEIGHT)
-    expect(compare(detailed, detailed)).toBe(
-      KQM_COMPARE_CARD_HEIGHT + 2 * KQM_CARD_DETAILS_H
-    )
   })
   it('draws each member’s main stats and stats, label left and value right', () => {
     const { texts } = draw(detailed)
@@ -658,11 +643,6 @@ describe('drawKqmCard: notes on more than one line', () => {
   it('the sheet grows by a line for each line after the first', () => {
     expect(kqmCardHeight(twoLines)).toBe(
       kqmCardHeight(detailed) + KQM_CARD_NOTE_LINE
-    )
-    const side = (card: KqmCardData) => ({ card, marks: {} })
-    expect(kqmCompareCardHeight({ a: side(twoLines), b: side(detailed) })).toBe(
-      kqmCompareCardHeight({ a: side(detailed), b: side(detailed) }) +
-        KQM_CARD_NOTE_LINE
     )
   })
   it('draws each line, centred in the notes row, one under the other', () => {

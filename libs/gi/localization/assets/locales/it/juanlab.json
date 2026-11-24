@@ -140,6 +140,45 @@
     "entries": [
       {
         "date": "2026-11-24",
+        "title": "Aggiornamento a Stellar Optimizer 1.40",
+        "summary": "Arrivano le versioni 1.39.1 e 1.40.0 di Stellar Optimizer, e l’immagine delle versioni ha la vista dettagliata.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Utilizzabile da** su ogni arma, in Ottimizza squadra e KQM: un’arma di Favonio viene provata solo sui membri che scegli.",
+              "**ER: Automatica o Manuale**, in Ottimizza squadra e KQM. In Automatica, Favonio e le altre armi di energia mostrano sulla loro scheda quanto fanno risparmiare a ogni membro, e lì si regolano anche le attivazioni.",
+              "**Editor della rotazione**: un avviso quando la rotazione attende i tempi di ricarica (cosa e per quanto); la timeline può mostrare ogni rotazione giocata."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "I Tripudi opzionali (Q?, Q/N3, EQ/E) contano come un Tripudio ogni 2 nel calcolatore di ER.",
+              "Le schede dei risultati sono più leggibili e mostrano l’ER richiesta di ogni membro.",
+              "Gli elenchi di armi e set si spuntano all’istante; Ottimizza squadra non blocca più i telefoni mentre lavora."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "Usare una rotazione non riattiva più buff come la risonanza Cryo nelle impostazioni della squadra.",
+              "L’ER Manuale resta Manuale quando cambia la rotazione; i menu del calcolatore di ER si aprono di nuovo sopra.",
+              "Viaggiatore Cryo: Attacco caricato: Freddo glaciale appare in Cryo."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Versioni → Condividi: Normale o Dettagliata**. L’immagine dettagliata aggiunge per ogni membro le statistiche principali e le statistiche fuori combattimento, come nella card della squadra KQM.",
+              "Tolta la Card di confronto (originale contro una versione): la sostituisce l’immagine delle versioni di Stellar.",
+              "Anche i nuovi testi sono in italiano."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-24",
         "title": "Aggiornamento a Stellar Optimizer 1.39",
         "summary": "Arrivano le versioni da 1.37.3 a 1.39.0 di Stellar Optimizer.",
         "sections": [
