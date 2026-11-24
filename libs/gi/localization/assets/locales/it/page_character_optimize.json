@@ -214,7 +214,14 @@
       "owned": "Posseduti"
     },
     "advancedTip": "Scegli separatamente i bonus da 2 e da 4 pezzi",
-    "advanced": "Avanzate"
+    "advanced": "Avanzate",
+    "shapes": {
+      "twoTwo": "2 pezzi + 2 pezzi",
+      "mixed": "Pezzi misti",
+      "label": "Le build possono avere",
+      "twoTwoTip": "Due bonus da 2 pezzi: build 2+2+1 e 3+2",
+      "mixedTip": "Pezzi il cui set non compare in nessun altro pezzo: build 2 pezzi + 3 misti, 3 pezzi + 2 misti e 5 misti"
+    }
   },
   "bonusStats": {
     "title": "Statistiche bonus"

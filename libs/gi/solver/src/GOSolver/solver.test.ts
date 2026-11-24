@@ -269,6 +269,32 @@ const cases: Case[] = [
     partial: true,
     manySets: true,
   },
+  // two 2-piece bonuses turned off; with mixed pieces too: every build wears 4 of a set
+  { seed: 15, perSlot: 9, topN: 5, exclusion: { twoTwo: [2, 4] } },
+  {
+    seed: 16,
+    perSlot: 8,
+    topN: 4,
+    exclusion: { twoTwo: [2, 4], rainbow: [2, 4] },
+    constraints: 'er',
+    manySets: true,
+  },
+  {
+    seed: 17,
+    perSlot: 7,
+    topN: 3,
+    exclusion: { twoTwo: [2, 4], [A]: [4] },
+    partial: true,
+    plot: true,
+  },
+  {
+    seed: 18,
+    perSlot: 8,
+    topN: 5,
+    exclusion: { twoTwo: [2, 4], rainbow: [2, 4], [B]: [2, 4] },
+    constraints: 'er+cr',
+    manySets: true,
+  },
 ]
 const schedules = [
   { workers: 1 },

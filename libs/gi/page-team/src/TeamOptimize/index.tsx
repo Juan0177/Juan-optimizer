@@ -13,8 +13,8 @@ import {
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
-  KqmResult,
   BonusStats,
+  KqmResult,
   RunAttackState,
   RunEnemy,
   SimGear,
@@ -23,6 +23,7 @@ import type {
   TeamOptMember,
   TeamOptPicks,
   TeamOptPickView,
+  TeamOptShortfall,
 } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
@@ -34,6 +35,7 @@ import {
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameRunEnemy,
+  teamEnergyAuto,
   teamLinkOwnGear,
   teamLinkUseImported,
   teamLinkUseOwnGear,
@@ -81,6 +83,7 @@ import {
   useKqmTeamBuffs,
   useTeamOptBuffs,
 } from './buffs'
+import { DamageShare } from './DamageShare'
 import { ExtraBuffs } from './ExtraBuffs'
 import { expandStore } from './expandStore'
 import {
@@ -114,11 +117,10 @@ import {
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
 import { sameBuildRoster, teamRoster } from './runScope'
-import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
-import { DamageShare } from './DamageShare'
 import { TeamOptInspector } from './TeamOptInspector'
+import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
+import { Shortfalls, TeamEquipUndo, TeamOptResults } from './TeamOptResults'
 import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
-import { TeamEquipUndo, TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -1245,6 +1247,12 @@ export default function TeamBuildWorkspace({
         <Alert severity="error" onClose={clear}>
           {state.setRulesUnmet?.length ? (
             <SetRulesUnmet characterKeys={state.setRulesUnmet} />
+          ) : state.requirementsUnmet ? (
+            <RequirementsUnmet
+              shortfalls={state.requirementsUnmet}
+              teamData={teamData}
+              automaticEr={teamEnergyAuto(teamOpt)}
+            />
           ) : (
             <>
               {t('teamOpt.run.error', 'Team Optimize stopped:')} {state.message}
@@ -2042,6 +2050,62 @@ function SetRulesUnmet({ characterKeys }: { characterKeys: CharacterKey[] }) {
           'Even with the pieces the other members hold, no build of the artifacts they may use keeps to the sets allowed on their Optimize tab (Requirements → Artifact sets), with their main stats and the inventory settings. Allow more sets, or free up pieces of the sets they need.'
         )}
       />
+    </>
+  )
+}
+
+/** A run without a result: no team build gets these members to their minimums */
+function RequirementsUnmet({
+  shortfalls,
+  teamData,
+  automaticEr,
+}: {
+  shortfalls: Partial<Record<CharacterKey, TeamOptShortfall[]>>
+  teamData: TeamData | undefined
+  automaticEr: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const { gender } = useDBMeta()
+  const why = t(
+    'teamOpt.run.requirementsUnmetWhy',
+    'The search uses the allowed sets, main stats, artifact levels and weapons. To change a manual minimum, open the member’s Optimize tab.'
+  )
+  return (
+    <>
+      {t(
+        'teamOpt.run.requirementsUnmet',
+        'The search did not find a build that meets the minimums for'
+      )}{' '}
+      {Object.keys(shortfalls).map((ck, i) => (
+        <Fragment key={ck}>
+          {i > 0 && ', '}
+          <strong>
+            <CharacterName characterKey={ck as CharacterKey} gender={gender} />
+          </strong>
+        </Fragment>
+      ))}
+      {'.'}
+      {Object.entries(shortfalls).map(([ck, missed]) => (
+        <Box key={ck} sx={{ mt: 0.75 }}>
+          <Shortfalls
+            shortfalls={missed ?? []}
+            data={teamData?.[ck as CharacterKey]?.target}
+            optimized
+            why={why}
+          />
+        </Box>
+      ))}
+      {automaticEr &&
+        Object.values(shortfalls).some((missed) =>
+          missed?.some(({ path }) => path.at(-1) === 'enerRech_')
+        ) && (
+          <Box sx={{ mt: 0.75 }}>
+            {t(
+              'teamOpt.run.automaticErShortfall',
+              'Automatic ER gets its target from the team’s ER calculator. It can change with the rotation and the team’s weapons.'
+            )}
+          </Box>
+        )}
     </>
   )
 }

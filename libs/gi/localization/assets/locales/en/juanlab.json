@@ -139,6 +139,41 @@
     },
     "entries": [
       {
+        "date": "2026-11-25",
+        "title": "Update to Stellar Optimizer 1.40.4",
+        "summary": "Stellar Optimizer’s releases 1.40.2 to 1.40.4 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**A Melt rotation template for Mavuika, Citlali, Xilonen and Bennett.**",
+              "**Advanced artifact sets**: builds can allow or forbid two 2-piece bonuses (2+2+1, 3+2) and mixed pieces."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Faster Team optimize with big inventories**: Quick searches in full only the weapons that can come close to the best, and skips weaker copies.",
+              "Team optimize puts meeting Energy Recharge and artifact requirements first, stops at once when a minimum can’t be reached, and says how far off it is."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Mavuika**: tapping her Skill during Nightsoul’s Blessing switches form, as in gcsim, and a cancelled Charged Attack no longer fires its finisher later.",
+              "Citlali’s Nightsoul points no longer go past 100; Faruzan makes particles only from Pressurized Collapses.",
+              "With every set but one turned off, every build wears 4 pieces of it; the inspector ranks a member’s best build among its sets."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-24",
         "title": "Update to Stellar Optimizer 1.40.1",
         "summary": "Stellar Optimizer’s release 1.40.1 arrives.",

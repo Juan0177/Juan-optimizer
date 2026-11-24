@@ -1,6 +1,13 @@
 import { createTestDBStorage } from '@genshin-optimizer/common/database'
 import { defaultOptArtifactLevel } from '@genshin-optimizer/gi/consts'
 import { ArtCharDatabase } from '../ArtCharDatabase'
+import type { ArtSetExclusion } from './OptConfigDataManager'
+import {
+  allArtifactSetExclusionKeys,
+  forcedSet,
+  isSetRule,
+  withForcedSet,
+} from './OptConfigDataManager'
 
 describe('OptConfigDataManager', () => {
   let database: ArtCharDatabase
@@ -119,7 +126,7 @@ describe('OptConfigDataManager', () => {
     expect(result?.excludedLocations).not.toContain(id)
   })
 
-  // (the sets dialog no longer has mixed pieces: mixed builds are always considered)
+  // (the sets dialog has no mixed pieces: they are limited only when one set is left)
   it('drops an old mixed-pieces limit and keeps every set choice', () => {
     const id = optConfigs.new()
     const saved = {
@@ -142,5 +149,116 @@ describe('OptConfigDataManager', () => {
       artSetExclusion: { ...saved.artSetExclusion, rainbow: [4] } as never,
     })
     expect(optConfigs.get(id)?.artSetExclusion).not.toHaveProperty('rainbow')
+  })
+
+  it('with every set but one off, builds wear 4 pieces of that one', () => {
+    const id = optConfigs.new()
+    const allBut = (...kept: string[]) =>
+      Object.fromEntries(
+        allArtifactSetExclusionKeys
+          .filter((key) => !isSetRule(key) && !kept.includes(key))
+          .map((key) => [key, [2, 4]])
+      ) as ArtSetExclusion
+    optConfigs.set(id, { artSetExclusion: allBut('TenacityOfTheMillelith') })
+    const forced = optConfigs.get(id)!.artSetExclusion
+    expect(forcedSet(forced)).toBe('TenacityOfTheMillelith')
+    // (at most one piece of another set: four of the one left)
+    expect(forced.rainbow).toEqual([2, 4])
+    // its 4-piece bonus turned off too: nothing to force
+    optConfigs.set(id, {
+      artSetExclusion: { ...forced, TenacityOfTheMillelith: [4] },
+    })
+    expect(optConfigs.get(id)!.artSetExclusion).not.toHaveProperty('rainbow')
+    // another set on again: mixed pieces too
+    optConfigs.set(id, {
+      artSetExclusion: allBut('TenacityOfTheMillelith', 'NoblesseOblige'),
+    })
+    expect(forcedSet(optConfigs.get(id)!.artSetExclusion)).toBeUndefined()
+    expect(optConfigs.get(id)!.artSetExclusion).not.toHaveProperty('rainbow')
+  })
+
+  it('keeps the build-shape switches, and turns mixed pieces off as the solvers read it', () => {
+    const id = optConfigs.new()
+    // a stored mixed-pieces limit from before the switches: not one of them
+    optConfigs.set(id, {
+      artSetExclusion: { rainbow: [2], GladiatorsFinale: [4] },
+    })
+    expect(optConfigs.get(id)!.artSetExclusion).toEqual({
+      GladiatorsFinale: [4],
+    })
+    // switches off (any value stores as off)
+    optConfigs.set(id, {
+      artSetExclusion: { twoTwo: [2], mixed: [4], GladiatorsFinale: [4] },
+    })
+    expect(optConfigs.get(id)!.artSetExclusion).toEqual({
+      twoTwo: [2, 4],
+      mixed: [2, 4],
+      rainbow: [2, 4],
+      GladiatorsFinale: [4],
+    })
+    // mixed pieces on again: the solvers' limit goes with it, two 2-piece bonuses stay off
+    const { mixed: _, ...rest } = optConfigs.get(id)!.artSetExclusion
+    optConfigs.set(id, { artSetExclusion: rest })
+    expect(optConfigs.get(id)!.artSetExclusion).toEqual({
+      twoTwo: [2, 4],
+      GladiatorsFinale: [4],
+    })
+    // empty values: on
+    optConfigs.set(id, { artSetExclusion: { twoTwo: [], mixed: [] } })
+    expect(optConfigs.get(id)!.artSetExclusion).toEqual({})
+  })
+
+  it('a switch is not a set: one set left on still forces it', () => {
+    const id = optConfigs.new()
+    const allBut = (kept: string) =>
+      Object.fromEntries(
+        allArtifactSetExclusionKeys
+          .filter((key) => !isSetRule(key) && key !== kept)
+          .map((key) => [key, [2, 4]])
+      ) as ArtSetExclusion
+    optConfigs.set(id, {
+      artSetExclusion: { ...allBut('NoblesseOblige'), twoTwo: [2, 4] },
+    })
+    const exclusion = optConfigs.get(id)!.artSetExclusion
+    expect(forcedSet(exclusion)).toBe('NoblesseOblige')
+    expect(exclusion.rainbow).toEqual([2, 4])
+    expect(exclusion.twoTwo).toEqual([2, 4])
+  })
+
+  it('one owned set left on forces it, whatever unowned sets are left on', () => {
+    const allBut = (...kept: string[]) =>
+      Object.fromEntries(
+        allArtifactSetExclusionKeys
+          .filter((key) => !isSetRule(key) && !kept.includes(key))
+          .map((key) => [key, [2, 4]])
+      ) as ArtSetExclusion
+    // VV and two sets with no pieces in the inventory left on
+    const exclusion = allBut(
+      'ViridescentVenerer',
+      'LegacyOfTheFirstChronicle',
+      'PreludeOfTheKingfisherCanopy'
+    )
+    const owned = new Set([
+      'ViridescentVenerer',
+      'Instructor',
+      'NoblesseOblige',
+    ])
+    expect(forcedSet(exclusion)).toBeUndefined()
+    expect(forcedSet(exclusion, owned)).toBe('ViridescentVenerer')
+    expect(withForcedSet(exclusion, owned).rainbow).toEqual([2, 4])
+    expect(withForcedSet(exclusion, owned)).not.toBe(exclusion)
+    // two owned sets on: nothing forced, the same object
+    const two = allBut('ViridescentVenerer', 'Instructor')
+    expect(withForcedSet(two, owned)).toBe(two)
+    // its 4-piece off: nothing to force
+    const twoOnly = { ...exclusion, ViridescentVenerer: [4] } as ArtSetExclusion
+    expect(forcedSet(twoOnly, owned)).toBeUndefined()
+    // mixed pieces already off: kept as it is
+    const mixedOff = {
+      ...two,
+      mixed: [2, 4],
+      rainbow: [2, 4],
+    } as ArtSetExclusion
+    expect(withForcedSet(mixedOff, owned)).toBe(mixedOff)
   })
 })

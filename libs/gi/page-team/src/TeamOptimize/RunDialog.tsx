@@ -292,7 +292,7 @@ export function RunDialog({
               <FieldLabel
                 tip={t(
                   'teamOpt.run.searchTip',
-                  'Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.'
+                  'Quick narrows each slot to the artifacts that can matter and searches in full only the weapons a quick estimate puts near the best: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact and every weapon.'
                 )}
               >
                 {t('teamOpt.kqm.search', 'Search')}

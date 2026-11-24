@@ -19,14 +19,19 @@ import type { GeneratedBuild } from './GeneratedBuildListDataManager'
 import type {
   ArtSetExclusion,
   ArtSetExclusionKey,
+  ArtSetRuleKey,
   OptConfig,
   StatFilterSetting,
   StatFilters,
 } from './OptConfigDataManager'
 import {
   allArtifactSetExclusionKeys,
+  artSetRuleKeys,
+  forcedSet,
   handleArtSetExclusion,
+  isSetRule,
   maxBuildsToShowList,
+  withForcedSet,
 } from './OptConfigDataManager'
 import type {
   PandoArtIds,
@@ -119,6 +124,7 @@ export type {
   ArtifactData,
   ArtSetExclusion,
   ArtSetExclusionKey,
+  ArtSetRuleKey,
   BonusStats,
   BuildTc,
   BuildTcArtifactSlot,
@@ -168,11 +174,13 @@ export type {
 export {
   allArtifactSetExclusionKeys,
   applyTeamRotation,
+  artSetRuleKeys,
   cachedArtifact,
   defaultInitialWeapon,
   defaultInitialWeaponKey,
   defaultTeamOptKqm,
   defLoadoutExportSetting,
+  forcedSet,
   handleArtSetExclusion,
   initCharTC,
   initCustomMultiTarget,
@@ -182,6 +190,7 @@ export {
   initTeamOpt,
   initTeamOptAttack,
   isPandoTeamCharacterKey,
+  isSetRule,
   MAX_DESC_LENGTH,
   MAX_ENEMY_HP,
   MAX_NAME_LENGTH,
@@ -207,4 +216,5 @@ export {
   validateFightSettings,
   validateTeamEnemy,
   validateTeamOpt,
+  withForcedSet,
 }

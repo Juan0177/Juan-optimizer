@@ -21,6 +21,16 @@ import type { GeneratedBuildList } from './GeneratedBuildListDataManager'
 export const maxBuildsToShowList = [1, 2, 3, 4, 5, 8, 10] as const
 export const maxBuildsToShowDefault = 5
 
+/**
+ * The keys of a build's shape rules, not a set's:
+ * - `rainbow`: the solvers' limit on mixed pieces (pieces whose set no other piece has), derived:
+ *   `mixed` off, or one set left on (`forcedSet`)
+ * - `mixed`: mixed pieces turned off (2-piece + 3 mixed, 3-piece + 2 mixed, 5 mixed)
+ * - `twoTwo`: two 2-piece bonuses turned off (2+2+1, 3+2)
+ */
+export const artSetRuleKeys = ['rainbow', 'mixed', 'twoTwo'] as const
+export type ArtSetRuleKey = (typeof artSetRuleKeys)[number]
+
 export const allArtifactSetExclusionKeys = [
   ...allArtifactSetKeys.filter(
     (key) =>
@@ -31,7 +41,7 @@ export const allArtifactSetExclusionKeys = [
         'PrayersToSpringtime',
       ].includes(key)
   ),
-  'rainbow',
+  ...artSetRuleKeys,
 ] as ArtSetExclusionKey[]
 
 export type ArtSetExclusionKey =
@@ -42,8 +52,41 @@ export type ArtSetExclusionKey =
       | 'PrayersForWisdom'
       | 'PrayersToSpringtime'
     >
-  | 'rainbow'
+  | ArtSetRuleKey
 export type ArtSetExclusion = Partial<Record<ArtSetExclusionKey, (2 | 4)[]>>
+
+export const isSetRule = (key: string): key is ArtSetRuleKey =>
+  (artSetRuleKeys as readonly string[]).includes(key)
+
+/**
+ * The set every build wears 4 pieces of: the only one left on (its 4-piece bonus allowed), every
+ * other set's bonuses turned off. Its builds then hold at most one piece of another set. With
+ * `owned` (the sets the inventory has pieces of), a set left on that none are of does not count.
+ */
+export function forcedSet(
+  exclusion: ArtSetExclusion,
+  owned?: ReadonlySet<string>
+) {
+  const inUse = allArtifactSetExclusionKeys.filter(
+    (key) =>
+      !isSetRule(key) &&
+      (exclusion[key]?.length ?? 0) < 2 &&
+      (!owned || owned.has(key))
+  )
+  return inUse.length === 1 && !exclusion[inUse[0]]?.includes(4)
+    ? (inUse[0] as Exclude<ArtSetExclusionKey, ArtSetRuleKey>)
+    : undefined
+}
+
+/** `exclusion` as the solvers take it: mixed pieces limited when one owned set is left on */
+export function withForcedSet(
+  exclusion: ArtSetExclusion,
+  owned: ReadonlySet<string>
+): ArtSetExclusion {
+  return !exclusion.rainbow?.length && forcedSet(exclusion, owned)
+    ? { ...exclusion, rainbow: [2, 4] }
+    : exclusion
+}
 
 const statFilterSettingSchema = z.object({
   value: z.number().catch(0),
@@ -63,15 +106,19 @@ const artSetExclusionSchema = z.preprocess(
     for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
       if (!allArtifactSetExclusionKeys.includes(k as ArtSetExclusionKey))
         continue
-      // (mixed builds are always considered: the sets dialog no longer limits them)
+      // (the solvers' mixed-pieces limit follows from the switches, below: a stored one, as old
+      // configs have, is not one of them)
       if (k === 'rainbow') continue
       if (!Array.isArray(v)) continue
       const filtered = [...new Set(v.filter((n) => n === 2 || n === 4))] as (
         | 2
         | 4
       )[]
-      if (filtered.length) result[k as ArtSetExclusionKey] = filtered
+      if (!filtered.length) continue
+      // a switch turned off
+      result[k as ArtSetExclusionKey] = isSetRule(k) ? [2, 4] : filtered
     }
+    if (result.mixed || forcedSet(result)) result.rainbow = [2, 4]
     return result
   },
   z.record(z.string(), z.array(z.union([z.literal(2), z.literal(4)])))

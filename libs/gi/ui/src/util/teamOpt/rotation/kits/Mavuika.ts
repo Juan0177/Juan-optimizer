@@ -4,6 +4,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
   withHitlag,
 } from './common'
@@ -97,10 +98,16 @@ const BURST_BUFF_START = 105
 const BURST_BUFF = 7 * 60
 /** One revolution of the Flamestrider's held Charged Attack (gcsim's bikeChargeAttackSpinFrames) */
 const BIKE_SPIN = 45
+/** Skill recast (form switch) cooldown (gcsim's skillRecastCD) */
+const SKILL_RECAST_CD = 60
 /** Rings of Searing Radiance: every 2 s in Ring form */
 const RADIANCE_INTERVAL = 2 * 60
 /** C6: a Flamestrider hit every 3 s in Flamestrider form */
 const C6_INTERVAL = 3 * 60
+const C6_INITIAL_DELAY = 12
+const C6_REFUND = 80
+const C6_REFUND_THRESHOLD = 5
+const C6_REFUND_CD = 15 * 60
 
 type MavHit = Parameters<SimContext['hit']>[1]
 
@@ -137,10 +144,20 @@ interface MavuikaState {
   c1On: boolean
   /** C2: the Ring's DEF shred is on (Ring form, or either form at C6, in the blessing) */
   c2On: boolean
+  c6BikeReady: number
+  c6RefundReady: number
   /** A4: only the latest burst's 20 s buff */
   a4Token: number
   /** Her last action was a jump (the Flamestrider plunge follows one): for `variant` */
   lastJump: boolean
+  /** Cached constellation for `cooldownKey` (which does not receive SimContext) */
+  cons: number
+  /** When the 15 s Skill cooldown is next ready (for detecting form-switch recasts in `cooldownKey`) */
+  skillReadyAt: number
+  /** End frame of gcsim's `skillRecastCDKey` (60 f): used by CA windup skip after Skill */
+  recastCdEnd: number
+  /** Whether a Flamestrider Dash immediately after her last Charged Attack can charge-cancel (6 f) */
+  canChargeCancelDash: boolean
 }
 
 const maxPoints = (c: number) => (c >= 1 ? 120 : 80)
@@ -148,19 +165,52 @@ const spiritMul = (c: number) => (c >= 1 ? 1.25 : 1)
 const inBurst = (s: MavuikaState, t: number) =>
   t >= s.burstStart && t < s.burstEnd
 
+function tryC6Refund(s: MavuikaState, t: number, cons: number) {
+  if (
+    cons >= 6 &&
+    s.blessing &&
+    s.bike &&
+    s.points <= C6_REFUND_THRESHOLD + 1e-9 &&
+    t >= s.c6RefundReady
+  ) {
+    s.points = Math.min(maxPoints(cons), s.points + C6_REFUND)
+    s.c6RefundReady = t + C6_REFUND_CD
+    return true
+  }
+  return false
+}
+
 /**
  * Frames of Nightsoul drain from frame `from`: the points lose their rate per frame while the
  * blessing is up, and become Fighting Spirit (C1: the last frame that happened)
  */
 function drain(s: MavuikaState, from: number, frames: number, cons: number) {
   const rate = s.bike ? BIKE_RATE : RING_RATE
-  const used = Math.min(s.points, frames * rate)
-  s.points -= used
-  s.spirit = Math.min(MAX_SPIRIT, s.spirit + used * spiritMul(cons))
-  if (used > 0) s.lastGain = Math.max(s.lastGain, from + used / rate)
-  if (s.points < 0.001) {
-    s.points = 0
-    s.blessing = false
+  let at = from
+  const end = from + frames
+  while (at < end && s.blessing) {
+    tryC6Refund(s, at, cons)
+    let step = end - at
+    const toEmpty = s.points / rate
+    if (toEmpty < step) step = toEmpty
+    if (cons >= 6 && s.bike) {
+      if (s.points > C6_REFUND_THRESHOLD) {
+        const toThreshold = (s.points - C6_REFUND_THRESHOLD) / rate
+        if (toThreshold < step) step = toThreshold
+      } else if (s.c6RefundReady > at && s.c6RefundReady < at + step) {
+        step = s.c6RefundReady - at
+      }
+    }
+    const used = Math.min(s.points, step * rate)
+    s.points -= used
+    s.spirit = Math.min(MAX_SPIRIT, s.spirit + used * spiritMul(cons))
+    if (used > 0) s.lastGain = Math.max(s.lastGain, at + used / rate)
+    at += step
+    if (!tryC6Refund(s, at, cons) && s.points < 0.001) {
+      s.points = 0
+      s.blessing = false
+    }
+    if (step <= 1e-9) break
   }
 }
 
@@ -190,7 +240,7 @@ function consume(c: SimContext, s: MavuikaState, amount: number) {
   s.points -= used
   s.spirit = Math.min(MAX_SPIRIT, s.spirit + used * spiritMul(cons))
   if (used > 0) s.lastGain = c.now
-  if (s.points < 0.001) {
+  if (!tryC6Refund(s, c.now, cons) && s.points < 0.001) {
     s.points = 0
     s.blessing = false
   }
@@ -200,10 +250,12 @@ function consume(c: SimContext, s: MavuikaState, amount: number) {
 function gainPoints(c: SimContext, s: MavuikaState, amount: number) {
   const cons = c.constellation('Mavuika')
   settle(s, c.now, cons)
+  const wasBlessing = s.blessing
   if (!s.blessing) {
     s.blessing = true
-    s.points = amount
+    s.points = Math.min(maxPoints(cons), amount)
   } else s.points = Math.min(maxPoints(cons), s.points + amount)
+  if (!wasBlessing && s.blessing && s.bike) startBikeC6(c, s)
 }
 
 /**
@@ -213,6 +265,7 @@ function gainPoints(c: SimContext, s: MavuikaState, amount: number) {
 const c6Tick = (s: MavuikaState, src: number) => (c: SimContext) => {
   settle(s, c.now, c.constellation('Mavuika'))
   if (s.bikeSrc !== src || !s.bike || !s.blessing) return
+  s.c6BikeReady = c.now + C6_INTERVAL
   hitAt(c, s, 0, {
     characterKey: 'Mavuika',
     path: ['constellation6', 'ringDmg'],
@@ -226,12 +279,16 @@ const c6Tick = (s: MavuikaState, src: number) => (c: SimContext) => {
   c.at(C6_INTERVAL, c6Tick(s, src))
 }
 
+function startBikeC6(c: SimContext, s: MavuikaState) {
+  if (c.constellation('Mavuika') < 6 || !s.bike || !s.blessing) return
+  s.bikeSrc = c.now
+  const delay = Math.max(C6_INITIAL_DELAY, s.c6BikeReady - c.now)
+  c.at(delay, c6Tick(s, c.now))
+}
+
 function enterBike(c: SimContext, s: MavuikaState) {
   s.bike = true
-  if (c.constellation('Mavuika') >= 6) {
-    s.bikeSrc = c.now
-    c.at(C6_INTERVAL, c6Tick(s, c.now))
-  }
+  if (s.blessing) startBikeC6(c, s)
 }
 
 /** Rings of Searing Radiance: a hit and a Nightsoul cost every 2 s, while in Ring form */
@@ -415,14 +472,52 @@ export const kit: KitModel = {
     lastGain: Number.NEGATIVE_INFINITY,
     c1On: false,
     c2On: false,
+    c6BikeReady: Number.NEGATIVE_INFINITY,
+    c6RefundReady: Number.NEGATIVE_INFINITY,
     a4Token: 0,
     lastJump: false,
+    cons: 0,
+    skillReadyAt: 0,
+    recastCdEnd: Number.NEGATIVE_INFINITY,
+    canChargeCancelDash: false,
   }),
+  onStart(ctx, s: MavuikaState) {
+    s.cons = ctx.constellation('Mavuika')
+  },
+  cooldownKey(state: MavuikaState, action, now) {
+    if (action.kind === 'burst') return 'burst'
+    if (action.kind !== 'skill') return undefined
+    if (!action.hold && now < state.skillReadyAt) {
+      const s = { ...state }
+      settle(s, now, s.cons)
+      if (s.blessing) return 'skillRecast'
+    }
+    return 'skill'
+  },
   // On the Flamestrider (in the blessing) her normal and charged attacks, E, dash, jump and the
-  // plunge after that jump are the Flamestrider's own moves, with their own frames
+  // plunge after that jump are the Flamestrider's own moves, with their own frames. While E is on
+  // cooldown during Nightsoul's Blessing, tapping E recasts to switch between Ring and Flamestrider.
   variant(ctx, state: MavuikaState, action) {
     const s = { ...state }
-    settle(s, ctx.now, ctx.constellation('Mavuika'))
+    const cons = ctx.constellation('Mavuika')
+    settle(s, ctx.now, cons)
+    if (
+      action.kind === 'skill' &&
+      !action.hold &&
+      s.blessing &&
+      ctx.cooldownReadyAt('skill') > ctx.now
+    )
+      return s.bike
+        ? {
+            key: 'recastRing',
+            label: 'Switch to Ring',
+            mode: 'Flamestrider',
+          }
+        : {
+            key: 'recastBike',
+            label: 'Switch to Flamestrider',
+            mode: 'Ring',
+          }
     if (!s.bike || !s.blessing) return undefined
     if (action.kind === 'plunge' && !s.lastJump) return undefined
     const label = FLAMESTRIDER_MOVES[action.kind]
@@ -432,10 +527,17 @@ export const kit: KitModel = {
   },
   act(ctx, s: MavuikaState, action, previous) {
     const cons = ctx.constellation('Mavuika')
+    s.cons = cons
     settle(s, ctx.now, cons)
     consUpdate(ctx, s)
     const flame = s.bike && s.blessing
     s.lastJump = action.kind === 'jump'
+    // Any non-charged action exits ChargeAttackState and cancels an unreached finisher (gcsim OnRemoved).
+    const prevChargeCancelDash = s.canChargeCancelDash
+    if (action.kind !== 'charged') {
+      s.chargeToken++
+      s.canChargeCancelDash = false
+    }
     switch (action.kind) {
       case 'normal': {
         const count = action.count ?? 1
@@ -479,13 +581,18 @@ export const kit: KitModel = {
       case 'charged': {
         s.lastNormal = undefined
         if (flame) {
+          const recastLeft = s.recastCdEnd - ctx.now
           const skipped = ['normal', 'charged', 'dash', 'burst'].includes(
             previous?.kind ?? ''
           )
             ? 15
-            : previous?.kind === 'plunge'
-              ? 13
-              : 0
+            : previous?.kind === 'skill' && recastLeft > 0
+              ? recastLeft > 45
+                ? 13
+                : 15
+              : previous?.kind === 'plunge'
+                ? 13
+                : 0
           const timing = bikeChargeTiming(ctx.target, skipped)
           if (!timing)
             return {
@@ -499,6 +606,12 @@ export const kit: KitModel = {
           const spins = Math.max(1, action.spins ?? 1)
           const held = (spins - 1) * BIKE_SPIN
           const final = timing.final + held
+          // gcsim cdcLockout: while actively spinning (not after a Finisher), CDC is locked out
+          // on raw frames 79..87 + 45k (e.g. C2D at raw 80 is locked out; CD at 35 and C3FD are not).
+          const rawCancel = timing.hit + held + skipped
+          s.canChargeCancelDash =
+            !!action.final ||
+            !(rawCancel >= 79 && (rawCancel - 79) % BIKE_SPIN <= 8)
           consume(ctx, s, (0.2 / 6) * Math.max(0, final - 45))
           for (let spin = 0; spin < spins; spin++)
             hitAt(ctx, s, timing.hit + spin * BIKE_SPIN, {
@@ -576,7 +689,57 @@ export const kit: KitModel = {
       }
       case 'skill': {
         s.lastNormal = undefined
+        // Skill recast (gcsim skill[recast=1]): switches Ring <-> Flamestrider during Nightsoul's
+        // Blessing while E is on its 15 s cooldown (60-frame recast CD, no hit or particles).
+        if (
+          !action.hold &&
+          s.blessing &&
+          ctx.cooldownReadyAt('skill') > ctx.now
+        ) {
+          s.recastCdEnd = ctx.now + SKILL_RECAST_CD
+          const recastCooldown = {
+            key: 'skillRecast',
+            frames: SKILL_RECAST_CD,
+          }
+          if (!s.bike) {
+            enterBike(ctx, s)
+            consUpdate(ctx, s)
+            return {
+              cooldown: recastCooldown,
+              frames: 24,
+              framesInto: {
+                normal: 13,
+                charged: 13,
+                skill: 13,
+                burst: 13,
+                dash: 12,
+                jump: 13,
+                swap: 24,
+              },
+            }
+          }
+          enterRing(ctx, s)
+          consUpdate(ctx, s)
+          return {
+            cooldown: recastCooldown,
+            frames: 38,
+            framesInto: {
+              normal: 27,
+              charged: 28,
+              skill: 28,
+              burst: 28,
+              dash: 37,
+              jump: 38,
+              swap: 24,
+            },
+          }
+        }
         const cooldown = { key: 'skill', frames: 15 * 60, delay: 18 }
+        s.skillReadyAt = ctx.now + 18 + 15 * 60
+        ctx.at(19, (c2) => {
+          s.skillReadyAt = c2.cooldownReadyAt('skill')
+        })
+        particleMarker(ctx, 16, 'The Named Moment particles')
         const skillHit: MavHit = {
           path: ['skill', 'skillDmg'],
           tag: 'skill',
@@ -590,6 +753,8 @@ export const kit: KitModel = {
           // in Flamestrider form, E refreshes the form (press or hold)
           hitAt(ctx, s, 16, skillHit)
           gainPoints(ctx, s, maxPoints(cons))
+          s.recastCdEnd = ctx.now + SKILL_RECAST_CD
+          ctx.setCooldown('skillRecast', SKILL_RECAST_CD)
           return {
             cooldown,
             frames: 39,
@@ -607,6 +772,9 @@ export const kit: KitModel = {
           enterBike(ctx, s)
           hitAt(ctx, s, 16, skillHit)
           gainPoints(ctx, s, maxPoints(cons))
+          consUpdate(ctx, s)
+          s.recastCdEnd = ctx.now + 24 + SKILL_RECAST_CD
+          ctx.at(24, (c2) => c2.setCooldown('skillRecast', SKILL_RECAST_CD))
           return {
             cooldown,
             frames: 43,
@@ -616,6 +784,7 @@ export const kit: KitModel = {
         enterRing(ctx, s)
         hitAt(ctx, s, 16, skillHit)
         gainPoints(ctx, s, maxPoints(cons))
+        consUpdate(ctx, s)
         return {
           cooldown,
           frames: 28,
@@ -737,7 +906,11 @@ export const kit: KitModel = {
       case 'dash': {
         s.lastNormal = undefined
         if (flame) {
-          // Flamestrider Sprint: a hit 6 frames in, and 10 Nightsoul points
+          // Flamestrider Sprint: a hit 6 frames in, and 10 Nightsoul points.
+          // Following a Flamestrider Charged Attack (outside CDC lockout), dashing into CA can
+          // early charge-cancel at frame 6 (gcsim dash[charge_cancel=1]).
+          const chargeCancel =
+            previous?.kind === 'charged' && prevChargeCancelDash
           hitAt(ctx, s, 6, {
             path: ['skill', 'sprintDmg'],
             tag: 'other',
@@ -751,7 +924,7 @@ export const kit: KitModel = {
           return {
             frames: 24,
             framesInto: {
-              charged: 20,
+              charged: chargeCancel ? 6 : 20,
               normal: 18,
               skill: 20,
               burst: 20,
@@ -775,6 +948,7 @@ export const kit: KitModel = {
   },
   onHit(ctx, s: MavuikaState, hit) {
     const cons = ctx.constellation('Mavuika')
+    s.cons = cons
     settle(s, hit.t, cons)
     // Fighting Spirit: any member's normal attack hit gives 1.5 (0.1 s ICD)
     if (hit.tag === 'normal' && hit.t >= s.naIcd) {
@@ -785,9 +959,13 @@ export const kit: KitModel = {
     consUpdate(ctx, s)
   },
   onSwapOut(ctx, s: MavuikaState) {
-    // a swap ends the burst's buff, and her last normal no longer counts
-    settle(s, ctx.now, ctx.constellation('Mavuika'))
+    // a swap ends the burst's buff, cancels any pending CA finisher, and resets her last normal
+    const cons = ctx.constellation('Mavuika')
+    s.cons = cons
+    settle(s, ctx.now, cons)
     s.lastNormal = undefined
+    s.chargeToken++
+    s.canChargeCancelDash = false
     s.burstEnd = Math.min(s.burstEnd, ctx.now)
     s.burstStart = Math.min(s.burstStart, s.burstEnd)
     // leaving the field on the Flamestrider turns it back into the Ring (gcsim's onExitField:

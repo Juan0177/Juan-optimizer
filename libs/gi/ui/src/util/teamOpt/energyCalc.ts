@@ -1398,16 +1398,17 @@ export function energyFromRotation(
       hold: boolean
       particlesAt?: number
       option?: string
-    }[] = markers.length
-      ? markers.map((m) => ({
-          t: m.t,
-          hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
-          particlesAt: m.t,
-          option: m.path[2] || MARKER_OPTIONS[key],
-        }))
-      : (sim.skillUses ?? []).filter(
-          (u) => u.characterKey === key && u.t >= start && u.t < end
-        )
+    }[] =
+      markers.length || PARTICLE_MARKED.has(key)
+        ? markers.map((m) => ({
+            t: m.t,
+            hold: /^h/i.test(actionAt(m.t)?.text ?? ''),
+            particlesAt: m.t,
+            option: m.path[2] || MARKER_OPTIONS[key],
+          }))
+        : (sim.skillUses ?? []).filter(
+            (u) => u.characterKey === key && u.t >= start && u.t < end
+          )
     uses.sort((a, b) => a.t - b.t)
     // each use's first Skill hit (its particles' for most kits) before the next use
     const firstHits = uses.map((u, i) => {
@@ -1951,6 +1952,12 @@ const TURRET_MARKED = new Set<CharacterKey>([
   'Yaoyao',
   'Zhongli',
 ])
+/**
+ * Kits that mark every particle drop they make (`particleMarker`): 0 markers in the rotation
+ * means 0 particle-generating uses (do not fall back to Skill cooldown starts when e.g. Faruzan
+ * casts E without firing a Hurricane Arrow and has no C6 triggers).
+ */
+const PARTICLE_MARKED = new Set<CharacterKey>(['Faruzan'])
 /** The sheet option a kit's particle markers count as, when not its Skill's (one entry per line) */
 const MARKER_OPTIONS: Partial<Record<CharacterKey, string>> = {
   Flins: 'Manifest Flame hit',

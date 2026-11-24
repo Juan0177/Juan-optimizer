@@ -25,6 +25,7 @@ import {
 import type { ArtSetExclusion } from '@genshin-optimizer/gi/db'
 import {
   allArtifactSetExclusionKeys,
+  forcedSet,
   handleArtSetExclusion,
 } from '@genshin-optimizer/gi/db'
 import {
@@ -44,9 +45,9 @@ import { UIData } from '@genshin-optimizer/gi/uidata'
 import { setKeysByRarities } from '@genshin-optimizer/gi/util'
 import { constant } from '@genshin-optimizer/gi/wr'
 import { allNonstackBuffs } from '@genshin-optimizer/gi/wr-types'
+import AutoModeIcon from '@mui/icons-material/AutoMode'
 import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import AutoModeIcon from '@mui/icons-material/AutoMode'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -166,6 +167,10 @@ export default function ArtifactSetConfig({
   )
   const allowed2 = configurableSetKeys.filter((k) => !isExcluded(k, 2))
   const allowed4 = configurableSetKeys.filter((k) => !isExcluded(k, 4))
+  const forced = forcedSet(
+    artSetExclusion,
+    new Set(database.arts.values.map((a) => a.setKey))
+  )
 
   const condCountBySet = useMemo(
     () =>
@@ -237,6 +242,18 @@ export default function ArtifactSetConfig({
                 label={t('artSetConfig.summary.twoPc')}
                 value={describe(allowed2)}
               />
+              {!!artSetExclusion.twoTwo?.length && (
+                <SummaryRow
+                  label={t('artSetConfig.shapes.twoTwo', '2-piece + 2-piece')}
+                  value={t('artSetConfig.summary.mixedNone')}
+                />
+              )}
+              {!!artSetExclusion.mixed?.length && (
+                <SummaryRow
+                  label={t('artSetConfig.shapes.mixed', 'Mixed pieces')}
+                  value={t('artSetConfig.summary.mixedNone')}
+                />
+              )}
               <SummaryRow
                 label={t('artSetConfig.summary.effects')}
                 value={
@@ -246,6 +263,13 @@ export default function ArtifactSetConfig({
                 }
               />
             </Box>
+            {forced && (
+              <Typography variant="caption" color="text.secondary">
+                {t('artSetConfig.summary.forced', {
+                  name: t(`artifactNames_gen:${forced}`),
+                })}
+              </Typography>
+            )}
           </CardContent>
         </CardThemed>
       )}
@@ -415,9 +439,27 @@ function SetConfigDialog({
     },
     [artSetExclusion, saveExclusion]
   )
+  // (every other set off: every build wears 4 of its pieces)
   const onlyThis4 = useCallback(
-    (setKey: ArtifactSetKey) => setAll(4, true, setKey),
-    [setAll]
+    (setKey: ArtifactSetKey) =>
+      saveExclusion(
+        Object.fromEntries(
+          configurableSetKeys
+            .filter((other) => other !== setKey)
+            .map((other) => [other, [2, 4]])
+        ) as ArtSetExclusion
+      ),
+    [saveExclusion]
+  )
+  // a build shape allowed or not (both off: every build wears 4 pieces of a set)
+  const setShapeRule = useCallback(
+    (key: 'twoTwo' | 'mixed', on: boolean) => {
+      const next = deepClone(artSetExclusion)
+      if (on) delete next[key]
+      else next[key] = [2, 4]
+      saveExclusion(next)
+    },
+    [artSetExclusion, saveExclusion]
   )
   // the basic view: a set used (both its bonuses allowed) or not (neither)
   const useSets = useCallback(
@@ -435,6 +477,10 @@ function SetConfigDialog({
   const useSet = useCallback(
     (setKey: ArtifactSetKey, use: boolean) => useSets([setKey], use),
     [useSets]
+  )
+  const forced = forcedSet(
+    artSetExclusion,
+    new Set(database.arts.values.map((a) => a.setKey))
   )
   const used = configurableSetKeys.filter(
     (k) => (artSetExclusion[k as keyof ArtSetExclusion]?.length ?? 0) < 2
@@ -619,6 +665,43 @@ function SetConfigDialog({
         </Tooltip>
       </Box>
 
+      {advanced && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 2,
+            rowGap: 0.5,
+            px: { xs: 2, sm: 3 },
+            py: 1,
+            borderBottom: hairline,
+          }}
+        >
+          <Typography sx={{ ...type.label, color: 'text.secondary' }}>
+            {t('artSetConfig.shapes.label', 'Builds may have')}
+          </Typography>
+          <ShapeSwitch
+            label={t('artSetConfig.shapes.twoTwo', '2-piece + 2-piece')}
+            tip={t(
+              'artSetConfig.shapes.twoTwoTip',
+              'Two 2-piece bonuses: 2+2+1 and 3+2 builds'
+            )}
+            on={!artSetExclusion.twoTwo?.length}
+            onChange={(on) => setShapeRule('twoTwo', on)}
+          />
+          <ShapeSwitch
+            label={t('artSetConfig.shapes.mixed', 'Mixed pieces')}
+            tip={t(
+              'artSetConfig.shapes.mixedTip',
+              'Pieces whose set no other piece has: 2-piece + 3 mixed, 3-piece + 2 mixed and 5 mixed builds'
+            )}
+            on={!artSetExclusion.mixed?.length}
+            onChange={(on) => setShapeRule('mixed', on)}
+          />
+        </Box>
+      )}
+
       {/* One row per set */}
       <Box role="list" sx={{ containerType: 'inline-size' }}>
         {shownSets.map(({ setKey, slotCount, slotsOwned, pieces }) => (
@@ -673,17 +756,21 @@ function SetConfigDialog({
         }}
       >
         <Typography sx={{ ...type.label, ...numSx }}>
-          {advanced
-            ? t('artSetConfig.footer.summary', {
-                four: allowed4,
-                two: allowed2,
-                total,
+          {forced
+            ? t('artSetConfig.summary.forced', {
+                name: t(`artifactNames_gen:${forced}`),
               })
-            : t('artSetConfig.footer.using', {
-                defaultValue: 'Using {{count}} of {{total}} sets',
-                count: used,
-                total,
-              })}
+            : advanced
+              ? t('artSetConfig.footer.summary', {
+                  four: allowed4,
+                  two: allowed2,
+                  total,
+                })
+              : t('artSetConfig.footer.using', {
+                  defaultValue: 'Using {{count}} of {{total}} sets',
+                  count: used,
+                  total,
+                })}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
         {!!condTotal && (
@@ -1050,6 +1137,38 @@ const SetRow = memo(function SetRow({
     </Box>
   )
 })
+
+/** One of the build shapes the advanced view allows or not */
+function ShapeSwitch({
+  label,
+  tip,
+  on,
+  onChange,
+}: {
+  label: string
+  tip: string
+  on: boolean
+  onChange: (on: boolean) => void
+}) {
+  return (
+    <Tooltip title={tip}>
+      <Box
+        component="label"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 0.5,
+          cursor: 'pointer',
+          ...type.label,
+          '&:hover': { color: 'text.primary' },
+        }}
+      >
+        <Switch size="small" checked={on} onChange={() => onChange(!on)} />
+        {label}
+      </Box>
+    </Tooltip>
+  )
+}
 
 /** The basic view's one switch: the set used (its bonuses allowed) or not */
 function UseSwitch({

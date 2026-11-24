@@ -4,6 +4,21 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.40.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.40.2) (2026-11-24)
+
+### Improved
+
+- Team optimize is much faster with big inventories: Quick searches in full only the weapons that can come close to the best (Full still tries every one), and skips weaker copies of the same weapon.
+- Team optimize stops at once when a member's minimum, like Energy Recharge, can't be reached with any of their weapons, and says how far off it is.
+- A built-in Melt rotation for Mavuika, Citlali, Xilonen and Bennett.
+
+### Fixed
+
+- Artifact sets: turning every set off but one (or Only) now makes every build wear 4 pieces of it, instead of still allowing mixed sets.
+- Mavuika: tapping her Skill during Nightsoul's Blessing switches form without extra damage or particles, and a cancelled Charged Attack no longer fires its finisher later.
+- Faruzan makes particles only from Pressurized Collapses (5.5 s cooldown, C6 included), each going to whoever is on the field.
+- Citlali's Nightsoul points no longer go past 100.
+
 ## [v1.40.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.40.0) (2026-11-24)
 
 ### New

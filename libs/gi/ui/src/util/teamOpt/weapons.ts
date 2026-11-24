@@ -147,7 +147,29 @@ export function teamOptWeaponCandidates(
     const other = kept.get(copy)
     if (!other || moves(weapon) < moves(other)) kept.set(copy, weapon)
   }
-  const chosen = new Set(kept.values())
+  // A copy at most as high in level, ascension and refinement as another of the same weapon (same
+  // settings) is never better: its stats and passive only grow with them (an energy weapon's
+  // Energy too), so only the strongest is tried. Not when either is a teammate's: taking it hands
+  // that teammate this member's weapon. The member's own stays (its floor).
+  const settingsOf = (weapon: ICachedWeapon) =>
+    copyOf(weapon).split('|').slice(4).join('|')
+  const outranks = (a: ICachedWeapon, b: ICachedWeapon) =>
+    a.key === b.key &&
+    a !== b &&
+    a.level >= b.level &&
+    a.ascension >= b.ascension &&
+    a.refinement >= b.refinement &&
+    moves(a) < 3 &&
+    moves(b) < 3 &&
+    settingsOf(a) === settingsOf(b)
+  const copies = [...kept.values()]
+  const chosen = new Set(
+    copies.filter(
+      (weapon) =>
+        weapon.id === currentWeaponId ||
+        !copies.some((other) => outranks(other, weapon))
+    )
+  )
   return candidates.filter((weapon) => chosen.has(weapon))
 }
 
@@ -217,7 +239,7 @@ export const energyWeaponKeys: readonly WeaponKey[] = [
 export const isEnergyWeapon = (weaponKey: WeaponKey) =>
   energyWeaponKeys.includes(weaponKey)
 
-const isErFilter = (pathStr: string) => {
+export const isErFilter = (pathStr: string) => {
   try {
     return (JSON.parse(pathStr) as string[]).at(-1) === 'enerRech_'
   } catch {

@@ -1334,7 +1334,10 @@
       "buildsOwn": "Le mie build",
       "importedBuilds": "Esegue le build importate così come sono: il loro danno, cosa lo aumenta, la scheda della squadra. «Le mie build» ottimizza i tuoi pezzi.",
       "searchTip": "Rapida prima restringe ogni slot ai manufatti che possono contare, poi cerca esattamente tra quelli: molto più veloce, e manca di rado la build migliore (e di poco, quando succede). Completa cerca tra tutti i manufatti.",
-      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato."
+      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato.",
+      "requirementsUnmetWhy": "La ricerca usa i set, le statistiche principali, i livelli dei manufatti e le armi ammessi. Per cambiare un minimo manuale, apri la scheda Ottimizza del membro.",
+      "requirementsUnmet": "La ricerca non ha trovato una build che rispetti i minimi per",
+      "automaticErShortfall": "L'ER automatica prende l'obiettivo dal calcolatore di ER della squadra. Può cambiare con la rotazione e con le armi della squadra."
     },
     "runDialog": {
       "anyMain": "Qualsiasi",

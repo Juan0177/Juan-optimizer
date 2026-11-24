@@ -21,11 +21,16 @@ import type {
   StatFilters,
   TeamOpt,
 } from '@genshin-optimizer/gi/db'
+import { withForcedSet } from '@genshin-optimizer/gi/db'
 import {
   getArtSheet,
   type IConditionalValues,
 } from '@genshin-optimizer/gi/sheets'
-import { optimizerGpuSupported } from '@genshin-optimizer/gi/solver'
+import type { DynMinMax } from '@genshin-optimizer/gi/solver'
+import {
+  nodeRangeEvaluator,
+  optimizerGpuSupported,
+} from '@genshin-optimizer/gi/solver'
 import { getMainStatValue } from '@genshin-optimizer/gi/util'
 import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import {
@@ -39,11 +44,17 @@ import type { BonusStats, CharacterOverride, TeamOptMember } from './data'
 import { addBonusStats, teamOptBonusStats, teamOptMembers } from './data'
 import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
-import { type PrefilterProblem, quickPool, seedBuild } from './prefilter'
+import {
+  climbFrom,
+  type PrefilterProblem,
+  quickPool,
+  seedBuild,
+} from './prefilter'
 import type { SimGear } from './rotation'
 import {
   canWield,
   hasEnergyRequirement,
+  isErFilter,
   isWeaponExcludedFor,
   teamEnergyNeeds,
   teamOptUntickedWeapons,
@@ -255,6 +266,21 @@ export class TeamOptCancelled extends Error {
 }
 
 /**
+ * No team build meets every optimized member's minimums (their Optimize tab's requirements, the ER
+ * calculator's): per member, each one it misses, with the most a build of the artifacts and weapons
+ * it may use can reach (`value`)
+ */
+export class TeamOptRequirementsUnmet extends Error {
+  constructor(
+    readonly shortfalls: Partial<Record<CharacterKey, TeamOptShortfall[]>>
+  ) {
+    super(
+      `No build of the artifacts they may use meets the minimums of ${Object.keys(shortfalls).join(', ')}`
+    )
+  }
+}
+
+/**
  * No team build keeps every optimized member's set rules (their Optimize tab's set exclusions):
  * `characterKeys` are the members left outside them, even with the pieces the others hold
  */
@@ -409,7 +435,7 @@ export const allowedCounts = (rule: readonly number[] | undefined) =>
  * reads them: each set's piece count, and "rainbow" for the number of pieces whose set has one
  */
 export function meetsSetRules(
-  arts: readonly ICachedArtifact[],
+  arts: readonly Pick<ICachedArtifact, 'setKey'>[],
   exclusion: ArtSetExclusion | undefined
 ): boolean {
   if (!exclusion || !Object.keys(exclusion).length) return true
@@ -420,6 +446,14 @@ export function meetsSetRules(
     if (!allowedCounts(exclusion[setKey as keyof ArtSetExclusion]).includes(n))
       return false
   const singles = [...counts.values()].filter((n) => n === 1).length
+  // (two 2-piece bonuses turned off: a full build with no 4 pieces of a set needs 2+ mixed pieces)
+  if (
+    exclusion.twoTwo?.length &&
+    arts.length === 5 &&
+    Math.max(...counts.values()) < 4 &&
+    singles < 2
+  )
+    return false
   return allowedCounts(exclusion.rainbow).includes(singles)
 }
 
@@ -549,6 +583,14 @@ const bySlot = (
     artifactIds.find((id) => database.arts.get(id)?.slotKey === slotKey)
   )
 
+/** How many builds `arts` make (one piece per slot that has any) */
+const buildsOf = (arts: readonly ICachedArtifact[]) => {
+  const perSlot = new Map<string, number>()
+  for (const art of arts)
+    perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
+  return [...perSlot.values()].reduce((a, b) => a * b, 1)
+}
+
 /** A better build must beat the current one by more than this (relative) */
 const MIN_GAIN = 1e-6
 const beatOf = (floor: number) =>
@@ -643,6 +685,15 @@ export const TEAM_GPU_MIN_TOTAL = 2_000_000
  * problem, the browser compiling its shader), so the next ones overlap that instead of queuing
  */
 const PARALLEL_SOLVES = 3
+/**
+ * Quick searches a member's weapon in full when a climb with it from the member's build (one slot
+ * changed at a time) reaches within this share of the best weapon's climb, or ranks among the
+ * first `SCREEN_KEEP`; only for pools of at least this many builds (smaller searches are quick as
+ * they are)
+ */
+const SCREEN_SHARE = 0.05
+const SCREEN_KEEP = 3
+export const teamOptScreen = { fromBuilds: 1e8, fromBuildsCpu: 1e5 }
 /** Forgets every solve done (tests; or to measure a run from scratch) */
 /**
  * The page's turn between a run's heavy steps (a member's team data and formulas, built on the main
@@ -760,6 +811,8 @@ export async function optimizeTeam({
     found: 0,
     evals: 0,
     evalMs: 0,
+    /** Weapons Quick did not search in full */
+    screened: 0,
     t0: performance.now(),
   }
   /**
@@ -780,10 +833,7 @@ export async function optimizeTeam({
       values: (art) => teamOptArtValues(art, input.mainStatAssumptionLevel),
       allowed: (arts) => meetsSetRules(arts, input.exclusion),
     }
-    const perSlot = new Map<string, number>()
-    for (const art of input.arts)
-      perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
-    const space = [...perSlot.values()].reduce((a, b) => a * b, 1)
+    const space = buildsOf(input.arts)
     // (a search this small is fast as it is: narrowing it would cost more than it saves)
     const { arts, seed, refine } =
       quick &&
@@ -851,10 +901,7 @@ export async function optimizeTeam({
       return undefined
     }
     const prepared = await prepare(input, floor, quick)
-    const perSlot = new Map<string, number>()
-    for (const art of prepared.input.arts)
-      perSlot.set(art.slotKey, (perSlot.get(art.slotKey) ?? 0) + 1)
-    profile.space += [...perSlot.values()].reduce((a, b) => a * b, 1)
+    profile.space += buildsOf(prepared.input.arts)
     // the solver picks CPU or GPU itself: measured on Apple Silicon, starting members on the
     // CPU's branch and bound was slower than the GPU's sweep, even where the floor pruned it well
     const found = await solveRaw({
@@ -906,48 +953,20 @@ export async function optimizeTeam({
       solveMemo.delete(solveMemo.keys().next().value as string)
     return result
   }
-  /**
-   * When no build meets the requirements of `input`: the one closest to them. Each requirement in
-   * turn is raised as high as it goes (up to what it needs), the ones before it kept where they
-   * got; then the team's best build with all of them there. `reached`: how high each one got.
-   */
-  const closest = async (input: TeamOptSolveInput) => {
-    const kept: TeamOptSolveInput['constraints'] = []
-    const reached: number[] = []
-    for (const { value, min } of input.constraints) {
-      if (isCancelled()) throw new TeamOptCancelled()
-      const most = await solve({
-        ...input,
-        objective: value,
-        constraints: kept,
-      })
-      if (!most) return undefined
-      reached.push(Math.min(min, most.value))
-      // (a hair below: the build that got there must still count as getting there)
-      kept.push({
-        value,
-        min: Math.min(min, most.value - Math.abs(most.value) * MIN_GAIN),
-      })
-    }
-    if (isCancelled()) throw new TeamOptCancelled()
-    const result = await solve({ ...input, constraints: kept })
-    return result && { ...result, reached }
-  }
-  /** Whether requirements reached `a` are closer to what they need than `b` (1), as close (0), or not */
-  const closer = (a: readonly number[], b: readonly number[]) => {
-    for (const [j, value] of a.entries()) {
-      const tolerance = Math.abs(b[j]) * MIN_GAIN
-      if (value > b[j] + tolerance) return 1
-      if (value < b[j] - tolerance) return -1
-    }
-    return 0
-  }
   const members = teamOptMembers(database, teamId)
+  // (one set left on among the sets the inventory has pieces of: its 4 pieces in every build)
+  const owned = new Set<string>(database.arts.values.map((a) => a.setKey))
   const optConfigs = Object.fromEntries(
-    members.map((m) => [
-      m.characterKey,
-      database.optConfigs.get(m.teamChar.optConfigId),
-    ])
+    members.map((m) => {
+      const optConfig = database.optConfigs.get(m.teamChar.optConfigId)
+      return [
+        m.characterKey,
+        optConfig && {
+          ...optConfig,
+          artSetExclusion: withForcedSet(optConfig.artSetExclusion, owned),
+        },
+      ]
+    })
   ) as Partial<Record<CharacterKey, OptConfig>>
   const statFilters = Object.fromEntries(
     members.map((m) => [
@@ -1100,11 +1119,16 @@ export async function optimizeTeam({
       ])
     ) as TeamOpt['attacks']
   }
+  // (a state is evaluated once: several steps ask for the same one)
+  const evaluations = new Map<string, ReturnType<typeof evaluateInRaw>>()
   const evaluateIn = (s: TeamState) => {
+    const key = JSON.stringify([s.builds, s.weaponIds])
+    if (evaluations.has(key)) return evaluations.get(key)
     const t0 = performance.now()
     const result = evaluateInRaw(s)
     profile.evals++
     profile.evalMs += performance.now() - t0
+    evaluations.set(key, result)
     return result
   }
   const evaluateInRaw = (s: TeamState, shown = false) => {
@@ -1204,7 +1228,7 @@ export async function optimizeTeam({
     // constraints that do not depend on this member are what they are: nothing to optimize
     const constraints = nodes.constraints
       .filter(({ value }) => value.operation !== 'const')
-      .map(({ value, min }) => ({ value, min }))
+      .map(({ value, min, path }) => ({ value, min, path }))
     const unmetOthers = new Set(
       nodes.constraints
         .filter(
@@ -1254,26 +1278,190 @@ export async function optimizeTeam({
         keepsSetRules(characterKey, artsIn(before, characterKey))
     )
   /**
-   * A member's build in `s`: what it reaches of each of `problem`'s requirements (up to what they
-   * need, as `closest` counts it), and its value
+   * Each stat's range over the builds of `arts`: its lowest and highest in each slot, added up (a
+   * stat a piece lacks counts as 0)
    */
-  const reachedIn = (
+  const poolRanges = new WeakMap<readonly ICachedArtifact[], DynMinMax>()
+  const rangeOf = (arts: readonly ICachedArtifact[]) => {
+    let ranges = poolRanges.get(arts)
+    if (ranges) return ranges
+    ranges = {}
+    for (const slotKey of allArtifactSlotKeys) {
+      const pieces = arts
+        .filter((art) => art.slotKey === slotKey)
+        .map((art) => teamOptArtValues(art, mainStatAssumptionLevel))
+      for (const key of new Set(pieces.flatMap((v) => Object.keys(v)))) {
+        let min = Number.POSITIVE_INFINITY,
+          max = Number.NEGATIVE_INFINITY
+        for (const values of pieces) {
+          const v = values[key] ?? 0
+          if (v < min) min = v
+          if (v > max) max = v
+        }
+        const total = (ranges[key] ??= { min: 0, max: 0 })
+        total.min += min
+        total.max += max
+      }
+    }
+    poolRanges.set(arts, ranges)
+    return ranges
+  }
+  const rangeEvaluators = new WeakMap<
+    OptNode,
+    ReturnType<typeof nodeRangeEvaluator>
+  >()
+  /**
+   * Minimums against the pieces of `arts`: the most each can reach (at most: every stat at its best
+   * in each slot at once, as one formula of them), and whether every one can reach what it needs.
+   * One that cannot is out of reach for any build of them: there is nothing to search.
+   */
+  const ceilingsIn = (
+    constraints: readonly { value: OptNode; min: number }[],
+    arts: readonly ICachedArtifact[]
+  ) => {
+    const reads = rangeOf(arts)
+    const most = constraints.map(({ value }) => {
+      let evaluate = rangeEvaluators.get(value)
+      if (!evaluate)
+        rangeEvaluators.set(value, (evaluate = nodeRangeEvaluator([value])))
+      return evaluate(reads)[0].max
+    })
+    return {
+      most,
+      reachable: constraints.every(
+        ({ min }, j) => !(most[j] < min - Math.abs(min) * MIN_GAIN)
+      ),
+    }
+  }
+  /** Per member, its minimums at its last step: for each, the weapon that got closest to it */
+  const minimumNotes = new Map<CharacterKey, Map<string, TeamOptShortfall>>()
+  /** `notes` with `constraints`' ceilings (`most`) where they come closer to what they need */
+  const noteMinimums = (
+    notes: Map<string, TeamOptShortfall>,
+    constraints: readonly { min: number; path?: string[] }[],
+    most: readonly number[]
+  ) =>
+    constraints.forEach(({ min, path }, j) => {
+      if (!path) return
+      const key = path.join('.')
+      const was = notes.get(key)
+      if (!was || most[j] - min > was.value - was.min)
+        notes.set(key, { path, min, value: most[j] })
+    })
+  /** Whether the team's energy weapons may lower `characterKey`'s Energy Recharge minimum */
+  const erMayDrop = (characterKey: CharacterKey) =>
+    teamOpt.energySource === 'calculator' ||
+    Object.values(teamOpt.weaponEnergy).some(
+      (byMember) => (byMember?.[characterKey] ?? 0) > 0
+    )
+  /**
+   * A member's minimums with `weapon` (else its own), compiled alone: no damage, a fraction of a
+   * problem's work
+   */
+  const minimumsIn = (
     s: TeamState,
     characterKey: CharacterKey,
-    { objective, constraints }: Problem
+    weapon?: ICachedWeapon
   ) => {
-    const [value, ...values] = evaluateNodes(
-      [objective, ...constraints.map(({ value }) => value)],
-      artsIn(s, characterKey),
-      mainStatAssumptionLevel
-    )
-    return {
-      value,
-      reached: constraints.map(({ min }, j) => Math.min(min, values[j])),
-    }
+    const weapons = weaponsIn(s, characterKey, weapon)
+    const nodes = teamRotationNodes(database, teamId, gender, {
+      dyn: characterKey,
+      arts: fixedArtsIn(s, characterKey),
+      attacks: {},
+      mainStatAssumptionLevel,
+      statFilters: teamStatFilters(statFilters, weapons, teamOpt),
+      weapons,
+      onField: teamOpt.onField,
+      bonusStats,
+    })
+    return (nodes?.constraints ?? [])
+      .filter(
+        (c) => c.characterKey === characterKey && c.value.operation !== 'const'
+      )
+      .map(({ value, min, path }) => ({ value, min, path }))
   }
   const isFull = (s: TeamState, characterKey: CharacterKey) =>
     allArtifactSlotKeys.every((slotKey) => s.builds[characterKey]?.[slotKey])
+  /** The member's build in `s`, in slot order */
+  const slotsIn = (s: TeamState, characterKey: CharacterKey) =>
+    allArtifactSlotKeys.map((slotKey) => {
+      const id = s.builds[characterKey]?.[slotKey]
+      return id ? database.arts.get(id) : undefined
+    })
+  const prefilterProblem = (
+    characterKey: CharacterKey,
+    pool: readonly ICachedArtifact[],
+    { objective, constraints }: Problem
+  ): PrefilterProblem => ({
+    arts: pool,
+    objective,
+    constraints,
+    values: (art) => teamOptArtValues(art, mainStatAssumptionLevel),
+    allowed: (build) =>
+      meetsSetRules(build, optConfigs[characterKey]?.artSetExclusion),
+  })
+  /**
+   * The best a climb (`climbFrom`) reaches from the member's build in `s` and from each of `starts`
+   * (a build in slot order); not `feasible` when none meets the requirements
+   */
+  const climbIn = async (
+    s: TeamState,
+    characterKey: CharacterKey,
+    pool: readonly ICachedArtifact[],
+    problem: Problem,
+    starts: readonly (ICachedArtifact | undefined)[][] = []
+  ) => {
+    const climbed = await Promise.all(
+      [slotsIn(s, characterKey), ...starts].map((start) =>
+        climbFrom(prefilterProblem(characterKey, pool, problem), start)
+      )
+    )
+    return climbed.reduce((a, b) =>
+      b.feasible && (!a.feasible || b.value > a.value) ? b : a
+    )
+  }
+  /**
+   * What `member` is worth to the team in `s` with `weapon` by a climb from its build, plus what
+   * each of `lowered` (teammates whose Energy Recharge requirement the weapon lowers) gains by a
+   * climb from its own. `Infinity` when a climb meets no requirement: no estimate.
+   */
+  const estimateIn = async (
+    s: TeamState,
+    member: TeamOptMember,
+    weapon: ICachedWeapon,
+    problem: Problem,
+    pool: readonly ICachedArtifact[],
+    lowered: readonly TeamOptMember[],
+    starts: readonly (ICachedArtifact | undefined)[][]
+  ) => {
+    const own = await climbIn(s, member.characterKey, pool, problem, starts)
+    if (!own.feasible) return Number.POSITIVE_INFINITY
+    let estimate = own.value
+    if (!lowered.length) return estimate
+    const next = copyState(s)
+    assign(next, member, undefined, weapon.id)
+    for (const other of lowered) {
+      const ck = other.characterKey
+      const optConfig = optConfigs[ck]
+      const theirs = problemIn(next, ck)
+      if (!optConfig || !theirs) return Number.POSITIVE_INFINITY
+      const taken = new Set(
+        members
+          .filter((m) => m.characterKey !== ck)
+          .flatMap((m) => Object.values(next.builds[m.characterKey] ?? {}))
+          .filter(notEmpty)
+      )
+      const climbed = await climbIn(
+        next,
+        ck,
+        teamOptPool(allArts, other, optConfig, teamOpt, teamLocations, taken),
+        theirs
+      )
+      if (!climbed.feasible) return Number.POSITIVE_INFINITY
+      estimate += Math.max(0, climbed.value - currentIn(next, ck, theirs).value)
+    }
+    return estimate
+  }
   /**
    * Gives `member` a build and/or a weapon in `s`. A piece it takes from another member is
    * swapped, as equipping does: that member gets this one's previous piece of the slot (if it may
@@ -1379,13 +1567,10 @@ export async function optimizeTeam({
         exclusion: optConfig.artSetExclusion,
         mainStatAssumptionLevel,
       }
-      let result = await solve(input)
-      // No build meets its requirements, and what it has does not either (or has an empty slot,
-      // a piece went to a member before it): the build closest to them, not a hole
-      if (!result && problem.constraints.length && (!full || !current.ok)) {
-        if (isCancelled()) throw new TeamOptCancelled()
-        result = await closest({ ...input, constraints: problem.constraints })
-      }
+      // (a minimum none of these pieces can reach: nothing to search)
+      const result = ceilingsIn(problem.constraints, input.arts).reachable
+        ? await solve(input)
+        : undefined
       if (isCancelled()) throw new TeamOptCancelled()
       if (result && result.value >= beat) assign(s, member, result.artifactIds)
       else if (!current.ok && !unmetBefore.has(characterKey)) return undefined
@@ -1461,12 +1646,19 @@ export async function optimizeTeam({
       ({ characterKey }) =>
         !keepsSetRules(characterKey, artsIn(s, characterKey))
     )
+  /** The optimized members whose build in `s` misses one of their minimums */
+  const belowMinimumsIn = (s: TeamState) => {
+    const unmet = evaluateIn(s)?.unmet ?? {}
+    return order.filter(({ characterKey }) => unmet[characterKey]?.length)
+  }
   /**
-   * Set rules come before damage. A member left outside its set rules (no build of the free pieces
-   * keeps to them, say another member holds the only pieces of its set) takes, among everything but
-   * the kept members' pieces, its best build that keeps to them; the others get its previous pieces,
-   * as equipping does, and settle again in the next round. A repair stands when no other member's
-   * set rules break, so each one leaves fewer members outside them.
+   * Set rules and minimums come before damage. A member left outside its set rules (no build of the
+   * free pieces keeps to them, say another member holds the only pieces of its set), or below its
+   * minimums (another member holds the pieces that reach them), takes, among everything but the
+   * kept members' pieces, its best build that keeps to them; the others get its previous pieces, as
+   * equipping does, and settle again in the next round. A repair stands when no other member's set
+   * rules break, so each one leaves fewer members outside them (and, for minimums, no more outside
+   * their set rules).
    */
   const repairIn = async (s: TeamState, round: number) => {
     let repaired = false
@@ -1479,8 +1671,9 @@ export async function optimizeTeam({
     for (const [i, member] of order.entries()) {
       const { characterKey } = member
       const optConfig = optConfigs[characterKey]
-      if (!optConfig || keepsSetRules(characterKey, artsIn(s, characterKey)))
-        continue
+      if (!optConfig) continue
+      const outside = !keepsSetRules(characterKey, artsIn(s, characterKey))
+      if (!outside && !belowMinimumsIn(s).includes(member)) continue
       if (isCancelled()) throw new TeamOptCancelled()
       await onStep?.({
         round,
@@ -1508,16 +1701,24 @@ export async function optimizeTeam({
         exclusion: optConfig.artSetExclusion,
         mainStatAssumptionLevel,
       }
-      // its requirements too if a build meets them, else its set rules alone (the next round gives
-      // it the closest build to them that keeps to the rules)
+      // its minimums too if a build reaches them (none of these pieces can: nothing to search),
+      // else its set rules alone (the run then stops below its minimums)
+      const reaches = ceilingsIn(problem.constraints, input.arts).reachable
       const result =
-        (await solve(input)) ?? (await solve({ ...input, constraints: [] }))
+        (reaches ? await solve(input) : undefined) ??
+        (outside ? await solve({ ...input, constraints: [] }) : undefined)
       if (isCancelled()) throw new TeamOptCancelled()
       if (!result) continue
       const next = copyState(s)
       assign(next, member, result.artifactIds)
       if (breaksSetRules(s, next)) continue
-      if (outsideSetRules(next).length >= outsideSetRules(s).length) continue
+      if (
+        outside
+          ? outsideSetRules(next).length >= outsideSetRules(s).length
+          : outsideSetRules(next).length > outsideSetRules(s).length ||
+            belowMinimumsIn(next).length >= belowMinimumsIn(s).length
+      )
+        continue
       s.builds = next.builds
       s.weaponIds = next.weaponIds
       repaired = true
@@ -1777,11 +1978,7 @@ export async function optimizeTeam({
           ))
         /** What a new build must beat: the current one, then the best found so far */
         let floor = Number.NEGATIVE_INFINITY
-        /** The weapons with which no build meets the member's requirements (their solves) */
-        const unreachable: {
-          weapon: ICachedWeapon
-          input: TeamOptSolveInput
-        }[] = []
+        let bestRepairCount = 0
         let best:
           | {
               value: number
@@ -1800,7 +1997,10 @@ export async function optimizeTeam({
           weapon: ICachedWeapon
           problem: ReturnType<typeof problemIn>
           current: number | undefined
+          /** Its minimums are within reach of these pieces (else there is nothing to search) */
+          reachable: boolean
         }[] = []
+        const notes = new Map<string, TeamOptShortfall>()
         for (const weapon of weaponChoices) {
           // (one problem at a time: several in a row froze a phone for a second)
           await pageTurn()
@@ -1814,8 +2014,17 @@ export async function optimizeTeam({
             )
               current = own.value
           }
-          candidates.push({ weapon, problem, current })
+          const ceilings = problem && ceilingsIn(problem.constraints, arts)
+          if (problem && ceilings)
+            noteMinimums(notes, problem.constraints, ceilings.most)
+          candidates.push({
+            weapon,
+            problem,
+            current,
+            reachable: !!ceilings?.reachable,
+          })
         }
+        minimumNotes.set(characterKey, notes)
         const currentOf = (c: (typeof candidates)[number]) =>
           c.current ?? Number.NEGATIVE_INFINITY
         candidates.sort(
@@ -1843,7 +2052,7 @@ export async function optimizeTeam({
          */
         const plan = (c: (typeof candidates)[number]) => {
           const { weapon, problem } = c
-          if (!problem) return undefined
+          if (!problem || !c.reachable) return undefined
           // The other members whose Energy Recharge requirement this weapon changes (it is an
           // energy weapon, or it replaces one)
           const needWith = teamEnergyNeeds(
@@ -1881,6 +2090,97 @@ export async function optimizeTeam({
           return { problem, needWith, affected }
         }
         const plans = candidates.map(plan)
+        /** Whether a weapon only raises teammates' Energy Recharge requirements */
+        const raisesOthers = ({
+          affected,
+          needWith,
+        }: NonNullable<(typeof plans)[number]>) =>
+          affected.length > 0 &&
+          !affected.some(
+            (m) => (needWith[m.characterKey] ?? 0) < (need[m.characterKey] ?? 0)
+          )
+        // Quick: only the weapons worth it are searched in full (`SCREEN_SHARE`); an energy weapon
+        // counts what the teammates whose requirement it lowers gain too
+        if (
+          !teamOpt.fullSearch &&
+          plans.filter(notEmpty).length > SCREEN_KEEP &&
+          buildsOf(arts) >=
+            (optimizerGpuSupported()
+              ? teamOptScreen.fromBuilds
+              : teamOptScreen.fromBuildsCpu)
+        ) {
+          // (a good build found fast for the first weapon: the climbs start from it too, as the
+          // member's own build may be far from its best)
+          const first = plans.find(notEmpty)
+          const seed =
+            first &&
+            (await seedBuild(
+              prefilterProblem(characterKey, arts, first.problem)
+            ))
+          const starts = seed
+            ? [
+                allArtifactSlotKeys.map((slotKey) =>
+                  seed.arts.find((art) => art.slotKey === slotKey)
+                ),
+              ]
+            : []
+          const estimates: number[] = []
+          for (const [w, p] of plans.entries()) {
+            if (!p) continue
+            if (isCancelled()) throw new TeamOptCancelled()
+            await pageTurn()
+            const lowered = p.affected.filter(
+              (m) =>
+                (p.needWith[m.characterKey] ?? 0) < (need[m.characterKey] ?? 0)
+            )
+            estimates[w] = await estimateIn(
+              state,
+              member,
+              candidates[w].weapon,
+              p.problem,
+              arts,
+              lowered,
+              starts
+            )
+          }
+          const ranked = (raising: boolean) =>
+            plans
+              .flatMap((p, w) =>
+                p &&
+                Number.isFinite(estimates[w]) &&
+                raisesOthers(p) === raising
+                  ? [w]
+                  : []
+              )
+              .sort((a, b) => estimates[b] - estimates[a])
+          const below = (w: number, top: number) =>
+            estimates[w] < top - Math.abs(top) * SCREEN_SHARE
+          const drop = (w: number) => {
+            plans[w] = undefined
+            profile.screened++
+          }
+          const comparable = ranked(false)
+          const top = comparable.length ? estimates[comparable[0]] : Number.NaN
+          for (const [rank, w] of comparable.entries())
+            if (
+              rank >= SCREEN_KEEP &&
+              candidates[w].weapon.id !== currentWeaponId &&
+              !plans[w]?.affected.some(
+                ({ characterKey: key }) =>
+                  unmetBefore().has(key) &&
+                  (plans[w]?.needWith[key] ?? 0) < (need[key] ?? 0)
+              ) &&
+              below(w, top)
+            )
+              drop(w)
+          // (one that raises teammates' requirements counts them as met: held to the others' best
+          // too, and ranked among its kind)
+          const raising = ranked(true)
+          const topRaising = raising.length ? estimates[raising[0]] : Number.NaN
+          for (const [rank, w] of raising.entries())
+            if (below(w, top) || (rank >= SCREEN_KEEP && below(w, topRaising)))
+              drop(w)
+        }
         // only a build that beats the floor is of interest: it also prunes the search
         const inputFor = (
           { objective, constraints }: Problem,
@@ -1914,17 +2214,20 @@ export async function optimizeTeam({
             early.set(j, solving)
           }
         }
+        // (progress counts the weapons searched)
+        const searched = plans.filter(notEmpty).length
+        let searching = 0
         for (const [w, { weapon }] of candidates.entries()) {
           if (isCancelled()) throw new TeamOptCancelled()
-          const weaponStep: TeamOptStep =
-            weaponChoices.length > 1
-              ? { ...step, weapon: w + 1, weapons: weaponChoices.length }
-              : step
-          if (weaponChoices.length > 1 && w) await onStep?.(weaponStep)
           const p = plans[w]
           if (!p) continue
+          searching++
+          const weaponStep: TeamOptStep =
+            searched > 1
+              ? { ...step, weapon: searching, weapons: searched }
+              : step
+          if (searching > 1) await onStep?.(weaponStep)
           const { problem, needWith, affected } = p
-          const { constraints } = problem
           const beat = beatOf(floor)
           const input = inputFor(problem, beat)
           if (affected.length) {
@@ -1956,19 +2259,34 @@ export async function optimizeTeam({
             )
             const evaluation = reoptimized && evaluateIn(reoptimized)
             if (
-              evaluation &&
-              evaluation.total >= beat &&
-              !members.some(
+              !evaluation ||
+              members.some(
                 (m) =>
                   evaluation.unmet[m.characterKey]?.length &&
                   !unmetBefore().has(m.characterKey)
               )
+            )
+              continue
+            // An energy weapon can make a teammate's build viable even when the
+            // team deals less damage. Keep that repair ahead of damage gains.
+            const repaired = order.filter(
+              (m) =>
+                m !== member &&
+                unmetBefore().has(m.characterKey) &&
+                !evaluation.unmet[m.characterKey]?.length
+            ).length
+            if (repaired && breaksSetRules(state, next)) continue
+            if (
+              (repaired === bestRepairCount && evaluation.total >= beat) ||
+              repaired > bestRepairCount
             ) {
+              bestRepairCount = repaired
               best = { value: evaluation.total, weaponId: weapon.id, next }
-              floor = Math.max(floor, evaluation.total)
+              floor = evaluation.total
             }
             continue
           }
+          if (bestRepairCount) continue
           startEarly(w)
           const result = await (early.get(w) ?? solve(input))
           early.delete(w)
@@ -1977,55 +2295,9 @@ export async function optimizeTeam({
             best = { ...result, weaponId: weapon.id }
             floor = Math.max(floor, result.value)
           }
-          if (!result && constraints.length) unreachable.push({ weapon, input })
         }
-        // No build meets its requirements, whatever the weapon, and what it has does not either (or
-        // has an empty slot: a piece went to a member before it). It gets the build and weapon
-        // closest to them, then the team's best with that (the result tells how far it is), rather
-        // than what it held: a weapon kept for no reason, or a hole.
-        if (!best && !Number.isFinite(floor)) {
-          let closestFound:
-            | {
-                value: number
-                artifactIds: string[]
-                weaponId: string
-                reached: number[]
-              }
-            | undefined
-          for (const { weapon, input } of unreachable) {
-            const found = await closest(input)
-            if (!found) continue
-            const order = closestFound
-              ? closer(found.reached, closestFound.reached)
-              : 1
-            if (
-              order > 0 ||
-              (order === 0 &&
-                !!closestFound &&
-                found.value >= beatOf(closestFound.value))
-            )
-              closestFound = {
-                value: found.value,
-                artifactIds: found.artifactIds,
-                weaponId: weapon.id,
-                reached: found.reached,
-              }
-          }
-          // what it has (whole, with its weapon still free) is as close and worth as much: it stays,
-          // the step changes nothing
-          const own = full
-            ? candidates.find((c) => c.weapon.id === currentWeaponId)?.problem
-            : undefined
-          const ownNow = own && reachedIn(state, characterKey, own)
-          const keepsOwn =
-            !!ownNow &&
-            !!closestFound &&
-            keepsSetRules(characterKey, artsIn(state, characterKey)) &&
-            closer(ownNow.reached, closestFound.reached) >= 0 &&
-            ownNow.value >=
-              closestFound.value - Math.abs(closestFound.value) * MIN_GAIN
-          if (closestFound && !keepsOwn) best = closestFound
-        }
+        // (no build reaches its minimums, whatever the weapon: it keeps what it has; a repair may
+        // free the pieces that do, else the run stops below them)
         if (best) {
           if (best.next) {
             state.builds = best.next.builds
@@ -2044,6 +2316,56 @@ export async function optimizeTeam({
       if (!changed) break
     }
   }
+  // Minimums come first. An Energy Recharge minimum no build can reach, whatever the weapon (every
+  // stat at its best in each slot, among every piece the member may use), stops the run before any
+  // search, unless the team's energy weapons may lower it (the ER calculator's, or a weapon's Energy
+  // for the member): the run sees those.
+  const outOfReach: Partial<Record<CharacterKey, TeamOptShortfall[]>> = {}
+  for (const member of order) {
+    const { characterKey } = member
+    const optConfig = optConfigs[characterKey]
+    if (
+      !optConfig ||
+      erMayDrop(characterKey) ||
+      !hasEnergyRequirement(statFilters[characterKey])
+    )
+      continue
+    const pool = teamOptPool(
+      allArts,
+      member,
+      optConfig,
+      teamOpt,
+      teamLocations,
+      new Set()
+    )
+    const own = start.weaponIds[characterKey] ?? member.weaponId
+    const weapons = teamOpt.optimizeWeapons
+      ? teamOptWeaponCandidates(
+          database,
+          member,
+          own,
+          teamOpt,
+          teamLocations,
+          new Set()
+        )
+      : []
+    const notes = new Map<string, TeamOptShortfall>()
+    for (const weapon of weapons.length ? weapons : [undefined]) {
+      if (isCancelled()) throw new TeamOptCancelled()
+      await pageTurn()
+      const minimums = minimumsIn(start, characterKey, weapon).filter(
+        ({ path }) => isErFilter(JSON.stringify(path))
+      )
+      noteMinimums(notes, minimums, ceilingsIn(minimums, pool).most)
+    }
+    const missed = [...notes.values()].filter(
+      ({ value, min }) => value < min - Math.abs(min) * MIN_GAIN
+    )
+    if (missed.length) outOfReach[characterKey] = missed
+  }
+  if (Object.keys(outOfReach).length)
+    throw new TeamOptRequirementsUnmet(outOfReach)
+
   await runRounds()
   // The provisional takes can leave the team below where it started: a bigger damage dealer's
   // step counts the later members' builds as they were, and those then lose what it took (say
@@ -2097,6 +2419,23 @@ export async function optimizeTeam({
   }
   const after = evaluateIn(state)
   if (!after) return undefined
+  // A member below its minimums is no result: the run stops, saying how far each one is (the most
+  // a build of its pieces reaches, when that falls short too; else what the run left it with)
+  const belowMinimums = order.filter((m) => after.unmet[m.characterKey]?.length)
+  if (belowMinimums.length)
+    throw new TeamOptRequirementsUnmet(
+      Object.fromEntries(
+        belowMinimums.map(({ characterKey }) => [
+          characterKey,
+          (after.shortfalls?.[characterKey] ?? []).map((shortfall) => {
+            const note = minimumNotes
+              .get(characterKey)
+              ?.get(shortfall.path.join('.'))
+            return note && note.value < note.min ? note : shortfall
+          }),
+        ])
+      )
+    )
 
   // The next best team builds: each optimized member's next best builds (the others as they are,
   // their pieces out of reach), by the team's damage. One member changes at a time; one that
@@ -2507,8 +2846,8 @@ export async function optimizeTeam({
         await breathe()
         if (cancelled()) return undefined
         const searched = await search(s, member, weapon, set)
-        const option =
-          searched?.found && optionOf(unmetNow, weapon, searched, set)
+        // Keep an eligible set visible even if its builds miss a requirement.
+        const option = optionOf(unmetNow, weapon, searched, set)
         if (option) sets.push(option)
       }
       return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }

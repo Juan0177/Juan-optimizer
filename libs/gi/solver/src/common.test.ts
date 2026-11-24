@@ -190,6 +190,7 @@ describe('artSetPerm with slot availability', () => {
     const r = random()
     if (r < 0.3) exclusion.rainbow = [2, 4]
     else if (r < 0.45) exclusion.rainbow = [4]
+    if (trial % 3 === 0) exclusion.twoTwo = [2, 4]
     const artSets = new Set(pool.filter(() => random() < 0.85))
     // each slot has a random part of the sets
     const available = objKeyMap(

@@ -416,7 +416,7 @@
       "preparing": "Preparing…",
       "alternatives": "Next best builds",
       "buildsLabel": "Builds",
-      "searchTip": "Quick first narrows each slot to the artifacts that can matter, then searches those exactly: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact.",
+      "searchTip": "Quick narrows each slot to the artifacts that can matter and searches in full only the weapons a quick estimate puts near the best: much faster, and it rarely misses the best build (by a little when it does). Full searches every artifact and every weapon.",
       "round": "Round {{round}}",
       "setup": "setting up the search",
       "searching": "searching {{total}} builds",
@@ -432,7 +432,10 @@
       "allTc": "Every member uses a TC build, which Team optimize keeps as it is. Switch members to their equipped builds, or use KQM Theorycrafting.",
       "allSwitchedOff": "Every member is switched off: turn members on in Optimize team.",
       "share": "searching · {{percent}}%",
-      "keepNeedsOriginal": "Run the original first: this version keeps its teammates' gear from the original's result."
+      "keepNeedsOriginal": "Run the original first: this version keeps its teammates' gear from the original's result.",
+      "requirementsUnmet": "The search did not find a build that meets the minimums for",
+      "requirementsUnmetWhy": "The search uses the allowed sets, main stats, artifact levels and weapons. To change a manual minimum, open the member’s Optimize tab.",
+      "automaticErShortfall": "Automatic ER gets its target from the team’s ER calculator. It can change with the rotation and the team’s weapons."
     },
     "slot": {
       "circlet": "Circlet",
