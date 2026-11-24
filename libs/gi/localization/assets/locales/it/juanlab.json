@@ -139,6 +139,46 @@
     },
     "entries": [
       {
+        "date": "2026-11-24",
+        "title": "Aggiornamento a Stellar Optimizer 1.39",
+        "summary": "Arrivano le versioni da 1.37.3 a 1.39.0 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Ottimizza squadra: migliori build e quota di danno** nei risultati, come nella scheda KQM: la squadra migliore, poi le build migliori che cambiano l’arma o il set di un membro.",
+              "**Analisi di un membro**: dopo un’esecuzione scegli un membro per mettere in classifica le sue altre armi e set di manufatti in base al danno della squadra.",
+              "**Effetti dell’equipaggiamento automatici**: Ottimizza squadra attiva gli effetti di armi e set che non hai impostato e temporizza gli effetti dei set dalla rotazione. Quello che imposti tu ha sempre la precedenza."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Finestra Ottimizza squadra ridisegnata**: una riga per membro con set, effetti dei set, statistiche principali e ER minima; scegli Build migliore o Tutte le build invece di un numero.",
+              "**Finestra dei set di manufatti più semplice**: un interruttore per set, effetti in ogni riga, 2 pz/4 pz in Avanzate; le build miste vengono sempre considerate.",
+              "**Quota di danno**: il danno stellare e quello lunare restano separati dal resto del danno del loro elemento.",
+              "**Intestazione dei risultati più pulita**, e niente salti mentre le altre build vengono classificate."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Yae Miko**: il suo attacco caricato colpisce una volta per lancio (veniva contato due volte).",
+              "**Danica C2**: il suo primo ingresso in campo di uno scontro gioca Will to Protect, come nel gioco.",
+              "**Valeriy**: la torretta del Tripudio spara il numero giusto di proiettili, al momento giusto.",
+              "**Arlecchino** (bonus della Maschera e C1 richiedono il 30% di Patto di vita) e **Citlali** (bonus della C1 solo al membro attivo).",
+              "**Timeline della rotazione**: cliccare un Tripudio il cui colpo arriva dopo l’azione successiva del membro apre quel colpo."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi sono in italiano."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-23",
         "title": "Aggiornamento a Stellar Optimizer 1.37",
         "summary": "Arrivano le versioni da 1.37.0 a 1.37.2 di Stellar Optimizer.",

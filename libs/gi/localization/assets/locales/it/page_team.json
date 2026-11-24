@@ -683,7 +683,7 @@
         "def": "DIF"
       },
       "copyPieces": "{{n}} pz",
-      "shareTip": "Come si divide il danno della squadra: per chi lo infligge e per l'elemento inflitto (il danno di una reazione conta come il suo elemento, Carica lunare come Electro).",
+      "shareTip": "Come si divide il danno della squadra: per chi lo infligge e per l'elemento inflitto (il danno di una reazione conta come il suo elemento; il danno stellare e quello lunare sono separati dal resto del danno del loro elemento).",
       "shareTitle": "Quota di danno",
       "shareMembers": "Per membro",
       "shareElements": "Per elemento",
@@ -777,7 +777,8 @@
       "weaponLockedRanking": "Arma bloccata in «Scegli le armi»: per questo membro non se ne prova un'altra.",
       "weaponNoMatch": "Nessuna arma corrisponde",
       "weaponNotTicked": "Non spuntata",
-      "weaponSearch": "Cerca armi"
+      "weaponSearch": "Cerca armi",
+      "shareStellar": "{{element}} stellare"
     },
     "card": {
       "button": "Card della squadra",
@@ -870,7 +871,15 @@
       "equipWarnMove": "Equipaggia le nuove build su {{count}} membri. Manufatti e armi vengono tolti a chi li ha ora, e un membro con una build salvata passa alla build equipaggiata.",
       "asItIs": "Eseguita così com'è: nessuna build è stata cercata.",
       "tcShort": "TC",
-      "tcTip": "Una build di theorycrafting: eseguita così com'è"
+      "tcTip": "Una build di theorycrafting: eseguita così com'è",
+      "staleShort": "Impostazioni precedenti",
+      "noChangeShort": "Già la migliore",
+      "asItIsShort": "Eseguita così com'è",
+      "equippedShort": "Equipaggiata",
+      "ranked": "Altre build classificate",
+      "rankingTip": "Questa squadra e il suo danno sono definitivi. Le altre armi e gli altri set di ogni membro sono ancora in classifica: le migliori build e le classifiche dell'equipaggiamento si completano quando hanno finito.",
+      "belowNowShort": "Sotto l'attuale · {{value}}",
+      "ranking": "Classifica delle altre build · {{done}} di {{total}}"
     },
     "editor": {
       "close": "Chiudi",
@@ -944,7 +953,11 @@
       "noAura": "Nessuna",
       "statUnused": "Non usata da questo colpo",
       "allHitsCount_one": "il suo {{hits}} colpo",
-      "allHitsCount_other": "tutti i suoi {{hits}} colpi"
+      "allHitsCount_other": "tutti i suoi {{hits}} colpi",
+      "auto": "Auto",
+      "autoTip": "Impostato in automatico per questa rotazione e squadra. Scegli uno stato sull'arma o sui manufatti del personaggio per usarne un altro.",
+      "useAuto": "Usa auto",
+      "useAutoTip": "Impostato a mano. Lascia invece che sia Ottimizza squadra a deciderlo per questa rotazione e squadra."
     },
     "weapons": {
       "teamEnergyHint": "Quanta Ricarica di energia in meno serve a ogni membro mentre qualcuno in squadra impugna quest'arma.",
@@ -986,7 +999,8 @@
       "pickNone": "Nessuna",
       "settings": "Impostazioni",
       "swap": "Cambia arma",
-      "teamEnergy": "ER necessaria"
+      "teamEnergy": "ER necessaria",
+      "count": "{{allowed}}/{{total}} armi"
     },
     "writer": {
       "addOpener": "Aggiungi un'apertura solo per la prima rotazione",
@@ -1065,7 +1079,10 @@
         "dashReady": "Vagabondo: scatto solo con Discesa, altrimenti un attacco caricato",
         "otherwise": "Solo se pronta, altrimenti le azioni dopo «/» (senza spazi in mezzo)",
         "plunge": "Attacco in picchiata alto o basso (P da sola: quello solito del personaggio). HP[collision] aggiunge il colpo di discesa; HP[collision=0.5] lo conta su metà delle picchiate",
-        "walk": "Camminata di 1 frame · 11 frame (un'azione: l'abilità successiva di Tartaglia è quella in camminata)"
+        "walk": "Camminata di 1 frame · 11 frame (un'azione: l'abilità successiva di Tartaglia è quella in camminata)",
+        "movement": "Dopo qualsiasi azione: i metri che il membro attivo percorre con essa, contando ogni attacco normale (il movement di gcsim). Lo usa solo la Bilancia dell'energia cinetica di Iansan: 0,67 punti Spirito notturno a metro mentre un altro membro è in campo, 6 m ad azione se non scritto",
+        "normalFrom": "La sequenza che continua: dal 3° al 4° colpo, dopo un'azione che la mantiene (N2 dopo un'Abilità ricomincia)",
+        "stacks": "Beidou: tieni premuto per 1 carica di Polaris (0,8 s ciascuna; hE da solo tiene per 2, il bonus massimo)"
       },
       "handEdited": "Attacchi modificati",
       "handEditedTip": "Gli attacchi sono stati modificati a mano dopo che la rotazione è stata giocata. Cambiare la rotazione o quante rotazioni contano la rigioca e sostituisce queste modifiche (per qualche secondo si può annullare).",
@@ -1137,7 +1154,13 @@
       "noMixedPc": "Set misti: niente {{pieces}} pz",
       "optimize": "Ottimizza i manufatti",
       "requirements": "Requisiti",
-      "setsAllowed": "Ammessi"
+      "setsAllowed": "Ammessi",
+      "sets": "Set",
+      "effects": "Effetti dei set",
+      "effectsTimedHint": "La tua rotazione attiva e disattiva gli effetti dei set a ogni colpo, per ogni set che un'esecuzione prova. Gli interruttori contano solo per i pochi che non può temporizzare.",
+      "effectsTimed": "Dalla rotazione",
+      "effectsNone": "Nessun effetto attivo",
+      "setsFew": "{{count}} set"
     },
     "onField": {
       "info": "Chi è in campo durante i colpi della rotazione, a meno che un attacco non dica altro (aprilo per cambiarlo). I buff per il personaggio attivo, come il DAN da CRIT della C1 di Mitya, vanno a lui, e quelli per i personaggi fuori campo agli altri. Nel resto del sito si considera in campo il primo membro della squadra.",
@@ -1168,7 +1191,10 @@
       "showMore_one": "Mostra altri ({{count}} rimasto)",
       "showMore_other": "Mostra altri ({{count}} rimasti)",
       "slot": "Slot",
-      "title": "Inventario"
+      "title": "Inventario",
+      "excludedNone": "Nessuno",
+      "off": "No",
+      "othersCount": "{{allowed}}/{{total}} personaggi"
     },
     "requirements": {
       "mainStats": "Statistiche principali",
@@ -1224,7 +1250,7 @@
       "allMembersKept": "Ogni membro resta com'è: non c'è niente da ottimizzare.",
       "alternatives": "Build alternative migliori",
       "builds": "{{done}} di {{total}} build",
-      "buildsInfo": "Quante build della squadra trovare: la migliore, poi le successive migliori (ognuna cambia i manufatti di un membro).",
+      "buildsInfo": "Build migliore: solo la build migliore della squadra, la più veloce. Tutte le build: anche le successive migliori (fino a 4 in più, ognuna cambia i manufatti di un membro), e ci vuole di più.",
       "buildsLabel": "Build",
       "button": "Ottimizza la squadra",
       "cancel": "Annulla",
@@ -1251,7 +1277,9 @@
       "buildsOwn": "Le mie build",
       "importedBuilds": "Esegue le build importate così come sono: il loro danno, cosa lo aumenta, la scheda della squadra. «Le mie build» ottimizza i tuoi pezzi.",
       "searchTip": "Rapida prima restringe ogni slot ai manufatti che possono contare, poi cerca esattamente tra quelli: molto più veloce, e manca di rado la build migliore (e di poco, quando succede). Completa cerca tra tutti i manufatti.",
-      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato."
+      "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato.",
+      "bestBuild": "Build migliore",
+      "allBuilds": "Tutte le build"
     },
     "runDialog": {
       "anyMain": "Qualsiasi",
@@ -1270,7 +1298,12 @@
       "emptyInventory": "Aggiungi o importa dei manufatti prima di ottimizzare la squadra.",
       "erNone": "Nessuno",
       "incompleteInventory": "Ad almeno un membro manca un manufatto ammesso per uno slot. Modifica i filtri dell'inventario o tieni la build attuale di quel membro.",
-      "asItIs": "Ogni membro è sulla sua build importata: «Avvia» calcola la squadra così com'è. Scegli «Le mie build» nella pagina per ottimizzare i tuoi pezzi."
+      "asItIs": "Ogni membro è sulla sua build importata: «Avvia» calcola la squadra così com'è. Scegli «Le mie build» nella pagina per ottimizzare i tuoi pezzi.",
+      "memberHead": "Membro",
+      "emptySlotsFix": "Attiva i manufatti degli altri personaggi o ammetti livelli più bassi.",
+      "noArtifacts": "Nessun manufatto tra cui scegliere",
+      "mainStatsEdit": "Scegli le statistiche principali",
+      "emptySlotsShort": "Nessun {{slots}} tra cui scegliere"
     },
     "sens": {
       "hideNoGain": "Nascondi queste righe",
@@ -1663,6 +1696,13 @@
       "keepTeammatesHint": "I membri in comune con l'originale tengono le sue build (arma, set, statistiche): si ricalcolano solo quelli cambiati. Esegui prima l'originale.",
       "allRun": "Tutte eseguite con queste impostazioni",
       "runEvery": "Esegui tutte"
+    },
+    "inspect": {
+      "bestSet": "Il migliore di qualsiasi set",
+      "compareTip": "Scegli un set per riordinare le armi, o un'arma per riordinare i set. I suoi manufatti vengono cercati di nuovo nel tuo inventario. I compagni tengono le build di questa esecuzione.",
+      "showingPicks": "Con l'equipaggiamento che hai scelto",
+      "reset": "Ripristina",
+      "picksShort": "Le tue scelte"
     }
   },
   "tcNoOptimize": {
