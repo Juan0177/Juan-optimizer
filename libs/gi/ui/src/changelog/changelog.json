@@ -1,5 +1,20 @@
 [
   {
+    "version": "1.40.2",
+    "date": "2026-11-24",
+    "improved": [
+      "Team optimize is much faster with big inventories: Quick searches in full only the weapons that can come close to the best (Full still tries every one), and skips weaker copies of the same weapon.",
+      "Team optimize stops at once when a member's minimum, like Energy Recharge, can't be reached with any of their weapons, and says how far off it is.",
+      "A built-in Melt rotation for Mavuika, Citlali, Xilonen and Bennett."
+    ],
+    "fixed": [
+      "Artifact sets: turning every set off but one (or Only) now makes every build wear 4 pieces of it, instead of still allowing mixed sets.",
+      "Mavuika: tapping her Skill during Nightsoul's Blessing switches form without extra damage or particles, and a cancelled Charged Attack no longer fires its finisher later.",
+      "Faruzan makes particles only from Pressurized Collapses (5.5 s cooldown, C6 included), each going to whoever is on the field.",
+      "Citlali's Nightsoul points no longer go past 100."
+    ]
+  },
+  {
     "version": "1.40.1",
     "date": "2026-11-24"
   },
