@@ -1238,3 +1238,72 @@ describe('energy inputs: optional and alternative Bursts auto-default to every 2
     expect(filled.members.Columbina!.burstEvery).toBe(1)
   })
 })
+
+describe('energy inputs: Faruzan Pressurized Collapse particles (5.5 s ICD) and C6 catching', () => {
+  it('counts C6 off-field Pressurized Collapse drops even when Faruzan only casts Q, crediting each drop to the on-fielder', () => {
+    const team: CharacterKey[] = ['Faruzan', 'Durin', 'Nicole', 'Xiao']
+    const sim = playTeam(
+      team,
+      'Faruzan Q -> Durin E E Q -> Nicole E N1 -> Xiao E E Q 12[J HP[collision]] -> Faruzan',
+      { Faruzan: 6 }
+    )
+    const energy = energyFromRotation(sim, team, 2, { Faruzan: 6 })
+    const f = energy.members.Faruzan!
+    expect(usesByOption(energy, 'Faruzan')).toEqual({ 'Aimed Shot': 3 })
+    expect(f.catchBy).toBe('Xiao')
+    expect(f.catchShares?.Xiao).toBeGreaterThan(50)
+    // Every particle marker is >= 5.5 s (331 f) apart
+    const markers = particleMarkers(sim, 'Faruzan')
+    expect(markers).toHaveLength(6)
+    for (let i = 1; i < markers.length; i++)
+      expect(markers[i].t - markers[i - 1].t).toBeGreaterThanOrEqual(331)
+  })
+
+  it('splits catching between Faruzan (first drop) and the on-field DPS (C6 drops) in Wanderer teams', () => {
+    const team: CharacterKey[] = ['Furina', 'Bennett', 'Faruzan', 'Wanderer']
+    const sim = playTeam(
+      team,
+      'Furina E D Q -> Bennett Q E -> Faruzan Q E -> Wanderer N2 Q N1 E N1 CA 4[N2 D N2 CA] E? -> Furina',
+      { Faruzan: 6, Bennett: 6 }
+    )
+    const energy = energyFromRotation(sim, team, 2, {
+      Faruzan: 6,
+      Bennett: 6,
+    })
+    const f = energy.members.Faruzan!
+    expect(usesByOption(energy, 'Faruzan')).toEqual({ 'Aimed Shot': 3 })
+    expect(f.catchBy).toBe('Wanderer')
+    expect(f.catchShares).toEqual({ Faruzan: 33.3, Wanderer: 66.7 })
+    expect(f.funnelShare).toBe(67)
+  })
+
+  it('gives 0 particles at C0 when E is cast without a Hurricane Arrow CA, and 1 Aimed Shot when E CA is used', () => {
+    const team: CharacterKey[] = ['Faruzan', 'Bennett', 'Wanderer']
+    const noCa = energyFromRotation(
+      playTeam(
+        team,
+        'Faruzan E Q -> Bennett E Q -> Wanderer E N3 N3 N3 -> Faruzan',
+        { Faruzan: 0 }
+      ),
+      team,
+      2,
+      { Faruzan: 0 }
+    )
+    expect(usesByOption(noCa, 'Faruzan')).toEqual({})
+    expect(noCa.members.Faruzan!.skillUses).toBe(0)
+
+    const withCa = energyFromRotation(
+      playTeam(
+        team,
+        'Faruzan E CA Q -> Bennett E Q -> Wanderer E N3 N3 N3 -> Faruzan',
+        { Faruzan: 0 }
+      ),
+      team,
+      2,
+      { Faruzan: 0 }
+    )
+    expect(usesByOption(withCa, 'Faruzan')).toEqual({ 'Aimed Shot': 1 })
+    expect(withCa.members.Faruzan!.catchBy).toBe('Faruzan')
+    expect(withCa.members.Faruzan!.catchShares).toEqual({ Faruzan: 100 })
+  })
+})

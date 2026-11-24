@@ -55,6 +55,7 @@ describe('buildAllowed matches the builds artSetPerm enumerates', () => {
           ])
       if (rand() < 0.5)
         exclusion.rainbow = pick([[2], [4], [2, 4]]) as (2 | 4)[]
+      if (rand() < 0.4) exclusion.twoTwo = [2, 4]
 
       // the builds artSetPerm's filters cover (they must be disjoint, so count duplicates)
       const key = (b: ArtifactBuildData[]) =>
@@ -104,5 +105,65 @@ describe('buildAllowed matches the builds artSetPerm enumerates', () => {
               }
     }
     expect(compared).toBeGreaterThan(50_000)
+  })
+})
+
+describe('build shapes: two 2-piece bonuses and mixed pieces turned off', () => {
+  const [A, B, C, D, E] = pool
+  const shapes: Record<string, (ArtifactSetKey | undefined)[]> = {
+    '5': [A, A, A, A, A],
+    '4+1': [A, A, A, A, B],
+    '3+2': [A, A, A, B, B],
+    '2+2+1': [A, A, B, B, C],
+    '3+1+1': [A, A, A, B, C],
+    '2+1+1+1': [A, A, B, C, D],
+    '1+1+1+1+1': [A, B, C, D, E],
+    // (an empty slot counts as one more set, as the solvers have it)
+    '4+empty': [A, A, A, A, undefined],
+    '2+2+empty': [A, A, B, B, undefined],
+    '3+empty+empty': [A, A, A, undefined, undefined],
+  }
+  const allowed = (exclusion: ArtSetExclusion) =>
+    Object.entries(shapes)
+      .filter(([, sets]) => buildAllowed(sets, exclusionMasks(exclusion)))
+      .map(([name]) => name)
+  const all = Object.keys(shapes)
+  test('both allowed: every shape', () => {
+    expect(allowed({})).toEqual(all)
+  })
+  test('no two 2-piece bonuses: 3+2 and 2+2+1 (and their partial forms) go', () => {
+    expect(allowed({ twoTwo: [2, 4] })).toEqual(
+      all.filter(
+        (n) => !['3+2', '2+2+1', '2+2+empty', '3+empty+empty'].includes(n)
+      )
+    )
+  })
+  test('no mixed pieces: 2 or more pieces of sets no other piece has go', () => {
+    expect(allowed({ rainbow: [2, 4] })).toEqual([
+      '5',
+      '4+1',
+      '3+2',
+      '2+2+1',
+      '4+empty',
+      '2+2+empty',
+      '3+empty+empty',
+    ])
+  })
+  test('both off: only builds with 4 pieces of a set', () => {
+    expect(allowed({ twoTwo: [2, 4], rainbow: [2, 4] })).toEqual([
+      '5',
+      '4+1',
+      '4+empty',
+    ])
+  })
+  test('with a set rule too: no 2+2, and A at most 3 pieces', () => {
+    expect(allowed({ twoTwo: [2, 4], [A]: [4] } as ArtSetExclusion)).toEqual([
+      '3+1+1',
+      '2+1+1+1',
+      '1+1+1+1+1',
+    ])
+  })
+  test('the switches are not sets', () => {
+    expect(exclusionMasks({ twoTwo: [2, 4], mixed: [2, 4] }).sets).toEqual({})
   })
 })

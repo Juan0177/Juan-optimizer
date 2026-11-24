@@ -265,7 +265,8 @@ function pruneOrder(
    * effects that decrease enemy resistance (which is monotonically decreasing) does not violate this assumption
    * as set effects are not handled here.
    */
-  const allowRainbow = !exclusion.rainbow?.length,
+  // (a shape rule: a piece switched to another set may change the build's shape)
+  const allowRainbow = !exclusion.rainbow?.length && !exclusion.twoTwo?.length,
     keys = Object.keys(arts.base)
   const noSwitchIn = new Set(
     Object.entries(exclusion)
@@ -833,6 +834,10 @@ export function* artSetPerm(
    *   - It then fills the rainbow slots, e.g., slot C of AABBC while ensuring the exclusion rule of each sets
    */
   const allowedRainbows = exclusionToAllowed(exclusion.rainbow)
+  // (with no set at 4 pieces: two 2-piece bonuses turned off leave only 2 or more mixed pieces)
+  const fourlessRainbows = exclusion.twoTwo?.length
+    ? new Set([...allowedRainbows].filter((n) => n >= 2))
+    : allowedRainbows
   let shapes: number[][] = []
   function populateShapes(
     current: number[],
@@ -840,7 +845,11 @@ export function* artSetPerm(
     rainbows: number[]
   ) {
     if (current.length === 5) {
-      if (allowedRainbows.has(rainbows.length)) shapes.push(current)
+      const most = Math.max(
+        ...current.map((g) => current.filter((h) => h === g).length)
+      )
+      if ((most >= 4 ? allowedRainbows : fourlessRainbows).has(rainbows.length))
+        shapes.push(current)
       return
     }
     for (const i of list)

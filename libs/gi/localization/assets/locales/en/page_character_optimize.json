@@ -159,7 +159,8 @@
       "mixedOnly5": "5 mixed only",
       "effectsOn_one": "{{count}} on",
       "effectsOn_other": "{{count}} on",
-      "effectsNone": "None on"
+      "effectsNone": "None on",
+      "forced": "Every build wears 4 pieces of {{name}}"
     },
     "mixed": {
       "title": "Mixed pieces",
@@ -169,6 +170,13 @@
       "fiveAlias": "Also called 5-rainbow",
       "legendSet": "same set",
       "legendMixed": "any set"
+    },
+    "shapes": {
+      "label": "Builds may have",
+      "twoTwo": "2-piece + 2-piece",
+      "twoTwoTip": "Two 2-piece bonuses: 2+2+1 and 3+2 builds",
+      "mixed": "Mixed pieces",
+      "mixedTip": "Pieces whose set no other piece has: 2-piece + 3 mixed, 3-piece + 2 mixed and 5 mixed builds"
     },
     "search": "Search sets",
     "view": {
@@ -195,7 +203,7 @@
       "effectOf": "{{num}}-piece effect",
       "excludedNote": "not used, the {{num}}-piece bonus is excluded",
       "more": "More options for {{name}}",
-      "only4": "Use only this set for 4-piece"
+      "only4": "Use only this set: every build wears 4 of its pieces"
     },
     "empty": "No sets match.",
     "footer": {

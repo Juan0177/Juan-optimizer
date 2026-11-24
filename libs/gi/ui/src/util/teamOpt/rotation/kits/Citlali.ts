@@ -239,7 +239,7 @@ export const kit: KitModel = {
         // 18 frames: Itzpapa's Nightsoul Blessing (20 s), +24 points; Opal Fire may start
         ctx.at(18, (c2) => {
           settle(s, c2.now, c2.constellation('Citlali') >= 6)
-          s.points += 24
+          s.points = Math.min(MAX_POINTS, s.points + 24)
           s.blessingEnd = c2.now + 20 * 60
           tryFire(c2, s)
         })

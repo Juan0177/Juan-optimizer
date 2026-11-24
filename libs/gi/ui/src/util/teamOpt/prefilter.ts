@@ -228,6 +228,20 @@ function toSeed({
   }
 }
 
+/**
+ * What `problem` reaches from `start` (a build in slot order) by changing one slot at a time: a
+ * quick estimate of what it is worth near a known build
+ */
+export async function climbFrom(
+  problem: PrefilterProblem,
+  start: readonly (ICachedArtifact | undefined)[]
+): Promise<SeedBuild> {
+  const bySlot = allArtifactSlotKeys.map((slot) =>
+    problem.arts.filter((a) => a.slotKey === slot)
+  )
+  return toSeed(await climb(bySlot, [...start], evaluator(problem), pacer()))
+}
+
 /** The artifacts with the highest `score`, `count` of them (all when there are no more) */
 function topBy<T>(items: readonly T[], count: number, score: (t: T) => number) {
   if (items.length <= count) return items

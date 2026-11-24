@@ -38,6 +38,7 @@ import type { TeamOptResult, TeamOptSolver } from '../'
 import {
   evaluateTeamRotation,
   optimizeTeam,
+  TeamOptRequirementsUnmet,
   teamOptArtValues,
   teamOptBonusStats,
   teamSensitivity,
@@ -332,7 +333,7 @@ describe('hand-checked team: Fischl + Xiangling (Overloaded)', () => {
     expect(result.after.unmet[xiangling]).toBeUndefined()
   })
 
-  it('flags a requirement no build meets, and still fills every slot', async () => {
+  it('stops below a minimum no build reaches, saying how far', async () => {
     const { database, teamId, teamCharIds } = overloadTeam()
     database.optConfigs.set(
       database.teamChars.get(teamCharIds[xiangling]!)!.optConfigId,
@@ -344,10 +345,16 @@ describe('hand-checked team: Fischl + Xiangling (Overloaded)', () => {
         },
       }
     )
-    const result = await run(database, teamId, teamOpt)
-    expect(result.after.unmet[xiangling]?.length).toBe(1)
-    for (const ck of [fischl, xiangling])
-      expect(Object.values(result.builds[ck]!).every(Boolean)).toBe(true)
+    const error = await run(database, teamId, teamOpt).catch(
+      (e) => e as TeamOptRequirementsUnmet
+    )
+    expect(error).toBeInstanceOf(TeamOptRequirementsUnmet)
+    const missed = error.shortfalls[xiangling]
+    expect(missed).toHaveLength(1)
+    expect(missed![0].path).toEqual(['basic', 'eleMas'])
+    expect(missed![0].min).toBe(5000)
+    expect(missed![0].value).toBeLessThan(5000)
+    expect(missed![0].value).toBeGreaterThan(0)
   })
 
   it('counts fractional hits, extra buffs and an attack’s own stats by hand', () => {
