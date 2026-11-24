@@ -131,6 +131,21 @@ export function teamRotationSearchSetup(
     gear,
     overrides,
     ...(attackStates?.length ? { attackStates: [...attackStates] } : {}),
-    sim: { gear: own.gear, overrides: {} },
+    // (the build's sets and weapons as candidates: their effects timed as the run timed them)
+    sim: {
+      gear: Object.fromEntries(
+        own.members.map((k) => [
+          k,
+          {
+            ...own.gear[k],
+            candidates: {
+              sets: Object.keys(gear[k]?.sets ?? {}),
+              weapons: gear[k]?.weapon ? [gear[k]!.weapon!] : [],
+            },
+          },
+        ])
+      ),
+      overrides: {},
+    },
   }
 }

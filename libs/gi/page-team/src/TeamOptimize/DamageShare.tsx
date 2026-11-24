@@ -84,6 +84,30 @@ export function attackElement(
   return REACTION_ELEMENT[variant] ?? 'physical'
 }
 
+/** Stellar or Lunar damage (its Lunar reaction), else undefined: they get their own slices */
+function attackKind(
+  teamData: TeamData | undefined,
+  characterKey: CharacterKey,
+  attack: TeamOptAttack
+): { kind: 'stellar' } | { kind: 'lunar'; reaction: string } | undefined {
+  const data = teamData?.[characterKey]?.target
+  const node = data
+    ? (objPathValue(data.getDisplay(), attack.path) as CalcResult | undefined)
+    : undefined
+  const variant = node?.info
+    ? (resolveInfo(node.info).variant as string | undefined)
+    : undefined
+  if (variant?.startsWith('stellar')) return { kind: 'stellar' }
+  if (variant?.startsWith('lunar')) return { kind: 'lunar', reaction: variant }
+  return undefined
+}
+
+const LUNAR_NAMES: Record<string, string> = {
+  lunarcharged: 'Lunar-Charged',
+  lunarbloom: 'Lunar-Bloom',
+  lunarcrystallize: 'Lunar-Crystallize',
+}
+
 /**
  * The rings' colours: each element's hue from the game, its lightness set for the dark panel and
  * spread so that a team's elements stay apart (also for red-green colour blindness), and a second
@@ -142,7 +166,15 @@ export function DamageShare({
     })
   }, [members, evaluation, t])
   const byElement = useMemo<Slice[]>(() => {
-    const sums = new Map<string, number>()
+    // (Stellar and Lunar damage apart from their element's other damage: Cryo and Stellar Cryo)
+    const sums = new Map<
+      string,
+      { element: string; value: number; label: () => string; shade: number }
+    >()
+    const elementName = (element: string) =>
+      t(`sheet_gen:element.${element}`, {
+        defaultValue: element[0].toUpperCase() + element.slice(1),
+      })
     for (const ck of members) {
       const list = attacks[ck] ?? []
       // (an evaluation without its attacks' damage: no element split)
@@ -151,17 +183,38 @@ export function DamageShare({
         const value = damage[i] ?? 0
         if (value <= 0) return
         const element = attackElement(teamData, ck, attack)
-        sums.set(element, (sums.get(element) ?? 0) + value)
+        const kind = attackKind(teamData, ck, attack)
+        const key = !kind
+          ? element
+          : kind.kind === 'stellar'
+            ? `stellar-${element}`
+            : kind.reaction
+        const slice = sums.get(key) ?? {
+          element,
+          value: 0,
+          shade: kind ? 1 : 0,
+          label: () =>
+            !kind
+              ? elementName(element)
+              : kind.kind === 'stellar'
+                ? t('teamOpt.kqm.shareStellar', {
+                    defaultValue: 'Stellar {{element}}',
+                    element: elementName(element),
+                  })
+                : t(`teamOpt.kqm.shareLunar.${kind.reaction}`, {
+                    defaultValue: LUNAR_NAMES[kind.reaction] ?? kind.reaction,
+                  }),
+        }
+        slice.value += value
+        sums.set(key, slice)
       })
     }
     return [...sums]
-      .sort((a, b) => b[1] - a[1])
-      .map(([element, value]) => ({
-        key: element,
-        label: t(`sheet_gen:element.${element}`, {
-          defaultValue: element[0].toUpperCase() + element.slice(1),
-        }),
-        color: chartColor(element),
+      .sort((a, b) => b[1].value - a[1].value)
+      .map(([key, { element, value, label, shade }]) => ({
+        key,
+        label: label(),
+        color: chartColor(element, shade),
         value,
         icon: (
           <ElementIcon
@@ -186,7 +239,7 @@ export function DamageShare({
       <SubsectionTitle
         info={t(
           'teamOpt.kqm.shareTip',
-          'How the team’s damage splits: by who deals it, and by the element it deals (a reaction’s damage counts as its element, Lunar-Charged as Electro).'
+          'How the team’s damage splits: by who deals it, and by the element it deals (a reaction’s damage counts as its element; Stellar and Lunar damage are apart from their element’s other damage).'
         )}
       >
         {t('teamOpt.kqm.share', 'Damage share')}

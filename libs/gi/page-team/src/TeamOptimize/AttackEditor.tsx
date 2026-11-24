@@ -85,7 +85,7 @@ import { useTranslation } from 'react-i18next'
 import { AttackName, useAttackInfo } from './AttackName'
 import { AuraChips } from './auras'
 import type { BuffEffect, TeamBuff } from './buffs'
-import { buffEffects, useAttackTeamData } from './buffs'
+import { buffEffects, clearToAuto, useAttackTeamData } from './buffs'
 import { EffectText, useBuffSource } from './buffText'
 import { extraStatKeys } from './ExtraBuffs'
 import { formatHits } from './format'
@@ -1472,6 +1472,7 @@ function BuffRow({
   onChange: (attack: TeamOptAttack) => void
 }) {
   const { t } = useTranslation('page_team')
+  const database = useDatabase()
   const figures = useContext(AttackFiguresContext)
   const readOnly = useContext(AttackReadOnlyContext)
   const limit = limitOf(attack, buff.ref)
@@ -1606,6 +1607,56 @@ function BuffRow({
             {source(buff)}
           </Typography>
         </SuspenseTooltip>
+        {buff.auto && (
+          <Tooltip
+            arrow
+            title={t(
+              'teamOpt.editor.autoTip',
+              'Set automatically for this rotation and team. Choose a state on the character’s weapon or artifacts to use another one.'
+            )}
+          >
+            <Typography
+              component="span"
+              sx={{
+                fontSize: 11,
+                fontWeight: 600,
+                lineHeight: '17px',
+                px: 0.75,
+                borderRadius: 1,
+                color: 'text.secondary',
+                bgcolor: 'action.hover',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {t('teamOpt.editor.auto', 'Auto')}
+            </Typography>
+          </Tooltip>
+        )}
+        {buff.overridesAuto && !readOnly && (
+          <Tooltip
+            arrow
+            title={t(
+              'teamOpt.editor.useAutoTip',
+              'Set by hand. Let Team optimize decide it for this rotation and team instead.'
+            )}
+          >
+            <Button
+              size="small"
+              variant="text"
+              onClick={() => clearToAuto(database, buff)}
+              sx={{
+                minWidth: 0,
+                px: 0.75,
+                py: 0,
+                fontSize: 11,
+                lineHeight: '17px',
+                textTransform: 'none',
+              }}
+            >
+              {t('teamOpt.editor.useAuto', 'Use auto')}
+            </Button>
+          </Tooltip>
+        )}
         {effects === undefined ? (
           <Skeleton variant="rounded" width={120} height={18} />
         ) : (

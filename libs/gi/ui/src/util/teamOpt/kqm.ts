@@ -74,13 +74,11 @@ import type { TeamDataOverrides, TeamOptMember } from './data'
 import { teamOptBonusStats, teamOptMembers } from './data'
 import {
   calculateEnergyRecharge,
-  energyCalcData,
   isCalcEnergyWeapon,
   isFavonius,
   syncEnergyCalculator,
 } from './energyCalc'
-import type { ItemConditionalCtx } from './itemConditionals'
-import { isStellarAttackPath, itemConditionals } from './itemConditionals'
+import { itemConditionals } from './itemConditionals'
 import type { KqmBuiltProblem } from './kqmBuild'
 import { kqmProblemBuilder, releaseKqmBuilders } from './kqmBuildPool'
 import {
@@ -99,7 +97,7 @@ import type { RotationCalculation, SimGear } from './rotation/types'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
-import { tabEnemyFreezeImmune } from './writtenRotation'
+import { memberCtx } from './ruleConditionals'
 
 /*
  * KQM mode: every optimized member gets KQM Standards artifacts instead of the inventory's, and
@@ -948,56 +946,6 @@ function memberSpace(member: TeamOptMember, kqm: TeamOptKqm): MemberSpace {
   }
 }
 
-/** The rule-based conditionals for a member (what it does in the rotation, its team's elements) */
-function memberCtx(
-  database: ArtCharDatabase,
-  teamId: string,
-  characterKey: CharacterKey,
-  teamOpt: Pick<TeamOpt, 'attacks'>
-): ItemConditionalCtx {
-  const members = teamOptMembers(database, teamId)
-  const attacks = new Set<ItemConditionalCtx['attacks'][number]>()
-  const kinds = ['normal', 'charged', 'plunging', 'skill', 'burst'] as const
-  let ownStellar = false
-  let ownLunar = false
-  for (const attack of teamOpt.attacks[characterKey] ?? []) {
-    const text = attack.path.join('.').toLowerCase()
-    for (const kind of kinds) if (text.includes(kind)) attacks.add(kind)
-    if (isStellarAttackPath(attack.path)) ownStellar = true
-    if (text.includes('lunar')) ownLunar = true
-  }
-  const elements = members.map((m) => getCharEle(m.characterKey))
-  const auras = new Set<string>(
-    elements.filter((e) => e !== 'anemo' && e !== 'geo')
-  )
-  for (const attacks of Object.values(teamOpt.attacks))
-    for (const attack of attacks ?? [])
-      if (isStellarAttackPath(attack.path)) auras.add('stellar')
-  const own = getCharEle(characterKey)
-  return {
-    attacks: [...attacks],
-    auras: [...auras],
-    freezeImmune: tabEnemyFreezeImmune(database, teamId, true),
-    otherElements: new Set(elements.filter((e) => e !== own)).size,
-    element: own,
-    ownStellar,
-    zeroEnergy: energyCalcData[characterKey]?.burstCost === 0,
-    burstCost: energyCalcData[characterKey]?.burstCost,
-    elements: [...new Set(elements)],
-    ownLunar,
-    lowHp: characterKey === 'HuTao',
-    chainBreaker: members.filter(
-      (m) =>
-        getCharEle(m.characterKey) !== own ||
-        getCharStat(m.characterKey).region === 'natlan'
-    ).length,
-    teamEnergy: members.reduce(
-      (n, m) => n + (energyCalcData[m.characterKey]?.burstCost ?? 0),
-      0
-    ),
-  }
-}
-
 /**
  * Per member, how much less Energy Recharge it needs with the team's weapons: what KQM mode's
  * weapon window sets for each weapon (`TeamOptKqm.weaponEnergy`), added up over the team's
@@ -1041,7 +989,7 @@ export function kqmRuleConditionals(
   return Object.fromEntries(
     teamOptMembers(database, teamId).map((m) => {
       const rules = itemConditionals(
-        memberCtx(database, teamId, m.characterKey, teamOpt),
+        memberCtx(database, teamId, m.characterKey, teamOpt, true),
         {
           weapons: kqmWeapons(m.characterKey, undefined, { all: true }).map(
             (w) => w.key

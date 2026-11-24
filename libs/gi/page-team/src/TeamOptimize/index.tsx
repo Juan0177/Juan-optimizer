@@ -21,6 +21,8 @@ import type {
   TeamData,
   TeamOptEvaluation,
   TeamOptMember,
+  TeamOptPicks,
+  TeamOptPickView,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import {
@@ -114,6 +116,9 @@ import {
 import { RunDialog } from './RunDialog'
 import { sameBuildRoster, teamRoster } from './runScope'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
+import { DamageShare } from './DamageShare'
+import { TeamOptInspector } from './TeamOptInspector'
+import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
 import { TeamEquipUndo, TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
@@ -128,6 +133,7 @@ import {
   StepTitle,
   stepAccentSx,
   stepSurfaceSx,
+  subsectionSx,
   tokens,
   type,
   VDivider,
@@ -154,6 +160,9 @@ const sectionSx = {
   p: tokens.pad,
   minWidth: 0,
 } as const
+
+/** A result this new (ms) was just found: it is revealed (see `TeamOptResults`) */
+const FRESH_MS = 4000
 
 /** A result appears once: a short fade and rise (none with reduced motion) */
 const revealSx = {
@@ -253,7 +262,7 @@ export default function TeamBuildWorkspace({
     mode === 'inventory' ? teamData : undefined,
     wolfStates
   )
-  const { state, status, run, cancel, clear, requirementsKey } =
+  const { state, status, run, cancel, clear, requirementsKey, sessionOf } =
     useTeamOptRun(teamId)
   const kqm = useKqmRun(teamId)
   const kqmRunning = kqm.state.type === 'running'
@@ -471,8 +480,38 @@ export default function TeamBuildWorkspace({
   // which of the result's team builds is shown (the best, or one of the next ones)
   const [pick, setPick] = useState(0)
   const builds = result ? teamBuilds(result.result) : []
-  const shown = builds[Math.min(pick, builds.length - 1)]
-  useEffect(() => setPick(0), [result?.result])
+  const picked = builds[Math.min(pick, builds.length - 1)]
+  // (a new run's result: its best; its other builds coming in keep the pick)
+  useEffect(() => setPick(0), [result?.savedAt])
+  // equipment picked by hand in a member's inspector (the best team build's), and the team with it
+  const [picks, setPicks] = useState<TeamOptPicks>({})
+  const [pickView, setPickView] = useState<TeamOptPickView>()
+  const [inspected, setInspected] = useState<CharacterKey>()
+  const sessionOfResult = useCallback(
+    () => (result ? sessionOf(result) : Promise.resolve(undefined)),
+    [result, sessionOf]
+  )
+  const firstOptimized = result?.result.optimized[0]
+  // biome-ignore lint/correctness/useExhaustiveDependencies: another result or team build shown
+  useEffect(() => {
+    setPicks({})
+    setPickView(undefined)
+    // (the biggest damage dealer's, as the KQM tab opens on its first member)
+    setInspected(firstOptimized)
+  }, [result?.savedAt, pick])
+  // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
+  // tab's
+  const shownTeamOpt = useMemo(
+    () =>
+      result?.result.attacks
+        ? { ...result.teamOpt, attacks: result.result.attacks }
+        : (result?.teamOpt ?? teamOpt),
+    [result, teamOpt]
+  )
+  const shown =
+    pickView && picked && Object.keys(picks).length
+      ? { ...picked, ...pickView }
+      : picked
   // (each tab's rotation search, on the rotation's line and in its writer: with the builds shown;
   // a rotation it finds opens in the writer, to be played there and used)
   const kqmRunTeamOpt = kqmRotation?.runTeamOpt
@@ -494,11 +533,11 @@ export default function TeamBuildWorkspace({
         ? {
             tab: 'team',
             result: shown,
-            teamOpt: result.teamOpt,
+            teamOpt: shownTeamOpt,
             rankingBonusStats: fightBuffsNow,
           }
         : undefined,
-    [result, shown]
+    [result, shown, shownTeamOpt]
   )
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchButton = useCallback<SearchButton>(
@@ -713,7 +752,6 @@ export default function TeamBuildWorkspace({
     }
     return gear
   }, [shownGear])
-  const shownTeamOpt = result?.teamOpt ?? teamOpt
   const shownOverrides = useMemo(
     () =>
       shownGear && {
@@ -1226,9 +1264,89 @@ export default function TeamBuildWorkspace({
             teamId={teamId}
             members={members}
             result={shown}
+            fresh={
+              result.savedAt !== undefined &&
+              Date.now() - result.savedAt < FRESH_MS
+            }
             seconds={result.seconds}
-            runTeamOpt={result.teamOpt}
+            runTeamOpt={shownTeamOpt}
             rotationTime={rotationTime}
+            // (trying other equipment: for the best team build)
+            {...(pick === 0 && {
+              selected: inspected,
+              onSelect: setInspected,
+              picked: !!Object.keys(picks).length,
+              onResetPicks: () => setPicks({}),
+              inspector: inspected && picked && (
+                <TeamOptInspector
+                  key={inspected}
+                  characterKey={inspected}
+                  result={result.result}
+                  optionsRunning={!!result.optionsRunning}
+                  session={sessionOfResult}
+                  picks={picks}
+                  onPicks={setPicks}
+                  view={pickView}
+                  onView={setPickView}
+                  rotationTime={rotationTime}
+                />
+              ),
+            })}
+            ranking={
+              result.optionsRunning
+                ? {
+                    done: Object.keys(result.result.options ?? {}).length,
+                    total: result.result.optimized.length,
+                  }
+                : undefined
+            }
+            supplement={
+              // (as the KQM tab: the best teams that change one member, and how the shown team's
+              // damage splits; side by side where there is room)
+              shown && (
+                <Box
+                  sx={{
+                    ...subsectionSx,
+                    display: 'grid',
+                    columnGap: 3,
+                    rowGap: 4,
+                    alignItems: 'stretch',
+                    gridTemplateColumns:
+                      'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
+                  }}
+                >
+                  {pick === 0 && result.optionsRunning && (
+                    <TopBuildsPending
+                      done={Object.keys(result.result.options ?? {}).length}
+                      total={result.result.optimized.length}
+                    />
+                  )}
+                  {pick === 0 &&
+                    !result.optionsRunning &&
+                    result.result.options && (
+                      <TeamOptTopBuilds
+                        members={members.map((m) => m.characterKey)}
+                        result={result.result}
+                        picks={picks}
+                        rotationTime={rotationTime}
+                        onPick={(characterKey, next) => {
+                          setPicks(
+                            characterKey && next ? { [characterKey]: next } : {}
+                          )
+                          if (characterKey) setInspected(characterKey)
+                        }}
+                      />
+                    )}
+                  <DamageShare
+                    members={members.map((m) => m.characterKey)}
+                    evaluation={shown.after}
+                    attacks={shownTeamOpt.attacks}
+                    teamData={teamData}
+                    rotationTime={rotationTime}
+                  />
+                </Box>
+              )
+            }
             onDiscard={clear}
             teamData={teamData}
             stale={
@@ -1248,23 +1366,24 @@ export default function TeamBuildWorkspace({
                 teamData={teamData}
                 gear={shownSimGear}
                 kqmBuffs={rotationBuffs}
-                kqmAttacks={result.teamOpt.attacks}
+                kqmAttacks={shownTeamOpt.attacks}
                 kqmDamage={shown.after.attacks}
                 overrides={shownOverrides}
                 onField={onField}
-                mainStatAssumptionLevel={result.teamOpt.assumeMaxMain ? 20 : 0}
+                mainStatAssumptionLevel={shownTeamOpt.assumeMaxMain ? 20 : 0}
               />
             }
           />
         </Box>
       )}
       {/* what one more roll, talent level or level on each member would add */}
-      {mode === 'inventory' && result && shown && (
+      {/* (not while the run's other builds are ranked: computed, and shown, once they are) */}
+      {mode === 'inventory' && result && shown && !result.optionsRunning && (
         <TeamSensitivity
           teamId={teamId}
           members={members}
           // (the result's: its rotation and settings, as it was found)
-          teamOpt={result.teamOpt}
+          teamOpt={shownTeamOpt}
           result={shown}
           savedAt={result.savedAt}
           index={Math.min(pick, builds.length - 1)}

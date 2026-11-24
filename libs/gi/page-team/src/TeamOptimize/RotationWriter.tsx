@@ -67,10 +67,12 @@ import {
   simulateRotationSamples,
   simulateWritten,
   teamOptMembers,
+  teamOptRunGear,
   templatesForTeam,
   type WrittenRotation,
   writtenKqmReplay,
   writtenSeconds,
+  writtenTeamReplay,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -809,6 +811,136 @@ export function teamRotationEnergy({
     ),
     rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
   }
+}
+
+/**
+ * The team's written rotation as "Use this rotation" plays it, with the members' gear from `gearOf`
+ * (their own gear given). Nothing written, attacks entered by hand, or a rotation that can't be
+ * played: undefined.
+ */
+function teamReplayWith(
+  database: Database,
+  gender: GenderKey,
+  i18n: i18n,
+  teamId: string,
+  teamOpt: TeamOpt,
+  gearOf: (own: SimTeam['gear']) => SimTeam['gear']
+): TeamOpt['attacks'] | undefined {
+  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
+  const members = teamOptMembers(database, teamId)
+  try {
+    return writtenTeamReplay({
+      database,
+      teamId,
+      members,
+      gender,
+      names: memberNamesOf(members, i18n, gender),
+      teamOpt,
+      text: readStored(database, storageKey(teamId)) ?? '',
+      opener: readStored(database, openerKey(teamId)) ?? '',
+      timing: parseTiming(readStored(database, timingKey(teamId))),
+      frameData: parseFrameData(readStored(database, frameDataKey)),
+    })?.({ gear: gearOf(simTeamOf(members, database).gear), overrides: {} })
+      .attacks
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The attacks a Team optimize run plays: the written rotation with the sets and weapons the run
+ * may give each member timed in it (`teamOptRunGear`); undefined: the saved attacks.
+ */
+export const teamRunAttacks = (
+  database: Database,
+  gender: GenderKey,
+  i18n: i18n,
+  teamId: string,
+  teamOpt: TeamOpt
+) =>
+  teamReplayWith(database, gender, i18n, teamId, teamOpt, (own) =>
+    teamOptRunGear(database, teamId, teamOpt, own)
+  )
+
+const timedSetEffects = new WeakMap<
+  object,
+  Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined
+>()
+/**
+ * The set effects (`set.condition`) the written rotation turns on and off for each member, for any
+ * set it may wear: in a Team optimize run they follow the rotation, not the member's switches.
+ * Undefined without a written rotation. Kept per saved rotation (its attacks).
+ */
+export function teamTimedSetEffects(
+  database: Database,
+  gender: GenderKey,
+  i18n: i18n,
+  teamId: string,
+  teamOpt: TeamOpt
+) {
+  if (timedSetEffects.has(teamOpt.attacks))
+    return timedSetEffects.get(teamOpt.attacks)
+  const attacks = teamReplayWith(
+    database,
+    gender,
+    i18n,
+    teamId,
+    teamOpt,
+    (own) =>
+      Object.fromEntries(
+        Object.entries(own).map(([k, gear]) => [
+          k,
+          { ...gear, candidates: { sets: allArtifactSetKeys, weapons: [] } },
+        ])
+      )
+  )
+  const timed = attacks && timedRefs(attacks)
+  timedSetEffects.set(teamOpt.attacks, timed)
+  return timed
+}
+/** `teamTimedSetEffects`, worked out after the page paints while `enabled` (undefined until then) */
+export function useTimedSetEffects(
+  teamId: string,
+  teamOpt: TeamOpt,
+  enabled = true
+) {
+  const database = useDatabase()
+  const { gender } = useDBMeta()
+  const { i18n } = useTranslation('charNames_gen')
+  const [timed, setTimed] = useState<
+    Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined
+  >(() => timedSetEffects.get(teamOpt.attacks))
+  useEffect(() => {
+    if (!enabled) return undefined
+    const id = setTimeout(
+      () =>
+        setTimed(teamTimedSetEffects(database, gender, i18n, teamId, teamOpt)),
+      0
+    )
+    return () => clearTimeout(id)
+  }, [database, gender, i18n, teamId, teamOpt, enabled])
+  return timed
+}
+/** Each member's set conditions the attacks decide (states and limits) */
+function timedRefs(attacks: TeamOpt['attacks']) {
+  const sets = new Set<string>(allArtifactSetKeys)
+  const out: Partial<Record<CharacterKey, Set<string>>> = {}
+  const add = (
+    refs?: readonly { owner: string; path: readonly string[] }[]
+  ) => {
+    for (const { owner, path } of refs ?? [])
+      if (owner !== 'team' && sets.has(path[0] ?? ''))
+        (out[owner as CharacterKey] ??= new Set()).add(path.join('.'))
+  }
+  for (const list of Object.values(attacks))
+    for (const a of list ?? []) {
+      add(a.states)
+      add(a.limits)
+      for (const snap of a.statSnapshots ?? []) add(snap.states)
+      for (const states of Object.values(a.reactionContributorStates ?? {}))
+        add(states)
+    }
+  return out
 }
 
 /** Every member's hits in a played rotation */

@@ -46,6 +46,7 @@ import { constant } from '@genshin-optimizer/gi/wr'
 import { allNonstackBuffs } from '@genshin-optimizer/gi/wr-types'
 import CheckIcon from '@mui/icons-material/Check'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import AutoModeIcon from '@mui/icons-material/AutoMode'
 import SearchIcon from '@mui/icons-material/Search'
 import TuneIcon from '@mui/icons-material/Tune'
 import {
@@ -65,6 +66,7 @@ import {
 } from '@mui/material'
 import type { ReactNode } from 'react'
 import {
+  Fragment,
   memo,
   Suspense,
   useCallback,
@@ -129,11 +131,17 @@ export default function ArtifactSetConfig({
   disabled,
   dialogOnly,
   onDialogClose,
+  timed,
 }: {
   disabled?: boolean
   /** Only the dialog, open at once (e.g. from a summary elsewhere): closing it calls `onDialogClose` */
   dialogOnly?: boolean
   onDialogClose?: () => void
+  /**
+   * The effects (`set.condition`) Team optimize's rotation times: shown as such, not switched, and
+   * not counted as on
+   */
+  timed?: ReadonlySet<string>
 }) {
   const { t } = useTranslation(['page_character_optimize', 'artifactNames_gen'])
   const dataContext = useContext(DataContext)
@@ -164,10 +172,12 @@ export default function ArtifactSetConfig({
       Object.fromEntries(
         allArtifactSetKeys.map((setKey) => [
           setKey,
-          Object.keys(conditional[setKey] ?? {}).length,
+          Object.keys(conditional[setKey] ?? {}).filter(
+            (cond) => !timed?.has(`${setKey}.${cond}`)
+          ).length,
         ])
       ) as Record<ArtifactSetKey, number>,
-    [conditional]
+    [conditional, timed]
   )
   const condTotal = Object.values(condCountBySet).filter(Boolean).length
 
@@ -267,6 +277,7 @@ export default function ArtifactSetConfig({
               conditional={conditional}
               onClose={onClose}
               database={database}
+              timed={timed}
             />
           </Suspense>
         </CardThemed>
@@ -305,6 +316,7 @@ function SetConfigDialog({
   conditional,
   onClose,
   database,
+  timed,
 }: {
   charKey: string
   dataContext: dataContextObj
@@ -318,6 +330,7 @@ function SetConfigDialog({
   conditional: Record<string, unknown>
   onClose: () => void
   database: ReturnType<typeof useDatabase>
+  timed?: ReadonlySet<string>
 }) {
   const { t } = useTranslation(['page_character_optimize', 'artifactNames_gen'])
   const total = configurableSetKeys.length
@@ -437,16 +450,24 @@ function SetConfigDialog({
       }),
     [database, teamCharId]
   )
+  // (the switches counted: not those of the effects the rotation times)
   const resetArtConds = useCallback(() => {
     const tconditional = Object.fromEntries(
-      Object.entries(conditional).filter(
-        ([k]) => !allArtifactSetKeys.includes(k as ArtifactSetKey)
-      )
+      Object.entries(conditional).flatMap(([k, v]) => {
+        if (!allArtifactSetKeys.includes(k as ArtifactSetKey)) return [[k, v]]
+        if (!timed) return []
+        const kept = Object.fromEntries(
+          Object.entries(v as Record<string, string>).filter(([cond]) =>
+            timed.has(`${k}.${cond}`)
+          )
+        )
+        return Object.keys(kept).length ? [[k, kept]] : []
+      })
     )
     database.teamChars.set(teamCharId, (teamChar) => {
       teamChar.conditional = tconditional
     })
-  }, [database, teamCharId, conditional])
+  }, [database, teamCharId, conditional, timed])
 
   // Every conditional set effect's states as if the full set were equipped.
   const fakeData = useMemo(
@@ -622,6 +643,7 @@ function SetConfigDialog({
             onOnly4={onlyThis4}
             onCondition={setCondition}
             fakeData={fakeData}
+            timed={timed}
           />
         ))}
         {!shownSets.length && (
@@ -664,15 +686,19 @@ function SetConfigDialog({
               })}
         </Typography>
         <Box sx={{ flexGrow: 1 }} />
-        <Button
-          variant="text"
-          color="inherit"
-          disabled={!condTotal}
-          onClick={resetArtConds}
-          sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}
-        >
-          {t('artSetConfig.footer.resetEffects', { count: condTotal })}
-        </Button>
+        {!!condTotal && (
+          <Button
+            variant="text"
+            color="inherit"
+            onClick={resetArtConds}
+            sx={{
+              color: 'text.secondary',
+              '&:hover': { color: 'text.primary' },
+            }}
+          >
+            {t('artSetConfig.footer.resetEffects', { count: condTotal })}
+          </Button>
+        )}
         <Button
           variant="contained"
           sx={[{ px: 2.5 }, giCtaSx]}
@@ -763,6 +789,7 @@ const SetRow = memo(function SetRow({
   onOnly4,
   onCondition,
   fakeData,
+  timed,
 }: {
   setKey: ArtifactSetKey
   slotCount: Record<ArtifactSlotKey, number>
@@ -779,6 +806,7 @@ const SetRow = memo(function SetRow({
   onOnly4: (setKey: ArtifactSetKey) => void
   onCondition: (path: readonly string[], value?: string) => void
   fakeData: UIData
+  timed?: ReadonlySet<string>
 }) {
   const { t } = useTranslation([
     'page_character_optimize',
@@ -914,24 +942,44 @@ const SetRow = memo(function SetRow({
             }}
           >
             <Suspense fallback={<Skeleton width={160} height={30} />}>
-              {conditionals.map(({ num, cond }, i) => (
-                <EffectControl
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a set's fixed list
-                  key={i}
-                  cond={cond}
-                  num={num}
-                  showNum={bothNums}
-                  // a 2-piece effect also applies to 4-piece builds
-                  off={num === 2 ? excluded2 && excluded4 : excluded4}
-                  values={setConditional}
-                  onCondition={onCondition}
-                  // an effect turned on wants its set: the set used (basic), its bonus (advanced)
-                  onAllow={() =>
-                    advanced ? onToggle(setKey, num) : onUse(setKey, true)
-                  }
-                  data={fakeData}
-                />
-              ))}
+              {conditionals.map(({ num, cond }, i) =>
+                timed && isTimed(cond, timed, fakeData) ? (
+                  // (several conditions in one: a chip each, as when switched)
+                  timedLabels(cond, fakeData).map((label, j) => (
+                    <TimedEffectChip
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a set's fixed list
+                      key={`${i}.${j}`}
+                    >
+                      {bothNums && (
+                        <Box
+                          component="span"
+                          sx={{ color: 'text.secondary', mr: 0.5 }}
+                        >
+                          {num}-pc
+                        </Box>
+                      )}
+                      {label}
+                    </TimedEffectChip>
+                  ))
+                ) : (
+                  <EffectControl
+                    // biome-ignore lint/suspicious/noArrayIndexKey: a set's fixed list
+                    key={i}
+                    cond={cond}
+                    num={num}
+                    showNum={bothNums}
+                    // a 2-piece effect also applies to 4-piece builds
+                    off={num === 2 ? excluded2 && excluded4 : excluded4}
+                    values={setConditional}
+                    onCondition={onCondition}
+                    // an effect turned on wants its set: the set used (basic), its bonus (advanced)
+                    onAllow={() =>
+                      advanced ? onToggle(setKey, num) : onUse(setKey, true)
+                    }
+                    data={fakeData}
+                  />
+                )
+              )}
             </Suspense>
           </Box>
         )}
@@ -1217,6 +1265,68 @@ function EffectControl({
       }))}
       onPick={(stateKey) => onCondition(cond.path, stateKey)}
     />
+  )
+}
+
+/** Whether the rotation times a set effect (each of its states' own, for one of several) */
+const isTimed = (
+  cond: DocumentConditional,
+  timed: ReadonlySet<string>,
+  data: UIData
+) =>
+  'path' in cond
+    ? timed.has(cond.path.join('.'))
+    : Object.values(evalIfFunc(cond.states, data)).every(({ path }) =>
+        timed.has(path.join('.'))
+      )
+
+/**
+ * A timed effect's labels: its name, with its states when it has two (Blizzard Strayer's "Enemy is"
+ * reads as nothing alone); several conditions in one: each one's
+ */
+function timedLabels(cond: DocumentConditional, data: UIData): ReactNode[] {
+  const states = Object.values(evalIfFunc(cond.states, data))
+  if (!('path' in cond)) return states.map((st) => condName(st.name))
+  if (states.length !== 2) return [condName(cond.name)]
+  return [
+    <>
+      {condName(cond.name)}
+      {': '}
+      {states.map((st, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a condition's fixed states
+        <Fragment key={i}>
+          {i > 0 && ' / '}
+          {st.name}
+        </Fragment>
+      ))}
+    </>,
+  ]
+}
+
+/** A set effect Team optimize's rotation turns on and off for each hit: shown, not switched */
+function TimedEffectChip({ children }: { children: ReactNode }) {
+  const { t } = useTranslation('page_character_optimize')
+  return (
+    <Tooltip
+      title={t(
+        'artSetConfig.row.timedTip',
+        'Team optimize turns this on and off for each hit, as your rotation triggers it'
+      )}
+    >
+      <Box
+        sx={(theme) => ({
+          ...effectSx(false, false)(theme),
+          cursor: 'default',
+          '&:hover': {},
+        })}
+      >
+        <AutoModeIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
+        <span>{children}</span>
+        <Box component="span" sx={{ color: 'text.disabled', flexShrink: 0 }}>
+          {t('artSetConfig.row.timed', 'From rotation')}
+        </Box>
+      </Box>
+    </Tooltip>
   )
 }
 

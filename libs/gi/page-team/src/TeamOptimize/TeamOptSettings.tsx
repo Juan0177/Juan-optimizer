@@ -28,6 +28,7 @@ import {
   statName,
 } from '@genshin-optimizer/gi/ui'
 import type { CalcResult } from '@genshin-optimizer/gi/uidata'
+import AutoModeIcon from '@mui/icons-material/AutoMode'
 import ToggleOnOutlinedIcon from '@mui/icons-material/ToggleOnOutlined'
 import { alpha, Box, ButtonBase, Tooltip, Typography } from '@mui/material'
 import type { TFunction } from 'i18next'
@@ -200,15 +201,19 @@ export type Requirement =
   | {
       key: string
       kind: 'effects'
-      /** Sets with a conditional effect turned on */
+      /** Sets with a conditional effect turned on (not one the rotation times) */
       sets: ArtifactSetKey[]
+      /** The rotation times the set effects in a run (`teamTimedSetEffects`) */
+      timed?: boolean
     }
 type MainSlot = 'sands' | 'goblet' | 'circlet'
 
 /** A member's requirements: stat minimums ("Energy Recharge ≥ 160%"), main stats per slot, sets */
 export function useRequirements(
   member: TeamOptMember,
-  teamData: TeamData | undefined
+  teamData: TeamData | undefined,
+  /** The member's set effects the rotation times: their switches don't count */
+  timed?: ReadonlySet<string>
 ) {
   const { t } = useTranslation('page_team')
   const optConfig = useOptConfig(member.teamChar.optConfigId)
@@ -290,13 +295,15 @@ export function useRequirements(
     out.push({
       key: 'effects',
       kind: 'effects',
-      sets: allArtifactSetKeys.filter(
-        (k) =>
-          Object.keys((conditional as Record<string, object>)?.[k] ?? {}).length
+      sets: allArtifactSetKeys.filter((k) =>
+        Object.keys((conditional as Record<string, object>)?.[k] ?? {}).some(
+          (cond) => !timed?.has(`${k}.${cond}`)
+        )
       ),
+      timed: !!timed,
     })
     return out
-  }, [optConfig, data, conditional, t])
+  }, [optConfig, data, conditional, t, timed])
 }
 
 /** A small tag: a requirement (a click opens its settings), or the line's note */
@@ -516,32 +523,52 @@ export function RequirementTag({
       <ReqTag
         onClick={onClick}
         title={
-          req.sets.length ? (
-            <TagList
-              title={t('teamOpt.member.effectsOn', 'Set effects on')}
-              lines={req.sets.map(setName)}
-            />
-          ) : (
-            t(
-              'teamOpt.member.noEffectsHint',
-              'Set effects count only when on: click to turn them on'
-            )
-          )
+          <>
+            {req.timed && (
+              <Box sx={{ mb: req.sets.length ? 1 : 0 }}>
+                {t(
+                  'teamOpt.member.effectsTimedHint',
+                  'Your rotation turns set effects on and off for each hit, for every set a run tries. Switches count only for the few it can’t time.'
+                )}
+              </Box>
+            )}
+            {req.sets.length ? (
+              <TagList
+                title={t('teamOpt.member.effectsOn', 'Set effects on')}
+                lines={req.sets.map(setName)}
+              />
+            ) : (
+              !req.timed &&
+              t(
+                'teamOpt.member.noEffectsHint',
+                'Set effects count only when on: click to turn them on'
+              )
+            )}
+          </>
         }
       >
-        <ToggleOnOutlinedIcon
-          sx={{
-            fontSize: 16,
-            color: req.sets.length ? 'text.primary' : 'text.disabled',
-          }}
-        />
-        {req.sets.length
-          ? t('teamOpt.member.effectsOnCount', {
-              defaultValue_one: '{{count}} effect on',
-              defaultValue_other: '{{count}} effects on',
-              count: req.sets.length,
-            })
-          : t('teamOpt.member.effectsNone', 'No effects on')}
+        {req.timed && !req.sets.length ? (
+          <>
+            <AutoModeIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+            {t('teamOpt.member.effectsTimed', 'From rotation')}
+          </>
+        ) : (
+          <>
+            <ToggleOnOutlinedIcon
+              sx={{
+                fontSize: 16,
+                color: req.sets.length ? 'text.primary' : 'text.disabled',
+              }}
+            />
+            {req.sets.length
+              ? t('teamOpt.member.effectsOnCount', {
+                  defaultValue_one: '{{count}} effect on',
+                  defaultValue_other: '{{count}} effects on',
+                  count: req.sets.length,
+                })
+              : t('teamOpt.member.effectsNone', 'No effects on')}
+          </>
+        )}
       </ReqTag>
     )
   const slots = req.slotKeys
@@ -610,6 +637,7 @@ export function RequirementsModal({
   member,
   teamData,
   setsOnly,
+  timed,
   onClose,
 }: {
   teamId: string
@@ -617,6 +645,8 @@ export function RequirementsModal({
   teamData: TeamData | undefined
   /** Only the artifact set config's dialog */
   setsOnly?: boolean
+  /** The member's set effects the rotation times in a run */
+  timed?: ReadonlySet<string>
   onClose: () => void
 }) {
   const database = useDatabase()
@@ -644,7 +674,11 @@ export function RequirementsModal({
       <TeamCharacterContext.Provider value={teamCharContext}>
         <CharacterContext.Provider value={characterContext}>
           <DataContext.Provider value={dataContext}>
-            <ArtifactSetConfig dialogOnly onDialogClose={onClose} />
+            <ArtifactSetConfig
+              dialogOnly
+              onDialogClose={onClose}
+              timed={timed}
+            />
           </DataContext.Provider>
         </CharacterContext.Provider>
       </TeamCharacterContext.Provider>

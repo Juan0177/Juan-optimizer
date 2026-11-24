@@ -304,17 +304,7 @@ export function FreezeSetting({
       else enemy.freezeImmune = value
     })
   return (
-    <Row
-      label={t('enemy.freeze', 'Frozen')}
-      hint={
-        immune
-          ? t(
-              'enemy.freezeImmuneHint',
-              'Hydro and Cryo still react, but it never becomes Frozen: no Shatter, nothing that needs it Frozen'
-            )
-          : undefined
-      }
-    >
+    <Row label={t('enemy.freeze', 'Frozen')}>
       <Toggle on={!immune} disabled={disabled} onClick={() => set(false)}>
         {t('enemy.freezable', 'Can be frozen')}
       </Toggle>

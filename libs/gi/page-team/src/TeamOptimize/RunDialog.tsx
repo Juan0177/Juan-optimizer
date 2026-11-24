@@ -46,6 +46,7 @@ import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Componen
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
+import { useTimedSetEffects } from './RotationWriter'
 import type { TeamEnergy } from './TeamEnergy'
 import { setOptConfigEr, TeamEnergyDrawer, useTeamEnergy } from './TeamEnergy'
 import {
@@ -103,6 +104,8 @@ export function RunDialog({
   const { t } = useTranslation('page_team')
   const builds = teamOpt.topN ?? 1
   const database = useDatabase()
+  // (the set effects the rotation times in a run: their switches play no part)
+  const timed = useTimedSetEffects(teamId, teamOpt, open)
   const artifacts = useDataManagerValues(database.arts)
   const configs = new Map(useDataManagerEntries(database.optConfigs))
   const toOptimize = members.filter(
@@ -242,6 +245,7 @@ export function RunDialog({
                   teamOpt={teamOpt}
                   setTeamOpt={setTeamOpt}
                   energy={energy}
+                  timed={timed?.[member.characterKey]}
                 />
               ))}
             </Box>
@@ -266,7 +270,7 @@ export function RunDialog({
               <FieldLabel
                 tip={t(
                   'teamOpt.run.buildsInfo',
-                  'How many team builds to find: the best one, then the next best ones (each changes one member’s artifacts).'
+                  'Best build: only the team’s best build, the fastest. All builds: also the next best ones (up to 4 more, each changing one member’s artifacts), which takes longer.'
                 )}
               >
                 {t('teamOpt.run.buildsLabel', 'Builds')}
@@ -274,17 +278,23 @@ export function RunDialog({
               <Segmented
                 size="small"
                 aria-label={t('teamOpt.run.buildsLabel', 'Builds')}
-                value={builds}
-                onChange={(n) =>
+                value={builds > 1 ? 'all' : 'best'}
+                onChange={(choice) =>
                   setTeamOpt((o) => {
-                    if (n > 1) o.topN = n
+                    if (choice === 'all') o.topN = ALL_BUILDS
                     else delete o.topN
                   })
                 }
-                options={[1, 2, 3, 4, 5].map((n) => ({
-                  value: n,
-                  label: <Box sx={{ minWidth: 10, ...numSx }}>{n}</Box>,
-                }))}
+                options={[
+                  {
+                    value: 'best',
+                    label: t('teamOpt.run.bestBuild', 'Best build'),
+                  },
+                  {
+                    value: 'all',
+                    label: t('teamOpt.run.allBuilds', 'All builds'),
+                  },
+                ]}
               />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -350,6 +360,8 @@ export function RunDialog({
   )
 }
 
+/** "All builds": the best team build and the next best ones, this many in all */
+const ALL_BUILDS = 5
 const mainSlots = ['sands', 'goblet', 'circlet'] as const
 const slotNames = { sands: 'Sands', goblet: 'Goblet', circlet: 'Circlet' }
 
@@ -469,6 +481,7 @@ function MemberRunRow({
   teamOpt,
   setTeamOpt,
   energy,
+  timed,
 }: {
   teamId: string
   member: TeamOptMember
@@ -477,6 +490,8 @@ function MemberRunRow({
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
   energy: TeamEnergy
+  /** Its set effects the rotation times (`teamTimedSetEffects`) */
+  timed?: ReadonlySet<string>
 }) {
   const { t } = useTranslation(['page_team', 'artifact'])
   const database = useDatabase()
@@ -486,7 +501,7 @@ function MemberRunRow({
   const teamChar = database.teamChars.get(teamCharId) ?? member.teamChar
   const optConfig = useOptConfig(teamChar.optConfigId)
   const kept = isTc || teamOpt.keep.includes(characterKey)
-  const requirements = useRequirements(member, teamData)
+  const requirements = useRequirements(member, teamData, timed)
   const sets = requirements.find((r) => r.kind === 'sets')
   const effects = requirements.find((r) => r.kind === 'effects')
   // (its minimum ER has its own box on the line)
@@ -766,6 +781,7 @@ function MemberRunRow({
           member={member}
           teamData={teamData}
           setsOnly={settings === 'sets'}
+          timed={timed}
           onClose={() => setSettings(undefined)}
         />
       )}
