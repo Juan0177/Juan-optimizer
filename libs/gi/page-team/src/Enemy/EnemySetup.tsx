@@ -41,11 +41,7 @@ import { EnemyDialog } from './EnemyDialog'
 import { EnemyHeadline, levelOf, ResGrid } from './EnemyPanel'
 import { useEnemyTeam, useSetEnemy } from './enemyScope'
 import { formatHp } from './hp'
-import {
-  FreezeSetting,
-  MoongeckoSettings,
-  StartEnergySetting,
-} from './MoongeckoSettings'
+import { MoongeckoSettings, StartEnergySetting } from './MoongeckoSettings'
 
 // juanlab: 13.5M; in Italian 13,5M (the site's decimal separator)
 const compact = (digits: number) => ({
@@ -167,34 +163,33 @@ export function EnemySetup({
           {/* its RES, all eight */}
           <ResGrid team={team} />
         </Box>
-        {/* whether it can be frozen; a boss's: how the fight starts, and how the team plays the
-            Moongecko where its fight cannot tell */}
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 1.25,
-            pt: 1.5,
-            mt: 1.5,
-            borderTop: `1px solid ${giTokens.hairline}`,
-          }}
-        >
-          <FreezeSetting teamId={teamId} team={team} disabled={disabled} />
-          {stygian && (
+        {/* a boss's: how the fight starts, and how the team plays the Moongecko where its fight
+            cannot tell (whether it can be frozen: in Edit) */}
+        {stygian && (
+          <Box
+            sx={{
+              display: 'grid',
+              gap: 1.25,
+              pt: 1.5,
+              mt: 1.5,
+              borderTop: `1px solid ${giTokens.hairline}`,
+            }}
+          >
             <StartEnergySetting
               teamId={teamId}
               team={team}
               disabled={disabled}
             />
-          )}
-          {stygian?.boss.id === MOONGECKO_BOSS && (
-            <MoongeckoSettings
-              teamId={teamId}
-              team={team}
-              fight={fight}
-              disabled={disabled}
-            />
-          )}
-        </Box>
+            {stygian.boss.id === MOONGECKO_BOSS && (
+              <MoongeckoSettings
+                teamId={teamId}
+                team={team}
+                fight={fight}
+                disabled={disabled}
+              />
+            )}
+          </Box>
+        )}
       </Box>
       <EnemyDialog teamId={teamId} open={open} onClose={onClose} />
     </Box>

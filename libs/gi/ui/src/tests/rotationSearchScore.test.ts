@@ -82,7 +82,7 @@ describe('a rotation search’s player', () => {
     }
   })
 
-  it('Team optimize’s player counts a rotation as its tab does: played with the members’ own gear, its damage with the build', () => {
+  it('Team optimize’s player counts a rotation as its tab does: played with the members’ own gear and the build’s set and weapon effects, its damage with the build', () => {
     const database = new ArtCharDatabase(1, new SandboxStorage({}))
     for (const [key, weapon] of [
       [ayaka, 'AmenomaKageuchi'],
@@ -156,7 +156,19 @@ describe('a rotation search’s player', () => {
       teamOpt,
       text,
       ...saved,
-    })!({ gear: simTeamOf(members, database).gear, overrides: {} })
+    })!({
+      gear: {
+        [ayaka]: {
+          ...simTeamOf(members, database).gear[ayaka],
+          candidates: { sets: [], weapons: ['MistsplitterReforged'] },
+        },
+        [shenhe]: {
+          ...simTeamOf(members, database).gear[shenhe],
+          candidates: { sets: [], weapons: [] },
+        },
+      },
+      overrides: {},
+    })
     const total = evaluateTeamRotation(database, teamId, 'F', {
       ...overrides,
       attacks: played.attacks,

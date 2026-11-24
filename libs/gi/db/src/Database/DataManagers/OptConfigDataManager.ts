@@ -63,6 +63,8 @@ const artSetExclusionSchema = z.preprocess(
     for (const [k, v] of Object.entries(val as Record<string, unknown>)) {
       if (!allArtifactSetExclusionKeys.includes(k as ArtSetExclusionKey))
         continue
+      // (mixed builds are always considered: the sets dialog no longer limits them)
+      if (k === 'rainbow') continue
       if (!Array.isArray(v)) continue
       const filtered = [...new Set(v.filter((n) => n === 2 || n === 4))] as (
         | 2

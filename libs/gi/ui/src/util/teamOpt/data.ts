@@ -68,6 +68,7 @@ export function teamOptBonusStats(
 
 import { getCharDataBundle } from '../../hooks/useTeamData'
 import { getBuildTcArtifactData } from '../getBuildTcData'
+import { teamRuleConditionals } from './ruleConditionals'
 
 /** A conditional of the team, by whose it is and its path */
 export interface BuffRef {
@@ -274,7 +275,7 @@ export function getTeamDataWith(
     states = [],
     mainStatAssumptionLevel = 0,
     weapons = {},
-    extraConditionals = {},
+    extraConditionals: extra,
     bonusStats: extraBonusStats = {},
     characters = {},
     conditionalOverrides = {},
@@ -287,6 +288,12 @@ export function getTeamDataWith(
 ): Partial<Record<CharacterKey, Data[]>> | undefined {
   const team = database.teams.get(teamId)
   if (!team) return undefined
+  // (with the members' own builds, the gear effects nobody set are decided by rule)
+  const extraConditionals =
+    extra ??
+    (ownBuild
+      ? teamRuleConditionals(database, teamId, team.teamOpt?.attacks ?? {})
+      : {})
   const enemyOverride = { ...(enemy ?? team.enemyOverride), ...enemyExtra }
   const teamConditional = withoutPaths(
     withValues(
@@ -402,7 +409,7 @@ export function getTeamDataSelect(
     arts = {},
     mainStatAssumptionLevel = 0,
     weapons = {},
-    extraConditionals = {},
+    extraConditionals: extra,
     bonusStats: extraBonusStats = {},
     characters = {},
     conditionalOverrides = {},
@@ -416,6 +423,12 @@ export function getTeamDataSelect(
 ): TeamDataSelect | undefined {
   const team = database.teams.get(teamId)
   if (!team || !contexts.length) return undefined
+  // (with the members' own builds, the gear effects nobody set are decided by rule)
+  const extraConditionals =
+    extra ??
+    (ownBuild
+      ? teamRuleConditionals(database, teamId, team.teamOpt?.attacks ?? {})
+      : {})
   const enemyOverride = { ...(enemy ?? team.enemyOverride), ...enemyExtra }
   const teamSwitchesNow = teamSwitches ?? team.conditional
   const contextKeys = contexts.map(buffContextKey)

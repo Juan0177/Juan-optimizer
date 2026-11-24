@@ -40,6 +40,7 @@ import {
   teamConditionals,
   teamOptBonusStats,
   teamOptMembers,
+  teamRuleConditionals,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import { uiDataForTeam } from '@genshin-optimizer/gi/uidata'
@@ -83,6 +84,26 @@ export interface TeamBuff {
    * `moonsign`): a character's buff is named by it ("Elemental Skill", "A1", "C2")
    */
   talent?: string
+  /** Nobody set it: Team optimize decides it by rule (`teamRuleConditionals`) */
+  auto?: true
+  /** Set by hand to another state than the rule's: the member's loadout that holds it */
+  overridesAuto?: string
+}
+
+/** Forget a gear effect's state set by hand (its member's loadout): the rule decides it again */
+export function clearToAuto(database: ArtCharDatabase, buff: TeamBuff) {
+  const teamCharId = buff.overridesAuto
+  if (!teamCharId) return
+  const [item, cond] = buff.ref.path
+  database.teamChars.set(teamCharId, (teamChar) => {
+    const conditional = structuredClone(teamChar.conditional ?? {}) as Record<
+      string,
+      Record<string, string>
+    >
+    if (!conditional[item]) return
+    delete conditional[item][cond]
+    teamChar.conditional = conditional as typeof teamChar.conditional
+  })
 }
 
 const samePath = (a: readonly string[], b: readonly string[]) =>
@@ -309,18 +330,59 @@ function describeFromSheets(
   return { name: ref.path.join(' · '), teamBuff: false, unnamed: true }
 }
 
-/** Every conditional that is on in the team, with its name */
+/**
+ * Every conditional that is on in the team, with its name; then the gear effects of the members'
+ * own gear that nobody set and that are on by rule (`auto`)
+ */
 export function teamBuffsOf(
   database: ArtCharDatabase,
   teamId: string,
   teamData: TeamData
 ): TeamBuff[] {
-  return teamConditionals(database, teamId).map(({ ref, value }) => ({
-    ref,
-    key: buffRefKey(ref),
-    value,
-    ...describe(ref, value, teamData),
-  }))
+  const buffs: TeamBuff[] = teamConditionals(database, teamId).map(
+    ({ ref, value }) => ({
+      ref,
+      key: buffRefKey(ref),
+      value,
+      ...describe(ref, value, teamData),
+    })
+  )
+  const known = new Set(buffs.map((b) => b.key))
+  const rules = teamRuleConditionals(
+    database,
+    teamId,
+    database.teams.get(teamId)?.teamOpt?.attacks ?? {}
+  )
+  const members = teamOptMembers(database, teamId)
+  for (const buff of buffs) {
+    if (buff.ref.owner === 'team') continue
+    const [item, cond] = buff.ref.path
+    const rule = (
+      rules[buff.ref.owner] as
+        | Record<string, Record<string, string>>
+        | undefined
+    )?.[item]?.[cond]
+    const member = members.find((m) => m.characterKey === buff.ref.owner)
+    if (rule !== undefined && rule !== buff.value && member)
+      buff.overridesAuto = member.teamCharId
+  }
+  for (const [owner, items] of Object.entries(rules))
+    for (const [item, conds] of Object.entries(items ?? {}))
+      for (const [cond, value] of Object.entries(
+        (conds ?? {}) as Record<string, string>
+      )) {
+        if (!value) continue
+        const ref: BuffRef = {
+          owner: owner as CharacterKey,
+          path: [item, cond],
+        }
+        const key = buffRefKey(ref)
+        if (known.has(key)) continue
+        const described = describe(ref, value, teamData)
+        if (described.inactive === 'gear') continue
+        buffs.push({ ref, key, value, ...described, auto: true })
+      }
+  return buffs
 }
 
 /**

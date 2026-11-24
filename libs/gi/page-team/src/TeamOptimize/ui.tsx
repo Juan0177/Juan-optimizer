@@ -23,7 +23,9 @@ import {
   createContext,
   type ReactNode,
   Suspense,
+  startTransition,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -885,4 +887,28 @@ export function BetaBadge({
   ) : (
     badge
   )
+}
+
+/* ---------- rendering ---------- */
+
+/**
+ * How many rows to show: the first screenful at once, then a batch more every frame, up to
+ * `total` (the drawer opens without rendering rows nobody sees yet). A new `key` (another search)
+ * starts over from the first screenful, so a long list never renders in one go.
+ */
+export function useBatches(total: number, batch = 16, first = 6, key = '') {
+  const [state, setState] = useState({ key, shown: first })
+  // (adjusted while rendering: the new key's first render already shows the first screenful)
+  if (state.key !== key) setState({ key, shown: first })
+  const shown = state.key === key ? state.shown : first
+  useEffect(() => {
+    if (shown >= total) return
+    const id = requestAnimationFrame(() =>
+      startTransition(() =>
+        setState((s) => (s.key === key ? { key, shown: s.shown + batch } : s))
+      )
+    )
+    return () => cancelAnimationFrame(id)
+  }, [shown, total, batch, key])
+  return shown
 }

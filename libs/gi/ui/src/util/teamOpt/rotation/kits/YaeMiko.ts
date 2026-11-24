@@ -205,17 +205,29 @@ export const kit: KitModel = {
       case 'charged': {
         // The windup (14f) is skipped after a normal attack
         const windup = !swappedIn && previous?.kind === 'normal' ? 14 : 0
-        // Five 2 m boxes, 9f apart from 90f, each 1.65 m further ahead (from the player to
-        // 1.65 m, 3.3 m, ...): only those that reach the target's disk hit
+        // Five 2×2 m boxes, 9f apart from 90f, centred 1.65 m, 3.3 m, ... ahead: those touching the
+        // target's disk hit it, but the YaeCharged group deals damage once per 0.5 s (kqmsim
+        // ICDGroupDamageSequence 1, 0, 0, ...), so one target takes one hit, as in the game (the
+        // boxes kqmsim lands for 0 damage are left out)
+        const { distance, radius } = ctx.target
+        let gate = -Infinity
         for (let i = 0; i < 5; i++) {
-          if (1.65 * (i + 1) >= ctx.target.distance + ctx.target.radius) break
-          ctx.hit(90 + 9 * i - windup, {
+          const centre = 1.65 * (i + 1)
+          if (
+            centre - 1 >= distance + radius ||
+            centre + 1 <= distance - radius
+          )
+            continue
+          const t = 90 + 9 * i - windup
+          if (t < gate + 30) continue
+          gate = t
+          ctx.hit(t, {
             path: ['charged', 'dmg'],
             tag: 'charged',
             element: 'electro',
             applies: true,
             icd: 'YaeCharged',
-            label: `Charged Attack (${i + 1})`,
+            label: 'Charged Attack',
           })
         }
         return {

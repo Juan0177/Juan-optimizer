@@ -172,7 +172,7 @@ const c1BladeConsume_dmgInc_disp = objKeyValMap(
   ]
 )
 const c1BladeConsume_dmgInc = objMap(c1BladeConsume_dmgInc_disp, (node) =>
-  unequal(target.charKey, key, node)
+  unequal(target.charKey, key, equal(target.charKey, input.activeCharKey, node))
 )
 
 const c2EleMas = greaterEq(input.constellation, 2, dm.constellation2.selfEleMas)

@@ -349,6 +349,28 @@ describe('Finale of the Deep', () => {
     )
     expect(windows(sim, 'FinaleOfTheDeep.bond')).toEqual([[65, 965]])
   })
+
+  it('marks its Bond of Life only when held: a candidate times its own windows only', () => {
+    const marks = (gear: SimGear) =>
+      play(
+        'Xiangling E W20',
+        {
+          Xiangling: kit('Xiangling', 'pyro', {
+            skill: { hits: [{ at: 10 }], frames: 60 },
+          }),
+        },
+        { Xiangling: gear }
+      ).hits.filter(
+        (h) => h.path[0] === '_marker' && h.path[1] === 'bondOfLife'
+      ).length
+    expect(marks(wear('FinaleOfTheDeep'))).toBe(1)
+    expect(
+      marks({
+        weapon: 'DullBlade',
+        candidates: { weapons: ['FinaleOfTheDeep'] },
+      })
+    ).toBe(0)
+  })
 })
 
 describe('Iron Sting', () => {

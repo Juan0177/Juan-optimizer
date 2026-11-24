@@ -1,10 +1,12 @@
 import { CardThemed, ModalWrapper } from '@genshin-optimizer/common/ui'
+import { useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import { Box, Button } from '@mui/material'
 import { useTranslation } from 'react-i18next'
 import { DialogHead, floatSx } from '../TeamOptimize/OptionTile'
 import { hairline } from '../TeamOptimize/ui'
 import { EnemyPanel } from './EnemyPanel'
+import { FreezeSetting } from './MoongeckoSettings'
 
 /** The team's enemy, in a window: set by hand, or a Stygian Onslaught boss from its catalogue */
 export function EnemyDialog({
@@ -17,6 +19,7 @@ export function EnemyDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation('page_team')
+  const team = useTeam(teamId)
   if (!open) return null
   return (
     <ModalWrapper
@@ -35,6 +38,11 @@ export function EnemyDialog({
           }}
         >
           <EnemyPanel teamId={teamId} />
+          {team && (
+            <Box sx={{ mt: 2, pt: 2, borderTop: hairline }}>
+              <FreezeSetting teamId={teamId} team={team} />
+            </Box>
+          )}
         </Box>
         {/* (what is changed applies at once: done closes it) */}
         <Box

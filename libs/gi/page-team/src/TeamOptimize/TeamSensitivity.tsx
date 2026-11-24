@@ -109,7 +109,8 @@ function useTeamSensitivity(
   const database = useDatabase()
   const { gender } = useDBMeta()
   const kqm = 'kqm' in result ? result.kqm : undefined
-  const subject: object = kqm ?? result
+  // (its builds: the same while the run's other builds come in, which give a new result each)
+  const subject: object = kqm ?? (result as TeamOptResult).builds
   // what the cells depend on besides the result (a KQM run's settings are its own, and its played
   // attacks, every candidate's buffs on them, can be megabytes)
   const key = kqm
