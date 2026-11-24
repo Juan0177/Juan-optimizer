@@ -16,6 +16,7 @@ import type {
   RunEnemy,
   TeamOptResult,
   TeamOptSession,
+  TeamOptShortfall,
   TeamOptSolver,
   TeamOptStep,
 } from '@genshin-optimizer/gi/ui'
@@ -24,6 +25,7 @@ import {
   runEnemyOf,
   TEAM_GPU_MIN_TOTAL,
   TeamOptCancelled,
+  TeamOptRequirementsUnmet,
   TeamOptSetRulesUnmet,
   teamOptMembers,
   useNumWorkers,
@@ -63,6 +65,8 @@ export type TeamOptRunState =
       message: string
       /** The members no team build keeps to the allowed sets of (the run gave no result) */
       setRulesUnmet?: CharacterKey[]
+      /** The members no team build gets to their minimums: each one they miss, and how far */
+      requirementsUnmet?: Partial<Record<CharacterKey, TeamOptShortfall[]>>
     }
 
 /** The live counters of the solver of the current step */
@@ -460,6 +464,12 @@ export function useTeamOptRun(teamId: string) {
             type: 'error',
             message: e.message,
             setRulesUnmet: e.characterKeys,
+          })
+        else if (e instanceof TeamOptRequirementsUnmet)
+          setState({
+            type: 'error',
+            message: e.message,
+            requirementsUnmet: e.shortfalls,
           })
         else
           setState({ type: 'error', message: (e as Error)?.message ?? `${e}` })

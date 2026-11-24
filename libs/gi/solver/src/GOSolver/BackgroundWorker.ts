@@ -14,6 +14,8 @@ declare function postMessage(result: WorkerResult): void
  */
 let worker: SolverWorker | undefined
 let run = -1
+/** Searches of at least this many builds with minimums have their artifacts' ranges pruned first */
+const RANGE_PRUNE_FROM = 1e10
 /** The lead's CPU work, prepared once the CPU is needed (see `LeadInit.waitForCPU`) */
 let prepareCPU: (() => void) | undefined
 
@@ -32,11 +34,19 @@ function handle(data: WorkerCommand) {
         break
       }
       const { problem, localMax } = data
-      // the GPU sweeps a large problem faster than its artifacts' ranges are pruned
+      // The GPU sweeps a large problem faster than its artifacts' ranges are pruned: they prune
+      // nothing when only the damage has a floor. Minimums do prune them (most of a big search's
+      // builds when an Energy Recharge one is high): not skipped then, for a search that big.
+      const builds = countBuilds(problem.arts)
+      const minimums = problem.constraints.some(
+        (c) =>
+          c.value !== problem.optimizationTarget &&
+          c.min > Number.NEGATIVE_INFINITY
+      )
       const gpuFirst =
         !!data.waitForCPU &&
-        countBuilds(problem.arts) >=
-          (data.gpuMinTotal ?? Number.POSITIVE_INFINITY)
+        builds >= (data.gpuMinTotal ?? Number.POSITIVE_INFINITY) &&
+        !(minimums && builds >= RANGE_PRUNE_FROM)
       const prepared = preprocess(problem, !gpuFirst)
       prepared.plot = plotConfigFor(prepared)
       postMessage({

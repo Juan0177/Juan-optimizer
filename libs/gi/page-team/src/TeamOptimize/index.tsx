@@ -23,6 +23,7 @@ import type {
   TeamOptMember,
   TeamOptPicks,
   TeamOptPickView,
+  TeamOptShortfall,
 } from '@genshin-optimizer/gi/ui'
 import {
   appliedStygianPreset,
@@ -118,7 +119,7 @@ import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import { DamageShare } from './DamageShare'
 import { TeamOptInspector } from './TeamOptInspector'
 import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
-import { TeamEquipUndo, TeamOptResults } from './TeamOptResults'
+import { Shortfalls, TeamEquipUndo, TeamOptResults } from './TeamOptResults'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -1237,6 +1238,11 @@ export default function TeamBuildWorkspace({
         <Alert severity="error" onClose={clear}>
           {state.setRulesUnmet?.length ? (
             <SetRulesUnmet characterKeys={state.setRulesUnmet} />
+          ) : state.requirementsUnmet ? (
+            <RequirementsUnmet
+              shortfalls={state.requirementsUnmet}
+              teamData={teamData}
+            />
           ) : (
             <>
               {t('teamOpt.run.error', 'Team Optimize stopped:')} {state.message}
@@ -2034,6 +2040,49 @@ function SetRulesUnmet({ characterKeys }: { characterKeys: CharacterKey[] }) {
           'Even with the pieces the other members hold, no build of the artifacts they may use keeps to the sets allowed on their Optimize tab (Requirements → Artifact sets), with their main stats and the inventory settings. Allow more sets, or free up pieces of the sets they need.'
         )}
       />
+    </>
+  )
+}
+
+/** A run without a result: no team build gets these members to their minimums */
+function RequirementsUnmet({
+  shortfalls,
+  teamData,
+}: {
+  shortfalls: Partial<Record<CharacterKey, TeamOptShortfall[]>>
+  teamData: TeamData | undefined
+}) {
+  const { t } = useTranslation('page_team')
+  const { gender } = useDBMeta()
+  const why = t(
+    'teamOpt.run.requirementsUnmetWhy',
+    'The most any build of the artifacts and weapons it may use reaches (its main stats, the sets it may use, the artifact levels and the weapons ticked). Lower the minimum on its Optimize tab, or allow more.'
+  )
+  return (
+    <>
+      {t(
+        'teamOpt.run.requirementsUnmet',
+        'No team build reaches the minimums of'
+      )}{' '}
+      {Object.keys(shortfalls).map((ck, i) => (
+        <Fragment key={ck}>
+          {i > 0 && ', '}
+          <strong>
+            <CharacterName characterKey={ck as CharacterKey} gender={gender} />
+          </strong>
+        </Fragment>
+      ))}
+      {'.'}
+      {Object.entries(shortfalls).map(([ck, missed]) => (
+        <Box key={ck} sx={{ mt: 0.75 }}>
+          <Shortfalls
+            shortfalls={missed ?? []}
+            data={teamData?.[ck as CharacterKey]?.target}
+            optimized
+            why={why}
+          />
+        </Box>
+      ))}
     </>
   )
 }
