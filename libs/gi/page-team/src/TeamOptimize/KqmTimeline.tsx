@@ -229,7 +229,29 @@ export function KqmTimeline({
         mapping.hitAttacks.has(h)
     )
     const talent = talentOf(text)
-    const own = talent ? all.filter((h) => h.path[0] === talent) : []
+    // (its own talent's hits until that talent's next use: Mitya's Burst hit lands after his next
+    // action has started)
+    const nextOwn = Math.min(
+      sim.start + sim.frames,
+      ...sim.actions
+        .filter(
+          (x) =>
+            x.characterKey === characterKey &&
+            x.start > start &&
+            talentOf(x.text) === talent
+        )
+        .map((x) => x.start)
+    )
+    const own = talent
+      ? sim.hits.filter(
+          (h) =>
+            h.characterKey === characterKey &&
+            h.t >= start &&
+            h.t < nextOwn &&
+            h.path[0] === talent &&
+            mapping.hitAttacks.has(h)
+        )
+      : []
     const hits = own.length ? own : all
     const listed = kqmAttacks?.[characterKey] ?? []
     const parts: Part[] = []
