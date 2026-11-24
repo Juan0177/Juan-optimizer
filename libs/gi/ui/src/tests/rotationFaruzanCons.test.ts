@@ -52,3 +52,37 @@ it('Faruzan A1: the Hurricane Arrow vortex shreds Anemo RES', () => {
   expect(shred.start).toBe(vortex.t)
   expect(state(vortex, 'Faruzan.burstHit')).toBe('')
 })
+
+it('Faruzan particles: Pressurized Collapse drops 2 particles with a shared 5.5 s ICD across Hurricane Arrow and C6', () => {
+  // E without CA at C0 produces no Pressurized Collapse and no particle markers
+  const noCa = run('Faruzan E Q W3', ['Faruzan'], { Faruzan: 0 })
+  expect(
+    noCa.hits.filter(
+      (h) => h.path.slice(0, 2).join('.') === '_marker.particles'
+    )
+  ).toHaveLength(0)
+
+  // E CA Q + continuous attacks at C6: Hurricane Arrow collapse + C6 collapses share the 5.5 s (331 f) ICD
+  const c6 = run('Faruzan E CA Q -> Xiao E E Q 12[J P]', ['Faruzan', 'Xiao'], {
+    Faruzan: 6,
+  })
+  const collapses = c6.hits
+    .filter(
+      (h) =>
+        h.characterKey === 'Faruzan' && h.path.join('.') === 'skill.vortexDmg'
+    )
+    .map((h) => h.t)
+  const particles = c6.hits
+    .filter(
+      (h) =>
+        h.characterKey === 'Faruzan' &&
+        h.path.slice(0, 2).join('.') === '_marker.particles'
+    )
+    .map((h) => h.t)
+  // Multiple collapses occur every ~3 s, while particles trigger only every >= 5.5 s (331 frames)
+  expect(collapses.length).toBeGreaterThan(particles.length)
+  expect(particles.length).toBeGreaterThanOrEqual(3)
+  expect(particles[0]).toBe(collapses[0])
+  for (let i = 1; i < particles.length; i++)
+    expect(particles[i] - particles[i - 1]).toBeGreaterThanOrEqual(331)
+})

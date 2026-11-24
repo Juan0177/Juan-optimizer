@@ -4,6 +4,7 @@ import {
   GCSIM,
   type NormalHit,
   normalString,
+  particleMarker,
   templateJump,
 } from './common'
 
@@ -29,6 +30,8 @@ interface FaruzanState {
   c6Ready: number
   /** A4: the next Hurricane Guard can trigger from this frame */
   a4Ready: number
+  /** Pressurized Collapse particle ICD (5.5 s, Faruzan's clock: gcsim's faruzan-particle-icd) */
+  particleReady: number
 }
 
 /** A4's Hurricane Guard: these attacks' Anemo DMG */
@@ -36,6 +39,22 @@ interface FaruzanState {
 function c4Energy(ctx: SimContext, delay: number) {
   if (ctx.constellation('Faruzan') >= 4)
     flatEnergy(ctx, delay, 2, 'Faruzan C4', { owner: 'Faruzan' })
+}
+/** Pressurized Collapse (Hurricane Arrow or C6): 2 Anemo particles, shared 5.5 s ICD (gcsim) */
+function collapseParticles(ctx: SimContext, s: FaruzanState, delay: number) {
+  ctx.at(delay, (c2) => {
+    const own = c2.characterFrame('Faruzan')
+    if (own < s.particleReady) return
+    // (gcsim: AddStatus(particleICDKey, 5.5*60, true) — active on its expiry frame, hitlag-paused)
+    s.particleReady = own + 331
+    particleMarker(
+      c2,
+      0,
+      'Pressurized Collapse particles',
+      'Aimed Shot',
+      'Faruzan'
+    )
+  })
 }
 const A4_TAGS = new Set(['normal', 'charged', 'plunge', 'skill', 'burst'])
 
@@ -67,6 +86,7 @@ export const kit: KitModel = {
     hurricanes: 0,
     c6Ready: -1,
     a4Ready: -1,
+    particleReady: -1,
   }),
   // In Manifest Gale her charged attack is the Hurricane Arrow (gcsim's own aimedEFrames)
   variant(ctx, s: FaruzanState, action) {
@@ -124,6 +144,7 @@ export const kit: KitModel = {
             label: 'Pressurized Collapse',
           })
           c4Energy(ctx, 59 + 33)
+          collapseParticles(ctx, s, 59 + 33)
           return {
             frames: 60,
             framesInto: {
@@ -284,5 +305,6 @@ export const kit: KitModel = {
       label: 'Pressurized Collapse (C6)',
     })
     c4Energy(ctx, 33)
+    collapseParticles(ctx, s, 33)
   },
 }

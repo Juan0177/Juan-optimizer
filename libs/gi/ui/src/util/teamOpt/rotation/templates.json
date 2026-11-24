@@ -1,5 +1,50 @@
 {
   "Mavuika": {
+    "Mavuika-Citlali-Xilonen-Bennett": {
+      "kind": "melt",
+      "members": ["Mavuika", "Citlali", "Xilonen", "Bennett"],
+      "text": "Mavuika E -> Bennett E -> Xilonen E N2 -> Bennett Q -> Citlali E Q N1 -> Mavuika E C Q CD C3F D CF D CF D CD C2 D -> Mavuika",
+      "seconds": 18.2,
+      "source": {
+        "name": "Prydwen / KQM",
+        "url": "https://www.prydwen.gg/genshin-impact/characters/mavuika"
+      },
+      "checked": {
+        "constellations": {
+          "Bennett": 6
+        },
+        "gear": {
+          "Mavuika": {
+            "weapon": "SerpentSpine",
+            "refinement": 1,
+            "sets": {
+              "ObsidianCodex": 4
+            }
+          },
+          "Citlali": {
+            "weapon": "ThrillingTalesOfDragonSlayers",
+            "refinement": 5,
+            "sets": {
+              "ScrollOfTheHeroOfCinderCity": 4
+            }
+          },
+          "Xilonen": {
+            "weapon": "FavoniusSword",
+            "refinement": 3,
+            "sets": {
+              "ArchaicPetra": 4
+            }
+          },
+          "Bennett": {
+            "weapon": "TheAlleyFlash",
+            "refinement": 1,
+            "sets": {
+              "NoblesseOblige": 4
+            }
+          }
+        }
+      }
+    },
     "Mavuika-Bennett-Citlali-Rosaria": {
       "kind": "melt",
       "members": ["Mavuika", "Bennett", "Citlali", "Rosaria"],

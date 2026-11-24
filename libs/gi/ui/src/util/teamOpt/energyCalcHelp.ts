@@ -35,7 +35,7 @@ export const ENERGY_HELP: Partial<Record<CharacterKey, string>> = {
   Durin: 'Bonus energy holds his Skill’s own Energy, 30 per state he enters (once per 6 s, Skill Lv. 9), filled from the written rotation.',
   Emilie: 'Her Burst replaces her Lumidouce Case and costs it a particle: that is the Second skill Burst, filled from the written rotation.',
   Escoffier: 'C4: up to 14 Energy per Burst (2 per Rehab Diet heal, a chance equal to her CRIT Rate, 7 times), filled into Bonus energy from the written rotation.',
-  Faruzan: 'Only the Hurricane Arrow after her Skill (Aimed Shot) and, at C6, C6 triggers (Second skill) make particles, with a shared 5.5 s cooldown. C4: 2 per vortex, filled into Bonus energy from the written rotation.',
+  Faruzan: 'Only Pressurized Collapses (Hurricane Arrow and C6 triggers) make particles (2 each, shared 5.5 s cooldown): counted from the written rotation as Aimed Shot uses and credited to whoever is on the field as each drop arrives; without a rotation, add C6 triggers as the Second skill. C4: 2 per vortex, filled into Bonus energy from the written rotation.',
   Fischl: 'Skill uses are only the Oz she summons with her Skill: the Oz from her Burst is counted for you.',
   Flins: 'From the written rotation: Skill counts his particles (one per Manifest Flame hit), the Thunderous Symphony row his 30-Energy Bursts, and Bonus energy C1’s 8 per Lunar-Charged (once per 5.5 s).',
   Freminet: 'Skills in his Burst make 1 particle: set them as the Second skill Level 0 (burst) or Level 4. C2: 2 per Shattering Pressure (3 at Level 4), filled into Bonus energy from the written rotation.',
