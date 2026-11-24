@@ -140,6 +140,20 @@
     "entries": [
       {
         "date": "2026-11-25",
+        "title": "Reazioni nella cronologia",
+        "summary": "Ora si vede quali reazioni avvengono e quando.",
+        "sections": [
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Riga Reazioni nella cronologia**: un segno per ogni reazione del personaggio in campo, nel suo colore (pieno per Fusione e Vaporizzazione dirette ×2, vuoto per le inverse ×1,5). Passandoci sopra si vede il momento, chi l’ha innescata e con quale colpo.",
+              "**Sezione Reazioni in Scrivi la rotazione**: per ogni personaggio quante reazioni di ogni tipo e l’elenco con il secondo e il colpo. Si può passare da “In campo” a “Tutte” per vedere anche quelle innescate fuori campo (come il Tifone glaciale di Citlali sul Pyro di Mavuika)."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-25",
         "title": "Fusione di Mavuika e lista dei colpi",
         "summary": "Una correzione nella lista dei colpi della rotazione e una guida sulla Fusione di Mavuika con Citlali.",
         "sections": [
