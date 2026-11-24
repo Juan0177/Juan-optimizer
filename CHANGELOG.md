@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.39.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.39.1) (2026-11-24)
+
+### Improved
+
+- Team optimize stays responsive on phones while it runs: the page no longer freezes for a second at a time.
+
+### Fixed
+
+- Cryo Traveler: Charged Attack: Freezing Ice without Stellar Radiance showed as a plain white Charged Attack. It now shows as Freezing Ice, in Cryo.
+
 ## [v1.39.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.39.0) (2026-11-24)
 
 ### New

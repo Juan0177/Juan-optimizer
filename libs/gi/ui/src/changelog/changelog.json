@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.39.1",
+    "date": "2026-11-24",
+    "improved": [
+      "Team optimize stays responsive on phones while it runs: the page no longer freezes for a second at a time."
+    ],
+    "fixed": [
+      "Cryo Traveler: Charged Attack: Freezing Ice without Stellar Radiance showed as a plain white Charged Attack. It now shows as Freezing Ice, in Cryo."
+    ]
+  },
+  {
     "version": "1.39.0",
     "date": "2026-11-24",
     "new": [
