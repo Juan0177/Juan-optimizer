@@ -54,7 +54,6 @@ import {
   parseRotation,
   parseTiming,
   perRotation,
-  REACTION_NAMES,
   type RotationMember,
   rotationAttacks,
   rotationBuffDefaults,
@@ -112,6 +111,7 @@ import {
 import type { i18n } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { HitLabel, useAttackInfo, variantColor } from './AttackName'
+import { attackHitGroup } from './hitLabel'
 import type { TeamBuff } from './buffs'
 import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
@@ -2967,7 +2967,8 @@ function EmptyTimeline({ playing }: { playing?: boolean }) {
 
 /** One part of an attack in a hit card: what kind of hit it is ("Stellar-Conduct"), how many */
 interface HitPart {
-  tag?: string
+  /** Its kinds of hit, the reaction last ("Cyclic", "Melt"); none for the plain hit */
+  tags: string[]
   n: number
   path: string[]
 }
@@ -2990,7 +2991,9 @@ function HitGroup({
   // in another language, the attack's name from the sheet (`HitLabel`): the label is English
   const { i18n } = useTranslation()
   const english = (i18n?.language ?? 'en').startsWith('en') || !info?.name
-  const label = (part: HitPart) => (part.tag ? `${name} (${part.tag})` : name)
+  const label = (part: HitPart) =>
+    `${name}${part.tags.map((tag) => ` (${tag})`).join('')}`
+  const kind = (part: HitPart) => part.tags.join(' · ')
   const color = variantColor(info?.element)
   const count = (value: number, quiet?: boolean) => (
     <Box
@@ -3063,19 +3066,19 @@ function HitGroup({
               <HitLabel label={label(first)} data={data} path={first.path} />
             )}
           </Box>
-          {english && first.tag && (
+          {english && first.tags.length > 0 && (
             <Box component="span" sx={tagSx}>
-              {first.tag}
+              {kind(first)}
             </Box>
           )}
         </Box>
       </Tooltip>
       {count(first.n)}
       {rest.map((part) => (
-        <Fragment key={part.tag ?? part.path.join('.')}>
+        <Fragment key={kind(part) || part.path.join('.')}>
           <Box component="span" sx={{ ...tagSx, pl: 1.5 }}>
             {english ? (
-              (part.tag ?? name)
+              kind(part) || name
             ) : (
               <HitLabel label={label(part)} data={data} path={part.path} />
             )}
@@ -3159,18 +3162,12 @@ function HitsSummary({
           // each attack once ("Palestar Crown"), its kinds of hit (Cryo, Stellar-Conduct) as its parts
           const groups = new Map<string, HitPart[]>()
           for (const a of attacks?.[characterKey] ?? []) {
-            const base = a.description ?? a.path.join('.')
-            const label = a.reaction
-              ? `${base} (${REACTION_NAMES[a.reaction] ?? a.reaction})`
-              : base
             // "Wing Dance Move (Stellar-Swirl)": the attack, then what kind of hit it is
-            const tagged = label.match(/^(.*?)\s*\(([^()]*)\)$/)
-            const name = tagged ? tagged[1] : label
-            const tag = tagged?.[2]
+            const { name, tags } = attackHitGroup(a)
             const parts = groups.get(name) ?? []
-            const part = parts.find((p) => p.tag === tag)
+            const part = parts.find((p) => p.tags.join('|') === tags.join('|'))
             if (part) part.n += a.hits ?? 1
-            else parts.push({ tag, n: a.hits ?? 1, path: a.path })
+            else parts.push({ tags, n: a.hits ?? 1, path: a.path })
             groups.set(name, parts)
           }
           const sums = [...groups.values()].map((parts) =>

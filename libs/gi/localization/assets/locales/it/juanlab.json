@@ -140,6 +140,25 @@
     "entries": [
       {
         "date": "2026-11-25",
+        "title": "Fusione di Mavuika e lista dei colpi",
+        "summary": "Una correzione nella lista dei colpi della rotazione e una guida sulla Fusione di Mavuika con Citlali.",
+        "sections": [
+          {
+            "kind": "fixed",
+            "items": [
+              "**Colpi per rotazione**: le reazioni non compaiono più due volte (“Tifone glaciale (Fusione) (Fusione)”), e i colpi in Fusione stanno sotto il loro attacco invece di formare una riga a parte (“Attacco caricato: Ciclico, Ciclico · Fusione, Finale · Fusione”)."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "**Mavuika con Citlali**: i suoi attacchi caricati fondono solo se Citlali applica il Cryo dopo il suo Tripudio, cioè con `Citlali E Q N1` (5 attacchi caricati su 13, come conta Prydwen). Con `Citlali E Q` o `Citlali E N1 Q` l’aura Pyro di Mavuika resta sul nemico e non fonde mai. La spiegazione completa è in docs/mavuika-citlali-melt.md."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-25",
         "title": "Aggiornamento a Stellar Optimizer 1.40.4",
         "summary": "Arrivano le versioni da 1.40.2 a 1.40.4 di Stellar Optimizer.",
         "sections": [
