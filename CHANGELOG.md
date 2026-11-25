@@ -4,6 +4,14 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.41.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.2) (2026-11-25)
+
+### Fixed
+
+- Burst scenarios progress now advances smoothly without jumping backward between weapons, rounds, or repair passes.
+- Optimize rotation now uses your team's live ER calculator settings, Burst frequency, and constellations when scoring and confirming builds, drops rotations whose real builds fail requirements or lose DPS, and marks unconfirmed rotations that need more ER.
+- Team optimize waits for automatic ER to update after switching rotations and explains in the Below current tooltip when current builds miss a requirement such as Min ER.
+
 ## [v1.41.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.1) (2026-11-25)
 
 ### Improved

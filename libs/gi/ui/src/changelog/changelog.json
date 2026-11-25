@@ -1,5 +1,14 @@
 [
   {
+    "version": "1.41.2",
+    "date": "2026-11-25",
+    "fixed": [
+      "Burst scenarios progress now advances smoothly without jumping backward between weapons, rounds, or repair passes.",
+      "Optimize rotation now uses your team's live ER calculator settings, Burst frequency, and constellations when scoring and confirming builds, drops rotations whose real builds fail requirements or lose DPS, and marks unconfirmed rotations that need more ER.",
+      "Team optimize waits for automatic ER to update after switching rotations and explains in the Below current tooltip when current builds miss a requirement such as Min ER."
+    ]
+  },
+  {
     "version": "1.41.1",
     "date": "2026-11-25",
     "improved": [
