@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.40.6",
+    "date": "2026-11-25",
+    "fixed": [
+      "Team Optimize now ranks up to three 2-piece + 2-piece artifact builds per character alongside 4-piece builds. Select a pair to compare its team damage.",
+      "Varesa's Skill charges now recharge one at a time. The rotation also ends Fiery Passion when she swaps out after a plunge that spent her Nightsoul points."
+    ]
+  },
+  {
     "version": "1.40.5",
     "date": "2026-11-25"
   },
