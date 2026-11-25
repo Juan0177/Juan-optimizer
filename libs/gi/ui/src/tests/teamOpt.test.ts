@@ -888,6 +888,20 @@ describe('team optimize', () => {
         expect(option.value).toBeLessThanOrEqual(options.best * (1 + 1e-9))
       }
     }
+    const replayOrder = [...result.optimized].reverse()
+    const replayed: CharacterKey[] = []
+    await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt,
+      solve: bruteForce,
+      from: { ...result, optimized: replayOrder },
+      maxRounds: 0,
+      onResult: () => {},
+      onOptions: (ck) => replayed.push(ck),
+    })
+    expect(replayed).toEqual(replayOrder)
   })
 
   it('lists an eligible set even if its builds cannot meet a minimum', async () => {

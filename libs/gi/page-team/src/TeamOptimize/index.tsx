@@ -502,7 +502,14 @@ export default function TeamBuildWorkspace({
   // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
   // tab's
   const resultAttacks = result?.result.attacks
-  const resultSettings = result?.teamOpt ?? teamOpt
+  const savedSettings = result?.teamOpt
+  const resultSettings = savedSettings ?? teamOpt
+  const resultSettingsChanged = useMemo(
+    () =>
+      !!savedSettings &&
+      teamOptRunKey(savedSettings) !== teamOptRunKey(teamOpt),
+    [savedSettings, teamOpt]
+  )
   const shownTeamOpt = useMemo(
     () =>
       resultAttacks
@@ -1358,7 +1365,7 @@ export default function TeamBuildWorkspace({
             teamData={teamData}
             stale={
               result.requirementsKey !== requirementsKey ||
-              teamOptRunKey(result.teamOpt) !== teamOptRunKey(teamOpt) ||
+              resultSettingsChanged ||
               enemyChanged(result.enemy)
             }
             enemy={result.enemy}

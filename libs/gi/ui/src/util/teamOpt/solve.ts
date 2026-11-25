@@ -796,7 +796,8 @@ export async function optimizeTeam({
   /** Given the team found, to try other equipment on (`TeamOptSession`) */
   onSession?: (session: TeamOptSession) => void
   /** Start from these builds and weapons (a saved result's: with `maxRounds` 0, its session) */
-  from?: Pick<TeamOptResult, 'builds' | 'weapons'>
+  from?: Pick<TeamOptResult, 'builds' | 'weapons'> &
+    Partial<Pick<TeamOptResult, 'optimized'>>
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -1155,12 +1156,17 @@ export async function optimizeTeam({
   const before = evaluateIn(state)
   if (!before) return undefined
   const start = copyState(state)
+  const savedOrder = new Map(
+    (maxRounds === 0 ? from?.optimized : undefined)?.map((key, i) => [key, i])
+  )
   const order = members
     .filter((m) => !m.isTc && !teamOpt.keep.includes(m.characterKey))
     .sort(
       (a, b) =>
+        (savedOrder.get(a.characterKey) ?? members.length) -
+          (savedOrder.get(b.characterKey) ?? members.length) ||
         (before.members[b.characterKey] ?? 0) -
-        (before.members[a.characterKey] ?? 0)
+          (before.members[a.characterKey] ?? 0)
     )
   const teamLocations = new Set(members.map((m) => m.location as string))
   const allArts = database.arts.values

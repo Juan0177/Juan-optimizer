@@ -2,35 +2,32 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import type { OptProblemInput } from '@genshin-optimizer/gi/solver'
-import {
-  GOSolver,
-  mergeBuilds,
-  nextPaint,
-  prewarmSolver,
-} from '@genshin-optimizer/gi/solver'
-import { compactArtifacts } from '@genshin-optimizer/gi/solver-tc'
+import { nextPaint, prewarmSolver } from '@genshin-optimizer/gi/solver'
 import type {
   BonusStats,
   RunAttackState,
   RunEnemy,
+  TeamOptMemberOptions,
   TeamOptResult,
   TeamOptSession,
   TeamOptShortfall,
-  TeamOptSolver,
+  TeamOptStatus,
   TeamOptStep,
 } from '@genshin-optimizer/gi/ui'
 import {
+  initStatus,
   optimizeTeam,
   runEnemyOf,
-  TEAM_GPU_MIN_TOTAL,
+  startTeamOptRankings,
   TeamOptCancelled,
   TeamOptRequirementsUnmet,
   TeamOptSetRulesUnmet,
   teamOptMembers,
+  teamOptSolver,
   useNumWorkers,
 } from '@genshin-optimizer/gi/ui'
 import {
+  startTransition,
   useCallback,
   useEffect,
   useRef,
@@ -41,6 +38,9 @@ import { useTranslation } from 'react-i18next'
 import { teamRunAttacks } from './RotationWriter'
 import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
 import { inventoryRequirementsKey } from './useTeamOpt'
+
+export type { TeamOptStatus } from '@genshin-optimizer/gi/ui'
+export { initStatus, teamOptSolver } from '@genshin-optimizer/gi/ui'
 
 export type TeamOptRunState =
   | { type: 'idle' }
@@ -68,31 +68,6 @@ export type TeamOptRunState =
       /** The members no team build gets to their minimums: each one they miss, and how far */
       requirementsUnmet?: Partial<Record<CharacterKey, TeamOptShortfall[]>>
     }
-
-/** The live counters of the solver of the current step */
-export type TeamOptStatus = {
-  /**
-   * The step being run. Kept here, read by the progress line on its own timer, not in the run's
-   * state: a state change per step re-rendered the whole page about 30 times a run.
-   */
-  step?: TeamOptStep
-  tested: number
-  failed: number
-  skipped: number
-  total: number
-  /** Every combination, set rules not applied (the GPU's sweep), until `total` is known */
-  upper?: number
-  testedPerSecond: number
-  skippedPerSecond: number
-}
-export const initStatus = (): TeamOptStatus => ({
-  tested: 0,
-  failed: 0,
-  skipped: 0,
-  total: Number.NaN,
-  testedPerSecond: 0,
-  skippedPerSecond: 0,
-})
 
 /**
  * The last result per team, so that it is still there after visiting another page (one object
@@ -166,99 +141,6 @@ function lastRun(database: ArtCharDatabase, teamId: string): TeamOptRunState {
     if (saved) lastRuns[key] = saved
   }
   return lastRuns[key] ?? { type: 'idle' }
-}
-
-/**
- * Team Optimize's solver for its runs: one solve per member and round, on the GPU when the browser
- * can, its live counters in `status`; `onSolver` gets what stops the solves running (undefined
- * between solves). A member's weapons can be solved at once: the first one running shows its
- * counters, the others count apart.
- */
-export function teamOptSolver(
-  status: TeamOptStatus,
-  maxWorkers: number,
-  onSolver: (stop: (() => void) | undefined) => void
-): TeamOptSolver {
-  const running = new Set<GOSolver>()
-  const stopAll = () => {
-    for (const solver of running) solver.cancel(new TeamOptCancelled())
-  }
-  return async ({
-    arts,
-    objective,
-    constraints,
-    exclusion,
-    mainStatAssumptionLevel,
-    topN = 1,
-    onWork,
-    background,
-  }) => {
-    const problem: OptProblemInput = {
-      arts: compactArtifacts(arts, mainStatAssumptionLevel, false),
-      optimizationTarget: objective,
-      constraints,
-      exclusion,
-      topN,
-    }
-    const shown = !running.size
-    const counters = shown ? Object.assign(status, initStatus()) : initStatus()
-    // (Team Optimize always uses the GPU when the browser can: each step has a build to beat, which
-    // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
-    // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
-    // small searches)
-    const solver = new GOSolver(
-      problem,
-      counters,
-      // (one running beside another shares the cores, should the CPU take it)
-      background
-        ? Math.min(maxWorkers, 2)
-        : shown
-          ? maxWorkers
-          : Math.max(1, Math.floor(maxWorkers / 2)),
-      { gpu: true, gpuMinTotal: TEAM_GPU_MIN_TOTAL, background }
-    )
-    running.add(solver)
-    onSolver(stopAll)
-    const t0 = performance.now()
-    try {
-      const results = await solver.solve()
-      onWork?.({
-        tested: counters.tested,
-        total: Number.isFinite(counters.total) ? counters.total : 0,
-      })
-      const [best, ...next] = mergeBuilds(
-        results.map((r) => r.builds),
-        topN
-      )
-      if (process.env['NODE_ENV'] === 'development')
-        console.log('[TeamOpt] solve', {
-          arts: arts.length,
-          total: counters.total,
-          tested: counters.tested,
-          skipped: counters.skipped,
-          ms: Math.round(performance.now() - t0),
-          found: !!best,
-        })
-      return (
-        best && {
-          value: best.value,
-          artifactIds: best.artifactIds,
-          ...(next.length
-            ? {
-                more: next.map(({ value, artifactIds }) => ({
-                  value,
-                  artifactIds,
-                })),
-              }
-            : {}),
-        }
-      )
-    } finally {
-      running.delete(solver)
-      if (!running.size) onSolver(undefined)
-      solver.cancel()
-    }
-  }
 }
 
 /**
@@ -353,8 +235,10 @@ export function useTeamOptRun(teamId: string) {
       let cancelled = false
       const roster = teamRoster(database, teamId)
       let stopSolver: (() => void) | undefined
+      let stopRanking: (() => void) | undefined
       cancelRef.current = () => {
         cancelled = true
+        stopRanking?.()
         stopSolver?.()
       }
       const stopFollowing = database.teams.follow(teamId, () => {
@@ -364,7 +248,7 @@ export function useTeamOptRun(teamId: string) {
       // its other builds done or stopped: the result as it is, saved (not over a newer run's)
       const settle = (found: TeamOptRunState & { type: 'done' }) => {
         const { optionsRunning: _, ...done } = found
-        if (mine()) setState(done, true)
+        if (mine()) startTransition(() => setState(done, true))
         else {
           const last = lastRuns[key]
           if (last?.type === 'done' && last.savedAt === done.savedAt)
@@ -395,42 +279,27 @@ export function useTeamOptRun(teamId: string) {
           if (!mine() || cancelled || teamRoster(database, teamId) !== roster)
             return
           const first = !shown
-          shown = { ...next, savedAt: shown?.savedAt ?? Date.now() }
+          const found = { ...next, savedAt: shown?.savedAt ?? Date.now() }
+          shown = found
           if (first && session)
-            keepSession(shown.savedAt!, Promise.resolve(session))
-          setState(shown, true)
+            keepSession(found.savedAt, Promise.resolve(session))
+          // Save the team immediately, then save the rankings together when the worker stops.
+          startTransition(() => setState(found, first))
         }
-        const result = await optimizeTeam({
-          database,
+        const runSettings = {
           teamId,
           gender,
           teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
-          onResult: (found) =>
-            show({
-              type: 'done',
-              roster,
-              requirementsKey,
-              result: attacks ? { ...found, attacks } : found,
-              seconds: seconds(),
-              teamOpt,
-              ...(enemy ? { enemy } : {}),
-              optionsRunning: true,
-            }),
+          attackStates,
+          rankingBonusStats,
+        }
+        const result = await optimizeTeam({
+          ...runSettings,
+          database,
           onSession: (s) => {
             session = s
           },
-          onOptions: (ck, options) =>
-            shown &&
-            show({
-              ...shown,
-              result: {
-                ...shown.result,
-                options: { ...shown.result.options, [ck]: options },
-              },
-            }),
           solve,
-          attackStates,
-          rankingBonusStats,
           isCancelled: () => cancelled,
           onStep: async (step) => {
             status.current.step = step
@@ -441,24 +310,72 @@ export function useTeamOptRun(teamId: string) {
             lastPaint = performance.now()
           },
         })
-        // (stopped while its other builds were searched: the result stays, with those found)
-        if (shown) return settle(shown)
         if (!mine()) return
         if (cancelled || teamRoster(database, teamId) !== roster)
           throw new TeamOptCancelled()
-        setState(
-          result
-            ? {
-                type: 'done',
-                roster,
-                requirementsKey,
-                result: attacks ? { ...result, attacks } : result,
-                seconds: seconds(),
-                teamOpt,
-                ...(enemy ? { enemy } : {}),
-              }
-            : { type: 'error', message: 'The team could not be computed.' }
-        )
+        if (!result) {
+          setState({
+            type: 'error',
+            message: 'The team could not be computed.',
+          })
+          return
+        }
+        show({
+          type: 'done',
+          roster,
+          requirementsKey,
+          result: attacks ? { ...result, attacks } : result,
+          seconds: seconds(),
+          teamOpt,
+          ...(enemy ? { enemy } : {}),
+          ...(result.optimized.length ? { optionsRunning: true } : {}),
+        })
+        if (!shown || !result.optimized.length) return
+        const onOptions = (ck: CharacterKey, options: TeamOptMemberOptions) => {
+          if (!shown) return
+          show({
+            ...shown,
+            result: {
+              ...shown.result,
+              options: { ...shown.result.options, [ck]: options },
+            },
+          })
+        }
+        await nextPaint()
+        if (cancelled) return settle(shown)
+        try {
+          const ranking = startTeamOptRankings(
+            database,
+            {
+              ...runSettings,
+              result: {
+                builds: result.builds,
+                weapons: result.weapons,
+                optimized: result.optimized,
+              },
+              maxWorkers,
+            },
+            onOptions
+          )
+          stopRanking = ranking.stop
+          await ranking.done
+        } catch {
+          // If a worker cannot run, finish any remaining rankings with the run's own session.
+          for (const ck of result.optimized) {
+            if (cancelled || !session) break
+            if (shown.result.options?.[ck]) continue
+            const weaponId = result.weapons[ck]
+            if (!weaponId) continue
+            const options = await session.rankings(
+              { builds: result.builds, weaponIds: result.weapons },
+              ck,
+              { weaponId },
+              () => cancelled
+            )
+            if (options) onOptions(ck, options)
+          }
+        }
+        settle(shown)
       } catch (e) {
         if (shown) return settle(shown)
         if (!mine()) return

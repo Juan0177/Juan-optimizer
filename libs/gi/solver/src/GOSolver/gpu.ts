@@ -409,8 +409,9 @@ export class GPUSolver {
     ) => {
       doneDispatches = 0
       const paced = () =>
-        typeof document !== 'undefined' &&
-        document.visibilityState === 'visible'
+        background ||
+        (typeof document !== 'undefined' &&
+          document.visibilityState === 'visible')
       // Short slices of work, at most two queued: the browser's own GPU work (drawing the page)
       // runs between slices instead of waiting behind the whole sweep, and the next slice is
       // already queued while the GPU reports the previous one done (that report can be slow)
