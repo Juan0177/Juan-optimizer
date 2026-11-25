@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.42.0",
+    "date": "2026-11-25",
+    "new": [
+      "Sacrificial weapons can reset Elemental Skills in written rotations. Add an optional E? to cast again when the Skill is ready and continue immediately when it is still on cooldown.",
+      "The rotation writer shows how often the extra Skill played and lets you compare cast and skipped timelines. Compare ER with Sacrificial shows the no-reset target alongside the average with resets. Automatic ER uses the no-reset target."
+    ],
+    "fixed": [
+      "Mavuika’s Flamestrider Charged Attack finisher now counts when it ends a rotation. Follow-up actions also respect its hitlag and recovery.",
+      "Vesna’s Charged Attack now requires an open Normal Attack combo, so the rotation simulator flags inputs that the game cannot execute."
+    ]
+  },
+  {
     "version": "1.41.4",
     "date": "2026-11-25"
   },

@@ -4,6 +4,18 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.42.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.42.0) (2026-11-25)
+
+### New
+
+- Sacrificial weapons can reset Elemental Skills in written rotations. Add an optional E? to cast again when the Skill is ready and continue immediately when it is still on cooldown.
+- The rotation writer shows how often the extra Skill played and lets you compare cast and skipped timelines. Compare ER with Sacrificial shows the no-reset target alongside the average with resets. Automatic ER uses the no-reset target.
+
+### Fixed
+
+- Mavuika’s Flamestrider Charged Attack finisher now counts when it ends a rotation. Follow-up actions also respect its hitlag and recovery.
+- Vesna’s Charged Attack now requires an open Normal Attack combo, so the rotation simulator flags inputs that the game cannot execute.
+
 ## [v1.41.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.2) (2026-11-25)
 
 ### Fixed
