@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.41.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.1) (2026-11-25)
+
+### Improved
+
+- Team optimize runs noticeably faster and keeps the page smoother while searching, especially for alternative weapon and artifact set rankings and repeat runs.
+
+### Fixed
+
+- Team optimize no longer puts the main carry on an energy weapon like Favonius in round 1 just because a teammate's starting artifacts miss their ER requirement before that teammate has been optimized; when an energy weapon is genuinely needed, lower-damage supports now take it first.
+
 ## [v1.41.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.0) (2026-11-25)
 
 ### New
