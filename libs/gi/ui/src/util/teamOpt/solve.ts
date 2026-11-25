@@ -641,12 +641,18 @@ const beatOf = (floor: number) =>
 interface TeamState {
   builds: TeamOptBuilds
   weaponIds: Partial<Record<CharacterKey, string>>
+  lockedPairs?: Partial<Record<CharacterKey, TeamOptSetPair>>
 }
-const copyState = ({ builds, weaponIds }: TeamState): TeamState => ({
+const copyState = ({
+  builds,
+  weaponIds,
+  lockedPairs,
+}: TeamState): TeamState => ({
   builds: Object.fromEntries(
     Object.entries(builds).map(([key, build]) => [key, { ...build }])
   ) as TeamOptBuilds,
   weaponIds: { ...weaponIds },
+  lockedPairs,
 })
 
 /**
@@ -1295,7 +1301,10 @@ export async function optimizeTeam({
   const currentIn = (
     s: TeamState,
     characterKey: CharacterKey,
-    { objective, constraints }: Problem
+    {
+      objective,
+      constraints,
+    }: Pick<TeamOptSolveInput, 'objective' | 'constraints'>
   ) => {
     const arts = artsIn(s, characterKey)
     const [value, ...values] = evaluateNodes(
@@ -1588,12 +1597,25 @@ export async function optimizeTeam({
       if (isCancelled()) throw new TeamOptCancelled()
       const problem = problemIn(s, characterKey)
       if (!problem) return undefined
-      const current = currentIn(s, characterKey, problem)
+      const pair = s.lockedPairs?.[characterKey]
+      const constraints = pair
+        ? [
+            ...problem.constraints,
+            ...pair.map((key) => ({ value: dynRead(key), min: 2 })),
+          ]
+        : problem.constraints
+      const current = currentIn(s, characterKey, {
+        objective: problem.objective,
+        constraints,
+      })
       const full = isFull(s, characterKey)
       const beat = beatOf(
         current.ok && full ? current.value : Number.NEGATIVE_INFINITY
       )
-      const open = [...takeable, ...group.slice(j + 1)]
+      const open = [
+        ...takeable,
+        ...group.slice(j + 1).filter((m) => !s.lockedPairs?.[m.characterKey]),
+      ]
       const taken = new Set(
         members
           .filter((m) => m.characterKey !== characterKey && !open.includes(m))
@@ -1613,13 +1635,13 @@ export async function optimizeTeam({
         ),
         objective: problem.objective,
         constraints: Number.isFinite(beat)
-          ? [...problem.constraints, { value: problem.objective, min: beat }]
-          : problem.constraints,
+          ? [...constraints, { value: problem.objective, min: beat }]
+          : constraints,
         exclusion: optConfig.artSetExclusion,
         mainStatAssumptionLevel,
       }
       // (a minimum none of these pieces can reach: nothing to search)
-      const result = ceilingsIn(problem.constraints, input.arts).reachable
+      const result = ceilingsIn(constraints, input.arts).reachable
         ? await solve(input)
         : undefined
       if (isCancelled()) throw new TeamOptCancelled()
@@ -2662,7 +2684,8 @@ export async function optimizeTeam({
   function sessionOf(found: TeamState): TeamOptSession {
     const ranked = evaluateIn(found)
     const best = ranked?.total ?? Number.NaN
-    const keyOf = (s: TeamState) => JSON.stringify([s.builds, s.weaponIds])
+    const keyOf = (s: TeamState) =>
+      JSON.stringify([s.builds, s.weaponIds, s.lockedPairs])
     const memberOf = (ck: CharacterKey) =>
       members.find((m) => m.characterKey === ck)
     const othersIn = (ck: CharacterKey) =>
@@ -2710,6 +2733,7 @@ export async function optimizeTeam({
         const again =
           weapon && (await search(settled, member, weapon, pick, background))
         if (again?.found) assign(settled, member, again.found.artifactIds)
+        else if (pick.setPair) return team
         return settled
       } catch (e) {
         if (e instanceof TeamOptCancelled) return team
@@ -3043,6 +3067,8 @@ export async function optimizeTeam({
           const team = copyState(s)
           team.builds[ck] = bySlot(database, searched.found.artifactIds)
           team.weaponIds[ck] = weapon.id
+          if (pick.setPair)
+            team.lockedPairs = { ...s.lockedPairs, [ck]: pick.setPair }
           // (its teammates whose ER requirement the pick changes: searched again)
           return settle(team, s, ck, pick, () => false)
         })()

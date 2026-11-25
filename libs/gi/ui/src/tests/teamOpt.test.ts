@@ -2374,6 +2374,43 @@ describe('team optimize', () => {
       (o) => o.weaponId === calamity
     )!
     expect(calamityRow.unmet).toBeUndefined()
+
+    const ayakaWeapon = picked!.weapons[ayaka]!
+    const ayakaPair = ['BlizzardStrayer', 'GladiatorsFinale'] as const
+    const shenhePair = ['GladiatorsFinale', 'NoblesseOblige'] as const
+    const pairKept = (
+      view: { builds: TeamOptResult['builds'] },
+      ck: CharacterKey,
+      pair: readonly ArtifactSetKey[]
+    ) => {
+      const sets = Object.values(view.builds[ck]!).map(
+        (id) => database.arts.get(id!)?.setKey
+      )
+      for (const key of pair)
+        expect(sets.filter((set) => set === key).length).toBeGreaterThanOrEqual(
+          2
+        )
+    }
+    // Taking Favonius away cannot override a pair already selected on Ayaka.
+    const withPreviousPair = (await session!.pick(
+      {
+        [ayaka]: { weaponId: ayakaWeapon, setPair: ayakaPair },
+        [shenhe]: { weaponId: calamity },
+      },
+      shenhe
+    ))!
+    pairKept(withPreviousPair, ayaka, ayakaPair)
+    expect(withPreviousPair.after.unmet[ayaka]).toHaveLength(1)
+
+    // Ayaka may need pieces of the set just selected on Shenhe. Keep the pair and show the ER gap.
+    const withNewPair = (await session!.pick(
+      {
+        [shenhe]: { weaponId: calamity, setPair: shenhePair },
+      },
+      shenhe
+    ))!
+    pairKept(withNewPair, shenhe, shenhePair)
+    expect(withNewPair.after.unmet[ayaka]).toHaveLength(1)
   })
 
   it('never assigns a member a weapon excluded for them during optimizeTeam', async () => {
