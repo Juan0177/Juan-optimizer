@@ -478,7 +478,7 @@ export class GOSolver {
           break
         case 'finalized':
           finals.push(r)
-          if (finals.length === ready.length)
+          if (finals.length === ready.length) {
             finish(
               mergeBuilds(
                 finals.map((f) => f.builds),
@@ -491,6 +491,7 @@ export class GOSolver {
                   )
                 : undefined
             )
+          }
           return
         case 'err':
           return fail(new Error(`Worker Error: ${r.message}`))
