@@ -8,6 +8,7 @@ import type {
 import type { TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
   defaultEnergyCalculator,
+  isWeaponGloballyExcluded,
   updateEnergyCalcMember,
 } from '@genshin-optimizer/gi/ui'
 import { createTheme, ThemeProvider } from '@mui/material'
@@ -346,18 +347,18 @@ describe('WeaponGroup ER & Favonius energy UX', () => {
 })
 
 describe('isDefaultVisibleWeapon', () => {
-  it('shows only 3★–5★ weapons at level 70 and above by default', () => {
+  it('shows and enables only 4★–5★ weapons at level 70 and above by default', () => {
     expect(isDefaultVisibleWeapon({ key: 'DullBlade', level: 70 })).toBe(false)
     expect(isDefaultVisibleWeapon({ key: 'SilverSword', level: 70 })).toBe(
       false
     )
-    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 69 })).toBe(
+    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 70 })).toBe(
       false
     )
-    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 70 })).toBe(
-      true
+    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 90 })).toBe(
+      false
     )
-    expect(isDefaultVisibleWeapon({ key: 'FavoniusSword', level: 60 })).toBe(
+    expect(isDefaultVisibleWeapon({ key: 'FavoniusSword', level: 69 })).toBe(
       false
     )
     expect(isDefaultVisibleWeapon({ key: 'FavoniusSword', level: 70 })).toBe(
@@ -368,6 +369,25 @@ describe('isDefaultVisibleWeapon', () => {
     ).toBe(false)
     expect(
       isDefaultVisibleWeapon({ key: 'PrimordialJadeCutter', level: 90 })
+    ).toBe(true)
+  })
+
+  it('excludes 1–3★ and sub-Lv70 weapons by default unless explicitly included', () => {
+    const hod = { id: 'w_hod', key: 'HarbingerOfDawn' as WeaponKey, level: 90 }
+    const low4 = { id: 'w_low4', key: 'FavoniusSword' as WeaponKey, level: 60 }
+    const high4 = { id: 'w_hi4', key: 'FavoniusSword' as WeaponKey, level: 70 }
+    const empty = { excludedWeapons: [] as string[] }
+    expect(isWeaponGloballyExcluded(hod, empty)).toBe(true)
+    expect(isWeaponGloballyExcluded(low4, empty)).toBe(true)
+    expect(isWeaponGloballyExcluded(high4, empty)).toBe(false)
+    expect(
+      isWeaponGloballyExcluded(hod, {
+        excludedWeapons: [],
+        includedWeapons: ['w_hod'],
+      })
+    ).toBe(false)
+    expect(
+      isWeaponGloballyExcluded(high4, { excludedWeapons: ['w_hi4'] })
     ).toBe(true)
   })
 })

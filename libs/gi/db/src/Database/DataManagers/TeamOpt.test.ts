@@ -773,3 +773,18 @@ describe('excludedWeaponMembers (per-member weapon restrictions)', () => {
     expect(empty?.kqm?.excludedWeaponMembers).toBeUndefined()
   })
 })
+
+describe('includedWeapons (explicitly ticked default-hidden weapons)', () => {
+  it('validates, deduplicates and drops empty arrays', () => {
+    const cleaned = validateTeamOpt({
+      includedWeapons: ['weapon_1', 42, 'weapon_1', 'weapon_2'],
+    })
+    expect(cleaned?.includedWeapons).toEqual(['weapon_1', 'weapon_2'])
+    expect(validateTeamOpt({ includedWeapons: [] })?.includedWeapons).toBe(
+      undefined
+    )
+    expect(validateTeamOpt({ includedWeapons: [123] })?.includedWeapons).toBe(
+      undefined
+    )
+  })
+})

@@ -133,8 +133,13 @@ export interface TeamOpt {
   assumeMaxMain: boolean
   /** Also choose each member's weapon, among the inventory's (of its type) */
   optimizeWeapons: boolean
-  /** Weapons left out of that choice */
+  /** Weapons left out of that choice (among default-eligible 4–5★ Lv. 70+ weapons) */
   excludedWeapons: string[]
+  /**
+   * Default-excluded weapons (1–3★ or below level 70) explicitly ticked by the user.
+   * Absent when empty.
+   */
+  includedWeapons?: string[]
   /**
    * Per weapon (id), the members left out of using it (among those who wield its type).
    * Absent: any wielder of its type may use a ticked weapon.
@@ -691,6 +696,18 @@ const teamOptSchema = z.object({
     .transform((ids) => [
       ...new Set(ids.filter((id): id is string => typeof id === 'string')),
     ]),
+  // (absent when empty: a result found before this field existed is not "found with other settings")
+  includedWeapons: z
+    .array(z.unknown())
+    .optional()
+    .catch(undefined)
+    .transform((ids) => {
+      if (!ids) return undefined
+      const valid = [
+        ...new Set(ids.filter((id): id is string => typeof id === 'string')),
+      ]
+      return valid.length ? valid : undefined
+    }),
   // (absent when empty: a result found before the map existed is not "found with other settings")
   excludedWeaponMembers: z
     .unknown()

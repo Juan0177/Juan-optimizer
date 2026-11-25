@@ -341,7 +341,7 @@ export function useTeamEnergy(
           !m.isTc &&
           !teamOpt.keep.includes(m.characterKey) &&
           canWield(m.characterKey, w) &&
-          !isWeaponExcludedFor(m.characterKey, w.id, teamOpt) &&
+          !isWeaponExcludedFor(m.characterKey, w, teamOpt) &&
           Object.keys(teamOpt.weaponEnergy[w.id] ?? {}).length > 0
       )
     )

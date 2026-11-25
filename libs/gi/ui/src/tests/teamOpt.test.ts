@@ -1600,6 +1600,7 @@ describe('team optimize', () => {
     const excluded = await run({
       optimizeWeapons: true,
       excludedWeapons: [mistsplitter.id],
+      includedWeapons: [dullBlade],
     })
     expect(excluded.weapons[ayaka]).toBe(dullBlade)
     expect(excluded.untickedWeapons).toBeUndefined()
@@ -1611,9 +1612,17 @@ describe('team optimize', () => {
     const replaced = await run({
       optimizeWeapons: true,
       excludedWeapons: [mistsplitter.id],
+      includedWeapons: [dullBlade],
     })
     expect(replaced.weapons[ayaka]).toBe(dullBlade)
     expect(replaced.untickedWeapons).toBeUndefined()
+    // 1–3★ / < Lv. 70 weapons are disabled by default unless explicitly ticked in includedWeapons
+    const defaultHiddenOnly = await run({
+      optimizeWeapons: true,
+      excludedWeapons: [mistsplitter.id],
+    })
+    expect(defaultHiddenOnly.weapons[ayaka]).toBe(mistsplitter.id)
+    expect(defaultHiddenOnly.untickedWeapons).toEqual([ayaka])
     const allTicked = await run({ optimizeWeapons: true })
     expect(allTicked.weapons[ayaka]).toBe(mistsplitter.id)
     expect(replaced.after.total).toBeLessThan(allTicked.after.total)
@@ -1628,15 +1637,17 @@ describe('team optimize', () => {
 
   it('Quick searches only the weapons a climb puts near the best, Full every one, to the same team', async () => {
     const { database, teamId } = setup()
-    // Ayaka wields her Mistsplitter; six level-1 swords lie unequipped
-    for (const key of [
-      'DullBlade',
-      'SilverSword',
-      'CoolSteel',
-      'HarbingerOfDawn',
-      'TravelersHandySword',
-      'FilletBlade',
-    ] as const)
+    // Ayaka wields her Mistsplitter; six level-1 swords lie unequipped (explicitly opted in)
+    const extraSwords = (
+      [
+        'DullBlade',
+        'SilverSword',
+        'CoolSteel',
+        'HarbingerOfDawn',
+        'TravelersHandySword',
+        'FilletBlade',
+      ] as const
+    ).map((key) =>
       database.weapons.new({
         key,
         level: 1,
@@ -1645,9 +1656,11 @@ describe('team optimize', () => {
         location: '',
         lock: false,
       })
+    )
     const teamOpt: TeamOpt = {
       ...initTeamOpt(),
       optimizeWeapons: true,
+      includedWeapons: extraSwords,
       attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
     }
     let calls = 0
@@ -1710,10 +1723,11 @@ describe('team optimize', () => {
     expect(best.weapons[ayaka]).toBe(mistsplitter.id)
     for (const id of Object.values(best.builds[ayaka]!))
       if (id) database.arts.set(id, { location: ayaka })
-    // her Mistsplitter not ticked: the Dull Blade, though below her own build (not kept as it is)
+    // her Mistsplitter not ticked: the opted-in Dull Blade, though below her own build (not kept as it is)
     const leftOut = await run({
       optimizeWeapons: true,
       excludedWeapons: [mistsplitter.id],
+      includedWeapons: [dullBlade],
     })
     expect(leftOut.weapons[ayaka]).toBe(dullBlade)
     expect(leftOut.after.total).toBeLessThan(leftOut.before.total)
@@ -1805,11 +1819,22 @@ describe('team optimize', () => {
       })
     const oneStar = make('BeginnersProtector', 1)
     const fourStar = make('FavoniusLance', 90)
-    const candidates = teamOptWeaponCandidates(
+    // 1–3★ / < Lv. 70 weapons are left out by default until explicitly included
+    const defaultCandidates = teamOptWeaponCandidates(
       database,
       member,
       current,
       initTeamOpt(),
+      new Set([ayaka, shenhe]),
+      new Set()
+    ).map((w) => w.id)
+    expect(defaultCandidates).toContain(fourStar)
+    expect(defaultCandidates).not.toContain(oneStar)
+    const candidates = teamOptWeaponCandidates(
+      database,
+      member,
+      current,
+      { ...initTeamOpt(), includedWeapons: [oneStar] },
       new Set([ayaka, shenhe]),
       new Set()
     ).map((w) => w.id)
@@ -1991,9 +2016,23 @@ describe('team optimize', () => {
     })
     const onKeqing = copy('Keqing')
     const free = copy('')
-    copy('')
+    const free2 = copy('')
     const r5 = copy('', 5)
-    const teamOpt = { ...initTeamOpt(), optimizeWeapons: true }
+    // By default, 1–3★ and < Lv. 70 weapons are disabled until explicitly included
+    const defaultCandidates = teamOptWeaponCandidates(
+      database,
+      member,
+      member.weaponId,
+      { ...initTeamOpt(), optimizeWeapons: true },
+      new Set([ayaka, shenhe]),
+      new Set()
+    )
+    expect(defaultCandidates.filter((w) => w.key === 'DullBlade')).toEqual([])
+    const teamOpt = {
+      ...initTeamOpt(),
+      optimizeWeapons: true,
+      includedWeapons: [onKeqing, free, free2, r5],
+    }
     const candidates = teamOptWeaponCandidates(
       database,
       member,

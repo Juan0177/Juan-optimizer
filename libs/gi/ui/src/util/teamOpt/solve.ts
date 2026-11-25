@@ -2074,8 +2074,8 @@ export async function optimizeTeam({
             )
             if (!weaponA || !weaponB || weaponA.id === weaponB.id) continue
             if (
-              isWeaponExcludedFor(a.characterKey, weaponB.id, teamOpt) ||
-              isWeaponExcludedFor(b.characterKey, weaponA.id, teamOpt)
+              isWeaponExcludedFor(a.characterKey, weaponB, teamOpt) ||
+              isWeaponExcludedFor(b.characterKey, weaponA, teamOpt)
             )
               continue
             if (
@@ -2646,9 +2646,11 @@ export async function optimizeTeam({
   // fall back on when one of them holds such a weapon and the run found it a ticked one.
   const weaponOf = (s: TeamState, member: TeamOptMember) =>
     s.weaponIds[member.characterKey] ?? member.weaponId
-  const weaponLeftOut = (member: TeamOptMember, weaponId: string) =>
-    teamOpt.optimizeWeapons &&
-    isWeaponExcludedFor(member.characterKey, weaponId, teamOpt)
+  const weaponLeftOut = (member: TeamOptMember, weaponId: string) => {
+    if (!teamOpt.optimizeWeapons) return false
+    const weapon = database.weapons.get(weaponId)
+    return !!weapon && isWeaponExcludedFor(member.characterKey, weapon, teamOpt)
+  }
   /** The members whose weapon in `s` is not ticked for them while `than` gives them a ticked one */
   const untickedAgainst = (s: TeamState, than: TeamState) =>
     order
@@ -2815,6 +2817,7 @@ export async function optimizeTeam({
     if (relief > 0) energy[characterKey] = { relief, weaponIds }
   }
   const untickedWeapons = teamOptUntickedWeapons(
+    database,
     order,
     state.weaponIds,
     teamOpt
