@@ -4,6 +4,7 @@ import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import type { RotationScenario, TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { createTheme, ThemeProvider } from '@mui/material'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -384,6 +385,95 @@ describe('RotationCompare', () => {
       expect(mockRun).toHaveBeenCalledTimes(2)
     })
 
+    resolvers[1]()
+    await waitFor(() => {
+      expect(screen.getAllByText('300,000').length).toBe(2)
+    })
+  })
+
+  it('never lets scenario or overall progress percentage move backwards', async () => {
+    mockPreview.mockImplementation((_ctx, sc) => ({
+      scenarioId: sc.id,
+      rotationTime: 18.3,
+      erTargets: { Columbina: 182, Illuga: 148, Zibai: 106 },
+      stalls: [],
+      warnings: [],
+    }))
+    mockBaseline.mockReturnValue(undefined)
+
+    let emitStep: ((step: ScenarioLiveStep) => void) | undefined
+    const resolvers: Array<() => void> = []
+    mockRun.mockImplementation(async (_ctx, sc, _isCancelled, options) => {
+      emitStep = options?.onStep
+      options?.onStep?.({
+        fraction: 0.64,
+        detail: 'Round 1 · Zibai · weapon 2/3 · 64%',
+      })
+      await new Promise<void>((resolve) => resolvers.push(resolve))
+      return {
+        scenario: sc,
+        dps: 300000,
+        total: 5490000,
+        rotationTime: 18.3,
+        memberDps: { Zibai: 200000 },
+        erTargets: { Columbina: 182, Illuga: 148, Zibai: 106 },
+        erAchieved: { Columbina: 185, Illuga: 150, Zibai: 110 },
+        weapons: {},
+        sets: {},
+        unmetCount: 0,
+        stalls: [],
+        warnings: [],
+      }
+    })
+
+    render(
+      <ThemeProvider theme={theme}>
+        <RotationCompareButton
+          compact
+          tab="team"
+          teamId="team_1"
+          text={example}
+          names={names}
+          teamOpt={initTeamOpt()}
+          setTeamOpt={vi.fn()}
+          base={teamBase}
+          baseStale
+        />
+      </ThemeProvider>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Burst scenarios/i }))
+    const every2Buttons = screen.getAllByRole('checkbox', {
+      name: 'Every 2nd',
+    })
+    fireEvent.click(every2Buttons[0])
+    fireEvent.click(screen.getByRole('button', { name: 'Compare 2 scenarios' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('64%')).toBeTruthy()
+      expect(screen.getByText('32%')).toBeTruthy() // overall: 0.64 / 2
+    })
+
+    // Simulate a regressive step update: UI must keep 64% (and overall 32%) instead of dropping
+    act(() => {
+      emitStep?.({
+        fraction: 0.25,
+        detail: 'Round 1 · Zibai · weapon 3/3 · 10%',
+      })
+    })
+    await waitFor(() => {
+      expect(
+        screen.getAllByText(/Round 1 · Zibai · weapon 3\/3 · 10%/).length
+      ).toBeGreaterThan(0)
+    })
+    expect(screen.getByText('64%')).toBeTruthy()
+    expect(screen.getByText('32%')).toBeTruthy()
+    expect(screen.queryByText('25%')).toBeNull()
+
+    resolvers[0]()
+    await waitFor(() => {
+      expect(mockRun).toHaveBeenCalledTimes(2)
+    })
     resolvers[1]()
     await waitFor(() => {
       expect(screen.getAllByText('300,000').length).toBe(2)

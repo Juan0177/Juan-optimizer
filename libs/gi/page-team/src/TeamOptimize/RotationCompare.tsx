@@ -562,9 +562,15 @@ function RotationCompareDialog({
           keepKqmWorkers: true,
           onStep: (step) => {
             if (cancelledRef.current) return
-            setProgress((prev) =>
-              prev && prev.activeId === sc.id ? { ...prev, step } : prev
-            )
+            setProgress((prev) => {
+              if (!prev || prev.activeId !== sc.id) return prev
+              const prevFrac = prev.step?.fraction ?? 0
+              const fraction = Math.min(0.99, Math.max(prevFrac, step.fraction))
+              return {
+                ...prev,
+                step: fraction === step.fraction ? step : { ...step, fraction },
+              }
+            })
           },
         }
       )

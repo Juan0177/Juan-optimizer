@@ -337,51 +337,189 @@ export function previewRotationScenario(
   }
 }
 
-/** Format a live `TeamOptStep` + solver counters into progress fraction & concise text. */
-function teamLiveStep(
-  names: readonly RotationMember[],
-  step: TeamOptStep | undefined,
-  done: number,
-  total: number,
-  upper?: number
-): ScenarioLiveStep {
-  if (!step) return { fraction: 0.04, detail: 'Preparing builds…' }
-  const who = nameOf(names, step.characterKey)
-  const denom =
-    Number.isFinite(total) && total > 0
-      ? total
-      : upper && Number.isFinite(upper) && upper > 0
-        ? upper
-        : 0
-  const solvePct = denom > 0 ? Math.min(1, Math.max(0, done / denom)) : 0
+/**
+ * Stateful, strictly monotonic progress tracker for a single Team optimize scenario run.
+ * Uses rebased work windows (matching `kqm.ts`) so weapon loops, energy-weapon teammate checks,
+ * mid-run set/ER repairs, piece exchanges, and fallback passes advance smoothly and never drop.
+ */
+export interface TeamProgressTracker {
+  onStep(step: TeamOptStep): ScenarioLiveStep
+  onPoll(done: number, total: number, upper?: number): ScenarioLiveStep
+}
 
-  if (step.exchange) {
-    return {
-      fraction: 0.88 + 0.08 * solvePct,
-      detail: `Trading pieces · ${who}`,
+export function createTeamProgressTracker(
+  names: readonly RotationMember[]
+): TeamProgressTracker {
+  const START = 0.04
+  const CEILING = 0.97
+
+  let shown = START
+  let current: TeamOptStep | undefined
+  let phase: 'init' | 'normal' | 'exchange' | 'alternatives' = 'init'
+  let pass = 0
+  let lastNormalRound = 0
+  let plannedRounds = 0
+  let exchangeStartStep = 0
+  let prevExchangeStep = 0
+  let slotKey = ''
+  let subBase = 0
+  let slotBest = 0
+  let rebase = { shown: START, units: 0, total: 1, ceiling: 0.9 }
+
+  const setRebase = (units: number, total: number, ceiling: number) => {
+    rebase = {
+      shown,
+      units,
+      total: Math.max(units + 1e-6, total),
+      ceiling: Math.min(CEILING, Math.max(shown, ceiling)),
     }
   }
 
-  const rounds = Math.max(1, step.maxRounds)
-  const steps = Math.max(1, step.steps)
-  const weaponFrac =
-    step.weapons && step.weapons > 1 && step.weapon
-      ? (step.weapon - 1 + solvePct) / step.weapons
-      : solvePct
-  const roundFrac = (step.step - 1 + weaponFrac) / steps
-  // Most runs converge by round 2–3, so weight early rounds higher for smoother perceived progress
-  const fraction = Math.min(
-    0.88,
-    0.05 + ((step.round - 1 + roundFrac) / Math.min(rounds, 3)) * 0.83
-  )
+  const project = (units: number) => {
+    const left = rebase.total - rebase.units
+    const raw =
+      left > 0
+        ? rebase.shown +
+          ((rebase.ceiling - rebase.shown) *
+            Math.max(0, units - rebase.units)) /
+            left
+        : rebase.ceiling
+    shown = Math.max(shown, Math.min(rebase.ceiling, raw))
+    return shown
+  }
 
-  const parts = [`Round ${step.round}`, who]
-  if (step.energyFor) parts.push(`ER check ${nameOf(names, step.energyFor)}`)
-  else if (step.weapons && step.weapons > 1 && step.weapon)
-    parts.push(`weapon ${step.weapon}/${step.weapons}`)
-  if (denom > 0) parts.push(`${Math.round(solvePct * 100)}%`)
+  const format = (
+    step: TeamOptStep,
+    solvePct: number,
+    denom: number,
+    fraction: number
+  ): ScenarioLiveStep => {
+    const who = nameOf(names, step.characterKey)
+    if (step.exchange) {
+      const parts = ['Trading pieces', who]
+      if (denom > 0) parts.push(`${Math.round(solvePct * 100)}%`)
+      return { fraction, detail: parts.join(' · ') }
+    }
+    const parts = [`Round ${step.round}`, who]
+    if (step.energyFor) parts.push(`ER check ${nameOf(names, step.energyFor)}`)
+    else if (step.weapons && step.weapons > 1 && step.weapon)
+      parts.push(`weapon ${step.weapon}/${step.weapons}`)
+    if (denom > 0) parts.push(`${Math.round(solvePct * 100)}%`)
+    return { fraction, detail: parts.join(' · ') }
+  }
 
-  return { fraction, detail: parts.join(' · ') }
+  const computeUnits = (step: TeamOptStep, solvePct: number) => {
+    const steps = Math.max(1, step.steps)
+    if (step.exchange) {
+      return Math.max(0, step.step - 1 - exchangeStartStep + solvePct)
+    }
+    if (step.alternatives) {
+      return Math.max(0, step.step - 1 + solvePct)
+    }
+    const weapons = step.weapons && step.weapons > 1 ? step.weapons : 1
+    const weapon =
+      step.weapons && step.weapons > 1 && step.weapon
+        ? Math.min(step.weapon, weapons)
+        : 1
+    const subRange = subBase > 0 ? Math.max(0.05, (1 - subBase) * 0.75) : 1
+    const subProg = Math.min(1, subBase + solvePct * subRange)
+    slotBest = Math.max(slotBest, subProg)
+    const weaponFrac = (weapon - 1 + slotBest) / weapons
+    return (step.round - 1) * steps + (step.step - 1) + weaponFrac
+  }
+
+  return {
+    onStep(step) {
+      current = step
+      const steps = Math.max(1, step.steps)
+
+      if (step.exchange) {
+        const entering = phase !== 'exchange' || step.step < prevExchangeStep
+        prevExchangeStep = step.step
+        if (entering) {
+          phase = 'exchange'
+          exchangeStartStep = step.step - 1
+          const remainingSteps = Math.max(1, steps - exchangeStartStep)
+          const midRun =
+            step.round < Math.max(plannedRounds, Math.min(step.maxRounds, 2))
+          const ceiling = midRun
+            ? Math.min(0.88, shown + (0.9 - shown) * 0.35)
+            : Math.min(0.96, Math.max(shown + 0.04, 0.96))
+          setRebase(0, remainingSteps, ceiling)
+        }
+        const units = computeUnits(step, 0)
+        return format(step, 0, 0, project(units))
+      }
+
+      if (step.alternatives) {
+        if (phase !== 'alternatives') {
+          phase = 'alternatives'
+          setRebase(step.step - 1, steps, CEILING)
+        }
+        const units = computeUnits(step, 0)
+        return format(step, 0, 0, project(units))
+      }
+
+      // Normal round step
+      const wasNormal = phase === 'normal'
+      const fallback = lastNormalRound > 0 && step.round < lastNormalRound
+      if (fallback) {
+        pass++
+        plannedRounds = Math.max(1, Math.min(step.maxRounds, 2))
+      } else if (plannedRounds === 0) {
+        plannedRounds = Math.max(1, Math.min(step.maxRounds, 2))
+      }
+
+      const expanded = step.round > plannedRounds
+      if (expanded) plannedRounds = step.round
+      lastNormalRound = step.round
+
+      const weapons = step.weapons && step.weapons > 1 ? step.weapons : 1
+      const weapon =
+        step.weapons && step.weapons > 1 && step.weapon
+          ? Math.min(step.weapon, weapons)
+          : 1
+      const nextSlotKey = `${pass}:${step.round}:${step.step}:${weapon}/${weapons}`
+      if (nextSlotKey !== slotKey) {
+        slotKey = nextSlotKey
+        subBase = 0
+        slotBest = 0
+      } else {
+        // Repeated sub-solve inside the same weapon slot (e.g. energy-weapon teammate checks)
+        subBase = Math.min(
+          0.85,
+          Math.max(slotBest, subBase + (1 - subBase) * 0.45)
+        )
+        slotBest = Math.max(slotBest, subBase)
+      }
+
+      const units = computeUnits(step, 0)
+      if (!wasNormal || fallback || expanded) {
+        phase = 'normal'
+        const ceiling = fallback
+          ? Math.min(CEILING, shown + (CEILING - shown) * 0.7)
+          : expanded
+            ? Math.min(0.95, Math.max(0.9, shown + (0.96 - shown) * 0.5))
+            : Math.max(0.9, shown + (0.95 - shown) * 0.5)
+        setRebase(units, plannedRounds * steps, ceiling)
+      }
+
+      return format(step, 0, 0, project(units))
+    },
+
+    onPoll(done, total, upper) {
+      if (!current) return { fraction: shown, detail: 'Preparing builds…' }
+      const denom =
+        Number.isFinite(total) && total > 0
+          ? total
+          : upper && Number.isFinite(upper) && upper > 0
+            ? upper
+            : 0
+      const solvePct = denom > 0 ? Math.min(1, Math.max(0, done / denom)) : 0
+      const units = computeUnits(current, solvePct)
+      return format(current, solvePct, denom, project(units))
+    },
+  }
 }
 
 /** Format a live `KqmStep` into progress fraction & concise text. */
@@ -1039,6 +1177,7 @@ export async function runRotationScenario(
         ? { ...baseRunTeamOpt, keep: teamPlan.keep }
         : baseRunTeamOpt
       const status = initStatus()
+      const tracker = createTeamProgressTracker(ctx.names)
       let stop: (() => void) | undefined
       const cancelled = () => {
         if (!isCancelled()) return false
@@ -1046,19 +1185,34 @@ export async function runRotationScenario(
         return true
       }
 
+      // Track solve invocations so stale 100% counters from a finished step are never read for
+      // a newly started step before its own solve() resets `status`.
+      const rawSolve = teamOptSolver(status, ctx.maxWorkers, (s) => {
+        stop = s
+      })
+      let solveSeq = 0
+      let stepSolveSeq = 0
+      const solve: typeof rawSolve = Object.assign(
+        (input: Parameters<typeof rawSolve>[0]) => {
+          solveSeq++
+          return rawSolve(input)
+        },
+        { createSetRanker: rawSolve.createSetRanker }
+      )
+
       // Poll live solver progress every 160 ms so long artifact sweeps show steady movement
       const poll = onStep
         ? setInterval(() => {
-            if (!isCancelled())
+            if (!isCancelled()) {
+              const active = solveSeq > stepSolveSeq
               onStep(
-                teamLiveStep(
-                  ctx.names,
-                  status.step,
-                  status.tested + status.skipped,
-                  status.total,
-                  status.upper
+                tracker.onPoll(
+                  active ? status.tested + status.skipped : 0,
+                  active ? status.total : Number.NaN,
+                  active ? status.upper : undefined
                 )
               )
+            }
           }, 160)
         : undefined
       let lastPaint = performance.now()
@@ -1078,23 +1232,14 @@ export async function runRotationScenario(
             maxExchanges: teamPlan.maxExchanges,
             weaponFilter: teamPlan.weaponFilter,
           }),
-          solve: teamOptSolver(status, ctx.maxWorkers, (s) => {
-            stop = s
-          }),
+          solve,
           attackStates: ctx.attackStates,
           rankingBonusStats: ctx.rankingBonusStats,
           isCancelled: cancelled,
           onStep: async (step) => {
             status.step = step
-            onStep?.(
-              teamLiveStep(
-                ctx.names,
-                step,
-                status.tested + status.skipped,
-                status.total,
-                status.upper
-              )
-            )
+            stepSolveSeq = solveSeq
+            onStep?.(tracker.onStep(step))
             if (performance.now() - lastPaint < 100) return
             await nextPaint()
             lastPaint = performance.now()

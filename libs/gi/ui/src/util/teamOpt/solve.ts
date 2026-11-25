@@ -2457,7 +2457,7 @@ export async function optimizeTeam({
             searched > 1
               ? { ...step, weapon: searching, weapons: searched }
               : step
-          if (searching > 1) await onStep?.(weaponStep)
+          if (searched > 1) await onStep?.(weaponStep)
           const { problem, needWith, affected } = p
           const beat = beatOf(floor)
           const input = inputFor(problem, beat)
