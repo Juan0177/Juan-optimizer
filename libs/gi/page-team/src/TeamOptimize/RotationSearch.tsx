@@ -591,12 +591,28 @@ function RotationSearchDialog({
             </Box>
             <RotationView steps={seedWords} />
             {seedScore && (
-              <ErLine
-                er={seedScore.er}
-                names={names}
-                funded={funded}
-                team={team}
-              />
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  columnGap: 1.5,
+                  rowGap: 0.5,
+                }}
+              >
+                <Typography sx={{ ...type.label, ...numSx }}>
+                  {t('teamOpt.search.length', {
+                    defaultValue: '{{seconds}} s rotation',
+                    seconds: seedScore.time.toFixed(1),
+                  })}
+                </Typography>
+                <ErLine
+                  er={seedScore.er}
+                  names={names}
+                  funded={funded}
+                  team={team}
+                />
+              </Box>
             )}
           </Box>
           <Box
