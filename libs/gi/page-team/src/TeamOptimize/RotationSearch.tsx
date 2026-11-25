@@ -105,6 +105,7 @@ export function RotationSearchButton({
   text,
   names,
   base,
+  teamOpt,
   onUse,
   compact,
   disabled,
@@ -117,6 +118,8 @@ export function RotationSearchButton({
   names: RotationMember[]
   /** The builds shown, as they played the rotation; absent: no current result */
   base: RotationSearchBase | undefined
+  /** Current tab settings (for confirming builds with live ER/weapon/filter settings) */
+  teamOpt?: TeamOpt
   onUse: (text: string) => void
   /** The states a run gives every attack now (Wolf's Gravestone's uptime) */
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
@@ -221,6 +224,7 @@ export function RotationSearchButton({
           seed={text}
           names={names}
           base={base}
+          teamOpt={teamOpt}
           attackStates={attackStates}
           onClose={() => setOpen(false)}
           onUse={(chosen) => {
@@ -233,11 +237,73 @@ export function RotationSearchButton({
   )
 }
 
+/**
+ * Filter and rank candidate rotations for display: confirmed winners first (by their real DPS with
+ * their own builds), dropping any confirmed rotation that failed requirements (`null`) or did not
+ * beat `runDps`, followed by unconfirmed candidates whose estimate beats the seed.
+ */
+export function betterRotationCandidates({
+  top,
+  rowSeed,
+  confirmed,
+  fullDone,
+  ended,
+  from,
+  runDps,
+  limit = SHOWN,
+}: {
+  top: readonly RotationCandidate[] | undefined
+  rowSeed: RotationCandidate | undefined
+  confirmed: Readonly<Record<string, number | null>> | undefined
+  fullDone: boolean
+  ended?: RotationSearchResult['ended']
+  from?: RotationCandidate
+  runDps: number
+  limit?: number
+}): RotationCandidate[] {
+  if (!rowSeed || !top) return []
+  const own = (c: RotationCandidate) =>
+    confirmed && c.text in confirmed ? confirmed[c.text] : undefined
+  // (stopped or out of time: those found without builds of their own yet after them)
+  if (fullDone) {
+    const base = from ?? rowSeed
+    return [
+      ...top
+        .filter((c) => {
+          const dps = own(c)
+          return typeof dps === 'number' && dps > runDps * (1 + 1e-4)
+        })
+        .sort((a, b) => (own(b) as number) - (own(a) as number)),
+      ...(ended === 'converged'
+        ? []
+        : top.filter(
+            (c) =>
+              own(c) === undefined && c.estimate > base.estimate * (1 + 1e-4)
+          )),
+    ].slice(0, limit)
+  }
+  const found = top
+    .filter((c) => {
+      const dps = own(c)
+      return dps !== undefined
+        ? dps !== null && dps > runDps * (1 + 1e-4)
+        : c.estimate > rowSeed.estimate * (1 + 1e-4)
+    })
+    .slice(0, limit)
+  return [
+    ...found
+      .filter((c) => typeof own(c) === 'number')
+      .sort((a, b) => (own(b) as number) - (own(a) as number)),
+    ...found.filter((c) => own(c) === undefined),
+  ]
+}
+
 function RotationSearchDialog({
   teamId,
   seed,
   names,
   base,
+  teamOpt,
   attackStates,
   onClose,
   onUse,
@@ -246,6 +312,7 @@ function RotationSearchDialog({
   seed: string
   names: RotationMember[]
   base: RotationSearchBase
+  teamOpt?: TeamOpt
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
   onClose: () => void
   onUse: (text: string) => void
@@ -271,6 +338,7 @@ function RotationSearchDialog({
           teamId,
           names,
           teamOpt: base.teamOpt,
+          liveTeamOpt: teamOpt,
           result: base.result,
           saved: settings,
           attackStates: states,
@@ -291,6 +359,7 @@ function RotationSearchDialog({
         })
   }, [
     base,
+    teamOpt,
     database,
     gender,
     i18n,
@@ -489,42 +558,19 @@ function RotationSearchDialog({
   const top = result?.best ?? progress?.top
   const runDps = source.dps
   const fullDone = searched === 'full' && !!result && !running
-  // (those with their own KQM builds first, by their DPS with them; a full search's, only those)
-  const better = useMemo(() => {
-    if (!rowSeed || !top) return []
-    const own = (c: RotationCandidate) => confirmed?.dps[c.text] ?? undefined
-    // (stopped or out of time: those found without builds of their own yet after them)
-    if (fullDone) {
-      const from = result?.from ?? rowSeed
-      return [
-        ...top
-          .filter((c) => (own(c) ?? 0) > runDps * (1 + 1e-4))
-          .sort((a, b) => own(b)! - own(a)!),
-        ...(result?.ended === 'converged'
-          ? []
-          : top.filter(
-              (c) =>
-                own(c) === undefined && c.estimate > from.estimate * (1 + 1e-4)
-            )),
-      ].slice(0, SHOWN)
-    }
-    // (a full search's with builds of their own, from any pass, are better by their DPS with
-    // them; the others by their estimate)
-    const found = top
-      .filter((c) => {
-        const dps = own(c)
-        return searched === 'full' && dps !== undefined
-          ? dps > runDps * (1 + 1e-4)
-          : c.estimate > rowSeed.estimate * (1 + 1e-4)
-      })
-      .slice(0, SHOWN)
-    return [
-      ...found
-        .filter((c) => own(c) !== undefined)
-        .sort((a, b) => own(b)! - own(a)!),
-      ...found.filter((c) => own(c) === undefined),
-    ]
-  }, [top, rowSeed, confirmed, fullDone, runDps, result, searched])
+  const better = useMemo(
+    () =>
+      betterRotationCandidates({
+        top,
+        rowSeed,
+        confirmed: confirmed?.dps,
+        fullDone,
+        ended: result?.ended,
+        from: result?.from,
+        runDps,
+      }),
+    [top, rowSeed, confirmed, fullDone, runDps, result]
+  )
   const checking =
     searched === 'quick' &&
     running &&
@@ -1379,6 +1425,13 @@ const CandidateRow = memo(function CandidateRow({
     [seed.text, names]
   )
   const checked = typeof own === 'number' && runDps > 0
+  const erOver =
+    !checked &&
+    team &&
+    Object.entries(candidate.er).some(
+      ([k, need]) =>
+        need !== undefined && need > (funded[k as CharacterKey] ?? 0)
+    )
   const gain = checked
     ? own / runDps - 1
     : candidate.estimate / seed.estimate - 1
@@ -1406,9 +1459,14 @@ const CandidateRow = memo(function CandidateRow({
           dps: formatDamage(candidate.dps, true),
           estimate: formatDamage(candidate.estimate, true),
         })
-      : team
-        ? t('teamOpt.search.teamPlayedTip', 'Played with your run’s builds.')
-        : t('teamOpt.search.playedTip', 'Played with your KQM run’s builds.')
+      : erOver
+        ? t(
+            'teamOpt.search.teamNeedsErTip',
+            'Played with your run’s builds, which do not meet this rotation’s ER: optimizing builds for it may give lower DPS.'
+          )
+        : team
+          ? t('teamOpt.search.teamPlayedTip', 'Played with your run’s builds.')
+          : t('teamOpt.search.playedTip', 'Played with your KQM run’s builds.')
   return (
     <Box
       data-key={candidate.text}
@@ -1481,7 +1539,14 @@ const CandidateRow = memo(function CandidateRow({
               {gain >= 0 ? '+' : ''}
               {(gain * 100).toFixed(1)}%
             </Typography>
-            <Typography sx={{ ...type.label, ...numSx, whiteSpace: 'nowrap' }}>
+            <Typography
+              sx={{
+                ...type.label,
+                ...numSx,
+                whiteSpace: 'nowrap',
+                color: erOver ? 'warning.main' : undefined,
+              }}
+            >
               {checked
                 ? t('teamOpt.search.ownDps', {
                     defaultValue: '{{dps}} DPS · own builds',
@@ -1492,7 +1557,12 @@ const CandidateRow = memo(function CandidateRow({
                       defaultValue: '≈{{dps}} DPS',
                       dps: formatDamage(candidate.estimate, true),
                     })
-                  : `${formatDamage(candidate.dps, true)} DPS`}
+                  : erOver
+                    ? t('teamOpt.search.teamNeedsErDps', {
+                        defaultValue: '{{dps}} DPS · needs more ER',
+                        dps: formatDamage(candidate.dps, true),
+                      })
+                    : `${formatDamage(candidate.dps, true)} DPS`}
             </Typography>
           </Box>
         </Tooltip>

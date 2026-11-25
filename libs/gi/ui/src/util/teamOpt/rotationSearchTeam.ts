@@ -128,7 +128,7 @@ export function teamRotationSearchSetup(
     names,
     teamOpt,
     ...saved,
-    constellations: {},
+    constellations: own.constellations,
     gear,
     overrides,
     ...(attackStates?.length ? { attackStates: [...attackStates] } : {}),

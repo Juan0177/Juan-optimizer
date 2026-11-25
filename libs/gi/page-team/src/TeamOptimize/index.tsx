@@ -584,6 +584,7 @@ export default function TeamBuildWorkspace({
           text={text}
           names={names}
           base={searchBase}
+          teamOpt={teamOpt}
           attackStates={attackStatesNow}
           onUse={setText}
         />
@@ -1019,6 +1020,7 @@ export default function TeamBuildWorkspace({
                     text={writtenRotation}
                     names={memberNames}
                     base={searchBase}
+                    teamOpt={teamOpt}
                     attackStates={attackStatesNow}
                     disabled={running}
                     onUse={(chosen) => {

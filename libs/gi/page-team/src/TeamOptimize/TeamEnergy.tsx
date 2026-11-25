@@ -179,6 +179,8 @@ export function useTeamEnergy(
     }
   }, [database, teamId, gender, written, playKey])
   const ready = !!written && worked?.for === playKey && !!worked.energy
+  const updating =
+    teamOpt.energySource !== 'manual' && !!written && worked?.for !== playKey
   const energy = ready ? worked?.energy : undefined
   const playedTime = ready ? worked?.rotationTime : undefined
 
@@ -408,6 +410,7 @@ export function useTeamEnergy(
     erHints,
     gear,
     fromRotation: ready,
+    updating,
     draft,
     setDraft,
     draftErrors: draft ? energyEstimate(keys, draft, gear).errors : [],

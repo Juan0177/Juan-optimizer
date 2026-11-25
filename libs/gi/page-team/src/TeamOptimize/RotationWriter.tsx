@@ -762,6 +762,7 @@ export function teamRotationEnergy({
   team,
   text: given,
   burstEvery,
+  saved,
 }: {
   database: Database
   teamId: string
@@ -773,6 +774,12 @@ export function teamRotationEnergy({
   text?: string
   /** Per-member Burst cadence overrides from the ER calculator (e.g. Every 2nd) */
   burstEvery?: Partial<Record<CharacterKey, number>>
+  /** Saved rotation settings when already loaded (defaults to reading from storage) */
+  saved?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
 }): { energy: RotationEnergy; rotationTime: number } | undefined {
   if (
     given === undefined &&
@@ -783,9 +790,11 @@ export function teamRotationEnergy({
   if (!text.trim()) return undefined
   const played = simulateWritten({
     text,
-    opener: readStored(database, openerKey(teamId)) ?? '',
-    timing: parseTiming(readStored(database, timingKey(teamId))),
-    frameData: parseFrameData(readStored(database, frameDataKey)),
+    opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
+    timing:
+      saved?.timing ?? parseTiming(readStored(database, timingKey(teamId))),
+    frameData:
+      saved?.frameData ?? parseFrameData(readStored(database, frameDataKey)),
     names,
     members,
     database,
