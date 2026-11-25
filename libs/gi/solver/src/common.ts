@@ -318,11 +318,24 @@ export function pruneArtRange(
   arts: ArtifactsBySlot,
   minimum: number[]
 ): ArtifactsBySlot {
+  // Only evaluate constraints that actually have a finite minimum (skipping e.g. the
+  // unconstrained optimization target with minimum = -Infinity avoids evaluating a
+  // multi-thousand-node damage tree across every artifact for nothing).
+  const activeNodes: OptNode[] = []
+  const activeMins: number[] = []
+  for (let i = 0; i < nodes.length; i++) {
+    const m = minimum[i]
+    if (m !== undefined && m > Number.NEGATIVE_INFINITY) {
+      activeNodes.push(nodes[i])
+      activeMins.push(m)
+    }
+  }
+  if (!activeNodes.length) return arts
   const baseRange = Object.fromEntries(
     Object.entries(arts.base).map(([key, x]) => [key, { min: x, max: x }])
   )
   const wrap = { arts }
-  const rangesOf = nodeRangeEvaluator(nodes)
+  const rangesOf = nodeRangeEvaluator(activeNodes)
   while (true) {
     const artRanges = objKeyMap(allArtifactSlotKeys, (slot) =>
       computeArtRange(wrap.arts.values[slot])
@@ -339,9 +352,7 @@ export function pruneArtRange(
     const values = objKeyMap(allArtifactSlotKeys, (slot) => {
       const result = wrap.arts.values[slot].filter((art) => {
         const read = addArtRange([computeArtRange([art]), otherArtRanges[slot]])
-        return rangesOf(read).every(
-          (range, i) => range.max >= (minimum[i] ?? Number.NEGATIVE_INFINITY)
-        )
+        return rangesOf(read).every((range, i) => range.max >= activeMins[i])
       })
       if (result.length !== wrap.arts.values[slot].length) progress = true
       return result

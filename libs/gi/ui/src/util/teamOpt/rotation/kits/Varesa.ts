@@ -193,22 +193,11 @@ interface VaresaState {
   /** A1 Rainbow Crash and C4 Diligent Refinement last until these frames (or their first impact) */
   a1Until: number
   c4Until: number
-  /** Rush charges, and when the next one comes back */
-  charges: number
-  restoreAt?: number
   /**
    * When Apex Drive last ended without its Kablam, and why (a Rush, or its 2.3 s ran out): what a
    * full Flying Kick right after it is explained by
    */
   apexLost?: { at: number; why: 'rush' | 'expired' }
-}
-
-/** Charges come back one at a time, RUSH_CD frames each */
-function settleCharges(s: VaresaState, t: number) {
-  while (s.restoreAt !== undefined && s.restoreAt <= t) {
-    s.charges++
-    s.restoreAt = s.charges < 2 ? s.restoreAt + RUSH_CD : undefined
-  }
 }
 
 /** Nightsoul Blessing starts: 15 s, and the next Rush is free */
@@ -404,6 +393,8 @@ export const kit: KitModel = {
   characterKey: 'Varesa',
   element: 'electro',
   source: `${GCSIM}/varesa`,
+  // Riding the Night-Rainbow (skill 11112): 2 charges, 9 s each, recharging sequentially
+  charges: () => ({ skill: 2 }),
   nightsoul(_ctx, s: VaresaState) {
     return { active: s.blessed, points: s.points }
   },
@@ -423,7 +414,6 @@ export const kit: KitModel = {
     lastCharged: false,
     a1Until: -1,
     c4Until: -1,
-    charges: 2,
   }),
   // In Fiery Passion (the blessing) her normal and charged attacks, Rush and plunges have frames
   // of their own; after a Rush her normal or charged attack is the quick Follow-Up Strike; in Apex
@@ -509,20 +499,9 @@ export const kit: KitModel = {
           ctx.note(
             'Varesa: a held Rush is modelled as a tap (gcsim has no hold).'
           )
-        // a free Rush (the blessing's first) has no cooldown and no charge
+        // a free Rush (the blessing's first, skill 11117) has no cooldown and spends no charge of 11112
         const free = s.freeSkill
         if (free) s.freeSkill = false
-        else {
-          settleCharges(s, ctx.now)
-          if (s.charges <= 0)
-            return {
-              frames: 0,
-              failed:
-                'Varesa: no Rush charge ready (2 charges, 9 s each; only her first Rush in Fiery Passion is free)',
-            }
-          s.charges--
-          if (s.restoreAt === undefined) s.restoreAt = ctx.now + RUSH_CD
-        }
         if (s.apex) {
           endApex(s)
           s.apexLost = { at: ctx.now, why: 'rush' }
@@ -568,8 +547,7 @@ export const kit: KitModel = {
           },
           { hitmarks: [fiery ? 2 : 5], hitlag: [4] }
         )
-        if (!free && s.charges === 0 && s.restoreAt !== undefined)
-          result.cooldown = { key: 'skill', frames: s.restoreAt - ctx.now }
+        if (!free) result.cooldown = { key: 'skill', frames: RUSH_CD }
         return result
       }
       case 'burst': {
@@ -680,6 +658,10 @@ export const kit: KitModel = {
         return { frames: 30 }
     }
   },
+  onSwapOut(_ctx, s: VaresaState) {
+    // a Fiery Passion plunge already spent her Nightsoul points (kqmsim OnRemoved -> clearNightsoulCB)
+    if (s.exitNS) exitBlessing(s)
+  },
   // Why a Q or E waited: her Flying Kick's cooldown (and what the Kablam needs), or a Rush charge
   waitNote: (s: VaresaState, action, now) =>
     action.kind === 'burst'
@@ -691,9 +673,9 @@ export const kit: KitModel = {
   cooldownKey: (s: VaresaState, action) => {
     // the Volcanic Kablam (Apex Drive) is not on the burst's cooldown
     if (action.kind === 'burst') return s.apex ? undefined : 'burst'
-    // a Rush waits for a charge (a free one doesn't)
-    if (action.kind === 'skill' && !s.freeSkill && s.charges <= 0)
-      return 'skill'
+    // a Rush waits for a charge unless the blessing's free Rush is still up (and not ending here)
+    if (action.kind === 'skill')
+      return s.freeSkill && !s.exitNS ? undefined : 'skill'
     return undefined
   },
 }

@@ -9,7 +9,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt, TeamRotation } from '@genshin-optimizer/gi/db'
 import { parseTeamRotation, teamRotationExport } from '@genshin-optimizer/gi/db'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import { giCtaSx } from '@genshin-optimizer/gi/theme'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type { TeamOptMember } from '@genshin-optimizer/gi/ui'
 import { CharacterName } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
@@ -17,6 +17,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload'
 import FileUploadIcon from '@mui/icons-material/FileUpload'
 import {
   Alert,
+  alpha,
   Box,
   Button,
   CardContent,
@@ -34,16 +35,25 @@ import { focusSx, quickSx, tokens, type } from './ui'
  * Export (to the clipboard) and import (pasted) the team's whole rotation as one JSON: every
  * member's attacks, the rotation time and who is on the field
  */
-const transferSx = {
+const transferBtnSx = {
+  height: 28,
+  minWidth: 0,
+  px: 1.125,
+  borderRadius: 0,
+  border: 'none',
+  fontSize: 12.5,
+  fontWeight: 550,
   color: 'text.secondary',
-  borderColor: 'divider',
   whiteSpace: 'nowrap',
-  px: 1.25,
   ...quickSx,
   ...focusSx,
-  '&:hover': { color: 'text.primary', borderColor: tokens.hairlineStrong },
+  '&.Mui-focusVisible, &:focus-visible': { outlineOffset: -2 },
+  '&:hover': {
+    color: 'text.primary',
+    bgcolor: alpha(giTokens.parchment, 0.06),
+  },
   '& .MuiButton-startIcon': { mr: 0.5 },
-  '& .MuiButton-startIcon svg': { fontSize: 16 },
+  '& .MuiButton-startIcon svg': { fontSize: 15 },
 } as const
 
 export function RotationTransfer({
@@ -131,40 +141,63 @@ export function RotationTransfer({
       </>
     )
   return (
-    <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
-      <Tooltip
-        open={!!note}
-        title={note ?? ''}
-        placement="top"
-        disableHoverListener
-        disableFocusListener
-        disableTouchListener
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.75,
+        flexWrap: 'wrap',
+      }}
+    >
+      <Box
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          height: 30,
+          borderRadius: tokens.radius.control,
+          border: `1px solid ${tokens.hairlineStrong}`,
+          bgcolor: alpha(giTokens.parchment, 0.02),
+          overflow: 'hidden',
+        }}
       >
-        <span>
-          <Button
-            size="small"
-            variant="outlined"
-            color="inherit"
-            startIcon={<FileUploadIcon />}
-            onClick={copy}
-            disabled={disabled || !hasAttacks}
-            sx={transferSx}
-          >
-            {t('teamOpt.transfer.exportAttacks', 'Export attacks')}
-          </Button>
-        </span>
-      </Tooltip>
-      <Button
-        size="small"
-        variant="outlined"
-        color="inherit"
-        startIcon={<FileDownloadIcon />}
-        onClick={onShow}
-        disabled={disabled}
-        sx={transferSx}
-      >
-        {t('teamOpt.transfer.importAttacks', 'Import attacks')}
-      </Button>
+        <Tooltip
+          open={!!note}
+          title={note ?? ''}
+          placement="top"
+          disableHoverListener
+          disableFocusListener
+          disableTouchListener
+        >
+          <span style={{ display: 'inline-flex' }}>
+            <Button
+              size="small"
+              variant="text"
+              color="inherit"
+              startIcon={<FileUploadIcon />}
+              onClick={copy}
+              disabled={disabled || !hasAttacks}
+              sx={transferBtnSx}
+            >
+              {t('teamOpt.transfer.exportAttacks', 'Export attacks')}
+            </Button>
+          </span>
+        </Tooltip>
+        <Box
+          aria-hidden
+          sx={{ width: '1px', height: 16, bgcolor: tokens.hairlineStrong }}
+        />
+        <Button
+          size="small"
+          variant="text"
+          color="inherit"
+          startIcon={<FileDownloadIcon />}
+          onClick={onShow}
+          disabled={disabled}
+          sx={transferBtnSx}
+        >
+          {t('teamOpt.transfer.importAttacks', 'Import attacks')}
+        </Button>
+      </Box>
       {downloadFallback && (
         <Alert
           severity="info"

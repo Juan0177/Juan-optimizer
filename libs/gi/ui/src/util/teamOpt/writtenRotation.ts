@@ -55,6 +55,22 @@ export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
   return Object.values(every).some((n) => n !== 1) ? every : undefined
 }
 
+/**
+ * Team optimize's ER calculator "Burst: Every 2nd / 3rd / Skip" per member;
+ * none unless the ER comes from the calculator with a non-1 cadence.
+ */
+export function teamBurstEvery(teamOpt: TeamOpt | undefined) {
+  const calculator =
+    teamOpt?.energySource === 'calculator'
+      ? teamOpt.energyCalculator
+      : undefined
+  if (!calculator) return undefined
+  const every = Object.fromEntries(
+    Object.entries(calculator.members).map(([k, m]) => [k, m?.burstEvery ?? 1])
+  ) as Partial<Record<CharacterKey, number>>
+  return Object.values(every).some((n) => n !== 1) ? every : undefined
+}
+
 /** A rotation's saved timing (none: no edits) */
 export const parseTiming = (raw: string | null): RotationTimingSettings => {
   try {
@@ -308,7 +324,7 @@ export function simulateWritten({
       loops,
       fromStart,
     }
-  const counted = fromStart ?? STEADY_COUNTED
+  const counted = fromStart ?? STEADY_COUNTED * loops
   return {
     rotation,
     // (what the timeline shows: the last of the two counted; the first few, all of them)

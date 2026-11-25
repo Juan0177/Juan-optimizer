@@ -137,8 +137,9 @@ export function RunDialog({
     )
   })
   const asItIs = !!evaluateOnly && !toOptimize.length
-  const canStart = (toOptimize.length > 0 && eligible) || asItIs
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
+  const canStart =
+    ((toOptimize.length > 0 && eligible) || asItIs) && !energy.updating
   const notice = asItIs
     ? t(
         'teamOpt.runDialog.asItIs',

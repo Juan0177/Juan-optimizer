@@ -4,6 +4,7 @@ import type { LoadoutDatum, TeamOpt } from '@genshin-optimizer/gi/db'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
 import {
+  defaultEnergyCalculator,
   evaluateTeamRotation,
   kqmRotationSearchSetup,
   optimizeTeamKqm,
@@ -13,6 +14,7 @@ import {
   simTeamOf,
   teamOptMembers,
   teamRotationSearchSetup,
+  updateEnergyCalcMember,
   writtenTeamReplay,
 } from '../'
 
@@ -182,5 +184,86 @@ describe('a rotation search’s player', () => {
       attacks: played.attacks,
     })!.total
     expect(total).not.toBeCloseTo(own, 0)
+  })
+
+  it('respects the team’s saved ER calculator settings (enemy particles and burstEvery) instead of defaults', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage({}))
+    for (const [key, weapon] of [
+      [ayaka, 'AmenomaKageuchi'],
+      [shenhe, 'Deathmatch'],
+    ] as const) {
+      database.chars.set(key, {
+        key,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
+      })
+      database.weapons.new({
+        key: weapon,
+        level: 90,
+        ascension: 6,
+        refinement: 1,
+        location: key,
+        lock: false,
+      })
+    }
+    const teamId = database.teams.new({
+      loadoutData: [
+        { teamCharId: database.teamChars.new(ayaka) },
+        { teamCharId: database.teamChars.new(shenhe) },
+      ] as LoadoutDatum[],
+    })
+    const names = [
+      { characterKey: ayaka, name: 'Ayaka' },
+      { characterKey: shenhe, name: 'Shenhe' },
+    ]
+    const saved = {
+      opener: '',
+      timing: parseTiming(null),
+      frameData: parseFrameData(null),
+    }
+    const text = 'Shenhe E Q -> Ayaka E Q N2 CA'
+    const baseScore = rotationScorer(
+      database,
+      teamRotationSearchSetup(
+        database,
+        teamId,
+        'F',
+        names,
+        initTeamOpt(),
+        { arts: {}, weapons: {} },
+        {},
+        saved
+      )
+    )(text)!
+
+    let calc = defaultEnergyCalculator([ayaka, shenhe], 20)
+    calc.enemyParticles = 0
+    calc = updateEnergyCalcMember(calc, [ayaka, shenhe], shenhe, {
+      burstEvery: 0,
+    })
+    const customTeamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      energySource: 'calculator',
+      energyCalculator: calc,
+    }
+    const customScore = rotationScorer(
+      database,
+      teamRotationSearchSetup(
+        database,
+        teamId,
+        'F',
+        names,
+        customTeamOpt,
+        { arts: {}, weapons: {} },
+        {},
+        saved
+      )
+    )(text)!
+
+    // Without enemy particles Ayaka needs more ER, and Shenhe skipping Burst drops to 100%
+    expect(customScore.er[ayaka]!).toBeGreaterThan(baseScore.er[ayaka]!)
+    expect(customScore.er[shenhe]).toBe(100)
   })
 })

@@ -387,6 +387,7 @@ export function TeamOptResults({
   )
   // a result below the current builds: says so (even when not comparing), and why
   const belowNow = after.total < before.total * (1 - 1e-4)
+  const startUnmet = result.optimized.filter((ck) => !!before.unmet[ck]?.length)
   const discardLabel = t('teamOpt.result.discard', 'Discard')
 
   return (
@@ -492,9 +493,20 @@ export function TeamOptResults({
                       defaultValue: 'Below your current builds ({{value}})',
                       value: formatRate(before.total, rotationTime, true),
                     })}
-                    {!!result.startBreaksSetRules?.length && (
+                    {!!startUnmet.length && (
                       <>
                         {': '}
+                        <Names keys={startUnmet} gender={gender} />{' '}
+                        {t('teamOpt.result.belowNowUnmet', {
+                          count: startUnmet.length,
+                          defaultValue:
+                            'can’t keep their current build: it misses their requirements (e.g. Min ER)',
+                        })}
+                      </>
+                    )}
+                    {!!result.startBreaksSetRules?.length && (
+                      <>
+                        {startUnmet.length ? '; ' : ': '}
                         <Names
                           keys={result.startBreaksSetRules}
                           gender={gender}
@@ -508,7 +520,9 @@ export function TeamOptResults({
                     )}
                     {!!result.startUntickedWeapons?.length && (
                       <>
-                        {result.startBreaksSetRules?.length ? '; ' : ': '}
+                        {startUnmet.length || result.startBreaksSetRules?.length
+                          ? '; '
+                          : ': '}
                         <Names
                           keys={result.startUntickedWeapons}
                           gender={gender}

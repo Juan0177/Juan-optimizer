@@ -140,6 +140,42 @@
     "entries": [
       {
         "date": "2026-11-25",
+        "title": "Update to Stellar Optimizer 1.41.4",
+        "summary": "Stellar Optimizer’s releases 1.40.5 to 1.41.4 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Burst scenarios** (Team optimize and KQM): compare a character’s Burst every rotation, every 2nd, every 3rd or never (with an action in its place, such as N4). Each scenario gets its Energy Recharge and builds recalculated, ranked by team DPS."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Faster Team optimize**: the optimization runs off the page, which stays smooth, and alternative weapon and set rankings are quicker.",
+              "Rankings show up to three 2+2 set pairs per character beside the 4-piece sets.",
+              "Write rotation suggests commands and tips fitted to the team (Mavuika, Beidou, Sandrone…) and opens the Notes expanded.",
+              "The weapon chooser hides 1–2★ weapons and those under level 70 by default, with a button to show them.",
+              "Optimize rotation shows the current rotation’s length beside the Energy Recharge it needs, and scores rotations with the team’s ER settings."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "Team optimize no longer gives the main carry an energy weapon like Favonius in round 1 just because a teammate hasn’t been optimized yet.",
+              "Varesa: her Skill charges recharge one at a time, and Fiery Passion ends when she swaps out after a plunge that spent her Nightsoul points."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts (Burst scenarios, weapon chooser, rotation tips) are in Italian too."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-25",
         "title": "Reactions in the timeline",
         "summary": "You can now see which reactions happen and when.",
         "sections": [

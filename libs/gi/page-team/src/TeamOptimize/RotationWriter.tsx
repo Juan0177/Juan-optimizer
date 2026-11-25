@@ -8,7 +8,6 @@ import { deepClone, layeredAssignment } from '@genshin-optimizer/common/util'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSetKeys,
-  allWeaponKeys,
   charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type {
@@ -19,54 +18,40 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmBuild,
   KqmPlayed,
   KqmReplayInput,
-  RotationCalculation,
   RotationEnergy,
   RotationTemplate,
-  SimGear,
   TeamData,
   TeamDataOverrides,
   TeamOptMember,
+  TeamOptRunRotation,
 } from '@genshin-optimizer/gi/ui'
 import {
   actionFrameDefaults,
   CharacterName,
   energyFromRotation,
-  everyNthBursts,
   type FrameData,
-  GEAR_KEYS,
   HEXEREI_CHARACTERS,
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
-  kqmBurstEvery,
   kqmMemberConstellation,
   kqmSimGear,
-  lastRotation,
-  needsRotationCalculation,
-  ownConditional,
   parseFrameData,
-  parseRotation,
   parseTiming,
   perRotation,
   type RotationMember,
   rotationAttacks,
   rotationBuffDefaults,
-  rotationCalculation,
-  rotationSamples,
-  type SimBuffOwner,
   type SimHit,
   type SimTeam,
   simTeamOf,
-  simulateRotationSamples,
   simulateWritten,
   teamOptMembers,
-  teamOptRunGear,
   templatesForTeam,
   type WrittenRotation,
   writtenKqmReplay,
@@ -96,6 +81,7 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material'
+import type { i18n } from 'i18next'
 import {
   Fragment,
   type ReactNode,
@@ -108,7 +94,6 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import type { i18n } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { HitLabel, useAttackInfo, variantColor } from './AttackName'
 import { attackHitGroup } from './hitLabel'
@@ -125,13 +110,13 @@ import {
   DEFAULT_SWAP_FRAMES,
   firstRotations,
   frameOverrides,
-  openerCounted as openerIsCounted,
   type RotationTimingSettings,
   STEADY_COUNTED,
   STEADY_RANGE,
   STEADY_REPEATS,
   timingPing,
 } from './RotationTiming'
+import { teamQuickTokens, teamSyntaxRows } from './rotationWriterHints'
 import { useSimText } from './simText'
 import {
   TimelineHitStats,
@@ -153,6 +138,7 @@ import { kqmRotationUpdate, kqmRotationView } from './useTeamOpt'
 export {
   kqmBurstEvery,
   simulateWritten,
+  teamBurstEvery,
   type WrittenRotation,
   writtenSeconds,
   writtenWaits,
@@ -450,45 +436,6 @@ export const exampleRotation = (names: string[]) => {
     supports[0],
   ].join(' -> ')
 }
-/** The writer's action words, inserted from the quick row */
-const TOKENS: { text: string; key: string; label: string }[] = [
-  { text: 'E', key: 'skill', label: 'Elemental Skill (tap)' },
-  {
-    text: 'hE',
-    key: 'hold',
-    label:
-      'Elemental Skill (hold; Beidou: 2 Polaris stacks, hE[stacks=1] for 1)',
-  },
-  { text: 'Q', key: 'burst', label: 'Elemental Burst' },
-  { text: 'N3', key: 'normal', label: 'Normal attacks: N1 to N6 hits' },
-  {
-    text: 'CA',
-    key: 'charged',
-    label:
-      'Charged Attack (Sandrone: 3 condensed beams, CA[beams=2] for 2, up to 6 from C1; Mavuika: C3F spins 3 times, then the finisher; Arlecchino: CA[cancel] absorbs the Blood-Debt Directive without the hit; Chasca: CA[bullets=4] fires after 4 bullets)',
-  },
-  {
-    text: 'P',
-    key: 'plunge',
-    label:
-      'Plunging Attack (HP: high plunge, LP: low plunge; HP[collision] adds the hit on the way down)',
-  },
-  { text: 'D', key: 'dash', label: 'Dash' },
-  { text: 'J', key: 'jump', label: 'Jump' },
-  {
-    text: 'W1',
-    key: 'wait',
-    label:
-      'Wait: W1.5 is 1.5 s, W90f is 90 frames; WK is a walk (WK11f: 11 frames)',
-  },
-  {
-    text: 'entry',
-    key: 'swap',
-    label:
-      "Swap in only: the member's swap-in effect and nothing else (an Entry Skill)",
-  },
-  { text: '->', key: 'next', label: 'Next step or another member' },
-]
 
 /** The writer's saved state, with a signal so every view of it (the inline field, the writer) follows */
 const storageEvent = 'teamOpt.rotationStorage'
@@ -788,6 +735,8 @@ export function teamRotationEnergy({
   names,
   team,
   text: given,
+  burstEvery,
+  saved,
 }: {
   database: Database
   teamId: string
@@ -797,6 +746,14 @@ export function teamRotationEnergy({
   team: SimTeam
   /** Another rotation to play, with the saved opener and timing; absent: the written one */
   text?: string
+  /** Per-member Burst cadence overrides from the ER calculator (e.g. Every 2nd) */
+  burstEvery?: Partial<Record<CharacterKey, number>>
+  /** Saved rotation settings when already loaded (defaults to reading from storage) */
+  saved?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
 }): { energy: RotationEnergy; rotationTime: number } | undefined {
   if (
     given === undefined &&
@@ -807,9 +764,11 @@ export function teamRotationEnergy({
   if (!text.trim()) return undefined
   const played = simulateWritten({
     text,
-    opener: readStored(database, openerKey(teamId)) ?? '',
-    timing: parseTiming(readStored(database, timingKey(teamId))),
-    frameData: parseFrameData(readStored(database, frameDataKey)),
+    opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
+    timing:
+      saved?.timing ?? parseTiming(readStored(database, timingKey(teamId))),
+    frameData:
+      saved?.frameData ?? parseFrameData(readStored(database, frameDataKey)),
     names,
     members,
     database,
@@ -820,6 +779,7 @@ export function teamRotationEnergy({
     repeats: KQM_REPEATS,
     keep: 'last2',
     samples: 32,
+    burstEvery,
   })
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
@@ -868,20 +828,24 @@ function teamReplayWith(
   }
 }
 
-/**
- * The attacks a Team optimize run plays: the written rotation with the sets and weapons the run
- * may give each member timed in it (`teamOptRunGear`); undefined: the saved attacks.
- */
-export const teamRunAttacks = (
+/** The writer settings a Team Optimize worker needs to replay the rotation. */
+export function teamRunRotation(
   database: Database,
   gender: GenderKey,
   i18n: i18n,
-  teamId: string,
-  teamOpt: TeamOpt
-) =>
-  teamReplayWith(database, gender, i18n, teamId, teamOpt, (own) =>
-    teamOptRunGear(database, teamId, teamOpt, own)
-  )
+  teamId: string
+): TeamOptRunRotation | undefined {
+  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
+  const text = readStored(database, storageKey(teamId)) ?? ''
+  if (!text.trim()) return undefined
+  return {
+    text,
+    opener: readStored(database, openerKey(teamId)) ?? '',
+    timing: parseTiming(readStored(database, timingKey(teamId))),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
+    names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
+  }
+}
 
 const timedSetEffects = new Map<
   string,
@@ -2389,7 +2353,7 @@ function WriterModal({
                     )
                   }
                 />
-                {syntaxOpen && <SyntaxSheet />}
+                {syntaxOpen && <SyntaxSheet members={members} names={names} />}
               </Box>
               {!!warnings.length && (
                 <Box
@@ -3257,13 +3221,13 @@ function HitsSummary({
 }
 
 /**
- * What the simulation assumed or could not check: folded behind one line, each a short row (its
- * subject, then what it says)
+ * What the simulation assumed or could not check: shown by default (still collapsible), each a
+ * short row (its subject, then what it says)
  */
 function RotationNotes({ notes }: { notes: string[] }) {
   const { t } = useTranslation('page_team')
   const simText = useSimText()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(true)
   return (
     <Disclosure
       open={open}
@@ -3334,6 +3298,20 @@ export function WriterQuickRow({
 }) {
   const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const { gender } = useDBMeta()
+  const memberNames = useMemo<RotationMember[]>(
+    () =>
+      members.map(({ characterKey }) => ({
+        characterKey,
+        name: i18n.t(
+          `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+        ),
+      })),
+    [members, i18n, gender]
+  )
+  const quickTokens = useMemo(
+    () => teamQuickTokens(members, memberNames, t),
+    [members, memberNames, t]
+  )
   const chip = (theme: Theme) => ({
     height: 28,
     px: 1,
@@ -3433,12 +3411,8 @@ export function WriterQuickRow({
           bgcolor: alpha(theme.palette.text.primary, 0.12),
         })}
       />
-      {TOKENS.map((tok) => (
-        <Tooltip
-          key={tok.key}
-          arrow
-          title={tip(t(`teamOpt.writer.token.${tok.key}`, tok.label))}
-        >
+      {quickTokens.map((tok) => (
+        <Tooltip key={tok.key} arrow title={tip(tok.label)}>
           <ButtonBase
             onClick={() => onInsert(tok.text)}
             onMouseDown={keepFocus}
@@ -3448,8 +3422,18 @@ export function WriterQuickRow({
               fontSize: 13,
               minWidth: 34,
               px: 0.875,
+              ...(tok.characterKey && {
+                '& .lane': { bgcolor: laneColor(theme, tok.characterKey) },
+              }),
             })}
           >
+            {tok.characterKey && (
+              <Box
+                className="lane"
+                component="span"
+                sx={{ width: 5, height: 5, borderRadius: '50%' }}
+              />
+            )}
             {tok.text}
           </ButtonBase>
         </Tooltip>
@@ -3504,155 +3488,40 @@ function EditorHead({
   )
 }
 
-/** How a rotation is written: each word with what it does, and a worked example */
-function SyntaxSheet() {
+/** How a rotation is written: team-specific mechanics first, then universal syntax */
+function SyntaxSheet({
+  members,
+  names,
+}: {
+  members: readonly { characterKey: CharacterKey }[]
+  names: readonly RotationMember[]
+}) {
   const { t } = useTranslation('page_team')
-  const rows: [string, string][] = [
-    [
-      'Name E Q',
-      t(
-        'teamOpt.writer.syntax.step',
-        'A step: who acts, then their actions. Names can be short (bina, ei).'
-      ),
-    ],
-    [
-      '->',
-      t(
-        'teamOpt.writer.syntax.next',
-        'Next step. Also →, >, a comma or a new line.'
-      ),
-    ],
-    [
-      'E / tE · hE',
-      t('teamOpt.writer.syntax.skill', 'Elemental Skill, tapped · held'),
-    ],
-    ['Q', t('teamOpt.writer.syntax.burst', 'Elemental Burst')],
-    [
-      'N3[movement=4]',
-      t(
-        'teamOpt.writer.syntax.movement',
-        'After any action: the metres the active member moves with it, each normal attack counted (gcsim’s movement). Only Iansan’s Kinetic Energy Scale uses it: 0.67 Nightsoul points a metre while another member is on the field, 6 m an action when not written'
-      ),
-    ],
-    [
-      'N1 – N6',
-      t(
-        'teamOpt.writer.syntax.normal',
-        'A normal attack string of that many hits'
-      ),
-    ],
-    [
-      'N3-4',
-      t(
-        'teamOpt.writer.syntax.normalFrom',
-        'The string carrying on: its 3rd to 4th hits, after an action that keeps it going (N2 after a Skill starts over)'
-      ),
-    ],
-    [
-      'hE[stacks=1]',
-      t(
-        'teamOpt.writer.syntax.stacks',
-        'Beidou: hold for 1 Polaris stack (0.8 s each; hE alone holds for 2, the maximum bonus)'
-      ),
-    ],
-    ['CA', t('teamOpt.writer.syntax.charged', 'Charged Attack')],
-    [
-      'CA[beams=2]',
-      t(
-        'teamOpt.writer.syntax.beams',
-        'Sandrone: release after 2 condensed beams (3 by default, up to 6 from C1)'
-      ),
-    ],
-    [
-      'CA[cancel]',
-      t(
-        'teamOpt.writer.syntax.cancel',
-        'Arlecchino: cancel the Charged Attack before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), but the attack never lands, so it doesn’t use up the aura for Melt'
-      ),
-    ],
-    [
-      'CA[bullets=4]',
-      t(
-        'teamOpt.writer.syntax.bullets',
-        'Chasca: fire after loading 4 bullets (6 by default)'
-      ),
-    ],
-    [
-      'HP · LP',
-      t(
-        'teamOpt.writer.syntax.plunge',
-        'A high or low plunge (P alone: the character’s usual one). HP[collision] adds the collision hit on the way down; HP[collision=0.5] counts it on half of them'
-      ),
-    ],
-    [
-      'C3F · C2D',
-      t(
-        'teamOpt.writer.syntax.spins',
-        'Mavuika: 3 Flamestrider spins, then the finisher · 2 spins, then a dash (no finisher)'
-      ),
-    ],
-    ['P · D · J', t('teamOpt.writer.syntax.moves', 'Plunge · dash · jump')],
-    [
-      '4[N5 CD] · 4N5CD',
-      t(
-        'teamOpt.writer.syntax.repeat',
-        'A group that many times (up to 20), as N5 CD four times'
-      ),
-    ],
-    [
-      'W1.5 · W90f',
-      t(
-        'teamOpt.writer.syntax.wait',
-        'Wait 1.5 s · 90 frames, from when the next action could start (gcsim’s wait)'
-      ),
-    ],
-    [
-      'WK · WK11f',
-      t(
-        'teamOpt.writer.syntax.walk',
-        'Walk 1 frame · 11 frames (an action: Tartaglia’s next Skill is his walking one)'
-      ),
-    ],
-    [
-      'E? · Q?',
-      t(
-        'teamOpt.writer.syntax.ready',
-        'Only when ready: left out, not waited for (ER calc: Q? defaults to every 2nd burst)'
-      ),
-    ],
-    [
-      'Q?/N3 · Q/N3 · EQ/E',
-      t(
-        'teamOpt.writer.syntax.otherwise',
-        'Only when ready, otherwise the actions after "/" (no spaces inside; ER calc defaults to every 2nd burst)'
-      ),
-    ],
-    [
-      'D?/CA',
-      t(
-        'teamOpt.writer.syntax.dashReady',
-        'Wanderer: dash only with Descent, otherwise a Charged Attack'
-      ),
-    ],
-    [
-      'entry',
-      t(
-        'teamOpt.writer.syntax.entry',
-        "Swap in only: the member's swap-in effect (a name alone mid-rotation is the same)"
-      ),
-    ],
-    [
-      '(note) · A/B',
-      t('teamOpt.writer.syntax.notes', 'Ignored · the first one is played'),
-    ],
-    [
-      '-> Name',
-      t(
-        'teamOpt.writer.syntax.loop',
-        'End with the first member: where the rotation loops'
-      ),
-    ],
-  ]
+  const { teamRows, generalRows } = useMemo(
+    () => teamSyntaxRows(members, names, t),
+    [members, names, t]
+  )
+  const listSx = {
+    m: 0,
+    display: 'grid',
+    gridTemplateColumns: {
+      xs: 'max-content minmax(0, 1fr)',
+      md: 'max-content minmax(0, 1fr) max-content minmax(0, 1fr)',
+    },
+    columnGap: 2,
+    rowGap: 0.75,
+    fontSize: 12.5,
+    lineHeight: 1.5,
+    '& dt': {
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      color: 'text.primary',
+      whiteSpace: 'nowrap',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 0.625,
+    },
+    '& dd': { m: 0, color: 'text.secondary' },
+  } as const
   return (
     <Box
       id="rotation-syntax"
@@ -3660,39 +3529,57 @@ function SyntaxSheet() {
         px: { xs: 1.25, sm: 1.75 },
         py: 1.5,
         borderTop: `1px solid ${tokens.hairline}`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.25,
       }}
     >
-      <Box
-        component="dl"
-        sx={{
-          m: 0,
-          display: 'grid',
-          gridTemplateColumns: {
-            xs: 'max-content minmax(0, 1fr)',
-            md: 'max-content minmax(0, 1fr) max-content minmax(0, 1fr)',
-          },
-          columnGap: 2,
-          rowGap: 0.75,
-          fontSize: 12.5,
-          lineHeight: 1.5,
-          '& dt': {
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            color: 'text.primary',
-            whiteSpace: 'nowrap',
-          },
-          '& dd': { m: 0, color: 'text.secondary' },
-        }}
-      >
-        {rows.map(([code, meaning]) => (
+      {!!teamRows.length && (
+        <Box
+          sx={{
+            pb: 1.25,
+            borderBottom: `1px solid ${tokens.hairline}`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+          }}
+        >
+          <Typography sx={{ ...type.label, fontWeight: 600 }}>
+            {t('teamOpt.writer.syntax.forTeam', 'For this team')}
+          </Typography>
+          <Box component="dl" sx={listSx}>
+            {teamRows.map(({ code, meaning, characterKey }) => (
+              <Fragment key={code}>
+                <dt>
+                  {characterKey && (
+                    <Box
+                      component="span"
+                      sx={(theme) => ({
+                        width: 6,
+                        height: 6,
+                        borderRadius: '50%',
+                        bgcolor: laneColor(theme, characterKey),
+                        flexShrink: 0,
+                      })}
+                    />
+                  )}
+                  {code}
+                </dt>
+                <dd>{meaning}</dd>
+              </Fragment>
+            ))}
+          </Box>
+        </Box>
+      )}
+      <Box component="dl" sx={listSx}>
+        {generalRows.map(({ code, meaning }) => (
           <Fragment key={code}>
             <dt>{code}</dt>
             <dd>{meaning}</dd>
           </Fragment>
         ))}
       </Box>
-      <Typography
-        sx={{ mt: 1.25, fontSize: 12, color: 'text.secondary', opacity: 0.8 }}
-      >
+      <Typography sx={{ fontSize: 12, color: 'text.secondary', opacity: 0.8 }}>
         {t(
           'teamOpt.writer.syntax.credit',
           'Automatic entry skills are included; actions not modelled are listed in the notes. Frame data: gcsim and kqmsim (AGPLv3).'

@@ -22,6 +22,7 @@ import {
   optimizeTeam,
   simTeamOf,
   syncEnergyCalculator,
+  teamBurstEvery,
   teamOptBonusStats,
   teamOptMembers,
   teamOptResultGear,
@@ -33,8 +34,8 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import { uiInput } from '@genshin-optimizer/gi/wr'
 import type { i18n } from 'i18next'
-import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
 import { teamRotationEnergy } from './RotationWriter'
+import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
 import { initStatus, teamOptSolver } from './useTeamOptRun'
 
 /**
@@ -155,6 +156,8 @@ export function teamSearchSource(args: {
   names: RotationMember[]
   /** The settings the result was run with (its rotation's attacks and time) */
   teamOpt: TeamOpt
+  /** Current tab settings for ER calculation and build confirmation (defaults to `teamOpt`) */
+  liveTeamOpt?: TeamOpt
   /** The team build (the result, or one of its next best) */
   result: Pick<TeamOptResult, 'builds' | 'weapons' | 'after' | 'attackStates'>
   saved: {
@@ -168,6 +171,15 @@ export function teamSearchSource(args: {
   maxWorkers: number
 }): RotationSearchSource {
   const { database, gender, teamId, names, teamOpt, result, saved } = args
+  const confirmTeamOpt = args.liveTeamOpt ?? teamOpt
+  const setupTeamOpt: TeamOpt =
+    confirmTeamOpt === teamOpt
+      ? teamOpt
+      : {
+          ...teamOpt,
+          energySource: confirmTeamOpt.energySource,
+          energyCalculator: confirmTeamOpt.energyCalculator,
+        }
   const keys = teamOptMembers(database, teamId).map((m) => m.characterKey)
   const builds = teamOptResultGear(database, teamId, result)
   const gear: Partial<Record<CharacterKey, SimGear>> = {}
@@ -190,7 +202,7 @@ export function teamSearchSource(args: {
       teamId,
       gender,
       names,
-      teamOpt,
+      setupTeamOpt,
       {
         ...builds,
         mainStatAssumptionLevel: teamOpt.assumeMaxMain ? 20 : 0,
@@ -210,9 +222,12 @@ export function teamSearchSource(args: {
     dps: time > 0 ? result.after.total / time : 0,
     prices: async () => ({}),
     confirm: async (text, isCancelled) => {
-      const run = await teamRotationRun({ ...args, text, isCancelled }).catch(
-        () => undefined
-      )
+      const run = await teamRotationRun({
+        ...args,
+        teamOpt: confirmTeamOpt,
+        text,
+        isCancelled,
+      }).catch(() => undefined)
       if (!run) return undefined
       const runTime = run.teamOpt.rotationTime ?? 0
       return {
@@ -220,6 +235,7 @@ export function teamSearchSource(args: {
         next: teamSearchSource({
           ...args,
           teamOpt: run.teamOpt,
+          liveTeamOpt: run.teamOpt,
           result: run.result,
         }),
       }
@@ -284,7 +300,7 @@ export async function teamRotationRun({
     attacks: played.attacks,
     rotationTime: played.rotationTime,
   }
-  if (teamOpt.energySource === 'calculator') {
+  if (teamOpt.energySource !== 'manual') {
     const worked = teamRotationEnergy({
       database,
       teamId,
@@ -293,8 +309,11 @@ export async function teamRotationRun({
       names,
       team: own,
       text,
+      burstEvery: teamBurstEvery(teamOpt),
+      saved,
     })
-    if (worked)
+    if (worked) {
+      runTeamOpt.energySource = 'calculator'
       runTeamOpt.energyCalculator = {
         ...withRotationEnergy(
           syncEnergyCalculator(
@@ -309,6 +328,7 @@ export async function teamRotationRun({
         ),
         rotationTime: worked.rotationTime || played.rotationTime,
       }
+    }
   }
   let stop: (() => void) | undefined
   const cancelled = () => {

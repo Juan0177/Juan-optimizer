@@ -254,38 +254,38 @@ describe('attackSegments', () => {
 })
 
 describe('team rotation', () => {
-  it.each([false, true])(
-    'removes excluded starting artifacts without relying on a better replacement (use own exclusions: %s)',
-    async (useExcludedArts) => {
-      const { database, teamId, ayakaId, ids } = setup()
-      const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
-      database.optConfigs.set(optConfigId, { artExclusion: [ids.atk.plume] })
-      const result = await optimizeTeam({
-        database,
-        teamId,
-        gender: 'F',
-        teamOpt: {
-          ...initTeamOpt(),
-          attacks: {
-            [ayaka]: [attack(['skill', 'press'], 1)],
-            [shenhe]: [attack(['skill', 'press'], 1)],
-          },
-          excludedArts: [ids.atk.flower, ids.crit.flower],
-          useExcludedArts,
-          keep: [shenhe],
+  it.each([
+    false,
+    true,
+  ])('removes excluded starting artifacts without relying on a better replacement (use own exclusions: %s)', async (useExcludedArts) => {
+    const { database, teamId, ayakaId, ids } = setup()
+    const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
+    database.optConfigs.set(optConfigId, { artExclusion: [ids.atk.plume] })
+    const result = await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        attacks: {
+          [ayaka]: [attack(['skill', 'press'], 1)],
+          [shenhe]: [attack(['skill', 'press'], 1)],
         },
-        // No search improvement: the incumbent itself must obey the exclusions.
-        maxRounds: 0,
-        solve: async () => undefined,
-      })
-      expect(result).toBeDefined()
-      expect(result!.builds[ayaka]!.flower).toBeUndefined()
-      expect(result!.builds[ayaka]!.plume).toBe(
-        useExcludedArts ? ids.atk.plume : undefined
-      )
-      expect(result!.builds[shenhe]!.flower).toBe(ids.crit.flower)
-    }
-  )
+        excludedArts: [ids.atk.flower, ids.crit.flower],
+        useExcludedArts,
+        keep: [shenhe],
+      },
+      // No search improvement: the incumbent itself must obey the exclusions.
+      maxRounds: 0,
+      solve: async () => undefined,
+    })
+    expect(result).toBeDefined()
+    expect(result!.builds[ayaka]!.flower).toBeUndefined()
+    expect(result!.builds[ayaka]!.plume).toBe(
+      useExcludedArts ? ids.atk.plume : undefined
+    )
+    expect(result!.builds[shenhe]!.flower).toBe(ids.crit.flower)
+  })
 
   it('counts each attack as the app computes it', () => {
     const { database, teamId } = setup()
@@ -882,12 +882,27 @@ describe('team optimize', () => {
         const pieces = Object.values(option.artifactIds).map(
           (id) => database.arts.get(id!)!
         )
-        expect(
-          pieces.filter((a) => a.setKey === option.set).length
-        ).toBeGreaterThanOrEqual(4)
+        for (const set of option.setPair ?? [option.set])
+          expect(
+            pieces.filter((a) => a.setKey === set).length
+          ).toBeGreaterThanOrEqual(option.setPair ? 2 : 4)
         expect(option.value).toBeLessThanOrEqual(options.best * (1 + 1e-9))
       }
     }
+    const replayOrder = [...result.optimized].reverse()
+    const replayed: CharacterKey[] = []
+    await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt,
+      solve: bruteForce,
+      from: { ...result, optimized: replayOrder },
+      maxRounds: 0,
+      onResult: () => {},
+      onOptions: (ck) => replayed.push(ck),
+    })
+    expect(replayed).toEqual(replayOrder)
   })
 
   it('lists an eligible set even if its builds cannot meet a minimum', async () => {
@@ -925,6 +940,55 @@ describe('team optimize', () => {
     expect(
       sets.find((o) => o.set === 'NoblesseOblige')?.artifactIds
     ).toBeDefined()
+    const mixed = sets.filter((option) => option.setPair)
+    expect(mixed.map((option) => option.setPair)).toEqual([
+      ['BlizzardStrayer', 'NoblesseOblige'],
+    ])
+    expect(mixed[0].artifactIds).toBeDefined()
+  })
+
+  it('only searches the four required set slots when ranking a set with one missing slot', async () => {
+    const { database, teamId, ids } = setup()
+    for (const id of Object.values(ids.weak))
+      database.arts.set(id, { location: shenhe })
+    database.arts.remove(ids.crit.circlet)
+    let searched = false
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        keep: [shenhe],
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+      },
+      solve: (input) => {
+        const blizzard = input.constraints.some(
+          ({ value, min }) =>
+            value.operation === 'read' &&
+            value.path[1] === 'BlizzardStrayer' &&
+            min === 4
+        )
+        if (blizzard) {
+          searched = true
+          expect(input.background).toBe(true)
+          expect(input.arts.length).toBe(5)
+          expect(
+            input.arts.every(
+              (art) =>
+                art.setKey === 'BlizzardStrayer' || art.slotKey === 'circlet'
+            )
+          ).toBe(true)
+        }
+        return bruteForce(input)
+      },
+      onResult: () => {},
+    }))!
+    expect(searched).toBe(true)
+    expect(
+      result.options?.[ayaka]?.sets.find((o) => o.set === 'BlizzardStrayer')
+        ?.artifactIds?.circlet
+    ).toBe(ids.atk.circlet)
   })
 
   it('forces the one set left on among those the inventory has pieces of', async () => {
@@ -1000,7 +1064,7 @@ describe('team optimize', () => {
       { weaponId: result.weapons[ayaka]! }
     ))!
     const other = ranked.sets.find(
-      (o) => setOf(result.builds[ayaka]!, o.set!) < 4
+      (o) => o.set && setOf(result.builds[ayaka]!, o.set) < 4
     )!.set!
     const one = (await session!.pick(
       { [ayaka]: { weaponId: result.weapons[ayaka]!, set: other } },
@@ -1022,6 +1086,128 @@ describe('team optimize', () => {
     expect(
       shenheArts.some((id) => Object.values(two.builds[ayaka]!).includes(id))
     ).toBe(false)
+  })
+
+  it('ranks distinct 2-piece pairs and preserves them when selected', async () => {
+    const { database, teamId, ayakaId, ids } = setup()
+    const { loadoutData } = database.teams.get(teamId)!
+    database.teams.set(teamId, { loadoutData: [loadoutData[0]] })
+    for (const id of Object.values(ids.crit))
+      database.arts.set(id, { location: '' })
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+    }
+    let session: TeamOptSession | undefined
+    const run = () =>
+      optimizeTeam({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt,
+        solve: bruteForce,
+        onResult: () => {},
+        onSession: (next) => {
+          session = next
+        },
+      })
+    const result = (await run())!
+    const ranked = result.options![ayaka]!.sets
+    expect(ranked.filter(({ set }) => set)).toHaveLength(3)
+    const mixed = ranked.filter(({ setPair }) => setPair)
+    expect(mixed.map(({ setPair }) => setPair)).toEqual(
+      expect.arrayContaining([
+        ['BlizzardStrayer', 'GladiatorsFinale'],
+        ['BlizzardStrayer', 'NoblesseOblige'],
+        ['GladiatorsFinale', 'NoblesseOblige'],
+      ])
+    )
+    expect(mixed).toHaveLength(3)
+    for (const { setPair, weaponId, value } of mixed) {
+      const picked = await session!.pick(
+        { [ayaka]: { weaponId, setPair } },
+        ayaka
+      )
+      const pieces = Object.values(picked!.builds[ayaka]!).map(
+        (id) => database.arts.get(id!)!.setKey
+      )
+      for (const key of setPair!)
+        expect(
+          pieces.filter((set) => set === key).length
+        ).toBeGreaterThanOrEqual(2)
+      expect(picked!.after.total).toBeCloseTo(value, 6)
+    }
+
+    for (const id of Object.values(ids.weak)) {
+      const { setKey: _set, ...artifact } = database.arts.get(id)!
+      database.arts.new({ ...artifact, setKey: 'HeartOfDepth' })
+    }
+    const shortlisted = (await run())!.options![ayaka]!.sets.flatMap(
+      ({ setPair }) => (setPair ? [setPair.join('+')] : [])
+    )
+    expect(new Set(shortlisted).size).toBe(3)
+    expect(shortlisted).toHaveLength(3)
+
+    const { optConfigId } = database.teamChars.get(ayakaId)!
+    database.optConfigs.set(optConfigId, {
+      artSetExclusion: { BlizzardStrayer: [2] },
+    })
+    const withoutBlizzardBonus = (await run())!.options![ayaka]!.sets
+    expect(
+      withoutBlizzardBonus.some(({ set }) => set === 'BlizzardStrayer')
+    ).toBe(true)
+    expect(
+      withoutBlizzardBonus.some(({ setPair }) =>
+        setPair?.includes('BlizzardStrayer')
+      )
+    ).toBe(false)
+
+    database.optConfigs.set(optConfigId, {
+      artSetExclusion: { twoTwo: [2, 4] },
+    })
+    const excluded = (await run())!.options![ayaka]!.sets
+    expect(excluded.some(({ setPair }) => setPair)).toBe(false)
+    expect(excluded.filter(({ set }) => set)).toHaveLength(4)
+  })
+
+  it.each([
+    true,
+    false,
+  ])('ranks a pair only when its slots fit (fit: %s)', async (fit) => {
+    const { database, teamId, ids } = setup()
+    const { loadoutData } = database.teams.get(teamId)!
+    database.teams.set(teamId, { loadoutData: [loadoutData[0]] })
+    for (const slot of allArtifactSlotKeys) {
+      if (['flower', 'plume', 'sands'].includes(slot))
+        database.arts.set(ids.crit[slot], { location: '' })
+      else database.arts.remove(ids.crit[slot])
+      if (!(fit ? ['goblet', 'circlet'] : ['flower', 'plume']).includes(slot))
+        database.arts.remove(ids.atk[slot])
+      if (fit || slot !== 'goblet') database.arts.remove(ids.weak[slot])
+    }
+    if (!fit) {
+      const artifact = database.arts.get(ids.weak.goblet)!
+      database.arts.new({
+        ...artifact,
+        setKey: 'HeartOfDepth',
+        slotKey: 'circlet',
+      })
+    }
+    const result = await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+      },
+      solve: bruteForce,
+      onResult: () => {},
+    })
+    const sets = result!.options![ayaka]!.sets
+    expect(sets.map(({ setPair }) => setPair)).toEqual(
+      fit ? [['BlizzardStrayer', 'NoblesseOblige']] : []
+    )
   })
 
   it('finds builds no member can improve alone, without sharing artifacts', async () => {
@@ -2089,6 +2275,49 @@ describe('team optimize', () => {
     expect(result.after.total).toBeLessThan(result.before.total)
   })
 
+  it('does not force the carry onto an energy weapon when an unmet teammate can meet their minimum on their own turn', async () => {
+    const { database, teamId, shenheId, ids } = setup()
+    const mistsplitter = database.chars.get(ayaka)!.equippedWeapon
+    for (const id of Object.values(ids.crit))
+      database.arts.set(id, { location: ayaka })
+    // Shenhe starts on low-ER weak pieces (100% ER), while her ATK/ER pieces (132.5% ER) are free
+    for (const id of Object.values(ids.weak))
+      database.arts.set(id, { location: shenhe })
+    for (const id of Object.values(ids.atk))
+      database.arts.set(id, { location: '' })
+    const favonius = database.weapons.new({
+      key: 'FavoniusSword',
+      level: 90,
+      ascension: 6,
+      refinement: 5,
+      location: '',
+      lock: false,
+    })
+    database.optConfigs.set(database.teamChars.get(shenheId)!.optConfigId, {
+      statFilters: {
+        [JSON.stringify(['basic', 'enerRech_'])]: [
+          { value: 130, disabled: false },
+        ],
+      },
+    })
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        optimizeWeapons: true,
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+        weaponEnergy: { [favonius]: { [shenhe]: 50 } },
+      },
+      solve: bruteForce,
+    }))!
+    expect(result.before.unmet[shenhe]).toHaveLength(1)
+    expect(result.after.unmet[shenhe]).toBeUndefined()
+    expect(result.weapons[ayaka]).toBe(mistsplitter)
+    expect(result.after.total).toBeGreaterThan(result.before.total)
+  })
+
   it('weighs what an energy weapon saves the rest of the team', async () => {
     const { database, teamId, ayakaId } = setup()
     const calamity = database.chars.get(shenhe)!.equippedWeapon
@@ -2188,6 +2417,43 @@ describe('team optimize', () => {
       (o) => o.weaponId === calamity
     )!
     expect(calamityRow.unmet).toBeUndefined()
+
+    const ayakaWeapon = picked!.weapons[ayaka]!
+    const ayakaPair = ['BlizzardStrayer', 'GladiatorsFinale'] as const
+    const shenhePair = ['GladiatorsFinale', 'NoblesseOblige'] as const
+    const pairKept = (
+      view: { builds: TeamOptResult['builds'] },
+      ck: CharacterKey,
+      pair: readonly ArtifactSetKey[]
+    ) => {
+      const sets = Object.values(view.builds[ck]!).map(
+        (id) => database.arts.get(id!)?.setKey
+      )
+      for (const key of pair)
+        expect(sets.filter((set) => set === key).length).toBeGreaterThanOrEqual(
+          2
+        )
+    }
+    // Taking Favonius away cannot override a pair already selected on Ayaka.
+    const withPreviousPair = (await session!.pick(
+      {
+        [ayaka]: { weaponId: ayakaWeapon, setPair: ayakaPair },
+        [shenhe]: { weaponId: calamity },
+      },
+      shenhe
+    ))!
+    pairKept(withPreviousPair, ayaka, ayakaPair)
+    expect(withPreviousPair.after.unmet[ayaka]).toHaveLength(1)
+
+    // Ayaka may need pieces of the set just selected on Shenhe. Keep the pair and show the ER gap.
+    const withNewPair = (await session!.pick(
+      {
+        [shenhe]: { weaponId: calamity, setPair: shenhePair },
+      },
+      shenhe
+    ))!
+    pairKept(withNewPair, shenhe, shenhePair)
+    expect(withNewPair.after.unmet[ayaka]).toHaveLength(1)
   })
 
   it('never assigns a member a weapon excluded for them during optimizeTeam', async () => {

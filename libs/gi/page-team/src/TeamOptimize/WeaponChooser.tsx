@@ -100,9 +100,9 @@ import {
   createContext,
   Fragment,
   memo,
-  useCallback,
   Suspense,
   startTransition,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -146,6 +146,19 @@ export interface WeaponCalcEnergyConfig {
 }
 
 const ER_FILTER_PATH = JSON.stringify(['basic', 'enerRech_'])
+
+export const DEFAULT_WEAPON_MIN_RARITY = 3
+export const DEFAULT_WEAPON_MIN_LEVEL = 70
+
+/** Weapons shown by default in Team optimize's chooser: 3★–5★ at level 70 and above */
+export function isDefaultVisibleWeapon(
+  weapon: Pick<ICachedWeapon, 'key' | 'level'>
+) {
+  return (
+    (getWeaponStat(weapon.key)?.rarity ?? 0) >= DEFAULT_WEAPON_MIN_RARITY &&
+    weapon.level >= DEFAULT_WEAPON_MIN_LEVEL
+  )
+}
 
 /** Whether a weapon is usable by at least one current wielder of its type */
 function isWeaponTicked(
@@ -533,8 +546,28 @@ function WeaponChooserModal({
       ).length,
     0
   )
+  // Hide 1–2★ weapons and weapons below level 70 by default; reveal on demand
+  const [showHidden, setShowHidden] = useState(false)
+  const hiddenCount = useMemo(
+    () => all.filter((w) => !isDefaultVisibleWeapon(w)).length,
+    [all]
+  )
+  const visibleGroups = useMemo(
+    () =>
+      groups.map((g) => ({
+        ...g,
+        visibleWeapons: showHidden
+          ? g.weapons
+          : g.weapons.filter(isDefaultVisibleWeapon),
+      })),
+    [groups, showHidden]
+  )
+  const visibleTotal = visibleGroups.reduce(
+    (n, g) => n + g.visibleWeapons.length,
+    0
+  )
   // (rows come in batches: the first screenful at once, the rest a batch per frame)
-  const shown = useBatches(ready ? all.length : 0, 24, 12)
+  const shown = useBatches(ready ? visibleTotal : 0, 24, 12)
   let left = shown
   return (
     <ModalWrapper
@@ -594,6 +627,37 @@ function WeaponChooserModal({
               {p.label}
             </Pill>
           ))}
+          {hiddenCount > 0 && (
+            <>
+              <Box
+                aria-hidden
+                sx={{
+                  width: '1px',
+                  height: 16,
+                  mx: 0.25,
+                  bgcolor: tokens.hairlineStrong,
+                }}
+              />
+              <Pill
+                selected={showHidden}
+                onClick={() => setShowHidden((v) => !v)}
+                tip={t(
+                  'teamOpt.weapons.showHiddenTip',
+                  'Show 1–2★ weapons and weapons under level 70. Hidden by default so the list stays focused on leveled 3–5★ weapons.'
+                )}
+              >
+                {showHidden
+                  ? t('teamOpt.weapons.showingHidden', {
+                      defaultValue: 'Showing < Lv. 70 & 1–2★ ({{count}})',
+                      count: hiddenCount,
+                    })
+                  : t('teamOpt.weapons.showHidden', {
+                      defaultValue: 'Show < Lv. 70 & 1–2★ ({{count}})',
+                      count: hiddenCount,
+                    })}
+              </Pill>
+            </>
+          )}
           {calcEnergy && (
             <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
               <Tooltip
@@ -648,11 +712,11 @@ function WeaponChooserModal({
           }}
         >
           {!ready &&
-            groups.map((group) => (
+            visibleGroups.map((group) => (
               <Box key={group.type}>
                 <Skeleton variant="text" width={180} height={34} />
                 <Box sx={{ mt: 1, ...rowGridSx }}>
-                  {group.weapons.slice(0, 6).map((w) => (
+                  {group.visibleWeapons.slice(0, 6).map((w) => (
                     <Skeleton
                       key={w.id}
                       variant="rounded"
@@ -664,14 +728,57 @@ function WeaponChooserModal({
               </Box>
             ))}
           {ready &&
-            groups.map((group) => {
-              const visible = Math.max(0, Math.min(group.weapons.length, left))
-              left -= group.weapons.length
+            visibleGroups.map((group) => {
+              const visible = Math.max(
+                0,
+                Math.min(group.visibleWeapons.length, left)
+              )
+              left -= group.visibleWeapons.length
               return (
                 <WeaponGroup
                   key={group.type}
-                  {...group}
+                  type={group.type}
+                  members={group.members}
+                  weapons={group.visibleWeapons}
+                  allWeapons={group.weapons}
                   visible={visible}
+                  note={
+                    !showHidden &&
+                    group.visibleWeapons.length === 0 &&
+                    group.weapons.length > 0 ? (
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <span>
+                          {t('teamOpt.weapons.allHiddenInGroup', {
+                            defaultValue:
+                              'No 3–5★ weapons at level 70 or above ({{count}} hidden).',
+                            count: group.weapons.length,
+                          })}
+                        </span>
+                        <Button
+                          size="small"
+                          variant="text"
+                          color="inherit"
+                          onClick={() => setShowHidden(true)}
+                          sx={{
+                            minHeight: 24,
+                            py: 0,
+                            px: 0.75,
+                            fontSize: 12.5,
+                            color: 'primary.main',
+                          }}
+                        >
+                          {t('teamOpt.weapons.showHiddenShort', 'Show hidden')}
+                        </Button>
+                      </Box>
+                    ) : undefined
+                  }
                   teamData={teamData}
                   excluded={excluded}
                   excludedMembers={excludedMembers}
@@ -955,7 +1062,7 @@ export function WeaponGroup({
           {t('teamOpt.weapons.groupCount', {
             defaultValue: '{{allowed}} of {{total}}',
             allowed: ticked,
-            total: selectionCounts?.total ?? weapons.length,
+            total: selectionCounts?.total ?? pool.length,
           })}
         </Typography>
         {!virtual && <AddWeaponButton type={type} />}

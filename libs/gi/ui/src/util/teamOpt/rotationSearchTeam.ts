@@ -13,7 +13,7 @@ import type {
   SimGear,
 } from './rotation'
 import type { RotationSearchSetup } from './rotationSearchScore'
-import { simTeamOf, simulateWritten } from './writtenRotation'
+import { simTeamOf, simulateWritten, teamBurstEvery } from './writtenRotation'
 
 /**
  * Team optimize's own play of a written rotation with given builds, as "Use this rotation" plays
@@ -68,6 +68,7 @@ export function writtenTeamReplay({
       openerWarning: (w) => w,
       calculation: overrides,
       calculate,
+      burstEvery: teamBurstEvery(teamOpt),
     })
     if (!played?.sim || !played.attacks)
       throw new Error(
@@ -127,7 +128,7 @@ export function teamRotationSearchSetup(
     names,
     teamOpt,
     ...saved,
-    constellations: {},
+    constellations: own.constellations,
     gear,
     overrides,
     ...(attackStates?.length ? { attackStates: [...attackStates] } : {}),

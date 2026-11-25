@@ -5,6 +5,7 @@ import { teamOptMembers } from './data'
 import {
   calculateEnergyRecharge,
   defaultEnergyCalculator,
+  syncEnergyCalculator,
   withRotationEnergy,
 } from './energyCalc'
 import type { RunAttackState } from './lowHpUptime'
@@ -162,14 +163,29 @@ export function rotationScorer(
         },
         damage
       )?.total ?? 0
+    const savedCalc =
+      setup.play === 'team'
+        ? teamOpt.energyCalculator
+        : teamOpt.kqm?.energyCalculator
     const er = played.energy
       ? calculateEnergyRecharge(
           keys,
-          withRotationEnergy(
-            defaultEnergyCalculator(keys, time),
-            keys,
-            played.energy
-          ),
+          {
+            ...withRotationEnergy(
+              savedCalc
+                ? syncEnergyCalculator(
+                    keys,
+                    savedCalc,
+                    time,
+                    teamOpt.onField ?? keys[0],
+                    setup.constellations
+                  )
+                : defaultEnergyCalculator(keys, time),
+              keys,
+              played.energy
+            ),
+            rotationTime: time,
+          },
           weapons as never,
           refinements as never,
           sets as never

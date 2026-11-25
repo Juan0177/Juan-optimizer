@@ -21,7 +21,7 @@ import {
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { WeaponCalcEnergyConfig } from './WeaponChooser'
-import { WeaponGroup } from './WeaponChooser'
+import { isDefaultVisibleWeapon, WeaponGroup } from './WeaponChooser'
 
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => ({}),
@@ -342,5 +342,32 @@ describe('WeaponGroup ER & Favonius energy UX', () => {
     // Shortcut to ER calculator
     fireEvent.click(within(favCard as HTMLElement).getByText('Calculate ER'))
     expect(onOpenCalculator).toHaveBeenCalledOnce()
+  })
+})
+
+describe('isDefaultVisibleWeapon', () => {
+  it('shows only 3★–5★ weapons at level 70 and above by default', () => {
+    expect(isDefaultVisibleWeapon({ key: 'DullBlade', level: 70 })).toBe(false)
+    expect(isDefaultVisibleWeapon({ key: 'SilverSword', level: 70 })).toBe(
+      false
+    )
+    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 69 })).toBe(
+      false
+    )
+    expect(isDefaultVisibleWeapon({ key: 'HarbingerOfDawn', level: 70 })).toBe(
+      true
+    )
+    expect(isDefaultVisibleWeapon({ key: 'FavoniusSword', level: 60 })).toBe(
+      false
+    )
+    expect(isDefaultVisibleWeapon({ key: 'FavoniusSword', level: 70 })).toBe(
+      true
+    )
+    expect(
+      isDefaultVisibleWeapon({ key: 'PrimordialJadeCutter', level: 1 })
+    ).toBe(false)
+    expect(
+      isDefaultVisibleWeapon({ key: 'PrimordialJadeCutter', level: 90 })
+    ).toBe(true)
   })
 })

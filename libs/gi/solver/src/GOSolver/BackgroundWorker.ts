@@ -14,8 +14,6 @@ declare function postMessage(result: WorkerResult): void
  */
 let worker: SolverWorker | undefined
 let run = -1
-/** Searches of at least this many builds with minimums have their artifacts' ranges pruned first */
-const RANGE_PRUNE_FROM = 1e10
 /** The lead's CPU work, prepared once the CPU is needed (see `LeadInit.waitForCPU`) */
 let prepareCPU: (() => void) | undefined
 
@@ -34,20 +32,18 @@ function handle(data: WorkerCommand) {
         break
       }
       const { problem, localMax } = data
-      // The GPU sweeps a large problem faster than its artifacts' ranges are pruned: they prune
-      // nothing when only the damage has a floor. Minimums do prune them (most of a big search's
-      // builds when an Energy Recharge one is high): not skipped then, for a search that big.
+      // Before a huge GPU sweep (>= 500M builds), prune artifacts against cheap non-target
+      // minimums (like ER/CR): takes <1 ms instead of hundreds of ms evaluating a huge
+      // team-damage floor per artifact, while still eliminating ER-impossible artifacts.
+      // Smaller GPU sweeps run faster without range pruning at all.
       const builds = countBuilds(problem.arts)
-      const minimums = problem.constraints.some(
-        (c) =>
-          c.value !== problem.optimizationTarget &&
-          c.min > Number.NEGATIVE_INFINITY
-      )
       const gpuFirst =
         !!data.waitForCPU &&
-        builds >= (data.gpuMinTotal ?? Number.POSITIVE_INFINITY) &&
-        !(minimums && builds >= RANGE_PRUNE_FROM)
-      const prepared = preprocess(problem, !gpuFirst)
+        builds >= (data.gpuMinTotal ?? Number.POSITIVE_INFINITY)
+      const prepared = preprocess(
+        problem,
+        gpuFirst ? (builds >= 5e8 ? 'minimums' : false) : true
+      )
       prepared.plot = plotConfigFor(prepared)
       postMessage({
         resultType: 'prepared',
@@ -99,9 +95,16 @@ function handle(data: WorkerCommand) {
           setup.plot = plotConfigFor(setup)
           prepare(setup)?.()
         }
+      else if (data.waitForCPU)
+        // Defer enumerating set combinations (`initialItems`) until `proceed`: if the GPU takes
+        // the problem, enumerating hundreds of thousands of CPU items would waste seconds on the
+        // lead worker for work that is never used.
+        prepareCPU = () => {
+          prepareCPU = undefined
+          prepare(prepared)?.()
+        }
       else {
-        prepareCPU = prepare(prepared)
-        if (!data.waitForCPU) prepareCPU?.()
+        prepare(prepared)?.()
       }
       break
     }

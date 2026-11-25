@@ -250,7 +250,7 @@ export function RotationInline({
           display: 'flex',
           flexDirection: { xs: 'column', sm: 'row' },
           alignItems: 'stretch',
-          minHeight: 44,
+          minHeight: 48,
           '&:hover': { borderColor: tokens.hairlineStrong },
         }}
       >
@@ -261,19 +261,22 @@ export function RotationInline({
           aria-label={`${t('teamOpt.writer.edit', 'Edit rotation')}: ${applied}`}
           sx={{
             ...focusSx,
+            ...quickSx,
             flex: 1,
             minWidth: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-start',
-            gap: 1,
-            px: 1.5,
-            py: 1,
+            gap: 1.25,
+            px: 1.75,
+            py: 1.125,
             borderRadius: 'inherit',
             textAlign: 'left',
             cursor: 'pointer',
+            '&:hover': { bgcolor: alpha(giTokens.parchment, 0.025) },
             '&:hover .rotation-edit, &.Mui-focusVisible .rotation-edit': {
-              opacity: 1,
+              opacity: 0.9,
+              color: 'text.primary',
             },
           }}
         >
@@ -295,7 +298,7 @@ export function RotationInline({
               <Box
                 component="span"
                 sx={{
-                  alignSelf: 'flex-start',
+                  alignSelf: 'center',
                   flexShrink: 0,
                   ml: 'auto',
                   px: 0.75,
@@ -316,13 +319,12 @@ export function RotationInline({
             className="rotation-edit"
             sx={{
               ml: editedByHand ? 0 : 'auto',
-              alignSelf: 'flex-start',
-              mt: 0.25,
-              fontSize: 16,
+              alignSelf: 'center',
+              fontSize: 15,
               color: 'text.secondary',
-              opacity: 0.45,
+              opacity: 0.4,
               flexShrink: 0,
-              transition: 'opacity .12s',
+              transition: 'opacity .12s, color .12s',
             }}
           />
         </ButtonBase>
@@ -333,9 +335,11 @@ export function RotationInline({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'flex-end',
+              flexWrap: 'wrap',
+              gap: 0.25,
               flexShrink: 0,
-              px: 1,
-              py: { xs: 0.5, sm: 0 },
+              px: 0.875,
+              py: { xs: 0.625, sm: 0 },
               borderLeft: { xs: 0, sm: hairline },
               borderTop: { xs: hairline, sm: 0 },
             }}
@@ -717,8 +721,9 @@ function Step({
             component="span"
             sx={{
               fontFamily: mono,
-              fontSize: 13.5,
-              color: 'text.primary',
+              fontSize: 13,
+              fontWeight: 550,
+              color: alpha(giTokens.parchment, 0.92),
               letterSpacing: '0.01em',
             }}
           >

@@ -60,7 +60,7 @@ describe('WebGPU shader', () => {
     expect(steps.filter((n) => own.has(n))).toEqual([])
   })
 
-  it('picks the mixed-piece mask by whether a set has 4 pieces, only when the two differ', () => {
+  it('selects mixed-piece mask dynamically from Params uniforms so pipelines are reusable across set rules', () => {
     const source = (rules: {
       rainbow: number
       noFour?: number
@@ -80,24 +80,40 @@ describe('WebGPU shader', () => {
         rules,
         0
       )!
-    // two 2-piece bonuses turned off: 0 or 1 mixed pieces only with 4 of a set
     const twoTwo = source({
       rainbow: 0b111111,
       noFour: 0b111100,
       maskOffset: 0,
     })
+    const same = source({
+      rainbow: 0b11,
+      noFour: 0b11,
+      maskOffset: 42,
+    })
     expect(twoTwo).toContain(
-      'let rbm = select(60u, 63u, max(max(c0, c1), max(max(c2, c3), c4)) >= 4u);'
+      'let rbm = select(P.noFour, P.rainbow, max(max(c0, c1), max(max(c2, c3), c4)) >= 4u);'
     )
     expect(twoTwo).toContain('(((rbm >> rb)')
-    // the same masks: the shader as before
-    for (const rules of [
-      { rainbow: 0b11, maskOffset: 0 },
-      { rainbow: 0b11, noFour: 0b11, maskOffset: 0 },
-    ]) {
-      const src = source(rules)
-      expect(src).not.toContain('rbm')
-      expect(src).toContain('(((3u >> rb)')
-    }
+    expect(twoTwo).toBe(same)
+  })
+
+  it('uses direct monotone scaling for constant-factor interval products', () => {
+    const src = shaderSource(
+      [prod(2.5, dynRead('atk'))],
+      [],
+      ['atk'],
+      {
+        base: {},
+        values: Object.fromEntries(
+          allArtifactSlotKeys.map((slot) => [slot, []])
+        ) as never,
+      },
+      undefined,
+      undefined,
+      0
+    )!
+    expect(src).not.toContain('min(min(')
+    expect(src).toContain('2.5*l0')
+    expect(src).toContain('2.5*h0')
   })
 })

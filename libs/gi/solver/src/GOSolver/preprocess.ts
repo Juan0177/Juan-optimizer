@@ -19,7 +19,8 @@ export function preprocess(
     exclusion,
     constraints,
   }: OptProblemInput,
-  pruneArtRange = true
+  pruneArtRange: boolean | 'minimums' = true,
+  pruneOrder = true
 ): Setup {
   constraints = constraints.filter((x) => x.min > Number.NEGATIVE_INFINITY)
 
@@ -29,20 +30,30 @@ export function preprocess(
     nodes.push(plotBase)
     minimums.push(Number.NEGATIVE_INFINITY)
   }
+  // In 'minimums' mode (used before GPU sweeps), prune artifacts only against cheap non-target
+  // minimums (like ER/CR) rather than evaluating a huge target-floor formula on every artifact.
+  const pruneMins =
+    pruneArtRange === 'minimums'
+      ? minimums.map((m, i) =>
+          i < constraints.length && constraints[i].value === optimizationTarget
+            ? Number.NEGATIVE_INFINITY
+            : m
+        )
+      : minimums
 
   nodes = pruneExclusion(nodes, exclusion)
   nodes = optimize(nodes, {}, (_) => false)
   ;({ nodes, arts } = pruneAll(
     nodes,
-    minimums,
+    pruneMins,
     arts,
     plotBase ? Number.POSITIVE_INFINITY : topN,
     exclusion,
     {
       reaffine: true,
-      pruneArtRange,
+      pruneArtRange: !!pruneArtRange,
       pruneNodeRange: true,
-      pruneOrder: true,
+      pruneOrder,
     }
   ))
   nodes = optimize(nodes, {}, (_) => false)
