@@ -140,6 +140,42 @@
     "entries": [
       {
         "date": "2026-11-25",
+        "title": "Aggiornamento a Stellar Optimizer 1.41.4",
+        "summary": "Arrivano le versioni da 1.40.5 a 1.41.4 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Scenari del Tripudio** (Ottimizza squadra e KQM): confronta il Tripudio di un personaggio a ogni rotazione, una su 2, una su 3 o mai (con un’azione al suo posto, come N4). Per ogni scenario ricalcola la ricarica di energia e le build e li mette in classifica per DPS della squadra."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Ottimizza squadra più veloce**: l’ottimizzazione gira fuori dalla pagina, che resta fluida, e le classifiche di armi e set alternativi sono più rapide.",
+              "Le classifiche mostrano fino a tre combinazioni 2+2 di set per personaggio accanto ai set da 4 pezzi.",
+              "Scrivi la rotazione propone comandi e suggerimenti adatti alla squadra (Mavuika, Beidou, Sandrone…) e apre le Note già espanse.",
+              "La scelta delle armi nasconde di base quelle da 1–2★ e sotto il livello 70, con un pulsante per mostrarle.",
+              "Ottimizza rotazione mostra la durata della rotazione attuale accanto alla ricarica che le serve, e usa le impostazioni di ER della squadra per valutare le rotazioni."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "Ottimizza squadra non mette più un’arma di energia come Favonius al personaggio principale al primo giro solo perché un compagno non è ancora stato ottimizzato.",
+              "Varesa: le cariche dell’abilità si ricaricano una alla volta, e la Passione ardente finisce quando esce dal campo dopo una picchiata che ha speso i punti Spirito notturno."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi (scenari del Tripudio, scelta delle armi, suggerimenti della rotazione) sono in italiano."
+            ]
+          }
+        ]
+      },
+      {
+        "date": "2026-11-25",
         "title": "Reazioni nella cronologia",
         "summary": "Ora si vede quali reazioni avvengono e quando.",
         "sections": [

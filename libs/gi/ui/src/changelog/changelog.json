@@ -1,5 +1,58 @@
 [
   {
+    "version": "1.41.4",
+    "date": "2026-11-25"
+  },
+  {
+    "version": "1.41.3",
+    "date": "2026-11-25"
+  },
+  {
+    "version": "1.41.2",
+    "date": "2026-11-25",
+    "fixed": [
+      "Burst scenarios progress now advances smoothly without jumping backward between weapons, rounds, or repair passes.",
+      "Optimize rotation now uses your team's live ER calculator settings, Burst frequency, and constellations when scoring and confirming builds, drops rotations whose real builds fail requirements or lose DPS, and marks unconfirmed rotations that need more ER.",
+      "Team optimize waits for automatic ER to update after switching rotations and explains in the Below current tooltip when current builds miss a requirement such as Min ER."
+    ]
+  },
+  {
+    "version": "1.41.1",
+    "date": "2026-11-25",
+    "improved": [
+      "Team optimize runs noticeably faster and keeps the page smoother while searching, especially for alternative weapon and artifact set rankings and repeat runs."
+    ],
+    "fixed": [
+      "Team optimize no longer puts the main carry on an energy weapon like Favonius in round 1 just because a teammate's starting artifacts miss their ER requirement before that teammate has been optimized; when an energy weapon is genuinely needed, lower-damage supports now take it first."
+    ]
+  },
+  {
+    "version": "1.41.0",
+    "date": "2026-11-25",
+    "new": [
+      "Burst scenarios (Team optimize and KQM): compare using a character's Burst every rotation, every 2nd or 3rd rotation, or skipping it (with an optional replacement action such as N4), recalculating ER requirements and builds for each scenario and ranking them by team DPS."
+    ],
+    "improved": [
+      "Optimize rotation now shows your current rotation's length alongside its ER needs, so you can compare it directly with the suggested rotations."
+    ]
+  },
+  {
+    "version": "1.40.7",
+    "date": "2026-11-25"
+  },
+  {
+    "version": "1.40.6",
+    "date": "2026-11-25",
+    "fixed": [
+      "Team Optimize now ranks up to three 2-piece + 2-piece artifact builds per character alongside 4-piece builds. Select a pair to compare its team damage.",
+      "Varesa's Skill charges now recharge one at a time. The rotation also ends Fiery Passion when she swaps out after a plunge that spent her Nightsoul points."
+    ]
+  },
+  {
+    "version": "1.40.5",
+    "date": "2026-11-25"
+  },
+  {
     "version": "1.40.4",
     "date": "2026-11-24"
   },

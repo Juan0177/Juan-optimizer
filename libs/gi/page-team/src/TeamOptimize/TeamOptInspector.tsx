@@ -14,8 +14,13 @@ import type {
   TeamOptPickView,
   TeamOptResult,
   TeamOptSession,
+  TeamOptSetChoice,
 } from '@genshin-optimizer/gi/ui'
-import { CharacterName, WeaponName } from '@genshin-optimizer/gi/ui'
+import {
+  CharacterName,
+  teamOptSetKey,
+  WeaponName,
+} from '@genshin-optimizer/gi/ui'
 import UndoIcon from '@mui/icons-material/Undo'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
@@ -52,6 +57,13 @@ const picksKey = (picks: TeamOptPicks, characterKey: CharacterKey) =>
 
 /** A Team optimize option as the KQM tab's rankings show one */
 type Ranked = RankOption & { option: TeamOptOption }
+
+function pickedSets({ set, setPair }: TeamOptSetChoice): KqmSets {
+  const sets: KqmSets = {}
+  if (set) sets[set as ArtifactSetKey] = 4
+  for (const key of setPair ?? []) sets[key] = 2
+  return sets
+}
 
 /**
  * The set rankings with the build the team has (found with any sets) among them when it is not 4
@@ -169,7 +181,8 @@ export function TeamOptInspector({
 
   const choose = (next: TeamOptPick) => {
     const rest = { ...picks }
-    if (next.weaponId === own.weaponId && !next.set) delete rest[characterKey]
+    if (next.weaponId === own.weaponId && !teamOptSetKey(next))
+      delete rest[characterKey]
     else rest[characterKey] = next
     setOptimistic(next)
     setPending(Object.keys(rest).length ? 'figures' : undefined)
@@ -180,9 +193,8 @@ export function TeamOptInspector({
     (options ?? []).flatMap((option) => {
       const weapon = database.weapons.get(option.weaponId)
       if (!weapon) return []
-      const sets: KqmSets = {}
-      if (option.set) sets[option.set as ArtifactSetKey] = 4
-      else {
+      const sets = pickedSets(option)
+      if (!teamOptSetKey(option)) {
         const count: Record<string, number> = {}
         for (const id of Object.values(option.artifactIds ?? {})) {
           const setKey = id ? database.arts.get(id)?.setKey : undefined
@@ -210,35 +222,37 @@ export function TeamOptInspector({
     })
   const weapons = ranked(rankings?.weapons)
   const total = (view ?? result).after.total
-  const sets = withFoundBuild(
-    ranked(rankings?.sets),
-    ranked(
-      rankings && !pick.set
-        ? [
-            {
-              weaponId: pick.weaponId,
-              artifactIds: (view ?? result).builds[characterKey] as
-                | TeamOptOption['artifactIds']
-                | undefined,
-              value: (rankings.best * total) / result.after.total,
-            },
-          ]
-        : []
-    )[0]
-  )
+  const setRows = ranked(rankings?.sets)
+  const found =
+    rankings && !teamOptSetKey(pick)
+      ? ranked([
+          {
+            weaponId: pick.weaponId,
+            artifactIds: (view ?? result).builds[characterKey] as
+              | TeamOptOption['artifactIds']
+              | undefined,
+            value: (rankings.best * total) / result.after.total,
+          },
+        ])[0]
+      : undefined
+  const represented =
+    found &&
+    setRows.some(({ option }) =>
+      option.setPair?.every((key) => found.sets[key] === 2)
+    )
+  const sets = withFoundBuild(setRows, represented ? undefined : found)
   const list = category === 0 ? weapons : sets
   const busy = !!pending || (!rankings && optionsRunning)
   const changed = !!picks[characterKey]
   const weaponIds = [
     ...new Set([pick.weaponId, ...weapons.map((o) => o.option.weaponId)]),
   ]
-  const setKeys = [
-    ...new Set([
-      ...(pick.set ? [pick.set] : []),
-      // (the build found with any sets is "Best of any set", above)
-      ...sets.flatMap((o) => (o.option.set ? [o.option.set] : [])),
-    ]),
-  ]
+  const setChoices = new Map<string, TeamOptSetChoice>()
+  for (const { set, setPair } of [pick, ...sets.map(({ option }) => option)]) {
+    const choice = { set, setPair }
+    const key = teamOptSetKey(choice)
+    if (key) setChoices.set(key, choice)
+  }
   const shortfalls = (view ?? result).after.shortfalls?.[characterKey] ?? []
   const equipment = (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -250,7 +264,7 @@ export function TeamOptInspector({
         disabled={weaponIds.length < 2}
         sx={compactFieldSx}
         SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 380 } } } }}
-        onChange={(e) => choose({ weaponId: e.target.value, set: pick.set })}
+        onChange={(e) => choose({ ...pick, weaponId: e.target.value })}
       >
         {weaponIds.map((id) => {
           const weapon = database.weapons.get(id)
@@ -273,7 +287,7 @@ export function TeamOptInspector({
         select
         size="small"
         label={t('teamOpt.kqm.setLabel', 'Artifact set')}
-        value={pick.set ?? ''}
+        value={teamOptSetKey(pick)}
         sx={compactFieldSx}
         InputLabelProps={{ shrink: true }}
         SelectProps={{
@@ -281,15 +295,15 @@ export function TeamOptInspector({
           MenuProps: { PaperProps: { sx: { maxHeight: 380 } } },
         }}
         onChange={(e) =>
-          choose({ weaponId: pick.weaponId, set: e.target.value || undefined })
+          choose({ weaponId: pick.weaponId, ...setChoices.get(e.target.value) })
         }
       >
         <MenuItem value="">
           {t('teamOpt.inspect.bestSet', 'Best of any set')}
         </MenuItem>
-        {setKeys.map((set) => (
-          <MenuItem key={set} value={set}>
-            <SetLines sets={{ [set as ArtifactSetKey]: 4 }} />
+        {[...setChoices].map(([key, choice]) => (
+          <MenuItem key={key} value={key}>
+            <SetLines sets={pickedSets(choice)} />
           </MenuItem>
         ))}
       </TextField>
@@ -512,13 +526,17 @@ export function TeamOptInspector({
               selected={(o) =>
                 category === 0
                   ? o.option.weaponId === pick.weaponId
-                  : o.option.set === pick.set
+                  : teamOptSetKey(o.option) === teamOptSetKey(pick)
               }
               onSelect={(o) =>
                 choose(
                   category === 0
-                    ? { weaponId: o.option.weaponId, set: pick.set }
-                    : { weaponId: pick.weaponId, set: o.option.set }
+                    ? { ...pick, weaponId: o.option.weaponId }
+                    : {
+                        weaponId: pick.weaponId,
+                        set: o.option.set,
+                        setPair: o.option.setPair,
+                      }
                 )
               }
               disabled={false}

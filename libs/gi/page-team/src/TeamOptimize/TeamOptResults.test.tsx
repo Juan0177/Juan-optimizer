@@ -10,7 +10,7 @@ import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import type { TeamOptMember, TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { defaultEnergyCalculator } from '@genshin-optimizer/gi/ui'
 import { createTheme, ThemeProvider } from '@mui/material'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamOptResults } from './TeamOptResults'
 
@@ -298,5 +298,40 @@ describe('TeamOptResults ER requirement display', () => {
       </ThemeProvider>
     )
     expect(screen.getByText('148.2% / 160%')).toBeTruthy()
+  })
+
+  it('explains in the Below current tooltip when current builds missed requirements (e.g. Min ER)', async () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <TeamOptResults
+          teamId="team_1"
+          members={baseMembers}
+          result={makeResult({
+            before: {
+              total: 6_000_000,
+              members: { Sandrone: 4_000_000, Furina: 2_000_000 },
+              attacks: {},
+              unmet: { Furina: [0] },
+            },
+            after: {
+              total: 5_600_000,
+              members: { Sandrone: 3_800_000, Furina: 1_800_000 },
+              attacks: {},
+              unmet: {},
+            },
+          })}
+          seconds={12}
+          runTeamOpt={initTeamOpt()}
+          rotationTime={20}
+          teamData={undefined}
+          onDiscard={vi.fn()}
+        />
+      </ThemeProvider>
+    )
+    const pill = screen.getByText(/Below current/)
+    fireEvent.mouseOver(pill)
+    expect(
+      await screen.findByText(/it misses their requirements/i)
+    ).toBeTruthy()
   })
 })

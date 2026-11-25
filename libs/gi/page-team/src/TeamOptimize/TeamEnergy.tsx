@@ -36,6 +36,7 @@ import {
   KqmEnergyCalculator,
 } from './KqmEnergyCalculator'
 import {
+  teamBurstEvery,
   teamRotationEnergy,
   useAppliedRotation,
   useMemberNames,
@@ -135,14 +136,15 @@ export function useTeamEnergy(
   const written = text.trim()
     ? `${text.trim()}|${JSON.stringify([opener, timing, frameData])}`
     : ''
-  const playKey = `${written}|${JSON.stringify(own.constellations)}`
+  const burstEvery = useMemo(() => teamBurstEvery(teamOpt), [teamOpt])
+  const playKey = `${written}|${JSON.stringify(own.constellations)}|${JSON.stringify(burstEvery ?? {})}`
   const [worked, setWorked] = useState<{
     for: string
     energy?: RotationEnergy
     rotationTime?: number
   }>()
-  const latest = useRef({ own, names, members })
-  latest.current = { own, names, members }
+  const latest = useRef({ own, names, members, burstEvery })
+  latest.current = { own, names, members, burstEvery }
   useEffect(() => {
     if (!written) {
       setWorked(undefined)
@@ -159,6 +161,7 @@ export function useTeamEnergy(
           gender,
           names: latest.current.names,
           team: latest.current.own,
+          burstEvery: latest.current.burstEvery,
         })
       } catch {
         result = undefined
@@ -176,6 +179,8 @@ export function useTeamEnergy(
     }
   }, [database, teamId, gender, written, playKey])
   const ready = !!written && worked?.for === playKey && !!worked.energy
+  const updating =
+    teamOpt.energySource !== 'manual' && !!written && worked?.for !== playKey
   const energy = ready ? worked?.energy : undefined
   const playedTime = ready ? worked?.rotationTime : undefined
 
@@ -405,6 +410,7 @@ export function useTeamEnergy(
     erHints,
     gear,
     fromRotation: ready,
+    updating,
     draft,
     setDraft,
     draftErrors: draft ? energyEstimate(keys, draft, gear).errors : [],

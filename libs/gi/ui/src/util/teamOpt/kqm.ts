@@ -94,10 +94,10 @@ import {
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
 import type { RotationCalculation, SimGear } from './rotation/types'
+import { memberCtx } from './ruleConditionals'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
 import { withEnergyRelief } from './weapons'
-import { memberCtx } from './ruleConditionals'
 
 /*
  * KQM mode: every optimized member gets KQM Standards artifacts instead of the inventory's, and
@@ -1310,6 +1310,34 @@ interface KqmRunArgs {
    * settings allow), not refitted; the others still keep their builds
    */
   searchOnly?: boolean
+  /** Skip the full per-member weapon/set ranking sweep (`rankings` left empty): faster for scenario comparisons. */
+  skipRankings?: boolean
+  /** Keep the KQM worker pool warm after the run finishes (e.g. when running several scenarios back-to-back). */
+  keepWorkers?: boolean
+  /** Optional screened-out weapons/sets from a base KQM run for unchanged teammates (only used when !fullSearch). */
+  seedScreenedOut?: KqmResult['screenedOut']
+  /**
+   * Per-member search space override when starting from `from` (used by fast scenario comparisons):
+   * - `'keep'`: keep the member's `from` build untouched (0 problems compiled)
+   * - `{ weapons, four, two, ... }`: restrict that member's search to these candidate weapons & sets
+   */
+  spaceLimits?: Partial<
+    Record<
+      CharacterKey,
+      | 'keep'
+      | {
+          weapons?: KqmWeapon[]
+          four?: ArtifactSetKey[]
+          two?: ArtifactSetKey[]
+          /** Also retain every allowed Favonius, calculator-energy, and team-buff weapon */
+          keepTeamEnergyWeapons?: boolean
+          /** Also retain every allowed ER-substat weapon (plus Emblem/Exile sets) */
+          keepErWeapons?: boolean
+          /** Also retain every allowed team-buffing artifact set */
+          keepTeamSets?: boolean
+        }
+    >
+  >
 }
 /** Times the rotation is played again for the builds found (each time they change it) */
 const REPLAYS = 2
@@ -1377,6 +1405,10 @@ async function runKqm({
   from,
   only,
   searchOnly,
+  skipRankings,
+  keepWorkers,
+  seedScreenedOut,
+  spaceLimits,
   comparison,
 }: KqmRunArgs & {
   comparison?: {
@@ -1524,8 +1556,80 @@ async function runKqm({
       two: sets.filter(([, n]) => n === 2).map(([k]) => k),
     })
   }
+  const keptMembers = new Set<CharacterKey>()
+  if (from && spaceLimits) {
+    for (const [k, limit] of Object.entries(spaceLimits) as [
+      CharacterKey,
+      NonNullable<KqmRunArgs['spaceLimits']>[CharacterKey],
+    ][]) {
+      if (!limit || !from[k]) continue
+      if (limit === 'keep') {
+        keptMembers.add(k)
+        continue
+      }
+      const space = spaces.get(k)
+      if (!space) continue
+      const build = from[k]!
+      const buildSets = Object.entries(build.sets) as [ArtifactSetKey, number][]
+      let nextWeapons = space.weapons
+      if (limit.weapons?.length) {
+        const allow = new Set(
+          [build.weapon, ...limit.weapons].map(
+            (w) => `${w.key}@${w.refinement}`
+          )
+        )
+        const filtered = space.weapons.filter(
+          (w) =>
+            allow.has(`${w.key}@${w.refinement}`) ||
+            (limit.keepTeamEnergyWeapons &&
+              (isFavonius(w.key) ||
+                isCalcEnergyWeapon(w.key) ||
+                teamWeapon(w.key))) ||
+            (limit.keepErWeapons &&
+              getWeaponStat(w.key)?.subStat?.type === 'enerRech_')
+        )
+        if (filtered.length) nextWeapons = filtered
+      }
+      let nextFour = space.four
+      if (limit.four) {
+        const allow = new Set([
+          ...limit.four,
+          ...buildSets.filter(([, n]) => n >= 4).map(([s]) => s),
+        ])
+        nextFour = space.four.filter(
+          (s) =>
+            allow.has(s) ||
+            (limit.keepTeamSets && teamSet(s)) ||
+            (limit.keepErWeapons &&
+              (s === 'EmblemOfSeveredFate' || s === 'TheExile'))
+        )
+      }
+      let nextTwo = space.two
+      if (limit.two) {
+        const allow = new Set([
+          ...limit.two,
+          ...buildSets.filter(([, n]) => n === 2).map(([s]) => s),
+        ])
+        nextTwo = space.two.filter(
+          (s) =>
+            allow.has(s) ||
+            (limit.keepTeamSets && teamSet(s)) ||
+            (limit.keepErWeapons &&
+              (s === 'EmblemOfSeveredFate' || s === 'TheExile'))
+        )
+      }
+      spaces.set(k, {
+        ...space,
+        weapons: nextWeapons,
+        four: nextFour,
+        two: nextTwo,
+      })
+    }
+  }
   // (a pick after a quick run searches that run's contenders, and the picked weapon and sets)
-  const rootOut = kqm.fullSearch ? undefined : comparison?.result.screenedOut
+  const rootOut = kqm.fullSearch
+    ? undefined
+    : (comparison?.result.screenedOut ?? seedScreenedOut)
   for (const [k, out] of Object.entries(rootOut ?? {}) as [
     CharacterKey,
     { weapons: KqmWeapon[]; sets: ArtifactSetKey[] },
@@ -1844,7 +1948,7 @@ async function runKqm({
   const steps = optimized.length
   const rankedMembers = comparison
     ? optimized.filter((m) => m.characterKey === comparison.characterKey)
-    : from
+    : from || skipRankings
       ? []
       : optimized
   const RANK_UNITS = 2.5
@@ -1853,7 +1957,11 @@ async function runKqm({
   // is what they fill. With none, the run ends there.
   const CEILINGS = [0.7, 0.88]
   const ceilingOf = (pass: number) =>
-    comparison || from || maxRounds === 0 || pass >= ADOPT_PASSES
+    comparison ||
+    from ||
+    skipRankings ||
+    maxRounds === 0 ||
+    pass >= ADOPT_PASSES
       ? 1
       : (CEILINGS[pass] ?? 1)
   let ceiling = ceilingOf(0)
@@ -2181,7 +2289,7 @@ async function runKqm({
   // the weapons and sets near its best besides its build's and the ones that give the team
   // something; the later rounds, the replays' candidates and the rankings use only them (a
   // comparison or a refit searches what its run allows)
-  const quick = !kqm.fullSearch && !comparison && !from
+  const quick = !kqm.fullSearch && !comparison && (!from || !!skipRankings)
   let narrowed = false
   const weaponScreens = new Map<
     CharacterKey,
@@ -2289,8 +2397,8 @@ async function runKqm({
       let changed = false
       for (const [i, m] of optimized.entries()) {
         const ck = m.characterKey
-        // (members refitted: the others keep their builds)
-        if (refitted && !refitted.has(ck)) continue
+        // (members refitted or kept: the others keep their builds)
+        if ((refitted && !refitted.has(ck)) || keptMembers.has(ck)) continue
         const base = (round - 1) * steps + i
         await emit(
           { phase: 'search', round, step: i + 1, steps, characterKey: ck },
@@ -3053,9 +3161,9 @@ async function runKqm({
 
   let preview: KqmResult | undefined
   try {
-    // the rotation at the KQM constellations, with no weapon or set effects yet (its builds are
-    // not found yet)
-    if (!comparison) replayFor(builds, false)
+    // the rotation at the KQM constellations, with no weapon or set effects yet (unless starting
+    // from known scenario-base builds, so their gear effects apply right from round 1)
+    if (!comparison) replayFor(builds, !!(from && skipRankings))
     // The first builds, warmed up in the team's order and in reverse (the last ones choose with
     // the first ones' sets on: a team-wide set goes to whoever chooses first), the better kept:
     // which way the rounds settle depends on it, and only the KQM settings decide it
@@ -3076,9 +3184,10 @@ async function runKqm({
     await descend(1, maxRounds)
     // Played again with the builds found (their weapons' and sets' effects in it): while that
     // changes what it plays, the builds are searched again from where they are
+    const maxReplays = skipRankings && maxRounds <= 2 ? 1 : REPLAYS
     for (
       let r = 0;
-      !comparison && maxRounds > 0 && r < REPLAYS && replayFor(builds, true);
+      !comparison && maxRounds > 0 && r < maxReplays && replayFor(builds, true);
       r++
     ) {
       for (const ck of Object.keys(settled) as CharacterKey[])
@@ -3139,8 +3248,8 @@ async function runKqm({
         comparison.onPreview(shown)
       }
     }
-    // (from another run's builds: its rounds only)
-    for (let pass = 0; !from; pass++) {
+    // (from another run's builds: its rounds only, unless skipRankings still settles play)
+    for (let pass = 0; !from || skipRankings; pass++) {
       // (played again with the builds as they are now, while that changes the play: the rankings
       // and the result count what the builds taken on do to it, not the play of the ones before)
       for (
@@ -3154,6 +3263,7 @@ async function runKqm({
         await descend(rounds + 1, rounds + ADOPT_ROUNDS)
       }
       if (!comparison && maxRounds > 0) await settlePlay()
+      if (skipRankings) break
       await rankAll()
       if (comparison || pass >= ADOPT_PASSES) break
       // (the builds so far, with these rankings, while a better one is looked for: later
@@ -3189,7 +3299,7 @@ async function runKqm({
     throw cancelled(e)
   } finally {
     // (a comparison's workers are kept a while: the next pick needs them again)
-    releaseKqmWorkers(comparison ? COMPARE_WORKERS_KEPT_MS : 0)
+    releaseKqmWorkers(comparison || keepWorkers ? COMPARE_WORKERS_KEPT_MS : 0)
     // (the builders a while longer: a pick in the inspector builds with them)
     releaseKqmBuilders(COMPARE_WORKERS_KEPT_MS)
   }

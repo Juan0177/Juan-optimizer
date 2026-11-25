@@ -48,8 +48,8 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import {
   forwardRef,
   memo,
-  startTransition,
   Suspense,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -377,25 +377,36 @@ export function MemberRotation({
           '&:hover': onToggle
             ? { bgcolor: alpha(theme.palette.text.primary, 0.035) }
             : {},
-          '&:hover .member-chevron': { color: 'text.primary' },
+          '&:hover .member-chevron': { color: 'text.primary', opacity: 1 },
           '&.Mui-disabled': { pointerEvents: 'none' },
         })}
       >
-        <Box sx={{ px: 1.5, pt: 1.25, pb: 1, pr: onToggle ? 4.5 : 1.5 }}>
+        <Box sx={{ px: 1.5, pt: 1.375, pb: 1.25, pr: onToggle ? 4.25 : 1.5 }}>
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              gap: 1,
-              minHeight: 28,
+              gap: 1.125,
+              minHeight: 34,
             }}
           >
-            <MemberAvatar characterKey={characterKey} size={28} />
-            <Box sx={{ minWidth: 0, flexGrow: 1, lineHeight: 1.2 }}>
-              <Typography noWrap sx={{ ...type.body, fontWeight: 650 }}>
+            <MemberAvatar characterKey={characterKey} size={32} />
+            <Box sx={{ minWidth: 0, flexGrow: 1, lineHeight: 1.25 }}>
+              <Typography
+                noWrap
+                sx={{
+                  ...type.body,
+                  fontWeight: 650,
+                  letterSpacing: '-0.01em',
+                  lineHeight: 1.25,
+                }}
+              >
                 <CharacterName characterKey={characterKey} gender={gender} />
               </Typography>
-              <Typography noWrap sx={{ ...type.label, fontSize: 12, ...numSx }}>
+              <Typography
+                noWrap
+                sx={{ ...type.label, fontSize: 12, lineHeight: 1.25, ...numSx }}
+              >
                 {t('teamOpt.rotation.hitCount', {
                   defaultValue_one: '{{hits}} hit',
                   defaultValue_other: '{{hits}} hits',
@@ -415,20 +426,32 @@ export function MemberRotation({
                 <Box
                   sx={{
                     display: 'flex',
-                    alignItems: 'baseline',
-                    gap: 0.75,
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
                     flexShrink: 0,
+                    lineHeight: 1.25,
                     ...numSx,
                   }}
                 >
                   <Typography
                     component="span"
-                    sx={{ fontSize: 13.5, fontWeight: 650 }}
+                    sx={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      letterSpacing: '-0.02em',
+                      lineHeight: 1.25,
+                      whiteSpace: 'nowrap',
+                    }}
                   >
                     {formatRate(damage, rotationTime)}
                     <Box
                       component="span"
-                      sx={{ ...type.label, fontSize: 11, ml: 0.5 }}
+                      sx={{
+                        ...type.label,
+                        fontSize: 11,
+                        fontWeight: 500,
+                        ml: 0.375,
+                      }}
                     >
                       {rotationTime
                         ? t('teamOpt.rotation.dps', 'DPS')
@@ -440,7 +463,9 @@ export function MemberRotation({
                       component="span"
                       sx={{
                         ...type.label,
-                        minWidth: '3ch',
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        lineHeight: 1.25,
                         textAlign: 'right',
                       }}
                     >
@@ -455,6 +480,7 @@ export function MemberRotation({
           <ShareBar
             share={damage ? share : undefined}
             characterKey={characterKey}
+            sx={{ mt: 1.25 }}
           />
         </Box>
         {onToggle && <FoldChevron store={expandStore} expanded={expanded} />}
@@ -921,11 +947,12 @@ function FoldChevron({
       aria-hidden
       sx={{
         position: 'absolute',
-        top: 14,
+        top: 19,
         right: 10,
-        fontSize: 20,
+        fontSize: 18,
         color: 'text.secondary',
-        transition: `transform .18s ${tokens.ease}, color .12s`,
+        opacity: 0.65,
+        transition: `transform .18s ${tokens.ease}, color .12s, opacity .12s`,
         transform: open ? 'rotate(180deg)' : 'none',
         '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}

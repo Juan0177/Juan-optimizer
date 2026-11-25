@@ -56,13 +56,14 @@ const MAX_INVOCATIONS = 1 << 22
  * and the whole tab stutters while the optimizer runs.
  */
 const DISPATCH_BUILDS = 1 << 24
+const BACKGROUND_DISPATCH_BUILDS = 1 << 23
 /**
- * GPU time per slice of work while the page is visible (ms). A sweep otherwise keeps the GPU
- * fully busy and the browser cannot draw the page: the tab stutters for the whole run. Slices are
- * submitted one at a time, each once the previous one is done, so the page's drawing runs between
- * them; a hidden tab has nothing to draw and runs flat out.
+ * GPU time per slice of work while the page is visible (ms). Slices are double-buffered (two
+ * queued) so the GPU stays busy during IPC completion callbacks while still leaving clean gaps
+ * for the browser compositor to draw smoothly; a hidden tab runs flat out.
  */
-const SLICE_MS = 5
+const SLICE_MS = 8
+const BACKGROUND_SLICE_MS = 4
 const CANDIDATE_CAP = 1 << 20
 /**
  * Workgroup maxima (and counts) are folded into this many buckets on the GPU: a fixed, small
@@ -73,9 +74,7 @@ const BUCKETS = 1 << 16
 /**
  * Plots with at most this many bins keep each workgroup's bin maxima in workgroup memory, merged
  * into the global bins once per workgroup: with few bins, billions of global atomic updates of the
- * same few hundred addresses serialize. (Either way, a build only updates its bin when it beats
- * the bin's best so far, read first: an atomic update per build made the first pass three times
- * slower, with Elemental Mastery's 45K bins.)
+ * same few hundred addresses serialize.
  */
 const LOCAL_BINS_MAX = 2048
 /** Relative f32 slack for cutoffs and constraints; candidates are re-checked in f64 */
@@ -89,6 +88,104 @@ const plotCap = (len: number) =>
   Math.max(4, Math.min(1024, Math.floor(CANDIDATE_CAP / 4 / Math.max(1, len))))
 /** A candidate's plot bin when it has none (out of range) */
 const NO_BIN = 0xffffffff
+const NO_SET = 0xffffffff
+const PARAMS_BYTES = 128 // 32 x 32-bit words, 16-byte aligned
+const PIPELINE_CACHE_MAX = 64
+
+/** Page visibility reported to worker contexts so GPU pacing pauses when the tab is hidden */
+let gpuPageVisible = true
+export function setGpuPageVisible(visible: boolean) {
+  gpuPageVisible = visible
+}
+
+/**
+ * Serialize active GPU compute sweeps while allowing shader compilations and CPU preprocessing to
+ * overlap freely across parallel weapon solves. Running 3 huge sweeps concurrently on one GPU
+ * cannot speed up the GPU itself, but stacks 3x slice latency and causes UI compositor stutters.
+ */
+let gpuSweepTail: Promise<void> = Promise.resolve()
+function acquireGpuSweep(): Promise<() => void> {
+  let release!: () => void
+  const next = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const wait = gpuSweepTail
+  gpuSweepTail = gpuSweepTail.then(() => next)
+  return wait.then(() => release)
+}
+
+/** Shared WebGPU device + pipeline LRU cache per JS realm (recreated automatically if lost) */
+let sharedDevicePromise:
+  | Promise<{ device: GPUDevice; lost: { value: boolean } } | undefined>
+  | undefined
+let pipelineCache = new Map<string, Promise<GPUComputePipeline>>()
+
+function getSharedDevice() {
+  if (!sharedDevicePromise) {
+    sharedDevicePromise = (async () => {
+      const gpu = typeof navigator !== 'undefined' ? navigator.gpu : undefined
+      if (!gpu) return undefined
+      const adapter = await gpu.requestAdapter({
+        powerPreference: 'high-performance',
+      })
+      if (!adapter || adapter.info?.isFallbackAdapter) return undefined
+      const device = await adapter.requestDevice({
+        requiredLimits: {
+          maxStorageBufferBindingSize:
+            adapter.limits.maxStorageBufferBindingSize,
+          maxBufferSize: adapter.limits.maxBufferSize,
+        },
+      })
+      const lost = { value: false }
+      const entry = { device, lost }
+      device.lost.then(() => {
+        lost.value = true
+        if (sharedDevicePromise) {
+          sharedDevicePromise.then((cur) => {
+            if (cur === entry) {
+              sharedDevicePromise = undefined
+              pipelineCache = new Map()
+            }
+          })
+        }
+      })
+      return entry
+    })().catch(() => {
+      sharedDevicePromise = undefined
+      return undefined
+    })
+  }
+  return sharedDevicePromise
+}
+
+function getCachedPipeline(
+  device: GPUDevice,
+  src: string
+): Promise<GPUComputePipeline> {
+  const existing = pipelineCache.get(src)
+  if (existing) {
+    // refresh LRU order
+    pipelineCache.delete(src)
+    pipelineCache.set(src, existing)
+    return existing
+  }
+  const module = device.createShaderModule({ code: src })
+  const promise = device
+    .createComputePipelineAsync({
+      layout: 'auto',
+      compute: { module, entryPoint: 'main' },
+    })
+    .catch((err) => {
+      pipelineCache.delete(src)
+      throw err
+    })
+  pipelineCache.set(src, promise)
+  if (pipelineCache.size > PIPELINE_CACHE_MAX) {
+    const oldest = pipelineCache.keys().next().value
+    if (oldest !== undefined) pipelineCache.delete(oldest)
+  }
+  return promise
+}
 
 /** `bin`: the build's plot bin, per the GPU (none: out of range, or no plot) */
 export type GPUCandidate = {
@@ -100,8 +197,23 @@ export type GPURun =
   | { ok: true; tested: number; failed: number; candidates: GPUCandidate[] }
   | { ok: false; reason: 'too-large' | 'overflow' }
 
+/** Dynamic set-rule overrides for reusing a compiled GPUSolver across set/pair rankings */
+export type GPUSetRulesOverride = {
+  /** Per-set allowed count bitmask (missing sets use `defaultMask`, default 0x3f) */
+  sets?: Partial<Record<string, number>>
+  /** Bitmask for any set (including empty slot) not listed in `sets` */
+  defaultMask?: number
+  rainbow: number
+  noFour?: number
+  /** Required minimum pieces of up to 2 sets (for fast outer-prefix pruning) */
+  req?: readonly (readonly [string, number])[]
+  /** Forbidden 2pc+2pc set pairs (up to 2 pairs) */
+  forbidPairs?: readonly (readonly [string, string])[]
+}
+
 export class GPUSolver {
   private readonly device: GPUDevice
+  private readonly deviceLost: { value: boolean }
   private readonly pipeline: GPUComputePipeline
   private readonly keys: string[]
   private readonly K: number
@@ -121,6 +233,10 @@ export class GPUSolver {
   private readonly plotLen: number
   /** Set rules: each table row's set index, then the allowed piece counts per set index */
   private readonly rules?: GPUBuffer
+  private readonly setRules?: SetRules
+  private readonly ruleMaskOffset: number
+  /** Target floor extracted from constraints equal to `optTarget` (applied dynamically in Params) */
+  private readonly floorMin: number
   /** Per bucket: the best value (encoded), then (set rules) the number of allowed builds */
   private readonly wg: GPUBuffer
   private readonly evaluate: ReturnType<typeof precompute<5>>
@@ -128,80 +244,102 @@ export class GPUSolver {
   private readonly targetRange: (reads: DynMinMax) => MinMax[]
   private readonly base: Record<string, number>
   private readonly topN: number
-  private lost = false
+  /** Scales DISPATCH_BUILDS down on huge shaders (e.g. 4,000+ lines) so slices stay within ~4-8 ms */
+  private readonly shaderComplexity: number
+  /** Carry calibrated slice size across repeated `run()` calls on a reused GPUSolver */
+  private lastPerSlice = 1
 
   /**
    * `undefined` when WebGPU is unavailable or the formula cannot be compiled. With `rules`, only
-   * the builds they allow are part of the search (see `exclusion.ts`).
+   * the builds they allow are part of the search (see `exclusion.ts`). Pass `forceRules: true`
+   * when reusing one compiled pipeline across varying set rules via `run(..., { rules })`.
    */
   static async create(
     setup: Setup,
     plot: PlotConfig | undefined,
-    rules?: ExclusionMasks
+    rules?: ExclusionMasks,
+    { forceRules = false }: { forceRules?: boolean } = {}
   ): Promise<GPUSolver | undefined> {
-    const gpu = typeof navigator !== 'undefined' ? navigator.gpu : undefined
-    if (!gpu) return undefined
-    const adapter = await gpu.requestAdapter({
-      powerPreference: 'high-performance',
-    })
-    if (!adapter || adapter.info?.isFallbackAdapter) return undefined
+    const shared = await getSharedDevice()
+    if (!shared || shared.lost.value) return undefined
+    const { device, lost } = shared
     const nodes = [
       setup.optTarget,
       ...setup.constraints.map((c) => c.value),
       ...(setup.plotBase ? [setup.plotBase] : []),
     ]
-    const setRules = setRulesFor(setup, rules)
-    const rows = allArtifactSlotKeys.reduce(
-      (n, slot) => n + setup.arts.values[slot].length,
-      0
-    )
+    const cheapNodes: OptNode[] = []
+    const cheapMins: number[] = []
+    let floorMin = Number.NEGATIVE_INFINITY
+    for (const c of setup.constraints) {
+      if (c.value === setup.optTarget) {
+        if (c.min > floorMin) floorMin = c.min
+      } else {
+        cheapNodes.push(c.value)
+        cheapMins.push(c.min)
+      }
+    }
+    const shaderNodes = [
+      setup.optTarget,
+      ...cheapNodes,
+      ...(setup.plotBase ? [setup.plotBase] : []),
+    ]
+    const setRules = setRulesFor(setup, rules, forceRules)
+    const keys = readKeys(nodes)
     const src = shaderSource(
-      nodes,
-      setup.constraints.map((c) => c.min),
-      readKeys(nodes),
+      shaderNodes,
+      cheapMins,
+      keys,
       setup.arts,
       setup.plotBase ? plot : undefined,
-      setRules && {
-        rainbow: setRules.rainbow,
-        noFour: setRules.noFour,
-        maskOffset: rows,
-      },
-      rows
+      setRules
+        ? { rainbow: setRules.rainbow, noFour: setRules.noFour }
+        : undefined
     )
     if (!src) return undefined
-    const device = await adapter.requestDevice({
-      requiredLimits: {
-        maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-        maxBufferSize: adapter.limits.maxBufferSize,
-      },
-    })
-    const module = device.createShaderModule({ code: src })
-    const info = await module.getCompilationInfo()
-    if (info.messages.some((m) => m.type === 'error')) {
-      device.destroy()
+    let pipeline: GPUComputePipeline
+    try {
+      pipeline = await getCachedPipeline(device, src)
+    } catch {
       return undefined
     }
-    const pipeline = await device.createComputePipelineAsync({
-      layout: 'auto',
-      compute: { module, entryPoint: 'main' },
-    })
-    return new GPUSolver(device, pipeline, nodes, setup, plot, setRules)
+    if (lost.value) return undefined
+    const shaderLines = src.split('\n').length
+    return new GPUSolver(
+      device,
+      lost,
+      pipeline,
+      nodes,
+      keys,
+      setup,
+      plot,
+      setRules,
+      floorMin,
+      shaderLines
+    )
   }
 
   private constructor(
     device: GPUDevice,
+    deviceLost: { value: boolean },
     pipeline: GPUComputePipeline,
     nodes: OptNode[],
+    keys: string[],
     setup: Setup,
     plot: PlotConfig | undefined,
-    setRules: SetRules | undefined
+    setRules: SetRules | undefined,
+    floorMin: number,
+    shaderLines: number
   ) {
     this.device = device
+    this.deviceLost = deviceLost
     this.pipeline = pipeline
     this.topN = setup.topN
-    this.keys = readKeys(nodes)
-    this.K = this.keys.length
-    device.lost.then(() => (this.lost = true))
+    this.keys = keys
+    this.K = keys.length
+    this.setRules = setRules
+    this.floorMin = floorMin
+    this.shaderComplexity = Math.max(1, Math.round(shaderLines / 500))
 
     const arts = allArtifactSlotKeys.flatMap((slot) => setup.arts.values[slot])
     this.rowOf = new Map(arts.map((art, i) => [art, i]))
@@ -212,9 +350,10 @@ export class GPUSolver {
     )
     this.tableData = table
     this.rangeRows = arts.length * this.K
+    this.ruleMaskOffset = arts.length
     this.table = this.buffer(table.byteLength, BUFFER.STORAGE | BUFFER.COPY_DST)
     device.queue.writeBuffer(this.table, 0, table)
-    this.params = this.buffer(80, BUFFER.UNIFORM | BUFFER.COPY_DST)
+    this.params = this.buffer(PARAMS_BYTES, BUFFER.UNIFORM | BUFFER.COPY_DST)
     this.counters = this.buffer(
       8,
       BUFFER.STORAGE | BUFFER.COPY_DST | BUFFER.COPY_SRC
@@ -256,31 +395,56 @@ export class GPUSolver {
     )
   }
 
+  /** Destroy this solver's GPU buffers (keeps the shared GPUDevice and pipeline cache warm). */
   destroy() {
-    this.device.destroy()
+    this.table.destroy()
+    this.params.destroy()
+    this.counters.destroy()
+    this.out.destroy()
+    this.wg.destroy()
+    this.rules?.destroy()
+    this.bins?.destroy()
   }
 
   /**
    * Brute-force `arts` (a subset of the setup artifacts, same objects). Returns candidate builds,
    * already evaluated exactly; the caller applies constraints/threshold/plot bins to them.
    */
-  /** `onProgress`: the fraction of the sweep done so far (both passes), now and then */
-  /**
-   * `collect`: the problem asks its target to beat a value (a constraint on the target itself),
-   * so few builds meet the constraints: the first sweep also collects them all, and the second
-   * one is only needed when there are too many
-   */
   async run(
     arts: ArtifactsBySlot,
     threshold: number,
     onProgress?: (fraction: number) => void,
-    collect = false
+    collect = false,
+    background = false,
+    options?: { floor?: number; rules?: GPUSetRulesOverride }
   ): Promise<GPURun> {
-    if (this.lost) throw new Error('WebGPU device lost')
+    const releaseSweep = await acquireGpuSweep()
+    try {
+      return await this.runExclusive(
+        arts,
+        threshold,
+        onProgress,
+        collect,
+        background,
+        options
+      )
+    } finally {
+      releaseSweep()
+    }
+  }
+
+  private async runExclusive(
+    arts: ArtifactsBySlot,
+    threshold: number,
+    onProgress?: (fraction: number) => void,
+    collect = false,
+    background = false,
+    options?: { floor?: number; rules?: GPUSetRulesOverride }
+  ): Promise<GPURun> {
+    if (this.deviceLost.value) throw new Error('WebGPU device lost')
     // The innermost (free) slot: the one whose pieces move the target least. Each invocation
     // bounds its prefix's builds (four pieces fixed) over that slot, and a tight bound skips
-    // more of them. (By size, the free slot was often the circlet, whose main stats move the
-    // target most.) The order changes what is skipped, never which builds are covered.
+    // more of them.
     const slotLists = allArtifactSlotKeys.map((slot) => arts.values[slot])
     const free = this.freeSlot(slotLists)
     const lists = [
@@ -301,6 +465,77 @@ export class GPUSolver {
     if (outer >= 2 ** 31) return { ok: false, reason: 'too-large' }
     const total = countBuilds(arts)
 
+    // Dynamic set-rule override (reuses the same compiled pipeline and rules buffer)
+    let rainbowMask = this.setRules?.rainbow ?? 0x3f
+    let noFourMask = this.setRules?.noFour ?? rainbowMask
+    let reqSet0 = NO_SET,
+      reqMin0 = 0,
+      reqSet1 = NO_SET,
+      reqMin1 = 0
+    let forbid0a = NO_SET,
+      forbid0b = NO_SET,
+      forbid1a = NO_SET,
+      forbid1b = NO_SET
+    if (options?.rules && this.rules && this.setRules) {
+      const ov = options.rules
+      const { index, masks } = this.setRules
+      const defMask = ov.defaultMask ?? 0x3f
+      const nextMasks = new Uint32Array(masks.length).fill(defMask)
+      if (ov.sets) {
+        for (const [set, mask] of Object.entries(ov.sets)) {
+          if (mask === undefined) continue
+          const idx = index.get(set)
+          if (idx !== undefined) nextMasks[idx] = mask
+        }
+      }
+      this.device.queue.writeBuffer(
+        this.rules,
+        this.ruleMaskOffset * 4,
+        nextMasks
+      )
+      rainbowMask = ov.rainbow
+      noFourMask = ov.noFour ?? ov.rainbow
+      if (ov.req?.[0]) {
+        const idx = index.get(ov.req[0][0])
+        if (idx === undefined)
+          return { ok: true, tested: 0, failed: 0, candidates: [] }
+        reqSet0 = idx
+        reqMin0 = ov.req[0][1]
+      }
+      if (ov.req?.[1]) {
+        const idx = index.get(ov.req[1][0])
+        if (idx === undefined)
+          return { ok: true, tested: 0, failed: 0, candidates: [] }
+        reqSet1 = idx
+        reqMin1 = ov.req[1][1]
+      }
+      if (ov.forbidPairs?.[0]) {
+        const a = index.get(ov.forbidPairs[0][0])
+        const b = index.get(ov.forbidPairs[0][1])
+        if (a !== undefined && b !== undefined) {
+          forbid0a = a
+          forbid0b = b
+        }
+      }
+      if (ov.forbidPairs?.[1]) {
+        const a = index.get(ov.forbidPairs[1][0])
+        const b = index.get(ov.forbidPairs[1][1])
+        if (a !== undefined && b !== undefined) {
+          forbid1a = a
+          forbid1b = b
+        }
+      }
+    }
+
+    const floor = options?.floor ?? this.floorMin
+    const hasFloor = Number.isFinite(floor) ? 1 : 0
+    const floor5 = hasFloor
+      ? Math.fround(floor - (Math.abs(floor) * 1e-5 + 1e-6))
+      : -3e38
+    const floor4 = hasFloor
+      ? Math.fround(floor - (Math.abs(floor) * 1e-4 + 1e-6))
+      : -3e38
+
     // Per-level artifact rows
     const offsets: number[] = []
     const rows: number[] = []
@@ -311,18 +546,20 @@ export class GPUSolver {
     // Each stat's range over the fifth (largest) slot: the shader bounds every build of a
     // prefix (four pieces fixed) with it, from the table's own f32 values
     const { K, tableData } = this
-    const ranges = new Float32Array(2 * K)
-    ranges.fill(Number.POSITIVE_INFINITY, 0, K)
-    ranges.fill(Number.NEGATIVE_INFINITY, K)
-    for (const art of lists[4]) {
-      const row = this.rowOf.get(art)! * K
-      for (let k = 0; k < K; k++) {
-        const v = tableData[row + k]
-        if (v < ranges[k]) ranges[k] = v
-        if (v > ranges[K + k]) ranges[K + k] = v
+    if (K > 0) {
+      const ranges = new Float32Array(2 * K)
+      ranges.fill(Number.POSITIVE_INFINITY, 0, K)
+      ranges.fill(Number.NEGATIVE_INFINITY, K)
+      for (const art of lists[4]) {
+        const row = this.rowOf.get(art)! * K
+        for (let k = 0; k < K; k++) {
+          const v = tableData[row + k]
+          if (v < ranges[k]) ranges[k] = v
+          if (v > ranges[K + k]) ranges[K + k] = v
+        }
       }
+      this.device.queue.writeBuffer(this.table, this.rangeRows * 4, ranges)
     }
-    this.device.queue.writeBuffer(this.table, this.rangeRows * 4, ranges)
     const slotRows = this.buffer(
       rows.length * 4,
       BUFFER.STORAGE | BUFFER.COPY_DST
@@ -331,11 +568,18 @@ export class GPUSolver {
 
     const batches: { start: number; count: number; wx: number; wy: number }[] =
       []
+    const dispatchBuilds = Math.max(
+      1 << 20,
+      Math.floor(
+        (background ? BACKGROUND_DISPATCH_BUILDS : DISPATCH_BUILDS) /
+          this.shaderComplexity
+      )
+    )
     const perDispatch = Math.max(
       WORKGROUP,
       Math.min(
         MAX_INVOCATIONS,
-        Math.floor(DISPATCH_BUILDS / n[4] / WORKGROUP) * WORKGROUP
+        Math.floor(dispatchBuilds / n[4] / WORKGROUP) * WORKGROUP
       )
     )
     for (let start = 0; start < outer; start += perDispatch) {
@@ -367,7 +611,7 @@ export class GPUSolver {
       thr: number,
       countFailed: boolean
     ) => {
-      const p = new ArrayBuffer(80),
+      const p = new ArrayBuffer(PARAMS_BYTES),
         u = new Uint32Array(p),
         f = new Float32Array(p)
       u.set([
@@ -384,6 +628,21 @@ export class GPUSolver {
       ])
       u.set([b.start, b.count, 0, mode, CANDIDATE_CAP, countFailed ? 1 : 0], 10)
       f[16] = Math.fround(thr)
+      f[17] = floor5
+      f[18] = floor4
+      u[19] = hasFloor
+      u[20] = this.rangeRows
+      u[21] = this.ruleMaskOffset
+      u[22] = rainbowMask >>> 0
+      u[23] = noFourMask >>> 0
+      u[24] = reqSet0 >>> 0
+      u[25] = reqMin0 >>> 0
+      u[26] = reqSet1 >>> 0
+      u[27] = reqMin1 >>> 0
+      u[28] = forbid0a >>> 0
+      u[29] = forbid0b >>> 0
+      u[30] = forbid1a >>> 0
+      u[31] = forbid1b >>> 0
       this.device.queue.writeBuffer(this.params, 0, p)
       const enc = this.device.createCommandEncoder()
       const pass = enc.beginComputePass()
@@ -396,6 +655,8 @@ export class GPUSolver {
     /** The progress a pass reports (`onProgress`): from `base`, `span` for all its dispatches */
     let doneDispatches = 0
     let progress = { base: 0, span: 0.5 }
+    const inPage = typeof document !== 'undefined'
+    const targetSliceMs = background ? BACKGROUND_SLICE_MS : SLICE_MS
     const dispatch = async (
       mode: number,
       thr: number,
@@ -403,30 +664,41 @@ export class GPUSolver {
     ) => {
       doneDispatches = 0
       const paced = () =>
-        typeof document !== 'undefined' &&
-        document.visibilityState === 'visible'
-      // Short slices of work, at most two queued: the browser's own GPU work (drawing the page)
-      // runs between slices instead of waiting behind the whole sweep, and the next slice is
-      // already queued while the GPU reports the previous one done (that report can be slow)
+        background ||
+        (inPage ? document.visibilityState === 'visible' : gpuPageVisible)
+      // Tiny sweeps (1-2 batches) already fit well under a single frame budget; skip intermediate
+      // onSubmittedWorkDone IPC round-trips and submit directly before readback.
+      if (batches.length <= 2) {
+        for (let b = 0; b < batches.length; b++)
+          submit(batches[b], mode, thr, countFailed)
+        doneDispatches = batches.length
+        return
+      }
+      // Double-buffered slices (at most two queued): the browser's own GPU work (drawing the
+      // page) runs between slices, while the next slice is already queued during IPC completion
+      // callbacks so the GPU never drains idle on every slice. (`dispatchBuilds` already scales
+      // per-batch work by `shaderComplexity`, so `maxSlice` does not divide by it again.)
+      const maxSlice = 64
       const queued: { count: number; done: Promise<number> }[] = []
       let i = 0,
-        perSlice = 1,
+        perSlice = Math.max(1, Math.min(this.lastPerSlice, maxSlice)),
         last = performance.now()
       const retire = async () => {
         const { count, done } = queued.shift()!
         const at = await done
-        if (this.lost) throw new Error('WebGPU device lost')
+        if (this.deviceLost.value) throw new Error('WebGPU device lost')
         doneDispatches += count
         onProgress?.(
           progress.base + (progress.span * doneDispatches) / batches.length
         )
-        // the time between two slices finishing is about the GPU time of one: aim at SLICE_MS
+        // the time between two slices finishing is about the GPU time of one: aim at targetSliceMs.
+        // Smooth growth (at most 2x per step, capped by `maxSlice`) so leaving a heavily-pruned
+        // region into a dense region cannot suddenly stack a 100+ ms GPU frame stall.
         const ms = Math.max(0.5, at - last)
         last = at
-        perSlice = Math.max(
-          1,
-          Math.min(4096, Math.round((count * SLICE_MS) / ms))
-        )
+        const nextSlice = Math.round((count * targetSliceMs) / ms)
+        perSlice = Math.max(1, Math.min(maxSlice, count * 2, nextSlice))
+        this.lastPerSlice = perSlice
       }
       while (i < batches.length) {
         if (!paced()) {
@@ -444,7 +716,10 @@ export class GPUSolver {
             .onSubmittedWorkDone()
             .then(() => performance.now()),
         })
-        if (queued.length >= 2) await retire()
+        if (queued.length >= 2) {
+          await retire()
+          if (background && inPage) await yieldTask()
+        }
       }
       while (queued.length) await retire()
     }
@@ -522,9 +797,14 @@ export class GPUSolver {
     )
     slotRows.destroy()
     const candidates: GPUCandidate[] = []
+    let sliceStarted = performance.now()
     for (let c = 0; c < found; c++) {
-      // (exact re-evaluation runs on the page's thread: in chunks, so that it keeps drawing)
-      if (c % 20_000 === 19_999) await yieldTask()
+      // Bound each exact-eval slice on the page thread so UI stays responsive.
+      if (inPage && c % 32 === 0 && performance.now() - sliceStarted > 10) {
+        await yieldTask()
+        if (this.deviceLost.value) throw new Error('WebGPU device lost')
+        sliceStarted = performance.now()
+      }
       let r = pairs[stride * c]
       const i3 = r % n[3]
       r = Math.floor(r / n[3])
@@ -647,22 +927,31 @@ type SetRules = {
 }
 function setRulesFor(
   setup: Setup,
-  rules: ExclusionMasks | undefined
+  rules: ExclusionMasks | undefined,
+  forceRules = false
 ): SetRules | undefined {
-  if (!rules) return undefined
   const ALL = 0x3f // 0..5 pieces
-  const ruled = Object.values(rules.sets).some((m) => m !== ALL)
-  if (!ruled && (rules.rainbow & ALL) === ALL && (rules.noFour & ALL) === ALL)
-    return undefined // nothing to check
+  const ruled = rules ? Object.values(rules.sets).some((m) => m !== ALL) : false
+  const hasMasks =
+    !!rules &&
+    (ruled || (rules.rainbow & ALL) !== ALL || (rules.noFour & ALL) !== ALL)
+  if (!hasMasks && !forceRules) return undefined
   const index = new Map<string | undefined, number>()
   for (const slot of allArtifactSlotKeys)
     for (const art of setup.arts.values[slot])
       if (!index.has(art.set)) index.set(art.set, index.size)
   const masks = new Uint32Array(Math.max(1, index.size)).fill(ALL)
-  for (const [set, i] of index)
-    if (set !== undefined)
-      masks[i] = rules.sets[set as keyof typeof rules.sets] ?? ALL
-  return { index, masks, rainbow: rules.rainbow, noFour: rules.noFour }
+  if (rules) {
+    for (const [set, i] of index)
+      if (set !== undefined)
+        masks[i] = rules.sets[set as keyof typeof rules.sets] ?? ALL
+  }
+  return {
+    index,
+    masks,
+    rainbow: rules?.rainbow ?? ALL,
+    noFour: rules?.noFour ?? rules?.rainbow ?? ALL,
+  }
 }
 
 /** Inverse of the shader's `enc` (order-preserving f32 <-> u32) */
@@ -710,21 +999,16 @@ function shaderSource(
   arts: ArtifactsBySlot,
   plot: PlotConfig | undefined,
   /**
-   * Set rules: the allowed rainbow piece counts (bit mask; `noFour`: when no set has 4 pieces, as
-   * `rainbow` when omitted), and where the masks start in the rules buffer (after one set index
-   * per table row)
+   * Set rules: when present, enables set-rule checking using the `RS` buffer and `Params`
+   * uniform masks (`P.rainbow`, `P.noFour`, `P.moff`, `P.req*`, `P.forbid*`).
    */
-  setRules:
-    | { rainbow: number; noFour?: number; maskOffset: number }
-    | undefined,
-  /** Table rows (artifacts): two more rows follow, the fifth slot's stat ranges (see `run`) */
-  tableRows: number
+  setRules?: { rainbow: number; noFour?: number; maskOffset?: number },
+  _tableRows?: number
 ): string | undefined {
-  const rainbow = setRules?.rainbow
-  const noFour = setRules?.noFour ?? rainbow
   const K = keys.length
   const col = new Map(keys.map((k, i) => [k, i]))
   const nCons = mins.length
+  const cheapNodes = nodes.slice(1, 1 + nCons)
   const names = new Map<OptNode, string>()
   let ok = true,
     i = 0,
@@ -782,14 +1066,14 @@ function shaderSource(
     const outs = ns.map(visit)
     return { code: lines.join('\n      '), outs }
   }
-  const cons = group(nodes.slice(1, 1 + nCons))
+  const cons = group(cheapNodes)
   const target = group([nodes[0]])
   // Bounds of the target and constraints over all the builds of a prefix (four pieces fixed, the
   // fifth free; `l${k}`/`h${k}`: each stat's range over the fifth slot). In f32, sums, products,
   // minima, maxima and the threshold's select are monotone: the corners bound exactly what the
   // scalar code computes for each of those builds. (`sum_frac` straddling 0: unbounded.)
   const inames = new Map<OptNode, [string, string]>()
-  const ilines: string[] = []
+  let ilines: string[] = []
   let ii = 0
   const ivisit = (n: OptNode): [string, string] => {
     const got = inames.get(n)
@@ -825,16 +1109,63 @@ function shaderSource(
         )
         break
       case 'mul': {
-        // left to right, as the scalar code: [a, b]·[c, d] spans its corners' products
+        // Left to right, as the scalar code. When either operand is a finite constant, scalar
+        // multiplication is monotone (no 4-corner min/max explosion), cutting shader size ~50-65%.
         let [a, b] = ops[0]
-        for (const [c, d] of ops.slice(1)) {
-          const y = `y${ii++}`
-          ilines.push(
-            `let ${y}a:f32=${a}*${c}; let ${y}b:f32=${a}*${d}; let ${y}c:f32=${b}*${c}; let ${y}d:f32=${b}*${d};`,
-            `let ${y}l:f32=min(min(${y}a,${y}b),min(${y}c,${y}d)); let ${y}h:f32=max(max(${y}a,${y}b),max(${y}c,${y}d));`
-          )
-          a = `${y}l`
-          b = `${y}h`
+        const firstOp = n.operands[0] as OptNode
+        let aConst =
+          firstOp.operation === 'const' && Number.isFinite(firstOp.value)
+            ? firstOp.value
+            : undefined
+        for (let idx = 1; idx < ops.length; idx++) {
+          const child = n.operands[idx] as OptNode
+          const [c, d] = ops[idx]
+          const cConst =
+            child.operation === 'const' && Number.isFinite(child.value)
+              ? child.value
+              : undefined
+          if (aConst === 0 || cConst === 0) {
+            a = '0.0'
+            b = '0.0'
+            aConst = 0
+          } else if (aConst !== undefined && cConst !== undefined) {
+            const v = aConst * cConst
+            const vl = wlit(v)
+            if (vl === undefined) {
+              ok = false
+              return ['0.0', '0.0']
+            }
+            a = vl
+            b = vl
+            aConst = v
+          } else if (cConst !== undefined) {
+            const z = `z${ii++}`
+            if (cConst > 0)
+              ilines.push(`let ${z}l:f32=${a}*${c}; let ${z}h:f32=${b}*${c};`)
+            else
+              ilines.push(`let ${z}l:f32=${b}*${c}; let ${z}h:f32=${a}*${c};`)
+            a = `${z}l`
+            b = `${z}h`
+            aConst = undefined
+          } else if (aConst !== undefined) {
+            const z = `z${ii++}`
+            if (aConst > 0)
+              ilines.push(`let ${z}l:f32=${a}*${c}; let ${z}h:f32=${a}*${d};`)
+            else
+              ilines.push(`let ${z}l:f32=${a}*${d}; let ${z}h:f32=${a}*${c};`)
+            a = `${z}l`
+            b = `${z}h`
+            aConst = undefined
+          } else {
+            const y = `y${ii++}`
+            ilines.push(
+              `let ${y}a:f32=${a}*${c}; let ${y}b:f32=${a}*${d}; let ${y}c:f32=${b}*${c}; let ${y}d:f32=${b}*${d};`,
+              `let ${y}l:f32=min(min(${y}a,${y}b),min(${y}c,${y}d)); let ${y}h:f32=max(max(${y}a,${y}b),max(${y}c,${y}d));`
+            )
+            a = `${y}l`
+            b = `${y}h`
+            aConst = undefined
+          }
         }
         inames.set(n, [a, b])
         return [a, b]
@@ -858,7 +1189,7 @@ function shaderSource(
         hi = `resf(${ops[0][0]})`
         break
       case 'threshold': {
-        // surely ≥: pass; surely <: fail; else either
+        // surely >=: pass; surely <: fail; else either
         const [v, t, pass, fail] = ops
         lo = `select(select(min(${pass[0]},${fail[0]}),${fail[0]},${v[1]}<${t[0]}),${pass[0]},${v[0]}>=${t[1]})`
         hi = `select(select(max(${pass[1]},${fail[1]}),${fail[1]},${v[1]}<${t[0]}),${pass[1]},${v[0]}>=${t[1]})`
@@ -866,13 +1197,27 @@ function shaderSource(
       }
       case 'sum_frac': {
         const [x, c] = ops
+        const cNode = n.operands[1] as OptNode
         const y = `y${ii++}`
-        ilines.push(
-          `let ${y}s:f32=${x[0]}+${c[0]}; let ${y}t:f32=${x[1]}+${c[1]}; let ${y}k:bool=${y}s>0.0||${y}t<0.0;`,
-          `let ${y}a:f32=${x[0]}/${y}s; let ${y}b:f32=${x[0]}/${y}t; let ${y}c:f32=${x[1]}/${y}s; let ${y}d:f32=${x[1]}/${y}t;`
-        )
-        lo = `select(-3.0e38,min(min(${y}a,${y}b),min(${y}c,${y}d)),${y}k)`
-        hi = `select(3.0e38,max(max(${y}a,${y}b),max(${y}c,${y}d)),${y}k)`
+        if (
+          cNode.operation === 'const' &&
+          Number.isFinite(cNode.value) &&
+          cNode.value > 0
+        ) {
+          // For c > 0, x/(x+c) is strictly increasing on both (-inf, -c) and (-c, +inf).
+          ilines.push(
+            `let ${y}s:f32=${x[0]}+${c[0]}; let ${y}t:f32=${x[1]}+${c[0]}; let ${y}k:bool=${y}s>0.0||${y}t<0.0;`
+          )
+          lo = `select(-3.0e38,${x[0]}/${y}s,${y}k)`
+          hi = `select(3.0e38,${x[1]}/${y}t,${y}k)`
+        } else {
+          ilines.push(
+            `let ${y}s:f32=${x[0]}+${c[0]}; let ${y}t:f32=${x[1]}+${c[1]}; let ${y}k:bool=${y}s>0.0||${y}t<0.0;`,
+            `let ${y}a:f32=${x[0]}/${y}s; let ${y}b:f32=${x[0]}/${y}t; let ${y}c:f32=${x[1]}/${y}s; let ${y}d:f32=${x[1]}/${y}t;`
+          )
+          lo = `select(-3.0e38,min(min(${y}a,${y}b),min(${y}c,${y}d)),${y}k)`
+          hi = `select(3.0e38,max(max(${y}a,${y}b),max(${y}c,${y}d)),${y}k)`
+        }
         break
       }
       default:
@@ -884,18 +1229,23 @@ function shaderSource(
     inames.set(n, [`${z}l`, `${z}h`])
     return [`${z}l`, `${z}h`]
   }
+  // Emit cheap constraint interval bounds first, then target interval bounds only when needed.
+  ilines = []
+  const iCons = cheapNodes.map(ivisit)
+  const cheapIlines = ilines.join('\n    ')
+  ilines = []
   const iTarget = ivisit(nodes[0])
-  const iCons = nodes.slice(1, 1 + nCons).map(ivisit)
-  // A prefix none of whose builds can meet a constraint (or, in pass 1, reach the cut) is
-  // skipped. The margin is ten times the constraint check's own f32 slack: any build that check
-  // lets through is never in a skipped prefix.
+  const targetIlines = ilines.join('\n      ')
+
   const below4 = (m: number) => wlit(m - (Math.abs(m) * 1e-4 + 1e-6))
-  const deadConds = mins.map((m, j) => `(${iCons[j][1]}<${below4(m)})`)
-  if (!plot)
-    deadConds.push(
-      `(P.mode == 1u && ${iTarget[1]} < P.thr - (abs(P.thr) * 1e-4 + 1e-6))`
-    )
-  const prune = deadConds.length > 0
+  const cheapDeadConds = mins.map((m, j) => `(${iCons[j][1]}<${below4(m)})`)
+  const targetBoundCheck = plot
+    ? 'P.hasFloor != 0u'
+    : '(P.mode == 1u || P.hasFloor != 0u)'
+  const targetDeadExpr = plot
+    ? `(${iTarget[1]} < P.floor4)`
+    : `((P.mode == 1u && ${iTarget[1]} < P.thr - (abs(P.thr) * 1e-4 + 1e-6)) || (P.hasFloor != 0u && ${iTarget[1]} < P.floor4))`
+
   const plotG = plot ? group([nodes[1 + nCons]]) : undefined
   const baseLits = keys.map((k) => wlit(arts.base[k] ?? 0))
   if (!ok || baseLits.some((l) => l === undefined)) return undefined
@@ -906,13 +1256,16 @@ function shaderSource(
             `(${cons.outs[j]}>=${wlit(m - (Math.abs(m) * 1e-5 + 1e-6))})`
         )
         .join('&&')
-    : 'true'
+    : ''
   const ks = [...Array(K).keys()]
-  // Plot bins (the GPU's, from the f32 plot value; see the top of this file). Pass 1 takes the
-  // builds near their bin's best, at most `plotCap` per bin (counted after the bin maxima in BIN),
-  // and reports each one's bin. (Leaving the builds right on a bin edge out of the bin maxima let
-  // through hundreds of millions of candidates: with Elemental Mastery, every build without any
-  // is on the edge of bin 0, and that bin had no maximum.)
+  const cheapKeySet = new Set(
+    readKeys(cheapNodes)
+      .map((k) => col.get(k))
+      .filter((c): c is number => c !== undefined)
+  )
+  const cheapKs = ks.filter((k) => cheapKeySet.has(k))
+  const restKs = ks.filter((k) => !cheapKeySet.has(k))
+
   const PLOT_TAKE = plot
     ? `if (inb) { pb = u32(bk); }
         if (!take) {
@@ -920,14 +1273,11 @@ function shaderSource(
           else if (v >= below(binMax(bk))) { take = atomicAdd(&BIN[${plot.len}u + pb], 1u) < ${plotCap(plot.len)}u; }
         }`
     : ''
-  const rules = rainbow !== undefined
+  const rules = setRules !== undefined
   const localBins = !!plot && plot.len <= LOCAL_BINS_MAX
   const BINS = localBins ? 'LB' : 'BIN'
   const ruleBindings = `@group(0) @binding(7) var<storage, read> RS: array<u32>;
-const MOFF: u32 = ${setRules?.maskOffset ?? 0}u;
 var<workgroup> redc: array<u32, ${WORKGROUP}>;`
-  // Set rules: g0..g4 are the five set indices. A piece's count is 1 + the other pieces of its
-  // set; "rainbow" pieces have a count of 1 (see `buildAllowed` in exclusion.ts).
   const pairs = [
     [0, 1],
     [0, 2],
@@ -938,27 +1288,50 @@ var<workgroup> redc: array<u32, ${WORKGROUP}>;`
   ]
   const outerRules = rules
     ? `let g0 = RS[w0]; let g1 = RS[w1]; let g2 = RS[w2]; let g3 = RS[w3];
+    var setDead = false;
+    if (P.reqMin0 > 0u) {
+      let rc0 = select(0u,1u,g0==P.reqSet0)+select(0u,1u,g1==P.reqSet0)+select(0u,1u,g2==P.reqSet0)+select(0u,1u,g3==P.reqSet0);
+      if (rc0 + 1u < P.reqMin0) { setDead = true; }
+    }
+    if (!setDead && P.reqMin1 > 0u) {
+      let rc1 = select(0u,1u,g0==P.reqSet1)+select(0u,1u,g1==P.reqSet1)+select(0u,1u,g2==P.reqSet1)+select(0u,1u,g3==P.reqSet1);
+      if (rc1 + 1u < P.reqMin1) { setDead = true; }
+    }
+    if (!setDead) {
     ${pairs.map(([a, b]) => `let e${a}${b} = select(0u, 1u, g${a} == g${b});`).join(' ')}`
     : ''
-  // (the mixed-piece mask, by whether a set has 4 pieces when the two differ)
-  const fourDiffers = rules && noFour !== rainbow
-  const RB_MASK = fourDiffers
-    ? `let rbm = select(${noFour! >>> 0}u, ${rainbow! >>> 0}u, max(max(c0, c1), max(max(c2, c3), c4)) >= 4u);`
-    : ''
-  const RB = fourDiffers ? 'rbm' : `${rainbow! >>> 0}u`
   const innerRules = rules
     ? `let g4 = RS[w4];
       let e04 = select(0u, 1u, g0 == g4); let e14 = select(0u, 1u, g1 == g4); let e24 = select(0u, 1u, g2 == g4); let e34 = select(0u, 1u, g3 == g4);
       let c0 = 1u + e01 + e02 + e03 + e04; let c1 = 1u + e01 + e12 + e13 + e14; let c2 = 1u + e02 + e12 + e23 + e24;
       let c3 = 1u + e03 + e13 + e23 + e34; let c4 = 1u + e04 + e14 + e24 + e34;
       let rb = select(0u, 1u, c0 == 1u) + select(0u, 1u, c1 == 1u) + select(0u, 1u, c2 == 1u) + select(0u, 1u, c3 == 1u) + select(0u, 1u, c4 == 1u);
-      ${RB_MASK}
-      if ((((${RB} >> rb) & (RS[MOFF + g0] >> c0) & (RS[MOFF + g1] >> c1) & (RS[MOFF + g2] >> c2) & (RS[MOFF + g3] >> c3) & (RS[MOFF + g4] >> c4)) & 1u) == 0u) { continue; }
+      let rbm = select(P.noFour, P.rainbow, max(max(c0, c1), max(max(c2, c3), c4)) >= 4u);
+      if ((((rbm >> rb) & (RS[P.moff + g0] >> c0) & (RS[P.moff + g1] >> c1) & (RS[P.moff + g2] >> c2) & (RS[P.moff + g3] >> c3) & (RS[P.moff + g4] >> c4)) & 1u) == 0u) { continue; }
+      if (P.forbid0a != 0xffffffffu) {
+        let f0a = select(0u,1u,g0==P.forbid0a)+select(0u,1u,g1==P.forbid0a)+select(0u,1u,g2==P.forbid0a)+select(0u,1u,g3==P.forbid0a)+select(0u,1u,g4==P.forbid0a);
+        let f0b = select(0u,1u,g0==P.forbid0b)+select(0u,1u,g1==P.forbid0b)+select(0u,1u,g2==P.forbid0b)+select(0u,1u,g3==P.forbid0b)+select(0u,1u,g4==P.forbid0b);
+        if (f0a >= 2u && f0b >= 2u) { continue; }
+      }
+      if (P.forbid1a != 0xffffffffu) {
+        let f1a = select(0u,1u,g0==P.forbid1a)+select(0u,1u,g1==P.forbid1a)+select(0u,1u,g2==P.forbid1a)+select(0u,1u,g3==P.forbid1a)+select(0u,1u,g4==P.forbid1a);
+        let f1b = select(0u,1u,g0==P.forbid1b)+select(0u,1u,g1==P.forbid1b)+select(0u,1u,g2==P.forbid1b)+select(0u,1u,g3==P.forbid1b)+select(0u,1u,g4==P.forbid1b);
+        if (f1a >= 2u && f1b >= 2u) { continue; }
+      }
       allowed = allowed + 1u;`
     : ''
+  const rangeLoad = (indices: number[]) =>
+    indices
+      .map(
+        (k) =>
+          `let l${k}:f32=p${k}+T[P.rangeBase+${k}u]; let h${k}:f32=p${k}+T[P.rangeBase+${K + k}u];`
+      )
+      .join(' ')
   return `
 struct Params { n0:u32, n1:u32, n2:u32, n3:u32, n4:u32, s0:u32, s1:u32, s2:u32, s3:u32, s4:u32,
-  start:u32, count:u32, wgBase:u32, mode:u32, cap:u32, countFailed:u32, thr:f32, q0:f32, q1:f32, q2:f32 }
+  start:u32, count:u32, wgBase:u32, mode:u32, cap:u32, countFailed:u32, thr:f32, floor5:f32, floor4:f32, hasFloor:u32,
+  rangeBase:u32, moff:u32, rainbow:u32, noFour:u32, reqSet0:u32, reqMin0:u32, reqSet1:u32, reqMin1:u32,
+  forbid0a:u32, forbid0b:u32, forbid1a:u32, forbid1b:u32 }
 @group(0) @binding(0) var<uniform> P: Params;
 @group(0) @binding(1) var<storage, read> T: array<f32>;
 @group(0) @binding(2) var<storage, read> S: array<u32>;
@@ -1003,32 +1376,44 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
     let i1 = q % P.n1; let i0 = q / P.n1;
     // table rows of the four outer pieces (w*: rows; r*: stat sums, below)
     let w0 = S[P.s0 + i0]; let w1 = S[P.s1 + i1]; let w2 = S[P.s2 + i2]; let w3 = S[P.s3 + i3];
-    let o0 = w0 * ${K}u; let o1 = w1 * ${K}u; let o2 = w2 * ${K}u; let o3 = w3 * ${K}u;
     ${outerRules}
+    let o0 = w0 * ${K}u; let o1 = w1 * ${K}u; let o2 = w2 * ${K}u; let o3 = w3 * ${K}u;
     ${ks.map((k) => `let p${k}:f32=${baseLits[k]}+T[o0+${k}u]+T[o1+${k}u]+T[o2+${k}u]+T[o3+${k}u];`).join('\n    ')}
+    var dead = false;
     ${
-      prune
-        ? `${ks.map((k) => `let l${k}:f32=p${k}+T[${tableRows * K + k}u]; let h${k}:f32=p${k}+T[${(tableRows + 1) * K + k}u];`).join(' ')}
-    ${ilines.join('\n    ')}
-    let dead = ${deadConds.join(' || ')};
+      cheapDeadConds.length
+        ? `${rangeLoad(cheapKs)}
+    ${cheapIlines}
+    if (${cheapDeadConds.join(' || ')}) { dead = true; }`
+        : ''
+    }
+    if (!dead && ${targetBoundCheck}) {
+      ${rangeLoad(restKs)}
+      ${targetIlines}
+      if (${targetDeadExpr}) { dead = true; }
+    }
     if (dead) {
       ${
         rules
           ? `if (P.mode != 1u) { for (var i4: u32 = 0u; i4 < P.n4; i4 = i4 + 1u) { let w4 = S[P.s4 + i4]; ${innerRules} failed = failed + 1u; } }`
           : 'failed = failed + P.n4;'
       }
-    } else {`
-        : ''
-    }
+    } else {
     for (var i4: u32 = 0u; i4 < P.n4; i4 = i4 + 1u) {
       let w4 = S[P.s4 + i4];
       ${innerRules}
       let o4 = w4 * ${K}u;
-      ${ks.map((k) => `let r${k}:f32=p${k}+T[o4+${k}u];`).join('\n      ')}
+      ${
+        nCons
+          ? `${cheapKs.map((k) => `let r${k}:f32=p${k}+T[o4+${k}u];`).join('\n      ')}
       ${cons.code}
       if (!(${consOk})) { failed = failed + 1u; continue; }
+      ${restKs.map((k) => `let r${k}:f32=p${k}+T[o4+${k}u];`).join('\n      ')}`
+          : `${ks.map((k) => `let r${k}:f32=p${k}+T[o4+${k}u];`).join('\n      ')}`
+      }
       ${target.code}
       let v:f32 = ${target.outs[0]};
+      if (P.hasFloor != 0u && v < P.floor5) { failed = failed + 1u; continue; }
       ${plotG ? `${plotG.code}\n      let x:f32 = ${plotG.outs[0]};\n      let bk:i32 = i32(floor(x / PSCALE)) - PBASE;\n      let inb = bk >= 0 && bk < PLEN;` : ''}
       if (P.mode != 1u) {
         best = max(best, v);
@@ -1054,7 +1439,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(local_invocation
         }
       }
     }
-    ${prune ? '}' : ''}
+    }
+    ${rules ? '}' : ''}
   }
   ${
     localBins
