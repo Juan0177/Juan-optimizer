@@ -147,7 +147,8 @@
             "kind": "juanlab",
             "items": [
               "**Reactions row in the timeline**: a mark for each reaction of the on-field member, in its colour (full for forward Melt and Vaporize ×2, hollow for reverse ×1.5). Hovering one shows the moment, who triggered it and with which hit.",
-              "**Reactions section in Write rotation**: per member, how many of each reaction and the list with the second and the hit. Switch from “On field” to “All” to also see the ones triggered off field (such as Citlali’s Frostfall Storm on Mavuika’s Pyro)."
+              "**Reactions section in Write rotation**: per member, how many of each reaction and the list with the second and the hit. Switch from “On field” to “All” to also see the ones triggered off field (such as Citlali’s Frostfall Storm on Mavuika’s Pyro).",
+              "**DPR on the versions picture**: each team shows its damage per rotation beside its DPS."
             ]
           }
         ]
