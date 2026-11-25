@@ -13,6 +13,8 @@ import type {
   RotationTimingSettings,
 } from './rotation'
 import { isSacrificialWeapon } from './rotation'
+import { rotationWeaponKey } from './rotation/gearEffects'
+import { rotationCalculation } from './rotationCalculation'
 import { writtenTeamReplay } from './rotationSearchTeam'
 import { type TeamOptStatus, teamOptSolver } from './runSolver'
 import {
@@ -22,6 +24,8 @@ import {
   teamOptRunGear,
 } from './solve'
 import { simTeamOf } from './writtenRotation'
+
+const ROTATION_CALCULATION_CACHE_CHARS = 4_000_000
 
 export interface TeamOptRunRotation {
   names: RotationMember[]
@@ -75,7 +79,15 @@ export function teamOptRotationForRun(
       teamOpt,
       simTeamOf(members, database).gear
     )
-    const base = replay({ gear, overrides: {} })
+    // These replays use the same saved builds. Keep stat reads keyed by their exact
+    // buff state and active member across candidate timelines.
+    let calculate = rotationCalculation(database, teamId, gender)
+    const play = (equipped: typeof gear) => {
+      if (calculate.kept() > ROTATION_CALCULATION_CACHE_CHARS)
+        calculate = rotationCalculation(database, teamId, gender)
+      return replay({ gear: equipped, overrides: {}, calculate })
+    }
+    const base = play(gear)
     const wearers = members
       .map((m) => m.characterKey)
       .filter(
@@ -86,9 +98,7 @@ export function teamOptRotationForRun(
     if (!teamOpt.optimizeWeapons || !wearers.length) return { base }
     const cache = new Map<string, typeof base>()
     const signature = (weapons: typeof gear) =>
-      JSON.stringify(
-        wearers.map((key) => [weapons[key]?.weapon, weapons[key]?.refinement])
-      )
+      JSON.stringify(wearers.map((key) => rotationWeaponKey(weapons[key])))
     cache.set(signature(gear), base)
     return {
       base,
@@ -106,9 +116,13 @@ export function teamOptRotationForRun(
         }
         const key = signature(next)
         const found = cache.get(key)
-        if (found) return found
+        if (found) {
+          cache.delete(key)
+          cache.set(key, found)
+          return found
+        }
         try {
-          const played = replay({ gear: next, overrides: {} })
+          const played = play(next)
           cache.set(key, played)
           if (cache.size > 32) cache.delete(cache.keys().next().value!)
           return played

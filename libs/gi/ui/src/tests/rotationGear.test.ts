@@ -9,6 +9,7 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import { evaluateTeamRotation, teamOptRotationForRun } from '../'
 import { energyFromRotation } from '../util/teamOpt/energyCalc'
+import { rotationWeaponKey } from '../util/teamOpt/rotation/gearEffects'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import {
   rotationAttacks,
@@ -359,6 +360,27 @@ describe('rotation gear activation', () => {
   })
 
   describe('Sacrificial weapons', () => {
+    it('shares candidate-only weapon effects at the same refinement', () => {
+      const candidates = {
+        weapons: [
+          'FavoniusCodex',
+          'TheWidsith',
+          'SacrificialFragments',
+          'PrototypeAmber',
+          'CashflowSupervision',
+        ],
+      }
+      const key = (weapon: string, refinement = 1) =>
+        rotationWeaponKey({ weapon, refinement, candidates })
+      const fallback = key('FavoniusCodex')
+      expect(key('TheWidsith')).toEqual(fallback)
+      expect(key('TheWidsith', 5)).not.toEqual(fallback)
+      expect(key('SacrificialFragments')).not.toEqual(fallback)
+      expect(key('PrototypeAmber')).not.toEqual(fallback)
+      expect(key('CashflowSupervision')).not.toEqual(fallback)
+      expect(rotationWeaponKey({ weapon: 'TheWidsith' })).not.toEqual(fallback)
+    })
+
     it('replays a weapon comparison without carrying over Sacrificial hits', () => {
       const database = new ArtCharDatabase(1, new SandboxStorage({}))
       const teamCharId = database.teamChars.new('Xingqiu')
@@ -377,6 +399,11 @@ describe('rotation gear activation', () => {
       const fav = database.weapons.new({
         ...options,
         key: 'FavoniusSword',
+        location: '',
+      })
+      const sting = database.weapons.new({
+        ...options,
+        key: 'IronSting',
         location: '',
       })
       const replay = teamOptRotationForRun(database, {
@@ -407,6 +434,9 @@ describe('rotation gear activation', () => {
       expect(replay?.forWeapons?.({ Xingqiu: database.weapons.get(fav) })).toBe(
         withFav
       )
+      expect(
+        replay?.forWeapons?.({ Xingqiu: database.weapons.get(sting) })
+      ).toBe(withFav)
     })
 
     it('skips a missed extra Skill immediately and omits its hits and particles', () => {

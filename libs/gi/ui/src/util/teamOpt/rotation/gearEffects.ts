@@ -17,6 +17,27 @@ import type {
 import { weaponEffects } from './weaponEffects'
 import { WEAPON_MODULES } from './weapons'
 
+// Timed-only effects run for every candidate. Custom effects can inspect what is worn,
+// and damage procs only run for the equipped weapon.
+const equippedWeaponEffects = new Set(
+  WEAPON_MODULES.filter((module) => module.custom || module.procs?.length).map(
+    (module) => module.weapon
+  )
+)
+
+/** The equipped identity that can change a rotation with a fixed list of candidates. */
+export function rotationWeaponKey(gear?: SimGear) {
+  const weapon = gear?.weapon
+  const equippedMatters =
+    weapon &&
+    (!gear?.candidates?.weapons?.includes(weapon) ||
+      equippedWeaponEffects.has(weapon) ||
+      weapon === 'PrototypeAmber' ||
+      isSacrificialWeapon(weapon))
+  // Candidate passives may read the equipped refinement even when they only create buff windows.
+  return [equippedMatters ? weapon : undefined, gear?.refinement ?? 1] as const
+}
+
 /*
  * Artifact set effects the simulation plays from what happens in the rotation (gcsim's
  * internal/artifacts), for the sets the members wear in the build being simulated. Each one turns
