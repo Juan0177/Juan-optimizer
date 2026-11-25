@@ -13,6 +13,7 @@ import {
   type RotationAction,
 } from './parse'
 import { rotationRandom, stratifiedRandoms } from './random'
+import { isSacrificialWeapon } from './sacrificial'
 import { type AuraTrace, elementalReactions } from './reactions'
 import type {
   ActionResult,
@@ -115,6 +116,14 @@ export interface SimulationResult {
    * pressed (what an ER calculator counts as a use: Durin's recast is not one)
    */
   skillUses?: { characterKey: CharacterKey; t: number; hold: boolean }[]
+  /** Each optional Skill the writer tried, including skips at the end of a loop. */
+  optionalSkills?: {
+    characterKey: CharacterKey
+    text: string
+    t: number
+    rotationStart: number
+    played: boolean
+  }[]
   /**
    * Optional full Bursts in the kept span that were skipped (not ready, or left out by
    * `everyNthBursts`): lets `energyFromRotation` tell a cooldown-skipped `Q?` apart from one
@@ -328,6 +337,8 @@ export function simulateRotation({
   swapFrames = 12,
   target = { radius: 2, distance: 2.4 },
   random = rotationRandom(0),
+  sacrificialRandom = random,
+  sacrificial = true,
   auraTrace,
   auraTimeline,
   frameOverrides = {},
@@ -358,6 +369,9 @@ export function simulateRotation({
   gear?: Partial<Record<CharacterKey, SimGear>>
   calculate?: RotationCalculation
   random?: () => number
+  sacrificialRandom?: () => number
+  /** Disable Composed for the ER calculation that assumes no resets. */
+  sacrificial?: boolean
   /** Debugging: the reaction engine's aura trace (see `AuraTrace`) */
   auraTrace?: (entry: AuraTrace) => void
   /** Record the enemy's auras over time (`SimulationResult.auras`), for a timeline */
@@ -628,7 +642,6 @@ export function simulateRotation({
     gear,
     inNightsoul: (k, t) => inNightsoulAt(k, t),
     onField,
-    cooldown: (k, key, t) => cooldowns.readyAt(`${k}.${key}`, t) - t,
     window: (owner, path, value, start, end, offOnly) =>
       addWindow({
         owner,
@@ -643,6 +656,15 @@ export function simulateRotation({
       for (const linked of linkedCooldowns(k, key))
         cooldowns.reduce(`${k}.${linked}`, t, frames)
     },
+    ...(sacrificial && {
+      sacrificial: {
+        random: sacrificialRandom,
+        reset: (k, t) => {
+          for (const key of linkedCooldowns(k, 'skill'))
+            cooldowns.reset(`${k}.${key}`, t)
+        },
+      },
+    }),
     onShield: (t) => refreshGeoResonance(t),
   })
   let now = 0
@@ -1442,6 +1464,7 @@ export function simulateRotation({
   if (geoTeam) refreshGeoResonance(0)
   const actions: SimulationResult['actions'] = []
   const skillUses: NonNullable<SimulationResult['skillUses']> = []
+  const optionalSkills: NonNullable<SimulationResult['optionalSkills']> = []
   const skippedOptionalBursts: NonNullable<
     SimulationResult['skippedOptionalBursts']
   > = []
@@ -1467,6 +1490,16 @@ export function simulateRotation({
     // (an alternative's own frames and timeline place: none of the written list's)
     const own = !opener && !alternative
     const kit = kits[characterKey]
+    const recordOptionalSkill = (played: boolean) => {
+      if (action.optional && action.kind === 'skill')
+        optionalSkills.push({
+          characterKey,
+          text: action.text,
+          t: now,
+          rotationStart: bounds[r] ?? -1,
+          played,
+        })
+    }
     // an action's alternative ("Q/N3": N3 when Q is not played), then on to what follows it
     const playOtherwise = (otherwise: RotationAction[]) => {
       const after =
@@ -1646,6 +1679,7 @@ export function simulateRotation({
       if (readyAt <= now) break
       // an optional action ("E?"): used when ready, else left out (as a sim's "if .skill.ready")
       if (action.optional) {
+        recordOptionalSkill(false)
         if (action.kind === 'burst') {
           const short = kit.shortBurstVariant
           const variant = short
@@ -1917,6 +1951,7 @@ export function simulateRotation({
       ...(variant && { variant }),
       ...(action.optional && { optional: true }),
     })
+    recordOptionalSkill(true)
     currentAction = { actor: characterKey, start: now }
     now += frames
     if (result.forcedSwap && result.forcedSwap !== onField) {
@@ -2063,6 +2098,10 @@ export function simulateRotation({
     actions: actions.filter((a) => a.start >= start && a.start < end),
     waits: waits.filter((a) => a.start >= start && a.start < end),
     skillUses: skillUses.filter((u) => u.t >= start && u.t < end),
+    optionalSkills: optionalSkills.filter(
+      (s) =>
+        (keep === 'play' || s.rotationStart >= start) && s.rotationStart < end
+    ),
     skippedOptionalBursts: skippedOptionalBursts.filter(
       (s) => s.t >= start && s.t < end
     ),
@@ -2098,6 +2137,8 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
       countedBuffs: first.countedBuffs,
       actions: first.actions,
       waits: first.waits,
+      skillUses: first.skillUses,
+      optionalSkills: first.optionalSkills,
       skippedOptionalBursts: first.skippedOptionalBursts,
       swaps: first.swaps,
       stallSpans: first.stallSpans,
@@ -2166,6 +2207,9 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
     actions: sim.actions.filter((a) => within(a.start)),
     waits: sim.waits?.filter((a) => within(a.start)),
     skillUses: sim.skillUses?.filter((u) => within(u.t)),
+    optionalSkills: sim.optionalSkills?.filter(
+      (s) => s.rotationStart === from || (from !== starts.at(-1) && within(s.t))
+    ),
     skippedOptionalBursts: sim.skippedOptionalBursts?.filter((s) =>
       within(s.t)
     ),
@@ -2188,10 +2232,13 @@ export function lastRotation(sim: SimulationResult): SimulationResult {
 export function rotationSamples(
   members: readonly CharacterKey[],
   kits: Partial<Record<CharacterKey, KitModel>> = kitModels,
-  requested?: number
+  requested?: number,
+  gear?: Partial<Record<CharacterKey, SimGear>>
 ) {
   const need = Math.max(
-    1,
+    members.some((member) => isSacrificialWeapon(gear?.[member]?.weapon))
+      ? 16
+      : 1,
     ...members.map((m) => {
       const sampled = kits[m]?.sampled
       return sampled === true ? 64 : typeof sampled === 'number' ? sampled : 1
@@ -2200,24 +2247,77 @@ export function rotationSamples(
   return requested === undefined ? need : Math.max(1, Math.min(requested, need))
 }
 
+type RotationSampleOptions = Parameters<typeof simulateRotation>[0]
+type RotationSample = NonNullable<SimulationResult['samples']>[number]
+
 /** Sample whole timelines so random extra hits retain their own aura and buff history. */
 export function simulateRotationSamples(
-  options: Parameters<typeof simulateRotation>[0],
-  count = rotationSamples(options.members, options.kits ?? kitModels),
+  options: RotationSampleOptions,
+  count = rotationSamples(
+    options.members,
+    options.kits ?? kitModels,
+    undefined,
+    options.sacrificial === false ? undefined : options.gear
+  ),
   seed = 0x4b514d
 ): SimulationResult {
+  const samples = [...rotationSampleRuns(options, count, seed)]
+  return count === 1 ? samples[0].result : summarizeSamples(samples)
+}
+
+/** The editor can paint and take new input between whole samples. */
+export async function simulateRotationSamplesAsync(
+  options: RotationSampleOptions,
+  count: number,
+  isCancelled: () => boolean
+) {
+  const samples: RotationSample[] = []
+  let frame = performance.now()
+  for (const sample of rotationSampleRuns(options, count, 0x4b514d)) {
+    samples.push(sample)
+    if (samples.length < count && performance.now() - frame >= 10) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      if (isCancelled()) return undefined
+      frame = performance.now()
+    }
+  }
+  return count === 1 ? samples[0].result : summarizeSamples(samples)
+}
+
+function* rotationSampleRuns(
+  options: RotationSampleOptions,
+  count: number,
+  seed: number
+): Generator<RotationSample> {
   if (!Number.isInteger(count) || count < 1 || count > 1024)
     throw new Error('Rotation samples must be an integer between 1 and 1024')
-  if (count === 1) return simulateRotation(options)
-  if (options.reactions || options.random)
+  if (count === 1) {
+    yield { probability: 1, result: simulateRotation(options) }
+    return
+  }
+  if (options.reactions || options.random || options.sacrificialRandom)
     throw new Error(
       'Sampled rotations require independent reaction and random state'
     )
   const randoms = stratifiedRandoms(count, seed)
-  const samples = randoms.map((random) => ({
-    probability: 1 / count,
-    result: simulateRotation({ ...options, random }),
-  }))
+  // Changing a weapon should not also change the random draws of the member's kit.
+  const sacrificialRolls =
+    options.sacrificial !== false &&
+    options.members.some((m) => isSacrificialWeapon(options.gear?.[m]?.weapon))
+      ? stratifiedRandoms(count, seed ^ 0x6a932e71)
+      : []
+  for (const [i, random] of randoms.entries())
+    yield {
+      probability: 1 / count,
+      result: simulateRotation({
+        ...options,
+        random,
+        sacrificialRandom: sacrificialRolls[i],
+      }),
+    }
+}
+
+function summarizeSamples(samples: RotationSample[]): SimulationResult {
   const unique = (key: 'notes' | 'warnings') => [
     ...new Set(samples.flatMap(({ result }) => result[key])),
   ]
@@ -2228,7 +2328,7 @@ export function simulateRotationSamples(
       (sum, s) => sum + s.probability * s.result.frames,
       0
     ),
-    notes: [...unique('notes'), `${count} seeded rotation samples.`],
+    notes: [...unique('notes'), `${samples.length} seeded rotation samples.`],
     warnings: unique('warnings'),
     stalls: samples.reduce<Record<string, number>>((out, s) => {
       for (const [label, frames] of Object.entries(s.result.stalls ?? {}))

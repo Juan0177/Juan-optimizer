@@ -503,7 +503,9 @@ export default function TeamBuildWorkspace({
   }, [result?.savedAt])
   // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
   // tab's
-  const resultAttacks = result?.result.attacks
+  const resultAttacks = pickView?.attacks ?? result?.result.attacks
+  const resultRotationTime =
+    pickView?.rotationTime ?? result?.result.rotationTime
   const savedSettings = result?.teamOpt
   const resultSettings = savedSettings ?? teamOpt
   const resultSettingsChanged = useMemo(
@@ -515,9 +517,13 @@ export default function TeamBuildWorkspace({
   const shownTeamOpt = useMemo(
     () =>
       resultAttacks
-        ? { ...resultSettings, attacks: resultAttacks }
+        ? {
+            ...resultSettings,
+            attacks: resultAttacks,
+            rotationTime: resultRotationTime ?? resultSettings.rotationTime,
+          }
         : resultSettings,
-    [resultAttacks, resultSettings]
+    [resultAttacks, resultRotationTime, resultSettings]
   )
   const shown =
     pickView && picked && Object.keys(picks).length
@@ -1442,7 +1448,7 @@ export default function TeamBuildWorkspace({
             }
             seconds={result.seconds}
             runTeamOpt={shownTeamOpt}
-            rotationTime={rotationTime}
+            rotationTime={shownTeamOpt.rotationTime ?? rotationTime}
             // (trying other equipment)
             selected={inspected}
             onSelect={setInspected}

@@ -137,7 +137,7 @@ export function useTeamEnergy(
     ? `${text.trim()}|${JSON.stringify([opener, timing, frameData])}`
     : ''
   const burstEvery = useMemo(() => teamBurstEvery(teamOpt), [teamOpt])
-  const playKey = `${written}|${JSON.stringify(own.constellations)}|${JSON.stringify(burstEvery ?? {})}`
+  const playKey = `${written}|${JSON.stringify([own.constellations, own.gear, burstEvery])}`
   const [worked, setWorked] = useState<{
     for: string
     energy?: RotationEnergy

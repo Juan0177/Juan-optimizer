@@ -9,7 +9,11 @@ import type {
   RotationStep,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { parseRotation } from '@genshin-optimizer/gi/ui'
+import {
+  isSacrificialWeapon,
+  parseRotation,
+  simulateWrittenAsync,
+} from '@genshin-optimizer/gi/ui'
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
@@ -153,34 +157,26 @@ export function RotationInline({
   }, [typed, writing])
   const { opener, timing, frameData } = settings
   const isKqm = !!kqm
-  const play = useMemo(
+  const prepare = useMemo(
     () =>
-      (value: string, as: typeof team = team) => {
-        try {
-          return {
-            result: simulateWritten({
-              kqm: isKqm,
-              text: value,
-              opener,
-              timing,
-              frameData,
-              team: as,
-              names,
-              members,
-              database,
-              teamId,
-              gender,
-              openerWarning: (warning) =>
-                t('teamOpt.writer.openerWarning', {
-                  defaultValue: 'Opener: {{warning}}',
-                  warning,
-                }),
-            }),
-          }
-        } catch (e) {
-          return { error: e instanceof Error ? e.message : String(e) }
-        }
-      },
+      (value: string, as: typeof team = team) => ({
+        kqm: isKqm,
+        text: value,
+        opener,
+        timing,
+        frameData,
+        team: as,
+        names,
+        members,
+        database,
+        teamId,
+        gender,
+        openerWarning: (warning: string) =>
+          t('teamOpt.writer.openerWarning', {
+            defaultValue: 'Opener: {{warning}}',
+            warning,
+          }),
+      }),
     [
       isKqm,
       opener,
@@ -195,9 +191,58 @@ export function RotationInline({
       t,
     ]
   )
-  const played = useMemo(() => play(settled), [play, settled])
+  const play = (value: string, as: typeof team = team) => {
+    try {
+      return { result: simulateWritten(prepare(value, as)) }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  const hasSacrificial = useMemo(
+    () =>
+      Object.values(team.gear).some((gear) =>
+        isSacrificialWeapon(gear?.weapon)
+      ),
+    [team]
+  )
+  const [sampled, setSampled] = useState<{
+    input: string
+    prepare: typeof prepare
+    result?: WrittenRotation
+    error?: string
+  }>()
+  useEffect(() => {
+    if (!hasSacrificial || !settled.trim() || writing) return undefined
+    let cancelled = false
+    void simulateWrittenAsync(prepare(settled), () => cancelled)
+      .then((result) => {
+        if (!cancelled)
+          startTransition(() => setSampled({ prepare, input: settled, result }))
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setSampled({
+            prepare,
+            input: settled,
+            error: e instanceof Error ? e.message : String(e),
+          })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasSacrificial, writing, settled, prepare])
+  const basic = useMemo(() => {
+    if (hasSacrificial) return {}
+    try {
+      return { result: simulateWritten(prepare(settled)) }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }, [hasSacrificial, prepare, settled])
+  const sampleReady = sampled?.input === settled && sampled.prepare === prepare
+  const played = (hasSacrificial ? sampleReady && sampled : basic) || {}
   const result: WrittenRotation | undefined = played.result
-  const stale = settled !== text
+  const stale = settled !== text || (hasSacrificial && !sampleReady)
   const warnings = [
     ...new Set([
       ...(played.error ? [played.error] : []),

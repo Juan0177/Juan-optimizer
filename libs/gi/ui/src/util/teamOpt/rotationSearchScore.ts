@@ -167,6 +167,7 @@ export function rotationScorer(
       setup.play === 'team'
         ? teamOpt.energyCalculator
         : teamOpt.kqm?.energyCalculator
+    const energyTime = played.energyRotationTime ?? time
     const er = played.energy
       ? calculateEnergyRecharge(
           keys,
@@ -176,7 +177,7 @@ export function rotationScorer(
                 ? syncEnergyCalculator(
                     keys,
                     savedCalc,
-                    time,
+                    energyTime,
                     teamOpt.onField ?? keys[0],
                     setup.constellations
                   )
@@ -184,7 +185,7 @@ export function rotationScorer(
               keys,
               played.energy
             ),
-            rotationTime: time,
+            rotationTime: energyTime,
           },
           weapons as never,
           refinements as never,

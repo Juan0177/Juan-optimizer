@@ -1,5 +1,9 @@
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
-import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
+import type {
+  ArtCharDatabase,
+  ICachedWeapon,
+  TeamOpt,
+} from '@genshin-optimizer/gi/db'
 import { nextPaint } from '@genshin-optimizer/gi/solver'
 import { type BonusStats, teamOptMembers } from './data'
 import type { RunAttackState } from './lowHpUptime'
@@ -8,6 +12,7 @@ import type {
   RotationMember,
   RotationTimingSettings,
 } from './rotation'
+import { isSacrificialWeapon } from './rotation'
 import { writtenTeamReplay } from './rotationSearchTeam'
 import { type TeamOptStatus, teamOptSolver } from './runSolver'
 import {
@@ -42,29 +47,76 @@ export interface TeamOptRunUpdates {
   onOptions: (characterKey: CharacterKey, options: TeamOptMemberOptions) => void
 }
 
-function runAttacks(
+export function teamOptRotationForRun(
   database: ArtCharDatabase,
-  { teamId, gender, teamOpt, rotation }: TeamOptRunJob
-): TeamOpt['attacks'] | undefined {
+  {
+    teamId,
+    gender,
+    teamOpt,
+    rotation,
+  }: Pick<TeamOptRunJob, 'teamId' | 'gender' | 'teamOpt' | 'rotation'>
+) {
   if (!rotation) return undefined
   try {
     const members = teamOptMembers(database, teamId)
-    return writtenTeamReplay({
+    const replay = writtenTeamReplay({
       database,
       teamId,
       members,
       gender,
       teamOpt,
       ...rotation,
-    })?.({
-      gear: teamOptRunGear(
-        database,
-        teamId,
-        teamOpt,
-        simTeamOf(members, database).gear
-      ),
-      overrides: {},
-    }).attacks
+      includeEnergy: false,
+    })
+    if (!replay) return undefined
+    const gear = teamOptRunGear(
+      database,
+      teamId,
+      teamOpt,
+      simTeamOf(members, database).gear
+    )
+    const base = replay({ gear, overrides: {} })
+    const wearers = members
+      .map((m) => m.characterKey)
+      .filter(
+        (key) =>
+          isSacrificialWeapon(gear[key]?.weapon) ||
+          gear[key]?.candidates?.weapons?.some(isSacrificialWeapon)
+      )
+    if (!teamOpt.optimizeWeapons || !wearers.length) return { base }
+    const cache = new Map<string, typeof base>()
+    const signature = (weapons: typeof gear) =>
+      JSON.stringify(
+        wearers.map((key) => [weapons[key]?.weapon, weapons[key]?.refinement])
+      )
+    cache.set(signature(gear), base)
+    return {
+      base,
+      key: JSON.stringify([rotation, gear]),
+      forWeapons(weapons: Partial<Record<CharacterKey, ICachedWeapon>>) {
+        const next = { ...gear }
+        for (const key of wearers) {
+          const weapon = weapons[key]
+          if (!weapon) continue
+          next[key] = {
+            ...next[key],
+            weapon: weapon.key,
+            refinement: weapon.refinement,
+          }
+        }
+        const key = signature(next)
+        const found = cache.get(key)
+        if (found) return found
+        try {
+          const played = replay({ gear: next, overrides: {} })
+          cache.set(key, played)
+          if (cache.size > 32) cache.delete(cache.keys().next().value!)
+          return played
+        } catch {
+          return undefined
+        }
+      },
+    }
   } catch {
     // Match the rotation writer: if the saved rotation cannot play, use its saved attacks.
     return undefined
@@ -89,13 +141,16 @@ export async function runTeamOpt(
     maxWorkers,
     lowImpact,
   } = job
-  const attacks = runAttacks(database, job)
+  const rotation = teamOptRotationForRun(database, job)
+  const attacks = rotation?.base.attacks
   let lastPaint = performance.now()
   const result = await optimizeTeam({
     database,
     teamId,
     gender,
     teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
+    rotationForWeapons: rotation?.forWeapons,
+    rotationKey: rotation?.key,
     attackStates,
     rankingBonusStats,
     parallelWeaponSolves: lowImpact ? 1 : 3,
@@ -115,7 +170,16 @@ export async function runTeamOpt(
       await nextPaint()
       lastPaint = performance.now()
     },
-    onResult: (result) => onResult(attacks ? { ...result, attacks } : result),
+    onResult: (result) =>
+      onResult(
+        attacks
+          ? {
+              ...result,
+              attacks: result.attacks ?? attacks,
+              ...(rotation?.forWeapons && { writtenRotation: job.rotation }),
+            }
+          : result
+      ),
     onOptions,
   })
   if (!result) throw new Error('The team could not be computed.')

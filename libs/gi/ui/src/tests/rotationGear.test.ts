@@ -1,13 +1,19 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { LoadoutDatum, TeamOptAttack } from '@genshin-optimizer/gi/db'
-import { ArtCharDatabase, validateTeamOpt } from '@genshin-optimizer/gi/db'
-import { describe, expect, it } from 'vitest'
-import { evaluateTeamRotation } from '../'
+import {
+  ArtCharDatabase,
+  initTeamOpt,
+  validateTeamOpt,
+} from '@genshin-optimizer/gi/db'
+import { describe, expect, it, vi } from 'vitest'
+import { evaluateTeamRotation, teamOptRotationForRun } from '../'
+import { energyFromRotation } from '../util/teamOpt/energyCalc'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import {
   rotationAttacks,
   simulateRotation,
+  simulateRotationSamples,
 } from '../util/teamOpt/rotation/simulate'
 import type { KitModel } from '../util/teamOpt/rotation/types'
 
@@ -352,37 +358,211 @@ describe('rotation gear activation', () => {
     )
   })
 
-  it('models Sacrificial refinement and on-field eligibility deterministically', () => {
-    const kit: KitModel = {
-      characterKey: 'Mona',
-      element: 'hydro',
-      source: 'test',
-      act(ctx) {
-        for (const delay of [10, 20, 30])
-          ctx.hit(delay, {
-            path: ['skill', 'dot'],
-            tag: 'skill',
-            element: 'hydro',
-            label: 'Skill',
-          })
-        return { frames: 40, cooldown: { key: 'skill', frames: 600 } }
-      },
-    }
-    const config = {
-      rotation: parseRotation('Mona E E', [
-        { characterKey: 'Mona' as const, name: 'Mona' },
-      ]),
-      members: ['Mona' as const],
-      constellations: {},
-      elements: { Mona: 'hydro' as const },
-      repeats: 1,
-      kits: { Mona: kit },
-      gear: { Mona: { weapon: 'SacrificialFragments', refinement: 3 } },
-    }
-    const sim = simulateRotation(config)
-    expect(sim.actions.map((a) => a.start)).toEqual([0, 40])
-    expect(sim.notes.some((n) => n.includes('actual random procs'))).toBe(true)
-    expect(simulateRotation(config)).toEqual(sim)
+  describe('Sacrificial weapons', () => {
+    it('replays a weapon comparison without carrying over Sacrificial hits', () => {
+      const database = new ArtCharDatabase(1, new SandboxStorage({}))
+      const teamCharId = database.teamChars.new('Xingqiu')
+      const teamId = database.teams.new({ loadoutData: [{ teamCharId }] })
+      const options = {
+        level: 90,
+        ascension: 6,
+        refinement: 5,
+        lock: false,
+      } as const
+      const sac = database.weapons.new({
+        ...options,
+        key: 'SacrificialSword',
+        location: 'Xingqiu',
+      })
+      const fav = database.weapons.new({
+        ...options,
+        key: 'FavoniusSword',
+        location: '',
+      })
+      const replay = teamOptRotationForRun(database, {
+        teamId,
+        gender: 'F',
+        teamOpt: { ...initTeamOpt(), optimizeWeapons: true },
+        rotation: {
+          names: [{ characterKey: 'Xingqiu', name: 'Xingqiu' }],
+          text: 'Xingqiu E E?',
+          opener: '',
+          timing: { rotations: 1, edits: {} },
+          frameData: {},
+        },
+      })
+      const withSac = replay?.forWeapons?.({
+        Xingqiu: database.weapons.get(sac),
+      })
+      const withFav = replay?.forWeapons?.({
+        Xingqiu: database.weapons.get(fav),
+      })
+      const hits = (result: typeof withSac) =>
+        (result?.attacks.Xingqiu ?? []).reduce(
+          (sum, attack) => sum + (attack.hits ?? 1),
+          0
+        )
+      expect(hits(withSac)).toBeGreaterThan(3)
+      expect(hits(withFav)).toBe(2)
+      expect(replay?.forWeapons?.({ Xingqiu: database.weapons.get(fav) })).toBe(
+        withFav
+      )
+    })
+
+    it('skips a missed extra Skill immediately and omits its hits and particles', () => {
+      const config = {
+        rotation: parseRotation('Xingqiu E E?', [
+          { characterKey: 'Xingqiu', name: 'Xingqiu' },
+        ]),
+        members: ['Xingqiu'] as CharacterKey[],
+        constellations: {},
+        elements: { Xingqiu: 'hydro' as const },
+        repeats: 1,
+        gear: { Xingqiu: { weapon: 'SacrificialSword', refinement: 5 } },
+      }
+      const miss = simulateRotation({
+        ...config,
+        sacrificialRandom: () => 0.99,
+      })
+      const hit = simulateRotation({ ...config, sacrificialRandom: () => 0.79 })
+      const baseline = simulateRotation({ ...config, sacrificial: false })
+      expect(miss.frames).toBe(baseline.frames)
+      expect(miss.stalls).toEqual({})
+      expect(miss.optionalSkills?.map((step) => step.played)).toEqual([false])
+      expect(hit.optionalSkills?.map((step) => step.played)).toEqual([true])
+      expect(hit.skillUses).toHaveLength(2)
+      expect(miss.skillUses).toHaveLength(1)
+      expect(hit.hits.filter((event) => event.tag === 'skill')).toHaveLength(4)
+      expect(miss.hits.filter((event) => event.tag === 'skill')).toHaveLength(2)
+      expect(
+        energyFromRotation(hit, config.members).members.Xingqiu?.skillUses
+      ).toBe(2)
+      expect(
+        energyFromRotation(miss, config.members).members.Xingqiu?.skillUses
+      ).toBe(1)
+    })
+
+    it.each([
+      [1, 0.64],
+      [5, 0.96],
+    ])('rolls each Xingqiu hit independently at R%i', (refinement, expected) => {
+      const result = simulateRotationSamples(
+        {
+          rotation: parseRotation('Xingqiu E E?', [
+            { characterKey: 'Xingqiu', name: 'Xingqiu' },
+          ]),
+          members: ['Xingqiu'],
+          constellations: {},
+          elements: { Xingqiu: 'hydro' },
+          repeats: 1,
+          gear: { Xingqiu: { weapon: 'SacrificialSword', refinement } },
+        },
+        256
+      )
+      const chance = result.samples!.reduce(
+        (sum, sample) =>
+          sum +
+          (sample.result.optionalSkills?.[0]?.played ? sample.probability : 0),
+        0
+      )
+      expect(Math.abs(chance - expected)).toBeLessThan(0.05)
+    })
+
+    it('restores a charge even if Sucrose can already use her Skill', () => {
+      const config = {
+        rotation: parseRotation('Sucrose E E E?', [
+          { characterKey: 'Sucrose', name: 'Sucrose' },
+        ]),
+        members: ['Sucrose'] as CharacterKey[],
+        constellations: { Sucrose: 1 },
+        elements: { Sucrose: 'anemo' as const },
+        repeats: 1,
+        gear: { Sucrose: { weapon: 'SacrificialFragments', refinement: 5 } },
+      }
+      const hit = simulateRotation({ ...config, sacrificialRandom: () => 0 })
+      expect(hit.skillUses).toHaveLength(3)
+      expect(hit.stalls).toEqual({})
+      expect(
+        simulateRotation({ ...config, sacrificial: false }).skillUses
+      ).toHaveLength(2)
+    })
+
+    it('can spend the weapon cooldown on a delayed on-field hit with no Skill to reset', () => {
+      const kit: KitModel = {
+        characterKey: 'Mona',
+        element: 'hydro',
+        source: 'test',
+        act(ctx, _state, action) {
+          if (action.kind === 'burst') return { frames: 40 }
+          for (const delay of [1, 12])
+            ctx.hit(delay, {
+              path: ['skill', 'test'],
+              tag: 'skill',
+              element: 'hydro',
+              label: 'Delayed damage',
+            })
+          return {
+            frames: 20,
+            cooldown: { key: 'skill', frames: 480, delay: 8 },
+          }
+        },
+      }
+      const result = simulateRotation({
+        rotation: parseRotation('Mona E Q E?', [
+          { characterKey: 'Mona', name: 'Mona' },
+        ]),
+        members: ['Mona'],
+        constellations: {},
+        elements: { Mona: 'hydro' },
+        repeats: 1,
+        kits: { Mona: kit },
+        gear: { Mona: { weapon: 'SacrificialFragments', refinement: 3 } },
+        sacrificialRandom: () => 0,
+      })
+      expect(result.optionalSkills?.[0]?.played).toBe(false)
+    })
+
+    it('keeps the weapon cooldown across loops', () => {
+      const config = {
+        rotation: parseRotation('Diona hE hE? W12 -> Diona', [
+          { characterKey: 'Diona', name: 'Diona' },
+        ]),
+        members: ['Diona'] as CharacterKey[],
+        constellations: {},
+        elements: { Diona: 'cryo' as const },
+        repeats: 3,
+        keep: 'all' as const,
+        gear: { Diona: { weapon: 'SacrificialBow', refinement: 1 } },
+        sacrificialRandom: () => 0,
+      }
+      const played = simulateRotation(config)
+      expect(played.optionalSkills?.map((step) => step.played)).toEqual([
+        true,
+        false,
+        true,
+      ])
+    })
+
+    it('skips rolls when Diona swaps before her paws land', () => {
+      const roll = vi.fn(() => 0)
+      const members: CharacterKey[] = ['Diona', 'Bennett']
+      const sim = simulateRotation({
+        rotation: parseRotation(
+          'Diona hE -> Bennett E -> Diona hE?',
+          members.map((characterKey) => ({ characterKey, name: characterKey }))
+        ),
+        members,
+        constellations: {},
+        elements: { Diona: 'cryo', Bennett: 'pyro' },
+        repeats: 1,
+        swapFrames: 0,
+        gear: { Diona: { weapon: 'SacrificialBow', refinement: 5 } },
+        sacrificialRandom: roll,
+      })
+      expect(sim.hits.filter((hit) => hit.label === 'Icy Paw')).toHaveLength(5)
+      expect(roll).not.toHaveBeenCalled()
+      expect(sim.optionalSkills?.[0]?.played).toBe(false)
+    })
   })
 })
 

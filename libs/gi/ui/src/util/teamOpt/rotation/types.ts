@@ -61,6 +61,8 @@ export interface SimHit {
   element: HitElement
   /** Applies its element (durability > 0): can trigger reactions */
   applies?: boolean
+  /** Skill damage that cannot trigger Composed (e.g. Mona's A1 phantom). */
+  noSacrificial?: boolean
   /** Its element application's durability (default 25) */
   durability?: number
   /** Its ICD tag: 'none' (always applies) or a name; hits of one tag share a counter */

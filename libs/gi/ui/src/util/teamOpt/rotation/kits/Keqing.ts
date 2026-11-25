@@ -192,6 +192,7 @@ export const kit: KitModel = {
               ctx.hit(d, {
                 path: ['constellation1', 'dmg'],
                 tag: 'skill',
+                noSacrificial: true,
                 element: 'electro',
                 applies: true,
                 icd: 'skill',

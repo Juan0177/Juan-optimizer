@@ -208,6 +208,8 @@ export const kit: KitModel = {
             c2.hit(0, {
               path: ['skill', path[1]],
               tag: 'skill',
+              noSacrificial:
+                path[1] === 'initial_ele_dmg' || path[1] === 'max_ele_dmg',
               element: ele,
               applies: true,
               icd: `skill-${ele}`,
@@ -222,6 +224,7 @@ export const kit: KitModel = {
             ctx.hit(d, {
               path: ['skill', i < 2 ? 'initial_dmg' : 'initial_max'],
               tag: 'skill',
+              noSacrificial: true,
               element: 'anemo',
               applies: true,
               icd: 'skill',

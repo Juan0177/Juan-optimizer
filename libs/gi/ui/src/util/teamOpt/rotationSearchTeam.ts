@@ -6,6 +6,7 @@ import type { RotationEnergy } from './energyCalc'
 import { energyFromRotation } from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
 import type { RunAttackState } from './lowHpUptime'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import type {
   FrameData,
   RotationMember,
@@ -33,6 +34,7 @@ export function writtenTeamReplay({
   timing,
   frameData,
   warnings,
+  includeEnergy = true,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -46,6 +48,7 @@ export function writtenTeamReplay({
   frameData: FrameData
   /** Where each play adds its parser's and simulation's warnings */
   warnings?: string[]
+  includeEnergy?: boolean
 }):
   | ((
       input: Pick<KqmReplayInput, 'gear' | 'overrides' | 'calculate'>
@@ -54,7 +57,7 @@ export function writtenTeamReplay({
   if (!text.trim()) return undefined
   const own = simTeamOf(members, database)
   return ({ gear, overrides, calculate }) => {
-    const played = simulateWritten({
+    const playArgs = {
       text,
       opener,
       timing,
@@ -65,11 +68,12 @@ export function writtenTeamReplay({
       database,
       teamId,
       gender,
-      openerWarning: (w) => w,
+      openerWarning: (w: string) => w,
       calculation: overrides,
       calculate,
       burstEvery: teamBurstEvery(teamOpt),
-    })
+    }
+    const played = simulateWritten(playArgs)
     if (!played?.sim || !played.attacks)
       throw new Error(
         'The written rotation has no actions to play. Check the rotation text.'
@@ -84,16 +88,32 @@ export function writtenTeamReplay({
       .map(([label, frames]) => ({ label, seconds: frames / 60 / rotations }))
       .filter((s) => s.seconds >= 0.3)
       .sort((a, b) => b.seconds - a.seconds)
+    const energyPlay =
+      includeEnergy &&
+      own.members.some((key) => isSacrificialWeapon(gear[key]?.weapon))
+        ? simulateWritten({
+            ...playArgs,
+            sacrificial: false,
+            timelineOnly: true,
+          })
+        : undefined
+    const energySim = energyPlay?.counted?.sim ?? energyPlay?.sim
     return {
       attacks,
       rotationTime: Math.round((sim.frames / 60 / rotations) * 10) / 10,
       stalls,
-      energy: energyFromRotation(
-        sim,
-        own.members,
-        rotations,
-        own.constellations
-      ),
+      ...(includeEnergy && {
+        energy: energyFromRotation(
+          energySim ?? sim,
+          own.members,
+          rotations,
+          own.constellations
+        ),
+        ...(energySim && {
+          energyRotationTime:
+            Math.round((energySim.frames / 60 / rotations) * 10) / 10,
+        }),
+      }),
     }
   }
 }

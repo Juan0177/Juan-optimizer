@@ -32,10 +32,12 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   actionFrameDefaults,
+  calculateEnergyRecharge,
   CharacterName,
   energyFromRotation,
   type FrameData,
   HEXEREI_CHARACTERS,
+  isSacrificialWeapon,
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
@@ -52,9 +54,12 @@ import {
   type SimTeam,
   simTeamOf,
   simulateWritten,
+  simulateWrittenAsync,
+  syncEnergyCalculator,
   teamOptMembers,
   templatesForTeam,
   type WrittenRotation,
+  withRotationEnergy,
   writtenKqmReplay,
   writtenSeconds,
   writtenTeamReplay,
@@ -768,6 +773,7 @@ export function teamRotationEnergy({
     keep: 'last2',
     samples: 32,
     burstEvery,
+    sacrificial: false,
   })
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
@@ -1717,6 +1723,11 @@ function WriterModal({
   const keys = members.map((m) => m.characterKey)
 
   const team = useSimTeam(members, kqm, kqmBuilds)
+  const sacHolders = useMemo(
+    () =>
+      team.members.filter((key) => isSacrificialWeapon(team.gear[key]?.weapon)),
+    [team]
+  )
   // (the attacks a rotation leaves are the tab's: at the members' own constellations, or KQM's
   // without the shown builds' gear)
   const ownTeam = useSimTeam(members, kqm)
@@ -1780,17 +1791,42 @@ function WriterModal({
       teamId,
     ]
   )
-  const result = useMemo(() => {
-    if (!primed) return undefined
+  const [sacPreview, setSacPreview] = useState<{
+    args: typeof playArgs
+    result: ReturnType<typeof simulateWritten>
+  }>()
+  useEffect(() => {
+    if (!primed || !sacHolders.length || closing.current) return undefined
+    let cancelled = false
+    const start = performance.now()
+    void simulateWrittenAsync(playArgs, () => cancelled || closing.current)
+      .then((played) => {
+        if (cancelled || closing.current) return
+        playMs.current = performance.now() - start
+        lastResult.current = played
+        startTransition(() => setSacPreview({ args: playArgs, result: played }))
+      })
+      .catch(() => {
+        if (!cancelled) setSacPreview({ args: playArgs, result: undefined })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [primed, playArgs, sacHolders])
+  const basicResult = useMemo(() => {
+    if (!primed || sacHolders.length) return undefined
     if (closing.current && lastResult.current) return lastResult.current
     const start = performance.now()
     const played = simulateWritten(playArgs)
     playMs.current = performance.now() - start
     lastResult.current = played
     return played
-  }, [primed, playArgs])
+  }, [primed, playArgs, sacHolders])
+  const result = sacHolders.length ? sacPreview?.result : basicResult
   // (the moment pinned: the same in the timeline here and in the detailed window)
   const [timelinePin, setTimelinePin] = useState<TimelinePin>()
+  const [sacView, setSacView] = useState<'used' | 'skipped'>()
+  const [sacEnergyOpen, setSacEnergyOpen] = useState(false)
   // The timeline's rotations: the last one counted, or every one played (the opener before them)
   // so that waits show where they happen. The whole play is played when asked for, in a task of
   // its own after the preview's (never both in one), and is never counted (a single sample: what
@@ -1815,6 +1851,173 @@ function WriterModal({
   }, [wholeAsked, repeating, primed, playArgs])
   const wholeShown = wholeAsked && repeating && !!whole?.sim
   const shown = wholeShown ? whole : result
+  const countedSim = result?.counted?.sim ?? result?.sim
+  const sacSummary = useMemo(() => {
+    if (!countedSim || !sacHolders.length) return []
+    const runs = countedSim.samples ?? [{ probability: 1, result: countedSim }]
+    return sacHolders.flatMap((key) => {
+      let used = 0
+      let loops = 0
+      for (const { probability, result } of runs) {
+        const attempts = (result.optionalSkills ?? []).filter(
+          (step) => step.characterKey === key
+        )
+        loops +=
+          probability * new Set(attempts.map((step) => step.rotationStart)).size
+        used +=
+          probability *
+          new Set(
+            attempts
+              .filter((step) => step.played)
+              .map((step) => step.rotationStart)
+          ).size
+      }
+      return loops > 0
+        ? [{ key, percent: Math.round((used / loops) * 100) }]
+        : []
+    })
+  }, [countedSim, sacHolders])
+  const examples = useMemo(() => {
+    const out: Partial<Record<'used' | 'skipped', typeof shownSim>> = {}
+    const shownSim = result?.sim
+    if (!shownSim || !sacSummary.length) return out
+    for (const { result: sample } of shownSim.samples ?? [
+      { result: shownSim },
+    ]) {
+      const attempts = (sample.optionalSkills ?? []).filter((step) =>
+        sacHolders.includes(step.characterKey)
+      )
+      if (attempts.length)
+        out[attempts.some((step) => step.played) ? 'used' : 'skipped'] ??=
+          sample
+    }
+    return out
+  }, [result, sacSummary, sacHolders])
+  const timelineSim =
+    (!wholeShown && sacView ? examples[sacView] : undefined) ?? shown?.sim
+  const [sacEnergyPreview, setSacEnergyPreview] = useState<{
+    args: typeof playArgs
+    noReset?: Partial<Record<CharacterKey, number>>
+    average?: Partial<Record<CharacterKey, number>>
+  }>()
+  const sacEnergy =
+    sacEnergyPreview?.args === playArgs ? sacEnergyPreview : undefined
+  useEffect(() => {
+    if (
+      !sacEnergyOpen ||
+      !countedSim ||
+      !sacSummary.length ||
+      sacPreview?.args !== playArgs
+    )
+      return undefined
+    const active = countedSim
+    let cancelled = false
+    const compare = async () => {
+      const noReset = await simulateWrittenAsync(
+        {
+          ...playArgs,
+          sacrificial: false,
+          auraTimeline: false,
+          timelineOnly: true,
+        },
+        () => cancelled
+      )
+      if (!noReset?.sim) return undefined
+      const source = database.teams.get(teamId)?.teamOpt
+      const saved = isKqm
+        ? source?.kqm?.energyCalculator
+        : source?.energyCalculator
+      const rotations = result?.counted?.rotations ?? result?.fromStart ?? 1
+      const weapons = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.weapon])
+      )
+      const refinements = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.refinement])
+      )
+      const sets = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.sets])
+      )
+      const estimate = async (sim: NonNullable<typeof countedSim>) => {
+        const targets: Partial<Record<CharacterKey, number>> = {}
+        const unavailable = new Set<CharacterKey>()
+        const runs = sim.samples ?? [{ probability: 1, result: sim }]
+        let frame = performance.now()
+        for (const { probability, result: run } of runs) {
+          if (performance.now() - frame >= 10) {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            if (cancelled) return {}
+            frame = performance.now()
+          }
+          const seconds = run.frames / 60 / rotations
+          if (seconds <= 0) return {}
+          const calc = withRotationEnergy(
+            {
+              ...syncEnergyCalculator(
+                team.members,
+                saved,
+                seconds,
+                source?.onField ?? team.members[0],
+                team.constellations
+              ),
+              rotationTime: seconds,
+            },
+            team.members,
+            energyFromRotation(
+              run,
+              team.members,
+              rotations,
+              team.constellations
+            )
+          )
+          const current = calculateEnergyRecharge(
+            team.members,
+            calc,
+            weapons,
+            refinements,
+            sets
+          )
+          for (const key of team.members) {
+            const value = current.targets[key]
+            if (value === undefined || !Number.isFinite(value)) {
+              unavailable.add(key)
+              continue
+            }
+            targets[key] = (targets[key] ?? 0) + probability * value
+          }
+        }
+        for (const key of unavailable) delete targets[key]
+        return targets
+      }
+      return {
+        noReset: await estimate(noReset.counted?.sim ?? noReset.sim),
+        average: await estimate(active),
+      }
+    }
+    void compare()
+      .then((scores) => {
+        if (cancelled) return
+        startTransition(() =>
+          setSacEnergyPreview({ args: playArgs, ...scores })
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setSacEnergyPreview({ args: playArgs })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    sacEnergyOpen,
+    countedSim,
+    sacSummary,
+    sacPreview,
+    playArgs,
+    database,
+    teamId,
+    isKqm,
+    team,
+    result,
+  ])
   const rotationsControl = useMemo(
     () =>
       repeating ? (
@@ -1890,7 +2093,7 @@ function WriterModal({
   // result's (none before a result)
   const timelineFigures = useTimelineFigures(
     teamId,
-    shown?.sim,
+    timelineSim,
     shown?.own,
     figures || !!kqmOverrides,
     figures ? undefined : kqmOverrides
@@ -1964,7 +2167,10 @@ function WriterModal({
     (a) => !!a?.length
   )
   // (typed since the preview's play, which waits for a pause on a heavy team: used as it is now)
-  const stale = deferred !== text || deferredOpener !== openerText
+  const stale =
+    deferred !== text ||
+    deferredOpener !== openerText ||
+    (!!sacHolders.length && sacPreview?.args !== playArgs)
   const apply = () => {
     if (!result?.sim && !stale) return
     const applied =
@@ -2298,6 +2504,7 @@ function WriterModal({
                   bar
                   members={members}
                   onInsert={insert}
+                  optionalSkill={sacHolders.length > 0}
                   into={
                     openerShown
                       ? target === 'opener'
@@ -2439,10 +2646,148 @@ function WriterModal({
                     </Box>
                   </Box>
                   {waited && <WaitsWarning waited={waited} />}
+                  {!!sacSummary.length && (
+                    <Box sx={{ display: 'grid', gap: 0.5, px: 1.5, py: 0.75 }}>
+                      {sacSummary.map(({ key, percent }) => (
+                        <Typography key={key} sx={type.label} component="div">
+                          <CharacterName characterKey={key} gender={gender} />{' '}
+                          {t('teamOpt.writer.sacPercent', {
+                            defaultValue:
+                              '· Extra Skill used in {{percent}}% of sampled rotations',
+                            percent,
+                          })}
+                        </Typography>
+                      ))}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {!wholeShown && examples.used && examples.skipped && (
+                          <Segmented
+                            size="small"
+                            value={
+                              sacView ??
+                              (timelineSim?.optionalSkills?.some(
+                                (step) =>
+                                  step.played &&
+                                  sacHolders.includes(step.characterKey)
+                              )
+                                ? 'used'
+                                : 'skipped')
+                            }
+                            options={[
+                              {
+                                value: 'used',
+                                label: t(
+                                  'teamOpt.writer.sacUsed',
+                                  'Extra Skill used'
+                                ),
+                              },
+                              {
+                                value: 'skipped',
+                                label: t(
+                                  'teamOpt.writer.sacSkipped',
+                                  'Extra Skill skipped'
+                                ),
+                              },
+                            ]}
+                            onChange={(value) => {
+                              setTimelinePin(undefined)
+                              setSacView(value as 'used' | 'skipped')
+                            }}
+                          />
+                        )}
+                        <Button
+                          size="small"
+                          aria-expanded={sacEnergyOpen}
+                          onClick={() => setSacEnergyOpen(!sacEnergyOpen)}
+                        >
+                          {t(
+                            'teamOpt.writer.sacEnergy',
+                            'Compare ER with Sacrificial'
+                          )}
+                        </Button>
+                      </Box>
+                      {!wholeShown &&
+                        sacView === 'skipped' &&
+                        examples.skipped && (
+                          <Typography sx={type.label}>
+                            {t(
+                              'teamOpt.writer.sacSkipReason',
+                              'The Skill was still on cooldown at E?.'
+                            )}
+                          </Typography>
+                        )}
+                      {sacEnergyOpen && !sacEnergy && (
+                        <Typography role="status" sx={type.label}>
+                          {t(
+                            'teamOpt.writer.sacEnergyLoading',
+                            'Calculating ER…'
+                          )}
+                        </Typography>
+                      )}
+                      {sacEnergyOpen && sacEnergy && !sacEnergy.noReset && (
+                        <Typography role="status" sx={type.label}>
+                          {t(
+                            'teamOpt.writer.sacEnergyUnavailable',
+                            'ER comparison unavailable.'
+                          )}
+                        </Typography>
+                      )}
+                      {sacEnergyOpen &&
+                        sacEnergy?.noReset &&
+                        sacEnergy.average && (
+                          <Box
+                            component="table"
+                            sx={{
+                              fontSize: 12,
+                              textAlign: 'right',
+                              width: '100%',
+                            }}
+                          >
+                            <thead>
+                              <tr>
+                                <th scope="col">
+                                  {t('teamOpt.writer.sacMember', 'Member')}
+                                </th>
+                                <th scope="col">
+                                  {t('teamOpt.writer.sacSafe', 'No reset')}
+                                </th>
+                                <th scope="col">
+                                  {t(
+                                    'teamOpt.writer.sacAverage',
+                                    'Average with Sacrificial'
+                                  )}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {team.members.map((key) => (
+                                <tr key={key}>
+                                  <th scope="row">
+                                    <CharacterName
+                                      characterKey={key}
+                                      gender={gender}
+                                    />
+                                  </th>
+                                  <td>
+                                    {sacEnergy.noReset?.[key] === undefined
+                                      ? '—'
+                                      : `${Math.ceil(sacEnergy.noReset[key]!)}%`}
+                                  </td>
+                                  <td>
+                                    {sacEnergy.average?.[key] === undefined
+                                      ? '—'
+                                      : `${Math.ceil(sacEnergy.average[key]!)}%`}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Box>
+                        )}
+                    </Box>
+                  )}
                   <RotationTimeline
                     {...timelineProps(
                       shown?.rotation ?? result.rotation,
-                      shown?.sim ?? result.sim
+                      timelineSim ?? result.sim
                     )}
                     stats={detailOpen ? undefined : momentStats}
                     effects={detailOpen ? undefined : momentEffects}
@@ -2568,7 +2913,7 @@ function WriterModal({
                         <RotationTimeline
                           {...timelineProps(
                             shown?.rotation ?? result.rotation,
-                            shown?.sim ?? result.sim
+                            timelineSim ?? result.sim
                           )}
                           detail
                           // (a bar here: its step selected and its moment pinned; the window stays,
@@ -3229,6 +3574,7 @@ export function WriterQuickRow({
   into,
   trailing,
   bar,
+  optionalSkill,
 }: {
   members: readonly { characterKey: CharacterKey }[]
   onInsert: (word: string) => void
@@ -3239,6 +3585,7 @@ export function WriterQuickRow({
   trailing?: ReactNode
   /** The writer's code panel: a bar along its bottom */
   bar?: boolean
+  optionalSkill?: boolean
 }) {
   const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const { gender } = useDBMeta()
@@ -3382,6 +3729,24 @@ export function WriterQuickRow({
           </ButtonBase>
         </Tooltip>
       ))}
+      {optionalSkill && (
+        <Tooltip
+          arrow
+          title={t('teamOpt.writer.sacOptionalTip', 'Use Skill again if ready')}
+        >
+          <ButtonBase
+            aria-label={t(
+              'teamOpt.writer.sacOptionalTip',
+              'Use Skill again if ready'
+            )}
+            onClick={() => onInsert('E?')}
+            onMouseDown={keepFocus}
+            sx={chip}
+          >
+            E?
+          </ButtonBase>
+        </Tooltip>
+      )}
       {(draft || trailing) && (
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
           {draft}

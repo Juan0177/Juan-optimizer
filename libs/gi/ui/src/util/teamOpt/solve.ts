@@ -54,6 +54,7 @@ import {
   seedBuild,
 } from './prefilter'
 import type { SimGear } from './rotation'
+import type { TeamOptRunRotation } from './runTeam'
 import {
   canWield,
   hasEnergyRequirement,
@@ -220,6 +221,10 @@ export interface TeamOptResult {
    * sets and weapons it tried timed in it); its damage is per these. Absent: the team's own.
    */
   attacks?: TeamOpt['attacks']
+  /** The written rotation's average length with the result's weapons. */
+  rotationTime?: number
+  /** Saved with weapon-dependent rotations so the equipment inspector can replay them. */
+  writtenRotation?: TeamOptRunRotation
   /** Each optimized member's other builds: with each weapon it may take, in each set it may wear */
   options?: Partial<Record<CharacterKey, TeamOptMemberOptions>>
 }
@@ -265,6 +270,8 @@ export interface TeamOptPickView {
   builds: TeamOptBuilds
   weapons: Partial<Record<CharacterKey, string>>
   after: TeamOptEvaluation
+  attacks?: TeamOpt['attacks']
+  rotationTime?: number
   /**
    * The members whose Energy Recharge requirement the picks change (an energy weapon picked or
    * taken away): the run's, and now; their artifacts were searched again for it
@@ -856,6 +863,8 @@ export async function optimizeTeam({
   skipProvisional,
   maxExchanges = 2,
   weaponFilter,
+  rotationForWeapons,
+  rotationKey,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -899,6 +908,10 @@ export async function optimizeTeam({
   maxExchanges?: number
   /** Restrict candidate weapon IDs considered per member (current weapon is always allowed) */
   weaponFilter?: Partial<Record<CharacterKey, ReadonlySet<string>>>
+  rotationForWeapons?: (
+    weapons: Partial<Record<CharacterKey, ICachedWeapon>>
+  ) => { attacks: TeamOpt['attacks']; rotationTime?: number } | undefined
+  rotationKey?: string
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -1208,8 +1221,12 @@ export async function optimizeTeam({
       const weapon = weapons[owner as CharacterKey]
       return !WEAPON_KEYS.has(key) || !weapon || weapon.key === key
     }
+    const played = rotationForWeapons?.(weapons)
+    const current = played
+      ? withAttackStates(played.attacks, attackStates)
+      : attacks
     return Object.fromEntries(
-      Object.entries(attacks).map(([ck, list]) => [
+      Object.entries(current).map(([ck, list]) => [
         ck,
         list?.map((a) => ({
           ...a,
@@ -1300,6 +1317,7 @@ export async function optimizeTeam({
       rotationTime: teamOpt.rotationTime,
       weaponEnergy: teamOpt.weaponEnergy,
       attacks,
+      rotationKey,
       bonusStats,
       statFilters,
       teamCond: teamEntry?.conditional,
@@ -2812,6 +2830,7 @@ export async function optimizeTeam({
     )
     .map((m) => m.characterKey)
   const startUntickedWeapons = untickedAgainst(start, state)
+  const played = rotationForWeapons?.(weaponsIn(state))
   const result: TeamOptResult = {
     builds: state.builds,
     weapons: { ...state.weaponIds },
@@ -2819,6 +2838,10 @@ export async function optimizeTeam({
     after: shownIn(state, after),
     rounds,
     optimized: order.map((m) => m.characterKey),
+    ...(played && {
+      attacks: played.attacks,
+      rotationTime: played.rotationTime,
+    }),
     energy,
     ...(untickedWeapons.length ? { untickedWeapons } : {}),
     ...(startBreaksSetRules.length ? { startBreaksSetRules } : {}),
@@ -3345,10 +3368,15 @@ export async function optimizeTeam({
         const ev = evaluateIn(s)
         if (!ev) return undefined
         const er = teammatesEr(s)
+        const played = rotationForWeapons?.(weaponsIn(s))
         const view: TeamOptPickView = {
           builds: s.builds,
           weapons: { ...s.weaponIds },
           after: shownIn(s, ev),
+          ...(played && {
+            attacks: played.attacks,
+            rotationTime: played.rotationTime,
+          }),
           ...(er.length && { teammatesEr: er }),
         }
         onFigures?.(view)

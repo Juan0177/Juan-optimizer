@@ -25,6 +25,7 @@ import {
   TeamOptSetRulesUnmet,
   TeamOptWorkerUnavailable,
   teamOptMembers,
+  teamOptRotationForRun,
   teamOptSolver,
   useNumWorkers,
 } from '@genshin-optimizer/gi/ui'
@@ -372,6 +373,12 @@ export function useTeamOptRun(teamId: string) {
       let session = sessions.get(savedAt)
       if (!session) {
         let made: TeamOptSession | undefined
+        const replay = teamOptRotationForRun(database, {
+          teamId,
+          gender,
+          teamOpt: run.teamOpt,
+          rotation: run.result.writtenRotation,
+        })
         session = optimizeTeam({
           database,
           teamId,
@@ -383,6 +390,8 @@ export function useTeamOptRun(teamId: string) {
           maxRounds: 0,
           from: run.result,
           attackStates: run.result.attackStates,
+          rotationForWeapons: replay?.forWeapons,
+          rotationKey: replay?.key,
           rankingBonusStats: run.rankingBonusStats,
           onSession: (s) => {
             made = s
