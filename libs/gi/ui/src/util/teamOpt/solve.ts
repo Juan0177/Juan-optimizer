@@ -805,6 +805,9 @@ export async function optimizeTeam({
   onOptions,
   onSession,
   from,
+  skipProvisional,
+  maxExchanges = 2,
+  weaponFilter,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -842,6 +845,12 @@ export async function optimizeTeam({
   /** Start from these builds and weapons (a saved result's: with `maxRounds` 0, its session) */
   from?: Pick<TeamOptResult, 'builds' | 'weapons'> &
     Partial<Pick<TeamOptResult, 'optimized'>>
+  /** Skip provisional piece-taking in round 1 (faster when warm-starting from already-optimal builds) */
+  skipProvisional?: boolean
+  /** Max pairwise piece-exchange passes after member rounds (defaults to 2; 0 skips exchanges) */
+  maxExchanges?: number
+  /** Restrict candidate weapon IDs considered per member (current weapon is always allowed) */
+  weaponFilter?: Partial<Record<CharacterKey, ReadonlySet<string>>>
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -1978,7 +1987,7 @@ export async function optimizeTeam({
    * provisionally (`provisional`): the bigger damage dealers before them may take any of those.
    * Without it, every member keeps what it has until its turn, and each step only adds damage.
    */
-  let provisional = true
+  let provisional = !skipProvisional
   const runRounds = async () => {
     for (let round = 1; round <= maxRounds && order.length; round++) {
       rounds = round
@@ -2022,7 +2031,8 @@ export async function optimizeTeam({
         )
         const currentWeaponId = state.weaponIds[characterKey] ?? member.weaponId
         const currentWeapon = database.weapons.get(currentWeaponId)
-        const weaponChoices = teamOpt.optimizeWeapons
+        const allowedWeapons = weaponFilter?.[characterKey]
+        const rawWeapons = teamOpt.optimizeWeapons
           ? teamOptWeaponCandidates(
               database,
               member,
@@ -2036,6 +2046,11 @@ export async function optimizeTeam({
               )
             )
           : []
+        const weaponChoices = allowedWeapons
+          ? rawWeapons.filter(
+              (w) => w.id === currentWeaponId || allowedWeapons.has(w.id)
+            )
+          : rawWeapons
         if (!weaponChoices.length && currentWeapon)
           weaponChoices.push(currentWeapon)
         // A build with an empty slot (a piece went to a member optimized before) takes any full one
@@ -2381,8 +2396,8 @@ export async function optimizeTeam({
       }
       // a member left outside its set rules takes the pieces it needs from the others
       if (order.length > 1 && (await repairIn(state, round))) changed = true
-      // once the members' own steps settle: the exchanges between members (twice at most)
-      if (!changed && exchanges < 2 && order.length > 1) {
+      // once the members' own steps settle: the exchanges between members (up to maxExchanges)
+      if (!changed && exchanges < maxExchanges && order.length > 1) {
         exchanges++
         changed = await exchangeIn(state, round)
       }

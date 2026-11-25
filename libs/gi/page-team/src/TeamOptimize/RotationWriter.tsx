@@ -8,7 +8,6 @@ import { deepClone, layeredAssignment } from '@genshin-optimizer/common/util'
 import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSetKeys,
-  allWeaponKeys,
   charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type {
@@ -19,16 +18,13 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
-import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   KqmBuild,
   KqmPlayed,
   KqmReplayInput,
-  RotationCalculation,
   RotationEnergy,
   RotationTemplate,
-  SimGear,
   TeamData,
   TeamDataOverrides,
   TeamOptMember,
@@ -38,34 +34,23 @@ import {
   actionFrameDefaults,
   CharacterName,
   energyFromRotation,
-  everyNthBursts,
   type FrameData,
-  GEAR_KEYS,
   HEXEREI_CHARACTERS,
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
-  kqmBurstEvery,
   kqmMemberConstellation,
   kqmSimGear,
-  lastRotation,
-  needsRotationCalculation,
-  ownConditional,
   parseFrameData,
-  parseRotation,
   parseTiming,
   perRotation,
   REACTION_NAMES,
   type RotationMember,
   rotationAttacks,
   rotationBuffDefaults,
-  rotationCalculation,
-  rotationSamples,
-  type SimBuffOwner,
   type SimHit,
   type SimTeam,
   simTeamOf,
-  simulateRotationSamples,
   simulateWritten,
   teamOptMembers,
   templatesForTeam,
@@ -97,6 +82,7 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material'
+import type { i18n } from 'i18next'
 import {
   Fragment,
   type ReactNode,
@@ -109,7 +95,6 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
-import type { i18n } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useAttackInfo, variantColor } from './AttackName'
 import type { TeamBuff } from './buffs'
@@ -124,7 +109,6 @@ import {
   DEFAULT_SWAP_FRAMES,
   firstRotations,
   frameOverrides,
-  openerCounted as openerIsCounted,
   type RotationTimingSettings,
   STEADY_COUNTED,
   STEADY_RANGE,
@@ -151,6 +135,7 @@ import { kqmRotationUpdate, kqmRotationView } from './useTeamOpt'
 export {
   kqmBurstEvery,
   simulateWritten,
+  teamBurstEvery,
   type WrittenRotation,
   writtenSeconds,
   writtenWaits,
@@ -776,6 +761,7 @@ export function teamRotationEnergy({
   names,
   team,
   text: given,
+  burstEvery,
 }: {
   database: Database
   teamId: string
@@ -785,6 +771,8 @@ export function teamRotationEnergy({
   team: SimTeam
   /** Another rotation to play, with the saved opener and timing; absent: the written one */
   text?: string
+  /** Per-member Burst cadence overrides from the ER calculator (e.g. Every 2nd) */
+  burstEvery?: Partial<Record<CharacterKey, number>>
 }): { energy: RotationEnergy; rotationTime: number } | undefined {
   if (
     given === undefined &&
@@ -808,6 +796,7 @@ export function teamRotationEnergy({
     repeats: KQM_REPEATS,
     keep: 'last2',
     samples: 32,
+    burstEvery,
   })
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)

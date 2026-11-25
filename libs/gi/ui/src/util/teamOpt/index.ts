@@ -16,6 +16,7 @@ export * from './lowHpUptime'
 export * from './objective'
 export * from './rotation'
 export * from './rotationCalculation'
+export * from './rotationScenarios'
 export * from './rotationSearch'
 export * from './rotationSearchEr'
 export {

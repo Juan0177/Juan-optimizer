@@ -99,6 +99,7 @@ import { kqmOwnSetUp } from './kqmOwn'
 import { pushVersionSettings, syncVersion, versionRoot } from './kqmVersions'
 import { MemberAvatar } from './MemberAvatar'
 import { MemberRotation } from './MemberRotation'
+import { RotationCompareButton } from './RotationCompare'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { type RotationSearchBase, RotationSearchButton } from './RotationSearch'
 import { RotationTransfer } from './RotationTransfer'
@@ -548,20 +549,47 @@ export default function TeamBuildWorkspace({
         : undefined,
     [result, shown, shownTeamOpt]
   )
+  const kqmBaseStale =
+    !!kqmResult &&
+    (kqmRunKey(kqmResult.teamOpt) !== kqmRunKey(teamOpt) ||
+      kqmResultStandardChanged(kqmResult.result, teamOpt.kqm) ||
+      (kqmResult.rotation === 'played') !== !!writtenRotation.trim() ||
+      enemyChanged(kqmResult.enemy))
+  const teamBaseStale =
+    !!result &&
+    (result.requirementsKey !== requirementsKey ||
+      resultSettingsChanged ||
+      enemyChanged(result.enemy))
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
+  const searchBaseStale = mode === 'kqm' ? kqmBaseStale : teamBaseStale
   const searchButton = useCallback<SearchButton>(
     ({ text, names, setText }) => (
-      <RotationSearchButton
-        tab={mode === 'kqm' ? 'kqm' : 'team'}
-        teamId={teamId}
-        text={text}
-        names={names}
-        base={searchBase}
-        attackStates={attackStatesNow}
-        onUse={setText}
-      />
+      <>
+        <RotationCompareButton
+          tab={mode === 'kqm' ? 'kqm' : 'team'}
+          teamId={teamId}
+          text={text}
+          names={names}
+          teamOpt={teamOpt}
+          setTeamOpt={setTeamOpt}
+          base={searchBase}
+          baseStale={searchBaseStale}
+          attackStates={attackStatesNow}
+          rankingBonusStats={fightBuffsNow}
+          onApplied={setText}
+        />
+        <RotationSearchButton
+          tab={mode === 'kqm' ? 'kqm' : 'team'}
+          teamId={teamId}
+          text={text}
+          names={names}
+          base={searchBase}
+          attackStates={attackStatesNow}
+          onUse={setText}
+        />
+      </>
     ),
-    [teamId, searchBase, mode]
+    [teamId, teamOpt, setTeamOpt, searchBase, searchBaseStale, mode]
   )
   // the rotation written as text (inline), and its writer dialog with Undo
   const writer = useRotationWriter({
@@ -970,6 +998,20 @@ export default function TeamBuildWorkspace({
             <RotationInline
               trailing={
                 <>
+                  <RotationCompareButton
+                    compact
+                    tab={mode === 'kqm' ? 'kqm' : 'team'}
+                    teamId={teamId}
+                    text={writtenRotation}
+                    names={memberNames}
+                    teamOpt={teamOpt}
+                    setTeamOpt={setTeamOpt}
+                    base={searchBase}
+                    baseStale={searchBaseStale}
+                    attackStates={attackStatesNow}
+                    rankingBonusStats={fightBuffsNow}
+                    disabled={running}
+                  />
                   <RotationSearchButton
                     compact
                     tab={mode === 'kqm' ? 'kqm' : 'team'}
