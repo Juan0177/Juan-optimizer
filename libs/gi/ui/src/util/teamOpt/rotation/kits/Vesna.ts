@@ -492,6 +492,13 @@ export const kit: KitModel = {
         }
       }
       case 'charged': {
+        // Vesna uses KQMSim's sword-input rule: the normal string must still be open.
+        if (c.normalSequence(normals.length, 0) === 0)
+          return {
+            frames: 0,
+            failed:
+              'Vesna: Charged Attack requires a Normal Attack that leaves the combo open.',
+          }
         const armed = active(c, s)
         c.hit(31, {
           path: ['charged', 'dmg'],
