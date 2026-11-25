@@ -51,6 +51,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import CloseIcon from '@mui/icons-material/Close'
 import GroupsIcon from '@mui/icons-material/Groups'
+import SyncAltRoundedIcon from '@mui/icons-material/SyncAltRounded'
 import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
@@ -126,12 +127,12 @@ import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
   FieldLabel,
+  focusSx,
   hairline,
   insetSx,
   numSx,
   quickSx,
   Segmented,
-  StatTile,
   StepTitle,
   stepAccentSx,
   stepSurfaceSx,
@@ -560,6 +561,14 @@ export default function TeamBuildWorkspace({
     (result.requirementsKey !== requirementsKey ||
       resultSettingsChanged ||
       enemyChanged(result.enemy))
+  // The Team optimize result for the current rotation & settings (absent when none or stale)
+  const teamShown =
+    mode === 'inventory' && result && shown && !teamBaseStale
+      ? shown
+      : undefined
+  const teamShownTime = teamShown
+    ? (shownTeamOpt.rotationTime ?? rotationTime)
+    : rotationTime
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchBaseStale = mode === 'kqm' ? kqmBaseStale : teamBaseStale
   const searchButton = useCallback<SearchButton>(
@@ -762,11 +771,16 @@ export default function TeamBuildWorkspace({
     (characterKey: CharacterKey) =>
       (update: (attacks: TeamOptAttack[]) => TeamOptAttack[]) => {
         if (running) return
+        const shownList = teamShown
+          ? shownTeamOpt.attacks[characterKey]
+          : undefined
         setTeamOpt((o) => {
-          o.attacks[characterKey] = update(o.attacks[characterKey] ?? [])
+          o.attacks[characterKey] = update(
+            shownList ?? o.attacks[characterKey] ?? []
+          )
         })
       },
-    [setTeamOpt, running]
+    [setTeamOpt, running, teamShown, shownTeamOpt.attacks]
   )
   // the shown builds' rotation timeline: the written rotation played with their weapons and sets,
   // an attack's figures read with their builds (as the run counted them)
@@ -825,16 +839,26 @@ export default function TeamBuildWorkspace({
     opening: applications?.opening?.attacks,
   })
   // a new result: the rotation folds away (it opens again with a click) and the result, below it,
-  // comes into view
+  // comes into view (once per result, not again as its other builds finish ranking)
+  const revealedResult = useRef<string | undefined>(undefined)
+  const resultKey =
+    mode === 'inventory' && result
+      ? `${teamId}:${result.savedAt ?? result.seconds}`
+      : undefined
   useEffect(() => {
-    if (mode !== 'inventory' || !result) return
+    if (!resultKey) {
+      revealedResult.current = undefined
+      return
+    }
+    if (revealedResult.current === resultKey) return
+    revealedResult.current = resultKey
     rotationOpen.set(false)
     requestAnimationFrame(() =>
       document
         .getElementById(`teamopt-results-${teamId}`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     )
-  }, [mode, result, teamId, rotationOpen])
+  }, [resultKey, teamId, rotationOpen])
 
   if (!members.length) return <EmptyTeam teamId={teamId} />
 
@@ -856,7 +880,7 @@ export default function TeamBuildWorkspace({
           ...stepAccentSx('rotation'),
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
+          gap: 1.5,
         }}
       >
         <Box
@@ -864,9 +888,10 @@ export default function TeamBuildWorkspace({
             display: 'flex',
             alignItems: 'center',
             flexWrap: 'wrap',
-            columnGap: 1.5,
+            columnGap: 1.25,
             rowGap: 1.25,
             minHeight: 36,
+            ...(!showStart && { pb: 1.5, borderBottom: hairline }),
           }}
         >
           {mode === 'kqm' ? (
@@ -885,7 +910,12 @@ export default function TeamBuildWorkspace({
             </Box>
           ) : (
             <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mr: 0.5 }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                mr: 0.25,
+              }}
             >
               <Typography
                 id={rotationTitleId}
@@ -910,22 +940,78 @@ export default function TeamBuildWorkspace({
               disabled={running}
             />
           )}
-          <Box sx={{ flexGrow: 1 }} />
-          {!!attackCount && mode === 'inventory' && (
-            <HeaderStats
-              total={evaluation?.total}
-              rotationTime={rotationTime}
-              current={
-                !result || !shown
-                  ? undefined
-                  : members.every(
-                        (m) => m.loadoutDatum.buildType === 'equipped'
-                      )
-                    ? 'equipped'
-                    : 'builds'
-              }
-            />
+          {!showStart && canCopyInventoryRotation && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.kqm.copyRotationTip',
+                'Replace the KQM rotation with the Team optimize rotation'
+              )}
+            >
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<SyncAltRoundedIcon />}
+                  onClick={copyInventoryRotation}
+                  disabled={running}
+                  sx={copyRotationSx}
+                >
+                  {t('teamOpt.kqm.copyRotation', 'Copy from Team optimize')}
+                </Button>
+              </span>
+            </Tooltip>
           )}
+          {!showStart && canCopyKqmRotation && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.copyKqmRotationTip',
+                'Replace the Team optimize rotation with the KQM Theorycrafting rotation'
+              )}
+            >
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<SyncAltRoundedIcon />}
+                  onClick={copyKqmRotation}
+                  disabled={running}
+                  sx={copyRotationSx}
+                >
+                  {t('teamOpt.copyKqmRotation', 'Copy from KQM Theorycrafting')}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          <Box sx={{ flexGrow: 1 }} />
+          {!!attackCount &&
+            (mode === 'inventory' ? (
+              <HeaderStats
+                total={teamShown ? teamShown.after.total : evaluation?.total}
+                rotationTime={teamShownTime}
+                source={
+                  teamShown
+                    ? Object.keys(picks).length
+                      ? 'picked'
+                      : 'optimized'
+                    : result && teamBaseStale
+                      ? 'currentStale'
+                      : 'current'
+                }
+                equippedTotal={teamShown ? evaluation?.total : undefined}
+              />
+            ) : (
+              kqmShown && (
+                <HeaderStats
+                  total={kqmShown.after.total}
+                  rotationTime={kqmRotationTime ?? rotationTime}
+                  source={kqmView ? 'picked' : 'optimized'}
+                />
+              )
+            ))}
           {/* (moving the rotation in and out: at the right end, apart from writing it) */}
           {!showStart && (
             <RotationTransfer
@@ -938,9 +1024,7 @@ export default function TeamBuildWorkspace({
           )}
         </Box>
         {writer.element}
-        {((mode === 'kqm' && showStart) ||
-          canCopyInventoryRotation ||
-          canCopyKqmRotation) && (
+        {mode === 'kqm' && showStart && (
           <Box
             sx={{
               display: 'flex',
@@ -949,26 +1033,23 @@ export default function TeamBuildWorkspace({
               gap: 1,
             }}
           >
-            {mode === 'kqm' && showStart && (
-              <Typography variant="body2" color="text.secondary">
-                {t(
-                  'teamOpt.kqm.separateRotation',
-                  'KQM uses its own rotation. You can copy the current Team optimize rotation here.'
-                )}
-              </Typography>
-            )}
+            <Typography variant="body2" color="text.secondary">
+              {t(
+                'teamOpt.kqm.separateRotation',
+                'KQM uses its own rotation. You can copy the current Team optimize rotation here.'
+              )}
+            </Typography>
             {canCopyInventoryRotation && (
               <Button
                 size="small"
+                variant="outlined"
+                color="inherit"
+                startIcon={<SyncAltRoundedIcon />}
                 onClick={copyInventoryRotation}
                 disabled={running}
+                sx={copyRotationSx}
               >
                 {t('teamOpt.kqm.copyRotation', 'Copy from Team optimize')}
-              </Button>
-            )}
-            {canCopyKqmRotation && (
-              <Button size="small" onClick={copyKqmRotation} disabled={running}>
-                {t('teamOpt.copyKqmRotation', 'Copy from KQM Theorycrafting')}
               </Button>
             )}
           </Box>
@@ -1030,6 +1111,16 @@ export default function TeamBuildWorkspace({
                         chosen
                       )
                       writer.openWriter()
+                    }}
+                  />
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: '1px',
+                      height: 16,
+                      mx: 0.375,
+                      bgcolor: tokens.hairlineStrong,
+                      flexShrink: 0,
                     }}
                   />
                   <RotationsSetting
@@ -1124,21 +1215,43 @@ export default function TeamBuildWorkspace({
                     member={member}
                     teamData={teamData}
                     attacks={
-                      (kqmAttacks ?? teamOpt.attacks)[member.characterKey] ?? []
+                      (mode === 'kqm'
+                        ? (kqmAttacks ?? teamOpt.attacks)
+                        : teamShown
+                          ? shownTeamOpt.attacks
+                          : teamOpt.attacks)[member.characterKey] ?? []
                     }
                     setAttacks={setAttacks(member.characterKey)}
                     evaluation={
-                      mode === 'inventory' ? evaluation : kqmShown?.after
+                      mode === 'inventory'
+                        ? (teamShown?.after ?? evaluation)
+                        : kqmShown?.after
                     }
                     figures={mode === 'inventory'}
                     played={kqmPlayed}
-                    overrides={kqmOverrides}
-                    gear={mode === 'kqm' ? kqmGear : undefined}
+                    overrides={
+                      mode === 'kqm'
+                        ? kqmOverrides
+                        : teamShown
+                          ? shownOverrides
+                          : undefined
+                    }
+                    gear={
+                      mode === 'kqm'
+                        ? kqmGear
+                        : teamShown
+                          ? shownSimGear
+                          : undefined
+                    }
                     buffs={buffsForAttacker(rotationBuffs, member.characterKey)}
                     mainStatAssumptionLevel={teamOpt.assumeMaxMain ? 20 : 0}
                     members={members}
                     onField={onField ?? member.characterKey}
-                    rotationTime={kqmRotationTime ?? rotationTime}
+                    rotationTime={
+                      mode === 'kqm'
+                        ? (kqmRotationTime ?? rotationTime)
+                        : teamShownTime
+                    }
                     expandStore={rotationOpen}
                     onToggle={attackCount ? rotationOpen.toggle : undefined}
                     disabled={running}
@@ -1722,54 +1835,125 @@ const timeSx = {
   '& input.Mui-disabled': { WebkitTextFillColor: 'currentColor' },
 } as const
 
-/** The rotation's damage and its DPS, side by side */
+/** Quiet secondary button in the Rotation header bar (matches Write rotation's 30px height) */
+const copyRotationSx = {
+  height: 30,
+  px: 1.125,
+  fontSize: 12.5,
+  fontWeight: 550,
+  whiteSpace: 'nowrap',
+  color: 'text.secondary',
+  borderColor: tokens.hairlineStrong,
+  bgcolor: alpha(giTokens.parchment, 0.02),
+  ...quickSx,
+  ...focusSx,
+  '&:hover': {
+    color: 'text.primary',
+    borderColor: alpha(giTokens.parchment, 0.28),
+    bgcolor: alpha(giTokens.parchment, 0.055),
+  },
+  '& .MuiButton-startIcon': { mr: 0.5 },
+  '& .MuiButton-startIcon svg': { fontSize: 15 },
+} as const
+
+/** The rotation's damage and Team DPS, inside one clean inline readout capsule */
 function HeaderStats({
   total,
   rotationTime,
-  current,
+  source = 'current',
+  equippedTotal,
 }: {
   total: number | undefined
   rotationTime: number
-  /**
-   * A result is on screen too: say these are the members' builds now (all equipped, or some saved
-   * builds, as after Save as builds)
-   */
-  current?: 'equipped' | 'builds'
+  /** Which builds the figures represent (always the active builds on screen, never stale equipped) */
+  source?: 'optimized' | 'picked' | 'current' | 'currentStale'
+  /** Equipped baseline total when different from the shown optimized/picked builds (shown in tip) */
+  equippedTotal?: number
 }) {
   const { t } = useTranslation('page_team')
-  const tip =
-    current === 'builds'
-      ? t('teamOpt.header.currentTip', 'With the builds the team uses now')
-      : t('teamOpt.header.equippedTip', 'With the builds equipped now')
-  // (the figures keep their width while they change: nothing beside them moves)
-  const valueSx = { '& .MuiTypography-root': { minWidth: '7.5ch' } } as const
+  const differsFromEquipped =
+    total !== undefined &&
+    equippedTotal !== undefined &&
+    Math.abs(total - equippedTotal) > Math.max(1, total * 1e-3)
+  const baseTip =
+    source === 'picked'
+      ? t('teamOpt.header.pickedTip', 'With the equipment you picked below')
+      : source === 'optimized'
+        ? t(
+            'teamOpt.header.optimizedTip',
+            'With the optimized builds shown below'
+          )
+        : source === 'currentStale'
+          ? t(
+              'teamOpt.header.currentStaleTip',
+              'With your current builds (the result below is from earlier settings)'
+            )
+          : t('teamOpt.header.currentTip', 'With the builds the team uses now')
+  const tip = differsFromEquipped ? (
+    <Box component="span" sx={{ display: 'grid', gap: 0.25 }}>
+      <span>{baseTip}</span>
+      <Box component="span" sx={{ opacity: 0.8, ...numSx }}>
+        {t('teamOpt.header.equippedBaseline', {
+          defaultValue: 'Equipped: {{dps}} DPS ({{dmg}})',
+          dps: formatRate(equippedTotal, rotationTime, true),
+          dmg: formatDamage(equippedTotal, true),
+        })}
+      </Box>
+    </Box>
+  ) : (
+    baseTip
+  )
   return (
-    <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 2 }}>
-      <StatTile
-        label={
-          current === 'builds'
+    <Box
+      sx={{
+        ...insetSx,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 1.5,
+        py: 0.625,
+        minHeight: 38,
+      }}
+    >
+      <Box sx={{ minWidth: '7.5ch' }}>
+        <FieldLabel tip={tip} sx={{ fontSize: 11.5, lineHeight: 1.2 }}>
+          {source === 'currentStale'
             ? t('teamOpt.header.currentTotal', 'Current DMG')
-            : current
-              ? t('teamOpt.header.equippedTotal', 'Equipped DMG')
-              : t('teamOpt.header.total', 'Rotation DMG')
-        }
-        tip={tip}
-        value={formatDamage(total, true)}
-        sx={valueSx}
-      />
+            : t('teamOpt.header.total', 'Rotation DMG')}
+        </FieldLabel>
+        <Typography
+          sx={{
+            ...numSx,
+            fontSize: 15,
+            fontWeight: 650,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.25,
+            color: 'text.primary',
+          }}
+        >
+          {formatDamage(total, true)}
+        </Typography>
+      </Box>
       <VDivider />
-      <StatTile
-        label={
-          current === 'builds'
+      <Box sx={{ minWidth: '8ch' }}>
+        <FieldLabel tip={tip} sx={{ fontSize: 11.5, lineHeight: 1.2 }}>
+          {source === 'currentStale'
             ? t('teamOpt.header.currentDps', 'Current DPS')
-            : current
-              ? t('teamOpt.header.equippedDps', 'Equipped DPS')
-              : t('teamOpt.header.dps', 'DPS')
-        }
-        tip={tip}
-        value={formatRate(total, rotationTime, true)}
-        sx={valueSx}
-      />
+            : t('teamOpt.header.teamDps', 'Team DPS')}
+        </FieldLabel>
+        <Typography
+          sx={{
+            ...numSx,
+            fontSize: 16,
+            fontWeight: 700,
+            letterSpacing: '-0.025em',
+            lineHeight: 1.25,
+            color: 'text.primary',
+          }}
+        >
+          {formatRate(total, rotationTime, true)}
+        </Typography>
+      </Box>
     </Box>
   )
 }

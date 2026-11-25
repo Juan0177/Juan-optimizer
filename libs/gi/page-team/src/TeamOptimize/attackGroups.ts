@@ -36,7 +36,7 @@ export const totalHits = (attacks: readonly TeamOptAttack[]) =>
 export type MemberGear = Partial<
   Record<
     CharacterKey,
-    { weapon: string; sets: Partial<Record<string, number>> }
+    { weapon?: string; sets?: Partial<Record<string, number>> }
   >
 >
 
@@ -51,6 +51,6 @@ export function holdsItem(
   if ((allWeaponKeys as readonly string[]).includes(item))
     return build.weapon === item
   if ((allArtifactSetKeys as readonly string[]).includes(item))
-    return (build.sets[item] ?? 0) >= 2
+    return (build.sets?.[item] ?? 0) >= 2
   return true
 }
