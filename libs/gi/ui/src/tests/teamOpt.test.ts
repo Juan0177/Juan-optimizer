@@ -254,38 +254,38 @@ describe('attackSegments', () => {
 })
 
 describe('team rotation', () => {
-  it.each([false, true])(
-    'removes excluded starting artifacts without relying on a better replacement (use own exclusions: %s)',
-    async (useExcludedArts) => {
-      const { database, teamId, ayakaId, ids } = setup()
-      const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
-      database.optConfigs.set(optConfigId, { artExclusion: [ids.atk.plume] })
-      const result = await optimizeTeam({
-        database,
-        teamId,
-        gender: 'F',
-        teamOpt: {
-          ...initTeamOpt(),
-          attacks: {
-            [ayaka]: [attack(['skill', 'press'], 1)],
-            [shenhe]: [attack(['skill', 'press'], 1)],
-          },
-          excludedArts: [ids.atk.flower, ids.crit.flower],
-          useExcludedArts,
-          keep: [shenhe],
+  it.each([
+    false,
+    true,
+  ])('removes excluded starting artifacts without relying on a better replacement (use own exclusions: %s)', async (useExcludedArts) => {
+    const { database, teamId, ayakaId, ids } = setup()
+    const optConfigId = database.teamChars.get(ayakaId)!.optConfigId
+    database.optConfigs.set(optConfigId, { artExclusion: [ids.atk.plume] })
+    const result = await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        attacks: {
+          [ayaka]: [attack(['skill', 'press'], 1)],
+          [shenhe]: [attack(['skill', 'press'], 1)],
         },
-        // No search improvement: the incumbent itself must obey the exclusions.
-        maxRounds: 0,
-        solve: async () => undefined,
-      })
-      expect(result).toBeDefined()
-      expect(result!.builds[ayaka]!.flower).toBeUndefined()
-      expect(result!.builds[ayaka]!.plume).toBe(
-        useExcludedArts ? ids.atk.plume : undefined
-      )
-      expect(result!.builds[shenhe]!.flower).toBe(ids.crit.flower)
-    }
-  )
+        excludedArts: [ids.atk.flower, ids.crit.flower],
+        useExcludedArts,
+        keep: [shenhe],
+      },
+      // No search improvement: the incumbent itself must obey the exclusions.
+      maxRounds: 0,
+      solve: async () => undefined,
+    })
+    expect(result).toBeDefined()
+    expect(result!.builds[ayaka]!.flower).toBeUndefined()
+    expect(result!.builds[ayaka]!.plume).toBe(
+      useExcludedArts ? ids.atk.plume : undefined
+    )
+    expect(result!.builds[shenhe]!.flower).toBe(ids.crit.flower)
+  })
 
   it('counts each attack as the app computes it', () => {
     const { database, teamId } = setup()
@@ -2273,6 +2273,49 @@ describe('team optimize', () => {
     expect(result.before.unmet[shenhe]).toHaveLength(1)
     expect(result.after.unmet[shenhe]).toBeUndefined()
     expect(result.after.total).toBeLessThan(result.before.total)
+  })
+
+  it('does not force the carry onto an energy weapon when an unmet teammate can meet their minimum on their own turn', async () => {
+    const { database, teamId, shenheId, ids } = setup()
+    const mistsplitter = database.chars.get(ayaka)!.equippedWeapon
+    for (const id of Object.values(ids.crit))
+      database.arts.set(id, { location: ayaka })
+    // Shenhe starts on low-ER weak pieces (100% ER), while her ATK/ER pieces (132.5% ER) are free
+    for (const id of Object.values(ids.weak))
+      database.arts.set(id, { location: shenhe })
+    for (const id of Object.values(ids.atk))
+      database.arts.set(id, { location: '' })
+    const favonius = database.weapons.new({
+      key: 'FavoniusSword',
+      level: 90,
+      ascension: 6,
+      refinement: 5,
+      location: '',
+      lock: false,
+    })
+    database.optConfigs.set(database.teamChars.get(shenheId)!.optConfigId, {
+      statFilters: {
+        [JSON.stringify(['basic', 'enerRech_'])]: [
+          { value: 130, disabled: false },
+        ],
+      },
+    })
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        optimizeWeapons: true,
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+        weaponEnergy: { [favonius]: { [shenhe]: 50 } },
+      },
+      solve: bruteForce,
+    }))!
+    expect(result.before.unmet[shenhe]).toHaveLength(1)
+    expect(result.after.unmet[shenhe]).toBeUndefined()
+    expect(result.weapons[ayaka]).toBe(mistsplitter)
+    expect(result.after.total).toBeGreaterThan(result.before.total)
   })
 
   it('weighs what an energy weapon saves the rest of the team', async () => {

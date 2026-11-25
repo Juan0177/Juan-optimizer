@@ -2,6 +2,7 @@ import { SandboxStorage } from '@genshin-optimizer/common/database'
 import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  disposeTeamOptWorkerPool,
   startTeamOptWorker,
   type TeamOptWorkerReply,
   TeamOptWorkerUnavailable,
@@ -46,10 +47,13 @@ function start() {
   return { run, worker: StubWorker.current, updates }
 }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  disposeTeamOptWorkerPool()
+  vi.unstubAllGlobals()
+})
 
 describe('Team Optimize worker', () => {
-  it('reports progress, the team and its rankings before releasing the worker', async () => {
+  it('reports progress, the team and its rankings, then pools the worker for reuse', async () => {
     const { run, worker, updates } = start()
     const status = { ...initStatus(), tested: 10, total: 20 }
     const evaluation = { total: 1, members: {}, attacks: {}, unmet: {} }
@@ -74,6 +78,13 @@ describe('Team Optimize worker', () => {
     expect(updates.onProgress).toHaveBeenCalledWith(status)
     expect(updates.onResult).toHaveBeenCalledWith(result)
     expect(updates.onOptions).toHaveBeenCalledWith('Sucrose', options)
+    // Pooled warm instead of terminated immediately
+    expect(worker.terminate).not.toHaveBeenCalled()
+    // Next run reuses the exact same pooled worker
+    const second = start()
+    expect(second.worker).toBe(worker)
+    second.run.stop()
+    await expect(second.run.done).rejects.toBeInstanceOf(TeamOptCancelled)
     expect(worker.terminate).toHaveBeenCalledTimes(1)
   })
 

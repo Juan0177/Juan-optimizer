@@ -1,15 +1,21 @@
 import './kqmBuildWorkerEnv'
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
-import { prewarmSolver } from '@genshin-optimizer/gi/solver'
-import type { TeamOptWorkerReply, TeamOptWorkerRequest } from './runClient'
+import { prewarmSolver, setGpuPageVisible } from '@genshin-optimizer/gi/solver'
+import type { TeamOptWorkerMessage, TeamOptWorkerReply } from './runClient'
 import { initStatus } from './runSolver'
 import { runTeamOpt } from './runTeam'
 import { TeamOptRequirementsUnmet, TeamOptSetRulesUnmet } from './solve'
 
 const post = (reply: TeamOptWorkerReply) => self.postMessage(reply)
 
-self.onmessage = async ({ data }: MessageEvent<TeamOptWorkerRequest>) => {
+self.onmessage = async ({ data }: MessageEvent<TeamOptWorkerMessage>) => {
+  if ('type' in data && data.type === 'visibility') {
+    setGpuPageVisible(data.visible)
+    return
+  }
+  const req = data as Exclude<TeamOptWorkerMessage, { type: 'visibility' }>
+  if (req.visible !== undefined) setGpuPageVisible(req.visible)
   try {
     if (typeof Worker === 'undefined')
       throw new Error('Nested workers unavailable')
@@ -25,7 +31,7 @@ self.onmessage = async ({ data }: MessageEvent<TeamOptWorkerRequest>) => {
   const timer = setInterval(() => post({ type: 'progress', status }), 300)
   try {
     post({ type: 'ready' })
-    const { dbIndex, entries, ...job } = data
+    const { dbIndex, entries, visible: _v, ...job } = req
     const database = new ArtCharDatabase(dbIndex, new SandboxStorage(entries))
     await runTeamOpt(database, job, status, {
       onResult: (result) => {

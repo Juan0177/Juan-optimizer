@@ -48,6 +48,7 @@ import { type RunAttackState, withAttackStates } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import {
   climbFrom,
+  fastSeedBuild,
   type PrefilterProblem,
   quickPool,
   seedBuild,
@@ -80,15 +81,42 @@ export interface TeamOptSolveInput {
   /** Told, after the search, how much of the space it went through */
   onWork?: (work: { tested: number; total: number }) => void
 }
+/** Reusable GPU set ranker for one `(member, weapon)`: evaluates 4pc sets and 2pc+2pc pairs on one compiled pipeline. */
+export interface TeamOptSetRanker {
+  solveSet: (
+    arts: readonly ICachedArtifact[],
+    required: readonly string[],
+    minCount: 2 | 4
+  ) => Promise<
+    { value: number; artifactIds: string[] } | undefined | 'fallback'
+  >
+  solveMixed: (
+    arts: readonly ICachedArtifact[],
+    forbidPairs: readonly (readonly [string, string])[]
+  ) => Promise<
+    { value: number; artifactIds: string[] } | undefined | 'fallback'
+  >
+  destroy: () => void
+}
+
 /** The best build for `input` (with `topN`, the next ones in `more`), if any meets its constraints */
-export type TeamOptSolver = (input: TeamOptSolveInput) => Promise<
+export type TeamOptSolver = ((input: TeamOptSolveInput) => Promise<
   | {
       value: number
       artifactIds: string[]
       more?: { value: number; artifactIds: string[] }[]
     }
   | undefined
->
+>) & {
+  createSetRanker?: (input: {
+    arts: ICachedArtifact[]
+    objective: OptNode
+    constraints: { value: OptNode; min: number }[]
+    exclusion: ArtSetExclusion
+    mainStatAssumptionLevel: number
+    background?: boolean
+  }) => Promise<TeamOptSetRanker | undefined>
+}
 
 export interface TeamOptStep {
   round: number
@@ -722,9 +750,16 @@ const SOLVE_MEMO_SIZE = 400
  * are on the GPU (a few billion builds a second), slow on the CPU (a team's formula: ~2 million)
  */
 const QUICK_FROM_BUILDS = 5e9
+const QUICK_FROM_BUILDS_BG = 5e8
 const QUICK_FROM_BUILDS_CPU = 1e8
 /** Team Optimize's searches go to the GPU from this many builds (`GOSolver`'s `gpuMinTotal`) */
 export const TEAM_GPU_MIN_TOTAL = 2_000_000
+/**
+ * On huge GPU searches (e.g. Full search with 200M-20B+ builds), run a ~5-15 ms greedy climb
+ * (`seedBuild`) first to establish a tight floor near the optimum: this lets GPU prefix pruning
+ * skip >90% of prefixes and prevents Pass 0 candidate overflows that trigger a full Pass 1 sweep.
+ */
+const GPU_SEED_FROM_BUILDS = 2e8
 /**
  * A member's weapons solved at once, on the GPU: each solve mostly waits (its worker preparing the
  * problem, the browser compiling its shader), so the next ones overlap that instead of queuing
@@ -741,17 +776,30 @@ const SCREEN_KEEP = 3
 /** Rank this many distinct mixed pairs without searching every pair separately. */
 const MIXED_SET_RANKS = 3
 export const teamOptScreen = { fromBuilds: 1e8, fromBuildsCpu: 1e5 }
-/** Let other tasks run between heavy steps, including in hidden browser tabs. */
+/** Let other tasks run between heavy steps on the page thread (workers are already off-thread). */
 let lastTurn = 0
 async function yieldBetweenSteps() {
+  if (typeof document === 'undefined') return
   if (performance.now() - lastTurn < 40) return
   await yieldTask()
   lastTurn = performance.now()
 }
 
-/** Forgets every solve done (tests; or to measure a run from scratch). */
+const PROBLEM_MEMO_SIZE = 1024
+const problemMemo = new Map<
+  string,
+  | {
+      objective: OptNode
+      constraints: { value: OptNode; min: number; path: string[] }[]
+      unmetOthers: Set<CharacterKey>
+    }
+  | undefined
+>()
+
+/** Forgets every solve and compiled problem cached across runs (tests; or clean benchmarks). */
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
+  problemMemo.clear()
 }
 /**
  * `input` without its floors (constraints on the objective itself, `objective ≥ x`): what a
@@ -891,20 +939,25 @@ export async function optimizeTeam({
       allowed: (arts) => meetsSetRules(arts, input.exclusion),
     }
     const space = buildsOf(input.arts)
+    const quickLimit = optimizerGpuSupported()
+      ? input.background
+        ? QUICK_FROM_BUILDS_BG
+        : QUICK_FROM_BUILDS
+      : QUICK_FROM_BUILDS_CPU
     // (a search this small is fast as it is: narrowing it would cost more than it saves)
     const { arts, seed, refine } =
-      quick &&
-      space >
-        (optimizerGpuSupported() ? QUICK_FROM_BUILDS : QUICK_FROM_BUILDS_CPU)
+      quick && space > quickLimit
         ? await quickPool(problem)
         : {
             arts: input.arts,
-            // A seed can speed up the foreground CPU search. During rankings,
-            // let the worker search directly instead of climbing on the page.
-            seed:
-              input.background ||
-              (optimizerGpuSupported() && space >= TEAM_GPU_MIN_TOTAL)
-                ? undefined
+            // A fast single-start climb speeds up very large GPU searches (>= 200M builds)
+            // by establishing a tight floor that prunes >90% of prefixes and skips Pass 1.
+            seed: input.background
+              ? undefined
+              : optimizerGpuSupported() && space >= TEAM_GPU_MIN_TOTAL
+                ? space >= GPU_SEED_FROM_BUILDS
+                  ? await fastSeedBuild(problem)
+                  : undefined
                 : await seedBuild(problem),
             refine: undefined,
           }
@@ -947,10 +1000,12 @@ export async function optimizeTeam({
       if (result) profile.found++
       return result
     }
-    // the same problem solved before (this run or an earlier one): its answer is known
+    // the same problem solved before (this run or an earlier one): its answer is known.
+    // An exact (full) memo entry is also valid for a quick lookup.
     const { key: problemKey, floor } = solveKey(input)
     const key = quick ? `${problemKey}|quick` : problemKey
-    const known = solveMemo.get(key)
+    const known =
+      solveMemo.get(key) ?? (quick ? solveMemo.get(problemKey) : undefined)
     if (known?.best) {
       profile.memoHits++
       return known.best.value >= floor ? known.best : undefined
@@ -1230,9 +1285,42 @@ export async function optimizeTeam({
    * function of its artifacts, its constraints, and the other members whose (fixed) builds do not
    * meet theirs
    */
-  // Problems compiled in this run. Within a run nothing outside the team's state changes, and a
-  // member's problem depends only on its weapon, the others' builds and everyone's weapons (the
-  // energy relief): the same state compiles the same problem, so it is compiled once.
+  // Problems compiled in this run and cached across runs in a pooled worker. Everything outside
+  // the per-step weapon/build state is hashed into `problemRunKey` so any inventory, character,
+  // enemy, conditional or rotation change cleanly misses the cache.
+  const teamEntry = database.teams.get(teamId)
+  const problemRunKey = hash53(
+    JSON.stringify({
+      teamId,
+      gender,
+      mainStatAssumptionLevel,
+      onField: teamOpt.onField,
+      energySource: teamOpt.energySource,
+      energyCalculator: teamOpt.energyCalculator,
+      rotationTime: teamOpt.rotationTime,
+      weaponEnergy: teamOpt.weaponEnergy,
+      attacks,
+      bonusStats,
+      statFilters,
+      teamCond: teamEntry?.conditional,
+      enemyOverride: teamEntry?.enemyOverride,
+      members: members.map((m) => ({
+        ck: m.characterKey,
+        char: database.chars.get(m.characterKey),
+        tc: m.teamChar,
+        buildTc: m.isTc
+          ? database.buildTcs.get(m.loadoutDatum.buildTcId)
+          : undefined,
+      })),
+    })
+  )
+  const artSig = (id: string | undefined) => {
+    const a = id ? database.arts.get(id) : undefined
+    if (!a) return ''
+    return `${a.setKey}:${a.slotKey}:${a.rarity}:${a.level}:${a.mainStatKey}:${a.substats.map((x) => `${x.key}=${x.value}`).join(',')}`
+  }
+  const wepSig = (w: ICachedWeapon | undefined) =>
+    w ? `${w.id}:${w.key}:${w.level}:${w.ascension}:${w.refinement}` : ''
   const problems = new Map<string, ReturnType<typeof problemInRaw>>()
   const problemIn = (
     s: TeamState,
@@ -1255,11 +1343,36 @@ export async function optimizeTeam({
       profile.problemHits++
       return problems.get(id)
     }
+    const crossKey = `${problemRunKey}|${characterKey}|${hash53(
+      members
+        .map(
+          (m) =>
+            `${m.characterKey}:${wepSig(weapons[m.characterKey])}:${
+              m.characterKey === characterKey
+                ? '*'
+                : allArtifactSlotKeys
+                    .map((slot) => artSig(s.builds[m.characterKey]?.[slot]))
+                    .join(';')
+            }`
+        )
+        .join('|')
+    )}`
+    if (problemMemo.has(crossKey)) {
+      const cached = problemMemo.get(crossKey)
+      problemMemo.delete(crossKey)
+      problemMemo.set(crossKey, cached)
+      profile.problemHits++
+      problems.set(id, cached)
+      return cached
+    }
     const t0 = performance.now()
     const result = problemInRaw(s, characterKey, weapon)
     profile.problems++
     profile.problemMs += performance.now() - t0
     problems.set(id, result)
+    problemMemo.set(crossKey, result)
+    if (problemMemo.size > PROBLEM_MEMO_SIZE)
+      problemMemo.delete(problemMemo.keys().next().value as string)
     return result
   }
   const problemInRaw = (
@@ -1989,10 +2102,16 @@ export async function optimizeTeam({
    */
   let provisional = !skipProvisional
   const runRounds = async () => {
+    const optimizedOnce = new Set<CharacterKey>()
+    let repairRoundTried = false
     for (let round = 1; round <= maxRounds && order.length; round++) {
       rounds = round
       let changed = false
-      for (const [i, member] of order.entries()) {
+      // When a member still misses a requirement after everyone has had a turn, run the repair
+      // round lowest-DPS first so supports take energy weapons before the main carry does.
+      const repairing = round > 1 && belowMinimumsIn(state).length > 0
+      const roundOrder = repairing ? [...order].reverse() : order
+      for (const [i, member] of roundOrder.entries()) {
         const { characterKey } = member
         const step: TeamOptStep = {
           round,
@@ -2089,9 +2208,32 @@ export async function optimizeTeam({
           reachable: boolean
         }[] = []
         const notes = new Map<string, TeamOptShortfall>()
+        const hasMemberFilters = Object.values(
+          statFilters[characterKey] ?? {}
+        ).some((list) => list?.some((f) => !f.disabled))
+        const ownArts = artsIn(state, characterKey)
+        const fastCeilPool = ownArts.some((a) => !arts.includes(a))
+          ? [...arts, ...ownArts]
+          : arts
         for (const weapon of weaponChoices) {
           // (one problem at a time: several in a row froze a phone for a second)
           await yieldBetweenSteps()
+          // Fast-reject weapons that cannot reach the member's minimums (e.g. ER) without
+          // compiling the full multi-hundred-attack damage objective.
+          if (hasMemberFilters && weaponChoices.length > 1) {
+            const mins = minimumsIn(state, characterKey, weapon)
+            const fastCeil = ceilingsIn(mins, fastCeilPool)
+            if (!fastCeil.reachable) {
+              noteMinimums(notes, mins, fastCeil.most)
+              candidates.push({
+                weapon,
+                problem: undefined,
+                current: undefined,
+                reachable: false,
+              })
+              continue
+            }
+          }
           const problem = problemIn(state, characterKey, weapon)
           let current: number | undefined
           if (problem && full) {
@@ -2285,13 +2427,14 @@ export async function optimizeTeam({
         })
         // The next weapons solved on their own start early, above the floor known then: a floor
         // only prunes, so each finds what it would have found later, and is then held to the
-        // floor reached by its turn (as when solved one after another)
+        // floor reached by its turn (as when solved one after another). Scan past screened-out
+        // weapons so Quick mode actually keeps `parallel` solves overlapped.
         const parallel = optimizerGpuSupported() ? parallelWeaponSolves : 1
         const early = new Map<number, ReturnType<TeamOptSolver>>()
         const startEarly = (from: number) => {
           for (
             let j = from + 1;
-            j < candidates.length && j < from + parallel;
+            j < candidates.length && early.size < parallel - 1;
             j++
           ) {
             const p = plans[j]
@@ -2356,10 +2499,14 @@ export async function optimizeTeam({
             )
               continue
             // An energy weapon can make a teammate's build viable even when the
-            // team deals less damage. Keep that repair ahead of damage gains.
+            // team deals less damage. Keep that repair ahead of damage gains,
+            // but only for teammates that already had a turn to meet their own
+            // requirements (so an unoptimized starting build never forces the
+            // main carry onto an energy weapon in round 1).
             const repaired = order.filter(
               (m) =>
                 m !== member &&
+                optimizedOnce.has(m.characterKey) &&
                 unmetBefore().has(m.characterKey) &&
                 !evaluation.unmet[m.characterKey]?.length
             ).length
@@ -2393,6 +2540,7 @@ export async function optimizeTeam({
           } else assign(state, member, best.artifactIds, best.weaponId)
           changed = true
         }
+        optimizedOnce.add(characterKey)
       }
       // a member left outside its set rules takes the pieces it needs from the others
       if (order.length > 1 && (await repairIn(state, round))) changed = true
@@ -2401,7 +2549,13 @@ export async function optimizeTeam({
         exchanges++
         changed = await exchangeIn(state, round)
       }
-      if (!changed) break
+      if (!changed) {
+        if (belowMinimumsIn(state).length && !repairRoundTried) {
+          repairRoundTried = true
+          continue
+        }
+        break
+      }
     }
   }
   // Minimums come first. An Energy Recharge minimum no build can reach, whatever the weapon (every
@@ -2705,8 +2859,9 @@ export async function optimizeTeam({
       members.find((m) => m.characterKey === ck)
     const othersIn = (ck: CharacterKey) =>
       members.filter((m) => m.characterKey !== ck && !m.isTc)
-    // (the page between steps: a pick's work never holds it up)
-    const breathe = yieldTask
+    // (the page between steps: a pick's work never holds it up; workers are already off-thread)
+    const breathe =
+      typeof document === 'undefined' ? () => Promise.resolve() : yieldTask
     const needsIn = (s: TeamState) =>
       teamEnergyNeeds(statFilters, weaponsIn(s), teamOpt)
     /**
@@ -2848,7 +3003,8 @@ export async function optimizeTeam({
       member: TeamOptMember,
       weapon: ICachedWeapon,
       { set, setPair }: TeamOptSetChoice,
-      background = false
+      background = false,
+      ranker?: TeamOptSetRanker
     ) => {
       const base = searchInput(s, member, weapon, background)
       if (!base) return undefined
@@ -2882,6 +3038,10 @@ export async function optimizeTeam({
             s.size > min || !s.has(art.slotKey) || art.setKey === required[i]
         )
       )
+      if (ranker) {
+        const fast = await ranker.solveSet(arts, required, min)
+        if (fast !== 'fallback') return { problem, found: fast }
+      }
       // (the pool narrowed already: searched as it is)
       const found = await solve(
         {
@@ -2927,7 +3087,8 @@ export async function optimizeTeam({
       member: TeamOptMember,
       weapon: ICachedWeapon,
       unmetNow: ReadonlySet<string>,
-      cancelled: () => boolean
+      cancelled: () => boolean,
+      ranker?: TeamOptSetRanker
     ): Promise<TeamOptOption[]> => {
       const base = searchInput(s, member, weapon, true)
       if (!base || base.input.exclusion.twoTwo?.length || cancelled()) return []
@@ -2935,7 +3096,7 @@ export async function optimizeTeam({
       const ranked: TeamOptOption[] = []
       const rankPair = async (setPair: TeamOptSetPair) => {
         const choice = { setPair }
-        const searched = await search(s, member, weapon, choice, true)
+        const searched = await search(s, member, weapon, choice, true, ranker)
         const option = optionOf(unmetNow, weapon, searched, choice)
         if (option?.artifactIds) ranked.push(option)
       }
@@ -2968,18 +3129,33 @@ export async function optimizeTeam({
         ...input.constraints,
         { value: sum(...keys.map(hasBonus)), min: 2 },
       ]
+      const forbidPairs: TeamOptSetPair[] = []
       // Discover several pairs in the shortlist without running a solve for each pair.
       for (let i = 0; i < MIXED_SET_RANKS; i++) {
         await breathe()
         if (cancelled()) break
-        const found = await solve(
-          {
-            ...input,
-            arts: useShortlist ? arts : input.arts,
-            constraints: [...constraints],
-          },
-          !useShortlist
-        )
+        let found: { value: number; artifactIds: string[] } | undefined
+        let usedRanker = false
+        if (ranker && forbidPairs.length <= 2) {
+          const fast = await ranker.solveMixed(
+            useShortlist ? arts : input.arts,
+            forbidPairs
+          )
+          if (fast !== 'fallback') {
+            found = fast
+            usedRanker = true
+          }
+        }
+        if (!usedRanker) {
+          found = await solve(
+            {
+              ...input,
+              arts: useShortlist ? arts : input.arts,
+              constraints: [...constraints],
+            },
+            !useShortlist
+          )
+        }
         if (!found || cancelled()) break
         const counts = new Map<ArtifactSetKey, number>()
         for (const id of found.artifactIds) {
@@ -2991,6 +3167,7 @@ export async function optimizeTeam({
         )
         if (!pair) break
         await rankPair(pair)
+        forbidPairs.push(pair)
         constraints.push({
           value: greaterEq(
             constant(1),
@@ -3013,16 +3190,31 @@ export async function optimizeTeam({
       const weapon = database.weapons.get(pick.weaponId)
       if (!member || !optConfig || !weapon) return undefined
       const unmetNow = unmetIn(s)
-      const weapons: TeamOptOption[] = []
-      for (const w of weaponsIn_(s, member)) {
-        await breathe()
+      const baseNeeds = needsIn(s)
+      const weaponCandidates = weaponsIn_(s, member)
+      const changesTeamEr = (w: ICachedWeapon) => {
+        const nextNeeds = teamEnergyNeeds(
+          statFilters,
+          weaponsIn(s, ck, w),
+          teamOpt
+        )
+        return order.some(
+          (m) =>
+            m.characterKey !== ck &&
+            baseNeeds[m.characterKey] !== nextNeeds[m.characterKey]
+        )
+      }
+      const rankWeapon = async (
+        w: ICachedWeapon,
+        needsSettle: boolean
+      ): Promise<TeamOptOption | undefined> => {
         if (cancelled()) return undefined
         const searched = await search(s, member, w, pick, true)
         const option = optionOf(unmetNow, w, searched)
-        if (!option) continue
+        if (!option) return undefined
         // (a weapon that changes a teammate's ER requirement: worth the team with that teammate's
         // artifacts searched again, as the run and the KQM tab count it)
-        if (searched?.found) {
+        if (needsSettle && searched?.found) {
           const team = copyState(s)
           team.builds[ck] = bySlot(database, searched.found.artifactIds)
           team.weaponIds[ck] = w.id
@@ -3046,24 +3238,64 @@ export async function optimizeTeam({
             }
           }
         }
-        weapons.push(option)
+        return option
       }
-      const sets: TeamOptOption[] = []
-      for (const set of wearableSets(
-        poolIn(s, member),
-        optConfig.artSetExclusion
-      )) {
+      const weapons: TeamOptOption[] = []
+      const plainWeapons: ICachedWeapon[] = []
+      const erWeapons: ICachedWeapon[] = []
+      for (const w of weaponCandidates)
+        (changesTeamEr(w) ? erWeapons : plainWeapons).push(w)
+      const rankConcurrency = optimizerGpuSupported()
+        ? Math.max(1, parallelWeaponSolves)
+        : 1
+      for (let i = 0; i < plainWeapons.length; i += rankConcurrency) {
         await breathe()
         if (cancelled()) return undefined
-        const choice = { set }
-        const searched = await search(s, member, weapon, choice, true)
-        // Keep an eligible set visible even if its builds miss a requirement.
-        const option = optionOf(unmetNow, weapon, searched, choice)
-        if (option) sets.push(option)
+        const batch = plainWeapons.slice(i, i + rankConcurrency)
+        const opts = await Promise.all(batch.map((w) => rankWeapon(w, false)))
+        for (const option of opts) if (option) weapons.push(option)
       }
-      sets.push(
-        ...(await rankMixedSets(s, member, weapon, unmetNow, cancelled))
+      for (const w of erWeapons) {
+        await breathe()
+        if (cancelled()) return undefined
+        const option = await rankWeapon(w, true)
+        if (option) weapons.push(option)
+      }
+      const sets: TeamOptOption[] = []
+      const wearable = wearableSets(
+        poolIn(s, member),
+        optConfig.artSetExclusion
       )
+      const baseSetSearch = searchInput(s, member, weapon, true)
+      const ranker =
+        baseSetSearch &&
+        solveRaw.createSetRanker &&
+        (wearable.length > 0 || !optConfig.artSetExclusion.twoTwo?.length)
+          ? await solveRaw.createSetRanker(baseSetSearch.input)
+          : undefined
+      try {
+        for (const set of wearable) {
+          await breathe()
+          if (cancelled()) return undefined
+          const choice = { set }
+          const searched = await search(s, member, weapon, choice, true, ranker)
+          // Keep an eligible set visible even if its builds miss a requirement.
+          const option = optionOf(unmetNow, weapon, searched, choice)
+          if (option) sets.push(option)
+        }
+        sets.push(
+          ...(await rankMixedSets(
+            s,
+            member,
+            weapon,
+            unmetNow,
+            cancelled,
+            ranker
+          ))
+        )
+      } finally {
+        ranker?.destroy()
+      }
       if (cancelled()) return undefined
       return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }
     }

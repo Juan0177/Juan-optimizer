@@ -98,7 +98,7 @@ export async function runTeamOpt(
     teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
     attackStates,
     rankingBonusStats,
-    parallelWeaponSolves: lowImpact ? 1 : 2,
+    parallelWeaponSolves: lowImpact ? 1 : 3,
     solve: teamOptSolver(status, maxWorkers, onSolver, {
       responsive: true,
       lowImpact,

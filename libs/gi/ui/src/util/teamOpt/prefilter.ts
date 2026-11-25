@@ -2,7 +2,7 @@ import { allArtifactSlotKeys } from '@genshin-optimizer/gi/consts'
 import type { ICachedArtifact } from '@genshin-optimizer/gi/db'
 import { yieldTask } from '@genshin-optimizer/gi/solver'
 import type { OptNode } from '@genshin-optimizer/gi/wr'
-import { precompute } from '@genshin-optimizer/gi/wr'
+import { forEachNodes, precompute } from '@genshin-optimizer/gi/wr'
 
 /** One member's search, as the pre-filter reads it */
 export interface PrefilterProblem {
@@ -55,8 +55,9 @@ interface Scored {
   outs: number[]
 }
 
-/** Gives the page thread back once a slice of work has run */
+/** Gives the page thread back once a slice of work has run (workers are already off-thread). */
 function pacer() {
+  if (typeof document === 'undefined') return () => Promise.resolve()
   let since = performance.now()
   return async () => {
     if (performance.now() - since < SLICE_MS) return
@@ -116,19 +117,33 @@ function evaluator(problem: PrefilterProblem) {
   return { rest, score, outs, valuesOf }
 }
 
+function readKeys(nodes: OptNode[]): Set<string> {
+  const keys = new Set<string>()
+  forEachNodes(
+    nodes,
+    () => {},
+    (f) => {
+      if (f.operation === 'read' && f.path[0] === 'dyn' && f.path[1])
+        keys.add(f.path[1])
+    }
+  )
+  return keys
+}
+
 /**
  * The best build reached by changing one slot at a time from `start`, the change that helps most
- * first, until none helps (or `MAX_PASSES` rounds)
+ * first, until none helps (or `maxPasses` rounds)
  */
 async function climb(
   bySlot: ICachedArtifact[][],
   start: (ICachedArtifact | undefined)[],
   ev: ReturnType<typeof evaluator>,
-  pace: Pace
+  pace: Pace,
+  maxPasses = MAX_PASSES
 ) {
   const build = [...start]
   let current = ev.score(ev.rest(build, -1), undefined, build)
-  for (let pass = 0; pass < MAX_PASSES; pass++) {
+  for (let pass = 0; pass < maxPasses; pass++) {
     let moved = false
     for (const [s, candidates] of bySlot.entries()) {
       await pace()
@@ -158,8 +173,15 @@ async function climb(
 async function climbs(
   problem: PrefilterProblem,
   ev: ReturnType<typeof evaluator>,
-  pace: Pace
+  pace: Pace,
+  opts?: {
+    setStarts?: number
+    maxPasses?: number
+    onlyReferencedSets?: boolean
+  }
 ) {
+  const maxPasses = opts?.maxPasses ?? MAX_PASSES
+  const setStarts = opts?.setStarts ?? SET_STARTS
   const bySlot = allArtifactSlotKeys.map((slot) =>
     problem.arts.filter((a) => a.slotKey === slot)
   )
@@ -176,23 +198,43 @@ async function climbs(
     }
     greedy[s] = best?.art
   }
-  const general = await climb(bySlot, greedy, ev, pace)
+  const general = await climb(bySlot, greedy, ev, pace, maxPasses)
 
+  // Group artifacts by set and slot once so sets with fewer than 4 slots are skipped without
+  // evaluating any candidate pieces.
+  const bySet = new Map<string, ICachedArtifact[][]>()
+  for (const [s, candidates] of bySlot.entries()) {
+    for (const art of candidates) {
+      let slots = bySet.get(art.setKey)
+      if (!slots) {
+        slots = allArtifactSlotKeys.map(() => [])
+        bySet.set(art.setKey, slots)
+      }
+      slots[s].push(art)
+    }
+  }
+  const referenced =
+    opts?.onlyReferencedSets && general.scored.miss === 0
+      ? readKeys([
+          problem.objective,
+          ...problem.constraints.map((c) => c.value),
+        ])
+      : undefined
   // each set with pieces in at least 4 slots: its best piece per slot, in the general build
-  const sets = new Set(problem.arts.map((a) => a.setKey))
   const starts: {
     setKey: string
     start: (ICachedArtifact | undefined)[]
     scored: Scored
   }[] = []
-  for (const setKey of sets) {
+  for (const [setKey, slotPieces] of bySet) {
+    if (referenced && !referenced.has(setKey)) continue
+    let slotCount = 0
+    for (const pieces of slotPieces) if (pieces.length) slotCount++
+    if (slotCount < 4) continue
     const start = [...general.build]
-    let slots = 0
-    for (const [s, candidates] of bySlot.entries()) {
+    for (const [s, pieces] of slotPieces.entries()) {
       await pace()
-      const pieces = candidates.filter((a) => a.setKey === setKey)
       if (!pieces.length) continue
-      slots++
       const restValues = ev.rest(start, s)
       let best: { art: ICachedArtifact; scored: Scored } | undefined
       for (const [i, art] of pieces.entries()) {
@@ -203,7 +245,6 @@ async function climbs(
       }
       start[s] = best!.art
     }
-    if (slots < 4) continue
     starts.push({
       setKey,
       start,
@@ -212,8 +253,11 @@ async function climbs(
   }
   starts.sort((a, b) => (better(a.scored, b.scored) ? -1 : 1))
   const perSet: ({ setKey: string } & Awaited<ReturnType<typeof climb>>)[] = []
-  for (const { setKey, start } of starts.slice(0, SET_STARTS))
-    perSet.push({ setKey, ...(await climb(bySlot, start, ev, pace)) })
+  for (const { setKey, start } of starts.slice(0, setStarts))
+    perSet.push({
+      setKey,
+      ...(await climb(bySlot, start, ev, pace, maxPasses)),
+    })
   return { bySlot, general, perSet }
 }
 
@@ -253,6 +297,27 @@ function topBy<T>(items: readonly T[], count: number, score: (t: T) => number) {
     .sort((a, b) => b.s - a.s)
     .slice(0, count)
     .map(({ item }) => item)
+}
+
+/**
+ * Fast seed climb for huge GPU searches: climbs from the greedy start and the top referenced
+ * 4-piece set (2 passes) to establish a tight lower bound near the optimum without full 3-set
+ * prefilter cost. Used only as an exact-search pruning floor, never to drop artifacts.
+ */
+export async function fastSeedBuild(
+  problem: PrefilterProblem
+): Promise<SeedBuild | undefined> {
+  if (!problem.arts.length) return undefined
+  const ev = evaluator(problem)
+  const { general, perSet } = await climbs(problem, ev, pacer(), {
+    setStarts: 1,
+    maxPasses: 2,
+    onlyReferencedSets: true,
+  })
+  const best = [general, ...perSet].reduce((a, b) =>
+    better(b.scored, a.scored) ? b : a
+  )
+  return toSeed(best)
 }
 
 /**
@@ -339,12 +404,15 @@ export async function quickPool(problem: PrefilterProblem): Promise<{
   for (const [key, value] of Object.entries(ev.rest(best.build, -1)))
     if (!setKeys.has(key)) statsOnly[key] = value
   const base = ev.outs(statsOnly, {})[0]
-  const worthSets = [...setKeys].filter((setKey) =>
-    [2, 4].some(
-      (n) =>
-        ev.outs(statsOnly, { [setKey]: n })[0] - base >
-        Math.abs(base) * SET_WORTH
-    )
+  const referenced = readKeys([problem.objective])
+  const worthSets = [...setKeys].filter(
+    (setKey) =>
+      referenced.has(setKey) &&
+      [2, 4].some(
+        (n) =>
+          ev.outs(statsOnly, { [setKey]: n })[0] - base >
+          Math.abs(base) * SET_WORTH
+      )
   )
   const requirements = problem.constraints.map((_, i) => i + 1)
   const around = async (
