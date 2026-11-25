@@ -12,6 +12,7 @@ import type {
   TeamOptPicks,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
+import { teamOptSetKey } from '@genshin-optimizer/gi/ui'
 import { Box, CircularProgress, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -102,7 +103,8 @@ export function TeamOptTopBuilds({
           total: (option.value / ranked.best) * result.after.total,
           pick: {
             weaponId: option.weaponId,
-            ...(option.set && { set: option.set }),
+            set: option.set,
+            setPair: option.setPair,
           },
         })
       }
@@ -123,7 +125,7 @@ export function TeamOptTopBuilds({
             (o) =>
               o.changed === picked[0][0] &&
               o.pick?.weaponId === picked[0][1].weaponId &&
-              o.pick?.set === picked[0][1].set
+              teamOptSetKey(o.pick) === teamOptSetKey(picked[0][1])
           )
         : -1
   return (

@@ -37,6 +37,7 @@ import type { Data, OptNode } from '@genshin-optimizer/gi/wr'
 import {
   constant,
   dynRead,
+  greaterEq,
   optimize,
   precompute,
   sum,
@@ -195,15 +196,25 @@ export interface TeamOptResult {
   options?: Partial<Record<CharacterKey, TeamOptMemberOptions>>
 }
 
+type TeamOptSetPair = readonly [ArtifactSetKey, ArtifactSetKey]
+
+export interface TeamOptSetChoice {
+  /** Four or more pieces of one set. */
+  set?: string
+  /** Two distinct 2-piece bonuses. */
+  setPair?: TeamOptSetPair
+}
+
+export const teamOptSetKey = ({ set, setPair }: TeamOptSetChoice) =>
+  setPair?.join('+') ?? set ?? ''
+
 /** A member's best build with another weapon or in another set, the rest of the team as found */
-export interface TeamOptOption {
+export interface TeamOptOption extends TeamOptSetChoice {
   weaponId: string
   /** None: no build with this weapon meets the member's requirements */
   artifactIds?: Record<ArtifactSlotKey, string | undefined>
   /** The team's damage as the run ranks builds (`TeamOptMemberOptions.best`: the result's) */
   value: number
-  /** The set it has four pieces of */
-  set?: string
   /** It leaves another member's requirement unmet */
   unmet?: true
 }
@@ -216,10 +227,9 @@ export interface TeamOptMemberOptions {
   sets: TeamOptOption[]
 }
 
-/** A member's equipment picked by hand: a weapon, and four pieces of a set (none: any) */
-export interface TeamOptPick {
+/** A member's equipment picked by hand: a weapon and an optional set combination. */
+export interface TeamOptPick extends TeamOptSetChoice {
   weaponId: string
-  set?: string
 }
 export type TeamOptPicks = Partial<Record<CharacterKey, TeamOptPick>>
 /** The team with picks: its builds, weapons and damage as shown */
@@ -533,6 +543,32 @@ function wearableSets(
     .map(([setKey]) => setKey)
 }
 
+/** The two distinct bonuses these pieces can fit into four different slots. */
+function wearablePairs(
+  arts: readonly ICachedArtifact[],
+  exclusion: ArtSetExclusion
+): TeamOptSetPair[] {
+  const slotsBySet = new Map<ArtifactSetKey, Set<ArtifactSlotKey>>()
+  for (const { setKey, slotKey } of arts) {
+    const slots = slotsBySet.get(setKey) ?? new Set<ArtifactSlotKey>()
+    slotsBySet.set(setKey, slots.add(slotKey))
+  }
+  const sets = [...slotsBySet.keys()]
+    .filter(
+      (key) =>
+        slotsBySet.get(key)!.size >= 2 &&
+        allowedCounts(exclusion[key]).includes(2) &&
+        !!getArtSheet(key)?.setEffects[2]
+    )
+    .sort()
+  const pairs: TeamOptSetPair[] = []
+  for (const [i, a] of sets.entries())
+    for (const b of sets.slice(i + 1))
+      if (new Set([...slotsBySet.get(a)!, ...slotsBySet.get(b)!]).size >= 4)
+        pairs.push([a, b])
+  return pairs
+}
+
 /**
  * The members' sim gear for a run's play of the rotation: with, for each member it optimizes, the
  * sets its pool can wear four of (or two, for a 2-piece effect with a switch) within its set rules,
@@ -696,6 +732,8 @@ const PARALLEL_SOLVES = 3
  */
 const SCREEN_SHARE = 0.05
 const SCREEN_KEEP = 3
+/** Rank this many distinct mixed pairs without searching every pair separately. */
+const MIXED_SET_RANKS = 3
 export const teamOptScreen = { fromBuilds: 1e8, fromBuildsCpu: 1e5 }
 /** Forgets every solve done (tests; or to measure a run from scratch) */
 /**
@@ -2670,8 +2708,7 @@ export async function optimizeTeam({
         if (!settled || !member) return team
         const weapon = database.weapons.get(settled.weaponIds[ck] ?? '')
         const again =
-          weapon &&
-          (await search(settled, member, weapon, pick.set, background))
+          weapon && (await search(settled, member, weapon, pick, background))
         if (again?.found) assign(settled, member, again.found.artifactIds)
         return settled
       } catch (e) {
@@ -2725,18 +2762,15 @@ export async function optimizeTeam({
           ? [own]
           : []
     }
+    const equippedIds = (s: TeamState, ck: CharacterKey) =>
+      new Set<string | undefined>(Object.values(s.builds[ck] ?? {}))
     // (per state, member and weapon: the pieces Quick keeps for its build, any set)
     const kept = new Map<string, Promise<ICachedArtifact[]>>()
-    /**
-     * The member's best build in `s` with `weapon` (and four pieces of `set`): Quick narrows the
-     * search; for a set, to the pieces Quick keeps and that set's
-     */
-    const search = async (
+    const searchInput = (
       s: TeamState,
       member: TeamOptMember,
       weapon: ICachedWeapon,
-      set?: string,
-      background = false
+      background: boolean
     ) => {
       const ck = member.characterKey
       const optConfig = optConfigs[ck]
@@ -2752,26 +2786,62 @@ export async function optimizeTeam({
         exclusion: optConfig.artSetExclusion,
         mainStatAssumptionLevel,
       }
-      if (!set) return { problem, found: await solve(input, true) }
-      const setArts = pool.filter((art) => art.setKey === set)
-      const setSlots = new Set(setArts.map((art) => art.slotKey))
-      if (setSlots.size < 4) return { problem, found: undefined }
-      const keptKey = `${keyOf(s)}#${ck}#${weapon.id}`
-      let keeping = kept.get(keptKey)
+      return { problem, input }
+    }
+    const shortlist = (key: string, input: TeamOptSolveInput) => {
+      const { arts, objective, constraints, exclusion } = input
+      let keeping = kept.get(key)
       if (!keeping) {
         keeping = quickPool({
-          arts: pool,
-          objective: problem.objective,
-          constraints: problem.constraints,
+          arts,
+          objective,
+          constraints,
           values: (art) => teamOptArtValues(art, mainStatAssumptionLevel),
-          allowed: (build) => meetsSetRules(build, optConfig.artSetExclusion),
+          allowed: (build) => meetsSetRules(build, exclusion),
         }).then((q) => q.arts)
-        kept.set(keptKey, keeping)
+        kept.set(key, keeping)
       }
-      // With exactly four available set slots, each must wear a piece of the set.
-      const arts = [...new Set([...(await keeping), ...setArts])].filter(
-        (art) =>
-          setSlots.size > 4 || !setSlots.has(art.slotKey) || art.setKey === set
+      return keeping
+    }
+    /** Quick keeps some pieces for the remaining slots; search every piece of a picked set. */
+    const search = async (
+      s: TeamState,
+      member: TeamOptMember,
+      weapon: ICachedWeapon,
+      { set, setPair }: TeamOptSetChoice,
+      background = false
+    ) => {
+      const base = searchInput(s, member, weapon, background)
+      if (!base) return undefined
+      const { problem, input } = base
+      if (!set && !setPair) return { problem, found: await solve(input, true) }
+      const required = setPair ?? [set!]
+      const min = setPair ? 2 : 4
+      const setArts = input.arts.filter((art) => required.includes(art.setKey))
+      const slots = required.map(
+        (key) =>
+          new Set(setArts.filter((a) => a.setKey === key).map((a) => a.slotKey))
+      )
+      if (
+        slots.some((s) => s.size < min) ||
+        new Set(slots.flatMap((s) => [...s])).size < 4
+      )
+        return { problem, found: undefined }
+      const ck = member.characterKey
+      const key = `${keyOf(s)}#${ck}#${weapon.id}`
+      const equipped = setPair ? equippedIds(s, ck) : undefined
+      // If a set has exactly as many slots as it needs, reserve each of them.
+      const arts = [
+        ...new Set([
+          ...(await shortlist(key, input)),
+          ...setArts,
+          ...input.arts.filter((art) => equipped?.has(art.id)),
+        ]),
+      ].filter((art) =>
+        slots.every(
+          (s, i) =>
+            s.size > min || !s.has(art.slotKey) || art.setKey === required[i]
+        )
       )
       // (the pool narrowed already: searched as it is)
       const found = await solve(
@@ -2780,7 +2850,7 @@ export async function optimizeTeam({
           arts,
           constraints: [
             ...problem.constraints,
-            { value: dynRead(set), min: 4 },
+            ...required.map((key) => ({ value: dynRead(key), min })),
           ],
         },
         false
@@ -2797,7 +2867,7 @@ export async function optimizeTeam({
       unmetNow: ReadonlySet<string>,
       weapon: ICachedWeapon,
       searched: Awaited<ReturnType<typeof search>>,
-      set?: string
+      choice: TeamOptSetChoice = {}
     ): TeamOptOption | undefined =>
       searched && {
         weaponId: weapon.id,
@@ -2805,7 +2875,7 @@ export async function optimizeTeam({
           artifactIds: bySlot(database, searched.found.artifactIds),
         }),
         value: searched.found?.value ?? Number.NaN,
-        ...(set && { set }),
+        ...choice,
         ...([...searched.problem.unmetOthers].some(
           (key) => !unmetNow.has(key)
         ) && { unmet: true as const }),
@@ -2813,6 +2883,86 @@ export async function optimizeTeam({
     const byValue = (a: TeamOptOption, b: TeamOptOption) =>
       (Number.isNaN(b.value) ? Number.NEGATIVE_INFINITY : b.value) -
       (Number.isNaN(a.value) ? Number.NEGATIVE_INFINITY : a.value)
+    const rankMixedSets = async (
+      s: TeamState,
+      member: TeamOptMember,
+      weapon: ICachedWeapon,
+      unmetNow: ReadonlySet<string>,
+      cancelled: () => boolean
+    ): Promise<TeamOptOption[]> => {
+      const base = searchInput(s, member, weapon, true)
+      if (!base || base.input.exclusion.twoTwo?.length || cancelled()) return []
+      const { input } = base
+      const ranked: TeamOptOption[] = []
+      const rankPair = async (setPair: TeamOptSetPair) => {
+        const choice = { setPair }
+        const searched = await search(s, member, weapon, choice, true)
+        const option = optionOf(unmetNow, weapon, searched, choice)
+        if (option?.artifactIds) ranked.push(option)
+      }
+      const allPairs = wearablePairs(input.arts, input.exclusion)
+      if (allPairs.length <= MIXED_SET_RANKS) {
+        for (const pair of allPairs) {
+          await breathe()
+          if (cancelled()) break
+          await rankPair(pair)
+        }
+        return ranked
+      }
+
+      const ck = member.characterKey
+      const key = `${keyOf(s)}#${ck}#${weapon.id}`
+      const equipped = equippedIds(s, ck)
+      const arts = [
+        ...new Set([
+          ...(await shortlist(key, input)),
+          ...input.arts.filter((art) => equipped.has(art.id)),
+        ]),
+      ]
+      const shortlistedPairs = wearablePairs(arts, input.exclusion)
+      const useShortlist = shortlistedPairs.length > 0
+      const pairs = useShortlist ? shortlistedPairs : allPairs
+      const keys = [...new Set(pairs.flat())]
+      const hasBonus = (key: ArtifactSetKey) =>
+        greaterEq(dynRead(key), constant(2), constant(1))
+      const constraints = [
+        ...input.constraints,
+        { value: sum(...keys.map(hasBonus)), min: 2 },
+      ]
+      // Discover several pairs in the shortlist without running a solve for each pair.
+      for (let i = 0; i < MIXED_SET_RANKS; i++) {
+        await breathe()
+        if (cancelled()) break
+        const found = await solve(
+          {
+            ...input,
+            arts: useShortlist ? arts : input.arts,
+            constraints: [...constraints],
+          },
+          !useShortlist
+        )
+        if (!found || cancelled()) break
+        const counts = new Map<ArtifactSetKey, number>()
+        for (const id of found.artifactIds) {
+          const setKey = database.arts.get(id)!.setKey
+          counts.set(setKey, (counts.get(setKey) ?? 0) + 1)
+        }
+        const pair = pairs.find(
+          ([a, b]) => (counts.get(a) ?? 0) >= 2 && (counts.get(b) ?? 0) >= 2
+        )
+        if (!pair) break
+        await rankPair(pair)
+        constraints.push({
+          value: greaterEq(
+            constant(1),
+            sum(...pair.map(hasBonus)),
+            constant(1)
+          ),
+          min: 1,
+        })
+      }
+      return ranked
+    }
     const rankings: TeamOptSession['rankings'] = async (
       s,
       ck,
@@ -2828,7 +2978,7 @@ export async function optimizeTeam({
       for (const w of weaponsIn_(s, member)) {
         await breathe()
         if (cancelled()) return undefined
-        const searched = await search(s, member, w, pick.set, true)
+        const searched = await search(s, member, w, pick, true)
         const option = optionOf(unmetNow, w, searched)
         if (!option) continue
         // (a weapon that changes a teammate's ER requirement: worth the team with that teammate's
@@ -2841,7 +2991,7 @@ export async function optimizeTeam({
             team,
             s,
             ck,
-            { weaponId: w.id, set: pick.set },
+            { ...pick, weaponId: w.id },
             cancelled,
             true
           )
@@ -2866,24 +3016,29 @@ export async function optimizeTeam({
       )) {
         await breathe()
         if (cancelled()) return undefined
-        const searched = await search(s, member, weapon, set, true)
+        const choice = { set }
+        const searched = await search(s, member, weapon, choice, true)
         // Keep an eligible set visible even if its builds miss a requirement.
-        const option = optionOf(unmetNow, weapon, searched, set)
+        const option = optionOf(unmetNow, weapon, searched, choice)
         if (option) sets.push(option)
       }
+      sets.push(
+        ...(await rankMixedSets(s, member, weapon, unmetNow, cancelled))
+      )
+      if (cancelled()) return undefined
       return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }
     }
     // (a pick on a team: the team with it, per team and pick)
     const picked = new Map<string, Promise<TeamState | undefined>>()
     const withPick = (s: TeamState, ck: CharacterKey, pick: TeamOptPick) => {
-      const key = `${keyOf(s)}#${ck}#${pick.weaponId}#${pick.set ?? ''}`
+      const key = `${keyOf(s)}#${ck}#${pick.weaponId}#${teamOptSetKey(pick)}`
       let next = picked.get(key)
       if (!next) {
         next = (async () => {
           const member = memberOf(ck)
           const weapon = database.weapons.get(pick.weaponId)
           if (!member || !weapon) return undefined
-          const searched = await search(s, member, weapon, pick.set)
+          const searched = await search(s, member, weapon, pick)
           if (!searched?.found) return undefined
           const team = copyState(s)
           team.builds[ck] = bySlot(database, searched.found.artifactIds)

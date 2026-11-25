@@ -882,9 +882,10 @@ describe('team optimize', () => {
         const pieces = Object.values(option.artifactIds).map(
           (id) => database.arts.get(id!)!
         )
-        expect(
-          pieces.filter((a) => a.setKey === option.set).length
-        ).toBeGreaterThanOrEqual(4)
+        for (const set of option.setPair ?? [option.set])
+          expect(
+            pieces.filter((a) => a.setKey === set).length
+          ).toBeGreaterThanOrEqual(option.setPair ? 2 : 4)
         expect(option.value).toBeLessThanOrEqual(options.best * (1 + 1e-9))
       }
     }
@@ -939,6 +940,11 @@ describe('team optimize', () => {
     expect(
       sets.find((o) => o.set === 'NoblesseOblige')?.artifactIds
     ).toBeDefined()
+    const mixed = sets.filter((option) => option.setPair)
+    expect(mixed.map((option) => option.setPair)).toEqual([
+      ['BlizzardStrayer', 'NoblesseOblige'],
+    ])
+    expect(mixed[0].artifactIds).toBeDefined()
   })
 
   it('only searches the four required set slots when ranking a set with one missing slot', async () => {
@@ -1058,7 +1064,7 @@ describe('team optimize', () => {
       { weaponId: result.weapons[ayaka]! }
     ))!
     const other = ranked.sets.find(
-      (o) => setOf(result.builds[ayaka]!, o.set!) < 4
+      (o) => o.set && setOf(result.builds[ayaka]!, o.set) < 4
     )!.set!
     const one = (await session!.pick(
       { [ayaka]: { weaponId: result.weapons[ayaka]!, set: other } },
@@ -1080,6 +1086,128 @@ describe('team optimize', () => {
     expect(
       shenheArts.some((id) => Object.values(two.builds[ayaka]!).includes(id))
     ).toBe(false)
+  })
+
+  it('ranks distinct 2-piece pairs and preserves them when selected', async () => {
+    const { database, teamId, ayakaId, ids } = setup()
+    const { loadoutData } = database.teams.get(teamId)!
+    database.teams.set(teamId, { loadoutData: [loadoutData[0]] })
+    for (const id of Object.values(ids.crit))
+      database.arts.set(id, { location: '' })
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+    }
+    let session: TeamOptSession | undefined
+    const run = () =>
+      optimizeTeam({
+        database,
+        teamId,
+        gender: 'F',
+        teamOpt,
+        solve: bruteForce,
+        onResult: () => {},
+        onSession: (next) => {
+          session = next
+        },
+      })
+    const result = (await run())!
+    const ranked = result.options![ayaka]!.sets
+    expect(ranked.filter(({ set }) => set)).toHaveLength(3)
+    const mixed = ranked.filter(({ setPair }) => setPair)
+    expect(mixed.map(({ setPair }) => setPair)).toEqual(
+      expect.arrayContaining([
+        ['BlizzardStrayer', 'GladiatorsFinale'],
+        ['BlizzardStrayer', 'NoblesseOblige'],
+        ['GladiatorsFinale', 'NoblesseOblige'],
+      ])
+    )
+    expect(mixed).toHaveLength(3)
+    for (const { setPair, weaponId, value } of mixed) {
+      const picked = await session!.pick(
+        { [ayaka]: { weaponId, setPair } },
+        ayaka
+      )
+      const pieces = Object.values(picked!.builds[ayaka]!).map(
+        (id) => database.arts.get(id!)!.setKey
+      )
+      for (const key of setPair!)
+        expect(
+          pieces.filter((set) => set === key).length
+        ).toBeGreaterThanOrEqual(2)
+      expect(picked!.after.total).toBeCloseTo(value, 6)
+    }
+
+    for (const id of Object.values(ids.weak)) {
+      const { setKey: _set, ...artifact } = database.arts.get(id)!
+      database.arts.new({ ...artifact, setKey: 'HeartOfDepth' })
+    }
+    const shortlisted = (await run())!.options![ayaka]!.sets.flatMap(
+      ({ setPair }) => (setPair ? [setPair.join('+')] : [])
+    )
+    expect(new Set(shortlisted).size).toBe(3)
+    expect(shortlisted).toHaveLength(3)
+
+    const { optConfigId } = database.teamChars.get(ayakaId)!
+    database.optConfigs.set(optConfigId, {
+      artSetExclusion: { BlizzardStrayer: [2] },
+    })
+    const withoutBlizzardBonus = (await run())!.options![ayaka]!.sets
+    expect(
+      withoutBlizzardBonus.some(({ set }) => set === 'BlizzardStrayer')
+    ).toBe(true)
+    expect(
+      withoutBlizzardBonus.some(({ setPair }) =>
+        setPair?.includes('BlizzardStrayer')
+      )
+    ).toBe(false)
+
+    database.optConfigs.set(optConfigId, {
+      artSetExclusion: { twoTwo: [2, 4] },
+    })
+    const excluded = (await run())!.options![ayaka]!.sets
+    expect(excluded.some(({ setPair }) => setPair)).toBe(false)
+    expect(excluded.filter(({ set }) => set)).toHaveLength(4)
+  })
+
+  it.each([
+    true,
+    false,
+  ])('ranks a pair only when its slots fit (fit: %s)', async (fit) => {
+    const { database, teamId, ids } = setup()
+    const { loadoutData } = database.teams.get(teamId)!
+    database.teams.set(teamId, { loadoutData: [loadoutData[0]] })
+    for (const slot of allArtifactSlotKeys) {
+      if (['flower', 'plume', 'sands'].includes(slot))
+        database.arts.set(ids.crit[slot], { location: '' })
+      else database.arts.remove(ids.crit[slot])
+      if (!(fit ? ['goblet', 'circlet'] : ['flower', 'plume']).includes(slot))
+        database.arts.remove(ids.atk[slot])
+      if (fit || slot !== 'goblet') database.arts.remove(ids.weak[slot])
+    }
+    if (!fit) {
+      const artifact = database.arts.get(ids.weak.goblet)!
+      database.arts.new({
+        ...artifact,
+        setKey: 'HeartOfDepth',
+        slotKey: 'circlet',
+      })
+    }
+    const result = await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        attacks: { [ayaka]: [attack(['burst', 'cutting'], 19)] },
+      },
+      solve: bruteForce,
+      onResult: () => {},
+    })
+    const sets = result!.options![ayaka]!.sets
+    expect(sets.map(({ setPair }) => setPair)).toEqual(
+      fit ? [['BlizzardStrayer', 'NoblesseOblige']] : []
+    )
   })
 
   it('finds builds no member can improve alone, without sharing artifacts', async () => {
