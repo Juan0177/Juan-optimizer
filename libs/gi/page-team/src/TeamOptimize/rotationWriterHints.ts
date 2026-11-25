@@ -1,4 +1,5 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { getCharWeaponType } from '@genshin-optimizer/gi/stats'
 import type { RotationMember } from '@genshin-optimizer/gi/ui'
 import { holdsSkill, kitModels } from '@genshin-optimizer/gi/ui'
 import type { TFunction } from 'i18next'
@@ -27,7 +28,11 @@ const PLUNGE_MEMBERS = new Set<CharacterKey>([
   'Venti',
   'Diluc',
   'Albedo',
+  'Alhaitham',
 ])
+
+/** Bow characters whose rotations frequently include charged aimed shots (weakspot chip) */
+const AIMED_BOW_CARRIES = new Set<CharacterKey>(['Lyney', 'Ganyu', 'Tighnari'])
 
 function teamCapabilities(
   members: readonly { characterKey: CharacterKey }[],
@@ -39,8 +44,23 @@ function teamCapabilities(
     names.find((n) => n.characterKey === k)?.name ?? k
   const holdMembers = keys.filter((k) => holdsSkill(k))
   const entryMembers = keys.filter((k) => !!kitModels[k]?.onSwapIn)
-  const plungeMembers = keys.filter((k) => PLUNGE_MEMBERS.has(k))
-  return { keys, has, nameOf, holdMembers, entryMembers, plungeMembers }
+  const plungeMembers = keys.filter(
+    (k) => PLUNGE_MEMBERS.has(k) || !!kitModels[k]?.plungeHeights
+  )
+  const plungeHeightMembers = keys.filter((k) => !!kitModels[k]?.plungeHeights)
+  const bowMembers = keys.filter((k) => getCharWeaponType(k) === 'bow')
+  const aimedBowMembers = keys.filter((k) => AIMED_BOW_CARRIES.has(k))
+  return {
+    keys,
+    has,
+    nameOf,
+    holdMembers,
+    entryMembers,
+    plungeMembers,
+    plungeHeightMembers,
+    bowMembers,
+    aimedBowMembers,
+  }
 }
 
 /**
@@ -53,16 +73,29 @@ export function teamQuickTokens(
   names: readonly RotationMember[],
   t: TFunction
 ): WriterQuickToken[] {
-  const { has, nameOf, holdMembers, entryMembers, plungeMembers } =
-    teamCapabilities(members, names)
+  const {
+    has,
+    nameOf,
+    holdMembers,
+    entryMembers,
+    plungeMembers,
+    plungeHeightMembers,
+    aimedBowMembers,
+  } = teamCapabilities(members, names)
 
   const tokens: WriterQuickToken[] = [
     {
       text: 'E',
       key: 'skill',
       label: holdMembers.length
-        ? t('teamOpt.writer.token.skill', 'Elemental Skill (tap)')
-        : t('teamOpt.writer.token.skillOnly', 'Elemental Skill'),
+        ? t(
+            'teamOpt.writer.token.skill',
+            'Elemental Skill (tap) · E? casts only when ready, E?/N2 uses a fallback'
+          )
+        : t(
+            'teamOpt.writer.token.skillOnly',
+            'Elemental Skill · E? casts only when ready, E?/N2 uses a fallback'
+          ),
     },
   ]
 
@@ -87,7 +120,10 @@ export function teamQuickTokens(
     {
       text: 'Q',
       key: 'burst',
-      label: t('teamOpt.writer.token.burst', 'Elemental Burst'),
+      label: t(
+        'teamOpt.writer.token.burst',
+        'Elemental Burst · Q? casts only when ready, Q?/N4 uses a fallback'
+      ),
     },
     {
       text: 'N3',
@@ -115,7 +151,7 @@ export function teamQuickTokens(
     caNotes.push(
       t(
         'teamOpt.writer.token.caArlecchino',
-        'Arlecchino: CA[cancel] absorbs the Blood-Debt Directive without landing the hit'
+        'Arlecchino: CA[cancel] D absorbs the Blood-Debt Directive without landing the hit'
       )
     )
   if (has('Chasca'))
@@ -125,12 +161,13 @@ export function teamQuickTokens(
         'Chasca: CA[bullets=4] fires after 4 bullets (6 by default)'
       )
     )
-  if (has('Lyney'))
+  if (aimedBowMembers.length)
     caNotes.push(
-      t(
-        'teamOpt.writer.token.caLyney',
-        'Lyney: CA[weakspot] counts a weakspot hit'
-      )
+      t('teamOpt.writer.token.caWeakspot', {
+        defaultValue:
+          '{{names}}: CA[weakspot] counts an aimed weakspot hit (triggers Prototype Crescent)',
+        names: aimedBowMembers.map(nameOf).join(', '),
+      })
     )
   const caBase = t('teamOpt.writer.token.chargedBase', 'Charged Attack')
   tokens.push({
@@ -143,10 +180,13 @@ export function teamQuickTokens(
     tokens.push({
       text: 'P',
       key: 'plunge',
-      label: t(
-        'teamOpt.writer.token.plunge',
-        'Plunging Attack (HP: high plunge, LP: low plunge; HP[collision] adds the hit on the way down)'
-      ),
+      label: plungeHeightMembers.length
+        ? t('teamOpt.writer.token.plungeHeights', {
+            defaultValue:
+              'Plunging Attack ({{names}}: HP high plunge, LP low plunge, HP[collision] adds collision hit)',
+            names: plungeHeightMembers.map(nameOf).join(', '),
+          })
+        : t('teamOpt.writer.token.plungeSimple', 'Plunging Attack'),
     })
   }
 
@@ -217,12 +257,12 @@ export function teamQuickTokens(
     })
   if (has('Arlecchino'))
     tokens.push({
-      text: 'CA[cancel]',
+      text: 'CA[cancel] D',
       key: 'arlecchinoCancel',
       characterKey: 'Arlecchino',
       label: t(
         'teamOpt.writer.syntax.cancel',
-        'Arlecchino: cancel the Charged Attack before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), but the attack never lands, so it doesn’t use up the aura for Melt'
+        'Arlecchino: cancel the Charged Attack with a dash or jump before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), without using up the aura for Melt'
       ),
     })
   if (has('Chasca'))
@@ -245,15 +285,16 @@ export function teamQuickTokens(
         'Mavuika: 3 Flamestrider spins, then the finisher · 2 spins, then a dash (no finisher)'
       ),
     })
-  if (has('Lyney'))
+  if (aimedBowMembers.length)
     tokens.push({
       text: 'CA[weakspot]',
-      key: 'lyneyWeakspot',
-      characterKey: 'Lyney',
-      label: t(
-        'teamOpt.writer.syntax.weakspot',
-        'Lyney: Charged Attack weakspot hit'
-      ),
+      key: 'bowWeakspot',
+      ...(aimedBowMembers.length === 1 && { characterKey: aimedBowMembers[0] }),
+      label: t('teamOpt.writer.syntax.weakspotTeam', {
+        defaultValue:
+          '{{names}}: Charged aimed shot hitting a weak point (triggers Prototype Crescent)',
+        names: aimedBowMembers.map(nameOf).join(', '),
+      }),
     })
   if (has('Iansan'))
     tokens.push({
@@ -304,8 +345,15 @@ export function teamSyntaxRows(
   names: readonly RotationMember[],
   t: TFunction
 ): { teamRows: WriterSyntaxRow[]; generalRows: WriterSyntaxRow[] } {
-  const { has, nameOf, holdMembers, entryMembers, plungeMembers } =
-    teamCapabilities(members, names)
+  const {
+    has,
+    nameOf,
+    holdMembers,
+    entryMembers,
+    plungeMembers,
+    plungeHeightMembers,
+    bowMembers,
+  } = teamCapabilities(members, names)
   const firstName = names[0]?.name ?? 'Name'
 
   const teamRows: WriterSyntaxRow[] = []
@@ -330,14 +378,17 @@ export function teamSyntaxRows(
       ...(entryMembers.length === 1 && { characterKey: entryMembers[0] }),
     })
   }
-  if (plungeMembers.length) {
+  if (plungeHeightMembers.length) {
     teamRows.push({
-      code: 'HP · LP',
-      meaning: t(
-        'teamOpt.writer.syntax.plunge',
-        'A high or low plunge (P alone: the character’s usual one). HP[collision] adds the collision hit on the way down; HP[collision=0.5] counts it on half of them'
-      ),
-      ...(plungeMembers.length === 1 && { characterKey: plungeMembers[0] }),
+      code: 'HP · LP · HP[collision]',
+      meaning: t('teamOpt.writer.syntax.plungeTeam', {
+        defaultValue:
+          '{{names}}: high or low plunge (P alone: usual height); HP[collision] adds the collision hit on the way down (HP[collision=0.5] on half)',
+        names: plungeHeightMembers.map(nameOf).join(', '),
+      }),
+      ...(plungeHeightMembers.length === 1 && {
+        characterKey: plungeHeightMembers[0],
+      }),
     })
   }
   if (has('Beidou'))
@@ -360,11 +411,11 @@ export function teamSyntaxRows(
     })
   if (has('Arlecchino'))
     teamRows.push({
-      code: 'CA[cancel]',
+      code: 'CA[cancel] D',
       characterKey: 'Arlecchino',
       meaning: t(
         'teamOpt.writer.syntax.cancel',
-        'Arlecchino: cancel the Charged Attack before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), but the attack never lands, so it doesn’t use up the aura for Melt'
+        'Arlecchino: cancel the Charged Attack with a dash or jump before it hits. She still absorbs the Blood-Debt Directive (Bond of Life, C2’s Bloodfire), without using up the aura for Melt'
       ),
     })
   if (has('Chasca'))
@@ -385,14 +436,15 @@ export function teamSyntaxRows(
         'Mavuika: 3 Flamestrider spins, then the finisher · 2 spins, then a dash (no finisher)'
       ),
     })
-  if (has('Lyney'))
+  if (bowMembers.length)
     teamRows.push({
       code: 'CA[weakspot]',
-      characterKey: 'Lyney',
-      meaning: t(
-        'teamOpt.writer.syntax.weakspot',
-        'Lyney: Charged Attack weakspot hit'
-      ),
+      ...(bowMembers.length === 1 && { characterKey: bowMembers[0] }),
+      meaning: t('teamOpt.writer.syntax.weakspotTeam', {
+        defaultValue:
+          '{{names}}: Charged aimed shot hitting a weak point (triggers Prototype Crescent)',
+        names: bowMembers.map(nameOf).join(', '),
+      }),
     })
   if (has('Iansan'))
     teamRows.push({
@@ -489,14 +541,14 @@ export function teamSyntaxRows(
       code: 'E? · Q?',
       meaning: t(
         'teamOpt.writer.syntax.ready',
-        'Only when ready: left out, not waited for (ER calc: Q? defaults to every 2nd burst)'
+        'Cast only when ready: skipped instead of waiting on cooldown (ER calc: Q? defaults to every 2nd burst)'
       ),
     },
     {
-      code: 'Q?/N3 · Q/N3 · EQ/E',
+      code: 'Q?/N4 · E?/N2 · EQ/E',
       meaning: t(
         'teamOpt.writer.syntax.otherwise',
-        'Only when ready, otherwise the actions after "/" (no spaces inside; ER calc defaults to every 2nd burst)'
+        'Cast only when ready, otherwise play the fallback after "/" (no spaces inside; ER calc defaults to every 2nd burst)'
       ),
     },
     {

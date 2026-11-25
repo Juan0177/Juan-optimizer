@@ -114,6 +114,7 @@ import {
   DEFAULT_SWAP_FRAMES,
   firstRotations,
   frameOverrides,
+  RotationsDropdown,
   type RotationTimingSettings,
   STEADY_COUNTED,
   STEADY_RANGE,
@@ -1451,6 +1452,12 @@ export type SearchButton = (rotation: {
   text: string
   names: RotationMember[]
   setText: (text: string) => void
+  /** Live opener, timing (including rotations counted) and frame data in the modal */
+  saved?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
 }) => ReactNode
 
 function WriterHost({
@@ -2151,10 +2158,19 @@ function WriterModal({
   }, [frameDefaults, result])
   const timingEdited =
     timing.swapFrames !== undefined ||
-    timing.rotations !== undefined ||
     keys.some((k) => Object.keys(frameData[k] ?? {}).length > 0) ||
     (!!result &&
       Object.keys(frameOverrides(result.rotation, timing.edits)).length > 0)
+  const updateRotationsTiming = (next: RotationTimingSettings) => {
+    if (
+      next.rotations !== timing.rotations ||
+      next.countOpener !== timing.countOpener
+    ) {
+      setTimelinePin(undefined)
+      setWhole(undefined)
+    }
+    setTiming(next)
+  }
 
   const seconds = result ? writtenSeconds(result) : undefined
   const waited = result ? writtenWaits(result) : undefined
@@ -2166,10 +2182,12 @@ function WriterModal({
   const hadRotation = Object.values(scopeAttacks(database, teamId, !!kqm)).some(
     (a) => !!a?.length
   )
-  // (typed since the preview's play, which waits for a pause on a heavy team: used as it is now)
+  // (changed since the preview's play, which waits for a pause on a heavy team: used as it is now)
   const stale =
     deferred !== text ||
     deferredOpener !== openerText ||
+    deferredTiming !== timing ||
+    deferredFrameData !== frameData ||
     (!!sacHolders.length && sacPreview?.args !== playArgs)
   const apply = () => {
     if (!result?.sim && !stale) return
@@ -2235,11 +2253,12 @@ function WriterModal({
       {/* (phones and tablets: the window scrolls as one; its footer stays at the bottom of the
           screen, so the card must not clip it) */}
       <CardThemed sx={{ overflow: { xs: 'visible', md: 'hidden' } }}>
-        {/* title, the timing inspector's toggle, close */}
+        {/* title, rotations counted dropdown, the timing inspector's toggle, close */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 1,
             px: { xs: 2, sm: 2.5 },
             py: 1.5,
@@ -2258,6 +2277,12 @@ function WriterModal({
               )}
             />
           </Typography>
+          <RotationsDropdown
+            timing={timing}
+            hasOpener={openerShown && !!openerText.trim()}
+            onChange={updateRotationsTiming}
+            variant="outlined"
+          />
           <Button
             size="small"
             color="inherit"
@@ -2369,7 +2394,16 @@ function WriterModal({
                             {t('teamOpt.writer.revert', 'Undo')}
                           </Button>
                         )}
-                        {searchButton?.({ text, names, setText })}
+                        {searchButton?.({
+                          text,
+                          names,
+                          setText,
+                          saved: {
+                            opener: openerShown ? openerText : '',
+                            timing,
+                            frameData,
+                          },
+                        })}
                         <TemplatesButton
                           templates={templates}
                           team={memberKeys}
@@ -2541,6 +2575,13 @@ function WriterModal({
                     )
                   }
                 />
+                <OptionalSyntaxHint
+                  bar
+                  onInsert={insert}
+                  onToggleSyntax={
+                    !syntaxOpen ? () => setSyntaxOpen(true) : undefined
+                  }
+                />
                 {syntaxOpen && <SyntaxSheet members={members} names={names} />}
               </Box>
               {!!warnings.length && (
@@ -2625,23 +2666,6 @@ function WriterModal({
                         value={`${timingPing(timing)} ms`}
                         edited={timing.swapFrames !== undefined}
                         onClick={() => toggleTiming(true)}
-                      />
-                      {/* (the rotations counted are set on the page, beside the rotation: shown, not set) */}
-                      <SettingChip
-                        label={t('teamOpt.timing.counted', 'Counted')}
-                        value={
-                          firstRotations(timing) === undefined
-                            ? t('teamOpt.timing.steady', {
-                                defaultValue:
-                                  'Steady DPS (rot {{from}}–{{to}})',
-                                ...STEADY_RANGE,
-                              })
-                            : t('teamOpt.timing.firstN', {
-                                defaultValue: 'First {{count}}',
-                                count: firstRotations(timing),
-                              })
-                        }
-                        edited={firstRotations(timing) !== undefined}
                       />
                     </Box>
                   </Box>
@@ -3160,7 +3184,7 @@ function WaitsWarning({
         <InfoTooltipInline
           title={t(
             'teamOpt.writer.waitsTip',
-            'Played back to back, an action can still be on cooldown when the rotation reaches it again (a Burst used late in one rotation and early in the next): the team stands idle until it is ready. The time per rotation includes the waits, so they lower DPS. Use it later in the rotation or make the rotation longer. The timeline shows each wait hatched; All rotations shows them where they happen.'
+            'Played back to back, an action can still be on cooldown when the rotation reaches it again (a Burst used late in one rotation and early in the next): the team stands idle until it is ready. The time per rotation includes the waits, so they lower DPS. Use it later in the rotation, make the rotation longer, or write E? / Q? (or Q?/N4) to skip or replace it when not ready. The timeline shows each wait hatched; All rotations shows them where they happen.'
           )}
         />
       </Typography>
@@ -3752,6 +3776,120 @@ export function WriterQuickRow({
           {draft}
           {trailing}
         </Box>
+      )}
+    </Box>
+  )
+}
+
+/** Always-visible inline hint surfacing optional / fallback notation (`E?`, `Q?`, `Q?/N4`) */
+export function OptionalSyntaxHint({
+  onInsert,
+  onToggleSyntax,
+  bar,
+}: {
+  onInsert?: (word: string) => void
+  onToggleSyntax?: () => void
+  bar?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const code = (token: string) => {
+    const sx = (theme: Theme) => ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontSize: 11.5,
+      lineHeight: 1.4,
+      px: 0.625,
+      py: 0.125,
+      borderRadius: 0.75,
+      color: 'text.primary',
+      bgcolor: alpha(theme.palette.text.primary, 0.06),
+      boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.text.primary, 0.12)}`,
+      ...(onInsert && {
+        cursor: 'pointer',
+        ...quickSx,
+        '&:hover, &.Mui-focusVisible': {
+          bgcolor: alpha(theme.palette.primary.main, 0.12),
+          boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.5)}`,
+        },
+      }),
+    })
+    return onInsert ? (
+      <ButtonBase
+        component="button"
+        type="button"
+        onMouseDown={keepFocus}
+        onClick={() => onInsert(token)}
+        aria-label={t('teamOpt.writer.insertToken', {
+          defaultValue: 'Insert {{token}}',
+          token,
+        })}
+        sx={sx}
+      >
+        {token}
+      </ButtonBase>
+    ) : (
+      <Box component="code" sx={sx}>
+        {token}
+      </Box>
+    )
+  }
+  return (
+    <Box
+      sx={(theme) => ({
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        columnGap: 0.625,
+        rowGap: 0.5,
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: 'text.secondary',
+        ...(bar && {
+          px: { xs: 1.25, sm: 1.75 },
+          py: 0.875,
+          borderTop: `1px solid ${tokens.hairline}`,
+          bgcolor: alpha(theme.palette.common.black, 0.08),
+        }),
+      })}
+    >
+      <span>{t('teamOpt.writer.optionalHint.prefix', 'Tip:')}</span>
+      {code('E?')}
+      <span>{t('teamOpt.writer.optionalHint.slash', '/')}</span>
+      {code('Q?')}
+      <span>
+        {t(
+          'teamOpt.writer.optionalHint.ready',
+          'cast only when ready (skip instead of waiting) ·'
+        )}
+      </span>
+      {code('Q?/N4')}
+      <span>{t('teamOpt.writer.optionalHint.or', 'or')}</span>
+      {code('E?/N2')}
+      <span>
+        {t(
+          'teamOpt.writer.optionalHint.fallback',
+          'play a fallback when not ready ·'
+        )}
+      </span>
+      {code('3[N3 CA]')}
+      <span>{t('teamOpt.writer.optionalHint.repeat', 'repeats a combo')}</span>
+      {onToggleSyntax && (
+        <ButtonBase
+          type="button"
+          onClick={onToggleSyntax}
+          sx={{
+            ml: { sm: 'auto' },
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'primary.main',
+            borderRadius: 0.75,
+            px: 0.5,
+            '&:hover': { textDecoration: 'underline' },
+          }}
+        >
+          {t('teamOpt.writer.optionalHint.more', 'More syntax')}
+        </ButtonBase>
       )}
     </Box>
   )

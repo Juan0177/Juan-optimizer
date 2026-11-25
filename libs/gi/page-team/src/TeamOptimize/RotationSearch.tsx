@@ -5,12 +5,14 @@ import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   BonusStats,
+  FrameData,
   KqmResult,
   RotationCandidate,
   RotationEditKinds,
   RotationMember,
   RotationSearchProgress,
   RotationSearchResult,
+  RotationTimingSettings,
   RotationWordStep,
   RunAttackState,
   TeamOptResult,
@@ -110,6 +112,7 @@ export function RotationSearchButton({
   compact,
   disabled,
   attackStates,
+  savedOverride,
 }: {
   /** The tab it is on: KQM theorycrafting's, or Team optimize's */
   tab: RotationSearchBase['tab']
@@ -123,6 +126,12 @@ export function RotationSearchButton({
   onUse: (text: string) => void
   /** The states a run gives every attack now (Wolf's Gravestone's uptime) */
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
+  /** Live modal rotation settings when launched from the Write rotation modal */
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   /** On the rotation's line: a pill like its other settings */
   compact?: boolean
   disabled?: boolean
@@ -226,6 +235,7 @@ export function RotationSearchButton({
           base={base}
           teamOpt={teamOpt}
           attackStates={attackStates}
+          savedOverride={savedOverride}
           onClose={() => setOpen(false)}
           onUse={(chosen) => {
             onUse(chosen)
@@ -305,6 +315,7 @@ function RotationSearchDialog({
   base,
   teamOpt,
   attackStates,
+  savedOverride,
   onClose,
   onUse,
 }: {
@@ -314,6 +325,11 @@ function RotationSearchDialog({
   base: RotationSearchBase
   teamOpt?: TeamOpt
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   onClose: () => void
   onUse: (text: string) => void
 }) {
@@ -322,7 +338,8 @@ function RotationSearchDialog({
   const { gender } = useDBMeta()
   const [maxWorkers] = useNumWorkers()
   const team = base.tab === 'team'
-  const saved = useRotationSettings(team ? teamId : kqmRotationId(teamId))
+  const stored = useRotationSettings(team ? teamId : kqmRotationId(teamId))
+  const saved = savedOverride ?? stored
   // (what the search plays with, and how the tab finds builds of its own for a rotation)
   const source = useMemo<RotationSearchSource>(() => {
     const settings = {

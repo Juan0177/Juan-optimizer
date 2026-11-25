@@ -578,7 +578,7 @@ export default function TeamBuildWorkspace({
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchBaseStale = mode === 'kqm' ? kqmBaseStale : teamBaseStale
   const searchButton = useCallback<SearchButton>(
-    ({ text, names, setText }) => (
+    ({ text, names, setText, saved }) => (
       <>
         <RotationCompareButton
           tab={mode === 'kqm' ? 'kqm' : 'team'}
@@ -591,6 +591,7 @@ export default function TeamBuildWorkspace({
           baseStale={searchBaseStale}
           attackStates={attackStatesNow}
           rankingBonusStats={fightBuffsNow}
+          savedOverride={saved}
           onApplied={setText}
         />
         <RotationSearchButton
@@ -601,6 +602,7 @@ export default function TeamBuildWorkspace({
           base={searchBase}
           teamOpt={teamOpt}
           attackStates={attackStatesNow}
+          savedOverride={saved}
           onUse={setText}
         />
       </>

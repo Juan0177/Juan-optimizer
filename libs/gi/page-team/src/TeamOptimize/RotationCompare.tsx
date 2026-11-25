@@ -8,8 +8,10 @@ import type {
   BurstCadence,
   BurstMemberConfig,
   CustomScenarioInput,
+  FrameData,
   RotationMember,
   RotationScenario,
+  RotationTimingSettings,
   RotationWordStep,
   RunAttackState,
 } from '@genshin-optimizer/gi/ui'
@@ -152,6 +154,7 @@ export function RotationCompareButton({
   baseStale,
   attackStates,
   rankingBonusStats,
+  savedOverride,
   onApplied,
   compact,
   disabled,
@@ -170,6 +173,12 @@ export function RotationCompareButton({
   rankingBonusStats?: RefObject<
     Partial<Record<CharacterKey, BonusStats>> | undefined
   >
+  /** Live modal rotation settings when launched from the Write rotation modal */
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   /** Called with the applied rotation text (e.g. to sync an open writer dialog) */
   onApplied?: (text: string) => void
   compact?: boolean
@@ -282,6 +291,7 @@ export function RotationCompareButton({
           baseStale={baseStale}
           attackStates={attackStates}
           rankingBonusStats={rankingBonusStats}
+          savedOverride={savedOverride}
           onClose={() => setOpen(false)}
           onApplied={(appliedText, label) => {
             onApplied?.(appliedText)
@@ -318,6 +328,7 @@ function RotationCompareDialog({
   baseStale,
   attackStates,
   rankingBonusStats,
+  savedOverride,
   onClose,
   onApplied,
 }: {
@@ -333,6 +344,11 @@ function RotationCompareDialog({
   rankingBonusStats?: RefObject<
     Partial<Record<CharacterKey, BonusStats>> | undefined
   >
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   onClose: () => void
   onApplied: (text: string, label: string) => void
 }) {
@@ -341,7 +357,8 @@ function RotationCompareDialog({
   const { gender } = useDBMeta()
   const [maxWorkers] = useNumWorkers()
   const isKqm = tab === 'kqm'
-  const saved = useRotationSettings(isKqm ? kqmRotationId(teamId) : teamId)
+  const stored = useRotationSettings(isKqm ? kqmRotationId(teamId) : teamId)
+  const saved = savedOverride ?? stored
 
   const currentBurstEvery = useMemo(
     () => (isKqm ? kqmBurstEvery(teamOpt.kqm) : teamBurstEvery(teamOpt)),
