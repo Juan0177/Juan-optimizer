@@ -45,6 +45,8 @@ export type VersionsCardTeam = {
   dps: string
   /** the rotation's length ("20.1 s") */
   seconds?: string
+  /** juanlab: its damage per rotation, formatted, beside the DPS (when that is per second) */
+  dpr?: string
   /** the written rotation, its members' turns apart */
   rotation: string[]
 }
@@ -59,6 +61,8 @@ export type VersionsCardData = {
   beta?: string
   labels: {
     dps: string
+    /** juanlab: the damage per rotation's unit ("DPR") */
+    dpr?: string
     rotation: string
     original: string
     /** the member's cells' labels: share of the damage, field time, Energy Recharge needed */
@@ -94,7 +98,8 @@ const detailsH = (data?: Pick<VersionsCardData, 'teams'>) =>
     ? KQM_CARD_DETAILS_H
     : 0
 /** juanlab: a card's height, its detailed block included */
-const cardH = (data?: Pick<VersionsCardData, 'teams'>) => CARD_H + detailsH(data)
+const cardH = (data?: Pick<VersionsCardData, 'teams'>) =>
+  CARD_H + detailsH(data)
 /** juanlab: the notes' height, each line after the first one more */
 const notesH = (data?: Pick<VersionsCardData, 'notes'>) =>
   NOTES + ((data?.notes.split('\n').length ?? 1) - 1) * KQM_CARD_NOTE_LINE
@@ -332,6 +337,28 @@ export async function renderVersionsCard(
         color: MUTED,
         align: 'right',
       })
+    // juanlab: its damage per rotation, on the right (before the rank)
+    if (team.dpr && data.labels.dpr) {
+      const right =
+        x0 +
+        CARD_W -
+        16 -
+        (data.ranked ? widthAt(`#${t + 1}`, 18, 700) + 18 : 0)
+      const labelW = ink(ctx, data.labels.dpr, right, baseline, {
+        size: 13,
+        weight: 700,
+        color: MUTED,
+        tracking: 0.6,
+        align: 'right',
+      })
+      ink(ctx, team.dpr, right - labelW - 6, baseline, {
+        size: 24,
+        weight: 800,
+        color: TEXT,
+        tracking: -0.3,
+        align: 'right',
+      })
+    }
     const fx = x0 + 16
     const figW = ink(ctx, team.dps, fx, baseline, {
       size: 38,

@@ -1655,6 +1655,8 @@ function VersionsShare({
           }
         }),
         dps: formatRateFull(summary.total, time),
+        // juanlab: the damage per rotation too, when the figure is per second
+        dpr: time ? formatRateFull(summary.total, undefined) : undefined,
         seconds: time !== undefined ? `${time.toFixed(1)} s` : undefined,
         rotation: rotationTurns(
           writtenRotationOf(database, kqmRotationId(row.id)).text
@@ -1696,6 +1698,7 @@ function VersionsShare({
       beta: betaOf(keys).length ? BETA_LABEL : undefined,
       labels: {
         dps: shown.some((r) => r.summary?.rotationTime) ? 'DPS' : 'DPR',
+        dpr: 'DPR',
         rotation: t('page_team:teamOpt.kqm.share.rotation', 'Rotation'),
         original: t('page_team:teamOpt.versions.original', 'Original'),
         share: t('page_team:teamOpt.versions.cellShare', 'Share'),
@@ -1753,7 +1756,10 @@ function VersionsShare({
         members: team.members.map((m, i) => {
           const ms = own[row.members[i]]
           return ms
-            ? { ...m, details: kqmCardDetails(t as unknown as TFunction, ms, locale) }
+            ? {
+                ...m,
+                details: kqmCardDetails(t as unknown as TFunction, ms, locale),
+              }
             : m
         }),
       }
