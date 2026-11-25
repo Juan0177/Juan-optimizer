@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.42.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.42.2) (2026-11-25)
+
+### Improved
+
+- Team optimize runs faster when comparing weapons for a written rotation, especially when Sacrificial weapons are available.
+
 ## [v1.42.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.42.0) (2026-11-25)
 
 ### New

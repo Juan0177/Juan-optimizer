@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.42.2",
+    "date": "2026-11-25",
+    "improved": [
+      "Team optimize runs faster when comparing weapons for a written rotation, especially when Sacrificial weapons are available."
+    ]
+  },
+  {
     "version": "1.42.1",
     "date": "2026-11-25"
   },
