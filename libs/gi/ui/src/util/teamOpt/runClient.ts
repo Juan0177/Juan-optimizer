@@ -5,6 +5,7 @@ import type { TeamOptRunJob, TeamOptRunUpdates } from './runTeam'
 import type {
   TeamOptMemberOptions,
   TeamOptResult,
+  TeamOptSetComparison,
   TeamOptShortfall,
 } from './solve'
 import {
@@ -28,10 +29,11 @@ export type TeamOptWorkerReply =
   | { type: 'progress'; status: TeamOptStatus }
   | { type: 'result'; result: TeamOptResult }
   | {
-      type: 'options'
+      type: 'options' | 'setOptions'
       characterKey: CharacterKey
       options: TeamOptMemberOptions
     }
+  | { type: 'setComparisons'; comparisons: TeamOptSetComparison[] }
   | { type: 'done' }
   | { type: 'unavailable'; message: string }
   | {
@@ -95,6 +97,8 @@ export function startTeamOptWorker(
   {
     onResult,
     onOptions,
+    onSetOptions,
+    onSetComparisons,
     onProgress,
   }: TeamOptRunUpdates & { onProgress: (status: TeamOptStatus) => void }
 ) {
@@ -159,6 +163,12 @@ export function startTeamOptWorker(
           break
         case 'options':
           onOptions(data.characterKey, data.options)
+          break
+        case 'setOptions':
+          onSetOptions?.(data.characterKey, data.options)
+          break
+        case 'setComparisons':
+          onSetComparisons?.(data.comparisons)
           break
         case 'done':
           finish(undefined, true)

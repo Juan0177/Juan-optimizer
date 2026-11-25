@@ -32,7 +32,13 @@ class StubWorker {
 function start() {
   vi.stubGlobal('Worker', StubWorker)
   const database = new ArtCharDatabase(1, new SandboxStorage())
-  const updates = { onResult: vi.fn(), onOptions: vi.fn(), onProgress: vi.fn() }
+  const updates = {
+    onResult: vi.fn(),
+    onOptions: vi.fn(),
+    onSetOptions: vi.fn(),
+    onSetComparisons: vi.fn(),
+    onProgress: vi.fn(),
+  }
   const run = startTeamOptWorker(
     database,
     {
@@ -72,11 +78,18 @@ describe('Team Optimize worker', () => {
     worker.reply({ type: 'ready' })
     worker.reply({ type: 'progress', status })
     worker.reply({ type: 'result', result })
+    worker.reply({ type: 'setOptions', characterKey: 'Sucrose', options })
+    const comparisons = [
+      { sets: { Sucrose: 'Instructor' }, builds: {}, after: evaluation },
+    ]
+    worker.reply({ type: 'setComparisons', comparisons })
     worker.reply({ type: 'options', characterKey: 'Sucrose', options })
     worker.reply({ type: 'done' })
     await run.done
     expect(updates.onProgress).toHaveBeenCalledWith(status)
     expect(updates.onResult).toHaveBeenCalledWith(result)
+    expect(updates.onSetOptions).toHaveBeenCalledWith('Sucrose', options)
+    expect(updates.onSetComparisons).toHaveBeenCalledWith(comparisons)
     expect(updates.onOptions).toHaveBeenCalledWith('Sucrose', options)
     // Pooled warm instead of terminated immediately
     expect(worker.terminate).not.toHaveBeenCalled()

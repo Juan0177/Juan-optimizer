@@ -40,6 +40,10 @@ self.onmessage = async ({ data }: MessageEvent<TeamOptWorkerMessage>) => {
       },
       onOptions: (characterKey, options) =>
         post({ type: 'options', characterKey, options }),
+      onSetOptions: (characterKey, options) =>
+        post({ type: 'setOptions', characterKey, options }),
+      onSetComparisons: (comparisons) =>
+        post({ type: 'setComparisons', comparisons }),
     })
     post({ type: 'done' })
   } catch (error) {

@@ -10,6 +10,7 @@ import type {
   TeamOptMemberOptions,
   TeamOptResult,
   TeamOptSession,
+  TeamOptSetComparison,
   TeamOptShortfall,
   TeamOptStatus,
   TeamOptStep,
@@ -62,6 +63,7 @@ export type TeamOptRunState =
       savedAt?: number
       /** Its members' other builds are being searched (`TeamOptResult.options`) */
       optionsRunning?: true
+      weaponsRanked?: number
       /** Ranking-only buffs for the inspector of a freshly computed result. */
       rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
     }
@@ -251,7 +253,7 @@ export function useTeamOptRun(teamId: string) {
       let shown: (TeamOptRunState & { type: 'done' }) | undefined
       // its other builds done or stopped: the result as it is, saved (not over a newer run's)
       const settle = (found: TeamOptRunState & { type: 'done' }) => {
-        const { optionsRunning: _, ...done } = found
+        const { optionsRunning: _, weaponsRanked: _ranked, ...done } = found
         if (mine()) startTransition(() => setState(done, true))
         else {
           const last = lastRuns[key]
@@ -288,6 +290,21 @@ export function useTeamOptRun(teamId: string) {
           maxWorkers,
           lowImpact: window.matchMedia?.('(pointer: coarse)').matches ?? false,
         }
+        const addOptions = (
+          ck: CharacterKey,
+          options: TeamOptMemberOptions,
+          weapons: boolean
+        ) => {
+          if (!shown) return
+          show({
+            ...shown,
+            ...(weapons && { weaponsRanked: (shown.weaponsRanked ?? 0) + 1 }),
+            result: {
+              ...shown.result,
+              options: { ...shown.result.options, [ck]: options },
+            },
+          })
+        }
         const updates = {
           onResult: (result: TeamOptResult) =>
             show({
@@ -301,15 +318,13 @@ export function useTeamOptRun(teamId: string) {
               ...(enemy ? { enemy } : {}),
               ...(result.optimized.length ? { optionsRunning: true } : {}),
             }),
-          onOptions: (ck: CharacterKey, options: TeamOptMemberOptions) => {
-            if (!shown) return
-            show({
-              ...shown,
-              result: {
-                ...shown.result,
-                options: { ...shown.result.options, [ck]: options },
-              },
-            })
+          onOptions: (ck: CharacterKey, options: TeamOptMemberOptions) =>
+            addOptions(ck, options, true),
+          onSetOptions: (ck: CharacterKey, options: TeamOptMemberOptions) =>
+            addOptions(ck, options, false),
+          onSetComparisons: (setComparisons: TeamOptSetComparison[]) => {
+            if (shown)
+              show({ ...shown, result: { ...shown.result, setComparisons } })
           },
         }
         try {
@@ -386,7 +401,11 @@ export function useTeamOptRun(teamId: string) {
           teamOpt: run.result.attacks
             ? { ...run.teamOpt, attacks: run.result.attacks }
             : run.teamOpt,
-          solve: teamOptSolver(initStatus(), maxWorkers, () => {}),
+          solve: teamOptSolver(initStatus(), maxWorkers, () => {}, {
+            responsive: true,
+            lowImpact:
+              window.matchMedia?.('(pointer: coarse)').matches ?? false,
+          }),
           maxRounds: 0,
           from: run.result,
           attackStates: run.result.attackStates,

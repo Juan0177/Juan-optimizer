@@ -23,6 +23,7 @@ import type {
   TeamOptMember,
   TeamOptPicks,
   TeamOptPickView,
+  TeamOptSetComparison,
   TeamOptShortfall,
 } from '@genshin-optimizer/gi/ui'
 import {
@@ -487,6 +488,7 @@ export default function TeamBuildWorkspace({
   // equipment picked by hand in a member's inspector (the best team build's), and the team with it
   const [picks, setPicks] = useState<TeamOptPicks>({})
   const [pickView, setPickView] = useState<TeamOptPickView>()
+  const [setComparison, setSetComparison] = useState<TeamOptSetComparison>()
   const [inspected, setInspected] = useState<CharacterKey>()
   const sessionOfResult = useCallback(
     () => (result ? sessionOf(result) : Promise.resolve(undefined)),
@@ -497,6 +499,7 @@ export default function TeamBuildWorkspace({
   useEffect(() => {
     setPicks({})
     setPickView(undefined)
+    setSetComparison(undefined)
     // (the biggest damage dealer's, as the KQM tab opens on its first member)
     setInspected(firstOptimized)
   }, [result?.savedAt])
@@ -524,10 +527,13 @@ export default function TeamBuildWorkspace({
         : resultSettings,
     [resultAttacks, resultRotationTime, resultSettings]
   )
+  const hasPicks = !!setComparison || Object.keys(picks).length > 0
   const shown =
-    pickView && picked && Object.keys(picks).length
-      ? { ...picked, ...pickView }
-      : picked
+    picked && setComparison
+      ? { ...picked, builds: setComparison.builds, after: setComparison.after }
+      : pickView && picked && Object.keys(picks).length
+        ? { ...picked, ...pickView }
+        : picked
   // (each tab's rotation search, on the rotation's line and in its writer: with the builds shown;
   // a rotation it finds opens in the writer, to be played there and used)
   const kqmRunTeamOpt = kqmRotation?.runTeamOpt
@@ -1001,7 +1007,7 @@ export default function TeamBuildWorkspace({
                 rotationTime={teamShownTime}
                 source={
                   teamShown
-                    ? Object.keys(picks).length
+                    ? hasPicks
                       ? 'picked'
                       : 'optimized'
                     : result && teamBaseStale
@@ -1452,11 +1458,16 @@ export default function TeamBuildWorkspace({
             // (trying other equipment)
             selected={inspected}
             onSelect={setInspected}
-            picked={!!Object.keys(picks).length}
-            onResetPicks={() => setPicks({})}
+            picked={hasPicks}
+            onResetPicks={() => {
+              setPicks({})
+              setPickView(undefined)
+              setSetComparison(undefined)
+            }}
             inspector={
               inspected &&
-              picked && (
+              picked &&
+              !setComparison && (
                 <TeamOptInspector
                   key={inspected}
                   characterKey={inspected}
@@ -1474,7 +1485,7 @@ export default function TeamBuildWorkspace({
             ranking={
               result.optionsRunning
                 ? {
-                    done: Object.keys(result.result.options ?? {}).length,
+                    done: result.weaponsRanked ?? 0,
                     total: result.result.optimized.length,
                   }
                 : undefined
@@ -1494,23 +1505,33 @@ export default function TeamBuildWorkspace({
                       'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
                   }}
                 >
-                  {result.optionsRunning && (
+                  {result.optionsRunning && !result.result.options && (
                     <TopBuildsPending
                       done={Object.keys(result.result.options ?? {}).length}
                       total={result.result.optimized.length}
                     />
                   )}
-                  {!result.optionsRunning && result.result.options && (
+                  {(result.result.options || !result.optionsRunning) && (
                     <TeamOptTopBuilds
+                      key={result.savedAt ?? result.seconds}
                       members={members.map((m) => m.characterKey)}
                       result={result.result}
                       picks={picks}
+                      optionsRunning={result.optionsRunning}
+                      comparison={setComparison}
+                      session={sessionOfResult}
                       rotationTime={rotationTime}
                       onPick={(characterKey, next) => {
+                        setSetComparison(undefined)
                         setPicks(
                           characterKey && next ? { [characterKey]: next } : {}
                         )
                         if (characterKey) setInspected(characterKey)
+                      }}
+                      onCompare={(next) => {
+                        setPicks({})
+                        setPickView(undefined)
+                        setSetComparison(next)
                       }}
                     />
                   )}

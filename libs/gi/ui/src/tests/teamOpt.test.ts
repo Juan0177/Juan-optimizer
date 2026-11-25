@@ -947,6 +947,74 @@ describe('team optimize', () => {
     expect(mixed[0].artifactIds).toBeDefined()
   })
 
+  it('ranks a paired swap even when neither set is free for a single-member ranking', async () => {
+    const { database, teamId, ids } = setup()
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      attacks: {
+        [ayaka]: [attack(['burst', 'cutting'], 19)],
+        [shenhe]: [attack(['skill', 'press'], 2)],
+      },
+    }
+    const events: string[] = []
+    let session: TeamOptSession | undefined
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt,
+      solve: bruteForce,
+      from: {
+        builds: { [ayaka]: ids.crit, [shenhe]: ids.atk },
+        weapons: Object.fromEntries(
+          teamOptMembers(database, teamId).map((m) => [
+            m.characterKey,
+            m.weaponId,
+          ])
+        ),
+        optimized: [ayaka, shenhe],
+      },
+      maxRounds: 0,
+      onResult: () => events.push('result'),
+      onSetOptions: (ck) => events.push(`sets:${ck}`),
+      onSetComparisons: () => events.push('comparisons'),
+      onOptions: (ck) => events.push(`weapons:${ck}`),
+      onSession: (next) => {
+        session = next
+      },
+    }))!
+    expect(events).toEqual([
+      'result',
+      `sets:${ayaka}`,
+      `sets:${shenhe}`,
+      'comparisons',
+      `weapons:${ayaka}`,
+      `weapons:${shenhe}`,
+    ])
+    expect(
+      result.options?.[ayaka]?.sets.some((o) => o.set === 'NoblesseOblige')
+    ).toBe(false)
+    const sets = { [ayaka]: 'NoblesseOblige', [shenhe]: 'BlizzardStrayer' }
+    const found = result.setComparisons?.find(
+      ({ sets: chosen }) =>
+        chosen[ayaka] === sets[ayaka] && chosen[shenhe] === sets[shenhe]
+    )
+    expect(found).toBeDefined()
+    expect(await session!.compareSets(sets)).toEqual(found)
+    const artifactIds = Object.values(found!.builds).flatMap((build) =>
+      Object.values(build)
+    )
+    expect(new Set(artifactIds).size).toBe(10)
+    expect(found!.after.total).toBeGreaterThan(0)
+    expect(
+      await session!.compareSets({
+        [ayaka]: 'NoblesseOblige',
+        [shenhe]: 'NoblesseOblige',
+      })
+    ).toBeUndefined()
+    expect(await session!.compareSets(sets, () => true)).toBeUndefined()
+  })
+
   it('only searches the four required set slots when ranking a set with one missing slot', async () => {
     const { database, teamId, ids } = setup()
     for (const id of Object.values(ids.weak))

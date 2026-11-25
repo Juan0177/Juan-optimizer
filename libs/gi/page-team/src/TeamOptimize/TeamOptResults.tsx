@@ -2498,8 +2498,8 @@ function RankingStatus({
   return ranking ? (
     <Tooltip
       title={t(
-        'teamOpt.result.rankingTip',
-        'This team and its damage are final. Each member’s other weapons and sets are still being ranked: Top builds and the equipment rankings fill in when they are done.'
+        'teamOpt.result.rankingProgressTip',
+        'Top builds shows set comparisons first, then adds weapon results as they finish.'
       )}
     >
       {status}
