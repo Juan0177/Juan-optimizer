@@ -4,6 +4,16 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.41.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.41.0) (2026-11-25)
+
+### New
+
+- Burst scenarios (Team optimize and KQM): compare using a character's Burst every rotation, every 2nd or 3rd rotation, or skipping it (with an optional replacement action such as N4), recalculating ER requirements and builds for each scenario and ranking them by team DPS.
+
+### Improved
+
+- Optimize rotation now shows your current rotation's length alongside its ER needs, so you can compare it directly with the suggested rotations.
+
 ## [v1.40.6](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.40.6) (2026-11-25)
 
 ### Fixed

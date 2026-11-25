@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.41.0",
+    "date": "2026-11-25",
+    "new": [
+      "Burst scenarios (Team optimize and KQM): compare using a character's Burst every rotation, every 2nd or 3rd rotation, or skipping it (with an optional replacement action such as N4), recalculating ER requirements and builds for each scenario and ranking them by team DPS."
+    ],
+    "improved": [
+      "Optimize rotation now shows your current rotation's length alongside its ER needs, so you can compare it directly with the suggested rotations."
+    ]
+  },
+  {
     "version": "1.40.7",
     "date": "2026-11-25"
   },
