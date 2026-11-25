@@ -25,6 +25,7 @@ export const initStatus = (): TeamOptStatus => ({
   failed: 0,
   skipped: 0,
   total: Number.NaN,
+  upper: undefined,
   testedPerSecond: 0,
   skippedPerSecond: 0,
 })
@@ -38,7 +39,8 @@ export const initStatus = (): TeamOptStatus => ({
 export function teamOptSolver(
   status: TeamOptStatus,
   maxWorkers: number,
-  onSolver: (stop: (() => void) | undefined) => void
+  onSolver: (stop: (() => void) | undefined) => void,
+  { responsive = false, lowImpact = false } = {}
 ): TeamOptSolver {
   const running = new Set<GOSolver>()
   const stopAll = () => {
@@ -67,16 +69,24 @@ export function teamOptSolver(
     // the GPU's sweep prunes with; the Optimize tab's GPU setting is for single searches. A
     // team's formula is large: the CPU goes through ~2M builds a second, so the GPU takes even
     // small searches)
+    const threads = Math.min(
+      maxWorkers,
+      lowImpact ? 1 : responsive ? 4 : maxWorkers
+    )
     const solver = new GOSolver(
       problem,
       counters,
       // (one running beside another shares the cores, should the CPU take it)
       background
-        ? Math.min(maxWorkers, 2)
+        ? Math.min(threads, 2)
         : shown
-          ? maxWorkers
-          : Math.max(1, Math.floor(maxWorkers / 2)),
-      { gpu: true, gpuMinTotal: TEAM_GPU_MIN_TOTAL, background }
+          ? threads
+          : Math.max(1, Math.floor(threads / 2)),
+      {
+        gpu: true,
+        gpuMinTotal: TEAM_GPU_MIN_TOTAL,
+        background: responsive || background,
+      }
     )
     running.add(solver)
     onSolver(stopAll)

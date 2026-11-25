@@ -2,7 +2,7 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import { nextPaint, prewarmSolver } from '@genshin-optimizer/gi/solver'
+import { nextPaint } from '@genshin-optimizer/gi/solver'
 import type {
   BonusStats,
   RunAttackState,
@@ -18,10 +18,12 @@ import {
   initStatus,
   optimizeTeam,
   runEnemyOf,
-  startTeamOptRankings,
+  runTeamOpt,
+  startTeamOptWorker,
   TeamOptCancelled,
   TeamOptRequirementsUnmet,
   TeamOptSetRulesUnmet,
+  TeamOptWorkerUnavailable,
   teamOptMembers,
   teamOptSolver,
   useNumWorkers,
@@ -35,7 +37,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { teamRunAttacks } from './RotationWriter'
+import { teamRunRotation } from './RotationWriter'
 import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
 import { inventoryRequirementsKey } from './useTeamOpt'
 
@@ -59,6 +61,8 @@ export type TeamOptRunState =
       savedAt?: number
       /** Its members' other builds are being searched (`TeamOptResult.options`) */
       optionsRunning?: true
+      /** Ranking-only buffs for the inspector of a freshly computed result. */
+      rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
     }
   | {
       type: 'error'
@@ -218,8 +222,6 @@ export function useTeamOptRun(teamId: string) {
   /** The latest run: an earlier one (its other builds stopped) leaves the state to it */
   const latestRun = useRef(0)
   useEffect(() => () => cancelRef.current(), [])
-  // load a solver worker while the user sets things up
-  useEffect(() => prewarmSolver(), [])
 
   const run = useCallback(
     async (
@@ -235,14 +237,15 @@ export function useTeamOptRun(teamId: string) {
       let cancelled = false
       const roster = teamRoster(database, teamId)
       let stopSolver: (() => void) | undefined
-      let stopRanking: (() => void) | undefined
-      cancelRef.current = () => {
+      let stopWorker: (() => void) | undefined
+      const stop = () => {
         cancelled = true
-        stopRanking?.()
+        stopWorker?.()
         stopSolver?.()
       }
+      cancelRef.current = stop
       const stopFollowing = database.teams.follow(teamId, () => {
-        if (teamRoster(database, teamId) !== roster) cancelRef.current()
+        if (teamRoster(database, teamId) !== roster) stop()
       })
       let shown: (TeamOptRunState & { type: 'done' }) | undefined
       // its other builds done or stopped: the result as it is, saved (not over a newer run's)
@@ -256,126 +259,82 @@ export function useTeamOptRun(teamId: string) {
         }
       }
       const startTime = performance.now()
-      let lastPaint = startTime
-      status.current.step = undefined
+      Object.assign(status.current, initStatus(), { step: undefined })
       setState({ type: 'running', startTime })
       try {
         await nextPaint()
-        const teamOpt = database.teams.get(teamId)?.teamOpt ?? initTeamOpt()
-        // (the rotation played again with the sets and weapons the run may give each member, so
-        // their effects count as the rotation triggers them, not by the members' switches)
-        const attacks = teamRunAttacks(database, gender, i18n, teamId, teamOpt)
-        const requirementsKey = inventoryRequirementsKey(database, teamId)
-        // (the enemy its damage is for, as it is now)
+        if (cancelled) throw new TeamOptCancelled()
         const team = database.teams.get(teamId)
+        const teamOpt = team?.teamOpt ?? initTeamOpt()
+        const requirementsKey = inventoryRequirementsKey(database, teamId)
         const enemy = team && runEnemyOf(team)
-        const solve = teamOptSolver(status.current, maxWorkers, (stop) => {
-          stopSolver = stop
-        })
-        const seconds = () => (performance.now() - startTime) / 1000
-        // the result as soon as it is found, its members' other builds added as they come
-        let session: TeamOptSession | undefined
         const show = (next: TeamOptRunState & { type: 'done' }) => {
           if (!mine() || cancelled || teamRoster(database, teamId) !== roster)
             return
           const first = !shown
           const found = { ...next, savedAt: shown?.savedAt ?? Date.now() }
           shown = found
-          if (first && session)
-            keepSession(found.savedAt, Promise.resolve(session))
           // Save the team immediately, then save the rankings together when the worker stops.
           startTransition(() => setState(found, first))
         }
-        const runSettings = {
+        const job = {
           teamId,
           gender,
-          teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
+          teamOpt,
+          rotation: teamRunRotation(database, gender, i18n, teamId),
           attackStates,
           rankingBonusStats,
+          maxWorkers,
+          lowImpact: window.matchMedia?.('(pointer: coarse)').matches ?? false,
         }
-        const result = await optimizeTeam({
-          ...runSettings,
-          database,
-          onSession: (s) => {
-            session = s
-          },
-          solve,
-          isCancelled: () => cancelled,
-          onStep: async (step) => {
-            status.current.step = step
-            // let the page show the step, at most every 100 ms: a step the memo answers takes no
-            // time, and a paint after each (up to 50 ms) added up to seconds per run
-            if (performance.now() - lastPaint < 100) return
-            await nextPaint()
-            lastPaint = performance.now()
-          },
-        })
-        if (!mine()) return
-        if (cancelled || teamRoster(database, teamId) !== roster)
-          throw new TeamOptCancelled()
-        if (!result) {
-          setState({
-            type: 'error',
-            message: 'The team could not be computed.',
-          })
-          return
-        }
-        show({
-          type: 'done',
-          roster,
-          requirementsKey,
-          result: attacks ? { ...result, attacks } : result,
-          seconds: seconds(),
-          teamOpt,
-          ...(enemy ? { enemy } : {}),
-          ...(result.optimized.length ? { optionsRunning: true } : {}),
-        })
-        if (!shown || !result.optimized.length) return
-        const onOptions = (ck: CharacterKey, options: TeamOptMemberOptions) => {
-          if (!shown) return
-          show({
-            ...shown,
-            result: {
-              ...shown.result,
-              options: { ...shown.result.options, [ck]: options },
-            },
-          })
-        }
-        await nextPaint()
-        if (cancelled) return settle(shown)
-        try {
-          const ranking = startTeamOptRankings(
-            database,
-            {
-              ...runSettings,
+        const updates = {
+          onResult: (result: TeamOptResult) =>
+            show({
+              type: 'done',
+              roster,
+              requirementsKey,
+              result,
+              seconds: (performance.now() - startTime) / 1000,
+              teamOpt,
+              rankingBonusStats,
+              ...(enemy ? { enemy } : {}),
+              ...(result.optimized.length ? { optionsRunning: true } : {}),
+            }),
+          onOptions: (ck: CharacterKey, options: TeamOptMemberOptions) => {
+            if (!shown) return
+            show({
+              ...shown,
               result: {
-                builds: result.builds,
-                weapons: result.weapons,
-                optimized: result.optimized,
+                ...shown.result,
+                options: { ...shown.result.options, [ck]: options },
               },
-              maxWorkers,
-            },
-            onOptions
-          )
-          stopRanking = ranking.stop
-          await ranking.done
-        } catch {
-          // If a worker cannot run, finish any remaining rankings with the run's own session.
-          for (const ck of result.optimized) {
-            if (cancelled || !session) break
-            if (shown.result.options?.[ck]) continue
-            const weaponId = result.weapons[ck]
-            if (!weaponId) continue
-            const options = await session.rankings(
-              { builds: result.builds, weaponIds: result.weapons },
-              ck,
-              { weaponId },
-              () => cancelled
-            )
-            if (options) onOptions(ck, options)
-          }
+            })
+          },
         }
-        settle(shown)
+        try {
+          const worker = startTeamOptWorker(database, job, {
+            ...updates,
+            onProgress: (next) => {
+              if (!cancelled && mine()) Object.assign(status.current, next)
+            },
+          })
+          stopWorker = worker.stop
+          await worker.done
+        } catch (error) {
+          if (!(error instanceof TeamOptWorkerUnavailable) || cancelled)
+            throw error
+          await runTeamOpt(
+            database,
+            job,
+            status.current,
+            updates,
+            () => cancelled,
+            (next) => {
+              stopSolver = next
+            }
+          )
+        }
+        if (shown?.optionsRunning) settle(shown)
       } catch (e) {
         if (shown) return settle(shown)
         if (!mine()) return
@@ -424,6 +383,7 @@ export function useTeamOptRun(teamId: string) {
           maxRounds: 0,
           from: run.result,
           attackStates: run.result.attackStates,
+          rankingBonusStats: run.rankingBonusStats,
           onSession: (s) => {
             made = s
           },

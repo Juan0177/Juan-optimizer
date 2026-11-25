@@ -32,6 +32,7 @@ import type {
   TeamData,
   TeamDataOverrides,
   TeamOptMember,
+  TeamOptRunRotation,
 } from '@genshin-optimizer/gi/ui'
 import {
   actionFrameDefaults,
@@ -67,7 +68,6 @@ import {
   simulateRotationSamples,
   simulateWritten,
   teamOptMembers,
-  teamOptRunGear,
   templatesForTeam,
   type WrittenRotation,
   writtenKqmReplay,
@@ -856,20 +856,24 @@ function teamReplayWith(
   }
 }
 
-/**
- * The attacks a Team optimize run plays: the written rotation with the sets and weapons the run
- * may give each member timed in it (`teamOptRunGear`); undefined: the saved attacks.
- */
-export const teamRunAttacks = (
+/** The writer settings a Team Optimize worker needs to replay the rotation. */
+export function teamRunRotation(
   database: Database,
   gender: GenderKey,
   i18n: i18n,
-  teamId: string,
-  teamOpt: TeamOpt
-) =>
-  teamReplayWith(database, gender, i18n, teamId, teamOpt, (own) =>
-    teamOptRunGear(database, teamId, teamOpt, own)
-  )
+  teamId: string
+): TeamOptRunRotation | undefined {
+  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
+  const text = readStored(database, storageKey(teamId)) ?? ''
+  if (!text.trim()) return undefined
+  return {
+    text,
+    opener: readStored(database, openerKey(teamId)) ?? '',
+    timing: parseTiming(readStored(database, timingKey(teamId))),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
+    names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
+  }
+}
 
 const timedSetEffects = new Map<
   string,

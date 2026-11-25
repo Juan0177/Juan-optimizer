@@ -741,18 +741,15 @@ const SCREEN_KEEP = 3
 /** Rank this many distinct mixed pairs without searching every pair separately. */
 const MIXED_SET_RANKS = 3
 export const teamOptScreen = { fromBuilds: 1e8, fromBuildsCpu: 1e5 }
-/** Forgets every solve done (tests; or to measure a run from scratch) */
-/**
- * The page's turn between a run's heavy steps (a member's team data and formulas, built on the main
- * thread): after ~40 ms of work, so steps answered at once cost nothing
- */
+/** Let other tasks run between heavy steps, including in hidden browser tabs. */
 let lastTurn = 0
-async function pageTurn() {
+async function yieldBetweenSteps() {
   if (performance.now() - lastTurn < 40) return
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await yieldTask()
   lastTurn = performance.now()
 }
 
+/** Forgets every solve done (tests; or to measure a run from scratch). */
 export function clearTeamOptSolveMemo() {
   solveMemo.clear()
 }
@@ -800,6 +797,7 @@ export async function optimizeTeam({
   onStep,
   isCancelled = () => false,
   maxRounds = 4,
+  parallelWeaponSolves = PARALLEL_SOLVES,
   builds = 1,
   attackStates,
   rankingBonusStats,
@@ -816,6 +814,8 @@ export async function optimizeTeam({
   onStep?: (step: TeamOptStep) => void | Promise<void>
   isCancelled?: () => boolean
   maxRounds?: number
+  /** Limit concurrent GPU searches for different weapons. */
+  parallelWeaponSolves?: number
   /** Team builds to find (the best, and `builds` − 1 alternatives) */
   builds?: number
   /**
@@ -1884,7 +1884,7 @@ export async function optimizeTeam({
       let swapped = false
       const fns = new Map<CharacterKey, ReturnType<typeof compileIn>>()
       for (const m of order) {
-        await pageTurn()
+        await yieldBetweenSteps()
         fns.set(m.characterKey, compileIn(s, m.characterKey))
       }
       const gain = (
@@ -1917,9 +1917,9 @@ export async function optimizeTeam({
             next.builds[b.characterKey]![slotKey] = idA
             if (accept(next)) {
               swapped = true
-              await pageTurn()
+              await yieldBetweenSteps()
               fns.set(a.characterKey, compileIn(s, a.characterKey))
-              await pageTurn()
+              await yieldBetweenSteps()
               fns.set(b.characterKey, compileIn(s, b.characterKey))
             }
           }
@@ -1947,9 +1947,9 @@ export async function optimizeTeam({
             const buildB = s.builds[b.characterKey] ?? {}
             const nowA = fns.get(a.characterKey)?.(buildA)
             const nowB = fns.get(b.characterKey)?.(buildB)
-            await pageTurn()
+            await yieldBetweenSteps()
             const thenA = compileIn(s, a.characterKey, weaponB)?.(buildA)
-            await pageTurn()
+            await yieldBetweenSteps()
             const thenB = compileIn(s, b.characterKey, weaponA)?.(buildB)
             if (!nowA || !nowB || !thenA || !thenB) continue
             if (thenA.value - nowA.value + (thenB.value - nowB.value) <= 0)
@@ -1959,9 +1959,9 @@ export async function optimizeTeam({
             next.weaponIds[b.characterKey] = weaponA.id
             if (accept(next)) {
               swapped = true
-              await pageTurn()
+              await yieldBetweenSteps()
               fns.set(a.characterKey, compileIn(s, a.characterKey))
-              await pageTurn()
+              await yieldBetweenSteps()
               fns.set(b.characterKey, compileIn(s, b.characterKey))
             }
           }
@@ -2076,7 +2076,7 @@ export async function optimizeTeam({
         const notes = new Map<string, TeamOptShortfall>()
         for (const weapon of weaponChoices) {
           // (one problem at a time: several in a row froze a phone for a second)
-          await pageTurn()
+          await yieldBetweenSteps()
           const problem = problemIn(state, characterKey, weapon)
           let current: number | undefined
           if (problem && full) {
@@ -2201,7 +2201,7 @@ export async function optimizeTeam({
           for (const [w, p] of plans.entries()) {
             if (!p) continue
             if (isCancelled()) throw new TeamOptCancelled()
-            await pageTurn()
+            await yieldBetweenSteps()
             const lowered = p.affected.filter(
               (m) =>
                 (p.needWith[m.characterKey] ?? 0) < (need[m.characterKey] ?? 0)
@@ -2271,7 +2271,7 @@ export async function optimizeTeam({
         // The next weapons solved on their own start early, above the floor known then: a floor
         // only prunes, so each finds what it would have found later, and is then held to the
         // floor reached by its turn (as when solved one after another)
-        const parallel = optimizerGpuSupported() ? PARALLEL_SOLVES : 1
+        const parallel = optimizerGpuSupported() ? parallelWeaponSolves : 1
         const early = new Map<number, ReturnType<TeamOptSolver>>()
         const startEarly = (from: number) => {
           for (
@@ -2425,7 +2425,7 @@ export async function optimizeTeam({
     const notes = new Map<string, TeamOptShortfall>()
     for (const weapon of weapons.length ? weapons : [undefined]) {
       if (isCancelled()) throw new TeamOptCancelled()
-      await pageTurn()
+      await yieldBetweenSteps()
       const minimums = minimumsIn(start, characterKey, weapon).filter(
         ({ path }) => isErFilter(JSON.stringify(path))
       )

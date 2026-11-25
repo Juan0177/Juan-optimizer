@@ -1,0 +1,133 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
+import type { TeamOptStatus } from './runSolver'
+import type { TeamOptRunJob, TeamOptRunUpdates } from './runTeam'
+import type {
+  TeamOptMemberOptions,
+  TeamOptResult,
+  TeamOptShortfall,
+} from './solve'
+import {
+  TeamOptCancelled,
+  TeamOptRequirementsUnmet,
+  TeamOptSetRulesUnmet,
+} from './solve'
+
+export type TeamOptWorkerRequest = TeamOptRunJob & {
+  dbIndex: ArtCharDatabase['dbIndex']
+  entries: Record<string, string>
+}
+
+export type TeamOptWorkerReply =
+  | { type: 'ready' }
+  | { type: 'progress'; status: TeamOptStatus }
+  | { type: 'result'; result: TeamOptResult }
+  | {
+      type: 'options'
+      characterKey: CharacterKey
+      options: TeamOptMemberOptions
+    }
+  | { type: 'done' }
+  | { type: 'unavailable'; message: string }
+  | {
+      type: 'requirements'
+      shortfalls: Partial<Record<CharacterKey, TeamOptShortfall[]>>
+    }
+  | { type: 'sets'; characterKeys: CharacterKey[] }
+  | { type: 'error'; message: string }
+
+export class TeamOptWorkerUnavailable extends Error {}
+
+/** One worker prepares, searches and ranks a run. Stopping it also stops its solver workers. */
+export function startTeamOptWorker(
+  database: ArtCharDatabase,
+  job: TeamOptRunJob,
+  {
+    onResult,
+    onOptions,
+    onProgress,
+  }: TeamOptRunUpdates & { onProgress: (status: TeamOptStatus) => void }
+) {
+  let worker: Worker
+  try {
+    // @ts-expect-error TS1470: the app's bundler loads this library as a module.
+    worker = new Worker(new URL('./teamOptWorker.ts', import.meta.url), {
+      type: 'module',
+    })
+  } catch {
+    throw new TeamOptWorkerUnavailable('Could not start Team Optimize worker')
+  }
+  let finish: (error?: Error) => void
+  const done = new Promise<void>((resolve, reject) => {
+    let ready = false
+    let finished = false
+    const startup = setTimeout(
+      () =>
+        finish(
+          new TeamOptWorkerUnavailable('Team Optimize worker did not start')
+        ),
+      30000
+    )
+    finish = (error) => {
+      if (finished) return
+      finished = true
+      clearTimeout(startup)
+      worker.terminate()
+      if (error) reject(error)
+      else resolve()
+    }
+    worker.onerror = (event) => {
+      event.preventDefault()
+      const message = event.message || 'Team Optimize worker failed'
+      finish(ready ? new Error(message) : new TeamOptWorkerUnavailable(message))
+    }
+    worker.onmessageerror = () =>
+      finish(new Error('Could not read Team Optimize result'))
+    worker.onmessage = ({ data }: MessageEvent<TeamOptWorkerReply>) => {
+      if (finished) return
+      switch (data.type) {
+        case 'ready':
+          ready = true
+          clearTimeout(startup)
+          break
+        case 'progress':
+          onProgress(data.status)
+          break
+        case 'result':
+          onResult(data.result)
+          break
+        case 'options':
+          onOptions(data.characterKey, data.options)
+          break
+        case 'done':
+          finish()
+          break
+        case 'unavailable':
+          finish(new TeamOptWorkerUnavailable(data.message))
+          break
+        case 'requirements':
+          finish(new TeamOptRequirementsUnmet(data.shortfalls))
+          break
+        case 'sets':
+          finish(new TeamOptSetRulesUnmet(data.characterKeys))
+          break
+        case 'error':
+          finish(new Error(data.message))
+          break
+      }
+    }
+    try {
+      const entries = Object.fromEntries(database.storage.entries)
+      delete entries['teamOptResults']
+      delete entries['teamKqmResults']
+      worker.postMessage({
+        ...job,
+        dbIndex: database.dbIndex,
+        entries,
+      } satisfies TeamOptWorkerRequest)
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)))
+    }
+  })
+  return { done, stop: () => finish(new TeamOptCancelled()) }
+}
