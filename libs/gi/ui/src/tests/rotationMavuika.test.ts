@@ -163,7 +163,7 @@ describe("Mavuika's held Flamestrider Charged Attack in KQM's notation (C3FD C3F
     )
     expect(other.steps[0].actions[0].spins).toBeUndefined()
   })
-  it('spins 45 frames apart, then the finisher, and the dash comes at the finisher', () => {
+  it('spins 45 frames apart and dashes after the finisher hitlag', () => {
     const sim = simulateRotation({
       rotation: parseRotation(text, names),
       members: team,
@@ -195,7 +195,37 @@ describe("Mavuika's held Flamestrider Charged Attack in KQM's notation (C3FD C3F
     const dashes = (sim.actions ?? []).filter(
       (a) => a.characterKey === 'Mavuika' && a.text === 'D'
     )
-    expect(dashes[0].start).toBe(final[0].t)
+    expect(dashes[0].start - final[0].t).toBe(3)
+  })
+
+  it('counts an ending finisher inside its own rotation on the opener and repeat', () => {
+    const sim = simulateRotation({
+      rotation: parseRotation('Mavuika hE C3F', [
+        { characterKey: 'Mavuika', name: 'Mavuika' },
+      ]),
+      members: ['Mavuika'],
+      elements: { Mavuika: 'pyro' },
+      constellations: {},
+      repeats: 2,
+      keep: 'all',
+    })
+    const finals = sim.hits.filter(
+      (h) => h.label === 'Flamestrider Charged Attack (Final)'
+    )
+    expect(finals).toHaveLength(2)
+    for (const [i, start] of sim.rotationStarts!.entries()) {
+      expect(finals[i].t).toBeGreaterThanOrEqual(start)
+      expect(finals[i].t).toBeLessThan(start + sim.rotationFrames![i])
+    }
+  })
+
+  it('uses full finisher recovery before starting another Charged Attack', () => {
+    const sim = run('Mavuika hE CF C', 0)
+    const final = sim.hits.find(
+      (h) => h.label === 'Flamestrider Charged Attack (Final)'
+    )!
+    const next = sim.actions.find((a) => a.text === 'C')!
+    expect(next.start - final.t).toBe(32)
   })
 })
 

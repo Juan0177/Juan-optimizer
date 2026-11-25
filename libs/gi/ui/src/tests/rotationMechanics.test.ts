@@ -775,12 +775,12 @@ describe('native combat rules shared across character kits', () => {
     expect(bikeChargeTiming({ radius: 2, distance: 2.4 }, 15)).toEqual({
       hit: 20,
       final: 86,
-      normal: 117,
+      normal: 118,
     })
     expect(bikeChargeTiming({ radius: 2, distance: 2.4 }, 0)).toEqual({
       hit: 35,
       final: 101,
-      normal: 132,
+      normal: 133,
     })
     expect(bikeChargeTiming({ radius: 1, distance: 9 }, 15)).toBeUndefined()
     const members: CharacterKey[] = ['Mavuika']
