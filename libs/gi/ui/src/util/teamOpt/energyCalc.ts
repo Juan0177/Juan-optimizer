@@ -1929,11 +1929,7 @@ const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
   Barbara: barbaraEnergyFromRotation,
   Danica: maidEnergyFromRotation,
 }
-const FLAT_ENERGY_KIT_MARKED = new Set<CharacterKey>([
-  'Citlali',
-  'Durin',
-  'Iansan',
-])
+const FLAT_ENERGY_KIT_MARKED = new Set<CharacterKey>(['Durin'])
 /**
  * The turrets whose kits mark the particles they make (`turretParticles`, kqmsim's particle
  * callbacks): counted as made in the rotation (one entry per line)

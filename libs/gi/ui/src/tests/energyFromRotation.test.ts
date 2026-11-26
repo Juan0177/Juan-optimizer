@@ -1277,3 +1277,42 @@ describe('energy inputs: Faruzan Pressurized Collapse particles (5.5 s ICD) and 
     expect(withCa.members.Faruzan!.catchShares).toEqual({ Faruzan: 100 })
   })
 })
+
+describe('energy inputs: Skill options that hold a constellation’s Energy', () => {
+  const team: CharacterKey[] = ['Mavuika', 'Citlali', 'Iansan', 'Durin']
+  const targets = (cons: number) => {
+    const constellations = {
+      Mavuika: 0,
+      Citlali: cons,
+      Iansan: cons,
+      Durin: cons,
+    }
+    const sim = simulateRotation({
+      rotation: parseRotation(
+        'Citlali E Q -> Iansan E Q -> Durin E E Q -> Mavuika E Q N4 N4 N4 CA',
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations,
+      repeats: 4,
+      keep: 'last2',
+    })
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team),
+      team,
+      energyFromRotation(sim, team, 2, constellations)
+    )
+    return calculateEnergyRecharge(team, filled, {}, constellations).targets
+  }
+  it('Citlali C4 and Iansan C1 lower their ER needs; Durin’s Skill Energy is counted once', () => {
+    const c0 = targets(0)
+    const c6 = targets(6)
+    expect(c6.Citlali!).toBeLessThan(c0.Citlali! - 40)
+    expect(c6.Iansan!).toBeLessThan(c0.Iansan! - 40)
+    expect(c6.Durin!).toBeCloseTo(c0.Durin!, 1)
+    expect(c0.Durin!).toBeLessThan(160)
+  })
+})
