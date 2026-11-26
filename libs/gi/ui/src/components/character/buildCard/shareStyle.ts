@@ -194,7 +194,7 @@ declare const __GO_BETA_LABEL__: string
 export const BETA_KEYS: ReadonlySet<string> = new Set(
   typeof __GO_BETA_KEYS__ !== 'undefined' ? __GO_BETA_KEYS__ : []
 )
-/** The beta's name ("7.3 beta v4", apps/frontend/beta-content.json), marked over pictures of it */
+/** The beta's name ("7.3 beta v5", apps/frontend/beta-content.json), marked over pictures of it */
 export const BETA_LABEL =
   typeof __GO_BETA_LABEL__ === 'string' && __GO_BETA_LABEL__
     ? __GO_BETA_LABEL__

@@ -27,7 +27,7 @@ export const ENERGY_HELP: Partial<Record<CharacterKey, string>> = {
   Columbina: 'C1: the active member gets 6 Energy per Gravity Interference when Lunar-Charged built the most Gravity; C4: she gets 4 each time. Both are filled into Bonus energy from the written rotation.',
   Cyno: 'Skills in his Burst make fewer particles: count them as the Second skill Press (in burst), the rest as Press (no burst). C4: 3 to the others per Electro reaction he triggers in his Burst (5 times), and after Witch’s Revelation 20 to him when a Together We Rise holder triggers one (once per 18 s), filled into Bonus energy from the written rotation.',
   Dahlia: 'C1: 2.5 Energy per Benison stack he gains (up to 4 per Burst): add it to Bonus energy (half at Every 2nd).',
-  Danica: 'C1’s 20 Energy per Will to Protect or Will to Purge (once per 14 s) and C4’s 3 for each other member per Stellar-Conduct hit under her Royal Aegis (once per 3.5 s) are filled from the written rotation.',
+  Danica: 'C1’s 20 Energy per Will to Protect or Will to Purge (once per 14 s) and C4’s 3 for each other member per Stellar-Conduct hit another member deals under her Royal Aegis (once per 3.5 s) are filled from the written rotation.',
   Dehya: 'Her field makes no particles during her Burst, so she may need a little more than shown. C4: 1.5 Energy per Burst hit (once per 0.2 s), filled into Bonus energy from the written rotation.',
   Diluc: 'One Skill use is his whole three-hit combo, as the written rotation counts it.',
   Diona: 'C1: 15 Energy when her Burst ends, filled into Bonus energy from the written rotation (per rotation: 7.5 when she bursts every 2nd).',
