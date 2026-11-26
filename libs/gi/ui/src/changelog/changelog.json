@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.45.0",
+    "date": "2026-11-26",
+    "new": [
+      "Team variants are easier to find: a Team variants button above Rotation on the KQM tab shows how many you have saved, and KQM results have a Compare variants button beside Share."
+    ],
+    "improved": [
+      "The rotation optimizer suggests sturdier rotations: a pick that only wins on one exact frame is checked with small timing changes, supports stick to moves that make sense for them (no idle dashes, jumps or long Normal Attack strings), pointless cancels are dropped, and Energy Recharge changes are priced from your own builds.",
+      "Team optimize Burst Scenarios: skipping a Burst is scored on its own, your written rotation stays the baseline, and each member's unmet requirements are named. The rotation search says which DPS each gain is measured against.",
+      "Team optimize on phones: the rotation writer and run setup fit narrow screens. Setup says your edits save as you go and offers Reset edits, and the writer marks drafts you can discard.",
+      "Gear ranking runs when you ask for it and can be stopped, saved builds can be restored after a reload, and discarding a result asks first. Runs no longer freeze the page while they search.",
+      "Gear rankings in the build inspector and Top builds have a clearer, more compact layout."
+    ],
+    "fixed": [
+      "Thrilling Tales of Dragon Slayers is counted correctly on rotations shorter than 20 s (it triggers every other rotation), and its on-field share is shown.",
+      "Sandrone at C1 and above: the rotation writer suggests CA[beams=6] (C0 keeps CA[beams=2]).",
+      "Blazing Lionfang's passive uses the official English text (Revitalizing Spark).",
+      "Beta V5 changes updated: Anastasya's C2 Honor bonus is 130% of the original DMG (was 125%).",
+      "Beta V5 changes updated: Danica's C4 Energy comes only from the other party members' Stellar-Conduct hits under her Royal Aegis, not her own.",
+      "Beta V5 changes updated: official English names for Danica's and Anastasya's constellations and for the Epochal Advent and Empyrean Sojourn pieces."
+    ]
+  },
+  {
     "version": "1.44.0",
     "date": "2026-11-26",
     "new": [
