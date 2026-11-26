@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { lazy, Suspense } from 'react'
 import { expect, it, vi } from 'vitest'
-import { PassiveTag, playedWeaponPassiveUptime } from './CountedPassives'
+import {
+  PassiveTag,
+  passiveApplies,
+  playedWeaponPassiveUptime,
+} from './CountedPassives'
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
@@ -79,8 +83,7 @@ it('measures TTDS hit uptime across the recipient’s on-field hits and shows pa
     },
     'Mona',
     path,
-    'on',
-    true
+    'on'
   )
   expect(uptime).toBeCloseTo(0.5, 4)
 
@@ -98,8 +101,7 @@ it('measures TTDS hit uptime across the recipient’s on-field hits and shows pa
     },
     'Mona',
     path,
-    'on',
-    true
+    'on'
   )
   expect(zero).toBe(0)
 
@@ -117,4 +119,77 @@ it('measures TTDS hit uptime across the recipient’s on-field hits and shows pa
     />
   )
   expect(screen.getByText('Passive 50%')).toBeTruthy()
+})
+
+it('measures a passive over the hits it can buff, not every member’s', () => {
+  const attack = (
+    onField: 'Xiangling' | 'Bennett',
+    hits: number,
+    on: boolean,
+    owner = 'Xiangling'
+  ) => ({
+    path: ['skill', 'dmg'],
+    hits,
+    hitMode: 'avgHit' as const,
+    onField,
+    states: [
+      { owner, path: ['Deathmatch', 'stack'], value: on ? 'moreThanOne' : '' },
+    ],
+  })
+  // (Deathmatch's switch is on the team's side, but it buffs its holder only)
+  const self = playedWeaponPassiveUptime(
+    {
+      Xiangling: [attack('Bennett', 2, true), attack('Bennett', 2, false)],
+      Bennett: [attack('Bennett', 16, true)],
+    } as never,
+    'Xiangling',
+    ['Deathmatch', 'stack'],
+    'moreThanOne'
+  )
+  expect(self).toBeCloseTo(0.5, 4)
+  // (Moonpiercer's leaf buffs whoever is on the field)
+  const path = ['Moonpiercer', 'passive']
+  const active = playedWeaponPassiveUptime(
+    {
+      Xiangling: [
+        {
+          path: ['burst', 'dmg'],
+          hits: 10,
+          hitMode: 'avgHit',
+          onField: 'Bennett',
+          states: [{ owner: 'Xiangling', path, value: 'on' }],
+        },
+      ],
+      Bennett: [
+        {
+          path: ['normal', 'dmg'],
+          hits: 3,
+          hitMode: 'avgHit',
+          onField: 'Bennett',
+          states: [{ owner: 'Xiangling', path, value: 'on' }],
+        },
+        {
+          path: ['normal', 'dmg'],
+          hits: 1,
+          hitMode: 'avgHit',
+          onField: 'Bennett',
+          states: [{ owner: 'Xiangling', path, value: '' }],
+        },
+      ],
+    } as never,
+    'Xiangling',
+    path,
+    'on'
+  )
+  expect(active).toBeCloseTo(0.75, 4)
+})
+
+it('counts Exaiphanes Blade only on the Traveler', () => {
+  expect(passiveApplies(['ExaiphanesBlade', 'passive'], 'Odette')).toBe(false)
+  expect(passiveApplies(['ExaiphanesBlade', 'passive'], 'TravelerAnemo')).toBe(
+    true
+  )
+  expect(
+    passiveApplies(['MistsplitterReforged', 'MistsplittersEmblem'], 'Odette')
+  ).toBe(true)
 })
