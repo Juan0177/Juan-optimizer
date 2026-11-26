@@ -47,6 +47,10 @@ export interface TeamOptRunJob {
   lowImpact: boolean
   ranking?: boolean
   rankFrom?: Pick<TeamOptResult, 'builds' | 'weapons' | 'optimized'>
+  /** Warm-start builds and weapons for a full optimization run (e.g. rotation confirmation) */
+  warmStart?: Pick<TeamOptResult, 'builds' | 'weapons'>
+  /** Skip provisional piece-taking in round 1 when warm-starting */
+  skipProvisional?: boolean
 }
 
 export interface TeamOptRunUpdates {
@@ -172,7 +176,8 @@ export async function runTeamOpt(
     gender,
     teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
     maxRounds: job.rankFrom ? 0 : undefined,
-    from: job.rankFrom,
+    from: job.rankFrom ?? job.warmStart,
+    skipProvisional: job.skipProvisional,
     skipRankings: job.ranking === false,
     rotationForWeapons: rotation?.forWeapons,
     rotationKey: rotation?.key,

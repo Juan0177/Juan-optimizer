@@ -95,11 +95,11 @@ import {
 } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import type { RotationCalculation, SimGear } from './rotation/types'
 import { memberCtx } from './ruleConditionals'
 import type { TeamOptEvaluation } from './solve'
 import { evaluateTeamNodes, TeamOptCancelled } from './solve'
-import { isSacrificialWeapon } from './rotation/sacrificial'
 import { withEnergyRelief } from './weapons'
 
 /*
@@ -340,8 +340,10 @@ export interface KqmResult {
 /** The written rotation played for KQM builds: each member's attacks per rotation */
 export interface KqmPlayed {
   attacks: TeamOpt['attacks']
-  /** Seconds per rotation (absent: the team's rotation time) */
+  /** Seconds per rotation, rounded to 0.1 s for display and saved settings (absent: the team's rotation time) */
   rotationTime?: number
+  /** Exact seconds per rotation (unrounded, for rotation search DPS without 0.1 s step noise) */
+  exactTime?: number
   energy?: RotationEnergy
   /** The same rotation's pace with Sacrificial resets disabled, when applicable. */
   energyRotationTime?: number

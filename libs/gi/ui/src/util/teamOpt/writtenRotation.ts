@@ -12,7 +12,6 @@ import type { TeamDataOverrides, TeamOptMember } from './data'
 import type { RotationEnergy } from './energyCalc'
 import { energyFromRotation } from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
-import { isSacrificialWeapon } from './rotation/sacrificial'
 import {
   everyNthBursts,
   type FrameData,
@@ -35,6 +34,7 @@ import {
   simulateRotationSamples,
   simulateRotationSamplesAsync,
 } from './rotation'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import { rotationCalculation } from './rotationCalculation'
 import { teamRuleConditionals } from './ruleConditionals'
 
@@ -617,9 +617,11 @@ export function writtenKqmReplay({
           timelineOnly: true,
         })?.sim ?? played.sim)
       : played.sim
+    const exactTime = played.sim.frames / 60 / counted
     return {
       attacks,
-      rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
+      rotationTime: Math.round(exactTime * 10) / 10,
+      exactTime,
       stalls,
       // (the ER calculator's inputs as this rotation plays them)
       energy: energyFromRotation(energySim, keys, counted, constellations),

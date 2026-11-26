@@ -6,13 +6,13 @@ import type { RotationEnergy } from './energyCalc'
 import { energyFromRotation } from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
 import type { RunAttackState } from './lowHpUptime'
-import { isSacrificialWeapon } from './rotation/sacrificial'
 import type {
   FrameData,
   RotationMember,
   RotationTimingSettings,
   SimGear,
 } from './rotation'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import type { RotationSearchSetup } from './rotationSearchScore'
 import type { SimTeam } from './writtenRotation'
 import { simTeamOf, simulateWritten, teamBurstEvery } from './writtenRotation'
@@ -99,9 +99,11 @@ export function writtenTeamReplay({
           })
         : undefined
     const energySim = energyPlay?.counted?.sim ?? energyPlay?.sim
+    const exactTime = sim.frames / 60 / rotations
     return {
       attacks,
-      rotationTime: Math.round((sim.frames / 60 / rotations) * 10) / 10,
+      rotationTime: Math.round(exactTime * 10) / 10,
+      exactTime,
       stalls,
       ...(includeEnergy && {
         energy: energyFromRotation(

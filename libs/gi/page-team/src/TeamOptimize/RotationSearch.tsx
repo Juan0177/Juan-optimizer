@@ -19,6 +19,7 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   allRotationEdits,
+  candidateRank,
   erCostOf,
   rotationSearchPlayer,
   rotationWords,
@@ -42,6 +43,7 @@ import {
   Fragment,
   memo,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -77,6 +79,10 @@ type SearchMode = 'quick' | 'full'
 let lastMode: SearchMode = 'quick'
 const FULL_MINUTES = 20
 const pause = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+/** Portion of a Quick search budget reserved for confirming the best rotations' own builds (ms) */
+export const confirmReserveMs = (budgetSeconds: number) =>
+  Math.min(45_000, Math.max(10_000, Math.round(budgetSeconds * 1000 * 0.25)))
 
 /** The builds a search starts from: the KQM tab's shown result, or Team optimize's team build */
 export type RotationSearchBase =
@@ -322,6 +328,9 @@ export function betterRotationCandidates({
   if (!rowSeed || !top) return []
   const own = (c: RotationCandidate) =>
     confirmed && c.text in confirmed ? confirmed[c.text] : undefined
+  const beatsUnconfirmed = (c: RotationCandidate, base: RotationCandidate) =>
+    c.estimate > base.estimate * (1 + 1e-4) &&
+    candidateRank(c) > candidateRank(base) * (1 + 1e-4)
   // (stopped or out of time: those found without builds of their own yet after them)
   if (fullDone) {
     const base = from ?? rowSeed
@@ -334,10 +343,7 @@ export function betterRotationCandidates({
         .sort((a, b) => (own(b) as number) - (own(a) as number)),
       ...(ended === 'converged'
         ? []
-        : top.filter(
-            (c) =>
-              own(c) === undefined && c.estimate > base.estimate * (1 + 1e-4)
-          )),
+        : top.filter((c) => own(c) === undefined && beatsUnconfirmed(c, base))),
     ].slice(0, limit)
   }
   const found = top
@@ -345,7 +351,7 @@ export function betterRotationCandidates({
       const dps = own(c)
       return dps !== undefined
         ? dps !== null && dps > runDps * (1 + 1e-4)
-        : c.estimate > rowSeed.estimate * (1 + 1e-4)
+        : beatsUnconfirmed(c, rowSeed)
     })
     .slice(0, limit)
   return [
@@ -461,13 +467,13 @@ function RotationSearchDialog({
   }>()
   const cancelled = useRef(false)
   const release = useRef<() => void>()
-  useEffect(
-    () => () => {
-      cancelled.current = true
-      release.current?.()
-    },
-    []
-  )
+  const abortConfirm = useRef<() => void>()
+  const stopAll = useCallback(() => {
+    cancelled.current = true
+    release.current?.()
+    abortConfirm.current?.()
+  }, [])
+  useEffect(() => () => stopAll(), [stopAll])
 
   const startFull = () => {
     cancelled.current = false
@@ -477,6 +483,7 @@ function RotationSearchDialog({
     setConfirmed(undefined)
     setStage(undefined)
     setYours(undefined)
+    setThreads(0)
     setSearched('full')
     setRun({ start: Date.now(), budget: FULL_MINUTES * 60 })
     setRunning(true)
@@ -492,6 +499,9 @@ function RotationSearchDialog({
       isCancelled: () => cancelled.current,
       onStage: setStage,
       onThreads: setThreads,
+      onAbort: (abort) => {
+        abortConfirm.current = abort
+      },
       onConfirmed: (dps) =>
         setConfirmed({ total: Object.keys(dps).length, dps }),
       onProgress: (p) => {
@@ -519,6 +529,8 @@ function RotationSearchDialog({
         if (!cancelled.current) setError(String((e as Error)?.message ?? e))
       })
       .finally(() => {
+        abortConfirm.current = undefined
+        setThreads(0)
         setRun((r) => r && { ...r, end: Date.now() })
         setRunning(false)
         setStage(undefined)
@@ -534,6 +546,7 @@ function RotationSearchDialog({
     setConfirmed(undefined)
     setStage(undefined)
     setYours(undefined)
+    setThreads(0)
     setSearched('quick')
     setRun({ start: Date.now(), budget })
     setRunning(true)
@@ -554,17 +567,23 @@ function RotationSearchDialog({
       released = true
       player.release()
       release.current = undefined
+      setThreads(0)
     }
+    let confirmTimer: ReturnType<typeof setTimeout> | undefined
     ;(async () => {
       // (what Energy Recharge costs the builds: a rotation that needs less gains what it frees)
       const erCost = erCostOf(await source.prices(pause).catch(() => ({})))
-      const deadline = Date.now() + budget * 1000
-      setRun((r) => r && { ...r, start: Date.now() })
+      if (cancelled.current) return
+      const startMs = Date.now()
+      const totalDeadline = startMs + budget * 1000
+      const searchDeadline = totalDeadline - confirmReserveMs(budget)
+      setRun((r) => r && { ...r, start: startMs })
       const found = await searchRotations({
         seed,
         members: names,
         score: player.score,
-        deadline,
+        verify: player.verify,
+        deadline: searchDeadline,
         funded: source.funded,
         erCost,
         kinds,
@@ -586,23 +605,55 @@ function RotationSearchDialog({
       done()
       // (the best get builds of their own, as the tab's run of the rotation would find them)
       const best = found.best
-        .filter((c) => c.estimate > found.seed.estimate * (1 + 1e-4))
+        .filter(
+          (c) =>
+            c.estimate > found.seed.estimate * (1 + 1e-4) &&
+            candidateRank(c) > candidateRank(found.seed) * (1 + 1e-4)
+        )
         .slice(0, CONFIRMED)
       const dps: Record<string, number | null> = {}
-      for (const c of best) {
-        if (cancelled.current) break
-        setConfirmed({ total: best.length, dps: { ...dps } })
-        const run = await source
-          .confirm(c.text, () => cancelled.current)
-          .catch(() => undefined)
-        if (cancelled.current) break
-        dps[c.text] = run ? run.dps : null
+      let timedOutConfirm = false
+      if (best.length && !cancelled.current) {
+        const remaining = totalDeadline - Date.now()
+        if (remaining <= 0) {
+          timedOutConfirm = true
+        } else {
+          confirmTimer = setTimeout(() => {
+            timedOutConfirm = true
+            abortConfirm.current?.()
+          }, remaining)
+          const confirmStop = () =>
+            cancelled.current || timedOutConfirm || Date.now() >= totalDeadline
+          for (const c of best) {
+            if (confirmStop()) {
+              if (!cancelled.current) timedOutConfirm = true
+              break
+            }
+            setConfirmed({ total: best.length, dps: { ...dps } })
+            const run = await source
+              .confirm(c.text, confirmStop, (abort) => {
+                abortConfirm.current = abort
+              })
+              .catch(() => undefined)
+            abortConfirm.current = undefined
+            if (confirmStop()) {
+              if (!cancelled.current) timedOutConfirm = true
+              break
+            }
+            dps[c.text] = run ? run.dps : null
+          }
+          if (Object.keys(dps).length)
+            setConfirmed({ total: Object.keys(dps).length, dps: { ...dps } })
+          else setConfirmed(undefined)
+        }
       }
-      if (best.length) setConfirmed({ total: best.length, dps: { ...dps } })
       if (cancelled.current) setResult({ ...found, ended: 'cancelled' })
+      else if (timedOutConfirm) setResult({ ...found, ended: 'time' })
     })()
       .catch((e) => setError(String((e as Error)?.message ?? e)))
       .finally(() => {
+        if (confirmTimer !== undefined) clearTimeout(confirmTimer)
+        abortConfirm.current = undefined
         done()
         setRun((r) => r && { ...r, end: Date.now() })
         setRunning(false)
@@ -819,9 +870,7 @@ function RotationSearchDialog({
               <Button
                 color="inherit"
                 variant="outlined"
-                onClick={() => {
-                  cancelled.current = true
-                }}
+                onClick={stopAll}
                 sx={{ minWidth: 128, borderColor: tokens.hairlineStrong }}
               >
                 {t('teamOpt.search.stop', 'Stop')}
@@ -901,16 +950,19 @@ function RotationSearchDialog({
                             }`
                         : t('teamOpt.search.starting', 'Starting…')}
                 </Box>
-                {threads > 0 && (
-                  <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
-                    {threads === 1
-                      ? t('teamOpt.search.oneThread', '1 thread')
-                      : t('teamOpt.search.threads', {
-                          defaultValue: '{{threads}} threads',
-                          threads,
-                        })}
-                  </Box>
-                )}
+                {running &&
+                  threads > 0 &&
+                  !checking &&
+                  stage?.phase !== 'builds' && (
+                    <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+                      {threads === 1
+                        ? t('teamOpt.search.oneThread', '1 thread')
+                        : t('teamOpt.search.threads', {
+                            defaultValue: '{{threads}} threads',
+                            threads,
+                          })}
+                    </Box>
+                  )}
                 <Clock run={run} running={running} />
               </Box>
             </Box>
@@ -1158,10 +1210,14 @@ function TimeBar({ run, running }: { run: SearchRun; running: boolean }) {
       return undefined
     }
     const total = run.budget * 1000
-    const from = Math.min(1, (Date.now() - run.start) / total)
+    const from = Math.min(1, Math.max(0, (Date.now() - run.start) / total))
     const fill = el.animate(
       [{ transform: `scaleX(${from})` }, { transform: 'scaleX(1)' }],
-      { duration: total * (1 - from), easing: 'linear', fill: 'forwards' }
+      {
+        duration: Math.max(0, total * (1 - from)),
+        easing: 'linear',
+        fill: 'forwards',
+      }
     )
     return () => {
       last.current = getComputedStyle(el).transform
@@ -1519,12 +1575,19 @@ const CandidateRow = memo(function CandidateRow({
           dps: formatDamage(candidate.dps, true),
         })
     : estimated
-      ? t('teamOpt.search.estimateTip', {
-          defaultValue:
-            'With your KQM run’s builds it plays {{dps}} DPS; builds made for its Energy Recharge needs would have about {{estimate}}.',
-          dps: formatDamage(candidate.dps, true),
-          estimate: formatDamage(candidate.estimate, true),
-        })
+      ? team
+        ? t('teamOpt.search.teamEstimateTip', {
+            defaultValue:
+              'With your run’s builds it plays {{dps}} DPS; builds adjusted for its Energy Recharge needs would have about {{estimate}}.',
+            dps: formatDamage(candidate.dps, true),
+            estimate: formatDamage(candidate.estimate, true),
+          })
+        : t('teamOpt.search.estimateTip', {
+            defaultValue:
+              'With your KQM run’s builds it plays {{dps}} DPS; builds made for its Energy Recharge needs would have about {{estimate}}.',
+            dps: formatDamage(candidate.dps, true),
+            estimate: formatDamage(candidate.estimate, true),
+          })
       : erOver
         ? t(
             'teamOpt.search.teamNeedsErTip',

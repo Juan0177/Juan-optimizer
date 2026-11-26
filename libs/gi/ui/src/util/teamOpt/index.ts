@@ -20,6 +20,8 @@ export * from './rotationScenarios'
 export * from './rotationSearch'
 export * from './rotationSearchEr'
 export {
+  JITTER_SWAP_OFFSETS,
+  jitterSwapOffsets,
   kqmRotationSearchSetup,
   type RotationSearchBase,
   rotationSearchPlayer,

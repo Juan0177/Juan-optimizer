@@ -15,7 +15,9 @@ import { rotationScorer } from './rotationSearchScore'
 let database: ArtCharDatabase | undefined
 let dataKey: string | undefined
 let setupKey: string | undefined
-let play: ((text: string) => RotationScore | undefined) | undefined
+let play:
+  | ((text: string, swapOffset?: number) => RotationScore | undefined)
+  | undefined
 let failed: string | undefined
 
 const post = (reply: RotationSearchReply) => self.postMessage(reply)
@@ -58,6 +60,27 @@ self.onmessage = ({ data }: MessageEvent<RotationSearchCommand>) => {
             return undefined
           }
         }),
+      })
+      return
+    }
+    case 'verify': {
+      if (setupKey === data.key && failed)
+        return post({ type: 'error', id: data.id, message: failed })
+      if (!play || setupKey !== data.key || dataKey !== data.dataKey)
+        return post({ type: 'missing', id: data.id })
+      const player = play
+      post({
+        type: 'verified',
+        id: data.id,
+        scores: data.texts.map((text) =>
+          data.offsets.map((offset) => {
+            try {
+              return player(text, offset)
+            } catch {
+              return undefined
+            }
+          })
+        ),
       })
       return
     }
