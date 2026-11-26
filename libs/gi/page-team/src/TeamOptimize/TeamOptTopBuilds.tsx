@@ -123,6 +123,7 @@ export function TeamOptTopBuilds({
         })
       }
     }
+    const comparisons: TeamOptTopOption[] = []
     for (const pair of result.gearComparisons ?? []) {
       if (
         !Object.values(pair.builds).every((b) =>
@@ -138,7 +139,7 @@ export function TeamOptTopBuilds({
         const weapon = weaponOf(pair.weapons[ck])
         if (weapon) builds[ck] = { weapon, sets: setsOf(pair.builds[ck]) }
       }
-      rows.push({
+      comparisons.push({
         comparison: pair,
         changedMembers,
         builds,
@@ -151,7 +152,7 @@ export function TeamOptTopBuilds({
     rows.unshift(base)
     const rateOf = (row: TeamOptTopOption) =>
       row.total / (row.rotationTime ?? rotationTime ?? 1)
-    rows.sort((a, b) => {
+    const compareDps = (a: TeamOptTopOption, b: TeamOptTopOption) => {
       const first = rateOf(a)
       const second = rateOf(b)
       const diff = second - first
@@ -159,27 +160,14 @@ export function TeamOptTopBuilds({
         Math.max(Math.abs(first), Math.abs(second)) * 1e-9
         ? 0
         : diff
-    })
-    rows.forEach((row, i) => {
-      row.rank = i + 1
-    })
-    const top = rows.slice(0, MAX)
-    const active =
-      comparison &&
-      rows.find(
-        (row) =>
-          row.comparison &&
-          assignmentKey(row.comparison) === assignmentKey(comparison)
-      )
-    const bestPair = rows.find((row) => row.comparison)
-    const extra = [...new Set([base, active, bestPair])].filter(
-      (row): row is TeamOptTopOption => !!row && !top.includes(row)
-    )
-    // Keep the original and the selected comparison available alongside the highest ranks.
-    top.splice(MAX - extra.length, extra.length, ...extra)
-    top.sort((a, b) => a.rank! - b.rank!)
-    return top
-  }, [result, database, optionsRunning, comparison, rotationTime])
+    }
+    const top = rows.sort(compareDps).slice(0, MAX)
+    if (!top.includes(base)) top[MAX - 1] = base
+    return [...top, ...comparisons].sort(compareDps).map((row, i) => ({
+      ...row,
+      rank: i + 1,
+    }))
+  }, [result, database, optionsRunning, rotationTime])
 
   const picked = Object.entries(picks) as [CharacterKey, TeamOptPick][]
   const current = comparison

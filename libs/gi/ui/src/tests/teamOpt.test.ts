@@ -1014,6 +1014,92 @@ describe('team optimize', () => {
     ).toBe(false)
   })
 
+  it('keeps both three-way swaps when the held four-piece sets have crossed off-pieces', async () => {
+    const { database, teamId, ayakaId, shenheId, ids } = setup()
+    const kaeya = 'Kaeya'
+    database.chars.set(kaeya, {
+      key: kaeya,
+      level: 90,
+      ascension: 6,
+      talent: { auto: 9, skill: 9, burst: 9 },
+      constellation: 0,
+    })
+    database.weapons.new({
+      key: 'FavoniusSword',
+      level: 90,
+      ascension: 6,
+      refinement: 1,
+      location: kaeya,
+      lock: false,
+    })
+    database.teams.set(teamId, {
+      loadoutData: [ayakaId, shenheId, database.teamChars.new(kaeya)].map(
+        (teamCharId) => ({ teamCharId })
+      ),
+    })
+    const builds = {
+      [ayaka]: { ...ids.crit, flower: ids.atk.flower },
+      [shenhe]: { ...ids.atk, flower: ids.crit.flower },
+      [kaeya]: ids.weak,
+    }
+    const order = [ayaka, shenhe, kaeya]
+    // Kaeya may take the required pieces, but must use his own flower.
+    const kaeyaConfig = teamOptMembers(database, teamId).find(
+      (member) => member.characterKey === kaeya
+    )!.teamChar.optConfigId
+    database.optConfigs.set(kaeyaConfig, {
+      artExclusion: [ids.crit.flower, ids.atk.flower],
+    })
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        useExcludedArts: false,
+        attacks: {
+          [ayaka]: [attack(['burst', 'cutting'], 19)],
+          [shenhe]: [attack(['skill', 'press'], 2)],
+          [kaeya]: [attack(['normal', '0'], 2)],
+        },
+      },
+      solve: bruteForce,
+      from: {
+        builds,
+        weapons: Object.fromEntries(
+          teamOptMembers(database, teamId).map((member) => [
+            member.characterKey,
+            member.weaponId,
+          ])
+        ),
+        optimized: order,
+      },
+      maxRounds: 0,
+      onResult: () => {},
+      onGearComparisons: () => {},
+    }))!
+    expect(result.builds).toEqual(builds)
+    const cycles = result.gearComparisons?.filter(
+      (row) => row.changed.length === 3
+    )
+    const assignments = cycles?.map((row) => {
+      expect(row.builds[kaeya]?.flower).toBe(ids.weak.flower)
+      expect(
+        new Set(Object.values(row.builds).flatMap(Object.values)).size
+      ).toBe(15)
+      expect(row.after.total).toBeGreaterThan(0)
+      return order.map(
+        (ck) => database.arts.get(row.builds[ck]!.plume!)!.setKey
+      )
+    })
+    expect(assignments).toEqual(
+      expect.arrayContaining([
+        [specs.atk.set, specs.weak.set, specs.crit.set],
+        [specs.weak.set, specs.crit.set, specs.atk.set],
+      ])
+    )
+  })
+
   it('checks three members trading weapons already held by the team', async () => {
     const { database, teamId, ayakaId, ids } = setup()
     const xingqiu = 'Xingqiu'

@@ -2922,6 +2922,7 @@ export async function optimizeTeam({
     options[ck] = ranked
     onOptions?.(ck, ranked)
   }
+  if (!onSetOptions) await compare(false)
   if (teamOpt.optimizeWeapons) await compare(true)
   if (Object.keys(options).length) result.options = options
   return result
@@ -3389,6 +3390,7 @@ export async function optimizeTeam({
     }
     type CompareChoice = TeamOptPick & {
       ck: CharacterKey
+      setDonor?: CharacterKey
       artifactIds?: NonNullable<TeamOptBuilds[CharacterKey]>
       value: number
     }
@@ -3398,6 +3400,7 @@ export async function optimizeTeam({
           const pieces: ICachedArtifact[] = artsIn(s, ck)
           return (
             pieces.length !== allArtifactSlotKeys.length ||
+            pieces.some((piece) => !mayUse(memberOf(ck)!, piece)) ||
             !keepsSetRules(ck, pieces) ||
             (set && pieces.filter((art) => art.setKey === set).length < 4) ||
             setPair?.some(
@@ -3446,6 +3449,102 @@ export async function optimizeTeam({
       const ids = Object.values(s.weaponIds).filter(notEmpty)
       if (new Set(ids).size !== ids.length) return undefined
       return s
+    }
+    const seedAssignment = (choices: CompareChoice[]) => {
+      const state = comparisonState(choices)!
+      for (const { ck, artifactIds } of choices) {
+        if (artifactIds) state.builds[ck] = { ...artifactIds }
+        else delete state.builds[ck]
+      }
+      return state
+    }
+    const transferSets = (choices: CompareChoice[]) => {
+      const donors = choices.filter(({ setDonor }) => setDonor)
+      if (!donors.length) return undefined
+      const state = seedAssignment(choices)
+      for (const { ck } of donors) delete state.builds[ck]
+      const taken = new Set(
+        Object.values(state.builds).flatMap((build) =>
+          Object.values(build ?? {}).filter(notEmpty)
+        )
+      )
+      const free = copyState(state)
+      const requests = donors.map(({ ck, set, setDonor }) => {
+        const member = memberOf(ck)!
+        const original = found.builds[setDonor!]
+        const build = objKeyMap(allArtifactSlotKeys, (slot) => {
+          const art = database.arts.get(original?.[slot] ?? '')
+          return art && art.setKey === set && mayUse(member, art)
+            ? art.id
+            : undefined
+        })
+        const slots = allArtifactSlotKeys.filter((slot) => build[slot])
+        const offSlot = allArtifactSlotKeys.find((slot) => !build[slot])
+        let pool: ICachedArtifact[] | undefined
+        const offPieces = (slot: ArtifactSlotKey) => {
+          // Cache the pool with all participating donors' builds released.
+          pool ??= poolIn(free, member)
+          const preferred = [
+            original?.[slot],
+            found.builds[ck]?.[slot],
+            ...choices.map((choice) => found.builds[choice.ck]?.[slot]),
+          ]
+          const rank = (id: string) => {
+            const index = preferred.indexOf(id)
+            return index < 0 ? preferred.length : index
+          }
+          return pool
+            .filter((art) => art.slotKey === slot && !taken.has(art.id))
+            .sort((a, b) => rank(a.id) - rank(b.id))
+        }
+        return { ck, build, slots, offSlot, offPieces }
+      })
+      if (requests.some(({ slots }) => slots.length < 4)) return undefined
+      const offSlots: { index: number; slot: ArtifactSlotKey }[] = []
+      const matchOffPieces = (i: number): boolean => {
+        if (i === offSlots.length) return true
+        const { index, slot } = offSlots[i]
+        const { ck, offPieces } = requests[index]
+        const build = state.builds[ck]!
+        const counts = new Map<string, number>()
+        for (const art of offPieces(slot)) {
+          // Each further request can take at most one of these pieces. Set
+          // rules only depend on the set key of this slot.
+          const count = counts.get(art.setKey) ?? 0
+          counts.set(art.setKey, count + 1)
+          if (count >= offSlots.length - i) continue
+          build[slot] = art.id
+          if (!keepsSetRules(ck, artsIn(state, ck))) continue
+          taken.add(art.id)
+          if (matchOffPieces(i + 1)) return true
+          taken.delete(art.id)
+        }
+        build[slot] = undefined
+        return false
+      }
+      const reserveSets = (index: number): boolean => {
+        if (index === requests.length) return matchOffPieces(0)
+        const { ck, build, slots, offSlot } = requests[index]
+        // A five-piece donor can spare any slot if another member needs it.
+        for (const spare of offSlot ? [offSlot] : [undefined, ...slots]) {
+          const pieces = slots.filter((slot) => slot !== spare)
+          if (pieces.some((slot) => taken.has(build[slot]!))) continue
+          state.builds[ck] = { ...build }
+          if (spare) {
+            state.builds[ck]![spare] = undefined
+            offSlots.push({ index, slot: spare })
+          } else if (!keepsSetRules(ck, artsIn(state, ck))) {
+            continue
+          }
+          for (const slot of pieces) taken.add(build[slot]!)
+          if (reserveSets(index + 1)) return true
+          for (const slot of pieces) taken.delete(build[slot]!)
+          if (spare) offSlots.pop()
+        }
+        delete state.builds[ck]
+        return false
+      }
+      return reserveSets(0) ? state : undefined
     }
     const searchAssignment = async (
       choices: CompareChoice[],
@@ -3532,11 +3631,17 @@ export async function optimizeTeam({
       )
       const proposals = new Map<
         string,
-        { choices: CompareChoice[]; priority: number; transfer: boolean }
+        {
+          choices: CompareChoice[]
+          priority: number
+          transfer: boolean
+          direct: boolean
+        }
       >()
       const propose = (
         choices: (CompareChoice | undefined)[],
-        transfer = false
+        transfer = false,
+        direct = false
       ) => {
         const complete = choices.filter(notEmpty)
         if (
@@ -3550,10 +3655,11 @@ export async function optimizeTeam({
           .map((pick) => `${pick.ck}:${pick.weaponId}:${teamOptSetKey(pick)}`)
           .sort()
           .join('|')
-        if (!proposals.has(key))
+        if (!proposals.has(key) || (direct && !proposals.get(key)!.direct))
           proposals.set(key, {
             choices: complete,
             transfer,
+            direct,
             priority:
               complete.reduce((sum, choice) => sum + choice.value / best, 0) /
               complete.length,
@@ -3564,22 +3670,22 @@ export async function optimizeTeam({
         donor: CharacterKey
       ): CompareChoice | undefined => {
         const set = foundSets.get(donor)
-        if (!set || set === foundSets.get(ck)) return undefined
+        if (
+          !set ||
+          set === foundSets.get(ck) ||
+          !allowedCounts(
+            optConfigs[ck]!.artSetExclusion[set as keyof ArtSetExclusion]
+          ).includes(4)
+        )
+          return undefined
         const ranked = sets.get(ck)?.find((choice) => choice.set === set)
-        if (ranked) return ranked
-        const member = memberOf(ck)!
-        const build = found.builds[donor]
         return {
           ck,
           set,
+          setDonor: donor,
           weaponId: current(ck),
-          value: best,
-          artifactIds: objKeyMap(allArtifactSlotKeys, (slot) => {
-            const piece = database.arts.get(build?.[slot] ?? '')
-            return piece?.setKey === set && mayUse(member, piece)
-              ? piece.id
-              : found.builds[ck]?.[slot]
-          }),
+          value: ranked?.value ?? best,
+          artifactIds: ranked?.artifactIds,
         }
       }
       const takesWeapon = (
@@ -3616,19 +3722,20 @@ export async function optimizeTeam({
           if (!withWeapons) {
             const aTakes = takesSet(a, b)
             const bTakes = takesSet(b, a)
-            propose([aTakes, bTakes], true)
+            propose([aTakes, bTakes], true, true)
             for (const change of aSets) propose([change, bTakes], true)
             for (const change of bSets) propose([aTakes, change], true)
             propose([aSets[0], bSets[0]])
           } else {
             const aTakes = takesWeapon(a, b)
             const bTakes = takesWeapon(b, a)
-            propose([aTakes, bTakes], true)
+            propose([aTakes, bTakes], true, true)
             propose(
               [
                 withSet(aTakes, takesSet(a, b)),
                 withSet(bTakes, takesSet(b, a)),
               ],
+              true,
               true
             )
             propose([withSet(aTakes, aSets[0]), bTakes], true)
@@ -3639,19 +3746,28 @@ export async function optimizeTeam({
           }
           for (const c of keys.slice(j + 1)) {
             const transfer = withWeapons ? takesWeapon : takesSet
-            propose([transfer(a, b), transfer(b, c), transfer(c, a)], true)
-            propose([transfer(a, c), transfer(b, a), transfer(c, b)], true)
+            const recipients = [a, b, c]
+            for (const donors of [
+              [b, c, a],
+              [c, a, b],
+            ]) {
+              propose(
+                recipients.map((ck, i) => transfer(ck, donors[i])),
+                true,
+                true
+              )
+              if (withWeapons)
+                propose(
+                  recipients.map((ck, i) =>
+                    withSet(takesWeapon(ck, donors[i]), takesSet(ck, donors[i]))
+                  ),
+                  true,
+                  true
+                )
+            }
             const cSet = sets.get(c)?.[0]
             if (withWeapons) {
               const cWeapon = weapons.get(c)?.[0]
-              propose(
-                [
-                  withSet(takesWeapon(a, b), takesSet(a, b)),
-                  withSet(takesWeapon(b, c), takesSet(b, c)),
-                  withSet(takesWeapon(c, a), takesSet(c, a)),
-                ],
-                true
-              )
               propose([aWeapons[0], bWeapons[0], cWeapon ?? cSet])
               propose([aWeapons[0], bSets[0], cWeapon ?? cSet])
               propose([aSets[0], bWeapons[0], cWeapon ?? cSet])
@@ -3669,25 +3785,34 @@ export async function optimizeTeam({
       const ordered = [...proposals.values()].sort(
         (a, b) => b.priority - a.priority
       )
+      const rankedSeeds = ordered.filter(({ direct }) => !direct)
       const seeds = [
-        ...ordered.filter(({ choices }) => choices.length === 2).slice(0, 20),
-        ...ordered.filter(({ choices }) => choices.length === 3).slice(0, 12),
+        ...ordered.filter(({ direct }) => direct),
+        ...rankedSeeds
+          .filter(({ choices }) => choices.length === 2)
+          .slice(0, 20),
+        ...rankedSeeds
+          .filter(({ choices }) => choices.length === 3)
+          .slice(0, 12),
       ]
       const results: {
         choices: CompareChoice[]
         gear: TeamOptGearComparison
+        direct: boolean
       }[] = []
-      let repair: CompareChoice[] | undefined
-      for (const { choices, transfer } of seeds) {
+      let repair: (typeof seeds)[number] | undefined
+      for (const seed of seeds) {
         await breathe()
         if (isCancelled()) return []
-        const state = comparisonState(choices)!
-        for (const { ck, artifactIds } of choices) {
-          if (artifactIds) state.builds[ck] = artifactIds
-          else delete state.builds[ck]
-        }
-        const gear = scoreAssignment(state, choices)
-        if (gear) results.push({ choices, gear })
+        const { choices, transfer, direct } = seed
+        const assigned = transferSets(choices)
+        const seeded = scoreAssignment(seedAssignment(choices), choices)
+        const donated = assigned && scoreAssignment(assigned, choices)
+        const gear =
+          donated && (!seeded || donated.after.total > seeded.after.total)
+            ? donated
+            : seeded
+        if (gear) results.push({ choices, gear, direct })
         else if (
           transfer &&
           !repair &&
@@ -3702,7 +3827,7 @@ export async function optimizeTeam({
             ).includes(set)
           })
         )
-          repair = choices
+          repair = seed
       }
       const byDamage = (a: TeamOptGearComparison, b: TeamOptGearComparison) =>
         b.after.total / (b.rotationTime ?? played?.rotationTime ?? 1) -
@@ -3712,17 +3837,26 @@ export async function optimizeTeam({
       // found suitable artifacts for the other valid alternatives.
       const strongest = results[0]
       if (repair) {
-        const gear = await searchAssignment(repair)
-        if (gear) results.push({ choices: repair, gear })
+        const gear = await searchAssignment(repair.choices)
+        if (gear) results.push({ ...repair, gear })
       } else if (withWeapons && strongest) {
         const gear = await searchAssignment(strongest.choices, strongest.gear)
         if (gear) strongest.gear = gear
       }
-      const rankedGear = results.map(({ gear }) => gear).sort(byDamage)
-      return [
-        ...rankedGear.filter(({ changed }) => changed.length === 2).slice(0, 4),
-        ...rankedGear.filter(({ changed }) => changed.length === 3).slice(0, 2),
-      ].sort(byDamage)
+      const rankedGear = results.sort((a, b) => byDamage(a.gear, b.gear))
+      const rankedAlternatives = rankedGear.filter(({ direct }) => !direct)
+      const shown = new Set([
+        ...rankedGear.filter(({ direct }) => direct),
+        ...rankedAlternatives
+          .filter(({ choices }) => choices.length === 2)
+          .slice(0, 4),
+        ...rankedAlternatives
+          .filter(({ choices }) => choices.length === 3)
+          .slice(0, 2),
+      ])
+      return rankedGear
+        .filter((entry) => shown.has(entry))
+        .map(({ gear }) => gear)
     }
     // (a pick on a team: the team with it, per team and pick)
     const picked = new Map<string, Promise<TeamState | undefined>>()
