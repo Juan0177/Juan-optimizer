@@ -1,9 +1,11 @@
 import type { WeaponKey } from '@genshin-optimizer/gi/consts'
 import {
+  constant,
   equal,
-  equalStr,
   infoMut,
   input,
+  lookup,
+  prod,
   subscript,
   target,
   unequal,
@@ -19,11 +21,32 @@ const [, trm] = trans('weapon', key)
 const atkSrc = [-1, 0.24, 0.3, 0.36, 0.42, 0.48]
 
 const [condPassivePath, condPassive] = cond(key, 'Heritage')
-const nonstackWrite = equalStr(condPassive, 'on', input.charKey)
+/**
+ * Besides 'on', a rotation-averaged share in steps of 5% ('5' … '95'): used for manual
+ * rotations shorter than its 20 s cooldown (where no written rotation times its swap-outs).
+ */
+const uptimeStates = Array.from({ length: 19 }, (_, i) => `${(i + 1) * 5}`)
+const uptime = lookup(
+  condPassive,
+  {
+    on: constant(1),
+    ...Object.fromEntries(
+      uptimeStates.map((state) => [state, constant(Number(state) / 100)])
+    ),
+  },
+  0
+)
+const nonstackWrite = lookup(
+  condPassive,
+  Object.fromEntries(
+    ['on', ...uptimeStates].map((state) => [state, input.charKey])
+  ),
+  undefined
+)
 const [atk_Disp, atk_dispInactive] = nonStackBuff(
   'ttds',
   'atk_',
-  subscript(input.weapon.refinement, atkSrc)
+  prod(subscript(input.weapon.refinement, atkSrc), uptime)
 )
 const atk_ = unequal(
   input.activeCharKey,

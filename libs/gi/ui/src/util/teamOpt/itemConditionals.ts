@@ -41,6 +41,11 @@ export type ItemConditionalCtx = {
   ownLunar?: boolean
   /** Its kit keeps it below half HP (KQM's standard: Hu Tao): Staff of Homa */
   lowHp?: boolean
+  /**
+   * Rotation length in seconds when no written rotation times cooldowns (manual attacks): scales
+   * cooldown-gated buffs like Thrilling Tales (20 s CD) on shorter rotations.
+   */
+  rotationTime?: number
 }
 
 /**
@@ -232,6 +237,14 @@ const OVERRIDES: Partial<
   },
   // its effects rotate every 10 s: none is on all the time
   ForgedByTheGoldenMelody: () => null,
+  // Thrilling Tales of Dragon Slayers: 20 s cooldown, 10 s duration. Without a written rotation,
+  // a rotation shorter than 20 s can only trigger it once every ceil(20 / rotationTime) rotations.
+  ThrillingTalesOfDragonSlayers: (ctx) => {
+    if (!ctx.rotationTime || ctx.rotationTime >= 20) return undefined
+    const share = 1 / Math.ceil(20 / ctx.rotationTime)
+    const pct = Math.round(share * 20) * 5
+    return pct >= 100 ? 'on' : pct <= 0 ? null : `${pct}`
+  },
   // one of its three songs at random on taking the field: their average
   TheWidsith: () => 'avg',
   // after the wielder's Elemental Skill (its on-field time is the rotation's to say)
@@ -400,7 +413,10 @@ function choose(
   const override = OVERRIDES[itemKey]?.(ctx, condKey)
   if (override === null) return undefined
   if (typeof override === 'string')
-    return states.includes(override) ? [doc.path, override] : undefined
+    return states.includes(override) ||
+      (itemKey === 'ThrillingTalesOfDragonSlayers' && /^\d+$/.test(override))
+      ? [doc.path, override]
+      : undefined
   if (OFF.test(cond)) return undefined
   const has = (a: ItemConditionalCtx['attacks'][number]) =>
     ctx.attacks.includes(a)

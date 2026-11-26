@@ -71,7 +71,8 @@ function teamCapabilities(
 export function teamQuickTokens(
   members: readonly { characterKey: CharacterKey }[],
   names: readonly RotationMember[],
-  t: TFunction
+  t: TFunction,
+  constellations?: Partial<Record<CharacterKey, number>>
 ): WriterQuickToken[] {
   const {
     has,
@@ -82,6 +83,7 @@ export function teamQuickTokens(
     plungeHeightMembers,
     aimedBowMembers,
   } = teamCapabilities(members, names)
+  const sandroneC1 = (constellations?.Sandrone ?? 0) >= 1
 
   const tokens: WriterQuickToken[] = [
     {
@@ -135,10 +137,15 @@ export function teamQuickTokens(
   const caNotes: string[] = []
   if (has('Sandrone'))
     caNotes.push(
-      t(
-        'teamOpt.writer.token.caSandrone',
-        'Sandrone: 3 condensed beams, CA[beams=2] for 2 (up to 6 from C1)'
-      )
+      sandroneC1
+        ? t(
+            'teamOpt.writer.token.caSandroneC1',
+            'Sandrone (C1+): plain CA stays 3 beams; write CA[beams=6] for full C1 charge (1 to 6)'
+          )
+        : t(
+            'teamOpt.writer.token.caSandrone',
+            'Sandrone: 3 condensed beams, CA[beams=2] for 2 (up to 6 from C1)'
+          )
     )
   if (has('Mavuika'))
     caNotes.push(
@@ -247,13 +254,18 @@ export function teamQuickTokens(
     })
   if (has('Sandrone'))
     tokens.push({
-      text: 'CA[beams=2]',
+      text: sandroneC1 ? 'CA[beams=6]' : 'CA[beams=2]',
       key: 'sandroneBeams',
       characterKey: 'Sandrone',
-      label: t(
-        'teamOpt.writer.syntax.beams',
-        'Sandrone: release after 2 condensed beams (3 by default, up to 6 from C1)'
-      ),
+      label: sandroneC1
+        ? t(
+            'teamOpt.writer.syntax.beamsC1',
+            'Sandrone (C1+): full 6-beam charge (plain CA stays 3 beams; write CA[beams=1] to CA[beams=6])'
+          )
+        : t(
+            'teamOpt.writer.syntax.beams',
+            'Sandrone: release after 2 condensed beams (3 by default, up to 6 from C1)'
+          ),
     })
   if (has('Arlecchino'))
     tokens.push({
@@ -343,7 +355,8 @@ export function teamQuickTokens(
 export function teamSyntaxRows(
   members: readonly { characterKey: CharacterKey }[],
   names: readonly RotationMember[],
-  t: TFunction
+  t: TFunction,
+  constellations?: Partial<Record<CharacterKey, number>>
 ): { teamRows: WriterSyntaxRow[]; generalRows: WriterSyntaxRow[] } {
   const {
     has,
@@ -354,6 +367,7 @@ export function teamSyntaxRows(
     plungeHeightMembers,
     bowMembers,
   } = teamCapabilities(members, names)
+  const sandroneC1 = (constellations?.Sandrone ?? 0) >= 1
   const firstName = names[0]?.name ?? 'Name'
 
   const teamRows: WriterSyntaxRow[] = []
@@ -402,12 +416,17 @@ export function teamSyntaxRows(
     })
   if (has('Sandrone'))
     teamRows.push({
-      code: 'CA[beams=2]',
+      code: sandroneC1 ? 'CA[beams=6] · CA[beams=2]' : 'CA[beams=2]',
       characterKey: 'Sandrone',
-      meaning: t(
-        'teamOpt.writer.syntax.beams',
-        'Sandrone: release after 2 condensed beams (3 by default, up to 6 from C1)'
-      ),
+      meaning: sandroneC1
+        ? t(
+            'teamOpt.writer.syntax.beamsC1',
+            'Sandrone (C1+): full 6-beam charge (plain CA stays 3 beams; write CA[beams=1] to CA[beams=6])'
+          )
+        : t(
+            'teamOpt.writer.syntax.beams',
+            'Sandrone: release after 2 condensed beams (3 by default, up to 6 from C1)'
+          ),
     })
   if (has('Arlecchino'))
     teamRows.push({

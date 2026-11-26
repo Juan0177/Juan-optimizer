@@ -13,7 +13,7 @@ export function memberCtx(
   database: ArtCharDatabase,
   teamId: string,
   characterKey: CharacterKey,
-  teamOpt: Pick<TeamOpt, 'attacks'>,
+  teamOpt: Pick<TeamOpt, 'attacks' | 'rotationTime'>,
   /** The KQM tab's (its own enemy) or Team optimize's */
   kqm: boolean
 ): ItemConditionalCtx {
@@ -57,6 +57,9 @@ export function memberCtx(
       (n, m) => n + (energyCalcData[m.characterKey]?.burstCost ?? 0),
       0
     ),
+    ...(teamOpt.rotationTime && teamOpt.rotationTime > 0
+      ? { rotationTime: teamOpt.rotationTime }
+      : {}),
   }
 }
 
@@ -80,10 +83,21 @@ export function teamRuleConditionals(
 ): TeamRules {
   if (!teamRuleOptions.enabled) return {}
   const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  const hasTimedTtds = Object.values(attacks).some((list) =>
+    list?.some(
+      (a) =>
+        a.states?.some((s) => s.path[0] === 'ThrillingTalesOfDragonSlayers') ||
+        a.limits?.some((l) => l.path[0] === 'ThrillingTalesOfDragonSlayers')
+    )
+  )
+  const rotationTime = hasTimedTtds
+    ? undefined
+    : database.teams.get(teamId)?.teamOpt?.rotationTime
   const key = JSON.stringify([
     teamId,
     members,
     tabEnemyFreezeImmune(database, teamId, false),
+    rotationTime ?? null,
   ])
   let byTeam = ruleCache.get(attacks)
   if (!byTeam) ruleCache.set(attacks, (byTeam = new Map()))
@@ -92,7 +106,13 @@ export function teamRuleConditionals(
   const rules: TeamRules = Object.fromEntries(
     members.map((ck) => {
       // (the rules read only this summary: rotations that agree on it share them)
-      const ctx = memberCtx(database, teamId, ck, { attacks }, false)
+      const ctx = memberCtx(
+        database,
+        teamId,
+        ck,
+        { attacks, rotationTime },
+        false
+      )
       const ctxKey = JSON.stringify(ctx)
       let conditional = byContext.get(ctxKey)
       if (!conditional) {

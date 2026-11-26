@@ -81,10 +81,23 @@ describe('Sandrone charges with a number of beams (CA[beams=N], gcsim charge[bea
   })
   it('notes the CA[beams=N] syntax when a rotation writes a plain CA', () => {
     const syntax = (text: string) =>
-      [...run(text).notes].find((n) => n.includes('"CA[beams=N]"'))
+      [...run(text).notes].find((n) => n.includes('"CA[beams='))
     expect(syntax('Sandrone CA E')).toContain('after 3 condensed beams')
     expect(syntax('Sandrone CA E')).toContain('(1 to 3, up to 6 from C1)')
     expect(syntax('Sandrone CA[beams=2] E')).toBeUndefined()
+    const c1 = simulateRotation({
+      rotation: parseRotation('Sandrone CA E', [
+        { characterKey: 'Sandrone', name: 'Sandrone' },
+      ]),
+      members,
+      constellations: { Sandrone: 1 },
+      elements: { Sandrone: 'cryo' },
+      repeats: 1,
+      keep: 'all',
+    })
+    expect([...c1.notes].find((n) => n.includes('CA[beams=6]'))).toContain(
+      'Sandrone (C1+)'
+    )
   })
   it('releases the charge after that many beams', () => {
     // gcsim: charge[beams=2]@1 skill@165, charge[beams=1]@1 skill@105

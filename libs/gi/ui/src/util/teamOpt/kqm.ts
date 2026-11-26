@@ -994,7 +994,7 @@ export const kqmOwnSettings = (kqm: TeamOptKqm | undefined) => ({
 export function kqmRuleConditionals(
   database: ArtCharDatabase,
   teamId: string,
-  teamOpt: Pick<TeamOpt, 'attacks'>
+  teamOpt: Pick<TeamOpt, 'attacks' | 'rotationTime'>
 ): Partial<Record<CharacterKey, ReturnType<typeof itemConditionals>>> {
   return Object.fromEntries(
     teamOptMembers(database, teamId).map((m) => {
@@ -1052,6 +1052,7 @@ export function kqmTeamOverrides(
   }
   const rules = kqmRuleConditionals(database, teamId, {
     attacks: result.played?.attacks ?? teamOpt.attacks,
+    rotationTime: result.played ? undefined : teamOpt.rotationTime,
   })
   return {
     arts,
@@ -1699,7 +1700,10 @@ async function runKqm({
   // over them (the members' own switches for their gear play no part: `ownBuild`)
   // (from what the members do in the rotation: again when it is played differently)
   const ruleConditionals = () => {
-    const ctx = kqmRuleConditionals(database, teamId, { attacks: attacksNow() })
+    const ctx = kqmRuleConditionals(database, teamId, {
+      attacks: attacksNow(),
+      rotationTime: played ? undefined : teamOpt.rotationTime,
+    })
     return {
       ctx,
       extra: Object.fromEntries(

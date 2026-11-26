@@ -1,15 +1,21 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { allArtifactSetKeys, allWeaponKeys } from '@genshin-optimizer/gi/consts'
 import type { TeamOptAttack, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import type {
   KqmBuild,
+  SimBuffOwner,
   SimGear,
   SimHit,
   TeamData,
   TeamDataOverrides,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { rotationAttacks } from '@genshin-optimizer/gi/ui'
+import {
+  GEAR_KEYS,
+  ownConditional,
+  rotationAttacks,
+} from '@genshin-optimizer/gi/ui'
 import { alpha, Box, ButtonBase, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useDeferredValue, useMemo, useState } from 'react'
@@ -55,23 +61,60 @@ function talentOf(text: string) {
   if (action.startsWith('P')) return 'plunging'
   return undefined
 }
-/** An attack as one of a member's: everything but its hit count (and where it may land) */
-const sameAttack = (a: TeamOptAttack, b: TeamOptAttack) => {
-  const {
-    hits: _a,
-    limits: _al,
-    ...restA
-  } = a as TeamOptAttack & {
-    limits?: unknown
+const WEAPON_KEYS: ReadonlySet<string> = new Set(allWeaponKeys)
+const SET_KEYS: ReadonlySet<string> = new Set(allArtifactSetKeys)
+
+/**
+ * Keep only kit/team entries and entries for gear the shown builds actually hold: `kqmAttacks`
+ * includes states/limits for candidate gear from the replay, while the timeline plays only the
+ * shown builds.
+ */
+function filterHeldRefs<T extends { owner: string; path: string[] }>(
+  list: readonly T[] | undefined,
+  held: Partial<Record<CharacterKey, SimGear>> | undefined
+) {
+  if (!list?.length) return []
+  return list.filter((entry) => {
+    if (entry.owner === 'team') return true
+    const gear = held?.[entry.owner as CharacterKey]
+    const key = entry.path[0]
+    if (!gear || !key) return true
+    if (WEAPON_KEYS.has(key)) return gear.weapon === key
+    if (SET_KEYS.has(key)) return !!gear.sets?.[key]
+    return true
+  })
+}
+
+/** An attack as one of a member's: matches buff states and exclusions for held gear */
+const sameAttack = (
+  a: TeamOptAttack,
+  b: TeamOptAttack,
+  held?: Partial<Record<CharacterKey, SimGear>>
+) => {
+  const normalize = (x: TeamOptAttack) => {
+    const {
+      hits: _hits,
+      limits,
+      states,
+      ...rest
+    } = x as TeamOptAttack & {
+      limits?: NonNullable<TeamOptAttack['limits']>
+    }
+    const total = x.hits || 1
+    return {
+      ...rest,
+      states: filterHeldRefs(states, held)
+        .map((s) => `${s.owner}|${s.path.join('.')}=${s.value}`)
+        .sort(),
+      limits: filterHeldRefs(limits, held)
+        .map(
+          (l) =>
+            `${l.owner}|${l.path.join('.')}=${l.hits <= 0 ? '0' : (l.hits / total).toFixed(3)}`
+        )
+        .sort(),
+    }
   }
-  const {
-    hits: _b,
-    limits: _bl,
-    ...restB
-  } = b as TeamOptAttack & {
-    limits?: unknown
-  }
-  return JSON.stringify(restA) === JSON.stringify(restB)
+  return JSON.stringify(normalize(a)) === JSON.stringify(normalize(b))
 }
 
 /**
@@ -137,6 +180,36 @@ export function KqmTimeline({
   // (a heavy team's play takes a moment: the page first, the timeline once it is played)
   const deferredTeam = useDeferredValue(team)
   const isKqm = !!kqm
+  // Match `writtenKqmReplay`'s baseline conditionals when KQM overrides are given, so hits with a
+  // timed buff off (e.g. TTDS on cooldown) carry the same `limits` as `kqmAttacks`.
+  const current = useMemo(() => {
+    if (!isKqm || !overrides) return undefined
+    return (owner: SimBuffOwner, path: string[]) => {
+      if (owner === 'team') {
+        const switches = overrides.teamConditional as
+          | Record<string, Record<string, string>>
+          | undefined
+        return switches
+          ? switches[path[0]]?.[path[1]] || undefined
+          : ownConditional(database, teamId, members, owner, path)
+      }
+      const kqmSwitch =
+        overrides.conditionalOverrides?.[owner]?.[path[0]]?.[path[1]]
+      if (kqmSwitch !== undefined) return kqmSwitch || undefined
+      if (
+        overrides.ownKit !== false &&
+        !(overrides.ownBuild === false && GEAR_KEYS.has(path[0]))
+      ) {
+        const own = ownConditional(database, teamId, members, owner, path)
+        if (own !== undefined) return own
+      }
+      return (
+        overrides.extraConditionals?.[owner] as
+          | Record<string, Record<string, string>>
+          | undefined
+      )?.[path[0]]?.[path[1]]
+    }
+  }, [isKqm, overrides, database, teamId, members])
   const result = useMemo(
     () =>
       applied.trim()
@@ -152,6 +225,7 @@ export function KqmTimeline({
             database,
             teamId,
             gender,
+            current,
             // (the enemy's auras: an attack's window says which were on when it hit)
             auraTimeline: true,
             openerWarning: (warning) => warning,
@@ -172,6 +246,7 @@ export function KqmTimeline({
       database,
       teamId,
       gender,
+      current,
     ]
   )
   // each hit of the timeline's play, its attack (the play shown, its first sample)
@@ -284,7 +359,7 @@ export function KqmTimeline({
     )
     return {
       attack:
-        samePath.find((x) => sameAttack(x, mine)) ??
+        samePath.find((x) => sameAttack(x, mine, deferredTeam.gear)) ??
         (loose ? samePath[0] : undefined) ??
         mine,
       moment: {

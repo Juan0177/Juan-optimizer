@@ -430,6 +430,7 @@ export function RotationInline({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           <WriterQuickRow
             members={members}
+            constellations={team.constellations}
             onInsert={(word) =>
               insertWord(inputRef.current, text, word, setText)
             }

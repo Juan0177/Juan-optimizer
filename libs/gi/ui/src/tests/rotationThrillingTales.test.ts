@@ -5,6 +5,7 @@
  */
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { describe, expect, it } from 'vitest'
+import { itemConditionals } from '../util/teamOpt/itemConditionals'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import {
   rotationAttacks,
@@ -163,5 +164,58 @@ describe('Thrilling Tales of Dragon Slayers a build tries (Team optimize)', () =
           (a) => a.limits?.some(sucrose) || a.states?.some(sucrose)
         )
       ).toBe(false)
+  })
+})
+
+describe('Thrilling Tales on short rotations (< 20 s)', () => {
+  it('triggers only every other rotation in steady-state when rotation length is under 20 s', () => {
+    const members: CharacterKey[] = ['Sucrose', 'Xiangling']
+    // ~15 s loop (each action 60f + 12f swap + 13 s wait)
+    const sim = simulateRotation({
+      rotation: parseRotation(
+        'Sucrose E -> Xiangling E W13',
+        members.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members,
+      elements: { Sucrose: 'anemo', Xiangling: 'pyro' },
+      constellations: {},
+      repeats: 4,
+      keep: 'last2',
+      kits: { Sucrose: probe('Sucrose'), Xiangling: probe('Xiangling') },
+      reactions: { onHit() {} },
+      gear: { Sucrose: { weapon: 'ThrillingTalesOfDragonSlayers' } },
+    })
+    const attacks = rotationAttacks(sim, (owner, path) =>
+      owner === 'Sucrose' && path[0] === 'ThrillingTalesOfDragonSlayers'
+        ? 'on'
+        : undefined
+    )
+    const xl = attacks.Xiangling ?? []
+    const on = xl
+      .filter(
+        (a) =>
+          !a.limits?.some((l) => l.path[0] === 'ThrillingTalesOfDragonSlayers')
+      )
+      .reduce((s, a) => s + a.hits, 0)
+    const off = xl
+      .filter((a) =>
+        a.limits?.some((l) => l.path[0] === 'ThrillingTalesOfDragonSlayers')
+      )
+      .reduce((s, a) => s + a.hits, 0)
+    expect(on).toBe(1)
+    expect(off).toBe(1)
+  })
+
+  it('scales rule conditional uptime when manual rotationTime is under 20 s', () => {
+    const pick = (rotationTime?: number) =>
+      itemConditionals(
+        { attacks: ['skill'], auras: ['anemo'], rotationTime },
+        { sets: [], weapons: ['ThrillingTalesOfDragonSlayers'] }
+      ).conditional?.ThrillingTalesOfDragonSlayers?.Heritage
+    expect(pick(undefined)).toBe('on')
+    expect(pick(20)).toBe('on')
+    expect(pick(18)).toBe('50')
+    expect(pick(15)).toBe('50')
+    expect(pick(9)).toBe('35')
   })
 })

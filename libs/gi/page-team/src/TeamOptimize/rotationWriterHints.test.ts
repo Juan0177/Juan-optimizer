@@ -117,4 +117,19 @@ describe('rotationWriterHints', () => {
     const { teamRows } = teamSyntaxRows(members, names, t)
     expect(teamRows.some((r) => r.code === 'entry')).toBe(true)
   })
+
+  it('surfaces CA[beams=6] for C1+ Sandrone and keeps CA[beams=2] at C0', () => {
+    const { members, names } = makeTeam(['Sandrone', 'Mitya'])
+    expect(
+      teamQuickTokens(members, names, t, { Sandrone: 0 }).map((x) => x.text)
+    ).toContain('CA[beams=2]')
+    expect(
+      teamQuickTokens(members, names, t, { Sandrone: 1 }).map((x) => x.text)
+    ).toContain('CA[beams=6]')
+    expect(
+      teamSyntaxRows(members, names, t, { Sandrone: 1 }).teamRows.some(
+        (r) => r.characterKey === 'Sandrone' && r.code.includes('CA[beams=6]')
+      )
+    ).toBe(true)
+  })
 })

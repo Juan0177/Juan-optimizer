@@ -32,8 +32,8 @@ import type {
 } from '@genshin-optimizer/gi/ui'
 import {
   actionFrameDefaults,
-  calculateEnergyRecharge,
   CharacterName,
+  calculateEnergyRecharge,
   energyFromRotation,
   type FrameData,
   HEXEREI_CHARACTERS,
@@ -2515,6 +2515,7 @@ function WriterModal({
                 <WriterQuickRow
                   bar
                   members={members}
+                  constellations={ownTeam.constellations}
                   onInsert={insert}
                   optionalSkill={sacHolders.length > 0}
                   into={
@@ -2560,7 +2561,13 @@ function WriterModal({
                     !syntaxOpen ? () => setSyntaxOpen(true) : undefined
                   }
                 />
-                {syntaxOpen && <SyntaxSheet members={members} names={names} />}
+                {syntaxOpen && (
+                  <SyntaxSheet
+                    members={members}
+                    names={names}
+                    constellations={ownTeam.constellations}
+                  />
+                )}
               </Box>
               {!!warnings.length && (
                 <Box
@@ -3571,6 +3578,7 @@ const keepFocus = (e: { preventDefault: () => void }) => e.preventDefault()
 /** One row under the writer: the members (insert their name) and the action words */
 export function WriterQuickRow({
   members,
+  constellations,
   onInsert,
   draft,
   into,
@@ -3579,6 +3587,7 @@ export function WriterQuickRow({
   optionalSkill,
 }: {
   members: readonly { characterKey: CharacterKey }[]
+  constellations?: Partial<Record<CharacterKey, number>>
   onInsert: (word: string) => void
   draft?: ReactNode
   /** The box the words go into, when there are several (shown with the row) */
@@ -3602,8 +3611,8 @@ export function WriterQuickRow({
     [members, i18n, gender]
   )
   const quickTokens = useMemo(
-    () => teamQuickTokens(members, memberNames, t),
-    [members, memberNames, t]
+    () => teamQuickTokens(members, memberNames, t, constellations),
+    [members, memberNames, t, constellations]
   )
   const chip = (theme: Theme) => ({
     height: 28,
@@ -3922,14 +3931,16 @@ function EditorHead({
 function SyntaxSheet({
   members,
   names,
+  constellations,
 }: {
   members: readonly { characterKey: CharacterKey }[]
   names: readonly RotationMember[]
+  constellations?: Partial<Record<CharacterKey, number>>
 }) {
   const { t } = useTranslation('page_team')
   const { teamRows, generalRows } = useMemo(
-    () => teamSyntaxRows(members, names, t),
-    [members, names, t]
+    () => teamSyntaxRows(members, names, t, constellations),
+    [members, names, t, constellations]
   )
   const listSx = {
     m: 0,
