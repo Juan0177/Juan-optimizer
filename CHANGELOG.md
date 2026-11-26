@@ -4,6 +4,17 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.46.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.46.0) (2026-11-26)
+
+### New
+
+- Damage share shows how long Cryo Resonance (+15% CRIT Rate) is up in teams with two Cryo members: its share of the rotation's time and of its damage.
+- Damage share shows the Polestar Field too: its uptime and average stacks, over time and by damage (Anastasya's +1 included).
+
+### Fixed
+
+- Anastasya's Normal Attacks in Honor apply Cryo on every other hit (was every third).
+
 ## [v1.45.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.45.0) (2026-11-26)
 
 ### New

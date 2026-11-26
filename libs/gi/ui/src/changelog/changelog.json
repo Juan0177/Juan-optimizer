@@ -1,5 +1,16 @@
 [
   {
+    "version": "1.46.0",
+    "date": "2026-11-26",
+    "new": [
+      "Damage share shows how long Cryo Resonance (+15% CRIT Rate) is up in teams with two Cryo members: its share of the rotation's time and of its damage.",
+      "Damage share shows the Polestar Field too: its uptime and average stacks, over time and by damage (Anastasya's +1 included)."
+    ],
+    "fixed": [
+      "Anastasya's Normal Attacks in Honor apply Cryo on every other hit (was every third)."
+    ]
+  },
+  {
     "version": "1.45.5",
     "date": "2026-11-26"
   },
