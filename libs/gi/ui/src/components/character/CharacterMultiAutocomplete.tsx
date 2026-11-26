@@ -16,11 +16,14 @@ import { CharIconSide } from './CharIconSideElement'
 
 export function CharacterMultiAutocomplete({
   teamIds,
+  allTeamIds,
   charKeys,
   setCharKey,
   acProps,
 }: {
   teamIds: string[]
+  /** Full pool of visible teams for the denominator count (defaults to all teams in database) */
+  allTeamIds?: string[]
   charKeys: CharacterKey[]
   setCharKey: (v: CharacterKey[]) => void
   acProps?: Partial<GeneralAutocompleteMultiProps<CharacterKey>>
@@ -54,7 +57,10 @@ export function CharacterMultiAutocomplete({
       characterTeamTotal: allCharKeys,
     } as const
     return bulkCatTotal(catKeys, (ctMap) => {
-      database.teams.values.forEach((team) => {
+      const baseTeams = allTeamIds
+        ? allTeamIds.map((id) => database.teams.get(id)).filter(notEmpty)
+        : database.teams.values
+      baseTeams.forEach((team) => {
         const { loadoutData } = team
         loadoutData.filter(notEmpty).forEach(({ teamCharId }) => {
           const teamChar = database.teamChars.get(teamCharId)
@@ -75,7 +81,7 @@ export function CharacterMultiAutocomplete({
         })
       })
     })
-  }, [database, allCharKeys, teamIds])
+  }, [database, allCharKeys, teamIds, allTeamIds])
 
   const toExLabel = useCallback(
     (key: CharacterKey) => <strong>{characterTeamTotal[key]}</strong>,

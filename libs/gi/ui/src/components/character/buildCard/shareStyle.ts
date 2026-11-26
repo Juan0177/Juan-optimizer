@@ -51,7 +51,7 @@ export function loadShareFont(): Promise<void> {
       })
       await Promise.race([
         loaded,
-        new Promise((resolve) => setTimeout(resolve, 4000)),
+        new Promise((resolve) => setTimeout(resolve, 350)),
       ])
     } catch {
       // (the system's font)

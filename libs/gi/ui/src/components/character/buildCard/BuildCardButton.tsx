@@ -23,7 +23,7 @@ import {
   useMediaQuery,
 } from '@mui/material'
 import type { ReactNode } from 'react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { SubstatToggle } from '../../artifact/SubstatToggle'
 import { useBuildCardData } from './buildCardData'
@@ -168,112 +168,174 @@ export function CardImageDialog({
   children?: ReactNode
 }) {
   const { t } = useTranslation('ui')
-  const [png, setPng] = useState<
-    { blob: Blob; url: string; canvas: HTMLCanvasElement } | undefined
-  >()
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | undefined>()
+  const [blobState, setBlobState] = useState<{
+    canvas: HTMLCanvasElement
+    blob: Blob
+  }>()
   const [busy, setBusy] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | undefined>()
   const [copied, setCopied] = useState(false)
   const touch = useMediaQuery('(pointer: coarse)')
   const [zoomed, setZoomed] = useState(false)
 
-  // the shown image's URL, released when replaced or closed
-  const urlRef = useRef<string | undefined>()
-  useEffect(
-    () => () => {
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
+  const watermarkRef = useRef(watermark)
+  watermarkRef.current = watermark
+  const hasRenderedRef = useRef(false)
+  // Cache the encoded (and watermarked) blob per rendered canvas so preview shows immediately
+  // without blocking on slow PNG compression.
+  const blobTaskRef = useRef<
+    { canvas: HTMLCanvasElement; promise: Promise<Blob> } | undefined
+  >()
+
+  const encodeCanvas = useCallback(
+    (target: HTMLCanvasElement, fmt: 'png' | 'jpeg'): Promise<Blob> => {
+      if (blobTaskRef.current?.canvas === target)
+        return blobTaskRef.current.promise
+      const promise = (async () => {
+        let record: unknown
+        try {
+          if (fmt === 'png') record = watermarkRef.current?.()
+        } catch {
+          record = undefined
+        }
+        if (record) await embedWatermark(target, record).catch(() => {})
+        let blob = await new Promise<Blob | null>((resolve) =>
+          target.toBlob(resolve, `image/${fmt}`, 0.92)
+        )
+        if (!blob) throw new Error('The image could not be made')
+        if (record) blob = await pngWithRecord(blob, record).catch(() => blob!)
+        return blob
+      })()
+      blobTaskRef.current = { canvas: target, promise }
+      return promise
     },
     []
   )
 
-  const watermarkRef = useRef(watermark)
-  watermarkRef.current = watermark
-
   useEffect(() => {
     if (!render) return
     let cancelled = false
+    let bgTimer: ReturnType<typeof setTimeout> | undefined
     setBusy(true)
     setError(undefined)
     const timer = setTimeout(
       () =>
         render()
-          .then(async (canvas) => {
-            // (the record is extra: the picture is made without it if it fails)
-            let record: unknown
-            try {
-              if (format === 'png') record = watermarkRef.current?.()
-            } catch {
-              record = undefined
-            }
-            if (record) await embedWatermark(canvas, record).catch(() => {})
-            let blob = await new Promise<Blob | null>((resolve) =>
-              canvas.toBlob(resolve, `image/${format}`, 0.92)
-            )
-            if (blob && record)
-              blob = await pngWithRecord(blob, record).catch(() => blob)
-            return [canvas, blob] as const
-          })
-          .then(([canvas, blob]) => {
+          .then((drawn) => {
             if (cancelled) return
-            if (!blob) throw new Error('The image could not be made')
-            const url = URL.createObjectURL(blob)
-            if (urlRef.current) URL.revokeObjectURL(urlRef.current)
-            urlRef.current = url
-            setPng({ blob, url, canvas })
+            hasRenderedRef.current = true
+            blobTaskRef.current = undefined
+            setBlobState(undefined)
+            setCanvas(drawn)
             setBusy(false)
+            // Pre-encode lazily after the canvas paints so Download/Copy/Share stay instant
+            // without stalling interactive checkbox/order edits.
+            bgTimer = setTimeout(() => {
+              if (cancelled) return
+              encodeCanvas(drawn, format)
+                .then((blob) => {
+                  if (!cancelled) setBlobState({ canvas: drawn, blob })
+                })
+                .catch(() => {})
+            }, 180)
           })
           .catch((e) => {
             if (cancelled) return
             setError(String(e?.message ?? e))
             setBusy(false)
           }),
-      urlRef.current ? 250 : 0
+      hasRenderedRef.current ? 80 : 0
     )
     return () => {
       cancelled = true
       clearTimeout(timer)
+      if (bgTimer) clearTimeout(bgTimer)
     }
-  }, [render, format])
+  }, [render, format, encodeCanvas])
 
+  const readyBlob =
+    blobState && blobState.canvas === canvas ? blobState.blob : undefined
   const fullName = `${fileName}-${new Date().toISOString().slice(0, 10)}.${format === 'jpeg' ? 'jpg' : 'png'}`
-  const download = () => {
-    if (!png) return
-    const a = document.createElement('a')
-    a.href = png.url
-    a.download = fullName
-    a.click()
+
+  const ensureBlob = async () => {
+    if (!canvas) return undefined
+    if (readyBlob) return readyBlob
+    setExporting(true)
+    try {
+      const blob = await encodeCanvas(canvas, format)
+      setBlobState({ canvas, blob })
+      return blob
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const download = async () => {
+    if (!canvas) return
+    try {
+      const blob = await ensureBlob()
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fullName
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e))
+    }
   }
   const shareFile = useMemo(
     () =>
-      png && touch
-        ? new File([png.blob], fullName, { type: png.blob.type })
+      readyBlob && touch
+        ? new File([readyBlob], fullName, { type: readyBlob.type })
         : undefined,
-    [png, touch, fullName]
+    [readyBlob, touch, fullName]
   )
-  const canShare = !!shareFile && !!navigator.canShare?.({ files: [shareFile] })
+  const canShare =
+    touch &&
+    !!navigator.canShare &&
+    (shareFile
+      ? navigator.canShare({ files: [shareFile] })
+      : !!canvas &&
+        navigator.canShare({
+          files: [new File([''], fullName, { type: `image/${format}` })],
+        }))
   const share = async () => {
-    if (!shareFile) return
+    if (!canvas) return
     try {
-      await navigator.share({ files: [shareFile], title })
+      const file =
+        shareFile ??
+        (await ensureBlob().then(
+          (b) => b && new File([b], fullName, { type: b.type })
+        ))
+      if (!file) return
+      await navigator.share({ files: [file], title })
     } catch (e) {
       if ((e as Error)?.name !== 'AbortError')
         setError(String((e as Error)?.message ?? e))
     }
   }
   const copy = async () => {
-    if (!png) return
+    if (!canvas) return
     try {
-      const blob =
+      const pngPromise =
         format === 'png'
-          ? png.blob
-          : await new Promise<Blob>((resolve, reject) =>
-              png.canvas.toBlob(
+          ? readyBlob
+            ? Promise.resolve(readyBlob)
+            : encodeCanvas(canvas, 'png')
+          : new Promise<Blob>((resolve, reject) =>
+              canvas.toBlob(
                 (b) => (b ? resolve(b) : reject(new Error('No image'))),
                 'image/png'
               )
             )
+      // Passing the Promise directly keeps the browser user-gesture active even if encoding is
+      // still finishing.
       await navigator.clipboard.write([
-        new ClipboardItem({ 'image/png': blob }),
+        new ClipboardItem({ 'image/png': pngPromise }),
       ])
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -316,7 +378,7 @@ export function CardImageDialog({
             placeholder
           ) : error ? (
             <Alert severity="error">{error}</Alert>
-          ) : png ? (
+          ) : canvas ? (
             <Box sx={{ position: 'relative' }}>
               <Box
                 onClick={touch ? () => setZoomed((z) => !z) : undefined}
@@ -326,21 +388,11 @@ export function CardImageDialog({
                   borderRadius: 1,
                 }}
               >
-                <Box
-                  component="img"
-                  src={png.url}
+                <CanvasPreview
+                  canvas={canvas}
                   alt={alt}
-                  sx={{
-                    display: 'block',
-                    width: zoomed
-                      ? `max(100%, ${png.canvas.width / 2}px)`
-                      : '100%',
-                    maxWidth: 'none',
-                    height: 'auto',
-                    borderRadius: 1,
-                    opacity: busy ? 0.7 : 1,
-                    transition: 'opacity 150ms',
-                  }}
+                  zoomed={zoomed}
+                  busy={busy}
                 />
               </Box>
               {touch && (
@@ -414,7 +466,9 @@ export function CardImageDialog({
               color="neutral400"
               startIcon={canShare ? undefined : <ContentCopyIcon />}
               onClick={copy}
-              disabled={!png || busy || (!!placeholder && !render)}
+              disabled={
+                !canvas || busy || exporting || (!!placeholder && !render)
+              }
               aria-label={
                 canShare
                   ? copied
@@ -442,7 +496,9 @@ export function CardImageDialog({
             color={canShare ? 'neutral400' : undefined}
             startIcon={<DownloadIcon />}
             onClick={download}
-            disabled={!png || busy || (!!placeholder && !render)}
+            disabled={
+              !canvas || busy || exporting || (!!placeholder && !render)
+            }
           >
             {format === 'jpeg'
               ? t('buildCard.downloadJpg', 'Download JPG')
@@ -453,7 +509,7 @@ export function CardImageDialog({
               variant="contained"
               startIcon={<IosShareRoundedIcon />}
               onClick={share}
-              disabled={busy}
+              disabled={busy || exporting}
             >
               {t('buildCard.share', 'Share')}
             </Button>
@@ -462,6 +518,41 @@ export function CardImageDialog({
       </CardThemed>
     </ModalWrapper>
   )
+}
+
+/** Displays the rendered canvas directly without blocking preview on PNG encoding. */
+function CanvasPreview({
+  canvas,
+  alt,
+  zoomed,
+  busy,
+}: {
+  canvas: HTMLCanvasElement
+  alt: string
+  zoomed: boolean
+  busy: boolean
+}) {
+  const hostRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    canvas.setAttribute('role', 'img')
+    canvas.setAttribute('aria-label', alt)
+    canvas.style.display = 'block'
+    canvas.style.maxWidth = 'none'
+    canvas.style.height = 'auto'
+    canvas.style.borderRadius = '4px'
+    host.replaceChildren(canvas)
+    return () => {
+      if (canvas.parentElement === host) host.removeChild(canvas)
+    }
+  }, [canvas, alt])
+  useEffect(() => {
+    canvas.style.width = zoomed ? `max(100%, ${canvas.width / 2}px)` : '100%'
+    canvas.style.opacity = busy ? '0.7' : '1'
+    canvas.style.transition = 'opacity 150ms'
+  }, [canvas, zoomed, busy])
+  return <Box ref={hostRef} />
 }
 
 /** A name as a file name: letters and digits only ("Furina", "SandroneMityaDanica") */

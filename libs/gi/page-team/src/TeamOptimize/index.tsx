@@ -1315,7 +1315,7 @@ export default function TeamBuildWorkspace({
 
       {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
       {kqmTheorycraftingEnabled && mode === 'kqm' && versionOf && (
-        <VersionNote rootId={versionOf} />
+        <VersionNote rootId={versionOf} teamId={teamId} />
       )}
       {/* (once on the tab, outside the results: a result coming in leaves it open) */}
       {kqmTheorycraftingEnabled && mode === 'kqm' && (

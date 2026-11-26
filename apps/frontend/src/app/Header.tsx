@@ -1,4 +1,7 @@
-import { useDataManagerKeys } from '@genshin-optimizer/common/database-ui'
+import {
+  useDataManagerKeys,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { AnvilIcon } from '@genshin-optimizer/common/svgicons'
 import {
   isPlainLeftClick,
@@ -156,7 +159,11 @@ function CharacterCount() {
 }
 function TeamCount() {
   const database = useDatabase()
-  return <NavCount count={useDataManagerKeys(database.teams).length} />
+  useDataManagerValues(database.teams)
+  const count = database.teams.keys.filter(
+    (id) => !database.teams.isHiddenVersion(id)
+  ).length
+  return <NavCount count={count} />
 }
 function WeaponCount() {
   const database = useDatabase()

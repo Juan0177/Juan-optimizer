@@ -11,9 +11,28 @@ import {
   defaultTeamOptKqm,
   initTeamOpt,
 } from '@genshin-optimizer/gi/db'
-import { mainPart, supportPart, teamOptMembers } from '@genshin-optimizer/gi/ui'
+import {
+  mainPart,
+  mainPartSuggestions,
+  supportPart,
+  supportPartSuggestions,
+  teamOptMembers,
+} from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
 import { describe, expect, it } from 'vitest'
+import {
+  characterPartSuggestions,
+  comboAutoRotation,
+  comboIdentityKey,
+  comboMainMember,
+  existingFamilyComboKeys,
+  existingFamilyMemberSets,
+  familyPartHints,
+  generatePoolCombinations,
+  memberSetKey,
+  suggestedPoolAdditions,
+  swapsForCombo,
+} from './kqmVersionCombos'
 import {
   createVersion,
   KQM_SHARED,
@@ -21,6 +40,7 @@ import {
   makeOriginal,
   pickVersionMember,
   pushVersionSettings,
+  setShowInTeams,
   syncVersion,
   versionRoot,
   versionsOf,
@@ -608,5 +628,205 @@ describe('picking a member in the New version and Duplicate windows', () => {
         ?.teamCharId
     expect(charOf(id, 'Bennett')).toBe(charOf(teamId, 'Bennett'))
     expect(charOf(id, 'Xiangling')).toBe(charOf(copied, 'Xiangling'))
+  })
+})
+
+describe('showInTeams visibility option', () => {
+  it('hides new versions by default, supports opt-in toggling, and clears on makeOriginal', () => {
+    const { database, teamId } = setup()
+    const hidden = createVersion(
+      database,
+      teamId,
+      [{ from: 'Rosaria', to: 'Xilonen' }],
+      names
+    )
+    expect(database.teams.get(hidden)?.showInTeams).toBeUndefined()
+    expect(database.teams.isHiddenVersion(hidden)).toBe(true)
+
+    const pinned = createVersion(
+      database,
+      teamId,
+      [{ from: 'Rosaria', to: 'KaedeharaKazuha' }],
+      names,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      {},
+      true
+    )
+    expect(database.teams.get(pinned)?.showInTeams).toBe(true)
+    expect(database.teams.isHiddenVersion(pinned)).toBe(false)
+
+    // Toggle visibility
+    expect(setShowInTeams(database, hidden, true)).toBe(true)
+    expect(database.teams.isHiddenVersion(hidden)).toBe(false)
+    expect(setShowInTeams(database, hidden, false)).toBe(true)
+    expect(database.teams.isHiddenVersion(hidden)).toBe(true)
+    // Original team cannot be toggled
+    expect(setShowInTeams(database, teamId, true)).toBe(false)
+
+    // Promoting pinned version to original clears showInTeams on promoted and demoted teams
+    expect(makeOriginal(database, pinned, names)).toBe(true)
+    expect(database.teams.get(pinned)?.showInTeams).toBeUndefined()
+    expect(database.teams.isHiddenVersion(pinned)).toBe(false)
+    expect(database.teams.get(teamId)?.versionOf).toBe(pinned)
+    expect(database.teams.get(teamId)?.showInTeams).toBeUndefined()
+    expect(database.teams.isHiddenVersion(teamId)).toBe(true)
+  })
+})
+
+describe('batch team combinations (up to 8 characters)', () => {
+  it('generates C(n,4) combinations respecting core locks, fewest-swaps order, and Traveler uniqueness', () => {
+    const pool: CharacterKey[] = [
+      'Mavuika',
+      'Bennett',
+      'Citlali',
+      'Rosaria',
+      'Xilonen',
+      'KaedeharaKazuha',
+      'Furina',
+    ]
+    // Lock main DPS Mavuika -> C(6, 3) = 20 combinations
+    const locked = generatePoolCombinations(pool, ['Mavuika'], 4, MEMBERS)
+    expect(locked).toHaveLength(20)
+    expect(locked.every((c) => c.includes('Mavuika'))).toBe(true)
+    // Original team (0 swaps) is first, then 1-swap combos
+    expect(memberSetKey(locked[0])).toBe(memberSetKey(MEMBERS))
+    const swapCount = (c: CharacterKey[]) =>
+      c.filter((k) => !MEMBERS.includes(k)).length
+    for (let i = 1; i < locked.length; i++)
+      expect(swapCount(locked[i])).toBeGreaterThanOrEqual(
+        swapCount(locked[i - 1])
+      )
+
+    // 8 chars with 0 locked -> C(8, 4) = 70
+    const pool8: CharacterKey[] = [...pool, 'Yelan']
+    expect(generatePoolCombinations(pool8, [], 4, MEMBERS)).toHaveLength(70)
+
+    // Two Traveler elements in the pool never appear in the same combination
+    const withTravelers: CharacterKey[] = [
+      'Mavuika',
+      'Bennett',
+      'Citlali',
+      'TravelerPyro',
+      'TravelerHydro',
+    ]
+    const combos = generatePoolCombinations(
+      withTravelers,
+      ['Mavuika', 'Bennett'],
+      4,
+      ['Mavuika', 'Bennett', 'Citlali', 'Rosaria']
+    )
+    expect(combos).toHaveLength(2)
+    expect(
+      combos.every(
+        (c) => !(c.includes('TravelerPyro') && c.includes('TravelerHydro'))
+      )
+    ).toBe(true)
+  })
+
+  it('maps swaps by keeping original slots, matching elements for supports, and pairing carry swaps', () => {
+    // Swapping Citlali (Cryo) and Bennett (Pyro) for Diona (Cryo) and Xiangling (Pyro)
+    // should pair Cryo->Cryo and Pyro->Pyro so aura/buff order stays aligned
+    const swaps = swapsForCombo(
+      MEMBERS,
+      ['Mavuika', 'Xiangling', 'Diona', 'Rosaria'],
+      'Mavuika'
+    )
+    expect(swaps).toEqual([
+      { from: 'Bennett', to: 'Xiangling' },
+      { from: 'Citlali', to: 'Diona' },
+    ])
+
+    // When main DPS Mavuika is swapped out alongside a support, incoming carry Varesa takes Mavuika's slot
+    const carrySwaps = swapsForCombo(
+      MEMBERS,
+      ['Bennett', 'Citlali', 'Xilonen', 'Varesa'],
+      'Mavuika'
+    )
+    expect(carrySwaps).toEqual([
+      { from: 'Mavuika', to: 'Varesa' },
+      { from: 'Rosaria', to: 'Xilonen' },
+    ])
+  })
+
+  it('auto-fills smart rotations, learns hints from existing family versions, and suggests parts', () => {
+    const { database, teamId } = setup()
+    expect(comboMainMember(database, teamId, names)).toBe('Mavuika')
+
+    // Create one version with a custom Xilonen step
+    createVersion(
+      database,
+      teamId,
+      [{ from: 'Rosaria', to: 'Xilonen' }],
+      names,
+      {
+        text: 'Mavuika E -> Bennett E Q -> Citlali E Q -> Xilonen E N2 Q -> Mavuika Q 6[C2D] -> Mavuika',
+        opener: '',
+      }
+    )
+
+    const existing = existingFamilyMemberSets(database, teamId)
+    expect(existing.has(memberSetKey(MEMBERS))).toBe(true)
+    expect(
+      existing.has(memberSetKey(['Mavuika', 'Bennett', 'Citlali', 'Xilonen']))
+    ).toBe(true)
+    expect(
+      existing.has(
+        memberSetKey(['Mavuika', 'Bennett', 'Citlali', 'KaedeharaKazuha'])
+      )
+    ).toBe(false)
+
+    // Learns Xilonen's custom step from the existing version
+    const hints = familyPartHints(database, teamId, names)
+    expect(hints.Xilonen).toBe('E N2 Q')
+    const xilonenSugs = characterPartSuggestions('Xilonen', {
+      familyHint: hints.Xilonen,
+    })
+    expect(xilonenSugs[0]).toBe('E N2 Q')
+    expect(supportPartSuggestions('Bennett').length).toBeGreaterThanOrEqual(2)
+    expect(mainPartSuggestions('Varesa').length).toBeGreaterThanOrEqual(1)
+
+    // Swapping Rosaria -> Furina with override uses the override cleanly
+    const auto = comboAutoRotation(
+      database,
+      teamId,
+      MEMBERS,
+      [{ from: 'Rosaria', to: 'Furina' }],
+      names,
+      {
+        partOverrides: { Furina: 'E' },
+        userEditedParts: new Set(['Furina']),
+        mainDps: 'Mavuika',
+      }
+    )
+    expect(auto.source).toBe('swapped')
+    expect(auto.text).toContain('Furina E')
+    expect(auto.text).toContain('Mavuika Q 6[C2D]')
+
+    // Suggests common teammates for Mavuika not already in the pool
+    const suggestions = suggestedPoolAdditions(MEMBERS, 'Mavuika', 6)
+    expect(suggestions.length).toBeGreaterThan(0)
+    expect(suggestions.every((k) => !MEMBERS.includes(k))).toBe(true)
+
+    // Constellation-aware deduplication: same members with a different constellation is NOT a duplicate
+    const comboKeys = existingFamilyComboKeys(database, teamId)
+    const rootCons = (k: CharacterKey) =>
+      ({ Mavuika: 0, Bennett: 6, Citlali: 2, Rosaria: 6 })[k] ?? 0
+    expect(comboKeys.has(comboIdentityKey(MEMBERS, rootCons))).toBe(true)
+    expect(
+      comboKeys.has(
+        comboIdentityKey(MEMBERS, (k) => (k === 'Mavuika' ? 2 : rootCons(k)))
+      )
+    ).toBe(false)
+    // Signature refinement override is also treated as distinct
+    expect(
+      comboKeys.has(
+        comboIdentityKey(MEMBERS, rootCons, (k) =>
+          k === 'Mavuika' ? 1 : undefined
+        )
+      )
+    ).toBe(false)
   })
 })

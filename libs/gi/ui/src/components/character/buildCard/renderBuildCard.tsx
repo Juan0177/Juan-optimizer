@@ -110,15 +110,24 @@ export function percentIcon(icon: HTMLImageElement, color: string) {
   return off
 }
 
+const loadedImages = new Map<string, Promise<HTMLImageElement | undefined>>()
+
 export function loadImage(src: string): Promise<HTMLImageElement | undefined> {
   if (!src) return Promise.resolve(undefined)
-  return new Promise((resolve) => {
+  const cached = loadedImages.get(src)
+  if (cached) return cached
+  const pending = new Promise<HTMLImageElement | undefined>((resolve) => {
     const img = new Image()
     img.decoding = 'async'
     img.onload = () => resolve(img)
-    img.onerror = () => resolve(undefined)
+    img.onerror = () => {
+      loadedImages.delete(src)
+      resolve(undefined)
+    }
     img.src = src
   })
+  loadedImages.set(src, pending)
+  return pending
 }
 
 export function roundRect(

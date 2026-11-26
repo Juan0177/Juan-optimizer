@@ -156,6 +156,7 @@ export function makeOriginal(
   database.teams.set(teamId, (team) => {
     delete team.versionOf
     delete team.versionCons
+    delete team.showInTeams
     team.teamOpt = {
       ...(team.teamOpt ?? initTeamOpt()),
       kqm: {
@@ -174,10 +175,27 @@ export function makeOriginal(
     ) as OwnCons
     database.teams.set(id, (team) => {
       team.versionOf = teamId
+      if (id === oldRoot) delete team.showInTeams
       if (Object.keys(own).length) team.versionCons = own
       else delete team.versionCons
     })
   }
+  return true
+}
+
+/** Toggles whether a version is also listed on the main Teams tab. */
+export function setShowInTeams(
+  database: ArtCharDatabase,
+  teamId: string,
+  show: boolean
+): boolean {
+  const team = database.teams.get(teamId)
+  if (!team?.versionOf) return false
+  if (!!team.showInTeams === show) return false
+  database.teams.set(teamId, (t) => {
+    if (show) t.showInTeams = true
+    else delete t.showInTeams
+  })
   return true
 }
 
@@ -298,7 +316,8 @@ function swappedRotation(
   rid: string,
   members: readonly CharacterKey[],
   swaps: readonly VersionSwap[],
-  { i18n, gender }: { i18n: i18n; gender: GenderKey }
+  { i18n, gender }: { i18n: i18n; gender: GenderKey },
+  partOverrides?: Partial<Record<CharacterKey, string>>
 ) {
   const names = memberNamesOf(
     members.map((characterKey) => ({ characterKey })),
@@ -317,13 +336,16 @@ function swappedRotation(
   const main = members.reduce((a, b) =>
     (actions.get(b) ?? 0) > (actions.get(a) ?? 0) ? b : a
   )
-  const parts = swaps.map(({ from, to }) => ({
-    from,
-    name: memberNamesOf([{ characterKey: to }], i18n, gender)[0].name,
-    ...(from === main
-      ? { part: mainPart(to) ?? supportPart(to), longest: true }
-      : { part: supportPart(to) }),
-  }))
+  const parts = swaps.map(({ from, to }) => {
+    const custom = partOverrides?.[to]?.trim()
+    return {
+      from,
+      name: memberNamesOf([{ characterKey: to }], i18n, gender)[0].name,
+      ...(from === main
+        ? { part: custom || mainPart(to) || supportPart(to), longest: true }
+        : { part: custom || supportPart(to) }),
+    }
+  })
   return {
     text: text.trim() ? swapRotationMembers(text, names, parts) : '',
     opener: opener.trim()
@@ -344,11 +366,19 @@ export function versionRotation(
   database: ArtCharDatabase,
   teamId: string,
   swaps: readonly VersionSwap[],
-  names: { i18n: i18n; gender: GenderKey }
+  names: { i18n: i18n; gender: GenderKey },
+  partOverrides?: Partial<Record<CharacterKey, string>>
 ) {
   const rootId = versionRoot(database, teamId)
   const members = teamOptMembers(database, rootId).map((m) => m.characterKey)
-  return swappedRotation(database, kqmRotationId(rootId), members, swaps, names)
+  return swappedRotation(
+    database,
+    kqmRotationId(rootId),
+    members,
+    swaps,
+    names,
+    partOverrides
+  )
 }
 
 /**
@@ -448,7 +478,9 @@ export function createVersion(
    */
   base?: string,
   /** Its members' signature weapons (`TeamOptKqm.signature`: 0 none, 1–5 its refinement) */
-  signature: OwnCons = {}
+  signature: OwnCons = {},
+  /** Whether to also list this version on the main Teams tab (default: false) */
+  showInTeams = false
 ): string {
   const rootId = versionRoot(database, teamId)
   const root = database.teams.get(rootId)
@@ -510,6 +542,8 @@ export function createVersion(
   database.teams.set(id, (team) => {
     team.name = name?.trim() || versionName(team2, cons, { i18n, gender }, sig)
     team.versionOf = rootId
+    if (showInTeams) team.showInTeams = true
+    else delete team.showInTeams
     team.loadoutData = baseTeam.loadoutData.map((datum, i) => {
       const want = slots[i]
       return !want || keyOf(datum) === want
