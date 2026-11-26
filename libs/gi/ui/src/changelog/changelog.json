@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.44.0",
+    "date": "2026-11-26",
+    "new": [
+      "Batch version combinations in KQM Theorycrafting: pick a pool of up to 8 characters (with core member locks, 1-click common teammate suggestions, per-character constellations C0–C6, and signature weapon refinements Any / No sig / R1–R5) to generate all team combinations at once with auto-filled rotations and 1-click action presets.",
+      "Versions now stay hidden from the main Teams tab by default so creating variations doesn't clutter your teams list. Pin individual versions to Teams whenever you want, or toggle Show versions right from the Teams page.",
+      "Multi-select and bulk delete versions directly from the Versions sidebar."
+    ],
+    "improved": [
+      "Redesigned the Versions sidebar with a wider layout, search and character filters, Best DPS and Original sorting, inline rotation previews, and rounded character portraits showing each member's constellation and signature refinement right on the portrait.",
+      "Share comparison sheets open and update much faster by rendering directly to canvas, caching decoded icons, and encoding the watermarked PNG lazily in the background."
+    ]
+  },
+  {
     "version": "1.43.0",
     "date": "2026-11-26"
   },
