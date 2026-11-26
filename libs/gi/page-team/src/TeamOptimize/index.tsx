@@ -92,7 +92,7 @@ import {
   useCocoonEvaluations,
   useRotationApplications,
 } from './fightTeam'
-import { defaultRotationTime, formatDamage, formatRate } from './format'
+import { defaultRotationTime, formatDamage, formatRateFull } from './format'
 import { KqmProgress, KqmResults, KqmSettings } from './KqmMode'
 import { KqmTimeline } from './KqmTimeline'
 import { VersionNote, VersionsButton, VersionsDrawer } from './KqmVersionList'
@@ -139,7 +139,6 @@ import {
   subsectionSx,
   tokens,
   type,
-  VDivider,
 } from './ui'
 import type { KqmRunState } from './useKqmRun'
 import { useKqmRun } from './useKqmRun'
@@ -1009,7 +1008,6 @@ export default function TeamBuildWorkspace({
                       ? 'currentStale'
                       : 'current'
                 }
-                equippedTotal={teamShown ? evaluation?.total : undefined}
               />
             ) : (
               kqmShown && (
@@ -1864,103 +1862,115 @@ const copyRotationSx = {
   '& .MuiButton-startIcon svg': { fontSize: 15 },
 } as const
 
-/** The rotation's damage and Team DPS, inside one clean inline readout capsule */
+/** The rotation's Team DPS and total damage, blended inline into the Rotation header */
 function HeaderStats({
   total,
   rotationTime,
   source = 'current',
-  equippedTotal,
 }: {
   total: number | undefined
   rotationTime: number
   /** Which builds the figures represent (always the active builds on screen, never stale equipped) */
   source?: 'optimized' | 'picked' | 'current' | 'currentStale'
-  /** Equipped baseline total when different from the shown optimized/picked builds (shown in tip) */
-  equippedTotal?: number
 }) {
   const { t } = useTranslation('page_team')
-  const differsFromEquipped =
-    total !== undefined &&
-    equippedTotal !== undefined &&
-    Math.abs(total - equippedTotal) > Math.max(1, total * 1e-3)
-  const baseTip =
-    source === 'picked'
-      ? t('teamOpt.header.pickedTip', 'With the equipment you picked below')
-      : source === 'optimized'
-        ? t(
-            'teamOpt.header.optimizedTip',
-            'With the optimized builds shown below'
-          )
-        : source === 'currentStale'
-          ? t(
-              'teamOpt.header.currentStaleTip',
-              'With your current builds (the result below is from earlier settings)'
-            )
-          : t('teamOpt.header.currentTip', 'With the builds the team uses now')
-  const tip = differsFromEquipped ? (
-    <Box component="span" sx={{ display: 'grid', gap: 0.25 }}>
-      <span>{baseTip}</span>
-      <Box component="span" sx={{ opacity: 0.8, ...numSx }}>
-        {t('teamOpt.header.equippedBaseline', {
-          defaultValue: 'Equipped: {{dps}} DPS ({{dmg}})',
-          dps: formatRate(equippedTotal, rotationTime, true),
-          dmg: formatDamage(equippedTotal, true),
-        })}
-      </Box>
-    </Box>
-  ) : (
-    baseTip
-  )
   return (
     <Box
       sx={{
-        ...insetSx,
         display: 'inline-flex',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 1.5,
-        py: 0.625,
-        minHeight: 38,
+        alignItems: 'baseline',
+        flexWrap: 'wrap',
+        columnGap: 1.125,
+        rowGap: 0.25,
+        mr: 0.5,
       }}
     >
-      <Box sx={{ minWidth: '7.5ch' }}>
-        <FieldLabel tip={tip} sx={{ fontSize: 11.5, lineHeight: 1.2 }}>
-          {source === 'currentStale'
-            ? t('teamOpt.header.currentTotal', 'Current DMG')
-            : t('teamOpt.header.total', 'Rotation DMG')}
-        </FieldLabel>
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 0.625,
+        }}
+      >
         <Typography
+          component="span"
           sx={{
             ...numSx,
-            fontSize: 15,
-            fontWeight: 650,
-            letterSpacing: '-0.02em',
-            lineHeight: 1.25,
+            fontSize: { xs: 19, sm: 21 },
+            fontWeight: 700,
+            letterSpacing: '-0.03em',
+            lineHeight: 1,
+            fontFeatureSettings: '"tnum", "ss01"',
             color: 'text.primary',
           }}
         >
-          {formatDamage(total, true)}
+          {formatRateFull(total, rotationTime)}
         </Typography>
-      </Box>
-      <VDivider />
-      <Box sx={{ minWidth: '8ch' }}>
-        <FieldLabel tip={tip} sx={{ fontSize: 11.5, lineHeight: 1.2 }}>
+        <Box
+          component="span"
+          sx={{
+            fontSize: 12.5,
+            fontWeight: 550,
+            letterSpacing: '-0.005em',
+            lineHeight: 1,
+            color: 'text.secondary',
+            whiteSpace: 'nowrap',
+          }}
+        >
           {source === 'currentStale'
             ? t('teamOpt.header.currentDps', 'Current DPS')
             : t('teamOpt.header.teamDps', 'Team DPS')}
-        </FieldLabel>
+        </Box>
+      </Box>
+      <Box
+        component="span"
+        aria-hidden
+        sx={{
+          color: 'text.secondary',
+          opacity: 0.35,
+          fontSize: 13,
+          lineHeight: 1,
+          userSelect: 'none',
+        }}
+      >
+        ·
+      </Box>
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'baseline',
+          gap: 0.5,
+        }}
+      >
         <Typography
+          component="span"
           sx={{
             ...numSx,
-            fontSize: 16,
-            fontWeight: 700,
-            letterSpacing: '-0.025em',
-            lineHeight: 1.25,
-            color: 'text.primary',
+            fontSize: 13.5,
+            fontWeight: 600,
+            letterSpacing: '-0.015em',
+            lineHeight: 1,
+            fontFeatureSettings: '"tnum", "ss01"',
+            color: alpha(giTokens.parchment, 0.78),
           }}
         >
-          {formatRate(total, rotationTime, true)}
+          {formatDamage(total)}
         </Typography>
+        <Box
+          component="span"
+          sx={{
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1,
+            color: 'text.secondary',
+            opacity: 0.85,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t('teamOpt.header.dmgShort', 'DMG')}
+        </Box>
       </Box>
     </Box>
   )
