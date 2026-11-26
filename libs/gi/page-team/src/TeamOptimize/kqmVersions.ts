@@ -27,8 +27,8 @@ import { sortedJson } from './useTeamOpt'
 /**
  * The KQM settings a version takes from its original, so that versions compare like for like: the
  * artifact standard, weapons and sets, refinements, constellations, enemy and extra buffs. A
- * version keeps its own rotation, the switches its rotation sets, and the ER targets worked out
- * for it (the same way as the original's).
+ * version keeps its own rotation, the switches its rotation sets, its locked weapons, and the ER
+ * targets worked out for it (the same way as the original's).
  */
 export const KQM_SHARED = [
   'enemy',
@@ -47,7 +47,6 @@ export const KQM_SHARED = [
   'excludedWeaponMembers',
   'weaponList',
   'refinements',
-  'lockedWeapons',
   'excludedSets',
   'weaponEnergy',
   'bonusStats',
@@ -101,15 +100,29 @@ export function kqmSharedKey(database: ArtCharDatabase, teamId: string) {
   const rootId = versionRoot(database, teamId)
   const rootKqm = database.teams.get(rootId)?.teamOpt?.kqm
   const sig = signatureOf(database, teamId)
+  const locks = lockedWeaponsOf(database, teamId)
   return sortedJson({
     // (the constellations it plays at: the family's with its own over them, its members' only)
     kqm: sharedOf(rootKqm, {
       cons: consFor(database, teamId, rootKqm),
     }),
     timing: writtenRotationOf(database, kqmRotationId(rootId)).timing,
-    // (its own signature weapon choices)
+    // (its own signature weapon choices and locked weapons)
     ...(Object.keys(sig).length ? { sig } : {}),
+    ...(Object.keys(locks).length ? { locks } : {}),
   })
+}
+
+/** A team's own locked weapons (`TeamOptKqm.lockedWeapons`), its members' */
+function lockedWeaponsOf(database: ArtCharDatabase, teamId: string) {
+  const members = new Set<string>(
+    teamOptMembers(database, teamId).map((m) => m.characterKey)
+  )
+  return Object.fromEntries(
+    Object.entries(
+      database.teams.get(teamId)?.teamOpt?.kqm?.lockedWeapons ?? {}
+    ).filter(([k, w]) => w && members.has(k))
+  )
 }
 
 /**
@@ -461,6 +474,69 @@ export function pickVersionMember(
  * support part (`supportPart`) at the first step of the one it replaces. Its id ('' when the swaps
  * do not fit the team).
  */
+/**
+ * A version's own constellations, signature weapons and name changed in place (its members,
+ * builds and rotation kept): what Edit saves. Whether it changed.
+ */
+export function editVersion(
+  database: ArtCharDatabase,
+  teamId: string,
+  { i18n, gender }: { i18n: i18n; gender: GenderKey },
+  /** Its own constellations, over the family's (its members': those that differ count) */
+  constellations: OwnCons = {},
+  /** Its members' signature weapons (`TeamOptKqm.signature`: 0 none, 1–5 its refinement) */
+  signature: OwnCons = {},
+  /** Its name; absent or blank: `versionName`'s */
+  name?: string
+): boolean {
+  const rootId = versionRoot(database, teamId)
+  const team = database.teams.get(teamId)
+  if (rootId === teamId || !team) return false
+  const rootKqm = database.teams.get(rootId)?.teamOpt?.kqm
+  const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
+  const cons = Object.fromEntries(
+    Object.entries(constellations).filter(
+      ([k, n]) =>
+        members.includes(k as CharacterKey) &&
+        Number.isInteger(n) &&
+        n! >= 0 &&
+        n! <= 6 &&
+        n !== kqmMemberConstellation(k as CharacterKey, rootKqm)
+    )
+  ) as OwnCons
+  const sig = Object.fromEntries(
+    Object.entries(signature).filter(
+      ([k, r]) =>
+        members.includes(k as CharacterKey) &&
+        signatureWeapons[k as CharacterKey] &&
+        Number.isInteger(r) &&
+        r! >= 0 &&
+        r! <= 5
+    )
+  ) as OwnCons
+  const nextName =
+    name?.trim() || versionName(members, cons, { i18n, gender }, sig)
+  const before = sortedJson([
+    team.name,
+    team.versionCons ?? {},
+    signatureOf(database, teamId),
+  ])
+  if (sortedJson([nextName, cons, sig]) === before) return false
+  database.teams.set(teamId, (t) => {
+    t.name = nextName
+    if (Object.keys(cons).length) t.versionCons = cons
+    else delete t.versionCons
+    const kqm: TeamOptKqm = {
+      ...structuredClone(t.teamOpt?.kqm ?? defaultTeamOptKqm),
+      constellations: { ...rootKqm?.constellations, ...cons },
+    }
+    if (Object.keys(sig).length) kqm.signature = sig
+    else delete kqm.signature
+    t.teamOpt = { ...(t.teamOpt ?? initTeamOpt()), kqm }
+  })
+  return true
+}
+
 export function createVersion(
   database: ArtCharDatabase,
   teamId: string,
@@ -566,6 +642,7 @@ export function createVersion(
       delete teamOpt.attacks[k]
       delete teamOpt.kqm?.attacks?.[k]
       delete teamOpt.kqm?.passives?.[k]
+      delete teamOpt.kqm?.lockedWeapons?.[k]
     }
     if (teamOpt.onField && gone.includes(teamOpt.onField))
       delete teamOpt.onField

@@ -57,6 +57,7 @@ import SortRoundedIcon from '@mui/icons-material/SortRounded'
 import StarOutlineRoundedIcon from '@mui/icons-material/StarOutlineRounded'
 import StarRoundedIcon from '@mui/icons-material/StarRounded'
 import SubjectRoundedIcon from '@mui/icons-material/SubjectRounded'
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import {
@@ -106,6 +107,7 @@ import {
 import type { VersionSwap } from './kqmVersions'
 import {
   createVersion,
+  editVersion,
   kqmSharedKey,
   makeOriginal,
   pickVersionMember,
@@ -116,6 +118,7 @@ import {
   versionRotation,
   versionsOf,
 } from './kqmVersions'
+import { sortedJson } from './useTeamOpt'
 import { MemberAvatar, VersionPortrait } from './MemberAvatar'
 import { RotationReadout } from './RotationInline'
 import { templateText } from './RotationTemplates'
@@ -346,7 +349,7 @@ export function KqmVersions({
   const results = useDataEntryBase(database.teamKqmResults)
   const queue = useVersionQueue()
   // the New version window, as a copy of a team of the family (Duplicate) or not
-  const [creating, setCreating] = useState<{ from?: string }>()
+  const [creating, setCreating] = useState<{ from?: string; edit?: string }>()
   // the batch Combinations window (up to 8 characters)
   const [combining, setCombining] = useState(false)
   // the team whose rotation is open to edit here
@@ -1058,6 +1061,7 @@ export function KqmVersions({
                       setEditing((now) => (now === row.id ? undefined : row.id))
                     }
                     onDuplicate={() => setCreating({ from: row.id })}
+                    onEditVariant={() => setCreating({ edit: row.id })}
                     onToggleTeams={() =>
                       setShowInTeams(database, row.id, !row.showInTeams)
                     }
@@ -1318,7 +1322,25 @@ export function KqmVersions({
         <NewVersionDialog
           teamId={rootId}
           from={creating.from}
+          edit={creating.edit}
           onClose={() => setCreating(undefined)}
+          onEdit={(constellations, signature, name) => {
+            const id = creating.edit
+            if (
+              !id ||
+              !editVersion(
+                database,
+                id,
+                { i18n, gender },
+                constellations,
+                signature,
+                name
+              )
+            )
+              return false
+            run([id])
+            return true
+          }}
           onCreate={(
             swaps,
             rotation,
@@ -1373,6 +1395,7 @@ function VersionLine({
   onRun,
   onEdit,
   onDuplicate,
+  onEditVariant,
   onToggleTeams,
   onMakeOriginal,
   onDelete,
@@ -1396,6 +1419,8 @@ function VersionLine({
   onEdit: () => void
   /** Opens the New version window as a copy of it */
   onDuplicate: () => void
+  /** Its own constellations, signature weapons and name, changed in place */
+  onEditVariant: () => void
   /** Pins or hides this version on the main Teams tab */
   onToggleTeams: () => void
   /** Makes it the family's original */
@@ -1995,6 +2020,19 @@ function VersionLine({
                 )}
           </MenuItem>
         )}
+        {!original && (
+          <MenuItem
+            onClick={() => {
+              setMenu(null)
+              onEditVariant()
+            }}
+          >
+            <ListItemIcon>
+              <TuneRoundedIcon fontSize="small" />
+            </ListItemIcon>
+            {t('page_team:teamOpt.versions.editVariant', 'Edit variant')}
+          </MenuItem>
+        )}
         <MenuItem
           onClick={() => {
             setMenu(null)
@@ -2087,17 +2125,28 @@ function VersionLine({
 
 /**
  * Picks the members of the original to swap, and who takes their places; as a copy of a team of
- * the family (`from`), starting from its members, constellations and rotation
+ * the family (`from`), starting from its members, constellations and rotation; or a version's own
+ * constellations, signature weapons and name, changed in place (`edit`: its members and rotation
+ * kept)
  */
 function NewVersionDialog({
   teamId,
   from,
+  edit,
   onClose,
   onCreate,
+  onEdit,
 }: {
   teamId: string
   from?: string
+  edit?: string
   onClose: () => void
+  /** Saves an edited version (and starts its run); false when nothing changed */
+  onEdit?: (
+    constellations: Partial<Record<CharacterKey, number>>,
+    signature: Partial<Record<CharacterKey, number>>,
+    name: string
+  ) => boolean
   /**
    * Creates it (and starts its run), with its rotation as chosen (absent: the original's swapped,
    * or the copied team's); false when it could not be
@@ -2116,10 +2165,13 @@ function NewVersionDialog({
   const database = useDatabase()
   const team = database.teams.get(teamId)
   const members = teamOptMembers(database, teamId).map((m) => m.characterKey)
-  // (a copy: the copied team's members as swaps of the original's, its own constellations)
+  // (a copy, or the version edited: its members as swaps of the original's, its own
+  // constellations)
+  const source = edit ?? from
+  const editing = !!edit
   const [copied] = useState(() => {
-    if (!from) return undefined
-    const own = teamOptMembers(database, from).map((m) => m.characterKey)
+    if (!source) return undefined
+    const own = teamOptMembers(database, source).map((m) => m.characterKey)
     const tos = own.filter((k) => !members.includes(k))
     const swaps = members
       .filter((k) => !own.includes(k))
@@ -2127,10 +2179,10 @@ function NewVersionDialog({
       .map((k, i) => ({ from: k, to: tos[i] }))
     return {
       swaps,
-      cons: { ...database.teams.get(from)?.versionCons },
-      sig: signatureOf(database, from),
-      name: database.teams.get(from)?.name ?? '',
-      rotation: writtenRotationOf(database, kqmRotationId(from)),
+      cons: { ...database.teams.get(source)?.versionCons },
+      sig: signatureOf(database, source),
+      name: database.teams.get(source)?.name ?? '',
+      rotation: writtenRotationOf(database, kqmRotationId(source)),
     }
   })
   const [swaps, setSwapsNow] = useState<VersionSwap[]>(copied?.swaps ?? [])
@@ -2176,29 +2228,41 @@ function NewVersionDialog({
   const swapOf = (from: CharacterKey) => swaps.find((s) => s.from === from)
   const shown = members.map((k) => swapOf(k)?.to ?? k)
   const inTeam = ([k]: [string, unknown]) => shown.includes(k as CharacterKey)
-  // (a copy may keep its team: another rotation)
-  const changed =
-    !!copied ||
-    swaps.length > 0 ||
-    Object.entries(cons).some(inTeam) ||
-    Object.entries(sig).some(inTeam)
-  // its name: its members' (`versionName`, numbered when the family has it) until one is typed
-  const [name, setName] = useState<string>()
+  const ownCons = Object.fromEntries(Object.entries(cons).filter(inTeam))
+  const ownSig = Object.fromEntries(Object.entries(sig).filter(inTeam))
+  // its name: its members' (`versionName`, numbered when the family has it) until one is typed;
+  // an edited version's own name kept when it was typed
+  const [name, setName] = useState<string | undefined>(() => {
+    if (!editing || !copied) return undefined
+    const auto = versionName(
+      members.map((k) => copied.swaps.find((s) => s.from === k)?.to ?? k),
+      copied.cons,
+      { i18n, gender },
+      copied.sig
+    )
+    return copied.name === auto || copied.name.startsWith(`${auto} (`)
+      ? undefined
+      : copied.name
+  })
+  // (a copy may keep its team: another rotation; an edit needs a change)
+  const changed = editing
+    ? sortedJson([ownCons, ownSig]) !==
+        sortedJson([copied?.cons ?? {}, copied?.sig ?? {}]) ||
+      (name !== undefined && name.trim() !== copied?.name)
+    : !!copied ||
+      swaps.length > 0 ||
+      Object.entries(cons).some(inTeam) ||
+      Object.entries(sig).some(inTeam)
   const familyNames = useMemo(
     () =>
       new Set(
-        [teamId, ...versionsOf(database, teamId)].map(
-          (id) => database.teams.get(id)?.name ?? ''
-        )
+        [teamId, ...versionsOf(database, teamId)]
+          .filter((id) => id !== edit)
+          .map((id) => database.teams.get(id)?.name ?? '')
       ),
-    [database, teamId]
+    [database, teamId, edit]
   )
-  const membersName = versionName(
-    shown,
-    Object.fromEntries(Object.entries(cons).filter(inTeam)),
-    { i18n, gender },
-    Object.fromEntries(Object.entries(sig).filter(inTeam))
-  )
+  const membersName = versionName(shown, ownCons, { i18n, gender }, ownSig)
   let defaultName = membersName
   for (let n = 2; familyNames.has(defaultName); n++)
     defaultName = `${membersName} (${n})`
@@ -2281,12 +2345,17 @@ function NewVersionDialog({
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography sx={type.title}>
-                {copied
-                  ? t('teamOpt.versions.duplicateTitle', {
-                      defaultValue: 'Duplicate “{{name}}”',
+                {editing && copied
+                  ? t('teamOpt.versions.editTitle', {
+                      defaultValue: 'Edit “{{name}}”',
                       name: copied.name,
                     })
-                  : t('teamOpt.versions.newVariant', 'New variant')}
+                  : copied
+                    ? t('teamOpt.versions.duplicateTitle', {
+                        defaultValue: 'Duplicate “{{name}}”',
+                        name: copied.name,
+                      })
+                    : t('teamOpt.versions.newVariant', 'New variant')}
               </Typography>
             </Box>
             <IconButton
@@ -2317,7 +2386,7 @@ function NewVersionDialog({
               return (
                 <Box key={k} sx={{ position: 'relative' }}>
                   <ButtonBase
-                    disabled={busy}
+                    disabled={busy || editing}
                     onClick={() => setPicking(k)}
                     sx={(theme) => ({
                       ...focusSx,
@@ -2380,12 +2449,12 @@ function NewVersionDialog({
                           {t('teamOpt.versions.for', 'for')}{' '}
                           <CharacterName characterKey={k} gender={gender} />
                         </>
-                      ) : (
+                      ) : editing ? null : (
                         t('teamOpt.versions.swap', 'Swap')
                       )}
                     </Typography>
                   </ButtonBase>
-                  {swap && (
+                  {swap && !editing && (
                     <IconButton
                       size="small"
                       disabled={busy}
@@ -2469,7 +2538,7 @@ function NewVersionDialog({
               )
             })}
           </Box>
-          {changed && (
+          {(changed || editing) && (
             <TextField
               fullWidth
               size="small"
@@ -2481,7 +2550,7 @@ function NewVersionDialog({
               sx={{ mt: 2 }}
             />
           )}
-          {rotation && (
+          {rotation && !editing && (
             <Box sx={{ mt: 2 }}>
               <Box
                 sx={{
@@ -2565,25 +2634,27 @@ function NewVersionDialog({
               mt: 2,
             }}
           >
-            <FormControlLabel
-              control={
-                <Checkbox
-                  size="small"
-                  disabled={busy}
-                  checked={showInTeams}
-                  onChange={(_, checked) => setShowInTeams(checked)}
-                />
-              }
-              label={t(
-                'teamOpt.versions.showInTeamsOption',
-                'Also show in Teams tab'
-              )}
-              sx={{
-                mr: 'auto',
-                ml: -0.5,
-                '& .MuiFormControlLabel-label': { ...type.label },
-              }}
-            />
+            {!editing && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    size="small"
+                    disabled={busy}
+                    checked={showInTeams}
+                    onChange={(_, checked) => setShowInTeams(checked)}
+                  />
+                }
+                label={t(
+                  'teamOpt.versions.showInTeamsOption',
+                  'Also show in Teams tab'
+                )}
+                sx={{
+                  mr: 'auto',
+                  ml: -0.5,
+                  '& .MuiFormControlLabel-label': { ...type.label },
+                }}
+              />
+            )}
             <Button color="inherit" onClick={onClose} disabled={busy}>
               {t('teamOpt.versions.cancel', 'Cancel')}
             </Button>
@@ -2603,23 +2674,27 @@ function NewVersionDialog({
                 setFailed(false)
                 // (after the busy state paints: making it plays its rotation)
                 setTimeout(() => {
-                  const ok = onCreate(
-                    swaps,
-                    chosen?.id === firstChoice && !edited
-                      ? undefined
-                      : rotation,
-                    cons,
-                    name ?? defaultName,
-                    Object.fromEntries(Object.entries(sig).filter(inTeam)),
-                    showInTeams
-                  )
+                  const ok = editing
+                    ? !!onEdit?.(ownCons, ownSig, name ?? defaultName)
+                    : onCreate(
+                        swaps,
+                        chosen?.id === firstChoice && !edited
+                          ? undefined
+                          : rotation,
+                        cons,
+                        name ?? defaultName,
+                        ownSig,
+                        showInTeams
+                      )
                   setBusy(false)
                   if (ok) onClose()
                   else setFailed(true)
                 }, 30)
               }}
             >
-              {t('teamOpt.versions.create', 'Create and run')}
+              {editing
+                ? t('teamOpt.versions.save', 'Save and run')
+                : t('teamOpt.versions.create', 'Create and run')}
             </Button>
           </Box>
         </CardThemed>
