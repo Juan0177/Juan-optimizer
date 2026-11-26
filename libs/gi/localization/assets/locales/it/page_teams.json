@@ -8,7 +8,11 @@
     "levelLabel": "Livello",
     "loadout": "Configurazione",
     "openMember": "Apri {{name}} in {{team}}",
-    "talents": "Talenti"
+    "talents": "Talenti",
+    "versionBadge": "Versione",
+    "versionOf": "Versione di {{name}}",
+    "versionsCount_one": "{{count}} versione in KQM Theorycrafting",
+    "versionsCount_other": "{{count}} versioni in KQM Theorycrafting"
   },
   "empty": {
     "create": "Crea una squadra",
@@ -25,6 +29,8 @@
   },
   "toolbar": {
     "filtered": "{{count}} di {{total}} squadre",
-    "search": "Cerca squadre"
+    "search": "Cerca squadre",
+    "showVersionsTip": "Di base le varianti qui restano nascoste: attiva per includerle, o fissa le singole varianti dalle Versioni.",
+    "showVersions": "Mostra le versioni ({{count}})"
   }
 }

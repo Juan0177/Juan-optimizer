@@ -466,7 +466,6 @@ function gear(weapon = false) {
       ...(weapon ? { Neuvillette: { weapon: 'SacrificialJade' } } : {}),
     },
     inNightsoul: () => true,
-    cooldown: () => 0,
     reduceCooldown: () => {},
     window: (owner, path, value, start, end) =>
       windows.push({ owner, path, value, start, end }),

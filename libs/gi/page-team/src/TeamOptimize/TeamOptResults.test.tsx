@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
-import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
+import { allArtifactSetKeys } from '@genshin-optimizer/gi/consts'
+import type {
+  ArtifactSetKey,
+  CharacterKey,
+  WeaponKey,
+} from '@genshin-optimizer/gi/consts'
 import type {
   ICachedWeapon,
   StatFilters,
@@ -10,9 +15,16 @@ import { initTeamOpt } from '@genshin-optimizer/gi/db'
 import type { TeamOptMember, TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { defaultEnergyCalculator } from '@genshin-optimizer/gi/ui'
 import { createTheme, ThemeProvider } from '@mui/material'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TeamOptResults } from './TeamOptResults'
+import { TeamOptTopBuilds } from './TeamOptTopBuilds'
 
 const ER_FILTER = JSON.stringify(['basic', 'enerRech_'])
 
@@ -49,7 +61,12 @@ const weaponsById: Record<string, ICachedWeapon> = {
 let optConfigEntries: [string, { statFilters: StatFilters }][] = []
 
 const mockDatabase = {
-  arts: { get: () => undefined },
+  arts: {
+    get: (id: string) => {
+      const key = id.split(':')[0] as ArtifactSetKey
+      return allArtifactSetKeys.includes(key) ? { setKey: key } : undefined
+    },
+  },
   chars: {
     get: (ck: CharacterKey) => ({
       constellation: ck === 'Furina' ? 2 : 0,
@@ -192,6 +209,55 @@ const makeResult = (overrides: Partial<TeamOptResult> = {}): TeamOptResult => ({
   rounds: 3,
   optimized: ['Sandrone', 'Furina'],
   ...overrides,
+})
+
+it('adds coordinated rows to the existing 50 Top builds and ranks by replay DPS', () => {
+  const baseline = makeResult()
+  const coordinated = {
+    changed: baseline.optimized,
+    builds: baseline.builds,
+    weapons: baseline.weapons,
+    after: { ...baseline.after, total: 3_000_000 },
+    rotationTime: 10,
+  }
+  const result = makeResult({
+    gearComparisons: [coordinated],
+    options: {
+      Sandrone: {
+        best: baseline.after.total,
+        weapons: [],
+        sets: allArtifactSetKeys.slice(0, 51).map((set, i) => ({
+          set,
+          value: baseline.after.total - (i + 1) * 1000,
+          weaponId: 'w_wgs',
+          artifactIds: { flower: `${set}:flower`, plume: `${set}:plume` },
+        })),
+      },
+    },
+  })
+  const onCompare = vi.fn()
+  render(
+    <ThemeProvider theme={theme}>
+      <TeamOptTopBuilds
+        members={baseline.optimized}
+        result={result}
+        picks={{}}
+        rotationTime={20}
+        onPick={vi.fn()}
+        onCompare={onCompare}
+      />
+    </ThemeProvider>
+  )
+  const list = within(screen.getByRole('region', { name: 'Top builds' }))
+  expect(list.getByRole('button', { name: /^Rank 1.*300,000/ })).toBeTruthy()
+  fireEvent.click(list.getByRole('button', { name: 'Show top 51' }))
+  const rows = within(
+    screen.getByRole('dialog', { name: 'Top builds' })
+  ).getAllByRole('button', { name: /^Rank \d/ })
+  expect(rows).toHaveLength(51)
+  expect(rows[50].getAttribute('aria-label')).toMatch('247,550')
+  fireEvent.click(rows[0])
+  expect(onCompare).toHaveBeenCalledWith(coordinated)
 })
 
 describe('TeamOptResults ER requirement display', () => {

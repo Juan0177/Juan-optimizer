@@ -649,7 +649,14 @@ describe('hand-checked team: Raiden + Xiangling (one Dragon’s Bane)', () => {
       attacks: teamOpt.attacks,
     })!
     expectNear(before.total, onXiangling)
-    const result = await run(database, teamId, teamOpt)
+    const whiteTassels = database.weapons.values
+      .filter((w) => w.key === 'WhiteTassel')
+      .map((w) => w.id)
+    const raidenTassel = database.chars.get(raiden)!.equippedWeapon
+    const result = await run(database, teamId, {
+      ...teamOpt,
+      includedWeapons: whiteTassels,
+    })
     const dragonsBane = database.weapons.values.find(
       (w) => w.key === 'DragonsBane'
     )!
@@ -663,6 +670,7 @@ describe('hand-checked team: Raiden + Xiangling (one Dragon’s Bane)', () => {
     const kept = await run(database, teamId, {
       ...teamOpt,
       excludedWeapons: [dragonsBane.id, weaponIds['WhiteTassel']!],
+      includedWeapons: [raidenTassel],
     })
     expect(kept.weapons[xiangling]).toBe(dragonsBane.id)
     expectNear(kept.after.total, onXiangling)

@@ -75,7 +75,7 @@ export type KqmCardData = {
   /** the written rotation, its members' turns apart */
   rotation?: string[]
   notes: string
-  /** it shows unreleased content: this name ("7.3 beta v4") over the whole sheet; absent: none */
+  /** it shows unreleased content: this name ("7.3 beta v5") over the whole sheet; absent: none */
   beta?: string
   labels: {
     team: string

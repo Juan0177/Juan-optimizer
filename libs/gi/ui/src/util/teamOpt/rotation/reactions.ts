@@ -68,7 +68,7 @@ const FRZ_DECAY_CAP = 10 / 60
 /** Members that turn a reaction into its Lunar or Stellar version (gcsim's enable flags) */
 export const reactionEnablers = {
   lunarCharged: ['Ineffa', 'Columbina', 'Flins'] as CharacterKey[],
-  lunarBloom: ['Columbina', 'Lauma'] as CharacterKey[],
+  lunarBloom: ['Columbina', 'Lauma', 'Nefer'] as CharacterKey[],
   lunarCrystallize: ['Columbina', 'Zibai', 'Linnea'] as CharacterKey[],
   stellarConduct: [
     'Sandrone',
@@ -162,6 +162,7 @@ interface Attack {
 
 export interface ReactionOptions {
   members: CharacterKey[]
+  elements?: Partial<Record<CharacterKey, SimHit['element']>>
   /** Whether Columbina's Lunar Domain is up at a frame (a 33% extra Lunar hit, counted 1.33) */
   domainActive?: (t: number) => boolean
   /** Whether a member has Nilou's Golden Chalice's Bounty (Bountiful Cores) at a frame */
@@ -196,6 +197,7 @@ export interface AuraTrace {
 
 export function elementalReactions({
   members,
+  elements,
   domainActive = () => false,
   bountiful = () => false,
   trace,
@@ -543,8 +545,11 @@ export function elementalReactions({
     core.alive = false
     reactionA(ctx, delay, core.owner, 'bloom', 'Bloom')
   }
+  let coresSuppressedUntil = -1
   const addCore = (ctx: SimContext, owner: CharacterKey) => {
+    if (ctx.now < coresSuppressedUntil) return
     ctx.at(30, (c) => {
+      if (c.now < coresSuppressedUntil) return
       if (bountiful(owner, c.now)) {
         // Nilou: a Bountiful Core bursts 0.4 s later and cannot Hyperbloom or Burgeon
         reactionA(c, 25, owner, 'bloom', 'Bloom (Bountiful Core)')
@@ -606,6 +611,38 @@ export function elementalReactions({
     const contributors = [...lcrContributors]
     lcrContributors.clear()
     for (const d of [13, 25, 37])
+      transformative(
+        ctx,
+        d,
+        owner,
+        'lunarcrystallize',
+        'geo',
+        'Lunar-Crystallize (Moondrift Harmony)',
+        { contributors, weight: weight(ctx.now) }
+      )
+    moondrifts = moondrifts.map((end) => (end > ctx.now ? ctx.now + 540 : end))
+  }
+  const forcedHarmony = (
+    ctx: SimContext,
+    owner: CharacterKey,
+    emitSync?: (hit: SimHit) => void
+  ) => {
+    if (!lunarCrystallize) return
+    const marker: SimHit = {
+      t: ctx.now,
+      characterKey: owner,
+      path: ['_reaction', 'moondriftHarmony'],
+      tag: 'other',
+      element: 'geo',
+      label: 'moondriftHarmony',
+    }
+    if (emitSync) emitSync(marker)
+    else mark(ctx, owner, 'moondriftHarmony')
+    const contributors = elements
+      ? members.filter((m) => elements[m] === 'hydro' || elements[m] === 'geo')
+      : [...lcrContributors]
+    const count = Math.min(3, alive(ctx.now))
+    for (const d of [13, 25, 37].slice(0, count))
       transformative(
         ctx,
         d,
@@ -1164,11 +1201,30 @@ export function elementalReactions({
     boostDew: (from: number, until: number, rate: number) => {
       dewBoosts.push([from, until, rate])
     },
+    endDewBoost: (now: number) => {
+      for (const b of dewBoosts) if (b[1] > now) b[1] = Math.max(b[0], now)
+    },
     // gcsim's ruptureDendroCores: a core's duration drops to 1, so it blooms on the next frame
     ruptureCores: (ctx: SimContext) => {
       for (const core of cores) explodeCore(ctx, core, 1)
       cores = cores.filter((x) => x.alive)
     },
+    suppressCores: (now: number, duration: number) => {
+      coresSuppressedUntil = Math.max(coresSuppressedUntil, now + duration)
+      let converted = 0
+      for (const core of cores)
+        if (core.alive) {
+          core.alive = false
+          converted++
+        }
+      cores = []
+      return converted
+    },
+    triggerForcedHarmony: (
+      ctx: SimContext,
+      owner: CharacterKey,
+      emitSync?: (hit: SimHit) => void
+    ) => forcedHarmony(ctx, owner, emitSync),
     consumeDewAt(t: number, amount: number) {
       dewAt(t)
       const requested = Math.max(0, Math.trunc(amount))
@@ -1266,9 +1322,8 @@ export function elementalReactions({
           ...states,
         ]
       }
-      // Linnea C2: Lumi's Hammer triggers a Harmony
-      if (lunarCrystallize && hit.triggersHarmony && alive(hit.t) >= 1)
-        harmony(ctx, hit.characterKey)
+      if (lunarCrystallize && hit.triggersHarmony)
+        forcedHarmony(ctx, hit.characterKey)
       shatterCheck(ctx, hit)
       if (!hit.applies) return auraStates()
       // Physical hits with durability count in their ICD tag too (gcsim), but don't react

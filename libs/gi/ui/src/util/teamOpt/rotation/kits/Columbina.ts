@@ -23,8 +23,6 @@ import {
  * party while it lasts. Gravity accrues as in gcsim: every 3 frames, while a Lunar reaction or
  * Lunar hit came in the last 2 s, 0.5 Gravity (0.67 at C2) goes to the Lunar type that came last;
  * the Gravity Interference is the type with the most Gravity when the total reaches 60.
- * Energy (C1's 6 for the active character, C4's 4 for her) and C1's interruption resistance
- * are not modelled (the sim tracks no energy).
  */
 
 /** gcsim attack.go: N1 23 / N2 20 / N3 41, no hitlag (catalyst) */
@@ -228,12 +226,14 @@ function gravityTick(ctx: SimContext, s: ColumbinaState, clear: boolean) {
       element: v.element,
       label: v.label,
     })
-  // C1: a Lunar-Crystallize Gravity Interference gives her the Rainsea Shield for 8 s, a
-  // Lunar-Charged one the active character 6 Energy
-  if (c >= 1 && type === LCR)
-    shieldMarker(ctx, 0, 480, 'Rainsea Shield (C1)', { target: 'Columbina' })
-  if (c >= 1 && type === LC)
-    flatEnergy(ctx, 0, 6, 'Columbina C1', { owner: 'Columbina', to: 'active' })
+  if (c >= 1 && ctx.moonsign >= 2) {
+    if (type === LCR) shieldMarker(ctx, 0, 480, 'Rainsea Shield (C1)')
+    if (type === LC)
+      flatEnergy(ctx, 0, 6, 'Columbina C1', {
+        owner: 'Columbina',
+        to: 'active',
+      })
+  }
   // C4: 4 Energy to her on every Gravity Interference (the 15 s cooldown is its DMG bonus's)
   if (c >= 4) flatEnergy(ctx, 0, 4, 'Columbina C4', { owner: 'Columbina' })
   // A1: +5% CRIT Rate per tick (stacks to 3, 10 s)
@@ -419,9 +419,8 @@ function columbinaAct(
               icd: 'none',
               label: 'Gravity Ripple',
             })
-            // its particles: 1, or 2 at a 33% chance, 3 s ICD (kqmsim particleCB)
-            if (turretReady(s.particles, 'ripple', c3.now, 180))
-              turretParticles(c3, 0, 1.33, 'Columbina')
+            if (turretReady(s.particles, 'ripple', c3.now, 210))
+              turretParticles(c3, 0, 4 / 3, 'Columbina')
             c3.at(117, tick)
           }
           c2.at(117, tick)
@@ -491,6 +490,18 @@ export const kit: KitModel = {
   moonsign: 1,
   element: 'hydro',
   source: `${KQMSIM}/columbina`,
+  simOnlyBuffs: () => [
+    ['Columbina', 'a1Stacks'],
+    ['Columbina', 'burstDomain'],
+    ['Columbina', 'c2Brilliance'],
+    ['Columbina', 'c2Lunarcharged'],
+    ['Columbina', 'c2Lunarbloom'],
+    ['Columbina', 'c2Lunarcrystallize'],
+    ['Columbina', 'c4Buff'],
+    ['Columbina', 'c6Lunarcharged'],
+    ['Columbina', 'c6Lunarbloom'],
+    ['Columbina', 'c6Lunarcrystallize'],
+  ],
   init: (): ColumbinaState => ({
     particles: new Map(),
     a1Stacks: 0,

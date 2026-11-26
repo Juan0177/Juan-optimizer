@@ -17,10 +17,10 @@ import type {
 } from '../util/teamOpt/rotation/types'
 import fixtures from './fixtures/priority-missing-kits/teams.json'
 
-it('uses rolled damage at both strict thresholds and clips each Will outcome before taking its mean', () => {
+it('uses rolled damage at both thresholds and clips each Will outcome before taking its mean', () => {
   const rolls = [
+    { damage: 999, probability: 0.25 },
     { damage: 1000, probability: 0.25 },
-    { damage: 1001, probability: 0.25 },
     { damage: 2999, probability: 0.25 },
     { damage: 3000, probability: 0.25 },
   ]

@@ -139,6 +139,46 @@
     },
     "entries": [
       {
+        "date": "2026-11-26",
+        "title": "Aggiornamento a Stellar Optimizer 1.45.0",
+        "summary": "Arrivano le versioni da 1.42.0 a 1.45.0 di Stellar Optimizer, con la beta 7.3 V5.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Combinazioni di versioni**: scegli fino a 8 personaggi, blocca quelli fissi e genera ed esegui in una volta tutte le squadre possibili.",
+              "**Pulsante Varianti della squadra** nella scheda KQM e **Confronta le varianti** accanto a Condividi nei risultati.",
+              "**Armi Sacrificali**: nelle rotazioni scritte possono azzerare l’abilità; con E? la si rilancia se è pronta. Lo scrittore mostra quanto spesso è successo e confronta la ricarica di energia con e senza azzeramento."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Barra delle versioni rifatta**: più larga, con ricerca, filtri per personaggio, ordine per DPS migliore o originale, anteprime della rotazione e ritratti con costellazione e raffinamento.",
+              "Le versioni non compaiono più nella scheda Squadre, a meno di sceglierlo per ognuna o di attivare “Mostra le versioni”.",
+              "Ottimizza rotazione propone rotazioni più solide e dice rispetto a quale DPS misura ogni guadagno; gli scenari del Tripudio indicano i requisiti mancanti di ogni membro.",
+              "La classifica dell’equipaggiamento parte quando la chiedi e si può fermare; le build salvate si possono ripristinare; scartare un risultato chiede conferma.",
+              "Ottimizza squadra e lo scrittore della rotazione si usano meglio da telefono; armi da 1–3★ e sotto il livello 70 escluse di base."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Beta 7.3 V5**: C2 di Anastasya al 130%, l’energia della C4 di Danica arriva solo dagli altri membri, nomi ufficiali in inglese.",
+              "**Mavuika**: il colpo finale dell’attacco caricato conta anche quando chiude la rotazione.",
+              "Epiche gesta degli Ammazzadraghi è contata bene nelle rotazioni sotto i 20 s (scatta una rotazione sì e una no).",
+              "L’energia della C4 di Citlali e della C1 di Iansan viene di nuovo contata; Sandrone dalla C1 suggerisce CA[beams=6]; l’attacco caricato di Vesna richiede una combo di attacchi normali aperta."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi sono in italiano, e le versioni che tengono l’equipaggiamento dei compagni hanno ancora il loro segno nella nuova barra."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-25",
         "title": "Aggiornamento a Stellar Optimizer 1.41.4",
         "summary": "Arrivano le versioni da 1.40.5 a 1.41.4 di Stellar Optimizer.",

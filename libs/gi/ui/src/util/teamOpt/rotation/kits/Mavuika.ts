@@ -98,6 +98,7 @@ const BURST_BUFF_START = 105
 const BURST_BUFF = 7 * 60
 /** One revolution of the Flamestrider's held Charged Attack (gcsim's bikeChargeAttackSpinFrames) */
 const BIKE_SPIN = 45
+const BIKE_FINISHER_HITLAG = 3
 /** Skill recast (form switch) cooldown (gcsim's skillRecastCD) */
 const SKILL_RECAST_CD = 60
 /** Rings of Searing Radiance: every 2 s in Ring form */
@@ -429,7 +430,11 @@ export function bikeChargeTiming(
   const phase = raw % 45
   const delay = phase < 10 ? 10 - phase : phase >= 35 ? 55 - phase : 0
   const hit = raw - skip
-  return { hit, final: hit + 1 + delay + 45, normal: hit + delay + 74 + 3 }
+  return {
+    hit,
+    final: hit + 1 + delay + 45,
+    normal: hit + 1 + delay + 74 + BIKE_FINISHER_HITLAG,
+  }
 }
 
 export const kit: KitModel = {
@@ -641,24 +646,27 @@ export const kit: KitModel = {
               path: ['_marker', 'hitlag'],
               tag: 'other',
               element: 'physical',
-              animationPause: 3,
+              animationPause: BIKE_FINISHER_HITLAG,
               label: 'Flamestrider finisher hitlag',
             })
           })
-          // (the next action cancels the finisher at the last spin's hit, unless it is waited for
-          // ("F"): then it comes as gcsim's finisher frames allow, the dash at its hit)
-          const cancel = action.final ? final : timing.hit + held
+          // "F" commits to the finisher. A new charge shares the normal recovery;
+          // the other cancels can start as soon as the hitlag ends.
+          const recovery = timing.normal + held
+          const cancel = action.final
+            ? final + BIKE_FINISHER_HITLAG
+            : timing.hit + held
           return {
-            frames: timing.normal + held,
+            frames: recovery,
             framesInto: {
-              normal: timing.normal + held,
-              charged: cancel,
+              normal: recovery,
+              charged: action.final ? recovery : cancel,
               skill: cancel,
               burst: cancel,
               dash: cancel,
               jump: cancel,
               swap: cancel,
-              wait: cancel,
+              wait: action.final ? final : cancel,
             },
           }
         }

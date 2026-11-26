@@ -24,7 +24,7 @@ import {
 } from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { preloadNamespaces } from '@genshin-optimizer/gi/i18n'
-import { giCtaSx } from '@genshin-optimizer/gi/theme'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type { TeamLinkJson } from '@genshin-optimizer/gi/ui'
 import {
   CharacterMultiAutocomplete,
@@ -35,11 +35,13 @@ import {
   teamLinkFromText,
 } from '@genshin-optimizer/gi/ui'
 import AddIcon from '@mui/icons-material/Add'
+import CallSplitRoundedIcon from '@mui/icons-material/CallSplitRounded'
 import GroupsIcon from '@mui/icons-material/Groups'
 import SearchIcon from '@mui/icons-material/Search'
 import UploadIcon from '@mui/icons-material/Upload'
 import {
   Alert,
+  alpha,
   Box,
   Button,
   CardContent,
@@ -48,6 +50,7 @@ import {
   InputAdornment,
   Skeleton,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import type { ChangeEvent } from 'react'
@@ -143,7 +146,7 @@ export default function PageTeams() {
     )
   }
   const displayTeam = useDataEntryBase(database.displayTeam)
-  const { sortType, ascending, charKeys } = displayTeam
+  const { sortType, ascending, charKeys, showVersions } = displayTeam
 
   const [searchTerm, setSearchTerm] = useState(displayTeam.searchTerm)
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -152,11 +155,21 @@ export default function PageTeams() {
   }, [database, deferredSearchTerm])
 
   const teamsDirty = useDataManagerValues(database.teams)
-  const totalTeamNum = teamsDirty.length
+  const { visibleBaseIds, hiddenVersionCount } = useMemo(() => {
+    const allKeys = teamsDirty ? database.teams.keys : []
+    let hidden = 0
+    const visible: string[] = []
+    for (const id of allKeys) {
+      const isHidden = database.teams.isHiddenVersion(id)
+      if (isHidden) hidden++
+      if (showVersions || !isHidden) visible.push(id)
+    }
+    return { visibleBaseIds: visible, hiddenVersionCount: hidden }
+  }, [teamsDirty, database, showVersions])
+  const totalTeamNum = visibleBaseIds.length
   const filteredTeamIds = useMemo(
     () =>
-      teamsDirty &&
-      database.teams.keys
+      visibleBaseIds
         .filter(
           filterFunction(
             { charKeys, name: deferredSearchTerm },
@@ -170,7 +183,14 @@ export default function PageTeams() {
             teamSortConfigs()
           )(database.teams.get(k1)!, database.teams.get(k2)!)
         }),
-    [teamsDirty, database, charKeys, deferredSearchTerm, sortType, ascending]
+    [
+      visibleBaseIds,
+      database,
+      charKeys,
+      deferredSearchTerm,
+      sortType,
+      ascending,
+    ]
   )
   const brPt = useMediaQueryUp()
 
@@ -237,6 +257,7 @@ export default function PageTeams() {
         />
         <CharacterMultiAutocomplete
           teamIds={filteredTeamIds}
+          allTeamIds={visibleBaseIds}
           charKeys={charKeys}
           setCharKey={(charKeys) => database.displayTeam.set({ charKeys })}
           acProps={{
@@ -249,7 +270,7 @@ export default function PageTeams() {
             ml: 'auto',
             display: 'flex',
             alignItems: 'center',
-            gap: 2,
+            gap: 1.5,
             flexWrap: 'wrap',
           }}
         >
@@ -261,6 +282,55 @@ export default function PageTeams() {
                 total: totalTeamNum,
               })}
             </Typography>
+          )}
+          {hiddenVersionCount > 0 && (
+            <Tooltip
+              title={t(
+                'page_teams:toolbar.showVersionsTip',
+                'Variants stay hidden here by default; toggle to include them or pin individual ones from Versions.'
+              )}
+            >
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                aria-pressed={showVersions}
+                startIcon={
+                  <CallSplitRoundedIcon sx={{ fontSize: '17px !important' }} />
+                }
+                onClick={() =>
+                  database.displayTeam.set({ showVersions: !showVersions })
+                }
+                sx={{
+                  height: 36,
+                  px: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontVariantNumeric: 'tabular-nums',
+                  borderColor: showVersions
+                    ? alpha(giTokens.gold, 0.55)
+                    : giTokens.hairlineStrong,
+                  bgcolor: showVersions
+                    ? alpha(giTokens.gold, 0.12)
+                    : 'transparent',
+                  color: showVersions ? giTokens.goldLight : 'text.secondary',
+                  '&:hover': {
+                    borderColor: showVersions
+                      ? giTokens.gold
+                      : giTokens.hairlineStrong,
+                    bgcolor: showVersions
+                      ? alpha(giTokens.gold, 0.18)
+                      : alpha(giTokens.parchment, 0.05),
+                    color: showVersions ? giTokens.goldLight : 'text.primary',
+                  },
+                }}
+              >
+                {t('page_teams:toolbar.showVersions', {
+                  defaultValue: 'Show versions ({{count}})',
+                  count: hiddenVersionCount,
+                })}
+              </Button>
+            </Tooltip>
           )}
           <SortByButton
             size="small"

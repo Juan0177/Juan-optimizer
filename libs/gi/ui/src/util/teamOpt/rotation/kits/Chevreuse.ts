@@ -60,31 +60,45 @@ interface ChevreuseState {
   /** C4: a Hold E has no cooldown until this frame, for `c4Shots` more casts */
   c4Until: number
   c4Shots: number
-  /** The healing of E is running (a recast only refreshes it) */
   healChain: boolean
   healEnd: number
-  /** C6: the team heal at the end of the healing is queued */
+  healId: number
   teamHealQueued: boolean
   ball: boolean
 }
 
-/** C6: the Pyro/Electro DMG stack (8 s) from the healing */
 const c6Stack = (ctx: SimContext) =>
   ctx.buff('Chevreuse', ['Chevreuse', 'c6AfterHealStacks'], '1', 0, 8 * 60, {
     recipient: ctx.onField,
+    hitlag: 'recipient',
   })
 
-/**
- * E's healing: the active member every 2 s for 12 s (world time, active on its expiry frame); a
- * recast while it runs only refreshes it (kqmsim chevreuse/skill.go:197-226). C6: each heal gives
- * the active member a stack, and at its end the party is healed and each member gets one
- * (cons.go:120-140). The sheet's stacks are team-wide, so the tick stacks count for the team.
- */
 function startHealing(ctx: SimContext, s: ChevreuseState, c6: boolean) {
+  const running = s.healChain && ctx.now <= s.healEnd
   s.healEnd = ctx.now + 12 * 60 + 1
-  if (s.healChain) return
+  if (c6 && !s.teamHealQueued) {
+    s.teamHealQueued = true
+    ctx.at(12 * 60, (c) => {
+      s.teamHealQueued = false
+      for (const recipient of c.members)
+        c.buff('Chevreuse', ['Chevreuse', 'c6AfterHealStacks'], '1', 0, 480, {
+          recipient,
+          hitlag: 'recipient',
+        })
+      c.hit(0, {
+        path: ['_heal', 'constellation6', 'heal'],
+        tag: 'other',
+        element: 'pyro',
+        healTargets: [...c.members],
+        label: 'In Pursuit of Ending Evil (C6, Heal)',
+      })
+    })
+  }
+  if (running) return
   s.healChain = true
+  const id = ++s.healId
   const tick = (c: SimContext) => {
+    if (id !== s.healId) return
     if (c.now > s.healEnd) {
       s.healChain = false
       return
@@ -100,23 +114,6 @@ function startHealing(ctx: SimContext, s: ChevreuseState, c6: boolean) {
     c.at(2 * 60, tick)
   }
   ctx.at(2 * 60, tick)
-  if (c6 && !s.teamHealQueued) {
-    s.teamHealQueued = true
-    ctx.at(12 * 60, (c) => {
-      s.teamHealQueued = false
-      for (const recipient of c.members)
-        c.buff('Chevreuse', ['Chevreuse', 'c6AfterHealStacks'], '1', 0, 480, {
-          recipient,
-        })
-      c.hit(0, {
-        path: ['_heal', 'constellation6', 'heal'],
-        tag: 'other',
-        element: 'pyro',
-        healTargets: [...c.members],
-        label: 'In Pursuit of Ending Evil (C6, Heal)',
-      })
-    })
-  }
 }
 
 export const kit: KitModel = {
@@ -132,9 +129,23 @@ export const kit: KitModel = {
     c4Shots: 0,
     healChain: false,
     healEnd: -1,
+    healId: 0,
     teamHealQueued: false,
     ball: false,
   }),
+  onStart(ctx) {
+    for (const condition of [
+      'a1AfterOverload',
+      'a4AfterBall',
+      'c6AfterHealStacks',
+    ])
+      ctx.state('Chevreuse', ['Chevreuse', condition], '')
+  },
+  simOnlyBuffs: () => [
+    ['Chevreuse', 'a1AfterOverload'],
+    ['Chevreuse', 'a4AfterBall'],
+    ['Chevreuse', 'c6AfterHealStacks'],
+  ],
   act(ctx, s: ChevreuseState, action, previous) {
     const c = ctx.constellation('Chevreuse')
     switch (action.kind) {
@@ -201,7 +212,8 @@ export const kit: KitModel = {
             ['Chevreuse', 'a4AfterBall'],
             'on',
             cdDelay,
-            1800
+            1800,
+            { hitlag: 'recipient' }
           )
         // her particles (4) on a hit, once per 10 s on world time: a C4 free Hold's too (kqmsim)
         if (ctx.now + hitmark >= s.particleIcdEnd) {

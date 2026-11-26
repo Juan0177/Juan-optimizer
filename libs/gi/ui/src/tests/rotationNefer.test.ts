@@ -34,16 +34,16 @@ describe('Nefer', () => {
     expect(sim.warnings).toEqual([])
   })
   it('turns Lunar-Blooms after her skill into Veils (3; C2: 5) that the burst consumes', () => {
-    for (const [cons, max] of [
-      [0, '3'],
-      [2, '5'],
+    for (const [cons, first, max] of [
+      [0, '2', '3'],
+      [2, '4', '5'],
     ] as const) {
       const sim = run(cons)
       const pp = sim.hits.find(
         (h) => h.label === 'Phantasm Performance (Nefer 1)'
       )!
-      expect(veilsAt(sim, pp.t)).toBe(max)
       const burst = sim.hits.find((h) => h.label === 'Sacred Vow (1)')!
+      expect(veilsAt(sim, pp.t)).toBe(first)
       expect(
         burst.states?.find((x) => x.path[1] === 'burstVeilsAbsorbed')?.value
       ).toBe(max)

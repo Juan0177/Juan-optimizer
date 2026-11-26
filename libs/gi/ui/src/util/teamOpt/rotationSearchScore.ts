@@ -17,6 +17,7 @@ import type {
   RotationTimingSettings,
   SimGear,
 } from './rotation'
+import { DEFAULT_SWAP_FRAMES } from './rotation'
 import { rotationCalculation } from './rotationCalculation'
 import type { RotationScore } from './rotationSearch'
 import { writtenTeamReplay } from './rotationSearchTeam'
@@ -123,11 +124,20 @@ export function rotationScorer(
   const sim = setup.sim ?? { gear, overrides }
   let calculate = rotationCalculation(database, teamId, gender, sim.overrides)
   let damage = new DamageKept()
-  return (text: string): RotationScore | undefined => {
+  return (text: string, swapOffset = 0): RotationScore | undefined => {
     if (damage.size * DAMAGE_ENTRY + calculate.kept() > kept) {
       calculate = rotationCalculation(database, teamId, gender, sim.overrides)
       damage = new DamageKept()
     }
+    const timing = swapOffset
+      ? {
+          ...setup.timing,
+          swapFrames: Math.max(
+            1,
+            (setup.timing.swapFrames ?? DEFAULT_SWAP_FRAMES) + swapOffset
+          ),
+        }
+      : setup.timing
     const warnings: string[] = []
     const played = (
       setup.play === 'team' ? writtenTeamReplay : writtenKqmReplay
@@ -140,7 +150,7 @@ export function rotationScorer(
       teamOpt,
       text,
       opener: setup.opener,
-      timing: setup.timing,
+      timing,
       frameData: setup.frameData,
       warnings,
     })?.({
@@ -150,7 +160,8 @@ export function rotationScorer(
       calculate,
     })
     const time = played?.rotationTime
-    if (!played || !time) return undefined
+    const exactTime = played?.exactTime ?? time
+    if (!played || !time || !exactTime) return undefined
     const total =
       rotationDamage(
         database,
@@ -167,6 +178,7 @@ export function rotationScorer(
       setup.play === 'team'
         ? teamOpt.energyCalculator
         : teamOpt.kqm?.energyCalculator
+    const energyTime = played.energyRotationTime ?? time
     const er = played.energy
       ? calculateEnergyRecharge(
           keys,
@@ -176,7 +188,7 @@ export function rotationScorer(
                 ? syncEnergyCalculator(
                     keys,
                     savedCalc,
-                    time,
+                    energyTime,
                     teamOpt.onField ?? keys[0],
                     setup.constellations
                   )
@@ -184,7 +196,7 @@ export function rotationScorer(
               keys,
               played.energy
             ),
-            rotationTime: time,
+            rotationTime: energyTime,
           },
           weapons as never,
           refinements as never,
@@ -192,7 +204,7 @@ export function rotationScorer(
         ).targets
       : {}
     return {
-      dps: total / time,
+      dps: total / exactTime,
       time,
       er: Object.fromEntries(
         Object.entries(er).map(([k, v]) => [k, Math.round(v as number)])

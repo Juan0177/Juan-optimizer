@@ -129,28 +129,42 @@ export const versionsCardHeight = (
  */
 export async function renderVersionsCard(
   data: VersionsCardData,
-  scale = 2
+  scale?: number
 ): Promise<HTMLCanvasElement> {
-  const icons = await Promise.all(
-    data.teams.map((team) =>
-      Promise.all(
-        team.members.map(async (m) => ({
-          face: await loadImage(m.face),
-          weapon: await loadImage(m.weapon.icon ?? ''),
-          sets: await Promise.all(m.sets.map((s) => loadImage(s.icon ?? ''))),
-        }))
-      )
-    )
-  )
-  await loadShareFont()
-  await document.fonts?.ready
-
   const n = data.teams.length
+  // Keep very large sheets fast to draw and PNG-encode while staying crisp to share
+  const effectiveScale = scale ?? (n <= 9 ? 2 : n <= 18 ? 1.5 : 1.25)
+
+  // Deduplicate and load every unique portrait, weapon, and artifact icon in one parallel wave
+  const urls = new Set<string>()
+  for (const team of data.teams) {
+    for (const m of team.members) {
+      if (m.face) urls.add(m.face)
+      if (m.weapon.icon) urls.add(m.weapon.icon)
+      for (const s of m.sets) if (s.icon) urls.add(s.icon)
+    }
+  }
+  const [loadedEntries] = await Promise.all([
+    Promise.all(
+      [...urls].map(async (url) => [url, await loadImage(url)] as const)
+    ),
+    loadShareFont(),
+  ])
+  await document.fonts?.ready
+  const imageByUrl = new Map(loadedEntries)
+  const icons = data.teams.map((team) =>
+    team.members.map((m) => ({
+      face: m.face ? imageByUrl.get(m.face) : undefined,
+      weapon: m.weapon.icon ? imageByUrl.get(m.weapon.icon) : undefined,
+      sets: m.sets.map((s) => (s.icon ? imageByUrl.get(s.icon) : undefined)),
+    }))
+  )
+
   const cols = columnsFor(n)
   const W = versionsCardWidth(n)
   const H = versionsCardHeight(n, data)
   const DETAILS = detailsH(data)
-  const { canvas, ctx } = page(W, H, scale)
+  const { canvas, ctx } = page(W, H, effectiveScale)
   ctx.fillStyle = PAGE
   ctx.fillRect(0, 0, W, H)
   const fill = (x: number, y: number, w: number, h: number, color: string) => {

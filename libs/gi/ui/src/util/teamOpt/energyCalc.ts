@@ -1370,7 +1370,9 @@ export function energyFromRotation(
       constellations?.[key] ?? (getCharStat(key).rarity === 4 ? 6 : 0)
     const usable = (i: number) =>
       energySkillConstellation(data.skills[i].label) <= cons
-    const base = defaultSkillMode(key, constellations?.[key])
+    const base = FLAT_ENERGY_KIT_MARKED.has(key)
+      ? 0
+      : defaultSkillMode(key, constellations?.[key])
     const modeFor = (hold: boolean) => {
       const found = data.skills.findIndex(
         (skill, i) =>
@@ -1533,7 +1535,7 @@ export function energyFromRotation(
     }
     // (every field it fills is set, none left out: a rotation without, after one with, clears it)
     member.flatEnergy =
-      SKILL_FLAT_ENERGY[key] !== undefined
+      SKILL_FLAT_ENERGY[key] !== undefined && !FLAT_ENERGY_KIT_MARKED.has(key)
         ? (SKILL_FLAT_ENERGY[key]! * uses.length) / per
         : 0
     // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
@@ -1830,9 +1832,10 @@ const USE_OPTIONS: Partial<
  * Danica's flat Energy a rotation, per member (dump ConfigTalent_Danica, Avatar_Danica_ElementalArt_E2):
  * - C1: 20 to herself on each Will to Protect (her automatic Entry) or Will to Purge, once per
  *   14 s (UNIQUE_Danica_C1_EnergyRecover_CD);
- * - C4: 3 to each other member when the member on the field, protected by her Royal Aegis (her
- *   kit's shield markers, a later one ending an earlier one), deals Stellar-Conduct DMG, once per
- *   3.5 s (UNIQUE_Danica_C4_EnergyRecover_CD).
+ * - C4: 3 to each other member when another member on the field, protected by her Royal Aegis
+ *   (her kit's shield markers, a later one ending an earlier one), deals Stellar-Conduct DMG, once
+ *   per 3.5 s (UNIQUE_Danica_C4_EnergyRecover_CD). Her own hits stopped counting in beta 7.2.54
+ *   (CN text); the 7.2.52 dump counted them.
  */
 function maidEnergyFromRotation(
   owner: CharacterKey,
@@ -1880,6 +1883,7 @@ function maidEnergyFromRotation(
       h.t < end &&
       h.tag === 'directStellarConduct' &&
       h.characterKey === h.onField &&
+      h.characterKey !== owner &&
       h.t >= last + 210 &&
       aegis.some(([from, to]) => from <= h.t && h.t < to)
     ) {
@@ -1925,6 +1929,7 @@ const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
   Barbara: barbaraEnergyFromRotation,
   Danica: maidEnergyFromRotation,
 }
+const FLAT_ENERGY_KIT_MARKED = new Set<CharacterKey>(['Durin'])
 /**
  * The turrets whose kits mark the particles they make (`turretParticles`, kqmsim's particle
  * callbacks): counted as made in the rotation (one entry per line)

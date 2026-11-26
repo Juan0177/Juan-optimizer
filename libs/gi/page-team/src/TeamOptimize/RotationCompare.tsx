@@ -8,8 +8,10 @@ import type {
   BurstCadence,
   BurstMemberConfig,
   CustomScenarioInput,
+  FrameData,
   RotationMember,
   RotationScenario,
+  RotationTimingSettings,
   RotationWordStep,
   RunAttackState,
 } from '@genshin-optimizer/gi/ui'
@@ -22,6 +24,7 @@ import {
   MAX_COMPARISON_SCENARIOS,
   rankScenarioResults,
   rotationWords,
+  statName,
   teamBurstEvery,
   useNumWorkers,
   validateInsteadAction,
@@ -66,7 +69,11 @@ import { DialogHead } from './OptionTile'
 import { Arrow, mono } from './RotationInline'
 import type { RotationSearchBase } from './RotationSearch'
 import { laneColor } from './RotationTimeline'
-import { kqmRotationId, useRotationSettings } from './RotationWriter'
+import {
+  kqmRotationId,
+  playedRotationKey,
+  useRotationSettings,
+} from './RotationWriter'
 import {
   applyRotationScenario,
   baselineScenarioResult,
@@ -120,6 +127,8 @@ function scenarioTitle(
 ): string {
   if (scenario.kind === 'custom')
     return scenario.label || t('teamOpt.compare.customLabel', 'Custom rotation')
+  if (scenario.isBaseline)
+    return t('teamOpt.compare.currentRotation', 'Current rotation')
   const nameOf = (ck: CharacterKey) =>
     names.find((n) => n.characterKey === ck)?.name ?? ck
   const entries = Object.entries(scenario.choices) as [
@@ -152,6 +161,7 @@ export function RotationCompareButton({
   baseStale,
   attackStates,
   rankingBonusStats,
+  savedOverride,
   onApplied,
   compact,
   disabled,
@@ -170,6 +180,12 @@ export function RotationCompareButton({
   rankingBonusStats?: RefObject<
     Partial<Record<CharacterKey, BonusStats>> | undefined
   >
+  /** Live writer settings when comparing a draft. */
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   /** Called with the applied rotation text (e.g. to sync an open writer dialog) */
   onApplied?: (text: string) => void
   compact?: boolean
@@ -282,6 +298,7 @@ export function RotationCompareButton({
           baseStale={baseStale}
           attackStates={attackStates}
           rankingBonusStats={rankingBonusStats}
+          savedOverride={savedOverride}
           onClose={() => setOpen(false)}
           onApplied={(appliedText, label) => {
             onApplied?.(appliedText)
@@ -318,6 +335,7 @@ function RotationCompareDialog({
   baseStale,
   attackStates,
   rankingBonusStats,
+  savedOverride,
   onClose,
   onApplied,
 }: {
@@ -333,6 +351,11 @@ function RotationCompareDialog({
   rankingBonusStats?: RefObject<
     Partial<Record<CharacterKey, BonusStats>> | undefined
   >
+  savedOverride?: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
   onClose: () => void
   onApplied: (text: string, label: string) => void
 }) {
@@ -341,7 +364,8 @@ function RotationCompareDialog({
   const { gender } = useDBMeta()
   const [maxWorkers] = useNumWorkers()
   const isKqm = tab === 'kqm'
-  const saved = useRotationSettings(isKqm ? kqmRotationId(teamId) : teamId)
+  const stored = useRotationSettings(isKqm ? kqmRotationId(teamId) : teamId)
+  const saved = savedOverride ?? stored
 
   const currentBurstEvery = useMemo(
     () => (isKqm ? kqmBurstEvery(teamOpt.kqm) : teamBurstEvery(teamOpt)),
@@ -427,6 +451,12 @@ function RotationCompareDialog({
       teamOpt,
       base,
       baseStale,
+      rotationKey: playedRotationKey(
+        baseText,
+        saved.opener,
+        saved.timing,
+        saved.frameData
+      ),
       baselineBurstEvery,
       saved: {
         opener: saved.opener,
@@ -447,6 +477,7 @@ function RotationCompareDialog({
       teamOpt,
       base,
       baseStale,
+      baseText,
       baselineBurstEvery,
       saved.opener,
       saved.timing,
@@ -665,6 +696,22 @@ function RotationCompareDialog({
   }, [results])
 
   const handleApply = (sc: RotationScenario) => {
+    const result = results[sc.id]
+    if (!result || result.error || sc.isBaseline) return
+    if (
+      !window.confirm(
+        result.unmetCount > 0
+          ? t(
+              'teamOpt.compare.applyUnmet',
+              'This build has unmet requirements. Replace the written rotation and ER targets anyway? Equipment stays as it is.'
+            )
+          : t(
+              'teamOpt.compare.applyChange',
+              'Replace the written rotation and ER targets with this scenario? Equipment stays as it is.'
+            )
+      )
+    )
+      return
     const ok = applyRotationScenario({
       ctx,
       scenario: sc,
@@ -692,14 +739,21 @@ function RotationCompareDialog({
     <ModalWrapper
       open
       onClose={running ? undefined : onClose}
-      containerProps={{ maxWidth: 'md' }}
+      aria-label={t('teamOpt.compare.title', 'Burst scenarios')}
+      containerProps={{ maxWidth: 'md', sx: { p: { xs: 0, sm: 1.5 } } }}
     >
       <CardThemed
         sx={{
           bgcolor: giTokens.panel,
-          border: `1px solid ${tokens.hairlineStrong}`,
-          borderRadius: tokens.radius.panel,
+          border: { xs: 0, sm: `1px solid ${tokens.hairlineStrong}` },
+          borderRadius: { xs: 0, sm: tokens.radius.panel },
+          display: 'flex',
+          flexDirection: 'column',
+          height: { xs: '100dvh', sm: 'auto' },
+          maxHeight: { sm: 'calc(100dvh - 24px)' },
           overflow: 'hidden',
+          pt: { xs: 'env(safe-area-inset-top)', sm: 0 },
+          '& > :first-of-type': { flexShrink: 0 },
         }}
       >
         <DialogHead
@@ -713,7 +767,19 @@ function RotationCompareDialog({
           }}
         />
 
-        <Box sx={{ p: { xs: 2, sm: 2.5 }, display: 'grid', gap: 2.25 }}>
+        <Box
+          sx={{
+            p: { xs: 1.5, sm: 2.5 },
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr)',
+            gap: 2.25,
+            alignContent: 'start',
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehaviorY: 'contain',
+          }}
+        >
           {/* Zone 1: Burst frequency matrix */}
           <Box sx={{ display: 'grid', gap: 1 }}>
             <Box
@@ -742,12 +808,27 @@ function RotationCompareDialog({
                   py: 0.25,
                   px: 1,
                   borderRadius: tokens.radius.control,
+                  minHeight: { xs: 44, sm: 30 },
                 }}
               >
                 {t('teamOpt.compare.addCustom', 'Custom rotation')}
               </Button>
             </Box>
 
+            {burstMembers.some((member) => member.baselineCadence === 0) && (
+              <Alert severity="info">
+                {t(
+                  'teamOpt.compare.cadenceMismatch',
+                  'The ER calculator marks {{names}} as Unused, and the written rotation contains their Burst. Current rotation keeps the written actions. Skip removes those actions.',
+                  {
+                    names: burstMembers
+                      .filter((member) => member.baselineCadence === 0)
+                      .map((member) => member.name)
+                      .join(', '),
+                  }
+                )}
+              </Alert>
+            )}
             {burstMembers.length > 0 ? (
               <Box sx={{ ...insetSx, overflow: 'hidden' }}>
                 {burstMembers.map((m, idx) => {
@@ -763,7 +844,7 @@ function RotationCompareDialog({
                       sx={{
                         display: 'grid',
                         gridTemplateColumns: {
-                          xs: '1fr',
+                          xs: 'minmax(0, 1fr)',
                           sm: '132px minmax(0, 1fr) auto',
                         },
                         alignItems: 'center',
@@ -796,6 +877,12 @@ function RotationCompareDialog({
                       </Box>
 
                       <Box
+                        role="group"
+                        aria-label={t(
+                          'teamOpt.compare.frequencyFor',
+                          'Burst frequency for {{name}}',
+                          { name: m.name }
+                        )}
                         sx={{
                           display: 'flex',
                           flexWrap: 'wrap',
@@ -823,14 +910,13 @@ function RotationCompareDialog({
                         <Box
                           sx={{
                             display: 'flex',
+                            flexWrap: 'wrap',
                             alignItems: 'center',
                             gap: 0.875,
                             justifySelf: { xs: 'start', sm: 'end' },
                           }}
                         >
-                          <Typography
-                            sx={{ ...type.label, whiteSpace: 'nowrap' }}
-                          >
+                          <Typography sx={type.label}>
                             {t('teamOpt.compare.insteadOfQ', 'Instead of Q')}
                           </Typography>
                           <Tooltip
@@ -856,22 +942,23 @@ function RotationCompareDialog({
                               )}
                               inputProps={{
                                 'aria-label': `${m.name} ${t('teamOpt.compare.insteadOfQ', 'Instead of Q')}`,
+                                'aria-invalid': !!err,
                               }}
                               sx={{
                                 width: 96,
-                                height: 30,
+                                height: { xs: 44, sm: 30 },
+                                maxWidth: '100%',
                                 px: 1,
                                 borderRadius: tokens.radius.control,
                                 fontFamily: mono,
                                 fontSize: 12.5,
                                 bgcolor: giTokens.panel,
-                                border: `1px solid ${
-                                  err
-                                    ? 'warning.main'
-                                    : cfg.instead.trim()
-                                      ? alpha(giTokens.gold, 0.48)
-                                      : tokens.hairlineStrong
-                                }`,
+                                border: '1px solid',
+                                borderColor: err
+                                  ? 'warning.main'
+                                  : cfg.instead.trim()
+                                    ? alpha(giTokens.gold, 0.48)
+                                    : tokens.hairlineStrong,
                                 '&.Mui-focused': {
                                   borderColor: err
                                     ? 'warning.main'
@@ -919,6 +1006,7 @@ function RotationCompareDialog({
                 >
                   <InputBase
                     value={customLabel}
+                    disabled={running}
                     onChange={(e) => setCustomLabel(e.target.value)}
                     placeholder={t(
                       'teamOpt.compare.customNamePlaceholder',
@@ -926,7 +1014,7 @@ function RotationCompareDialog({
                     )}
                     sx={{
                       width: { xs: '100%', sm: 184 },
-                      height: 34,
+                      minHeight: { xs: 44, sm: 34 },
                       px: 1.25,
                       borderRadius: tokens.radius.control,
                       fontSize: 13,
@@ -936,12 +1024,22 @@ function RotationCompareDialog({
                   />
                   <InputBase
                     value={customText}
+                    disabled={running}
+                    multiline
+                    maxRows={4}
+                    inputProps={{
+                      'aria-label': t(
+                        'teamOpt.compare.rotationLabel',
+                        'Rotation'
+                      ),
+                    }}
                     onChange={(e) => setCustomText(e.target.value)}
                     placeholder={baseText}
                     sx={{
-                      flex: '1 1 280px',
-                      height: 34,
-                      px: 1.25,
+                      flex: { xs: '1 1 100%', sm: '1 1 280px' },
+                      minWidth: 0,
+                      minHeight: { xs: 44, sm: 34 },
+                      p: 1.25,
                       borderRadius: tokens.radius.control,
                       fontFamily: mono,
                       fontSize: 12.5,
@@ -953,8 +1051,8 @@ function RotationCompareDialog({
                     size="small"
                     variant="contained"
                     onClick={addCustom}
-                    disabled={!customText.trim()}
-                    sx={{ height: 34, px: 2 }}
+                    disabled={running || !customText.trim()}
+                    sx={{ minHeight: { xs: 44, sm: 34 }, px: 2 }}
                   >
                     {t('teamOpt.compare.add', 'Add')}
                   </Button>
@@ -963,116 +1061,84 @@ function RotationCompareDialog({
             </Collapse>
           </Box>
 
-          {/* Action bar */}
+          {hasInvalidInstead && (
+            <Alert severity="warning" sx={{ py: 0.5 }}>
+              {Object.values(insteadErrors)[0]}
+            </Alert>
+          )}
+
+          {/* Zone 2: Scenarios & Ranked Comparison Cards */}
           <Box
             sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr)',
               gap: 1.25,
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                gap: 0.875,
-              }}
-            >
-              <Typography sx={{ ...type.label, ...numSx, fontWeight: 600 }}>
-                {t('teamOpt.compare.count', {
-                  defaultValue: '{{count}} scenarios',
-                  count: enabledScenarios.length,
-                })}
-              </Typography>
-              {enabledScenarios.length < 2 && !truncated && (
-                <Typography
-                  sx={{
-                    fontSize: 12.5,
-                    color: 'text.secondary',
-                    opacity: 0.85,
-                  }}
-                >
-                  ·{' '}
-                  {t(
-                    'teamOpt.compare.pickMore',
-                    'Select a 2nd option on any character to compare'
-                  )}
-                </Typography>
-              )}
-              {truncated && (
-                <Typography sx={{ fontSize: 12.5, color: 'warning.main' }}>
-                  ·{' '}
-                  {t('teamOpt.compare.capped', {
-                    defaultValue: 'Showing first {{max}} of {{total}}',
-                    max: MAX_COMPARISON_SCENARIOS,
-                    total: totalCount,
-                  })}
-                </Typography>
-              )}
-            </Box>
-
-            <Box sx={{ flexGrow: 1 }} />
-
-            <Segmented
-              size="small"
-              aria-label={t('teamOpt.compare.modeLabel', 'Comparison speed')}
-              value={compareMode}
-              onChange={(next) => {
-                if (!running) setCompareMode(next)
-              }}
-              options={[
-                {
-                  value: 'fast',
-                  label: t('teamOpt.compare.modeFast', 'Fast'),
-                  disabled: running,
-                  tip: t(
-                    'teamOpt.compare.modeFastTip',
-                    'Reuses your current builds & rankings: refits ER shifts, Favonius/team-gear swaps, and top weapons & sets across 2 rounds (much faster).'
-                  ),
-                },
-                {
-                  value: 'full',
-                  label: t('teamOpt.compare.modeFull', 'Full'),
-                  disabled: running,
-                  tip: t(
-                    'teamOpt.compare.modeFullTip',
-                    'Re-optimizes every member, weapon, and artifact set from scratch for each scenario.'
-                  ),
-                },
-              ]}
-            />
-
-            {running ? (
-              <Button
-                color="inherit"
-                variant="outlined"
-                onClick={() => {
-                  cancelledRef.current = true
-                }}
-                sx={{ minWidth: 128, borderColor: tokens.hairlineStrong }}
-              >
-                {t('teamOpt.compare.stop', 'Stop')}
-              </Button>
-            ) : (
-              <Button
-                variant="contained"
-                disabled={!canRun}
-                onClick={startCompare}
-                startIcon={<CompareArrowsRoundedIcon />}
-                sx={[{ minWidth: 176 }, giCtaSx]}
-              >
-                {hasResults
-                  ? t('teamOpt.compare.rerun', 'Compare again')
-                  : t('teamOpt.compare.run', {
-                      defaultValue: 'Compare {{count}} scenarios',
-                      count: enabledScenarios.length,
-                    })}
-              </Button>
-            )}
+            {orderedScenarios.map((sc) => {
+              const res = results[sc.id]
+              const prev = previews[sc.id]
+              const rank = rankById.get(sc.id)
+              const enabled = !disabledIds.has(sc.id)
+              return (
+                <ScenarioRow
+                  key={sc.id}
+                  scenario={sc}
+                  names={names}
+                  varying={varyingMembers}
+                  enabled={enabled}
+                  disabledToggle={running}
+                  onToggle={() =>
+                    setDisabledIds((prevSet) => {
+                      const next = new Set(prevSet)
+                      if (next.has(sc.id)) next.delete(sc.id)
+                      else next.add(sc.id)
+                      return next
+                    })
+                  }
+                  onRemoveCustom={
+                    sc.kind === 'custom' && !running
+                      ? () => removeCustom(sc.id)
+                      : undefined
+                  }
+                  preview={prev}
+                  baselinePreview={baselinePreview}
+                  result={res}
+                  baselineResult={baselineResult}
+                  rank={rank}
+                  activeStep={
+                    running && progress?.activeId === sc.id
+                      ? progress.step
+                      : undefined
+                  }
+                  queued={
+                    running && enabled && !res && progress?.activeId !== sc.id
+                  }
+                  expanded={expandedId === sc.id}
+                  onToggleExpand={() =>
+                    setExpandedId((id) => (id === sc.id ? undefined : sc.id))
+                  }
+                  onApply={() => handleApply(sc)}
+                  running={running}
+                />
+              )
+            })}
           </Box>
-
+        </Box>
+        <Box
+          component="footer"
+          sx={{
+            px: { xs: 1.5, sm: 2.5 },
+            pt: 1.25,
+            pb: { xs: 'max(10px, env(safe-area-inset-bottom))', sm: 1.25 },
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr)',
+            gap: 1,
+            flexShrink: 0,
+            borderTop: hairline,
+            '& [role="radio"]': { minHeight: { xs: 38, sm: 26 } },
+          }}
+        >
           {/* Progress strip */}
           {running && progress && (
             <Box
@@ -1153,62 +1219,127 @@ function RotationCompareDialog({
             </Box>
           )}
 
-          {hasInvalidInstead && (
-            <Alert severity="warning" sx={{ py: 0.5 }}>
-              {Object.values(insteadErrors)[0]}
-            </Alert>
-          )}
+          {/* Action bar */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              gap: { xs: 0.875, sm: 1.25 },
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                flexBasis: { xs: '100%', sm: 'auto' },
+                gap: 0.875,
+              }}
+            >
+              <Typography sx={{ ...type.label, ...numSx, fontWeight: 600 }}>
+                {t('teamOpt.compare.count', {
+                  defaultValue: '{{count}} scenarios',
+                  count: enabledScenarios.length,
+                })}
+              </Typography>
+              {enabledScenarios.length < 2 && !truncated && (
+                <Typography
+                  sx={{
+                    fontSize: 12.5,
+                    color: 'text.secondary',
+                    opacity: 0.85,
+                  }}
+                >
+                  ·{' '}
+                  {t(
+                    'teamOpt.compare.pickMore',
+                    'Select a 2nd option on any character to compare'
+                  )}
+                </Typography>
+              )}
+              {truncated && (
+                <Typography sx={{ fontSize: 12.5, color: 'warning.main' }}>
+                  ·{' '}
+                  {t('teamOpt.compare.capped', {
+                    defaultValue: 'Showing first {{max}} of {{total}}',
+                    max: MAX_COMPARISON_SCENARIOS,
+                    total: totalCount,
+                  })}
+                </Typography>
+              )}
+            </Box>
 
-          {/* Zone 2: Scenarios & Ranked Comparison Cards */}
-          <Box sx={{ display: 'grid', gap: 1.25 }}>
-            {orderedScenarios.map((sc) => {
-              const res = results[sc.id]
-              const prev = previews[sc.id]
-              const rank = rankById.get(sc.id)
-              const enabled = !disabledIds.has(sc.id)
-              return (
-                <ScenarioRow
-                  key={sc.id}
-                  scenario={sc}
-                  names={names}
-                  varying={varyingMembers}
-                  enabled={enabled}
-                  disabledToggle={running}
-                  onToggle={() =>
-                    setDisabledIds((prevSet) => {
-                      const next = new Set(prevSet)
-                      if (next.has(sc.id)) next.delete(sc.id)
-                      else next.add(sc.id)
-                      return next
-                    })
-                  }
-                  onRemoveCustom={
-                    sc.kind === 'custom' && !running
-                      ? () => removeCustom(sc.id)
-                      : undefined
-                  }
-                  preview={prev}
-                  baselinePreview={baselinePreview}
-                  result={res}
-                  baselineResult={baselineResult}
-                  rank={rank}
-                  activeStep={
-                    running && progress?.activeId === sc.id
-                      ? progress.step
-                      : undefined
-                  }
-                  queued={
-                    running && enabled && !res && progress?.activeId !== sc.id
-                  }
-                  expanded={expandedId === sc.id}
-                  onToggleExpand={() =>
-                    setExpandedId((id) => (id === sc.id ? undefined : sc.id))
-                  }
-                  onApply={() => handleApply(sc)}
-                  running={running}
-                />
-              )
-            })}
+            <Box sx={{ display: { xs: 'none', sm: 'block' }, flexGrow: 1 }} />
+
+            <Segmented
+              size="small"
+              aria-label={t('teamOpt.compare.modeLabel', 'Comparison speed')}
+              value={compareMode}
+              onChange={(next) => {
+                if (!running) setCompareMode(next)
+              }}
+              options={[
+                {
+                  value: 'fast',
+                  label: t('teamOpt.compare.modeFast', 'Fast'),
+                  disabled: running,
+                  tip: t(
+                    'teamOpt.compare.modeFastTip',
+                    'Reuses your current builds & rankings: refits ER shifts, Favonius/team-gear swaps, and top weapons & sets across 2 rounds (much faster).'
+                  ),
+                },
+                {
+                  value: 'full',
+                  label: t('teamOpt.compare.modeFull', 'Full'),
+                  disabled: running,
+                  tip: t(
+                    'teamOpt.compare.modeFullTip',
+                    'Re-optimizes every member, weapon, and artifact set from scratch for each scenario.'
+                  ),
+                },
+              ]}
+            />
+
+            {running ? (
+              <Button
+                color="inherit"
+                variant="outlined"
+                onClick={() => {
+                  cancelledRef.current = true
+                }}
+                sx={{
+                  flex: { xs: '1 1 auto', sm: '0 0 auto' },
+                  minHeight: { xs: 44, sm: 36 },
+                  minWidth: { xs: 0, sm: 128 },
+                  borderColor: tokens.hairlineStrong,
+                }}
+              >
+                {t('teamOpt.compare.stop', 'Stop')}
+              </Button>
+            ) : (
+              <Button
+                variant="contained"
+                disabled={!canRun}
+                onClick={startCompare}
+                startIcon={<CompareArrowsRoundedIcon />}
+                sx={[
+                  {
+                    flex: { xs: '1 1 auto', sm: '0 0 auto' },
+                    minHeight: { xs: 44, sm: 36 },
+                    minWidth: { xs: 0, sm: 176 },
+                  },
+                  giCtaSx,
+                ]}
+              >
+                {hasResults
+                  ? t('teamOpt.compare.rerun', 'Compare again')
+                  : t('teamOpt.compare.run', {
+                      defaultValue: 'Compare {{count}} scenarios',
+                      count: enabledScenarios.length,
+                    })}
+              </Button>
+            )}
           </Box>
         </Box>
       </CardThemed>
@@ -1256,15 +1387,16 @@ function CadencePill({
       sx={{
         ...quickSx,
         ...focusSx,
-        height: 30,
-        px: 1.25,
+        minHeight: { xs: 44, sm: 30 },
+        maxWidth: '100%',
+        px: { xs: 0.875, sm: 1.25 },
         gap: 0.5,
         borderRadius: 999,
         border: `1px solid ${on ? alpha(giTokens.gold, 0.48) : tokens.hairlineStrong}`,
         bgcolor: on ? alpha(giTokens.gold, 0.1) : 'transparent',
         fontSize: 12.5,
         fontWeight: 600,
-        whiteSpace: 'nowrap',
+        overflowWrap: 'anywhere',
         color: on ? 'text.primary' : 'text.secondary',
         '&:hover': {
           color: 'text.primary',
@@ -1322,6 +1454,8 @@ function CompactRotationSteps({
               flexWrap: 'wrap',
               alignItems: 'center',
               gap: 0.5,
+              minWidth: 0,
+              maxWidth: '100%',
             }}
           >
             <MemberAvatar characterKey={step.characterKey} size={18} />
@@ -1345,6 +1479,7 @@ function CompactRotationSteps({
                   sx={{
                     fontFamily: mono,
                     fontSize: 12.5,
+                    overflowWrap: 'anywhere',
                     fontWeight: isFallback ? 600 : 500,
                     color: isFallback ? tokens.gold : 'text.primary',
                     ...(isFallback && {
@@ -1365,6 +1500,9 @@ function CompactRotationSteps({
     </Box>
   )
 }
+
+const memberBreakdownColumns =
+  'minmax(100px, 1fr) minmax(108px, 1fr) minmax(0, 1.5fr) minmax(110px, auto)'
 
 /** One scenario card: instant ER preview before running, ranked DPS & structured breakdown after running. */
 function ScenarioRow({
@@ -1408,6 +1546,7 @@ function ScenarioRow({
 }) {
   const { t } = useTranslation('page_team')
   const isActive = !!activeStep
+  const hasStatus = isActive || queued || (!!result && !result.error)
   const isWinner =
     rank === 1 && !!result && !result.error && result.unmetCount === 0
   const steps = useMemo(
@@ -1468,13 +1607,14 @@ function ScenarioRow({
         sx={{
           ...rowHoverSx,
           cursor: 'pointer',
-          display: 'flex',
+          display: { xs: 'grid', sm: 'flex' },
+          gridTemplateColumns: 'auto minmax(0, 1fr) auto',
           flexWrap: 'wrap',
           alignItems: 'center',
-          columnGap: 1.75,
-          rowGap: 1,
-          px: { xs: 1.5, sm: 2 },
-          py: 1.5,
+          columnGap: { xs: 0.75, sm: 1.75 },
+          rowGap: 0.5,
+          px: { xs: 1, sm: 2 },
+          py: { xs: 1, sm: 1.5 },
         }}
       >
         {/* Left: Rank badge (after run), active spinner (while running), or include checkbox */}
@@ -1520,17 +1660,36 @@ function ScenarioRow({
         ) : (
           <Checkbox
             size="small"
+            inputProps={{
+              'aria-label': t(
+                'teamOpt.compare.includeNamed',
+                'Include {{scenario}}',
+                { scenario: scenarioTitle(t, scenario, names, varying) }
+              ),
+            }}
             checked={enabled}
             disabled={disabledToggle}
             onClick={(e) => e.stopPropagation()}
             onChange={onToggle}
-            sx={{ p: 0.25 }}
+            sx={{
+              p: 0.25,
+              minWidth: { xs: 44, sm: 0 },
+              minHeight: { xs: 44, sm: 0 },
+            }}
           />
         )}
 
         {/* Middle: Scenario chips + rotation length + ER targets */}
         <Box
-          sx={{ flex: '1 1 320px', minWidth: 0, display: 'grid', gap: 0.875 }}
+          sx={{
+            flex: '1 1 320px',
+            gridColumn: hasStatus ? '2 / -1' : undefined,
+            minWidth: 0,
+            display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr)',
+            gap: 0.875,
+            overflowWrap: 'anywhere',
+          }}
         >
           <Box
             sx={{
@@ -1540,7 +1699,11 @@ function ScenarioRow({
               gap: 0.75,
             }}
           >
-            {scenario.kind === 'custom' ? (
+            {scenario.isBaseline ? (
+              <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+                {t('teamOpt.compare.currentRotation', 'Current rotation')}
+              </Typography>
+            ) : scenario.kind === 'custom' ? (
               <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
                 {scenario.label ||
                   t('teamOpt.compare.customLabel', 'Custom rotation')}
@@ -1554,6 +1717,7 @@ function ScenarioRow({
                     key={ck}
                     sx={{
                       display: 'inline-flex',
+                      flexWrap: 'wrap',
                       alignItems: 'center',
                       gap: 0.625,
                       px: 1,
@@ -1596,22 +1760,6 @@ function ScenarioRow({
               })
             )}
 
-            {scenario.isBaseline && (
-              <Box
-                component="span"
-                sx={{
-                  px: 0.875,
-                  py: 0.25,
-                  borderRadius: 999,
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  color: 'text.secondary',
-                  border: `1px solid ${tokens.hairlineStrong}`,
-                }}
-              >
-                {t('teamOpt.compare.baseline', 'Current')}
-              </Box>
-            )}
             {result && result.unmetCount > 0 && (
               <Tooltip
                 arrow
@@ -1641,6 +1789,53 @@ function ScenarioRow({
               </Tooltip>
             )}
           </Box>
+          {!!result?.unmetMembers?.length && (
+            <Typography sx={{ ...type.label, color: 'warning.main' }}>
+              {result.unmetMembers
+                .map((key) => {
+                  const name =
+                    names.find((member) => member.characterKey === key)?.name ??
+                    key
+                  const target = result.erTargets[key]
+                  const achieved = result.erAchieved[key]
+                  const shortfalls = result.shortfalls?.[key]
+                  if (shortfalls?.length)
+                    return shortfalls
+                      .map(({ path, value, min }) => {
+                        const stat = path.at(-1) ?? ''
+                        const format = (amount: number) =>
+                          stat.endsWith('_')
+                            ? `${+(amount * 100).toFixed(1)}%`
+                            : `${+amount.toFixed(1)}`
+                        return t(
+                          'teamOpt.compare.namedShortfall',
+                          '{{name}} · {{stat}}: {{value}}, needs {{min}}',
+                          {
+                            name,
+                            stat: statName(stat),
+                            value: format(value),
+                            min: format(min),
+                          }
+                        )
+                      })
+                      .join(' · ')
+                  return target !== undefined &&
+                    achieved !== undefined &&
+                    achieved < target
+                    ? t(
+                        'teamOpt.compare.erShortfall',
+                        '{{name}}: {{achieved}}% ER, needs {{target}}%',
+                        { name, achieved, target: Math.round(target) }
+                      )
+                    : t(
+                        'teamOpt.compare.statShortfall',
+                        '{{name}}: unmet stat requirement',
+                        { name }
+                      )
+                })
+                .join(' · ')}
+            </Typography>
+          )}
 
           {/* Meta telemetry line: rotation length | ER needed per member */}
           <Box
@@ -1753,14 +1948,18 @@ function ScenarioRow({
         {/* Right: DPS + Delta + Apply (or live active status / Queued) + Expand */}
         <Box
           sx={{
-            ml: 'auto',
+            ml: { sm: 'auto' },
             display: 'flex',
+            flexWrap: 'wrap',
+            gridColumn: hasStatus ? '1 / -1' : undefined,
+            justifyContent: 'flex-end',
             alignItems: 'center',
-            gap: 1.25,
+            gap: { xs: 0.5, sm: 1.25 },
+            minWidth: 0,
           }}
         >
           {isActive && activeStep && (
-            <Box sx={{ textAlign: 'right', mr: 0.25 }}>
+            <Box sx={{ textAlign: 'right', mr: 0.25, minWidth: 0 }}>
               <Typography
                 sx={{
                   ...numSx,
@@ -1777,7 +1976,7 @@ function ScenarioRow({
                   ...type.label,
                   fontSize: 11.5,
                   whiteSpace: 'nowrap',
-                  maxWidth: 240,
+                  maxWidth: { xs: '100%', sm: 240 },
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
@@ -1865,7 +2064,7 @@ function ScenarioRow({
             </Box>
           )}
 
-          {result && !result.error && (
+          {result && !result.error && !scenario.isBaseline && (
             <Button
               size="small"
               disabled={running}
@@ -1875,7 +2074,7 @@ function ScenarioRow({
               }}
               sx={{
                 ...focusSx,
-                height: 32,
+                minHeight: { xs: 44, sm: 32 },
                 px: 1.5,
                 minWidth: 68,
                 borderRadius: tokens.radius.control,
@@ -1907,7 +2106,11 @@ function ScenarioRow({
                 e.stopPropagation()
                 onRemoveCustom()
               }}
-              sx={{ color: 'text.secondary' }}
+              sx={{
+                color: 'text.secondary',
+                minWidth: { xs: 44, sm: 0 },
+                minHeight: { xs: 44, sm: 0 },
+              }}
             >
               <CloseRoundedIcon fontSize="small" />
             </IconButton>
@@ -1915,7 +2118,11 @@ function ScenarioRow({
 
           <IconButton
             size="small"
-            aria-label={t('teamOpt.compare.details', 'Details')}
+            aria-label={t(
+              'teamOpt.compare.detailsNamed',
+              'Details for {{scenario}}',
+              { scenario: scenarioTitle(t, scenario, names, varying) }
+            )}
             aria-expanded={expanded}
             onClick={(e) => {
               e.stopPropagation()
@@ -1923,6 +2130,8 @@ function ScenarioRow({
             }}
             sx={{
               color: 'text.secondary',
+              minWidth: { xs: 44, sm: 0 },
+              minHeight: { xs: 44, sm: 0 },
               transform: expanded ? 'rotate(180deg)' : 'none',
               transition: 'transform 180ms ease',
             }}
@@ -1941,6 +2150,7 @@ function ScenarioRow({
             pb: 1.75,
             borderTop: hairline,
             display: 'grid',
+            gridTemplateColumns: 'minmax(0, 1fr)',
             gap: 1.5,
             bgcolor: alpha(giTokens.parchment, 0.015),
           }}
@@ -1976,8 +2186,8 @@ function ScenarioRow({
               {/* Column header row (desktop/tablet) */}
               <Box
                 sx={{
-                  display: { xs: 'none', sm: 'grid' },
-                  gridTemplateColumns: '132px 152px minmax(0, 1fr) 128px',
+                  display: { xs: 'none', md: 'grid' },
+                  gridTemplateColumns: memberBreakdownColumns,
                   columnGap: 2,
                   alignItems: 'center',
                   px: 1.5,
@@ -2029,10 +2239,10 @@ function ScenarioRow({
                       ...rowHoverSx,
                       display: 'grid',
                       gridTemplateColumns: {
-                        xs: '1fr',
-                        sm: '132px 152px minmax(0, 1fr) 128px',
+                        xs: 'minmax(0, 1fr) auto',
+                        md: memberBreakdownColumns,
                       },
-                      columnGap: 2,
+                      columnGap: { xs: 1, md: 2 },
                       rowGap: 0.75,
                       alignItems: 'center',
                       px: 1.5,
@@ -2069,10 +2279,7 @@ function ScenarioRow({
                         sx={{
                           display: 'flex',
                           alignItems: 'baseline',
-                          justifyContent: {
-                            xs: 'space-between',
-                            sm: 'flex-end',
-                          },
+                          justifyContent: 'flex-end',
                           gap: 0.875,
                         }}
                       >
@@ -2086,6 +2293,17 @@ function ScenarioRow({
                           }}
                         >
                           {formatRateFull(dps, undefined)}
+                          <Box
+                            component="span"
+                            sx={{
+                              display: { md: 'none' },
+                              color: 'text.secondary',
+                              fontSize: 11,
+                            }}
+                          >
+                            {' '}
+                            DPS
+                          </Box>
                         </Box>
                         <Box
                           component="span"
@@ -2120,7 +2338,14 @@ function ScenarioRow({
                     </Box>
 
                     {/* Col 3: Build — Weapon on line 1, Artifact sets on line 2 (never collides with ER) */}
-                    <Box sx={{ minWidth: 0, display: 'grid', gap: 0.25 }}>
+                    <Box
+                      sx={{
+                        minWidth: 0,
+                        display: 'grid',
+                        gap: 0.25,
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
                       {weapon && (
                         <Box
                           sx={{
@@ -2190,16 +2415,19 @@ function ScenarioRow({
                       sx={{
                         display: 'flex',
                         alignItems: 'center',
-                        justifyContent: {
-                          xs: 'flex-start',
-                          sm: 'flex-end',
-                        },
+                        justifyContent: 'flex-end',
                         gap: 0.5,
                         whiteSpace: 'nowrap',
                       }}
                     >
                       {targetEr !== undefined && (
                         <>
+                          <Box
+                            component="span"
+                            sx={{ ...type.label, display: { md: 'none' } }}
+                          >
+                            {t('teamOpt.compare.colEr', 'ER')}
+                          </Box>
                           <Box
                             component="span"
                             sx={{
@@ -2275,13 +2503,19 @@ function ScenarioRow({
               </Box>
               <Box
                 component="span"
-                sx={{ color: 'text.secondary', display: 'flex', gap: 1 }}
+                sx={{
+                  color: 'text.secondary',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 1,
+                  minWidth: 0,
+                }}
               >
                 {stalls.map((s) => (
                   <Box
                     key={`${s.label}-${s.seconds}`}
                     component="span"
-                    sx={{ whiteSpace: 'nowrap' }}
+                    sx={{ overflowWrap: 'anywhere' }}
                   >
                     {s.label}{' '}
                     <Box component="span" sx={{ color: 'warning.main' }}>

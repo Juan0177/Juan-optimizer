@@ -139,6 +139,46 @@
     },
     "entries": [
       {
+        "date": "2026-11-26",
+        "title": "Update to Stellar Optimizer 1.45.0",
+        "summary": "Stellar Optimizer’s releases 1.42.0 to 1.45.0 arrive, with the 7.3 beta V5.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Version combinations**: pick up to 8 characters, lock the fixed ones and generate and run every possible team at once.",
+              "**Team variants button** on the KQM tab and **Compare variants** beside Share in the results.",
+              "**Sacrificial weapons**: in written rotations they can reset the Skill; E? casts it again when ready. The writer shows how often that happened and compares Energy Recharge with and without resets."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "**Redesigned versions sidebar**: wider, with search, character filters, Best DPS or Original sorting, rotation previews and portraits showing constellation and refinement.",
+              "Versions no longer show on the Teams tab, unless chosen per version or with “Show versions”.",
+              "Optimize rotation suggests sturdier rotations and says which DPS each gain is measured against; Burst scenarios name each member’s unmet requirements.",
+              "Gear ranking starts when you ask and can be stopped; saved builds can be restored; discarding a result asks first.",
+              "Team optimize and the rotation writer work better on phones; 1–3★ and sub-Lv70 weapons are left out by default."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**7.3 beta V5**: Anastasya’s C2 at 130%, Danica’s C4 Energy from other members only, official English names.",
+              "**Mavuika**: her Charged Attack finisher counts when it ends the rotation too.",
+              "Thrilling Tales of Dragon Slayers is counted correctly on rotations under 20 s (it triggers every other rotation).",
+              "Citlali C4 and Iansan C1 Energy counted again; Sandrone from C1 suggests CA[beams=6]; Vesna’s Charged Attack needs an open Normal Attack combo."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts are in Italian too, and versions that keep their teammates’ gear still carry their tag in the new sidebar."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-25",
         "title": "Update to Stellar Optimizer 1.41.4",
         "summary": "Stellar Optimizer’s releases 1.40.5 to 1.41.4 arrive.",

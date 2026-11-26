@@ -66,6 +66,7 @@ export interface KqmDoneRun {
    */
   runTeamOpt: TeamOpt
   rotation: 'played' | 'entered'
+  rotationKey?: string
   /** What each rotation waited for to be ready (seconds), when played as KQM plays it */
   stalls?: { label: string; seconds: number }[]
   /** When it was found: which saved run it is (`database.teamKqmResults`) */
@@ -422,6 +423,7 @@ export async function startKqmRun(
           }
         : teamOpt,
       rotation: played ? 'played' : 'entered',
+      rotationKey: played ? start.rotation : undefined,
       stalls: played?.stalls,
       startTime: job.state.startTime,
     }

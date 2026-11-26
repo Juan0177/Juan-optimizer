@@ -454,9 +454,9 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
     // the Royal Aegis from 0, ended at 600 by a 0-frame one, a new one from 900
     hits: [
       aegis(0, 1500),
-      sc(42, 'Danica'),
-      sc(100, 'Mitya'), // (inside C4's 3.5 s)
-      sc(300, 'Mitya'),
+      sc(42, 'Danica'), // (her own: no C4 Energy since beta 7.2.54)
+      sc(100, 'Mitya'),
+      sc(300, 'Mitya'), // (inside C4's 3.5 s)
       sc(350, 'Odette', 'Mitya'), // (off the field)
       aegis(600, 0),
       sc(700, 'Mitya'), // (no Aegis)
@@ -497,16 +497,16 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
     expect(idle.members.Danica!.favoniusProcs).toBe(0)
     expect(idle.members.Danica!.weaponTriggers).toEqual({})
   })
-  it('C4: 3 to each other member when the Aegis-protected member on the field deals Stellar-Conduct DMG, once per 3.5 s', () => {
+  it('C4: 3 to each other member when another Aegis-protected member on the field deals Stellar-Conduct DMG, once per 3.5 s', () => {
     const c4 = energyFromRotation(sim as never, team, 1, { Danica: 4 })
-    // (procs at 42, 300 and 950)
+    // (procs at 100 and 950)
     for (const k of ['Mitya', 'Odette', 'Anastasya'] as const)
-      expect(c4.members[k]!.flatEnergy).toBe(9)
+      expect(c4.members[k]!.flatEnergy).toBe(6)
     expect(c4.members.Danica!.flatEnergy).toBe(40)
     const c3 = energyFromRotation(sim as never, team, 1, { Danica: 3 })
     expect(c3.members.Mitya!.flatEnergy).toBe(0)
   })
-  it('as the kit plays them: each Entry gives C1 and its own Stellar-Conduct hit under the Aegis C4', () => {
+  it('as the kit plays them: each Entry gives C1, and its own Stellar-Conduct hit under the Aegis no C4', () => {
     const played = simulateRotation({
       rotation: parseRotation(
         'Danica E Q -> Odette E Q -> Mitya hE Q CA -> Tsaritsa hE Q N5 D N5 E E E',
@@ -539,10 +539,12 @@ describe('energy inputs: Danica C1 and C4 (dump ConfigTalent_Danica)', () => {
       at(1).members.Danica!.flatEnergy! -
         (at(0).members.Danica!.flatEnergy ?? 0)
     ).toBeCloseTo((20 * entries) / 2, 2)
-    // (the Aegis lasts from the Entry to her E: the Entry hit is the one proc)
+    // (the Aegis lasts from the Entry to her E: only her own Entry hit falls inside it, and since
+    // beta 7.2.54 her own hits give no C4 Energy)
     expect(
-      at(4).members.Mitya!.flatEnergy! - (at(3).members.Mitya!.flatEnergy ?? 0)
-    ).toBeCloseTo((3 * entries) / 2, 2)
+      (at(4).members.Mitya!.flatEnergy ?? 0) -
+        (at(3).members.Mitya!.flatEnergy ?? 0)
+    ).toBeCloseTo(0, 2)
     // (her particles: the Entry's hit drops them, the Anchor Skill 2 s later is inside their 16 s)
     expect(at(6).members.Danica!.skillUses).toBe(1)
   })
@@ -1305,5 +1307,44 @@ describe('energy inputs: Faruzan Pressurized Collapse particles (5.5 s ICD) and 
     expect(usesByOption(withCa, 'Faruzan')).toEqual({ 'Aimed Shot': 1 })
     expect(withCa.members.Faruzan!.catchBy).toBe('Faruzan')
     expect(withCa.members.Faruzan!.catchShares).toEqual({ Faruzan: 100 })
+  })
+})
+
+describe('energy inputs: Skill options that hold a constellation’s Energy', () => {
+  const team: CharacterKey[] = ['Mavuika', 'Citlali', 'Iansan', 'Durin']
+  const targets = (cons: number) => {
+    const constellations = {
+      Mavuika: 0,
+      Citlali: cons,
+      Iansan: cons,
+      Durin: cons,
+    }
+    const sim = simulateRotation({
+      rotation: parseRotation(
+        'Citlali E Q -> Iansan E Q -> Durin E E Q -> Mavuika E Q N4 N4 N4 CA',
+        team.map((characterKey) => ({ characterKey, name: characterKey }))
+      ),
+      members: team,
+      elements: Object.fromEntries(
+        team.map((m) => [m, getCharEle(m)])
+      ) as never,
+      constellations,
+      repeats: 4,
+      keep: 'last2',
+    })
+    const filled = withRotationEnergy(
+      defaultEnergyCalculator(team),
+      team,
+      energyFromRotation(sim, team, 2, constellations)
+    )
+    return calculateEnergyRecharge(team, filled, {}, constellations).targets
+  }
+  it('Citlali C4 and Iansan C1 lower their ER needs; Durin’s Skill Energy is counted once', () => {
+    const c0 = targets(0)
+    const c6 = targets(6)
+    expect(c6.Citlali!).toBeLessThan(c0.Citlali! - 40)
+    expect(c6.Iansan!).toBeLessThan(c0.Iansan! - 40)
+    expect(c6.Durin!).toBeCloseTo(c0.Durin!, 1)
+    expect(c0.Durin!).toBeLessThan(160)
   })
 })

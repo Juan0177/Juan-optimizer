@@ -500,7 +500,14 @@ export class GOSolver {
     }
     const attach = (w: Worker) => {
       w.onmessage = (e: MessageEvent<WorkerResult>) => onMessage(w, e.data)
-      w.onerror = (e) => fail(new Error(`Worker Error: ${e.message}`))
+      w.onerror = (e) =>
+        fail(
+          new Error(
+            e.message
+              ? `Worker Error: ${e.message}`
+              : 'Could not load optimizer worker — try refreshing the page'
+          )
+        )
       this.workers.push(w)
     }
 

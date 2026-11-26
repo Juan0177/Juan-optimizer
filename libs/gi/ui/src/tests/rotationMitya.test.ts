@@ -7,8 +7,15 @@ import { type UIData, uiDataForTeam } from '@genshin-optimizer/gi/uidata'
 import type { NumNode } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import { getTeamDataWith } from '../'
+import { kitModels } from '../util/teamOpt/rotation/kits'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
-import { simulateRotation } from '../util/teamOpt/rotation/simulate'
+import {
+  rotationAttacks,
+  rotationSamples,
+  type SimulationResult,
+  simulateRotation,
+  simulateRotationSamples,
+} from '../util/teamOpt/rotation/simulate'
 
 function run(
   text: string,
@@ -124,5 +131,55 @@ describe('Mitya constellations', () => {
     expect(ratio(6, 'steady') / c5).toBeCloseTo(1, 6)
     // with an Overloaded core (Gradient Detonation's count) the C4 strike has no 115%
     expect(ratio(6, 'steady') / ratio(6, 'overloaded')).toBeCloseTo(1.15, 6)
+  })
+})
+
+describe('Mitya C6 Beacon refunds roll, as in kqmsim', () => {
+  const play = (constellation: number, samples?: number) =>
+    simulateRotationSamples(
+      {
+        rotation: parseRotation('Mitya hE Q CA W1', [
+          { characterKey: 'Mitya', name: 'Mitya' },
+        ]),
+        members: ['Mitya'],
+        elements: { Mitya: 'electro' },
+        constellations: { Mitya: constellation },
+        repeats: 1,
+        keep: 'all',
+      },
+      samples
+    )
+  /** Beacons the Overloaded charge consumed, averaged over the samples */
+  const consumed = (sim: SimulationResult) =>
+    (sim.samples ?? [{ probability: 1, result: sim }]).reduce(
+      (n, { probability, result }) =>
+        n +
+        probability *
+          result.hits.filter(
+            (h) => h.label === 'Special Charge (Stellar-Conduct)'
+          ).length,
+      0
+    )
+
+  it('averages seeded samples at C6 only: below it there is nothing to roll and the rotation plays once', () => {
+    expect(
+      rotationSamples(['Mitya'], kitModels, undefined, undefined, { Mitya: 5 })
+    ).toBe(1)
+    expect(
+      rotationSamples(['Mitya'], kitModels, undefined, undefined, { Mitya: 6 })
+    ).toBe(64)
+    expect(play(5).samples).toBeUndefined()
+    expect(consumed(play(5))).toBe(4)
+    expect(play(6).samples).toHaveLength(64)
+  })
+
+  it('gives each consumed Beacon a 34% chance of a new one, which the channel goes on to consume unless it came from the last', () => {
+    // C1's Beacon and the Burst's 3: the first 3 each come back 34% of the time, and the last
+    // one's refund comes after the channel has ended: (4 - 1) / 0.66 + 1 consumed on average
+    expect(consumed(play(6, 1024))).toBeCloseTo(3 / 0.66 + 1, 1)
+  })
+
+  it('plays the same samples every time', () => {
+    expect(rotationAttacks(play(6))).toEqual(rotationAttacks(play(6)))
   })
 })

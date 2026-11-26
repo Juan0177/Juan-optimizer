@@ -50,11 +50,15 @@ import type {
 import {
   CharacterName,
   canAssignTeamWeapons,
+  DEFAULT_WEAPON_MIN_LEVEL,
+  DEFAULT_WEAPON_MIN_RARITY,
   energyWeaponPerBurst,
   hasEnergyRequirement,
   isCalcEnergyWeapon,
+  isDefaultTeamOptWeapon,
   isEnergyWeapon,
   isFavonius,
+  isWeaponGloballyExcluded,
   LocationName,
   teamOptCurrentWeapons,
   updateEnergyCalcMember,
@@ -147,17 +151,35 @@ export interface WeaponCalcEnergyConfig {
 
 const ER_FILTER_PATH = JSON.stringify(['basic', 'enerRech_'])
 
-export const DEFAULT_WEAPON_MIN_RARITY = 3
-export const DEFAULT_WEAPON_MIN_LEVEL = 70
+export { DEFAULT_WEAPON_MIN_LEVEL, DEFAULT_WEAPON_MIN_RARITY }
 
-/** Weapons shown by default in Team optimize's chooser: 3★–5★ at level 70 and above */
-export function isDefaultVisibleWeapon(
-  weapon: Pick<ICachedWeapon, 'key' | 'level'>
+/** Weapons shown and enabled by default in Team optimize's chooser: 4★–5★ at level 70 and above */
+export const isDefaultVisibleWeapon = isDefaultTeamOptWeapon
+
+/** Effective set of globally excluded weapon ids (explicitly excluded, or hidden-by-default and not included) */
+function effectiveExcludedIds(
+  weapons: readonly ICachedWeapon[],
+  state: Pick<TeamOpt, 'excludedWeapons' | 'includedWeapons'>
 ) {
-  return (
-    (getWeaponStat(weapon.key)?.rarity ?? 0) >= DEFAULT_WEAPON_MIN_RARITY &&
-    weapon.level >= DEFAULT_WEAPON_MIN_LEVEL
-  )
+  const out = new Set<string>()
+  for (const w of weapons) if (isWeaponGloballyExcluded(w, state)) out.add(w.id)
+  return out
+}
+
+function enableWeaponIn(o: Exclusions, weapon: ICachedWeapon) {
+  o.excludedWeapons = o.excludedWeapons.filter((id) => id !== weapon.id)
+  if (!isDefaultTeamOptWeapon(weapon))
+    o.includedWeapons = [...new Set([...(o.includedWeapons ?? []), weapon.id])]
+}
+
+function disableWeaponIn(o: Exclusions, weapon: ICachedWeapon) {
+  if (isDefaultTeamOptWeapon(weapon)) {
+    o.excludedWeapons = [...new Set([...o.excludedWeapons, weapon.id])]
+  } else if (o.includedWeapons) {
+    const next = o.includedWeapons.filter((id) => id !== weapon.id)
+    if (next.length) o.includedWeapons = next
+    else delete o.includedWeapons
+  }
 }
 
 /** Whether a weapon is usable by at least one current wielder of its type */
@@ -219,8 +241,16 @@ export function WeaponSettings({
   const { t } = useTranslation('page_team')
   const groups = useTeamWeapons(members)
   const [show, onShow, onHide] = useBoolState()
-  const total = groups.reduce((n, g) => n + g.weapons.length, 0)
-  const excluded = new Set(teamOpt.excludedWeapons)
+  const all = groups.flatMap((g) => g.weapons)
+  const excluded = effectiveExcludedIds(all, teamOpt)
+  const included = new Set(teamOpt.includedWeapons ?? [])
+  const total = groups.reduce(
+    (n, g) =>
+      n +
+      g.weapons.filter((w) => isDefaultTeamOptWeapon(w) || included.has(w.id))
+        .length,
+    0
+  )
   const allowed = groups.reduce(
     (n, g) =>
       n +
@@ -285,8 +315,11 @@ export function WeaponSettings({
   )
 }
 
-/** The weapons left out, for all members or some */
-type Exclusions = Pick<TeamOpt, 'excludedWeapons' | 'excludedWeaponMembers'>
+/** The weapons left out (or explicitly opted in), for all members or some */
+type Exclusions = Pick<
+  TeamOpt,
+  'excludedWeapons' | 'includedWeapons' | 'excludedWeaponMembers'
+>
 
 function WeaponChooserModal({
   groups,
@@ -313,9 +346,15 @@ function WeaponChooserModal({
   const [pending, setPending] = useState<Exclusions>()
   const clicked: Exclusions = pending ?? {
     excludedWeapons: teamOpt.excludedWeapons,
+    includedWeapons: teamOpt.includedWeapons,
     excludedWeaponMembers: teamOpt.excludedWeaponMembers,
   }
-  const excluded = new Set(clicked.excludedWeapons)
+  const all = groups.flatMap((g) => g.weapons)
+  const excluded = effectiveExcludedIds(all, clicked)
+  const includedSet = useMemo(
+    () => new Set(clicked.includedWeapons ?? []),
+    [clicked.includedWeapons]
+  )
   const excludedMembers = clicked.excludedWeaponMembers
   const clickedRef = useRef(clicked)
   clickedRef.current = clicked
@@ -345,7 +384,6 @@ function WeaponChooserModal({
     queue.current.push(change)
     setPending(view)
   }
-  const all = groups.flatMap((g) => g.weapons)
   const keys = useMemo(() => members.map((m) => m.characterKey), [members])
   // (the weapon cards keep the handlers they were drawn with: these read the latest ones)
   const latest = useRef({ energy, onClose })
@@ -361,13 +399,24 @@ function WeaponChooserModal({
         : undefined,
     [hasEnergy]
   )
-  const setExcluded = (ids: string[], clearMembersFor?: Iterable<string>) =>
+  const setSelection = (
+    excludedDefaultIds: string[],
+    includedIds: string[] = [],
+    clearMembersFor?: Iterable<string>
+  ) =>
     update((o) => {
-      const nextIds = [...new Set(ids)]
-      o.excludedWeapons = nextIds
+      const nextExcluded = [...new Set(excludedDefaultIds)]
+      const nextIncluded = [...new Set(includedIds)]
+      o.excludedWeapons = nextExcluded
+      if (nextIncluded.length) o.includedWeapons = nextIncluded
+      else delete o.includedWeapons
       if (o.excludedWeaponMembers) {
         const next = { ...o.excludedWeaponMembers }
-        for (const id of nextIds) delete next[id]
+        const includedNow = new Set(nextIncluded)
+        for (const id of nextExcluded) delete next[id]
+        for (const w of all)
+          if (!isDefaultTeamOptWeapon(w) && !includedNow.has(w.id))
+            delete next[w.id]
         if (clearMembersFor) for (const id of clearMembersFor) delete next[id]
         if (Object.keys(next).length) o.excludedWeaponMembers = next
         else delete o.excludedWeaponMembers
@@ -375,16 +424,15 @@ function WeaponChooserModal({
     })
   const toggle = (weapon: ICachedWeapon, wielders: TeamOptMember[]) =>
     update((o) => {
-      const currentlyExcluded = new Set(o.excludedWeapons)
+      const currentlyExcluded = effectiveExcludedIds(all, o)
       const ticked = isWeaponTicked(
         weapon.id,
         wielders,
         currentlyExcluded,
         o.excludedWeaponMembers
       )
-      o.excludedWeapons = ticked
-        ? [...new Set([...o.excludedWeapons, weapon.id])]
-        : o.excludedWeapons.filter((id) => id !== weapon.id)
+      if (ticked) disableWeaponIn(o, weapon)
+      else enableWeaponIn(o, weapon)
       if (o.excludedWeaponMembers?.[weapon.id]) {
         const next = { ...o.excludedWeaponMembers }
         delete next[weapon.id]
@@ -398,7 +446,7 @@ function WeaponChooserModal({
     characterKey: CharacterKey
   ) =>
     update((o) => {
-      const currentlyExcluded = new Set(o.excludedWeapons)
+      const currentlyExcluded = effectiveExcludedIds(all, o)
       const ticked = isWeaponTicked(
         weapon.id,
         wielders,
@@ -408,7 +456,7 @@ function WeaponChooserModal({
       const nextMap = { ...o.excludedWeaponMembers }
       if (!ticked) {
         // Clicking a character on an unticked weapon ticks it for that character only
-        o.excludedWeapons = o.excludedWeapons.filter((id) => id !== weapon.id)
+        enableWeaponIn(o, weapon)
         const others = wielders
           .map((m) => m.characterKey)
           .filter((k) => k !== characterKey)
@@ -420,7 +468,7 @@ function WeaponChooserModal({
         else blocked.add(characterKey)
         const remaining = wielders.some((m) => !blocked.has(m.characterKey))
         if (!remaining) {
-          o.excludedWeapons = [...new Set([...o.excludedWeapons, weapon.id])]
+          disableWeaponIn(o, weapon)
           delete nextMap[weapon.id]
         } else if (blocked.size) {
           nextMap[weapon.id] = [...blocked]
@@ -507,34 +555,43 @@ function WeaponChooserModal({
     ids.length === excluded.size &&
     ids.every((id) => excluded.has(id)) &&
     (!checkRestrictions || !hasRestrictions(new Set(ids)))
-  const below5 = all
+  const defaultWeapons = all.filter(isDefaultTeamOptWeapon)
+  const hiddenWeapons = all.filter((w) => !isDefaultTeamOptWeapon(w))
+  const hiddenIds = hiddenWeapons.map((w) => w.id)
+  const defaultBelow5 = defaultWeapons
     .filter((w) => getWeaponStat(w.key).rarity < 5)
     .map((w) => w.id)
-  const below80 = all.filter((w) => w.level < 80).map((w) => w.id)
+  const defaultBelow80 = defaultWeapons
+    .filter((w) => w.level < 80)
+    .map((w) => w.id)
   const picks = [
     {
       key: 'all',
       label: t('teamOpt.weapons.all', 'All'),
-      ids: [],
+      excludedDefaultIds: [] as string[],
+      effectiveExcludedIds: hiddenIds,
       clearAll: true,
     },
     {
       key: '5',
       label: t('teamOpt.weapons.fiveStar', 'Only 5★'),
-      ids: below5,
+      excludedDefaultIds: defaultBelow5,
+      effectiveExcludedIds: [...hiddenIds, ...defaultBelow5],
       clearAll: false,
     },
     {
       key: '80',
       label: t('teamOpt.weapons.leveled', 'Level 80 and up'),
-      ids: below80,
+      excludedDefaultIds: defaultBelow80,
+      effectiveExcludedIds: [...hiddenIds, ...defaultBelow80],
       clearAll: false,
     },
     // none ticked: a start for ticking only the few wanted
     {
       key: 'none',
       label: t('teamOpt.weapons.pickNone', 'None'),
-      ids: all.map((w) => w.id),
+      excludedDefaultIds: defaultWeapons.map((w) => w.id),
+      effectiveExcludedIds: all.map((w) => w.id),
       clearAll: true,
     },
   ]
@@ -546,21 +603,24 @@ function WeaponChooserModal({
       ).length,
     0
   )
-  // Hide 1–2★ weapons and weapons below level 70 by default; reveal on demand
+  // Hide 1–3★ weapons and weapons below level 70 by default (unchecked until user ticks them);
+  // keep any explicitly ticked hidden weapon visible so active picks are never hidden from view.
   const [showHidden, setShowHidden] = useState(false)
-  const hiddenCount = useMemo(
-    () => all.filter((w) => !isDefaultVisibleWeapon(w)).length,
-    [all]
-  )
+  const defaultHiddenCount = hiddenWeapons.length
+  const collapsedHiddenCount = hiddenWeapons.filter(
+    (w) => !includedSet.has(w.id)
+  ).length
   const visibleGroups = useMemo(
     () =>
       groups.map((g) => ({
         ...g,
         visibleWeapons: showHidden
           ? g.weapons
-          : g.weapons.filter(isDefaultVisibleWeapon),
+          : g.weapons.filter(
+              (w) => isDefaultTeamOptWeapon(w) || includedSet.has(w.id)
+            ),
       })),
-    [groups, showHidden]
+    [groups, showHidden, includedSet]
   )
   const visibleTotal = visibleGroups.reduce(
     (n, g) => n + g.visibleWeapons.length,
@@ -596,7 +656,7 @@ function WeaponChooserModal({
               {t('teamOpt.weapons.groupCount', {
                 defaultValue: '{{allowed}} of {{total}}',
                 allowed: allowedCount,
-                total: all.length,
+                total: showHidden ? all.length : visibleTotal,
               })}
             </Typography>
           }
@@ -616,10 +676,11 @@ function WeaponChooserModal({
           {picks.map((p) => (
             <Pill
               key={p.key}
-              selected={sameAs(p.ids, p.key === 'all')}
+              selected={sameAs(p.effectiveExcludedIds, p.key === 'all')}
               onClick={() =>
-                setExcluded(
-                  p.ids,
+                setSelection(
+                  p.excludedDefaultIds,
+                  [],
                   p.clearAll ? all.map((w) => w.id) : undefined
                 )
               }
@@ -627,37 +688,38 @@ function WeaponChooserModal({
               {p.label}
             </Pill>
           ))}
-          {hiddenCount > 0 && (
-            <>
-              <Box
-                aria-hidden
-                sx={{
-                  width: '1px',
-                  height: 16,
-                  mx: 0.25,
-                  bgcolor: tokens.hairlineStrong,
-                }}
-              />
-              <Pill
-                selected={showHidden}
-                onClick={() => setShowHidden((v) => !v)}
-                tip={t(
-                  'teamOpt.weapons.showHiddenTip',
-                  'Show 1–2★ weapons and weapons under level 70. Hidden by default so the list stays focused on leveled 3–5★ weapons.'
-                )}
-              >
-                {showHidden
-                  ? t('teamOpt.weapons.showingHidden', {
-                      defaultValue: 'Showing < Lv. 70 & 1–2★ ({{count}})',
-                      count: hiddenCount,
-                    })
-                  : t('teamOpt.weapons.showHidden', {
-                      defaultValue: 'Show < Lv. 70 & 1–2★ ({{count}})',
-                      count: hiddenCount,
-                    })}
-              </Pill>
-            </>
-          )}
+          {defaultHiddenCount > 0 &&
+            (showHidden || collapsedHiddenCount > 0) && (
+              <>
+                <Box
+                  aria-hidden
+                  sx={{
+                    width: '1px',
+                    height: 16,
+                    mx: 0.25,
+                    bgcolor: tokens.hairlineStrong,
+                  }}
+                />
+                <Pill
+                  selected={showHidden}
+                  onClick={() => setShowHidden((v) => !v)}
+                  tip={t(
+                    'teamOpt.weapons.showHiddenTip',
+                    'Show 1–3★ weapons and weapons under level 70. Hidden and disabled by default — tick any to include them.'
+                  )}
+                >
+                  {showHidden
+                    ? t('teamOpt.weapons.showingHidden', {
+                        defaultValue: 'Showing < Lv. 70 & 1–3★ ({{count}})',
+                        count: defaultHiddenCount,
+                      })
+                    : t('teamOpt.weapons.showHidden', {
+                        defaultValue: 'Show < Lv. 70 & 1–3★ ({{count}})',
+                        count: collapsedHiddenCount,
+                      })}
+                </Pill>
+              </>
+            )}
           {calcEnergy && (
             <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
               <Tooltip
@@ -734,6 +796,18 @@ function WeaponChooserModal({
                 Math.min(group.visibleWeapons.length, left)
               )
               left -= group.visibleWeapons.length
+              const groupDefaults = group.weapons.filter(isDefaultTeamOptWeapon)
+              const groupAllowed = group.weapons.filter((w) =>
+                isWeaponTicked(w.id, group.members, excluded, excludedMembers)
+              ).length
+              const groupAllSelected =
+                groupDefaults.length > 0 &&
+                groupDefaults.every(
+                  (w) => !excluded.has(w.id) && !excludedMembers?.[w.id]?.length
+                ) &&
+                group.weapons.every(
+                  (w) => isDefaultTeamOptWeapon(w) || excluded.has(w.id)
+                )
               return (
                 <WeaponGroup
                   key={group.type}
@@ -742,6 +816,13 @@ function WeaponChooserModal({
                   weapons={group.visibleWeapons}
                   allWeapons={group.weapons}
                   visible={visible}
+                  selectionCounts={{
+                    allowed: groupAllowed,
+                    total: showHidden
+                      ? group.weapons.length
+                      : group.visibleWeapons.length,
+                  }}
+                  allSelected={groupAllSelected}
                   note={
                     !showHidden &&
                     group.visibleWeapons.length === 0 &&
@@ -757,7 +838,7 @@ function WeaponChooserModal({
                         <span>
                           {t('teamOpt.weapons.allHiddenInGroup', {
                             defaultValue:
-                              'No 3–5★ weapons at level 70 or above ({{count}} hidden).',
+                              'No 4–5★ weapons at level 70 or above ({{count}} hidden, disabled by default).',
                             count: group.weapons.length,
                           })}
                         </span>
@@ -787,14 +868,25 @@ function WeaponChooserModal({
                     toggleMember(weapon, group.members, characterKey)
                   }
                   onTickAll={(tick) => {
-                    const ids = new Set(group.weapons.map((w) => w.id))
-                    setExcluded(
-                      [
-                        ...clicked.excludedWeapons.filter((id) => !ids.has(id)),
-                        ...(tick ? [] : ids),
-                      ],
-                      ids
-                    )
+                    const defaultIds = new Set(groupDefaults.map((w) => w.id))
+                    const allGroupIds = new Set(group.weapons.map((w) => w.id))
+                    if (tick) {
+                      setSelection(
+                        clicked.excludedWeapons.filter(
+                          (id) => !defaultIds.has(id)
+                        ),
+                        clicked.includedWeapons ?? [],
+                        defaultIds
+                      )
+                    } else {
+                      setSelection(
+                        [...clicked.excludedWeapons, ...defaultIds],
+                        (clicked.includedWeapons ?? []).filter(
+                          (id) => !allGroupIds.has(id)
+                        ),
+                        allGroupIds
+                      )
+                    }
                   }}
                   teamMembers={members}
                   weaponEnergy={teamOpt.weaponEnergy}
@@ -863,12 +955,15 @@ export function WeaponGroup({
   onRefinement,
   visible,
   selectionCounts,
+  allSelected,
 }: {
   /** Fewer ticked than this shows `tooFew` (default: one per member, KQM's one) */
   minTicked?: number
   /** A line under the header */
   note?: ReactNode
   selectionCounts?: { allowed: number; total: number }
+  /** Override whether the group's "All" pill is highlighted */
+  allSelected?: boolean
   /** Only the first rows are rendered (the rest come in later batches) */
   visible?: number
   /** Weapons that are not the inventory's (KQM mode's): no adding, deleting or wielders */
@@ -946,8 +1041,9 @@ export function WeaponGroup({
     emptyMembers.length > 0 ||
     (minTicked !== undefined ? ticked < minTicked : !canAssign)
   const allUnrestricted =
-    ticked === pool.length &&
-    pool.every((w) => !excludedMembers?.[w.id]?.length)
+    allSelected ??
+    (ticked === pool.length &&
+      pool.every((w) => !excludedMembers?.[w.id]?.length))
   return (
     <Box component="section">
       <Box

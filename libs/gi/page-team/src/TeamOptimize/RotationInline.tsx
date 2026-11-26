@@ -9,12 +9,14 @@ import type {
   RotationStep,
   TeamOptMember,
 } from '@genshin-optimizer/gi/ui'
-import { parseRotation } from '@genshin-optimizer/gi/ui'
-import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
+import {
+  isSacrificialWeapon,
+  parseRotation,
+  simulateWrittenAsync,
+} from '@genshin-optimizer/gi/ui'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
-import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
-import RepeatRoundedIcon from '@mui/icons-material/RepeatRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
   Box,
@@ -22,9 +24,6 @@ import {
   ButtonBase,
   Checkbox,
   Collapse,
-  Divider,
-  Menu,
-  MenuItem,
   TextField,
   Tooltip,
   Typography,
@@ -46,6 +45,7 @@ import {
   FIRST_ROTATIONS,
   firstRotations,
   openerCounted,
+  RotationsDropdown,
   STEADY_RANGE,
 } from './RotationTiming'
 import {
@@ -53,6 +53,7 @@ import {
   editorSx,
   exampleRotation,
   insertWord,
+  OptionalSyntaxHint,
   type RotationWriterHandle,
   rotationIdOf,
   saveRotationTiming,
@@ -90,6 +91,7 @@ const shortcut =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
     ? '⌘ Enter'
     : 'Ctrl+Enter'
+const narrowRotation = '@container (max-width: 640px)'
 
 /**
  * The rotation as text, on the page: read as the members' steps, a click opens the writer dialog
@@ -107,7 +109,7 @@ export function RotationInline({
   kqmBuilds,
   trailing,
 }: {
-  /** At the line's right end, beside the rotation (its time) */
+  /** Controls alongside or below the rotation readout */
   trailing?: ReactNode
   /** KQM theorycrafting's settings, on its tab: previewed at its constellations, no own gear */
   kqm?: TeamOptKqm
@@ -156,34 +158,26 @@ export function RotationInline({
   }, [typed, writing])
   const { opener, timing, frameData } = settings
   const isKqm = !!kqm
-  const play = useMemo(
+  const prepare = useMemo(
     () =>
-      (value: string, as: typeof team = team) => {
-        try {
-          return {
-            result: simulateWritten({
-              kqm: isKqm,
-              text: value,
-              opener,
-              timing,
-              frameData,
-              team: as,
-              names,
-              members,
-              database,
-              teamId,
-              gender,
-              openerWarning: (warning) =>
-                t('teamOpt.writer.openerWarning', {
-                  defaultValue: 'Opener: {{warning}}',
-                  warning,
-                }),
-            }),
-          }
-        } catch (e) {
-          return { error: e instanceof Error ? e.message : String(e) }
-        }
-      },
+      (value: string, as: typeof team = team) => ({
+        kqm: isKqm,
+        text: value,
+        opener,
+        timing,
+        frameData,
+        team: as,
+        names,
+        members,
+        database,
+        teamId,
+        gender,
+        openerWarning: (warning: string) =>
+          t('teamOpt.writer.openerWarning', {
+            defaultValue: 'Opener: {{warning}}',
+            warning,
+          }),
+      }),
     [
       isKqm,
       opener,
@@ -198,9 +192,58 @@ export function RotationInline({
       t,
     ]
   )
-  const played = useMemo(() => play(settled), [play, settled])
+  const play = (value: string, as: typeof team = team) => {
+    try {
+      return { result: simulateWritten(prepare(value, as)) }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  const hasSacrificial = useMemo(
+    () =>
+      Object.values(team.gear).some((gear) =>
+        isSacrificialWeapon(gear?.weapon)
+      ),
+    [team]
+  )
+  const [sampled, setSampled] = useState<{
+    input: string
+    prepare: typeof prepare
+    result?: WrittenRotation
+    error?: string
+  }>()
+  useEffect(() => {
+    if (!hasSacrificial || !settled.trim() || writing) return undefined
+    let cancelled = false
+    void simulateWrittenAsync(prepare(settled), () => cancelled)
+      .then((result) => {
+        if (!cancelled)
+          startTransition(() => setSampled({ prepare, input: settled, result }))
+      })
+      .catch((e: unknown) => {
+        if (!cancelled)
+          setSampled({
+            prepare,
+            input: settled,
+            error: e instanceof Error ? e.message : String(e),
+          })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasSacrificial, writing, settled, prepare])
+  const basic = useMemo(() => {
+    if (hasSacrificial) return {}
+    try {
+      return { result: simulateWritten(prepare(settled)) }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }, [hasSacrificial, prepare, settled])
+  const sampleReady = sampled?.input === settled && sampled.prepare === prepare
+  const played = (hasSacrificial ? sampleReady && sampled : basic) || {}
   const result: WrittenRotation | undefined = played.result
-  const stale = settled !== text
+  const stale = settled !== text || (hasSacrificial && !sampleReady)
   const warnings = [
     ...new Set([
       ...(played.error ? [played.error] : []),
@@ -247,8 +290,9 @@ export function RotationInline({
         sx={{
           ...insetSx,
           ...quickSx,
+          containerType: 'inline-size',
           display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
+          flexWrap: 'wrap',
           alignItems: 'stretch',
           minHeight: 48,
           '&:hover': { borderColor: tokens.hairlineStrong },
@@ -264,6 +308,7 @@ export function RotationInline({
             ...quickSx,
             flex: 1,
             minWidth: 0,
+            [narrowRotation]: { flexBasis: '100%' },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-start',
@@ -337,11 +382,16 @@ export function RotationInline({
               justifyContent: 'flex-end',
               flexWrap: 'wrap',
               gap: 0.25,
-              flexShrink: 0,
+              maxWidth: '100%',
               px: 0.875,
-              py: { xs: 0.625, sm: 0 },
-              borderLeft: { xs: 0, sm: hairline },
-              borderTop: { xs: hairline, sm: 0 },
+              borderLeft: hairline,
+              [narrowRotation]: {
+                flexBasis: '100%',
+                justifyContent: 'flex-start',
+                py: 0.625,
+                borderLeft: 0,
+                borderTop: hairline,
+              },
             }}
           >
             {trailing}
@@ -380,10 +430,20 @@ export function RotationInline({
         sx={editorSx}
       />
       <Collapse in={focused || fresh} timeout={180} unmountOnExit>
-        <WriterQuickRow
-          members={members}
-          onInsert={(word) => insertWord(inputRef.current, text, word, setText)}
-        />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          <WriterQuickRow
+            members={members}
+            constellations={team.constellations}
+            onInsert={(word) =>
+              insertWord(inputRef.current, text, word, setText)
+            }
+          />
+          <OptionalSyntaxHint
+            onInsert={(word) =>
+              insertWord(inputRef.current, text, word, setText)
+            }
+          />
+        </Box>
       </Collapse>
       {(pending || fresh) && (
         <Box
@@ -495,13 +555,15 @@ const baseCode = (a: RotationAction): string => {
     case 'charged':
       return a.cancel
         ? 'CA[cancel]'
-        : a.beams
-          ? `CA[beams=${a.beams}]`
-          : a.bullets
-            ? `CA[bullets=${a.bullets}]`
-            : a.spins
-              ? `C${a.spins}${a.final ? 'F' : ''}`
-              : 'CA'
+        : a.weakspot
+          ? 'CA[weakspot]'
+          : a.beams
+            ? `CA[beams=${a.beams}]`
+            : a.bullets
+              ? `CA[bullets=${a.bullets}]`
+              : a.spins
+                ? `C${a.spins}${a.final ? 'F' : ''}`
+                : 'CA'
     case 'plunge':
       return `${a.height === 'high' ? 'HP' : a.height === 'low' ? 'LP' : 'P'}${
         a.collision
@@ -555,8 +617,8 @@ export function RotationReadout({
   )
   const nameOf = (ck: CharacterKey) =>
     names.find((n) => n.characterKey === ck)?.name ?? ck
-  // what the reader cannot show as steps is shown as written
-  if (parsed.warnings.length || !parsed.steps.length)
+  // only fall back to plain text when no steps could be parsed at all
+  if (!parsed.steps.length)
     return (
       <Box
         component="span"
@@ -650,6 +712,23 @@ export function RotationReadout({
             </Box>
           </Tooltip>
         </>
+      )}
+      {!!parsed.warnings.length && (
+        <Tooltip
+          arrow
+          title={
+            <Box component="span" sx={{ display: 'grid', gap: 0.25 }}>
+              {parsed.warnings.map((w) => (
+                <span key={w}>{w}</span>
+              ))}
+            </Box>
+          }
+        >
+          <WarningAmberRoundedIcon
+            aria-label={parsed.warnings.join('; ')}
+            sx={{ fontSize: 16, color: 'warning.main', flexShrink: 0 }}
+          />
+        </Tooltip>
       )}
     </Box>
   )
@@ -760,7 +839,6 @@ export function RotationsSetting({
   compact?: boolean
 }) {
   const { t } = useTranslation('page_team')
-  const [menu, setMenu] = useState<HTMLElement | null>(null)
   const database = useDatabase()
   const { gender } = useDBMeta()
   const rid = rotationIdOf(teamId, kqm)
@@ -821,6 +899,16 @@ export function RotationsSetting({
     }
     saveRotationTiming(database, rid, next)
   }
+  if (compact)
+    return (
+      <RotationsDropdown
+        timing={timing}
+        hasOpener={!!opener.trim()}
+        onChange={apply}
+        disabled={disabled}
+        variant="pill"
+      />
+    )
   const steadyLabel = t('teamOpt.timing.steady', {
     defaultValue: 'Steady DPS (rot {{from}}–{{to}})',
     ...STEADY_RANGE,
@@ -848,122 +936,6 @@ export function RotationsSetting({
       </span>
     </Box>
   )
-  const firstLabel = (n: number) =>
-    n === 1
-      ? t('teamOpt.timing.firstOne', 'First rotation')
-      : t('teamOpt.timing.firstN', {
-          defaultValue: 'First {{count}} rotations',
-          count: n,
-        })
-  if (compact) {
-    const choose = (rotations: number | undefined) => {
-      setMenu(null)
-      if (rotations !== first) set(rotations)
-    }
-    const check = (on: boolean) => (
-      <CheckRoundedIcon
-        sx={{ fontSize: 16, mr: 1, opacity: on ? 1 : 0, color: tokens.gold }}
-      />
-    )
-    return (
-      <>
-        <Tooltip arrow title={tip} placement="top">
-          <ButtonBase
-            onClick={(e) => setMenu(e.currentTarget)}
-            disabled={disabled}
-            aria-haspopup="menu"
-            aria-expanded={!!menu}
-            aria-label={`${t('teamOpt.timing.counted', 'Counted')}: ${
-              first === undefined ? steadyLabel : firstLabel(first)
-            }`}
-            sx={{
-              ...quickSx,
-              ...focusSx,
-              height: 28,
-              pl: 0.875,
-              pr: 0.5,
-              gap: 0.5,
-              borderRadius: 999,
-              border: '1px solid transparent',
-              fontSize: 13,
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              color: 'text.primary',
-              '&:hover': {
-                bgcolor: alpha(giTokens.parchment, 0.05),
-                borderColor: tokens.hairlineStrong,
-              },
-              '&.Mui-disabled': { opacity: 0.5 },
-            }}
-          >
-            <RepeatRoundedIcon sx={{ fontSize: 15, color: 'text.secondary' }} />
-            {first === undefined ? steadyLabel : firstLabel(first)}
-            <ExpandMoreRoundedIcon
-              sx={{ fontSize: 16, color: 'text.secondary' }}
-            />
-          </ButtonBase>
-        </Tooltip>
-        <Menu
-          anchorEl={menu}
-          open={!!menu}
-          onClose={() => setMenu(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          slotProps={{ paper: { sx: { minWidth: 200, mt: 0.5 } } }}
-        >
-          <MenuItem
-            selected={first === undefined}
-            onClick={() => choose(undefined)}
-            sx={{ fontSize: 13.5, ...numSx }}
-          >
-            {check(first === undefined)}
-            {steadyLabel}
-            <Box component="span" sx={{ ...type.label, ml: 1 }}>
-              {t('teamOpt.timing.default', 'default')}
-            </Box>
-          </MenuItem>
-          <Divider sx={{ my: '4px !important' }} />
-          {FIRST_ROTATIONS.map((n) => (
-            <MenuItem
-              key={n}
-              selected={first === n}
-              onClick={() => choose(n)}
-              sx={{ fontSize: 13.5, ...numSx }}
-            >
-              {check(first === n)}
-              {firstLabel(n)}
-            </MenuItem>
-          ))}
-          {first !== undefined &&
-            !!opener.trim() && [
-              <Divider key="divider" />,
-              <Tooltip
-                key="opener"
-                arrow
-                placement="left"
-                title={t(
-                  'teamOpt.timing.openerCountedTip',
-                  'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
-                )}
-              >
-                <MenuItem
-                  onClick={() => setOpenerCounted(!timing.countOpener)}
-                  sx={{ fontSize: 13.5 }}
-                >
-                  <Checkbox
-                    size="small"
-                    checked={!!timing.countOpener}
-                    sx={{ p: 0, mr: 1 }}
-                    tabIndex={-1}
-                  />
-                  {t('teamOpt.timing.openerCounted', 'Opener counted')}
-                </MenuItem>
-              </Tooltip>,
-            ]}
-        </Menu>
-      </>
-    )
-  }
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <FieldLabel tip={tip}>

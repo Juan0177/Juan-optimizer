@@ -226,11 +226,10 @@ const c2Moondrift_hydroGeo_critDMG_ = greaterEq(
     )
   )
 )
-// Million Ton Crush's own +150% CRIT DMG does not need a Moondrift Harmony
 const c2Lumi_critDMG_ = greaterEq(
   input.constellation,
   2,
-  dm.constellation2.lumi_critDMG_
+  equal(condC2Moondrift, 'on', dm.constellation2.lumi_critDMG_)
 )
 
 const [condC4MoondriftPath, condC4Moondrift] = cond(key, 'c4Moondrift')
@@ -582,24 +581,6 @@ const sheet: TalentSheet = {
     }),
   ]),
   constellation2: ct.talentTem('constellation2', [
-    ct.fieldsTem('constellation2', {
-      fields: [
-        {
-          node: infoMut(c2Lumi_critDMG_, {
-            name: ct.ch('lumiCritDmg_'),
-            unit: '%',
-            icon: (
-              <StatIcon
-                statKey="critDMG_"
-                iconProps={{
-                  fontSize: 'inherit',
-                }}
-              />
-            ),
-          }),
-        },
-      ],
-    }),
     ct.condTem('constellation2', {
       value: condC2Moondrift,
       path: condC2MoondriftPath,
@@ -610,6 +591,20 @@ const sheet: TalentSheet = {
           fields: [
             {
               node: c2Moondrift_hydroGeo_critDMG_,
+            },
+            {
+              node: infoMut(c2Lumi_critDMG_, {
+                name: ct.ch('lumiCritDmg_'),
+                unit: '%',
+                icon: (
+                  <StatIcon
+                    statKey="critDMG_"
+                    iconProps={{
+                      fontSize: 'inherit',
+                    }}
+                  />
+                ),
+              }),
             },
             {
               text: stg('duration'),

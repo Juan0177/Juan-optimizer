@@ -1,5 +1,6 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   ParsedRotation,
   RotationAction,
@@ -9,18 +10,29 @@ import type {
 import {
   actionFrameKey,
   CharacterName,
+  FIRST_ROTATIONS,
+  firstRotations,
   flatActions,
   frameOverrides,
   openerActions,
+  STEADY_RANGE,
   seconds as plainSeconds,
 } from '@genshin-optimizer/gi/ui'
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded'
+import RepeatRoundedIcon from '@mui/icons-material/RepeatRounded'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import {
   alpha,
   Box,
+  Button,
   ButtonBase,
+  Checkbox,
+  Divider,
   IconButton,
   InputBase,
+  Menu,
+  MenuItem,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -29,25 +41,26 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { localizeDecimal } from './format'
 import { MemberAvatar } from './MemberAvatar'
+import { focusSx, numSx, quickSx, tokens, type } from './ui'
 
 export {
-  type TimingEdit,
-  type RotationTimingSettings,
+  DEFAULT_SWAP_FRAMES,
   FIRST_ROTATIONS,
-  STEADY_REPEATS,
+  firstRotations,
+  flatActions,
+  frameOverrides,
+  openerActions,
+  openerCounted,
+  pingToSwapFrames,
+  type RotationTimingSettings,
   STEADY_COUNTED,
   STEADY_RANGE,
-  firstRotations,
-  openerCounted,
-  DEFAULT_SWAP_FRAMES,
-  pingToSwapFrames,
+  STEADY_REPEATS,
   swapFramesToPing,
+  type TimingEdit,
   timingPing,
   withPing,
   withSwapFrames,
-  flatActions,
-  openerActions,
-  frameOverrides,
 } from '@genshin-optimizer/gi/ui'
 
 /** Frames as seconds with 2 decimals, in the site's decimal separator ("1.25" / "1,25") */
@@ -56,6 +69,210 @@ export const seconds = (frames: number) =>
     plainSeconds(frames),
     i18next.isInitialized ? i18next.language : undefined
   )
+
+/**
+ * Dropdown for choosing which rotations are counted: Steady DPS (the repeating pace) or the
+ * first 1–6 rotations from the start (with an "Opener counted" toggle when an opener is written).
+ * Shared by the rotation line (`pill`) and the Write rotation modal (`outlined`).
+ */
+export function RotationsDropdown({
+  timing,
+  hasOpener,
+  onChange,
+  disabled,
+  variant = 'pill',
+}: {
+  timing: RotationTimingSettings
+  hasOpener: boolean
+  onChange: (next: RotationTimingSettings) => void
+  disabled?: boolean
+  variant?: 'pill' | 'outlined'
+}) {
+  const { t } = useTranslation('page_team')
+  const [menu, setMenu] = useState<HTMLElement | null>(null)
+  const first = firstRotations(timing)
+  const steadyLabel = t('teamOpt.timing.steady', {
+    defaultValue: 'Steady DPS (rot {{from}}–{{to}})',
+    ...STEADY_RANGE,
+  })
+  const firstLabel = (n: number) =>
+    n === 1
+      ? t('teamOpt.timing.firstOne', 'First rotation')
+      : t('teamOpt.timing.firstN', {
+          defaultValue: 'First {{count}} rotations',
+          count: n,
+        })
+  const currentLabel = first === undefined ? steadyLabel : firstLabel(first)
+  const tip = (
+    <Box component="span" sx={{ display: 'grid', gap: 1 }}>
+      <span>
+        <Box component="strong" sx={{ display: 'block' }}>
+          {steadyLabel}
+        </Box>
+        {t('teamOpt.timing.steadyTip', {
+          defaultValue:
+            'The default. Played {{to}} times in a row, rotations {{from}}–{{to}} averaged: the pace once cooldowns carry over.',
+          ...STEADY_RANGE,
+        })}
+      </span>
+      <span>
+        <Box component="strong" sx={{ display: 'block' }}>
+          {t('teamOpt.timing.firstTipTitle', 'First 1–6 rotations')}
+        </Box>
+        {t(
+          'teamOpt.timing.firstTip',
+          'Counted from the start, every cooldown ready, like a timed challenge.'
+        )}
+      </span>
+    </Box>
+  )
+  const choose = (rotations: number | undefined) => {
+    setMenu(null)
+    if (rotations === first) return
+    const { rotations: _previous, ...rest } = timing
+    onChange(rotations === undefined ? rest : { ...rest, rotations })
+  }
+  const toggleOpenerCounted = () => {
+    const { countOpener: _count, ...rest } = timing
+    onChange(timing.countOpener ? rest : { ...rest, countOpener: true })
+  }
+  const check = (on: boolean) => (
+    <CheckRoundedIcon
+      sx={{ fontSize: 16, mr: 1, opacity: on ? 1 : 0, color: tokens.gold }}
+    />
+  )
+  const ariaLabel = `${t('teamOpt.timing.counted', 'Counted')}: ${currentLabel}`
+
+  return (
+    <>
+      <Tooltip arrow title={menu ? '' : tip} placement="top">
+        <span>
+          {variant === 'outlined' ? (
+            <Button
+              size="small"
+              color="inherit"
+              variant="outlined"
+              disabled={disabled}
+              onClick={(e) => setMenu(e.currentTarget)}
+              startIcon={<RepeatRoundedIcon fontSize="small" />}
+              endIcon={<ExpandMoreRoundedIcon fontSize="small" />}
+              aria-haspopup="menu"
+              aria-expanded={!!menu}
+              aria-label={ariaLabel}
+              sx={(theme) => ({
+                borderColor:
+                  first !== undefined
+                    ? alpha(theme.palette.primary.main, 0.6)
+                    : 'divider',
+                color: first !== undefined ? 'primary.main' : 'text.primary',
+                bgcolor:
+                  first !== undefined
+                    ? alpha(theme.palette.primary.main, 0.1)
+                    : 'transparent',
+                whiteSpace: 'nowrap',
+                ...numSx,
+                '& .MuiButton-endIcon': { ml: 0.25 },
+              })}
+            >
+              {currentLabel}
+            </Button>
+          ) : (
+            <ButtonBase
+              onClick={(e) => setMenu(e.currentTarget)}
+              disabled={disabled}
+              aria-haspopup="menu"
+              aria-expanded={!!menu}
+              aria-label={ariaLabel}
+              sx={{
+                ...quickSx,
+                ...focusSx,
+                height: 28,
+                pl: 0.875,
+                pr: 0.5,
+                gap: 0.5,
+                borderRadius: 999,
+                border: '1px solid transparent',
+                fontSize: 13,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                color: 'text.primary',
+                '&:hover': {
+                  bgcolor: alpha(giTokens.parchment, 0.05),
+                  borderColor: tokens.hairlineStrong,
+                },
+                '&.Mui-disabled': { opacity: 0.5 },
+              }}
+            >
+              <RepeatRoundedIcon
+                sx={{ fontSize: 15, color: 'text.secondary' }}
+              />
+              {currentLabel}
+              <ExpandMoreRoundedIcon
+                sx={{ fontSize: 16, color: 'text.secondary' }}
+              />
+            </ButtonBase>
+          )}
+        </span>
+      </Tooltip>
+      <Menu
+        anchorEl={menu}
+        open={!!menu}
+        onClose={() => setMenu(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { minWidth: 200, mt: 0.5 } } }}
+      >
+        <MenuItem
+          selected={first === undefined}
+          onClick={() => choose(undefined)}
+          sx={{ fontSize: 13.5, ...numSx }}
+        >
+          {check(first === undefined)}
+          {steadyLabel}
+          <Box component="span" sx={{ ...type.label, ml: 1 }}>
+            {t('teamOpt.timing.default', 'default')}
+          </Box>
+        </MenuItem>
+        <Divider sx={{ my: '4px !important' }} />
+        {FIRST_ROTATIONS.map((n) => (
+          <MenuItem
+            key={n}
+            selected={first === n}
+            onClick={() => choose(n)}
+            sx={{ fontSize: 13.5, ...numSx }}
+          >
+            {check(first === n)}
+            {firstLabel(n)}
+          </MenuItem>
+        ))}
+        {first !== undefined &&
+          hasOpener && [
+            <Divider key="divider" />,
+            <Tooltip
+              key="opener"
+              arrow
+              describeChild
+              placement="left"
+              title={t(
+                'teamOpt.timing.openerCountedTip',
+                'Your “First rotation only” (in the rotation writer). Off (default): played before the start as a setup and not counted; its cooldowns, summons and auras carry into the rotations. On: it is the first rotation, and counted.'
+              )}
+            >
+              <MenuItem onClick={toggleOpenerCounted} sx={{ fontSize: 13.5 }}>
+                <Checkbox
+                  size="small"
+                  checked={!!timing.countOpener}
+                  sx={{ p: 0, mr: 1 }}
+                  tabIndex={-1}
+                />
+                {t('teamOpt.timing.openerCounted', 'Opener counted')}
+              </MenuItem>
+            </Tooltip>,
+          ]}
+      </Menu>
+    </>
+  )
+}
 
 /**
  * This rotation's steps: when each action starts and how many frames it takes before the next one,

@@ -1,4 +1,7 @@
-import { useDataManagerKeys } from '@genshin-optimizer/common/database-ui'
+import {
+  useDataManagerKeys,
+  useDataManagerValues,
+} from '@genshin-optimizer/common/database-ui'
 import { AnvilIcon } from '@genshin-optimizer/common/svgicons'
 import {
   isPlainLeftClick,
@@ -153,7 +156,11 @@ function CharacterCount() {
 }
 function TeamCount() {
   const database = useDatabase()
-  return <NavCount count={useDataManagerKeys(database.teams).length} />
+  useDataManagerValues(database.teams)
+  const count = database.teams.keys.filter(
+    (id) => !database.teams.isHiddenVersion(id)
+  ).length
+  return <NavCount count={count} />
 }
 function WeaponCount() {
   const database = useDatabase()
@@ -393,7 +400,13 @@ function SettingsMenu({
   )
 }
 
-function Brand({ onClick }: { onClick?: () => void }) {
+function Brand({
+  onClick,
+  compact,
+}: {
+  onClick?: () => void
+  compact?: boolean
+}) {
   const { t } = useTranslation('ui')
   const select = useContext(SelectNavContext)
   return (
@@ -412,7 +425,8 @@ function Brand({ onClick }: { onClick?: () => void }) {
         borderRadius: 1.5,
         color: 'text.primary',
         textDecoration: 'none',
-        flexShrink: 0,
+        flexShrink: compact ? 1 : 0,
+        minWidth: 0,
       }}
     >
       {/* juanlab: logo e nome del fork (il logo di Stellar Optimizer resta loro) */}
@@ -439,6 +453,9 @@ function Brand({ onClick }: { onClick?: () => void }) {
             fontSize: '0.75rem',
             fontWeight: 700,
             lineHeight: '20px',
+            ...(compact && {
+              '@media (max-width: 380px)': { display: 'none' },
+            }),
           }}
         >
           Dev
@@ -636,15 +653,20 @@ function MobileHeader({
             ))}
           </Box>
         </Drawer>
-        <Toolbar sx={{ minHeight: '56px !important' }}>
+        <Toolbar
+          sx={{
+            minHeight: '56px !important',
+            pr: 'max(16px, env(safe-area-inset-right))',
+          }}
+        >
+          {/* juanlab: our logo and name, no link to Stellar's beta site */}
           <Brand />
           <Box flexGrow={1} />
           <IconButton
             aria-label={t('openMenu')}
-            edge="end"
             onClick={toggle}
             // (the menu's one way in on phones: as bright as the title)
-            sx={{ color: 'text.primary' }}
+            sx={{ color: 'text.primary', flexShrink: 0 }}
           >
             <MenuIcon />
           </IconButton>

@@ -79,6 +79,7 @@ vi.mock('./MemberAvatar', () => ({
 }))
 vi.mock('./RotationWriter', () => ({
   kqmRotationId: (id: string) => `${id}_kqm`,
+  playedRotationKey: (text: string) => text,
   useRotationSettings: () => ({
     opener: '',
     timing: { edits: {} },
@@ -293,7 +294,9 @@ describe('RotationCompare', () => {
 
     // Apply #1 winner
     const applyButtons = screen.getAllByRole('button', { name: 'Apply' })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(applyButtons[0])
+    confirm.mockRestore()
 
     expect(mockApply).toHaveBeenCalledTimes(1)
     const appliedScenario = mockApply.mock.calls[0][0].scenario

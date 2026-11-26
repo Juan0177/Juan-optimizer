@@ -54,6 +54,7 @@ import {
   seedBuild,
 } from './prefilter'
 import type { SimGear } from './rotation'
+import type { TeamOptRunRotation } from './runTeam'
 import {
   canWield,
   hasEnergyRequirement,
@@ -220,8 +221,18 @@ export interface TeamOptResult {
    * sets and weapons it tried timed in it); its damage is per these. Absent: the team's own.
    */
   attacks?: TeamOpt['attacks']
+  /** The written rotation's average length with the result's weapons. */
+  rotationTime?: number
+  /** Saved with weapon-dependent rotations so the equipment inspector can replay them. */
+  writtenRotation?: TeamOptRunRotation
   /** Each optimized member's other builds: with each weapon it may take, in each set it may wear */
   options?: Partial<Record<CharacterKey, TeamOptMemberOptions>>
+  /** Members whose weapon rankings finished, including those with no alternatives. */
+  rankedMembers?: CharacterKey[]
+  /** All member rankings and coordinated gear comparisons finished. */
+  rankingsComplete?: boolean
+  rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
+  gearComparisons?: TeamOptGearComparison[]
 }
 
 type TeamOptSetPair = readonly [ArtifactSetKey, ArtifactSetKey]
@@ -235,6 +246,11 @@ export interface TeamOptSetChoice {
 
 export const teamOptSetKey = ({ set, setPair }: TeamOptSetChoice) =>
   setPair?.join('+') ?? set ?? ''
+
+/** A coordinated alternative scored with one feasible, shared inventory. */
+export interface TeamOptGearComparison extends TeamOptPickView {
+  changed: CharacterKey[]
+}
 
 /** A member's best build with another weapon or in another set, the rest of the team as found */
 export interface TeamOptOption extends TeamOptSetChoice {
@@ -265,6 +281,8 @@ export interface TeamOptPickView {
   builds: TeamOptBuilds
   weapons: Partial<Record<CharacterKey, string>>
   after: TeamOptEvaluation
+  attacks?: TeamOpt['attacks']
+  rotationTime?: number
   /**
    * The members whose Energy Recharge requirement the picks change (an energy weapon picked or
    * taken away): the run's, and now; their artifacts were searched again for it
@@ -296,7 +314,8 @@ export interface TeamOptSession {
     },
     characterKey: CharacterKey,
     pick: TeamOptPick,
-    isCancelled?: () => boolean
+    isCancelled?: () => boolean,
+    scope?: 'sets' | 'weapons'
   ): Promise<TeamOptMemberOptions | undefined>
 }
 
@@ -851,11 +870,16 @@ export async function optimizeTeam({
   rankingBonusStats,
   onResult,
   onOptions,
+  onSetOptions,
+  onGearComparisons,
+  skipRankings,
   onSession,
   from,
   skipProvisional,
   maxExchanges = 2,
   weaponFilter,
+  rotationForWeapons,
+  rotationKey,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -888,6 +912,12 @@ export async function optimizeTeam({
     characterKey: CharacterKey,
     options: TeamOptMemberOptions
   ) => void
+  onSetOptions?: (
+    characterKey: CharacterKey,
+    options: TeamOptMemberOptions
+  ) => void
+  skipRankings?: boolean
+  onGearComparisons?: (comparisons: TeamOptGearComparison[]) => void
   /** Given the team found, to try other equipment on (`TeamOptSession`) */
   onSession?: (session: TeamOptSession) => void
   /** Start from these builds and weapons (a saved result's: with `maxRounds` 0, its session) */
@@ -899,6 +929,10 @@ export async function optimizeTeam({
   maxExchanges?: number
   /** Restrict candidate weapon IDs considered per member (current weapon is always allowed) */
   weaponFilter?: Partial<Record<CharacterKey, ReadonlySet<string>>>
+  rotationForWeapons?: (
+    weapons: Partial<Record<CharacterKey, ICachedWeapon>>
+  ) => { attacks: TeamOpt['attacks']; rotationTime?: number } | undefined
+  rotationKey?: string
 }): Promise<TeamOptResult | undefined> {
   // where a run spends its time (logged in development): compiling problems, solving, evaluating
   const profile = {
@@ -1208,8 +1242,12 @@ export async function optimizeTeam({
       const weapon = weapons[owner as CharacterKey]
       return !WEAPON_KEYS.has(key) || !weapon || weapon.key === key
     }
+    const played = rotationForWeapons?.(weapons)
+    const current = played
+      ? withAttackStates(played.attacks, attackStates)
+      : attacks
     return Object.fromEntries(
-      Object.entries(attacks).map(([ck, list]) => [
+      Object.entries(current).map(([ck, list]) => [
         ck,
         list?.map((a) => ({
           ...a,
@@ -1300,6 +1338,7 @@ export async function optimizeTeam({
       rotationTime: teamOpt.rotationTime,
       weaponEnergy: teamOpt.weaponEnergy,
       attacks,
+      rotationKey,
       bonusStats,
       statFilters,
       teamCond: teamEntry?.conditional,
@@ -2056,8 +2095,8 @@ export async function optimizeTeam({
             )
             if (!weaponA || !weaponB || weaponA.id === weaponB.id) continue
             if (
-              isWeaponExcludedFor(a.characterKey, weaponB.id, teamOpt) ||
-              isWeaponExcludedFor(b.characterKey, weaponA.id, teamOpt)
+              isWeaponExcludedFor(a.characterKey, weaponB, teamOpt) ||
+              isWeaponExcludedFor(b.characterKey, weaponA, teamOpt)
             )
               continue
             if (
@@ -2628,9 +2667,11 @@ export async function optimizeTeam({
   // fall back on when one of them holds such a weapon and the run found it a ticked one.
   const weaponOf = (s: TeamState, member: TeamOptMember) =>
     s.weaponIds[member.characterKey] ?? member.weaponId
-  const weaponLeftOut = (member: TeamOptMember, weaponId: string) =>
-    teamOpt.optimizeWeapons &&
-    isWeaponExcludedFor(member.characterKey, weaponId, teamOpt)
+  const weaponLeftOut = (member: TeamOptMember, weaponId: string) => {
+    if (!teamOpt.optimizeWeapons) return false
+    const weapon = database.weapons.get(weaponId)
+    return !!weapon && isWeaponExcludedFor(member.characterKey, weapon, teamOpt)
+  }
   /** The members whose weapon in `s` is not ticked for them while `than` gives them a ticked one */
   const untickedAgainst = (s: TeamState, than: TeamState) =>
     order
@@ -2797,6 +2838,7 @@ export async function optimizeTeam({
     if (relief > 0) energy[characterKey] = { relief, weaponIds }
   }
   const untickedWeapons = teamOptUntickedWeapons(
+    database,
     order,
     state.weaponIds,
     teamOpt
@@ -2812,6 +2854,7 @@ export async function optimizeTeam({
     )
     .map((m) => m.characterKey)
   const startUntickedWeapons = untickedAgainst(start, state)
+  const played = rotationForWeapons?.(weaponsIn(state))
   const result: TeamOptResult = {
     builds: state.builds,
     weapons: { ...state.weaponIds },
@@ -2819,6 +2862,10 @@ export async function optimizeTeam({
     after: shownIn(state, after),
     rounds,
     optimized: order.map((m) => m.characterKey),
+    ...(played && {
+      attacks: played.attacks,
+      rotationTime: played.rotationTime,
+    }),
     energy,
     ...(untickedWeapons.length ? { untickedWeapons } : {}),
     ...(startBreaksSetRules.length ? { startBreaksSetRules } : {}),
@@ -2832,17 +2879,59 @@ export async function optimizeTeam({
   onSession?.(session)
   if (!onResult) return result
   onResult(result)
-  // each optimized member's other builds with its weapon and sets as found: its first rankings
+  if (skipRankings) return result
+  // Publish set comparisons before the usually longer weapon rankings.
   const options: NonNullable<TeamOptResult['options']> = {}
+  const compare = async (weapons: boolean) => {
+    if (!onGearComparisons || isCancelled()) return
+    try {
+      const comparisons = await session.rankGearComparisons(options, weapons)
+      if (!comparisons.length || isCancelled()) return
+      result.gearComparisons = [
+        ...(result.gearComparisons ?? []),
+        ...comparisons,
+      ]
+      onGearComparisons(result.gearComparisons)
+    } catch (error) {
+      if (!isCancelled())
+        console.warn('Could not rank coordinated equipment changes', error)
+    }
+  }
+  if (onSetOptions) {
+    for (const { characterKey: ck, weaponId } of order) {
+      if (isCancelled()) break
+      const ranked = await session.rankings(
+        state,
+        ck,
+        { weaponId: state.weaponIds[ck] ?? weaponId },
+        isCancelled,
+        'sets'
+      )
+      if (!ranked || isCancelled()) break
+      options[ck] = ranked
+      onSetOptions(ck, ranked)
+    }
+    await compare(false)
+  }
   for (const member of order) {
     if (isCancelled()) break
     const ck = member.characterKey
     const weaponId = state.weaponIds[ck] ?? member.weaponId
-    const ranked = await session.rankings(state, ck, { weaponId }, isCancelled)
+    const sets = options[ck]?.sets
+    const ranked = await session.rankings(
+      state,
+      ck,
+      { weaponId },
+      isCancelled,
+      sets ? 'weapons' : undefined
+    )
     if (!ranked || isCancelled()) break
+    if (sets) ranked.sets = sets
     options[ck] = ranked
     onOptions?.(ck, ranked)
   }
+  if (!onSetOptions) await compare(false)
+  if (teamOpt.optimizeWeapons) await compare(true)
   if (Object.keys(options).length) result.options = options
   return result
 
@@ -2850,7 +2939,12 @@ export async function optimizeTeam({
    * The team found, to try other equipment on (`TeamOptSession`): what a member's pick (a weapon,
    * a set) makes of its build, the others as they are, and its rankings under it
    */
-  function sessionOf(found: TeamState): TeamOptSession {
+  function sessionOf(found: TeamState): TeamOptSession & {
+    rankGearComparisons(
+      options: NonNullable<TeamOptResult['options']>,
+      weapons: boolean
+    ): Promise<TeamOptGearComparison[]>
+  } {
     const ranked = evaluateIn(found)
     const best = ranked?.total ?? Number.NaN
     const keyOf = (s: TeamState) =>
@@ -3183,7 +3277,8 @@ export async function optimizeTeam({
       s,
       ck,
       pick,
-      cancelled = () => false
+      cancelled = () => false,
+      scope
     ) => {
       const member = memberOf(ck)
       const optConfig = optConfigs[ck]
@@ -3191,7 +3286,7 @@ export async function optimizeTeam({
       if (!member || !optConfig || !weapon) return undefined
       const unmetNow = unmetIn(s)
       const baseNeeds = needsIn(s)
-      const weaponCandidates = weaponsIn_(s, member)
+      const weaponCandidates = scope === 'sets' ? [] : weaponsIn_(s, member)
       const changesTeamEr = (w: ICachedWeapon) => {
         const nextNeeds = teamEnergyNeeds(
           statFilters,
@@ -3261,6 +3356,8 @@ export async function optimizeTeam({
         const option = await rankWeapon(w, true)
         if (option) weapons.push(option)
       }
+      if (scope === 'weapons')
+        return { best, weapons: weapons.sort(byValue), sets: [] }
       const sets: TeamOptOption[] = []
       const wearable = wearableSets(
         poolIn(s, member),
@@ -3299,6 +3396,476 @@ export async function optimizeTeam({
       if (cancelled()) return undefined
       return { best, weapons: weapons.sort(byValue), sets: sets.sort(byValue) }
     }
+    type CompareChoice = TeamOptPick & {
+      ck: CharacterKey
+      setDonor?: CharacterKey
+      artifactIds?: NonNullable<TeamOptBuilds[CharacterKey]>
+      value: number
+    }
+    const scoreAssignment = (s: TeamState, choices: CompareChoice[]) => {
+      if (
+        choices.some(({ ck, set, setPair }) => {
+          const pieces: ICachedArtifact[] = artsIn(s, ck)
+          return (
+            pieces.length !== allArtifactSlotKeys.length ||
+            pieces.some((piece) => !mayUse(memberOf(ck)!, piece)) ||
+            !keepsSetRules(ck, pieces) ||
+            (set && pieces.filter((art) => art.setKey === set).length < 4) ||
+            setPair?.some(
+              (key) => pieces.filter((art) => art.setKey === key).length < 2
+            )
+          )
+        })
+      )
+        return undefined
+      const ids = Object.values(s.builds).flatMap((build) =>
+        Object.values(build ?? {}).filter(notEmpty)
+      )
+      if (new Set(ids).size !== ids.length) return undefined
+      const ev = evaluateIn(s)
+      if (
+        !ev ||
+        !ranked ||
+        !Number.isFinite(ev.total) ||
+        order.some(({ characterKey }) => ev.unmet[characterKey]?.length) ||
+        worsened(ranked, ev) ||
+        breaksSetRules(found, s)
+      )
+        return undefined
+      const changedWeapons = choices.some(
+        ({ ck }) => s.weaponIds[ck] !== found.weaponIds[ck]
+      )
+      const replay = changedWeapons
+        ? rotationForWeapons?.(weaponsIn(s))
+        : undefined
+      return {
+        changed: choices.map(({ ck }) => ck),
+        builds: s.builds,
+        weapons: s.weaponIds,
+        after: shownIn(s, ev),
+        ...(replay && {
+          rotationTime: replay.rotationTime,
+          ...(replay.attacks !== played?.attacks && {
+            attacks: replay.attacks,
+          }),
+        }),
+      }
+    }
+    const comparisonState = (choices: CompareChoice[]) => {
+      const s = copyState(found)
+      for (const { ck, weaponId } of choices) s.weaponIds[ck] = weaponId
+      const ids = Object.values(s.weaponIds).filter(notEmpty)
+      if (new Set(ids).size !== ids.length) return undefined
+      return s
+    }
+    const seedAssignment = (choices: CompareChoice[]) => {
+      const state = comparisonState(choices)!
+      for (const { ck, artifactIds } of choices) {
+        if (artifactIds) state.builds[ck] = { ...artifactIds }
+        else delete state.builds[ck]
+      }
+      return state
+    }
+    const transferSets = (choices: CompareChoice[]) => {
+      const donors = choices.filter(({ setDonor }) => setDonor)
+      if (!donors.length) return undefined
+      const state = seedAssignment(choices)
+      for (const { ck } of donors) delete state.builds[ck]
+      const taken = new Set(
+        Object.values(state.builds).flatMap((build) =>
+          Object.values(build ?? {}).filter(notEmpty)
+        )
+      )
+      const free = copyState(state)
+      const requests = donors.map(({ ck, set, setDonor }) => {
+        const member = memberOf(ck)!
+        const original = found.builds[setDonor!]
+        const build = objKeyMap(allArtifactSlotKeys, (slot) => {
+          const art = database.arts.get(original?.[slot] ?? '')
+          return art && art.setKey === set && mayUse(member, art)
+            ? art.id
+            : undefined
+        })
+        const slots = allArtifactSlotKeys.filter((slot) => build[slot])
+        const offSlot = allArtifactSlotKeys.find((slot) => !build[slot])
+        let pool: ICachedArtifact[] | undefined
+        const offPieces = (slot: ArtifactSlotKey) => {
+          // Cache the pool with all participating donors' builds released.
+          pool ??= poolIn(free, member)
+          const preferred = [
+            original?.[slot],
+            found.builds[ck]?.[slot],
+            ...choices.map((choice) => found.builds[choice.ck]?.[slot]),
+          ]
+          const rank = (id: string) => {
+            const index = preferred.indexOf(id)
+            return index < 0 ? preferred.length : index
+          }
+          return pool
+            .filter((art) => art.slotKey === slot && !taken.has(art.id))
+            .sort((a, b) => rank(a.id) - rank(b.id))
+        }
+        return { ck, build, slots, offSlot, offPieces }
+      })
+      if (requests.some(({ slots }) => slots.length < 4)) return undefined
+      const offSlots: { index: number; slot: ArtifactSlotKey }[] = []
+      const matchOffPieces = (i: number): boolean => {
+        if (i === offSlots.length) return true
+        const { index, slot } = offSlots[i]
+        const { ck, offPieces } = requests[index]
+        const build = state.builds[ck]!
+        const counts = new Map<string, number>()
+        for (const art of offPieces(slot)) {
+          // Each further request can take at most one of these pieces. Set
+          // rules only depend on the set key of this slot.
+          const count = counts.get(art.setKey) ?? 0
+          counts.set(art.setKey, count + 1)
+          if (count >= offSlots.length - i) continue
+          build[slot] = art.id
+          if (!keepsSetRules(ck, artsIn(state, ck))) continue
+          taken.add(art.id)
+          if (matchOffPieces(i + 1)) return true
+          taken.delete(art.id)
+        }
+        build[slot] = undefined
+        return false
+      }
+      const reserveSets = (index: number): boolean => {
+        if (index === requests.length) return matchOffPieces(0)
+        const { ck, build, slots, offSlot } = requests[index]
+        // A five-piece donor can spare any slot if another member needs it.
+        for (const spare of offSlot ? [offSlot] : [undefined, ...slots]) {
+          const pieces = slots.filter((slot) => slot !== spare)
+          if (pieces.some((slot) => taken.has(build[slot]!))) continue
+          state.builds[ck] = { ...build }
+          if (spare) {
+            state.builds[ck]![spare] = undefined
+            offSlots.push({ index, slot: spare })
+          } else if (!keepsSetRules(ck, artsIn(state, ck))) {
+            continue
+          }
+          for (const slot of pieces) taken.add(build[slot]!)
+          if (reserveSets(index + 1)) return true
+          for (const slot of pieces) taken.delete(build[slot]!)
+          if (spare) offSlots.pop()
+        }
+        delete state.builds[ck]
+        return false
+      }
+      return reserveSets(0) ? state : undefined
+    }
+    const searchAssignment = async (
+      choices: CompareChoice[],
+      seed?: TeamOptGearComparison
+    ) => {
+      const searchMember = async (s: TeamState, choice: CompareChoice) => {
+        await breathe()
+        if (isCancelled()) return false
+        const member = memberOf(choice.ck)
+        const weapon = database.weapons.get(choice.weaponId)
+        if (!member || !weapon) return false
+        const result = await search(s, member, weapon, choice, true)
+        if (!result?.found || isCancelled()) return false
+        s.builds[choice.ck] = bySlot(database, result.found.artifactIds)
+        return true
+      }
+      if (seed) {
+        const state = copyState({
+          builds: seed.builds,
+          weaponIds: seed.weapons,
+        })
+        for (const choice of choices) await searchMember(state, choice)
+        if (isCancelled()) return seed
+        const result = scoreAssignment(state, choices)
+        return result && result.after.total > seed.after.total ? result : seed
+      }
+      // Releasing the pieces together allows mutually dependent moves. Trying
+      // both allocation orders lets either member take a scarce off-piece first.
+      for (const ordered of [choices, [...choices].reverse()]) {
+        const state = comparisonState(choices)
+        if (!state || isCancelled()) return undefined
+        for (const { ck } of ordered) delete state.builds[ck]
+        let complete = true
+        for (const choice of ordered) {
+          if (await searchMember(state, choice)) continue
+          complete = false
+          break
+        }
+        if (!complete) continue
+        await searchMember(state, ordered[0])
+        if (isCancelled()) return undefined
+        const result = scoreAssignment(state, choices)
+        if (result) return result
+      }
+      return undefined
+    }
+    const rankGearComparisons = async (
+      options: NonNullable<TeamOptResult['options']>,
+      withWeapons: boolean
+    ) => {
+      if (order.length < 2 || !(best > 0)) return []
+      const keys = order.map(({ characterKey }) => characterKey)
+      const current = (ck: CharacterKey) =>
+        found.weaponIds[ck] ?? memberOf(ck)!.weaponId
+      const fullSet = (ck: CharacterKey) =>
+        wearableSets(artsIn(found, ck), optConfigs[ck]!.artSetExclusion)[0]
+      const foundSets = new Map(keys.map((ck) => [ck, fullSet(ck)]))
+      const alternatives = (
+        ck: CharacterKey,
+        weapon: boolean
+      ): CompareChoice[] =>
+        ((weapon ? options[ck]?.weapons : options[ck]?.sets) ?? []).flatMap(
+          (option) => {
+            if (!option.artifactIds || !Number.isFinite(option.value)) return []
+            if (
+              weapon
+                ? option.weaponId === current(ck)
+                : option.set
+                  ? option.set === foundSets.get(ck)
+                  : option.setPair?.every(
+                      (key) =>
+                        (artsIn(found, ck) as ICachedArtifact[]).filter(
+                          (art) => art.setKey === key
+                        ).length >= 2
+                    )
+            )
+              return []
+            return [{ ...option, ck }]
+          }
+        )
+      const sets = new Map(keys.map((ck) => [ck, alternatives(ck, false)]))
+      const weapons = new Map(
+        keys.map((ck) => [ck, withWeapons ? alternatives(ck, true) : []])
+      )
+      const proposals = new Map<
+        string,
+        {
+          choices: CompareChoice[]
+          priority: number
+          transfer: boolean
+          direct: boolean
+        }
+      >()
+      const propose = (
+        choices: (CompareChoice | undefined)[],
+        transfer = false,
+        direct = false
+      ) => {
+        const complete = choices.filter(notEmpty)
+        if (
+          complete.length !== choices.length ||
+          withWeapons !==
+            complete.some(({ ck, weaponId }) => weaponId !== current(ck)) ||
+          !comparisonState(complete)
+        )
+          return
+        const key = complete
+          .map((pick) => `${pick.ck}:${pick.weaponId}:${teamOptSetKey(pick)}`)
+          .sort()
+          .join('|')
+        if (!proposals.has(key) || (direct && !proposals.get(key)!.direct))
+          proposals.set(key, {
+            choices: complete,
+            transfer,
+            direct,
+            priority:
+              complete.reduce((sum, choice) => sum + choice.value / best, 0) /
+              complete.length,
+          })
+      }
+      const takesSet = (
+        ck: CharacterKey,
+        donor: CharacterKey
+      ): CompareChoice | undefined => {
+        const set = foundSets.get(donor)
+        if (
+          !set ||
+          set === foundSets.get(ck) ||
+          !allowedCounts(
+            optConfigs[ck]!.artSetExclusion[set as keyof ArtSetExclusion]
+          ).includes(4)
+        )
+          return undefined
+        const ranked = sets.get(ck)?.find((choice) => choice.set === set)
+        return {
+          ck,
+          set,
+          setDonor: donor,
+          weaponId: current(ck),
+          value: ranked?.value ?? best,
+          artifactIds: ranked?.artifactIds,
+        }
+      }
+      const takesWeapon = (
+        ck: CharacterKey,
+        donor: CharacterKey
+      ): CompareChoice | undefined => {
+        const weaponId = current(donor)
+        const weapon = database.weapons.get(weaponId)
+        if (
+          !weapon ||
+          weaponId === current(ck) ||
+          !canWield(ck, weapon) ||
+          isWeaponExcludedFor(ck, weapon, teamOpt)
+        )
+          return undefined
+        return { ck, weaponId, artifactIds: found.builds[ck], value: best }
+      }
+      const withSet = (
+        weapon: CompareChoice | undefined,
+        set: CompareChoice | undefined
+      ) =>
+        weapon &&
+        set && {
+          ...set,
+          weaponId: weapon.weaponId,
+        }
+      for (const [i, a] of keys.entries()) {
+        for (const [j, b] of keys.entries()) {
+          if (j <= i) continue
+          const aSets = sets.get(a)!.slice(0, 3)
+          const bSets = sets.get(b)!.slice(0, 3)
+          const aWeapons = weapons.get(a)!.slice(0, 2)
+          const bWeapons = weapons.get(b)!.slice(0, 2)
+          if (!withWeapons) {
+            const aTakes = takesSet(a, b)
+            const bTakes = takesSet(b, a)
+            propose([aTakes, bTakes], true, true)
+            for (const change of aSets) propose([change, bTakes], true)
+            for (const change of bSets) propose([aTakes, change], true)
+            propose([aSets[0], bSets[0]])
+          } else {
+            const aTakes = takesWeapon(a, b)
+            const bTakes = takesWeapon(b, a)
+            propose([aTakes, bTakes], true, true)
+            propose(
+              [
+                withSet(aTakes, takesSet(a, b)),
+                withSet(bTakes, takesSet(b, a)),
+              ],
+              true,
+              true
+            )
+            propose([withSet(aTakes, aSets[0]), bTakes], true)
+            propose([aTakes, withSet(bTakes, bSets[0])], true)
+            for (const x of aWeapons)
+              for (const y of [...bWeapons, bSets[0]]) propose([x, y])
+            for (const y of bWeapons) propose([aSets[0], y])
+          }
+          for (const c of keys.slice(j + 1)) {
+            const transfer = withWeapons ? takesWeapon : takesSet
+            const recipients = [a, b, c]
+            for (const donors of [
+              [b, c, a],
+              [c, a, b],
+            ]) {
+              propose(
+                recipients.map((ck, i) => transfer(ck, donors[i])),
+                true,
+                true
+              )
+              if (withWeapons)
+                propose(
+                  recipients.map((ck, i) =>
+                    withSet(takesWeapon(ck, donors[i]), takesSet(ck, donors[i]))
+                  ),
+                  true,
+                  true
+                )
+            }
+            const cSet = sets.get(c)?.[0]
+            if (withWeapons) {
+              const cWeapon = weapons.get(c)?.[0]
+              propose([aWeapons[0], bWeapons[0], cWeapon ?? cSet])
+              propose([aWeapons[0], bSets[0], cWeapon ?? cSet])
+              propose([aSets[0], bWeapons[0], cWeapon ?? cSet])
+              propose([aSets[0], bSets[0], cWeapon])
+            } else {
+              propose([aSets[0], bSets[0], cSet])
+              propose([aSets[0], takesSet(b, a), cSet], true)
+              propose([takesSet(a, b), bSets[0], cSet], true)
+            }
+          }
+        }
+      }
+      // Use the per-member rankings only to prioritize which assignments to test.
+      // Each row is evaluated as a whole team, with the actual gear and requirements.
+      const ordered = [...proposals.values()].sort(
+        (a, b) => b.priority - a.priority
+      )
+      const rankedSeeds = ordered.filter(({ direct }) => !direct)
+      const seeds = [
+        ...ordered.filter(({ direct }) => direct),
+        ...rankedSeeds
+          .filter(({ choices }) => choices.length === 2)
+          .slice(0, 20),
+        ...rankedSeeds
+          .filter(({ choices }) => choices.length === 3)
+          .slice(0, 12),
+      ]
+      const results: {
+        choices: CompareChoice[]
+        gear: TeamOptGearComparison
+        direct: boolean
+      }[] = []
+      let repair: (typeof seeds)[number] | undefined
+      for (const seed of seeds) {
+        await breathe()
+        if (isCancelled()) return []
+        const { choices, transfer, direct } = seed
+        const assigned = transferSets(choices)
+        const seeded = scoreAssignment(seedAssignment(choices), choices)
+        const donated = assigned && scoreAssignment(assigned, choices)
+        const gear =
+          donated && (!seeded || donated.after.total > seeded.after.total)
+            ? donated
+            : seeded
+        if (gear) results.push({ choices, gear, direct })
+        else if (
+          transfer &&
+          !repair &&
+          choices.every(({ ck, set }) => {
+            const member = memberOf(ck)!
+            if (!set) return true
+            const free = copyState(found)
+            for (const choice of choices) delete free.builds[choice.ck]
+            return wearableSets(
+              poolIn(free, member),
+              optConfigs[ck]!.artSetExclusion
+            ).includes(set)
+          })
+        )
+          repair = seed
+      }
+      const byDamage = (a: TeamOptGearComparison, b: TeamOptGearComparison) =>
+        b.after.total / (b.rotationTime ?? played?.rotationTime ?? 1) -
+        a.after.total / (a.rotationTime ?? played?.rotationTime ?? 1)
+      results.sort((a, b) => byDamage(a.gear, b.gear))
+      // Rebuild at most one alternative per pass. Normal ranking has already
+      // found suitable artifacts for the other valid alternatives.
+      const strongest = results[0]
+      if (repair) {
+        const gear = await searchAssignment(repair.choices)
+        if (gear) results.push({ ...repair, gear })
+      } else if (withWeapons && strongest) {
+        const gear = await searchAssignment(strongest.choices, strongest.gear)
+        if (gear) strongest.gear = gear
+      }
+      const rankedGear = results.sort((a, b) => byDamage(a.gear, b.gear))
+      const rankedAlternatives = rankedGear.filter(({ direct }) => !direct)
+      const shown = new Set([
+        ...rankedGear.filter(({ direct }) => direct),
+        ...rankedAlternatives
+          .filter(({ choices }) => choices.length === 2)
+          .slice(0, 4),
+        ...rankedAlternatives
+          .filter(({ choices }) => choices.length === 3)
+          .slice(0, 2),
+      ])
+      return rankedGear
+        .filter((entry) => shown.has(entry))
+        .map(({ gear }) => gear)
+    }
     // (a pick on a team: the team with it, per team and pick)
     const picked = new Map<string, Promise<TeamState | undefined>>()
     const withPick = (s: TeamState, ck: CharacterKey, pick: TeamOptPick) => {
@@ -3326,6 +3893,7 @@ export async function optimizeTeam({
     return {
       best,
       rankings,
+      rankGearComparisons,
       async pick(
         picks,
         ck,
@@ -3345,10 +3913,15 @@ export async function optimizeTeam({
         const ev = evaluateIn(s)
         if (!ev) return undefined
         const er = teammatesEr(s)
+        const played = rotationForWeapons?.(weaponsIn(s))
         const view: TeamOptPickView = {
           builds: s.builds,
           weapons: { ...s.weaponIds },
           after: shownIn(s, ev),
+          ...(played && {
+            attacks: played.attacks,
+            rotationTime: played.rotationTime,
+          }),
           ...(er.length && { teammatesEr: er }),
         }
         onFigures?.(view)

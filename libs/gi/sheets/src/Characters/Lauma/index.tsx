@@ -18,6 +18,7 @@ import {
   subscript,
   sum,
   tally,
+  unequal,
 } from '@genshin-optimizer/gi/wr'
 import { cond, nonStackBuff, st, stg } from '../../SheetUtil'
 import { CharacterSheet } from '../CharacterSheet'
@@ -153,13 +154,14 @@ const burstPaleHymn_bloom_dmgInc = equal(
 )
 const burstPaleHymn_hyperbloom_dmgInc = { ...burstPaleHymn_bloom_dmgInc }
 const burstPaleHymn_burgeon_dmgInc = { ...burstPaleHymn_bloom_dmgInc }
+const burstPaleHymn_lunarbloom_dmgInc_val = prod(
+  subscript(input.total.burstIndex, dm.burst.lunarBloomDmgInc, { unit: '%' }),
+  input.total.eleMas
+)
 const burstPaleHymn_lunarbloom_dmgInc = equal(
   condBurstPaleHymn,
   'on',
-  prod(
-    subscript(input.total.burstIndex, dm.burst.lunarBloomDmgInc, { unit: '%' }),
-    input.total.eleMas
-  )
+  burstPaleHymn_lunarbloom_dmgInc_val
 )
 
 const [condA1AfterSkillPath, condA1AfterSkill] = cond(key, 'a1AfterSkill')
@@ -249,14 +251,15 @@ const c2PaleHymn_bloom_dmgInc = greaterEq(
 )
 const c2PaleHymn_hyperbloom_dmgInc = { ...c2PaleHymn_bloom_dmgInc }
 const c2PaleHymn_burgeon_dmgInc = { ...c2PaleHymn_bloom_dmgInc }
-const c2PaleHymn_lunarbloom_dmgInc = greaterEq(
+const c2PaleHymn_lunarbloom_dmgInc_val = greaterEq(
   input.constellation,
   2,
-  equal(
-    condBurstPaleHymn,
-    'on',
-    prod(percent(dm.constellation2.lunarBloom_dmgInc), input.total.eleMas)
-  )
+  prod(percent(dm.constellation2.lunarBloom_dmgInc), input.total.eleMas)
+)
+const c2PaleHymn_lunarbloom_dmgInc = equal(
+  condBurstPaleHymn,
+  'on',
+  c2PaleHymn_lunarbloom_dmgInc_val
 )
 const c2Ascendant_lunarbloom_dmg_ = greaterEq(
   input.constellation,
@@ -327,7 +330,18 @@ const dmgFormulas = {
     dmg1: greaterEq(
       input.constellation,
       6,
-      lunarDmgNode(percent(dm.constellation6.dmg1), 'eleMas', 'lunarbloom')
+      lunarDmgNode(percent(dm.constellation6.dmg1), 'eleMas', 'lunarbloom', {
+        premod: {
+          lunarbloom_dmgInc: unequal(
+            condBurstPaleHymn,
+            'on',
+            sum(
+              burstPaleHymn_lunarbloom_dmgInc_val,
+              c2PaleHymn_lunarbloom_dmgInc_val
+            )
+          ),
+        },
+      })
     ),
     dmg2: greaterEq(
       input.constellation,

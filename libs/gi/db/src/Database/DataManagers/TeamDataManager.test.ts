@@ -370,4 +370,37 @@ describe('team versions (versionOf)', () => {
       database.teams.get(database.teams.duplicate(root))?.versionOf
     ).toBeUndefined()
   })
+  it('hides versions from the main Teams tab unless showInTeams is enabled', () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage())
+    const root = team(database, ['Mavuika', 'Bennett'])
+    const version = team(database, ['Mavuika', 'Xilonen'])
+    database.teams.set(version, { versionOf: root })
+    expect(database.teams.isHiddenVersion(root)).toBe(false)
+    expect(database.teams.isHiddenVersion(version)).toBe(true)
+    expect(database.teams.get(version)?.showInTeams).toBeUndefined()
+
+    // Non-versions cannot persist showInTeams
+    database.teams.set(root, { showInTeams: true })
+    expect(database.teams.get(root)?.showInTeams).toBeUndefined()
+
+    // Opting in shows the version in Teams
+    database.teams.set(version, { showInTeams: true })
+    expect(database.teams.get(version)?.showInTeams).toBe(true)
+    expect(database.teams.isHiddenVersion(version)).toBe(false)
+
+    // Export/import strips showInTeams
+    const exported = database.teams.export(version, [
+      defLoadoutExportSetting(),
+      defLoadoutExportSetting(),
+    ])
+    expect('showInTeams' in exported).toBe(false)
+    const imported = database.teams.import({ ...exported, showInTeams: true })
+    expect(database.teams.get(imported)?.showInTeams).toBeUndefined()
+
+    // Deleting the original detaches and clears showInTeams
+    database.teams.remove(root)
+    expect(database.teams.get(version)?.versionOf).toBeUndefined()
+    expect(database.teams.get(version)?.showInTeams).toBeUndefined()
+    expect(database.teams.isHiddenVersion(version)).toBe(false)
+  })
 })

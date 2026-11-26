@@ -1,3 +1,4 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import type { RotationAction } from '../parse'
@@ -112,7 +113,9 @@ interface NicoleState {
   /** C1 Arcane Projection: Unity's 6 s ICD */
   graceEnd: number
   swapToken: number
+  a4Token: number
   c1Until: number
+  hasGuidance: Set<CharacterKey>
   /** Her last action and when its animation ends (gcsim's state is Idle from then) */
   lastKind?: string
   lastEnd: number
@@ -199,11 +202,15 @@ function nicoleAct(
       // Shield of Blazing Light: a party shield for 20 s, made with the buff 8 frames in (kqmsim's
       // addShield; a recast replaces it)
       shieldMarker(ctx, 8, 1200, 'Shield of Blazing Light')
-      // Grace of Kenosis: the team's ATK bonus for 20 s (from frame 8)
       s.graceEnd = ctx.now + 1208
+      s.hasGuidance.clear()
+      s.a4Token++
+      ctx.state('Nicole', ['Nicole', 'skillGraceActive'], '')
       ctx.state('Nicole', ['Nicole', 'a1GuidanceActive'], '')
       ctx.state('Nicole', ['Nicole', 'a4NicoleGuidance'], '')
-      ctx.buff('Nicole', ['Nicole', 'skillGraceActive'], 'on', 8, 1200)
+      ctx.buff('Nicole', ['Nicole', 'skillGraceActive'], 'on', 8, 1200, {
+        hitlag: 'recipient',
+      })
       ctx.atCharacter('Nicole', 8, (at) => {
         s.graceSnapshot = { t: at.now, onField: at.onField }
       })
@@ -272,18 +279,27 @@ export const kit: KitModel = {
     c1Until: -1,
     graceEnd: -1,
     swapToken: 0,
+    a4Token: 0,
+    hasGuidance: new Set(),
     lastEnd: -1,
     c4Icd: new Map(),
   }),
+  simOnlyBuffs: () => [
+    ['Nicole', 'skillGraceActive'],
+    ['Nicole', 'a1GuidanceActive'],
+    ['Nicole', 'a4NicoleGuidance'],
+    ['Nicole', 'c4Pathfinder'],
+  ],
   onPartySwap(ctx, s: NicoleState, from, to) {
     if (to === 'Nicole') {
       s.lastKind = 'swap'
       s.lastEnd = ctx.now
     }
-    if (from !== 'Nicole' && ctx.constellation('Nicole') < 6)
+    if (from !== 'Nicole' && ctx.constellation('Nicole') < 6) {
+      s.hasGuidance.delete(from)
       ctx.state('Nicole', ['Nicole', 'a1GuidanceActive'], '')
+    }
     const token = ++s.swapToken
-    // A1 observes the other members: 3 s on the field (at once for a Hexerei member)
     if (to === 'Nicole') return
     const delay = HEXEREI_CHARACTERS.includes(to) ? 0 : 180
     ctx.atCharacter('Nicole', delay, (c) => {
@@ -293,9 +309,13 @@ export const kit: KitModel = {
         ['Nicole', 'a1GuidanceActive'],
         'on',
         0,
-        s.graceEnd - c.now
+        s.graceEnd - c.now,
+        { hitlag: 'recipient' }
       )
-      upgraded(c, s, to)
+      if (!s.hasGuidance.has(to)) {
+        s.hasGuidance.add(to)
+        upgraded(c, s, to)
+      }
     })
   },
   act(ctx, s: NicoleState, action, previous) {
@@ -319,31 +339,18 @@ export const kit: KitModel = {
           ...s.graceSnapshot,
         },
       ]
-    // A4: an active member's Elemental DMG upgrades Nicole (8 s; C6: for the rest of the skill's
-    // buff, and every other member is upgraded with her)
     const upgrades =
       hit.characterKey === ctx.onField &&
       hit.element !== 'physical' &&
       ctx.now < s.graceEnd
     if (hit.characterKey === 'Nicole') {
-      const before = ctx.hasBuff('Nicole', ['Nicole', 'a4NicoleGuidance'])
+      const before = s.hasGuidance.has('Nicole')
       const on = before || upgrades ? 'on' : ''
-      // On the field her Guidance is the sheet's active-member one (A1's condition). gcsim
-      // snapshots the upgrading hit's stats first, so its ATK misses the +300, but the upgrade's
-      // hit-time effects (C2 RES shred, C6 DEF ignore) already reach it.
       hit.states = [
         ...(hit.states ?? []),
         { owner: 'Nicole', path: ['Nicole', 'a4NicoleGuidance'], value: on },
-        ...(hit.characterKey === ctx.onField
-          ? [
-              {
-                owner: 'Nicole' as const,
-                path: ['Nicole', 'a1GuidanceActive'],
-                value: on,
-              },
-            ]
-          : []),
       ]
+      // Upgrading hit snapshots ATK before +300 Guidance while receiving hit-time C2 RES shred / C6 DEF ignore
       if (!before && upgrades)
         hit.statSnapshots = [
           ...(hit.statSnapshots ?? []),
@@ -352,31 +359,39 @@ export const kit: KitModel = {
     }
     if (upgrades) {
       const c6 = ctx.constellation('Nicole') >= 6
-      ctx.buff(
-        'Nicole',
-        ['Nicole', 'a4NicoleGuidance'],
-        'on',
-        0,
-        c6 ? s.graceEnd - ctx.now : Math.min(480, s.graceEnd - ctx.now)
-      )
-      // (gcsim's C4 hook runs after the upgrade: the triggering hit can use the new Blessing)
-      upgraded(ctx, s, 'Nicole', hit.characterKey === 'Nicole')
+      const dur = c6
+        ? s.graceEnd - ctx.now
+        : Math.min(480, s.graceEnd - ctx.now)
+      ctx.buff('Nicole', ['Nicole', 'a4NicoleGuidance'], 'on', 0, dur, {
+        hitlag: 'recipient',
+      })
+      if (!c6) {
+        const a4Token = ++s.a4Token
+        ctx.atCharacter('Nicole', dur, () => {
+          if (a4Token === s.a4Token) s.hasGuidance.delete('Nicole')
+        })
+      }
+      if (!s.hasGuidance.has('Nicole')) {
+        s.hasGuidance.add('Nicole')
+        upgraded(ctx, s, 'Nicole', hit.characterKey === 'Nicole')
+      }
       if (c6) {
-        // (gcsim's c6OnUpgrade: every member gets A1's Guidance for the rest of the skill's buff)
         ctx.buff(
           'Nicole',
           ['Nicole', 'a1GuidanceActive'],
           'on',
           0,
-          s.graceEnd - ctx.now
+          s.graceEnd - ctx.now,
+          { hitlag: 'recipient' }
         )
         for (const m of ctx.members)
-          if (m !== 'Nicole') upgraded(ctx, s, m, hit.characterKey === m)
+          if (m !== 'Nicole' && !s.hasGuidance.has(m)) {
+            s.hasGuidance.add(m)
+            upgraded(ctx, s, m, hit.characterKey === m)
+          }
       }
     }
-    // only the active character's hits trigger projections (gcsim's OnEnemyHit on the active member)
     if (hit.characterKey !== hit.onField) return
-    // C1 Arcane Projection: Unity: any active hit, 6 s ICD, 30 frames later, dealt by the hitter
     if (ctx.constellation('Nicole') >= 1 && hit.t >= s.c1Until) {
       s.c1Until = hit.t + 360
       ctx.hit(30, {
@@ -386,10 +401,10 @@ export const kit: KitModel = {
         element: getCharEle(hit.characterKey),
         applies: false,
         icd: 'none',
+        poiseDamage: 50,
         label: 'Arcane Projection: Unity (C1)',
       })
     }
-    // Arcane Projection: up to 4 per burst, 3 s ICD, 30 frames later, dealt by the hitter
     if (
       hit.t >= s.burstFrom &&
       hit.t < s.burstTo &&
@@ -405,6 +420,7 @@ export const kit: KitModel = {
         element: getCharEle(hit.characterKey),
         applies: false,
         icd: 'none',
+        poiseDamage: 50,
         label: 'Arcane Projection',
       })
     }

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   equipChanges,
   equipTeamResult,
+  restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
 } from './apply'
@@ -107,6 +108,22 @@ describe('Team Optimize Equip recovery', () => {
     expect(
       equipChanges(database, teamId, result).map((m) => m.characterKey)
     ).toEqual(['Bennett', 'Sucrose'])
+  })
+
+  it('restores the previous selection after reload and keeps the saved builds', () => {
+    const { database, storage, teamId, result, savedBuild, borrowed } = setup()
+    saveTeamResult(database, teamId, result, 'Saved')
+    const created = database.teams.get(teamId)!.loadoutData[0]!.buildId
+    const reloaded = new ArtCharDatabase(1, storage)
+    saveTeamResult(reloaded, teamId, result, 'Repeated')
+    expect(reloaded.teams.get(teamId)?.loadoutData[0]?.buildId).toBe(created)
+    expect(restoreTeamBuilds(reloaded, teamId)).toBe(true)
+    expect(reloaded.teams.get(teamId)?.loadoutData[0]?.buildType).toBe(
+      'equipped'
+    )
+    expect(reloaded.teams.get(teamId)?.loadoutData[1]?.buildId).toBe(savedBuild)
+    expect(reloaded.builds.get(created)?.artifactIds.flower).toBe(borrowed)
+    expect(reloaded.arts.get(borrowed)?.location).toBe('Xiangling')
   })
 
   it('declines to overwrite gear changed since equipping', () => {

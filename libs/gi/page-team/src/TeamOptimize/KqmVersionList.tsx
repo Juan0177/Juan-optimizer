@@ -9,7 +9,7 @@ import {
   charKeyToLocGenderedCharKey,
   signatureWeapons,
 } from '@genshin-optimizer/gi/consts'
-import type { TeamKqmRunSummary } from '@genshin-optimizer/gi/db'
+import type { TeamKqmRunSummary, TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
 import { kqmStandardOf } from '@genshin-optimizer/gi/solver'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
@@ -42,17 +42,23 @@ import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded'
 import CallSplitRoundedIcon from '@mui/icons-material/CallSplitRounded'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import ChecklistRoundedIcon from '@mui/icons-material/ChecklistRounded'
 import CloseIcon from '@mui/icons-material/Close'
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
+import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded'
 import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
+import SearchIcon from '@mui/icons-material/Search'
+import SortRoundedIcon from '@mui/icons-material/SortRounded'
 import StarOutlineRoundedIcon from '@mui/icons-material/StarOutlineRounded'
 import StarRoundedIcon from '@mui/icons-material/StarRounded'
+import SubjectRoundedIcon from '@mui/icons-material/SubjectRounded'
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined'
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined'
 import {
   alpha,
   Box,
@@ -61,9 +67,12 @@ import {
   Checkbox,
   Chip,
   CircularProgress,
+  Collapse,
   Drawer,
   FormControlLabel,
   IconButton,
+  InputAdornment,
+  LinearProgress,
   ListItemIcon,
   Menu,
   MenuItem,
@@ -112,13 +121,15 @@ import {
   kqmRunFresh,
   makeOriginal,
   pickVersionMember,
+  setShowInTeams,
   signatureOf,
   versionName,
   versionRoot,
   versionRotation,
   versionsOf,
 } from './kqmVersions'
-import { MemberAvatar } from './MemberAvatar'
+import { MemberAvatar, VersionPortrait } from './MemberAvatar'
+import { RotationReadout } from './RotationInline'
 import { templateText } from './RotationTemplates'
 import { firstRotations, STEADY_RANGE } from './RotationTiming'
 import {
@@ -131,6 +142,7 @@ import {
   WriterQuickRow,
   writtenRotationOf,
 } from './RotationWriter'
+import { VersionCombosDialog } from './VersionCombosDialog'
 
 const mono =
   'ui-monospace, SFMono-Regular, Menlo, Consolas, "Cascadia Mono", "Liberation Mono", monospace'
@@ -143,6 +155,7 @@ import {
   quickSx,
   rowHoverSx,
   Segmented,
+  selectedSx,
   tokens,
   type,
 } from './ui'
@@ -161,7 +174,11 @@ interface VersionRow {
   value?: number
   /** Its own constellations, over the family's */
   cons: Partial<Record<CharacterKey, number>>
-  /** It keeps its teammates' gear from the original (`TeamOptKqm.keepTeammates`) */
+  /** Its own signature weapon choices */
+  sig: Partial<Record<CharacterKey, number>>
+  /** Whether this version is also shown on the main Teams tab */
+  showInTeams: boolean
+  /** juanlab: it keeps its teammates' gear from the original (`TeamOptKqm.keepTeammates`) */
   keeps: boolean
 }
 
@@ -183,6 +200,8 @@ function rowOf(
     summary,
     fresh,
     cons: team?.versionCons ?? {},
+    sig: signatureOf(database, id, members),
+    showInTeams: !!team?.showInTeams,
     keeps: keepsTeammates(database, id),
     value: summary
       ? summary.rotationTime
@@ -217,17 +236,31 @@ function usePanelFor() {
   )
 }
 
-/**
- * "Versions" beside the KQM result's Share (and on a version's page): opens the panel of the
- * team's versions (`VersionsDrawer`), with their count, and a spinner while some run
- */
-export function VersionsButton({ teamId }: { teamId: string }) {
+/** The KQM entry point and result shortcut both open the team's variants drawer. */
+export function VersionsButton({
+  teamId,
+  compare = false,
+}: {
+  teamId: string
+  compare?: boolean
+}) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   useDataManagerValues(database.teams)
   const queue = useVersionQueue()
   const rootId = versionRoot(database, teamId)
-  const count = versionsOf(database, rootId).length
+  const versionIds = versionsOf(database, rootId)
+  const count = versionIds.length
+  const running = queue.some((id) => id === rootId || versionIds.includes(id))
+  const open = usePanelFor() === rootId
+  const label = compare
+    ? t('teamOpt.versions.compareVariants', 'Compare variants')
+    : count
+      ? t('teamOpt.versions.teamVariantsCount', {
+          defaultValue: 'Team variants ({{count}})',
+          count,
+        })
+      : t('teamOpt.versions.teamVariants', 'Team variants')
   return (
     <Button
       variant="outlined"
@@ -235,10 +268,11 @@ export function VersionsButton({ teamId }: { teamId: string }) {
       startIcon={<CallSplitRoundedIcon sx={{ fontSize: '19px !important' }} />}
       onClick={() => setPanelFor(rootId)}
       aria-haspopup="dialog"
+      aria-expanded={open}
       sx={{
         ...quickSx,
         ...focusSx,
-        height: 40,
+        minHeight: { xs: 44, sm: 40 },
         px: 2,
         borderRadius: 999,
         textTransform: 'none',
@@ -248,18 +282,9 @@ export function VersionsButton({ teamId }: { teamId: string }) {
         '& .MuiButton-startIcon': { mr: 0.75 },
       }}
     >
-      {t('teamOpt.versions.title', 'Versions')}
-      {queue.length > 0 ? (
-        <CircularProgress size={14} thickness={5} sx={{ ml: 1 }} />
-      ) : (
-        count > 0 && (
-          <Box
-            component="span"
-            sx={{ ml: 0.75, color: 'text.secondary', ...numSx }}
-          >
-            {count}
-          </Box>
-        )
+      {label}
+      {running && (
+        <CircularProgress aria-hidden size={14} thickness={5} sx={{ ml: 1 }} />
       )}
     </Button>
   )
@@ -270,7 +295,8 @@ export function VersionsDrawer({ teamId }: { teamId: string }) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   useDataManagerValues(database.teams)
-  const open = usePanelFor() === versionRoot(database, teamId)
+  const rootId = versionRoot(database, teamId)
+  const open = usePanelFor() === rootId
   const close = () => setPanelFor(undefined)
   useEffect(() => {
     const id = removeOnLeaving
@@ -283,51 +309,28 @@ export function VersionsDrawer({ teamId }: { teamId: string }) {
       anchor="right"
       open={open}
       onClose={close}
+      transitionDuration={{ enter: 220, exit: 180 }}
       PaperProps={{
         role: 'dialog',
         'aria-modal': true,
-        'aria-label': t('teamOpt.versions.title', 'Versions'),
+        'aria-label': t('teamOpt.versions.teamVariants', 'Team variants'),
         sx: {
-          width: { xs: '100%', md: 640 },
+          width: { xs: '100%', md: 840, lg: 940 },
           maxWidth: '100%',
           bgcolor: tokens.panel,
           backgroundImage: 'none',
           borderLeft: hairline,
+          display: 'flex',
+          flexDirection: 'column',
         },
       }}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          pl: { xs: 2, sm: 2.5 },
-          pr: 1.25,
-          minHeight: 60,
-          borderBottom: hairline,
-          flexShrink: 0,
-        }}
-      >
-        <Typography
-          component="h2"
-          sx={{ ...type.section, flex: 1, minWidth: 0 }}
-        >
-          {t('teamOpt.versions.title', 'Versions')}
-        </Typography>
-        <IconButton
-          onClick={close}
-          aria-label={t('teamOpt.editor.close', 'Close')}
-          sx={{ ...quickSx, ...focusSx }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </Box>
-      <Box sx={{ p: { xs: 1.5, sm: 2.5 }, overflowY: 'auto', flex: 1 }}>
-        <KqmVersions teamId={teamId} onLeave={close} />
-      </Box>
+      <KqmVersions teamId={teamId} onLeave={close} onClose={close} />
     </Drawer>
   )
 }
+
+type VersionSort = 'dps' | 'original'
 
 /**
  * The team's versions (KQM): teams of their own with members swapped, under the
@@ -337,12 +340,15 @@ export function VersionsDrawer({ teamId }: { teamId: string }) {
 export function KqmVersions({
   teamId,
   onLeave,
+  onClose,
 }: {
   teamId: string
   /** Another team's page is opened from it */
   onLeave?: () => void
+  /** Closes the parent drawer (renders the unified header when provided) */
+  onClose?: () => void
 }) {
-  const { t, i18n } = useTranslation('page_team')
+  const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const { gender } = useDBMeta()
   const database = useDatabase()
   const navigate = useNavigate()
@@ -351,10 +357,25 @@ export function KqmVersions({
   const queue = useVersionQueue()
   // the New version window, as a copy of a team of the family (Duplicate) or not
   const [creating, setCreating] = useState<{ from?: string }>()
+  // the batch Combinations window (up to 8 characters)
+  const [combining, setCombining] = useState(false)
   // the team whose rotation is open to edit here
   const [editing, setEditing] = useState<string>()
+  // sidebar search, character filter, sort, rotation preview, and multi-select delete
+  const [query, setQuery] = useState('')
+  const [charFilter, setCharFilter] = useState<CharacterKey[]>([])
+  const [sort, setSort] = useState<VersionSort>('dps')
+  const [sortAnchor, setSortAnchor] = useState<HTMLElement | null>(null)
+  const [showRotations, setShowRotations] = useState(false)
+  const [selecting, setSelecting] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+
   const rootId = versionRoot(database, teamId)
-  const rootName = database.teams.get(rootId)?.name ?? ''
+  const rootTeam = database.teams.get(rootId)
+  const rootName = rootTeam?.name ?? ''
+  const rootKqm = rootTeam?.teamOpt?.kqm
+
   // (made again when any team or result changes)
   const rows = useMemo(() => {
     const versions = versionsOf(database, rootId).map((id) =>
@@ -364,7 +385,87 @@ export function KqmVersions({
     versions.sort((a, b) => (b.value ?? -1) - (a.value ?? -1))
     return { root: rowOf(database, rootId, rootName), versions }
   }, [database, rootId, rootName, teamsDirty, results])
-  const all = [rows.root, ...rows.versions]
+  const all = useMemo(() => [rows.root, ...rows.versions], [rows])
+
+  // True family rank & max DPS (independent of active search/filter)
+  const { rankById, maxDps } = useMemo(() => {
+    const scored = all
+      .filter((r) => r.value !== undefined)
+      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+    const ranks = new Map<string, number>()
+    scored.forEach((r, idx) => ranks.set(r.id, idx + 1))
+    return { rankById: ranks, maxDps: scored[0]?.value }
+  }, [all])
+
+  // Characters that vary across versions (present in some teams, not all) for 1-click filtering
+  const filterChars = useMemo(() => {
+    if (all.length < 2) return []
+    const counts = new Map<CharacterKey, number>()
+    for (const r of all)
+      for (const k of r.members) counts.set(k, (counts.get(k) ?? 0) + 1)
+    return [...counts.entries()]
+      .filter(([, count]) => count < all.length)
+      .sort((a, b) => {
+        const aInRoot = rows.root.members.includes(a[0]) ? 1 : 0
+        const bInRoot = rows.root.members.includes(b[0]) ? 1 : 0
+        if (b[1] !== a[1]) return b[1] - a[1]
+        if (aInRoot !== bInRoot) return aInRoot - bInRoot
+        return a[0].localeCompare(b[0])
+      })
+      .map(([key, count]) => ({ key, count }))
+  }, [all, rows.root.members])
+
+  // Keep active char filters pruned if a version was deleted
+  const activeCharFilter = useMemo(
+    () => charFilter.filter((k) => filterChars.some((fc) => fc.key === k)),
+    [charFilter, filterChars]
+  )
+
+  const charName = (ck: CharacterKey) =>
+    t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, gender)}`)
+
+  // Filtered and sorted rows for display
+  const displayed = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const filtered = all.filter((r) => {
+      if (
+        activeCharFilter.length &&
+        !activeCharFilter.every((ck) => r.members.includes(ck))
+      )
+        return false
+      if (!q) return true
+      if (r.name.toLowerCase().includes(q)) return true
+      return r.members.some(
+        (k) =>
+          k.toLowerCase().includes(q) ||
+          t(`charNames_gen:${charKeyToLocGenderedCharKey(k, gender)}`)
+            .toLowerCase()
+            .includes(q)
+      )
+    })
+    const sorted = [...filtered]
+    if (sort === 'dps') {
+      sorted.sort((a, b) => {
+        if (a.value !== undefined && b.value !== undefined)
+          return b.value - a.value
+        if (a.value !== undefined) return -1
+        if (b.value !== undefined) return 1
+        // Unrun: keep original before unrun versions
+        if (a.id === rootId) return -1
+        if (b.id === rootId) return 1
+        return 0
+      })
+    } else {
+      // original first, then versions by DPS
+      sorted.sort((a, b) => {
+        if (a.id === rootId) return -1
+        if (b.id === rootId) return 1
+        return (b.value ?? -1) - (a.value ?? -1)
+      })
+    }
+    return sorted
+  }, [all, activeCharFilter, query, sort, rootId, t, gender])
+
   // (a result found before runs were kept in brief: briefed once, after the panel shows)
   const unsummed = all
     .filter((r) => !r.summary)
@@ -373,13 +474,14 @@ export function KqmVersions({
   useEffect(() => {
     if (!unsummed) return
     const id = setTimeout(() => {
-      for (const teamId of unsummed.split(',')) {
-        const summary = savedRunSummary(database, teamId)
-        if (summary) database.teamKqmResults.setSummary(teamId, summary)
+      for (const tid of unsummed.split(',')) {
+        const summary = savedRunSummary(database, tid)
+        if (summary) database.teamKqmResults.setSummary(tid, summary)
       }
     }, 50)
     return () => clearTimeout(id)
   }, [database, unsummed])
+
   const toRun = all.filter((r) => !r.fresh && !queue.includes(r.id))
   const running = queue.length > 0
   const run = (ids: string[]) => queueVersionRuns(database, gender, i18n, ids)
@@ -388,153 +490,840 @@ export function KqmVersions({
     navigate(`/teams/${id}/kqm`)
   }
   const hasVersions = rows.versions.length > 0
+  const hasActiveFilter = !!query.trim() || activeCharFilter.length > 0
+  const deletableIds = useMemo(
+    () => new Set(rows.versions.map((r) => r.id)),
+    [rows.versions]
+  )
+  const activeSelectedIds = useMemo(
+    () => [...selectedIds].filter((id) => deletableIds.has(id)),
+    [selectedIds, deletableIds]
+  )
+  const displayedDeletableIds = useMemo(
+    () => displayed.filter((r) => r.id !== rootId).map((r) => r.id),
+    [displayed, rootId]
+  )
+  const allDisplayedSelected =
+    displayedDeletableIds.length > 0 &&
+    displayedDeletableIds.every((id) => selectedIds.has(id))
+  const toggleSelectId = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  const exitSelecting = () => {
+    setSelecting(false)
+    setSelectedIds(new Set())
+    setConfirmBulkDelete(false)
+  }
+  const deleteSelected = () => {
+    const ids = activeSelectedIds
+    if (!ids.length) return
+    if (ids.some((id) => queue.includes(id))) stopVersionRuns(database)
+    let deleteCurrent = false
+    for (const id of ids) {
+      if (id === teamId) {
+        deleteCurrent = true
+        continue
+      }
+      database.teams.remove(id)
+    }
+    exitSelecting()
+    if (deleteCurrent) {
+      removeOnLeaving = teamId
+      navigate(`/teams/${rootId}/kqm`)
+    }
+  }
+  const sortLabels: Record<VersionSort, string> = {
+    dps: t('page_team:teamOpt.versions.sortDpsFull', 'Best DPS'),
+    original: t('page_team:teamOpt.versions.sortOriginal', 'Original'),
+  }
+
   return (
-    <Box>
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+        minHeight: 0,
+      }}
+    >
+      {/* Unified header: title, count, primary actions, and drawer close */}
       <Box
         sx={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateAreas: {
+            xs: '"title close" "actions actions"',
+            sm: '"title actions close"',
+          },
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr) auto',
+            sm: 'minmax(0, 1fr) auto auto',
+          },
           alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 1.5,
-          mb: 2,
+          gap: 1,
+          pl: { xs: 2, sm: 3 },
+          pr: { xs: 1.25, sm: 2 },
+          py: 1.25,
+          minHeight: 60,
+          borderBottom: hairline,
+          flexShrink: 0,
         }}
       >
-        <Button
-          size="small"
-          variant={hasVersions ? 'outlined' : 'contained'}
-          startIcon={<AddIcon />}
-          onClick={() => setCreating({})}
+        <Box
           sx={{
-            minHeight: 34,
-            flexShrink: 0,
-            ...(hasVersions ? {} : giCtaSx),
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            gridArea: 'title',
+            minWidth: 0,
           }}
         >
-          {t('teamOpt.versions.new', 'New version')}
-        </Button>
-        {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
-      </Box>
-      <Box sx={{ ...insetSx, overflow: 'hidden' }}>
-        {all.map((row, i) => (
-          <Fragment key={row.id}>
-            <VersionLine
-              row={row}
-              original={i === 0}
-              current={row.id === teamId}
-              rootMembers={rows.root.members}
-              queued={queue.includes(row.id)}
-              editing={editing === row.id}
-              onOpen={() => open(row.id)}
-              onRun={() => run([row.id])}
-              onEdit={() =>
-                setEditing((now) => (now === row.id ? undefined : row.id))
-              }
-              onDuplicate={() => setCreating({ from: row.id })}
-              onMakeOriginal={() => {
-                if (!makeOriginal(database, row.id, { i18n, gender })) return
-                // (the panel is the family's: open under its new original)
-                setPanelFor(row.id)
-              }}
-              onDelete={() => {
-                if (queue.includes(row.id)) stopVersionRuns(database)
-                if (row.id !== teamId) {
-                  database.teams.remove(row.id)
-                  return
-                }
-                // (the team shown: its original's page first, the panel still open; deleted once
-                // that page shows, or the team page, without its team, goes to the teams list)
-                removeOnLeaving = row.id
-                navigate(`/teams/${rootId}/kqm`)
-              }}
-            />
-            {editing === row.id && (
-              <VersionRotationEditor
-                teamId={row.id}
-                onClose={() => setEditing(undefined)}
-                onSaved={() => {
-                  setEditing(undefined)
-                  run([row.id])
-                }}
-              />
-            )}
-          </Fragment>
-        ))}
-        {!hasVersions && (
-          <Typography
-            sx={{ ...type.label, px: 1.5, py: 1.25, borderTop: hairline }}
-          >
-            {t(
-              'teamOpt.versions.none',
-              'No versions yet: swap members to see how the team compares.'
-            )}
+          <Typography component="h2" sx={{ ...type.section, fontSize: 18 }}>
+            {t('page_team:teamOpt.versions.teamVariants', 'Team variants')}
           </Typography>
+          {hasVersions && (
+            <Box
+              component="span"
+              sx={{
+                ...type.label,
+                ...numSx,
+                fontSize: 12,
+                px: 0.9,
+                py: '1px',
+                borderRadius: tokens.radius.pill,
+                bgcolor: alpha(giTokens.parchment, 0.08),
+              }}
+            >
+              {rows.versions.length}
+            </Box>
+          )}
+        </Box>
+
+        <Box
+          sx={{
+            gridArea: 'actions',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: { xs: 0.75, sm: 1 },
+          }}
+        >
+          <Button
+            size="small"
+            variant={hasVersions ? 'outlined' : 'contained'}
+            color={hasVersions ? 'inherit' : undefined}
+            startIcon={<AddIcon />}
+            onClick={() => setCreating({})}
+            sx={{
+              minHeight: { xs: 44, sm: 34 },
+              px: { xs: 1, sm: 1.5 },
+              flexShrink: 0,
+              textTransform: 'none',
+              fontWeight: 600,
+              ...(hasVersions
+                ? { borderColor: tokens.hairlineStrong }
+                : giCtaSx),
+            }}
+          >
+            {t('page_team:teamOpt.versions.newVariant', 'New variant')}
+          </Button>
+          {rows.root.members.length > 0 && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={
+                <GridViewRoundedIcon sx={{ fontSize: '17px !important' }} />
+              }
+              onClick={() => setCombining(true)}
+              sx={{
+                minHeight: { xs: 44, sm: 34 },
+                px: { xs: 1, sm: 1.5 },
+                flexShrink: 0,
+                textTransform: 'none',
+                fontWeight: 600,
+                borderColor: tokens.hairlineStrong,
+                '& .MuiButton-startIcon': {
+                  display: { xs: 'none', sm: 'flex' },
+                },
+              }}
+            >
+              {t(
+                'page_team:teamOpt.versions.generateCombinations',
+                'Generate combinations'
+              )}
+            </Button>
+          )}
+          {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
+        </Box>
+        {onClose && (
+          <IconButton
+            onClick={onClose}
+            aria-label={t('page_team:teamOpt.editor.close', 'Close')}
+            sx={{
+              ...quickSx,
+              ...focusSx,
+              gridArea: 'close',
+              width: { xs: 44, sm: 40 },
+              height: { xs: 44, sm: 40 },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         )}
-        {(hasVersions || toRun.length > 0 || running) && (
+      </Box>
+
+      {/* Compact search, sort, rotation toggle, and horizontal character filter strip */}
+      {hasVersions && (
+        <Box
+          sx={{
+            px: { xs: 2, sm: 3 },
+            py: 1.25,
+            borderBottom: hairline,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            flexShrink: 0,
+          }}
+        >
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
               gap: 1,
-              px: 1.5,
-              py: 1,
-              borderTop: hairline,
             }}
           >
-            <Typography sx={{ ...type.label, flex: 1, minWidth: 0 }}>
-              {running
-                ? t('teamOpt.versions.running', {
-                    defaultValue:
-                      'Running {{count}} in the background: you can keep working',
-                    count: queue.length,
-                  })
-                : toRun.length > 0
-                  ? t('teamOpt.versions.toRun', {
-                      defaultValue: '{{count}} not run with these settings',
-                      count: toRun.length,
-                    })
-                  : t('teamOpt.versions.allRun', 'All run with these settings')}
-            </Typography>
-            {running ? (
+            <TextField
+              size="small"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t(
+                'page_team:teamOpt.versions.searchPlaceholder',
+                'Search character or name...'
+              )}
+              inputProps={{
+                'aria-label': t(
+                  'page_team:teamOpt.versions.searchPlaceholder',
+                  'Search character or name...'
+                ),
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ fontSize: 17, color: 'text.disabled' }} />
+                  </InputAdornment>
+                ),
+                endAdornment: query ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={() => setQuery('')}
+                      aria-label={t(
+                        'page_team:teamOpt.versions.clearSearch',
+                        'Clear search'
+                      )}
+                      sx={{ p: 0.25 }}
+                    >
+                      <CloseIcon sx={{ fontSize: 15 }} />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
+              }}
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                '& .MuiInputBase-root': { height: 34, fontSize: 13.5 },
+              }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={
+                <SortRoundedIcon sx={{ fontSize: '16px !important' }} />
+              }
+              endIcon={
+                <KeyboardArrowDownRoundedIcon
+                  sx={{ fontSize: '16px !important', ml: -0.5 }}
+                />
+              }
+              onClick={(e) => setSortAnchor(e.currentTarget)}
+              aria-haspopup="menu"
+              sx={{
+                height: 34,
+                px: 1.35,
+                flexShrink: 0,
+                textTransform: 'none',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'text.secondary',
+                borderColor: tokens.hairlineStrong,
+              }}
+            >
+              {sortLabels[sort]}
+            </Button>
+            <Menu
+              anchorEl={sortAnchor}
+              open={!!sortAnchor}
+              onClose={() => setSortAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            >
+              {(['dps', 'original'] as const).map((key) => (
+                <MenuItem
+                  key={key}
+                  dense
+                  selected={sort === key}
+                  onClick={() => {
+                    setSort(key)
+                    setSortAnchor(null)
+                  }}
+                >
+                  {sortLabels[key]}
+                </MenuItem>
+              ))}
+            </Menu>
+            <Tooltip
+              arrow
+              title={
+                showRotations
+                  ? t(
+                      'page_team:teamOpt.versions.hideRotations',
+                      'Hide rotation previews'
+                    )
+                  : t(
+                      'page_team:teamOpt.versions.showRotations',
+                      'Show rotation previews'
+                    )
+              }
+            >
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                aria-pressed={showRotations}
+                startIcon={
+                  <SubjectRoundedIcon sx={{ fontSize: '17px !important' }} />
+                }
+                onClick={() => setShowRotations((v) => !v)}
+                sx={{
+                  height: 34,
+                  px: { xs: 1, sm: 1.35 },
+                  minWidth: 0,
+                  flexShrink: 0,
+                  textTransform: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.75 } },
+                  ...(showRotations
+                    ? {
+                        color: giTokens.goldLight,
+                        borderColor: alpha(giTokens.gold, 0.5),
+                        bgcolor: alpha(giTokens.gold, 0.12),
+                      }
+                    : {
+                        color: 'text.secondary',
+                        borderColor: tokens.hairlineStrong,
+                      }),
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{ display: { xs: 'none', sm: 'inline' } }}
+                >
+                  {t('page_team:teamOpt.versions.rotationsToggle', 'Rotations')}
+                </Box>
+              </Button>
+            </Tooltip>
+            <Tooltip
+              arrow
+              title={
+                selecting
+                  ? t(
+                      'page_team:teamOpt.versions.doneSelecting',
+                      'Exit selection mode'
+                    )
+                  : t(
+                      'page_team:teamOpt.versions.selectMultiple',
+                      'Select versions to delete'
+                    )
+              }
+            >
+              <Button
+                size="small"
+                variant="outlined"
+                color="inherit"
+                aria-pressed={selecting}
+                startIcon={
+                  <ChecklistRoundedIcon sx={{ fontSize: '17px !important' }} />
+                }
+                onClick={() => {
+                  if (selecting) exitSelecting()
+                  else {
+                    setEditing(undefined)
+                    setSelecting(true)
+                  }
+                }}
+                sx={{
+                  height: 34,
+                  px: { xs: 1, sm: 1.35 },
+                  minWidth: 0,
+                  flexShrink: 0,
+                  textTransform: 'none',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  '& .MuiButton-startIcon': { mr: { xs: 0, sm: 0.75 } },
+                  ...(selecting
+                    ? {
+                        color: giTokens.goldLight,
+                        borderColor: alpha(giTokens.gold, 0.5),
+                        bgcolor: alpha(giTokens.gold, 0.12),
+                      }
+                    : {
+                        color: 'text.secondary',
+                        borderColor: tokens.hairlineStrong,
+                      }),
+                }}
+              >
+                <Box
+                  component="span"
+                  sx={{ display: { xs: 'none', sm: 'inline' } }}
+                >
+                  {selecting
+                    ? t('page_team:teamOpt.versions.selectDone', 'Done')
+                    : t('page_team:teamOpt.versions.selectBtn', 'Select')}
+                </Box>
+              </Button>
+            </Tooltip>
+          </Box>
+
+          {/* Single horizontal scrollable character filter strip (only when 3+ teams exist) */}
+          {all.length >= 3 && filterChars.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.625,
+                overflowX: 'auto',
+                pb: 0.25,
+                '&::-webkit-scrollbar': { height: 4 },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: tokens.hairlineStrong,
+                  borderRadius: 4,
+                },
+              }}
+            >
+              {filterChars.map(({ key: ck, count }) => {
+                const selected = activeCharFilter.includes(ck)
+                return (
+                  <ButtonBase
+                    key={ck}
+                    aria-pressed={selected}
+                    onClick={() =>
+                      setCharFilter((prev) =>
+                        prev.includes(ck)
+                          ? prev.filter((k) => k !== ck)
+                          : [...prev, ck]
+                      )
+                    }
+                    sx={(theme) => ({
+                      ...focusSx,
+                      ...quickSx,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      height: 28,
+                      pl: 0.5,
+                      pr: 1,
+                      flexShrink: 0,
+                      borderRadius: tokens.radius.pill,
+                      border: hairline,
+                      bgcolor: tokens.inset,
+                      color: 'text.secondary',
+                      fontSize: 12.5,
+                      fontWeight: 550,
+                      whiteSpace: 'nowrap',
+                      '&:hover': {
+                        borderColor: tokens.hairlineStrong,
+                        color: 'text.primary',
+                      },
+                      ...(selected && {
+                        ...selectedSx(theme),
+                        color: giTokens.goldLight,
+                        fontWeight: 650,
+                      }),
+                    })}
+                  >
+                    <MemberAvatar characterKey={ck} size={20} />
+                    <span>{charName(ck)}</span>
+                    <Box
+                      component="span"
+                      sx={{ ...numSx, opacity: 0.6, fontSize: 11.5 }}
+                    >
+                      {count}
+                    </Box>
+                  </ButtonBase>
+                )
+              })}
+              {hasActiveFilter && (
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() => {
+                    setQuery('')
+                    setCharFilter([])
+                  }}
+                  sx={{
+                    minHeight: 26,
+                    minWidth: 0,
+                    px: 1,
+                    fontSize: 12.5,
+                    flexShrink: 0,
+                    color: 'text.secondary',
+                  }}
+                >
+                  {t('page_team:teamOpt.versions.clearFilters', 'Clear')}
+                </Button>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Scrollable versions list */}
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          px: { xs: 1.5, sm: 3 },
+          py: 2,
+        }}
+      >
+        {hasActiveFilter && displayed.length > 0 && (
+          <Typography sx={{ ...type.label, ...numSx, fontSize: 12, mb: 1 }}>
+            {t('page_team:teamOpt.versions.showingCount', {
+              defaultValue: 'Showing {{shown}} of {{total}}',
+              shown: displayed.length,
+              total: all.length,
+            })}
+          </Typography>
+        )}
+        <Box sx={{ ...insetSx, overflow: 'hidden' }}>
+          {displayed.length === 0 ? (
+            <Box
+              sx={{
+                px: 2,
+                py: 4,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1,
+                textAlign: 'center',
+              }}
+            >
+              <Typography sx={type.label}>
+                {t(
+                  'page_team:teamOpt.versions.noMatches',
+                  'No versions match the current filter.'
+                )}
+              </Typography>
               <Button
                 size="small"
                 color="inherit"
-                onClick={() => stopVersionRuns(database)}
+                onClick={() => {
+                  setQuery('')
+                  setCharFilter([])
+                }}
               >
-                {t('teamOpt.versions.stop', 'Stop')}
+                {t('page_team:teamOpt.versions.clearFilters', 'Clear')}
               </Button>
-            ) : (
-              <>
-                {toRun.length > 0 && toRun.length < all.length && (
-                  <Button
-                    size="small"
-                    color="inherit"
-                    onClick={() => run(all.map((r) => r.id))}
-                    sx={{ minHeight: 32 }}
-                  >
-                    {t('teamOpt.versions.runEvery', 'Run all')}
-                  </Button>
-                )}
-                <Button
-                  size="small"
-                  variant="contained"
-                  endIcon={<ArrowForwardIcon />}
-                  onClick={() =>
-                    run((toRun.length > 0 ? toRun : all).map((r) => r.id))
+            </Box>
+          ) : (
+            displayed.map((row) => {
+              const isOriginal = row.id === rootId
+              return (
+                <Fragment key={row.id}>
+                  <VersionLine
+                    row={row}
+                    original={isOriginal}
+                    current={row.id === teamId}
+                    rootMembers={rows.root.members}
+                    rootKqm={rootKqm}
+                    rank={hasVersions ? rankById.get(row.id) : undefined}
+                    maxDps={hasVersions ? maxDps : undefined}
+                    showRotation={showRotations}
+                    selecting={selecting}
+                    selected={selectedIds.has(row.id)}
+                    onToggleSelect={() => toggleSelectId(row.id)}
+                    queued={queue.includes(row.id)}
+                    editing={editing === row.id}
+                    onOpen={() => open(row.id)}
+                    onRun={() => run([row.id])}
+                    onEdit={() =>
+                      setEditing((now) => (now === row.id ? undefined : row.id))
+                    }
+                    onDuplicate={() => setCreating({ from: row.id })}
+                    onToggleTeams={() =>
+                      setShowInTeams(database, row.id, !row.showInTeams)
+                    }
+                    onMakeOriginal={() => {
+                      if (!makeOriginal(database, row.id, { i18n, gender }))
+                        return
+                      setPanelFor(row.id)
+                    }}
+                    onDelete={() => {
+                      if (queue.includes(row.id)) stopVersionRuns(database)
+                      if (row.id !== teamId) {
+                        database.teams.remove(row.id)
+                        return
+                      }
+                      removeOnLeaving = row.id
+                      navigate(`/teams/${rootId}/kqm`)
+                    }}
+                  />
+                  <Collapse in={editing === row.id} timeout={180} unmountOnExit>
+                    <VersionRotationEditor
+                      teamId={row.id}
+                      onClose={() => setEditing(undefined)}
+                      onSaved={() => {
+                        setEditing(undefined)
+                        run([row.id])
+                      }}
+                    />
+                  </Collapse>
+                </Fragment>
+              )
+            })
+          )}
+          {!hasVersions && (
+            <Typography
+              sx={{ ...type.label, px: 2, py: 1.75, borderTop: hairline }}
+            >
+              {t(
+                'page_team:teamOpt.versions.noVariants',
+                'Create a variant to compare lineups, constellations, or signature weapons using this team’s KQM settings.'
+              )}
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {/* Sticky footer: bulk delete bar while selecting, else run bar */}
+      {selecting && hasVersions ? (
+        <Box
+          sx={{
+            borderTop: hairline,
+            bgcolor: tokens.panel,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 1,
+            px: { xs: 1.5, sm: 3 },
+            py: 1.25,
+          }}
+        >
+          <Typography sx={{ ...type.body, fontWeight: 600, ...numSx }}>
+            {t('page_team:teamOpt.versions.selectedCount', {
+              defaultValue: '{{count}} selected',
+              count: activeSelectedIds.length,
+            })}
+          </Typography>
+          {displayedDeletableIds.length > 0 && (
+            <Button
+              size="small"
+              color="inherit"
+              onClick={() =>
+                setSelectedIds((prev) => {
+                  const next = new Set(prev)
+                  if (allDisplayedSelected) {
+                    for (const id of displayedDeletableIds) next.delete(id)
+                  } else {
+                    for (const id of displayedDeletableIds) next.add(id)
                   }
-                  sx={{ ...giCtaSx, minHeight: 32 }}
-                >
-                  {toRun.length > 0
-                    ? t('teamOpt.versions.runAll', {
-                        defaultValue: 'Run {{count}}',
+                  return next
+                })
+              }
+              sx={{
+                minHeight: 30,
+                textTransform: 'none',
+                color: 'text.secondary',
+              }}
+            >
+              {allDisplayedSelected
+                ? t('page_team:teamOpt.versions.deselectAll', 'Deselect all')
+                : t('page_team:teamOpt.versions.selectAll', 'Select all')}
+            </Button>
+          )}
+          <Box sx={{ flex: 1 }} />
+          <Button
+            size="small"
+            color="inherit"
+            onClick={exitSelecting}
+            sx={{ minHeight: 32, textTransform: 'none' }}
+          >
+            {t('page_team:teamOpt.versions.cancel', 'Cancel')}
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            variant="contained"
+            disabled={activeSelectedIds.length === 0}
+            startIcon={<DeleteOutlineIcon />}
+            onClick={() => setConfirmBulkDelete(true)}
+            sx={{ minHeight: 32, textTransform: 'none', fontWeight: 600 }}
+          >
+            {t('page_team:teamOpt.versions.deleteSelected', {
+              defaultValue: 'Delete {{count}}',
+              count: activeSelectedIds.length,
+            })}
+          </Button>
+        </Box>
+      ) : (
+        (hasVersions || toRun.length > 0 || running) && (
+          <Box
+            sx={{
+              position: 'relative',
+              borderTop: hairline,
+              bgcolor: tokens.panel,
+              flexShrink: 0,
+            }}
+          >
+            {running && (
+              <LinearProgress
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 2,
+                  bgcolor: 'transparent',
+                  '& .MuiLinearProgress-bar': { bgcolor: giTokens.gold },
+                }}
+              />
+            )}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: { xs: 1.5, sm: 3 },
+                py: 1.25,
+              }}
+            >
+              <Typography sx={{ ...type.label, flex: 1, minWidth: 0 }}>
+                {running
+                  ? t('page_team:teamOpt.versions.running', {
+                      defaultValue:
+                        'Running {{count}} in the background: you can keep working',
+                      count: queue.length,
+                    })
+                  : toRun.length > 0
+                    ? t('page_team:teamOpt.versions.toRun', {
+                        defaultValue: '{{count}} not run with these settings',
                         count: toRun.length,
                       })
-                    : t('teamOpt.versions.runEvery', 'Run all')}
+                    : t(
+                        'page_team:teamOpt.versions.allRun',
+                        'All run with these settings'
+                      )}
+              </Typography>
+              {running ? (
+                <Button
+                  size="small"
+                  color="inherit"
+                  onClick={() => stopVersionRuns(database)}
+                >
+                  {t('page_team:teamOpt.versions.stop', 'Stop')}
                 </Button>
-              </>
-            )}
+              ) : (
+                <>
+                  {toRun.length > 0 && toRun.length < all.length && (
+                    <Button
+                      size="small"
+                      color="inherit"
+                      onClick={() => run(all.map((r) => r.id))}
+                      sx={{ minHeight: 32 }}
+                    >
+                      {t('page_team:teamOpt.versions.runEvery', 'Run all')}
+                    </Button>
+                  )}
+                  <Button
+                    size="small"
+                    variant="contained"
+                    endIcon={<ArrowForwardIcon />}
+                    onClick={() =>
+                      run((toRun.length > 0 ? toRun : all).map((r) => r.id))
+                    }
+                    sx={{ ...giCtaSx, minHeight: 32 }}
+                  >
+                    {toRun.length > 0
+                      ? t('page_team:teamOpt.versions.runAll', {
+                          defaultValue: 'Run {{count}}',
+                          count: toRun.length,
+                        })
+                      : t('page_team:teamOpt.versions.runEvery', 'Run all')}
+                  </Button>
+                </>
+              )}
+            </Box>
           </Box>
-        )}
-      </Box>
+        )
+      )}
+
+      {confirmBulkDelete && (
+        <ModalWrapper
+          open
+          onClose={() => setConfirmBulkDelete(false)}
+          containerProps={{ maxWidth: 'xs' }}
+        >
+          <CardThemed sx={{ p: 2 }}>
+            <Typography sx={type.title}>
+              {t('page_team:teamOpt.versions.bulkDeleteTitle', {
+                defaultValue: 'Delete {{count}} versions?',
+                count: activeSelectedIds.length,
+              })}
+            </Typography>
+            <Typography sx={{ ...type.label, mt: 1 }}>
+              {t(
+                'page_team:teamOpt.versions.bulkDeleteText',
+                'The selected versions, their rotations, and their results are permanently deleted. The original stays.'
+              )}
+            </Typography>
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 1,
+                mt: 2,
+              }}
+            >
+              <Button
+                color="inherit"
+                onClick={() => setConfirmBulkDelete(false)}
+              >
+                {t('page_team:teamOpt.versions.cancel', 'Cancel')}
+              </Button>
+              <Button
+                color="error"
+                variant="contained"
+                onClick={deleteSelected}
+              >
+                {t('page_team:teamOpt.versions.deleteSelected', {
+                  defaultValue: 'Delete {{count}}',
+                  count: activeSelectedIds.length,
+                })}
+              </Button>
+            </Box>
+          </CardThemed>
+        </ModalWrapper>
+      )}
+
       {creating && (
         <NewVersionDialog
           teamId={rootId}
@@ -546,6 +1335,7 @@ export function KqmVersions({
             constellations,
             name,
             signature,
+            showInTeams,
             keepTeammates
           ) => {
             const id = createVersion(
@@ -558,11 +1348,19 @@ export function KqmVersions({
               name,
               creating.from,
               signature,
+              showInTeams,
               keepTeammates
             )
             if (id) run([id])
             return !!id
           }}
+        />
+      )}
+      {combining && (
+        <VersionCombosDialog
+          teamId={rootId}
+          onClose={() => setCombining(false)}
+          onCreated={(ids) => run(ids)}
         />
       )}
     </Box>
@@ -574,12 +1372,20 @@ function VersionLine({
   original,
   current,
   rootMembers,
+  rootKqm,
+  rank,
+  maxDps,
+  showRotation,
+  selecting,
+  selected,
+  onToggleSelect,
   queued,
   editing,
   onOpen,
   onRun,
   onEdit,
   onDuplicate,
+  onToggleTeams,
   onMakeOriginal,
   onDelete,
 }: {
@@ -587,6 +1393,13 @@ function VersionLine({
   original: boolean
   current: boolean
   rootMembers: CharacterKey[]
+  rootKqm?: TeamOptKqm
+  rank?: number
+  maxDps?: number
+  showRotation: boolean
+  selecting: boolean
+  selected: boolean
+  onToggleSelect: () => void
   queued: boolean
   /** Its rotation is open to edit under it */
   editing: boolean
@@ -595,11 +1408,15 @@ function VersionLine({
   onEdit: () => void
   /** Opens the New version window as a copy of it */
   onDuplicate: () => void
+  /** Pins or hides this version on the main Teams tab */
+  onToggleTeams: () => void
   /** Makes it the family's original */
   onMakeOriginal: () => void
   onDelete: () => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
+  const { gender } = useDBMeta()
+  const database = useDatabase()
   const theme = useTheme()
   const narrow = useMediaQuery(theme.breakpoints.down('sm'))
   const { state } = useKqmRun(row.id)
@@ -616,212 +1433,541 @@ function VersionLine({
       : early.result.after.total)
   const shown = row.summary
   const status = runningNow
-    ? t('teamOpt.versions.statusRunning', {
+    ? t('page_team:teamOpt.versions.statusRunning', {
         defaultValue: 'Running {{percent}}%',
         percent: Math.round((step?.progress ?? 0) * 100),
       })
     : queued
-      ? t('teamOpt.versions.statusQueued', 'Waiting')
+      ? t('page_team:teamOpt.versions.statusQueued', 'Waiting')
       : !shown
-        ? t('teamOpt.versions.statusNew', 'Not run')
+        ? t('page_team:teamOpt.versions.statusNew', 'Not run')
         : !row.fresh
-          ? t('teamOpt.versions.statusStale', 'Out of date')
+          ? t('page_team:teamOpt.versions.statusStale', 'Out of date')
           : undefined
+
+  // Auto-named versions display the clean 4-member roster on one line (highlighting changed
+  // members) while constellation & signature badges live directly on the character portraits.
+  const autoName = useMemo(
+    () => versionName(row.members, row.cons, { i18n, gender }, row.sig),
+    [row.members, row.cons, row.sig, i18n, gender]
+  )
+  const usesAutoName =
+    !original && (row.name === autoName || row.name.startsWith(`${autoName} (`))
+  const duplicateSuffix =
+    usesAutoName && row.name.length > autoName.length
+      ? row.name.slice(autoName.length)
+      : ''
+
+  const charName = (ck: CharacterKey) =>
+    t(`charNames_gen:${charKeyToLocGenderedCharKey(ck, gender)}`)
+
+  const barRatio =
+    row.value !== undefined && maxDps && maxDps > 0
+      ? Math.max(0, Math.min(1, row.value / maxDps))
+      : undefined
+
+  const rotationPreview = useMemo(() => {
+    if (!showRotation) return undefined
+    const rot = writtenRotationOf(database, kqmRotationId(row.id))
+    if (!rot.text.trim()) return undefined
+    return {
+      rot,
+      names: memberNamesOf(
+        row.members.map((characterKey) => ({ characterKey })),
+        i18n,
+        gender
+      ),
+    }
+  }, [showRotation, database, row.id, row.members, i18n, gender])
+
+  const metaLine =
+    status ??
+    (shown?.rotationTime !== undefined
+      ? t('page_team:teamOpt.versions.rotation', {
+          defaultValue: '{{seconds}} s',
+          seconds: shown.rotationTime.toFixed(1),
+        })
+      : t('page_team:teamOpt.versions.done', 'Up to date'))
+
+  const progressPct = Math.round((step?.progress ?? 0) * 100)
+
   return (
     <Box
       sx={(theme) => ({
+        position: 'relative',
         display: 'flex',
-        alignItems: { xs: 'flex-start', sm: 'center' },
-        gap: 1,
+        flexDirection: 'column',
         '& + &': { borderTop: hairline },
-        ...(current
-          ? { bgcolor: alpha(theme.palette.primary.main, 0.06) }
-          : rowHoverSx),
+        ...(selecting && selected
+          ? {
+              bgcolor: alpha(theme.palette.error.main, 0.08),
+              boxShadow: `inset 3px 0 0 ${alpha(theme.palette.error.main, 0.7)}`,
+            }
+          : current
+            ? {
+                bgcolor: alpha(theme.palette.primary.main, 0.065),
+                boxShadow: `inset 3px 0 0 ${giTokens.gold}`,
+              }
+            : rowHoverSx),
+        '& .ver-row-action': {
+          opacity: editing ? 1 : 0.48,
+          transition: 'opacity 140ms ease, color 140ms ease',
+        },
+        '&:hover .ver-row-action, &:focus-within .ver-row-action': {
+          opacity: 1,
+        },
       })}
     >
-      <ButtonBase
-        onClick={current ? undefined : onOpen}
-        disabled={current}
-        aria-label={row.name}
+      <Box
         sx={{
-          ...focusSx,
-          flex: 1,
-          minWidth: 0,
-          display: { xs: 'grid', sm: 'flex' },
-          gridTemplateColumns: 'auto minmax(0, 1fr) auto auto',
-          gridTemplateAreas: '"faces . value chevron" "text text text text"',
-          columnGap: 1.5,
-          rowGap: 0.75,
-          alignItems: 'center',
-          justifyContent: 'flex-start',
-          textAlign: 'left',
-          px: 1.5,
-          py: { xs: 1.25, sm: 1 },
-          borderRadius: 0,
+          display: 'flex',
+          alignItems: { xs: 'flex-start', sm: 'center' },
+          gap: 0.5,
         }}
       >
-        <Box sx={{ gridArea: 'faces', display: 'flex', flexShrink: 0 }}>
-          {row.members.map((k) => {
-            const swapped =
-              !original && (!rootMembers.includes(k) || k in row.cons)
-            return (
-              <Box
-                key={k}
-                sx={(theme) => ({
-                  ml: { xs: '-9px', sm: '-4px' },
-                  '&:first-of-type': { ml: 0 },
-                  borderRadius: '50%',
-                  lineHeight: 0,
-                  boxShadow: swapped
-                    ? `0 0 0 2px ${theme.palette.primary.main}`
-                    : `0 0 0 2px ${tokens.inset}`,
-                  zIndex: swapped ? 1 : 0,
-                })}
-              >
-                <MemberAvatar characterKey={k} size={28} />
-              </Box>
-            )
-          })}
-        </Box>
-        <Box sx={{ gridArea: 'text', flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography
-              sx={{
-                ...type.body,
-                fontWeight: 600,
-                lineHeight: 1.3,
-                display: '-webkit-box',
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                overflowWrap: 'anywhere',
+        {selecting && (
+          <Box
+            sx={{
+              pl: { xs: 1, sm: 1.5 },
+              pr: 0,
+              mt: { xs: '12px', sm: 0 },
+              display: 'flex',
+              alignItems: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Checkbox
+              size="small"
+              disabled={original}
+              checked={!original && selected}
+              onChange={onToggleSelect}
+              inputProps={{
+                'aria-label': t('page_team:teamOpt.versions.selectRow', {
+                  defaultValue: 'Select {{name}}',
+                  name: row.name,
+                }),
               }}
-            >
-              {row.name}
-            </Typography>
-            {(original || row.keeps) && (
-              <Box
-                component="span"
-                sx={{
-                  ...type.label,
-                  fontSize: 11,
-                  px: 0.75,
-                  py: '1px',
-                  borderRadius: tokens.radius.pill,
-                  border: hairline,
-                  flexShrink: 0,
-                }}
-              >
-                {original
-                  ? t('teamOpt.versions.original', 'Original')
-                  : t('teamOpt.versions.keptTag', "Teammates' gear kept")}
-              </Box>
-            )}
+              sx={{
+                p: 0.5,
+                visibility: original ? 'hidden' : 'visible',
+              }}
+            />
           </Box>
-          <Typography noWrap sx={{ ...type.label, ...numSx }}>
-            {status ??
-              (shown?.rotationTime !== undefined
-                ? t('teamOpt.versions.rotation', {
-                    defaultValue: '{{seconds}} s',
-                    seconds: shown.rotationTime.toFixed(1),
-                  })
-                : t('teamOpt.versions.done', 'Up to date'))}
-          </Typography>
-        </Box>
-        <Box sx={{ gridArea: 'value', textAlign: 'right', flexShrink: 0 }}>
-          {runningNow ? (
-            <Box
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
-              aria-live="polite"
-            >
-              {earlyValue !== undefined && (
-                <Typography
-                  sx={{ ...type.body, ...numSx, color: 'text.secondary' }}
-                >
-                  ≈{formatRateFull(earlyValue, undefined)}
-                </Typography>
-              )}
-              <CircularProgress
-                size={16}
-                thickness={5}
-                variant={step?.progress ? 'determinate' : 'indeterminate'}
-                value={(step?.progress ?? 0) * 100}
-              />
-            </Box>
-          ) : (
+        )}
+        <ButtonBase
+          onClick={
+            selecting
+              ? original
+                ? undefined
+                : onToggleSelect
+              : current
+                ? undefined
+                : onOpen
+          }
+          disabled={selecting ? original : current}
+          aria-label={row.name}
+          sx={{
+            ...focusSx,
+            flex: 1,
+            minWidth: 0,
+            display: { xs: 'grid', sm: 'flex' },
+            gridTemplateColumns: 'auto auto minmax(0, 1fr) auto',
+            gridTemplateAreas: '"rank faces . value" "text text text text"',
+            columnGap: 1.75,
+            rowGap: 0.75,
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            textAlign: 'left',
+            pl: selecting ? 0.5 : { xs: 1.5, sm: 2 },
+            pr: selecting ? 2 : 1,
+            py: 1.35,
+            borderRadius: 0,
+          }}
+        >
+          {maxDps !== undefined && (
             <Typography
+              component="span"
               sx={{
-                ...type.body,
+                gridArea: 'rank',
+                width: 22,
+                textAlign: 'right',
+                flexShrink: 0,
                 ...numSx,
-                fontWeight: 650,
-                color: row.fresh ? 'text.primary' : 'text.disabled',
+                fontSize: rank === 1 ? 14 : 13,
+                fontWeight: rank === 1 ? 750 : 550,
+                color:
+                  rank === 1 && row.fresh
+                    ? giTokens.goldLight
+                    : 'text.disabled',
               }}
             >
-              {row.value !== undefined
-                ? formatRateFull(row.value, undefined)
-                : '–'}
+              {rank !== undefined ? rank : '–'}
             </Typography>
           )}
-        </Box>
-        <ChevronRightIcon
-          fontSize="small"
+          <Box
+            sx={{
+              gridArea: 'faces',
+              display: 'flex',
+              gap: 0.75,
+              flexShrink: 0,
+            }}
+          >
+            {row.members.map((k) => {
+              const effCons = row.cons[k] ?? kqmMemberConstellation(k, rootKqm)
+              const ownCons = !original && k in row.cons
+              const sigRef = row.sig[k]
+              const highlighted =
+                !original &&
+                (!rootMembers.includes(k) || ownCons || sigRef !== undefined)
+              const tipParts = [
+                `${charName(k)} C${effCons}`,
+                sigRef !== undefined ? (sigRef ? `R${sigRef}` : 'no sig') : '',
+              ].filter(Boolean)
+              return (
+                <Tooltip key={k} arrow title={tipParts.join(' · ')}>
+                  <Box sx={{ lineHeight: 0 }}>
+                    <VersionPortrait
+                      characterKey={k}
+                      size={44}
+                      constellation={effCons}
+                      ownConstellation={ownCons}
+                      signature={sigRef}
+                      highlighted={highlighted}
+                    />
+                  </Box>
+                </Tooltip>
+              )
+            })}
+          </Box>
+          <Box sx={{ gridArea: 'text', flex: 1, minWidth: 0 }}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.875,
+                minWidth: 0,
+              }}
+            >
+              {usesAutoName ? (
+                <Typography
+                  noWrap
+                  title={row.name}
+                  sx={{
+                    fontSize: 14.5,
+                    lineHeight: 1.35,
+                    minWidth: 0,
+                  }}
+                >
+                  {row.members.map((k, idx) => {
+                    const changed =
+                      !rootMembers.includes(k) || k in row.cons || k in row.sig
+                    return (
+                      <Fragment key={k}>
+                        {idx > 0 && (
+                          <Box
+                            component="span"
+                            sx={{ color: 'text.disabled', mx: 0.625 }}
+                          >
+                            ·
+                          </Box>
+                        )}
+                        <Box
+                          component="span"
+                          sx={{
+                            fontWeight: changed ? 650 : 500,
+                            color: changed ? 'text.primary' : 'text.secondary',
+                          }}
+                        >
+                          {charName(k)}
+                        </Box>
+                      </Fragment>
+                    )
+                  })}
+                  {duplicateSuffix && (
+                    <Box
+                      component="span"
+                      sx={{ color: 'text.secondary', fontWeight: 500 }}
+                    >
+                      {duplicateSuffix}
+                    </Box>
+                  )}
+                </Typography>
+              ) : (
+                <Typography
+                  noWrap
+                  title={row.name}
+                  sx={{
+                    fontSize: 14.5,
+                    fontWeight: 650,
+                    lineHeight: 1.35,
+                    color: 'text.primary',
+                    minWidth: 0,
+                  }}
+                >
+                  {row.name}
+                </Typography>
+              )}
+              {original && (
+                <Box
+                  component="span"
+                  sx={{
+                    ...type.label,
+                    fontSize: 11,
+                    px: 0.75,
+                    py: '1px',
+                    borderRadius: tokens.radius.pill,
+                    border: hairline,
+                    flexShrink: 0,
+                  }}
+                >
+                  {t('page_team:teamOpt.versions.original', 'Original')}
+                </Box>
+              )}
+              {/* juanlab: a version whose teammates keep the original's gear */}
+              {!original && row.keeps && (
+                <Box
+                  component="span"
+                  sx={{
+                    ...type.label,
+                    fontSize: 11,
+                    px: 0.75,
+                    py: '1px',
+                    borderRadius: tokens.radius.pill,
+                    border: hairline,
+                    flexShrink: 0,
+                  }}
+                >
+                  {t(
+                    'page_team:teamOpt.versions.keptTag',
+                    "Teammates' gear kept"
+                  )}
+                </Box>
+              )}
+              {!original && row.showInTeams && (
+                <Tooltip
+                  arrow
+                  title={t(
+                    'page_team:teamOpt.versions.inTeamsTip',
+                    'Shown on the main Teams tab'
+                  )}
+                >
+                  <Box
+                    component="span"
+                    sx={{
+                      ...type.label,
+                      fontSize: 11,
+                      px: 0.75,
+                      py: '1px',
+                      borderRadius: tokens.radius.pill,
+                      border: hairline,
+                      color: 'text.secondary',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {t('page_team:teamOpt.versions.inTeams', 'In Teams')}
+                  </Box>
+                </Tooltip>
+              )}
+            </Box>
+            <Typography
+              noWrap
+              sx={{ ...type.label, ...numSx, fontSize: 12.5, mt: 0.25 }}
+            >
+              {metaLine}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              gridArea: 'value',
+              textAlign: 'right',
+              flexShrink: 0,
+              minWidth: 92,
+            }}
+          >
+            {runningNow ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 0.875,
+                }}
+                aria-live="polite"
+              >
+                {earlyValue !== undefined && (
+                  <Typography
+                    sx={{
+                      fontSize: 15,
+                      fontWeight: 600,
+                      ...numSx,
+                      color: 'text.secondary',
+                    }}
+                  >
+                    ≈{formatRateFull(earlyValue, undefined, i18n?.language)}
+                  </Typography>
+                )}
+                <Box
+                  sx={{
+                    position: 'relative',
+                    display: 'inline-flex',
+                    width: 18,
+                    height: 18,
+                    flexShrink: 0,
+                  }}
+                >
+                  <CircularProgress
+                    variant="determinate"
+                    value={100}
+                    size={18}
+                    thickness={5}
+                    sx={{
+                      color: alpha(giTokens.parchment, 0.14),
+                      position: 'absolute',
+                    }}
+                  />
+                  <CircularProgress
+                    size={18}
+                    thickness={5}
+                    variant={progressPct >= 8 ? 'determinate' : 'indeterminate'}
+                    value={progressPct}
+                    sx={{ color: giTokens.gold }}
+                  />
+                </Box>
+              </Box>
+            ) : (
+              <Typography
+                sx={{
+                  fontSize: 16,
+                  lineHeight: 1.2,
+                  letterSpacing: '-0.015em',
+                  ...numSx,
+                  fontWeight: 700,
+                  color:
+                    row.value === undefined
+                      ? 'text.disabled'
+                      : row.fresh
+                        ? rank === 1
+                          ? giTokens.goldLight
+                          : 'text.primary'
+                        : 'text.disabled',
+                }}
+              >
+                {row.value !== undefined
+                  ? formatRateFull(row.value, undefined, i18n?.language)
+                  : '–'}
+              </Typography>
+            )}
+          </Box>
+        </ButtonBase>
+
+        {/* Compact aligned right actions — hidden while bulk-selecting to keep focus clean */}
+        {!selecting && (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.25,
+              pr: 1,
+              mt: { xs: '10px', sm: 0 },
+              flexShrink: 0,
+            }}
+          >
+            {!runningNow && !queued && !row.fresh && (
+              <Button size="small" onClick={onRun} sx={{ minWidth: 0, px: 1 }}>
+                {t('page_team:teamOpt.versions.run', 'Run')}
+              </Button>
+            )}
+            {!narrow && (
+              <Tooltip
+                title={t(
+                  'page_team:teamOpt.versions.editRotation',
+                  'Edit its rotation'
+                )}
+              >
+                <IconButton
+                  className="ver-row-action"
+                  size="small"
+                  onClick={onEdit}
+                  aria-label={t(
+                    'page_team:teamOpt.versions.editRotation',
+                    'Edit its rotation'
+                  )}
+                  aria-expanded={editing}
+                  sx={{ color: editing ? 'primary.main' : 'text.secondary' }}
+                >
+                  <EditOutlinedIcon sx={{ fontSize: 17 }} />
+                </IconButton>
+              </Tooltip>
+            )}
+            <IconButton
+              className="ver-row-action"
+              size="small"
+              onClick={(e) => setMenu(e.currentTarget)}
+              aria-label={t('page_team:teamOpt.versions.more', 'More')}
+              aria-haspopup="menu"
+              sx={{
+                color: editing && narrow ? 'primary.main' : 'text.secondary',
+                '&:hover': { color: 'text.primary' },
+              }}
+            >
+              <MoreVertRoundedIcon sx={{ fontSize: 18 }} />
+            </IconButton>
+          </Box>
+        )}
+      </Box>
+
+      {/* Recessed rotation preview strip */}
+      {rotationPreview && !editing && (
+        <Box
           sx={{
-            gridArea: 'chevron',
-            color: 'text.disabled',
-            flexShrink: 0,
-            visibility: current ? 'hidden' : undefined,
+            ml:
+              maxDps !== undefined ? { xs: 1.5, sm: 6.25 } : { xs: 1.5, sm: 2 },
+            mr: { xs: 1.5, sm: 2 },
+            mb: 1.25,
+            px: 1.25,
+            py: 0.625,
+            borderRadius: tokens.radius.control,
+            bgcolor: alpha(giTokens.parchment, 0.028),
+            border: hairline,
+            '& span': { fontSize: '12.5px !important' },
           }}
-        />
-      </ButtonBase>
-      {canRerun && !narrow && (
-        <Tooltip title={t('teamOpt.versions.runAgain', 'Run again')}>
-          <IconButton
-            size="small"
-            onClick={onRun}
-            aria-label={t('teamOpt.versions.runAgain', 'Run again')}
-            sx={{ color: 'text.disabled' }}
-          >
-            <ReplayRoundedIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
-      {!runningNow && !queued && !row.fresh && (
-        <Button
-          size="small"
-          onClick={onRun}
-          sx={{ minWidth: 0, mr: -0.5, mt: { xs: '9px', sm: 0 } }}
         >
-          {t('teamOpt.versions.run', 'Run')}
-        </Button>
+          <RotationReadout
+            text={rotationPreview.rot.text}
+            opener={rotationPreview.rot.opener}
+            counted={false}
+            names={rotationPreview.names}
+          />
+        </Box>
       )}
-      {!narrow && (
-        <Tooltip
-          title={t('teamOpt.versions.editRotation', 'Edit its rotation')}
+
+      {/* Subtle proportional DPS bar */}
+      {barRatio !== undefined && (
+        <Box
+          aria-hidden
+          sx={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 2,
+            pointerEvents: 'none',
+          }}
         >
-          <IconButton
-            size="small"
-            onClick={onEdit}
-            aria-label={t('teamOpt.versions.editRotation', 'Edit its rotation')}
-            aria-expanded={editing}
-            sx={{ color: editing ? 'primary.main' : 'text.disabled' }}
-          >
-            <EditOutlinedIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+          <Box
+            sx={{
+              height: '100%',
+              width: `${barRatio * 100}%`,
+              bgcolor:
+                rank === 1 && row.fresh
+                  ? alpha(giTokens.gold, 0.5)
+                  : alpha(giTokens.parchment, row.fresh ? 0.1 : 0.045),
+              transition: `width 240ms ${tokens.ease}`,
+            }}
+          />
+        </Box>
       )}
-      <IconButton
-        size="small"
-        onClick={(e) => setMenu(e.currentTarget)}
-        aria-label={t('teamOpt.versions.more', 'More')}
-        aria-haspopup="menu"
-        sx={{
-          mr: 1,
-          mt: { xs: '10px', sm: 0 },
-          color: editing && narrow ? 'primary.main' : 'text.disabled',
-        }}
-      >
-        <MoreVertRoundedIcon fontSize="small" />
-      </IconButton>
+
       <Menu
         anchorEl={menu}
         open={!!menu}
@@ -829,7 +1975,7 @@ function VersionLine({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {narrow && canRerun && (
+        {canRerun && (
           <MenuItem
             onClick={() => {
               setMenu(null)
@@ -839,7 +1985,7 @@ function VersionLine({
             <ListItemIcon>
               <ReplayRoundedIcon fontSize="small" />
             </ListItemIcon>
-            {t('teamOpt.versions.runAgain', 'Run again')}
+            {t('page_team:teamOpt.versions.runAgain', 'Run again')}
           </MenuItem>
         )}
         {narrow && (
@@ -853,7 +1999,32 @@ function VersionLine({
             <ListItemIcon>
               <EditOutlinedIcon fontSize="small" />
             </ListItemIcon>
-            {t('teamOpt.versions.editRotation', 'Edit its rotation')}
+            {t('page_team:teamOpt.versions.editRotation', 'Edit its rotation')}
+          </MenuItem>
+        )}
+        {!original && (
+          <MenuItem
+            onClick={() => {
+              setMenu(null)
+              onToggleTeams()
+            }}
+          >
+            <ListItemIcon>
+              {row.showInTeams ? (
+                <VisibilityOffOutlinedIcon fontSize="small" />
+              ) : (
+                <VisibilityOutlinedIcon fontSize="small" />
+              )}
+            </ListItemIcon>
+            {row.showInTeams
+              ? t(
+                  'page_team:teamOpt.versions.hideFromTeams',
+                  'Hide from Teams tab'
+                )
+              : t(
+                  'page_team:teamOpt.versions.showInTeams',
+                  'Show in Teams tab'
+                )}
           </MenuItem>
         )}
         <MenuItem
@@ -865,7 +2036,7 @@ function VersionLine({
           <ListItemIcon>
             <ContentCopyRoundedIcon fontSize="small" />
           </ListItemIcon>
-          {t('teamOpt.versions.duplicate', 'Duplicate')}
+          {t('page_team:teamOpt.versions.duplicate', 'Duplicate')}
         </MenuItem>
         {!original && (
           <MenuItem
@@ -877,7 +2048,10 @@ function VersionLine({
             <ListItemIcon>
               <StarOutlineRoundedIcon fontSize="small" />
             </ListItemIcon>
-            {t('teamOpt.versions.makeOriginal', 'Make it the original')}
+            {t(
+              'page_team:teamOpt.versions.makeOriginal',
+              'Make it the original'
+            )}
           </MenuItem>
         )}
         {!original && (
@@ -891,7 +2065,7 @@ function VersionLine({
             <ListItemIcon sx={{ color: 'inherit' }}>
               <DeleteOutlineIcon fontSize="small" />
             </ListItemIcon>
-            {t('teamOpt.versions.delete', 'Delete this version')}
+            {t('page_team:teamOpt.versions.delete', 'Delete this version')}
           </MenuItem>
         )}
       </Menu>
@@ -903,14 +2077,14 @@ function VersionLine({
         >
           <CardThemed sx={{ p: 2 }}>
             <Typography sx={type.title}>
-              {t('teamOpt.versions.deleteTitle', {
+              {t('page_team:teamOpt.versions.deleteTitle', {
                 defaultValue: 'Delete “{{name}}”?',
                 name: row.name,
               })}
             </Typography>
             <Typography sx={{ ...type.label, mt: 1 }}>
               {t(
-                'teamOpt.versions.deleteText',
+                'page_team:teamOpt.versions.deleteText',
                 'The version is a team of its own: its team, rotation and results are deleted. The original stays.'
               )}
             </Typography>
@@ -923,7 +2097,7 @@ function VersionLine({
               }}
             >
               <Button color="inherit" onClick={() => setConfirm(false)}>
-                {t('teamOpt.versions.cancel', 'Cancel')}
+                {t('page_team:teamOpt.versions.cancel', 'Cancel')}
               </Button>
               <Button
                 color="error"
@@ -933,7 +2107,7 @@ function VersionLine({
                   onDelete()
                 }}
               >
-                {t('teamOpt.versions.deleteConfirm', 'Delete')}
+                {t('page_team:teamOpt.versions.deleteConfirm', 'Delete')}
               </Button>
             </Box>
           </CardThemed>
@@ -966,6 +2140,8 @@ function NewVersionDialog({
     constellations?: Partial<Record<CharacterKey, number>>,
     name?: string,
     signature?: Partial<Record<CharacterKey, number>>,
+    showInTeams?: boolean,
+    /** juanlab: its teammates keep the original's builds */
     keepTeammates?: boolean
   ) => boolean
 }) {
@@ -996,6 +2172,7 @@ function NewVersionDialog({
   const [picking, setPicking] = useState<CharacterKey>()
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [showInTeams, setShowInTeams] = useState(false)
   // its rotation: the copied team's, the original's swapped, or a template's, as chosen; then as
   // edited
   const firstChoice = copied ? 'copy' : 'own'
@@ -1146,7 +2323,7 @@ function NewVersionDialog({
                       defaultValue: 'Duplicate “{{name}}”',
                       name: copied.name,
                     })
-                  : t('teamOpt.versions.newTitle', 'New version')}
+                  : t('teamOpt.versions.newVariant', 'New variant')}
               </Typography>
             </Box>
             <IconButton
@@ -1445,10 +2622,30 @@ function NewVersionDialog({
               display: 'flex',
               justifyContent: 'flex-end',
               alignItems: 'center',
+              flexWrap: 'wrap',
               gap: 1,
               mt: 2,
             }}
           >
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  disabled={busy}
+                  checked={showInTeams}
+                  onChange={(_, checked) => setShowInTeams(checked)}
+                />
+              }
+              label={t(
+                'teamOpt.versions.showInTeamsOption',
+                'Also show in Teams tab'
+              )}
+              sx={{
+                mr: 'auto',
+                ml: -0.5,
+                '& .MuiFormControlLabel-label': { ...type.label },
+              }}
+            />
             <Button color="inherit" onClick={onClose} disabled={busy}>
               {t('teamOpt.versions.cancel', 'Cancel')}
             </Button>
@@ -1476,6 +2673,7 @@ function NewVersionDialog({
                     cons,
                     name ?? defaultName,
                     Object.fromEntries(Object.entries(sig).filter(inTeam)),
+                    showInTeams,
                     keep
                   )
                   setBusy(false)
@@ -1508,11 +2706,21 @@ function NewVersionDialog({
 }
 
 /** On a version's KQM tab: whose version it is, and that their settings are shared */
-export function VersionNote({ rootId }: { rootId: string }) {
+export function VersionNote({
+  rootId,
+  teamId,
+}: {
+  rootId: string
+  teamId?: string
+}) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const navigate = useNavigate()
+  useDataManagerValues(database.teams)
   const name = database.teams.get(rootId)?.name ?? ''
+  const shownInTeams = teamId
+    ? !!database.teams.get(teamId)?.showInTeams
+    : false
   return (
     <Box
       sx={{
@@ -1535,6 +2743,51 @@ export function VersionNote({ rootId }: { rootId: string }) {
           name,
         })}
       </Typography>
+      {teamId && (
+        <Tooltip
+          arrow
+          title={
+            shownInTeams
+              ? t(
+                  'teamOpt.versions.hideFromTeamsTip',
+                  'Shown on the main Teams tab — click to keep it only in Versions.'
+                )
+              : t(
+                  'teamOpt.versions.showInTeamsTip',
+                  'Hidden from the main Teams tab — click to also list it there.'
+                )
+          }
+        >
+          <Button
+            size="small"
+            color="inherit"
+            variant="outlined"
+            startIcon={
+              shownInTeams ? (
+                <VisibilityOutlinedIcon sx={{ fontSize: '16px !important' }} />
+              ) : (
+                <VisibilityOffOutlinedIcon
+                  sx={{ fontSize: '16px !important' }}
+                />
+              )
+            }
+            onClick={() => setShowInTeams(database, teamId, !shownInTeams)}
+            sx={{
+              minHeight: 30,
+              textTransform: 'none',
+              borderColor: shownInTeams
+                ? alpha(giTokens.gold, 0.5)
+                : tokens.hairlineStrong,
+              color: shownInTeams ? giTokens.goldLight : 'text.secondary',
+              bgcolor: shownInTeams ? alpha(giTokens.gold, 0.1) : 'transparent',
+            }}
+          >
+            {shownInTeams
+              ? t('teamOpt.versions.inTeams', 'In Teams')
+              : t('teamOpt.versions.showInTeams', 'Show in Teams tab')}
+          </Button>
+        </Tooltip>
+      )}
       <Button
         size="small"
         endIcon={<ArrowForwardIcon />}
@@ -1543,7 +2796,6 @@ export function VersionNote({ rootId }: { rootId: string }) {
       >
         {t('teamOpt.versions.openOriginal', 'Open the original')}
       </Button>
-      <VersionsButton teamId={rootId} />
     </Box>
   )
 }
@@ -1799,8 +3051,8 @@ function VersionsShare({
             disabled={shown.length < 2}
             onClick={() => setOpen(true)}
             sx={{
-              height: 36,
-              px: 1.75,
+              height: 34,
+              px: 1.5,
               borderRadius: 999,
               textTransform: 'none',
               fontWeight: 650,
@@ -1914,7 +3166,7 @@ function PictureTeams({
   onArrange: (ids: string[]) => void
   onLeave: (ids: string[]) => void
 }) {
-  const { t } = useTranslation('page_team')
+  const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const byId = new Map(rows.map((r) => [r.id, r]))
   const custom = order === 'custom'
@@ -2046,7 +3298,7 @@ function PictureTeams({
                     </Typography>
                     <Typography sx={{ ...type.label, ...numSx }}>
                       {row.value !== undefined
-                        ? formatRateFull(row.value, undefined)
+                        ? formatRateFull(row.value, undefined, i18n?.language)
                         : '–'}
                     </Typography>
                   </Box>
@@ -2218,7 +3470,7 @@ function OptionPill({
  * A rotation and its first rotation to edit, as the writer's boxes: the members' names and the
  * action words a click away (into the box last in focus), what does not read in amber under them
  */
-function RotationFields({
+export function RotationFields({
   names,
   value,
   disabled,

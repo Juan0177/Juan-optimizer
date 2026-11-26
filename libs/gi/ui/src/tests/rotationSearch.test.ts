@@ -12,11 +12,13 @@ import type {
 } from '../'
 import {
   allRotationEdits,
+  candidateRank,
   energyFits,
   erCostOf,
   evaluateTeamNodes,
   fieldAttacks,
   holdsSkill,
+  jitterSwapOffsets,
   kqmArtData,
   kqmWeaponData,
   kqmWeapons,
@@ -401,6 +403,228 @@ describe('the hill climb', () => {
   })
 })
 
+describe('support vocabulary and meaningless cancel pruning', () => {
+  const members = names([
+    'Wriothesley',
+    'YaeMiko',
+    'Odette',
+    'Anastasya',
+    'Mona',
+  ])
+
+  it('keeps idle dashes, jumps and multi-hit combos out of off-field support vocabularies', () => {
+    const steps = rotationWords(
+      'Odette E E -> YaeMiko E E E -> Anastasya E Q -> Wriothesley E N5 C D',
+      members
+    )
+    const vocab = rotationVocabulary(steps)
+    for (const support of ['Odette', 'YaeMiko', 'Anastasya'] as const) {
+      expect(vocab[support]).not.toContain('D')
+      expect(vocab[support]).not.toContain('J')
+      expect(vocab[support]).not.toContain('N2')
+      expect(vocab[support]).not.toContain('N3')
+      expect(vocab[support]).not.toContain('N4')
+      expect(vocab[support]).not.toContain('CA')
+      // Supports still keep N1 (for Favonius/Instructor/Hakushin/coordinated triggers) and skills/bursts
+      expect(vocab[support]).toContain('N1')
+      expect(vocab[support]).toContain('E')
+      expect(vocab[support]).toContain('Q')
+    }
+    expect(vocab.Anastasya).toContain('hE')
+    // Main attacker keeps full combo and cancel vocabulary
+    expect(vocab.Wriothesley).toContain('D')
+    expect(vocab.Wriothesley).toContain('J')
+    expect(vocab.Wriothesley).toContain('N4')
+    expect(vocab.Wriothesley).toContain('CA')
+  })
+
+  it('still allows alt-sprint dashes for Mona and Ayaka even as supports', () => {
+    const steps = rotationWords('Mona E Q -> Wriothesley E N3 C', members)
+    const vocab = rotationVocabulary(steps)
+    expect(vocab.Mona).toContain('D')
+    const edits = rotationEdits(steps, vocab).map(wordsRotationText)
+    expect(edits).toContain('Mona D E Q -> Wriothesley E N3 C')
+  })
+
+  it('prunes leading, consecutive, and trailing non-attack cancels', () => {
+    const steps = rotationWords('Odette E E -> Wriothesley E N3 C D', members)
+    const edits = rotationEdits(steps, {
+      Odette: ['D', 'J', 'E'],
+      Wriothesley: ['D', 'J', 'N3', 'C'],
+    }).map(wordsRotationText)
+    expect(edits.some((t) => /Odette (D|J) E/.test(t))).toBe(false)
+    expect(edits.some((t) => /Odette E E (D|J)/.test(t))).toBe(false)
+    expect(edits.some((t) => /\b(D|J) (D|J)\b/.test(t))).toBe(false)
+    expect(edits.some((t) => /Wriothesley (D|J) E/.test(t))).toBe(false)
+    // Valid cancel right after a field attack is still allowed
+    expect(edits).toContain('Odette E E -> Wriothesley E N3 D C D')
+  })
+
+  it('clamps and deduplicates jitter swap offsets for small base swapFrames', () => {
+    expect(jitterSwapOffsets(12)).toEqual([-4, -2, 2, 4])
+    expect(jitterSwapOffsets(2)).toEqual([-1, 2, 4])
+    expect(jitterSwapOffsets(1)).toEqual([2, 4])
+  })
+
+  it('keeps weave-NA supports off field vocabulary while dual carries keep full combos', () => {
+    const team = names(['Wriothesley', 'Shenhe', 'Zhongli', 'RaidenShogun'])
+    const singleCarry = rotationWords(
+      'Shenhe hE N1 Q -> Zhongli N1 hE D -> Wriothesley E 5[N3 CA J] N3 Q',
+      team
+    )
+    const vocab = rotationVocabulary(singleCarry)
+    for (const support of ['Shenhe', 'Zhongli'] as const) {
+      expect(vocab[support]).not.toContain('N2')
+      expect(vocab[support]).not.toContain('N3')
+      expect(vocab[support]).not.toContain('CA')
+      expect(vocab[support]).not.toContain('J')
+    }
+    expect(vocab.Shenhe).not.toContain('D')
+    expect(vocab.Wriothesley).toContain('N4')
+    expect(vocab.Wriothesley).toContain('D')
+
+    // Dual-carry: a second member with >= 3 field attacks in one step keeps field vocabulary
+    const dualCarry = rotationWords(
+      'Shenhe hE N1 Q -> RaidenShogun Q N3 CA N3 CA N3 -> Wriothesley E 5[N3 CA J]',
+      team
+    )
+    const dualVocab = rotationVocabulary(dualCarry)
+    expect(dualVocab.RaidenShogun).toContain('D')
+    expect(dualVocab.RaidenShogun).toContain('N4')
+    expect(dualVocab.Shenhe).not.toContain('D')
+  })
+
+  it('rejects adjacent normal strings, cyclic duplicate visits, plunge-jump drops, and redundant optionals', () => {
+    const team = names([
+      'Skirk',
+      'Faruzan',
+      'Xiao',
+      'Sucrose',
+      'Clorinde',
+      'Furina',
+    ])
+    // Adjacent normal strings (e.g. N5 D N2 N3, N5 N2, 2[N3]) are unplayable
+    const skirkSteps = rotationWords(
+      'Furina E Q -> Skirk E 2[N3 CA] N5 D N2 -> Furina',
+      team
+    )
+    const skirkEdits = rotationEdits(
+      skirkSteps,
+      rotationVocabulary(skirkSteps)
+    ).map(wordsRotationText)
+    expect(skirkEdits.some((t) => /\bN[1-6]\s+N[1-6]\b/.test(t))).toBe(false)
+    expect(skirkEdits.some((t) => /2\[N[1-6]\]/.test(t))).toBe(false)
+    // Changing N2 -> N5 in place stays allowed
+    expect(skirkEdits).toContain(
+      'Furina E Q -> Skirk E 2[N3 CA] N5 D N5 -> Furina'
+    )
+
+    // Cyclic loop-back duplicate visits (... -> Faruzan E -> Faruzan) are rejected
+    const xiaoSteps = rotationWords(
+      'Faruzan Q -> Xiao E E Q 12[J HP[collision]] -> Faruzan',
+      team
+    )
+    const xiaoEdits = rotationEdits(
+      xiaoSteps,
+      rotationVocabulary(xiaoSteps)
+    ).map(wordsRotationText)
+    expect(xiaoEdits.some((t) => /-> Faruzan [^->]+ -> Faruzan$/.test(t))).toBe(
+      false
+    )
+    // Deleting the jump before Xiao's plunge (`12[J HP[collision]]` -> `12[HP[collision]]`) is rejected
+    expect(xiaoEdits.some((t) => /12\[HP\[collision\]\]/.test(t))).toBe(false)
+
+    // Adjacent optional duplicates (`Q Q?`, `E E?`) are rejected while `Q? -> Q` replacement is offered
+    const optSteps = rotationWords(
+      'Sucrose E N2 Q? -> Clorinde E E 5[N3 E] N3 E? -> Sucrose',
+      team
+    )
+    const optEdits = rotationEdits(optSteps, rotationVocabulary(optSteps)).map(
+      wordsRotationText
+    )
+    expect(optEdits.some((t) => /\bQ\??\s+Q\??\b/.test(t))).toBe(false)
+    expect(optEdits.some((t) => /\bE\s+E\?\b|\bE\?\s+E\b/.test(t))).toBe(false)
+    expect(optEdits).toContain(
+      'Sucrose E N2 Q -> Clorinde E E 5[N3 E] N3 E? -> Sucrose'
+    )
+  })
+})
+
+describe('timing-jitter verification demotes narrow frame-cliff artifacts', () => {
+  const members = names(['Furina', 'Neuvillette'])
+
+  it('demotes a nominal cliff spike below a genuinely stronger rotation', async () => {
+    // Seed: 100. Adding Furina N1 spikes to 108 at nominal (0 offset) but crashes to 96 under
+    // jitter (mean 98.4 < 100). Changing Neuvillette N1 -> N2 is genuinely 104 everywhere!
+    const nominal = (text: string): RotationScore => {
+      const hasN1 = /Furina[^->]*N1/.test(text)
+      const hasN2 = /Neuvillette[^->]*N2/.test(text)
+      const dps = hasN1 ? 108 : hasN2 ? 104 : 100
+      return { dps, time: 20, er: {}, warnings: [] }
+    }
+    const jitter = (text: string): RotationScore[] => {
+      const hasN1 = /Furina[^->]*N1/.test(text)
+      const hasN2 = /Neuvillette[^->]*N2/.test(text)
+      const dps = hasN1 ? 96 : hasN2 ? 104 : 100
+      return [0, 1, 2, 3].map(() => ({ dps, time: 20, er: {}, warnings: [] }))
+    }
+    const result = await searchRotations({
+      seed: 'Furina E Q -> Neuvillette Q E N1 CA',
+      members,
+      score: async (texts) => texts.map(nominal),
+      verify: async (texts) => texts.map(jitter),
+      deadline: Date.now() + 60_000,
+      maxRounds: 2,
+    })
+    expect(result.best[0].text).not.toMatch(/Furina[^->]*N1/)
+    expect(result.best[0].text).toMatch(/Neuvillette[^->]*N2/)
+    expect(candidateRank(result.best[0])).toBeCloseTo(104)
+    const cliff = result.best.find((c) => /Furina[^->]*N1/.test(c.text))
+    if (cliff)
+      expect(candidateRank(cliff)).toBeLessThan(candidateRank(result.seed))
+  })
+
+  it('demotes candidates that trigger new warnings under timing jitter, while tolerating seed warnings', async () => {
+    const result = await searchRotations({
+      seed: 'Furina E Q -> Neuvillette Q E N1 CA',
+      members,
+      score: async (texts) =>
+        texts.map((text) => ({
+          dps: /Furina[^->]*N1/.test(text)
+            ? 115
+            : /Neuvillette[^->]*N2/.test(text)
+              ? 105
+              : 100,
+          time: 20,
+          er: {},
+          warnings: [],
+        })),
+      verify: async (texts) =>
+        texts.map((text) => {
+          const fragile = /Furina[^->]*N1/.test(text)
+          const dps = fragile
+            ? 115
+            : /Neuvillette[^->]*N2/.test(text)
+              ? 105
+              : 100
+          return [
+            { dps, time: 20, er: {}, warnings: ['seed-jitter-warn'] },
+            {
+              dps,
+              time: 20,
+              er: {},
+              warnings: fragile ? ['new-fragile-warn'] : ['seed-jitter-warn'],
+            },
+          ]
+        }),
+      deadline: Date.now() + 60_000,
+      maxRounds: 2,
+    })
+    expect(result.best[0].text).not.toMatch(/Furina[^->]*N1/)
+    expect(result.best[0].text).toMatch(/Neuvillette[^->]*N2/)
+  })
+})
+
 describe('Energy Recharge a rotation frees, priced in damage stats', () => {
   const members = names(['Furina', 'Neuvillette', 'KaedeharaKazuha'])
   // (the same DPS whatever the order; Neuvillette needs less ER when Kazuha's particles come to
@@ -424,6 +648,24 @@ describe('Energy Recharge a rotation frees, priced in damage stats', () => {
       cost({ dps: 0, time: 1, er: { Neuvillette: need }, warnings: [] })
     expect(at(150) - at(120)).toBeCloseTo((30 / 5) * 3)
     expect(at(100)).toBe(0)
+  })
+  it('applies asymmetric saveScale: ER increases pay full cost while ER decreases credit saveScale', () => {
+    const cost = erCostOf({
+      Neuvillette: { roll: 3, er: 5, floor: 110, saveScale: 0.3 },
+    })
+    const base: RotationScore = {
+      dps: 100,
+      time: 20,
+      er: { Neuvillette: 140 },
+      warnings: [],
+    }
+    const higher: RotationScore = { ...base, er: { Neuvillette: 160 } }
+    const lower: RotationScore = { ...base, er: { Neuvillette: 120 } }
+    const baseCost = cost(base, base)
+    // +20% ER pays full 1.0x penalty: (20 / 5) * 3 = 12
+    expect(cost(higher, base) - baseCost).toBeCloseTo(12)
+    // -20% ER credits 0.3x savings: (20 / 5) * 3 * 0.3 = 3.6
+    expect(baseCost - cost(lower, base)).toBeCloseTo(3.6)
   })
   it('finds the order that funnels particles, which the builds alone do not reward', async () => {
     const plain = await searchRotations({

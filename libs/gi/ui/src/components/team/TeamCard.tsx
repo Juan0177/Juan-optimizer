@@ -26,6 +26,7 @@ import {
 import { ElementIcon, StatIcon } from '@genshin-optimizer/gi/svgicons'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import AddIcon from '@mui/icons-material/Add'
+import CallSplitRoundedIcon from '@mui/icons-material/CallSplitRounded'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
 import {
   alpha,
@@ -76,6 +77,14 @@ export function TeamCard({
       datum?.teamCharId && database.teamChars.get(datum.teamCharId)?.key
     return key ? [key] : []
   })
+  const parentTeam = team.versionOf
+    ? database.teams.get(team.versionOf)
+    : undefined
+  const versionCount = !parentTeam
+    ? database.teams.keys.filter(
+        (id) => id !== teamId && database.teams.get(id)?.versionOf === teamId
+      ).length
+    : 0
 
   return (
     <CardThemed
@@ -128,20 +137,88 @@ export function TeamCard({
             },
           }}
         >
-          <Typography
-            className="team-card-name"
-            component="span"
-            noWrap
+          <Box
             sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.75,
               maxWidth: '100%',
-              fontWeight: 650,
-              fontSize: '1.125rem',
-              lineHeight: 1.35,
-              transition: 'color 120ms ease',
             }}
           >
-            {name}
-          </Typography>
+            <Typography
+              className="team-card-name"
+              component="span"
+              noWrap
+              sx={{
+                minWidth: 0,
+                fontWeight: 650,
+                fontSize: '1.125rem',
+                lineHeight: 1.35,
+                transition: 'color 120ms ease',
+              }}
+            >
+              {name}
+            </Typography>
+            {parentTeam && (
+              <Tooltip
+                title={t('page_teams:card.versionOf', {
+                  defaultValue: 'Version of {{name}}',
+                  name: parentTeam.name,
+                })}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.35,
+                    px: 0.75,
+                    height: 20,
+                    borderRadius: 999,
+                    border: `1px solid ${giTokens.hairline}`,
+                    bgcolor: alpha(giTokens.parchment, 0.04),
+                    color: 'text.secondary',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
+                >
+                  <CallSplitRoundedIcon sx={{ fontSize: 12 }} />
+                  {t('page_teams:card.versionBadge', 'Version')}
+                </Box>
+              </Tooltip>
+            )}
+            {versionCount > 0 && (
+              <Tooltip
+                title={t('page_teams:card.versionsCount', {
+                  defaultValue: '{{count}} versions in KQM Theorycrafting',
+                  count: versionCount,
+                })}
+              >
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.35,
+                    px: 0.75,
+                    height: 20,
+                    borderRadius: 999,
+                    border: `1px solid ${giTokens.hairline}`,
+                    bgcolor: alpha(giTokens.parchment, 0.04),
+                    color: 'text.secondary',
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    fontVariantNumeric: 'tabular-nums',
+                    flexShrink: 0,
+                  }}
+                >
+                  <CallSplitRoundedIcon sx={{ fontSize: 12 }} />
+                  {versionCount}
+                </Box>
+              </Tooltip>
+            )}
+          </Box>
           {!!description && (
             <Typography
               component="span"

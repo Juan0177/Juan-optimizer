@@ -93,7 +93,13 @@ export function templatesForTeam(members: CharacterKey[]) {
   return rotationTemplates
     .filter((t) => members.includes(t.characterKey))
     .map((t, i) => ({ t, i, n: has(t) }))
-    .sort((a, b) => b.n - a.n || a.i - b.i)
+    .sort(
+      (a, b) =>
+        Number(b.n === b.t.members.length) -
+          Number(a.n === a.t.members.length) ||
+        b.n - a.n ||
+        a.i - b.i
+    )
     .map(({ t }) => t)
 }
 
@@ -102,6 +108,19 @@ export function templatesForTeam(members: CharacterKey[]) {
  * ("E Q" when no template has it as a support)
  */
 export function supportPart(characterKey: CharacterKey): string {
+  return supportPartSuggestions(characterKey, 1)[0] ?? 'E Q'
+}
+
+const DEFAULT_SUPPORT_PARTS = ['E Q', 'E', 'Q', 'Q E'] as const
+
+/**
+ * Distinct support parts a character plays across templates, most common first, padded with basic
+ * fallbacks (`E Q`, `E`, `Q`, `Q E`) so every character has quick one-click alternatives.
+ */
+export function supportPartSuggestions(
+  characterKey: CharacterKey,
+  limit = 5
+): string[] {
   const counts = new Map<string, number>()
   for (const t of rotationTemplates) {
     if (t.characterKey === characterKey || !t.members.includes(characterKey))
@@ -113,14 +132,12 @@ export function supportPart(characterKey: CharacterKey): string {
     )
     if (part) counts.set(part, (counts.get(part) ?? 0) + 1)
   }
-  let best = 'E Q'
-  let most = 0
-  for (const [part, n] of counts)
-    if (n > most) {
-      best = part
-      most = n
-    }
-  return best
+  const ranked = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([part]) => part)
+  for (const fallback of DEFAULT_SUPPORT_PARTS)
+    if (!ranked.includes(fallback)) ranked.push(fallback)
+  return ranked.slice(0, Math.max(1, limit))
 }
 
 /**
@@ -128,18 +145,34 @@ export function supportPart(characterKey: CharacterKey): string {
  * (its field time); none without a template of its own
  */
 export function mainPart(characterKey: CharacterKey): string | undefined {
-  const template = rotationTemplates.find(
-    (t) => t.characterKey === characterKey
-  )
-  if (!template) return undefined
+  return mainPartSuggestions(characterKey, 1)[0]
+}
+
+/**
+ * Distinct main-DPS field-time steps a character plays across its own templates (longest step per
+ * template), preserving template order without duplicates.
+ */
+export function mainPartSuggestions(
+  characterKey: CharacterKey,
+  limit = 4
+): string[] {
   const words = (part: string) => part.split(/\s+/).length
-  return memberSteps(
-    template.text,
-    template.members.map((k) => ({ characterKey: k, name: k })),
-    characterKey
-  ).reduce<string | undefined>(
-    (longest, part) =>
-      !longest || words(part) > words(longest) ? part : longest,
-    undefined
-  )
+  const out: string[] = []
+  for (const template of rotationTemplates) {
+    if (template.characterKey !== characterKey) continue
+    const best = memberSteps(
+      template.text,
+      template.members.map((k) => ({ characterKey: k, name: k })),
+      characterKey
+    ).reduce<string | undefined>(
+      (longest, part) =>
+        !longest || words(part) > words(longest) ? part : longest,
+      undefined
+    )
+    if (best && !out.includes(best)) {
+      out.push(best)
+      if (out.length >= limit) break
+    }
+  }
+  return out
 }

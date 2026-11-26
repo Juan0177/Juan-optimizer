@@ -112,6 +112,7 @@ const a1Check = (s: MonaState) => (ctx: SimContext) => {
     characterKey: 'Mona',
     path: ['passive1', 'dmg'],
     tag: 'skill',
+    noSacrificial: true,
     element: 'hydro',
     applies: true,
     icd: 'none',

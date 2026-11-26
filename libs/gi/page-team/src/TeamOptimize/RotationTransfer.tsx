@@ -26,7 +26,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
 import { focusSx, quickSx, tokens, type } from './ui'
@@ -246,6 +246,7 @@ function ImportModal({
 }) {
   const { t } = useTranslation('page_team')
   const { gender } = useDBMeta()
+  const titleId = useId()
   const [text, setText] = useState('')
   const rotation = useMemo(
     () => (text.trim() ? parseTeamRotation(text) : undefined),
@@ -268,11 +269,12 @@ function ImportModal({
     ))
 
   return (
-    <ModalWrapper open onClose={onClose}>
+    <ModalWrapper open onClose={onClose} aria-labelledby={titleId}>
       <CardThemed>
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Typography
             component="h2"
+            id={titleId}
             sx={{
               ...type.title,
               display: 'flex',
