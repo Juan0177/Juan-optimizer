@@ -193,3 +193,34 @@ it('counts Exaiphanes Blade only on the Traveler', () => {
     passiveApplies(['MistsplitterReforged', 'MistsplittersEmblem'], 'Odette')
   ).toBe(true)
 })
+
+it('weighs a passive’s share by damage when the run gives each attack’s', () => {
+  const path = ['Azurelight', 'afterSkill']
+  const attacks = {
+    Odette: [
+      {
+        path: ['skill', 'coda'],
+        hits: 2,
+        hitMode: 'avgHit' as const,
+        onField: 'Odette' as const,
+        states: [{ owner: 'Odette', path, value: 'on' }],
+      },
+      {
+        path: ['skill', 'dance'],
+        hits: 22,
+        hitMode: 'avgHit' as const,
+        onField: 'Odette' as const,
+        states: [{ owner: 'Odette', path, value: '' }],
+      },
+    ],
+  }
+  // (2 big hits buffed of 24: 8% of the hits, 80% of the damage)
+  expect(
+    playedWeaponPassiveUptime(attacks as never, 'Odette', path, 'on')
+  ).toBeCloseTo(2 / 24, 4)
+  expect(
+    playedWeaponPassiveUptime(attacks as never, 'Odette', path, 'on', {
+      Odette: [80_000, 20_000],
+    })
+  ).toBeCloseTo(0.8, 4)
+})

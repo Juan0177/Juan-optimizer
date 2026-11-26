@@ -39,6 +39,8 @@ export interface CountedPassive {
   rotation?: number
   /** Rotation-share source: timed by the written rotation, or scaled by rotation length */
   rotationSource?: 'played' | 'cooldown'
+  /** A played share weighs each attack by its damage (else by its hits) */
+  rotationByDamage?: boolean
   source: 'rule' | 'kqm'
 }
 
@@ -83,15 +85,17 @@ export const passiveApplies = (path: readonly string[], holder: CharacterKey) =>
   PASSIVE_HOLDERS[path.join('.')]?.(holder) !== false
 
 /**
- * Hit-weighted uptime (0..1) of a weapon passive that the written rotation explicitly timed via
- * `states` or `limits`, over the hits it can buff. Returns `undefined` if the rotation never timed
- * this passive.
+ * Uptime (0..1) of a weapon passive that the written rotation explicitly timed via `states` or
+ * `limits`, over the hits it can buff: weighed by each attack's damage (`damage`, per member in the
+ * order of `attacks`), else by its hits. Returns `undefined` if the rotation never timed this
+ * passive.
  */
 export function playedWeaponPassiveUptime(
   attacks: TeamOpt['attacks'] | undefined,
   owner: CharacterKey,
   path: readonly string[],
-  baseValue: string | undefined
+  baseValue: string | undefined,
+  damage?: Partial<Record<CharacterKey, readonly number[]>>
 ): number | undefined {
   if (!attacks) return undefined
   const key = path.join('.')
@@ -106,16 +110,26 @@ export function playedWeaponPassiveUptime(
       }
   if (!timed) return undefined
 
-  const activeHitsOf = (
-    attack: NonNullable<TeamOpt['attacks'][CharacterKey]>[number]
-  ) => {
+  type Attack = NonNullable<TeamOpt['attacks'][CharacterKey]>[number]
+  /** The share of an attack's hits the passive is on for */
+  const onShare = (attack: Attack) => {
     const hits = attack.hits ?? 0
     if (hits <= 0) return 0
     const state = attack.states?.find(match)
-    if (state !== undefined) return state.value ? hits : 0
+    if (state !== undefined) return state.value ? 1 : 0
     const limit = attack.limits?.find(match)
-    if (limit !== undefined) return Math.max(0, Math.min(hits, limit.hits))
-    return baseValue ? hits : 0
+    if (limit !== undefined)
+      return Math.max(0, Math.min(hits, limit.hits)) / hits
+    return baseValue ? 1 : 0
+  }
+  const weightOf = (ck: CharacterKey, i: number, attack: Attack) => {
+    const hits = attack.hits ?? 0
+    if (hits <= 0) return 0
+    if (!damage) return hits
+    const value = damage[ck]?.[i]
+    return value !== undefined && Number.isFinite(value)
+      ? Math.max(0, value)
+      : 0
   }
 
   // Thrilling Tales only buffs the active teammate receiving the swap (never the wielder or
@@ -129,12 +143,12 @@ export function playedWeaponPassiveUptime(
       if (ck === owner) continue
       let on = 0
       let total = 0
-      for (const attack of list ?? []) {
-        const hits = attack.hits ?? 0
-        if (hits <= 0) continue
+      for (const [i, attack] of (list ?? []).entries()) {
+        const weight = weightOf(ck, i, attack)
+        if (weight <= 0) continue
         if (attack.onField && attack.onField !== ck) continue
-        total += hits
-        on += activeHitsOf(attack)
+        total += weight
+        on += weight * onShare(attack)
       }
       if (total > 0) byMember.set(ck, { on, total })
     }
@@ -176,11 +190,11 @@ export function playedWeaponPassiveUptime(
     CharacterKey,
     TeamOpt['attacks'][CharacterKey],
   ][])
-    for (const attack of list ?? []) {
-      const hits = attack.hits ?? 0
-      if (hits <= 0 || !reaches(ck, attack.onField ?? ck)) continue
-      total += hits
-      on += activeHitsOf(attack)
+    for (const [i, attack] of (list ?? []).entries()) {
+      const weight = weightOf(ck, i, attack)
+      if (weight <= 0 || !reaches(ck, attack.onField ?? ck)) continue
+      total += weight
+      on += weight * onShare(attack)
     }
   return total > 0 ? Math.min(1, on / total) : undefined
 }
@@ -208,6 +222,8 @@ export function useCountedPassives(
         .filter((s) => s.owner === characterKey)
         .map((s) => [s.path.join('.'), s.value])
     )
+    // (each played attack's damage with these builds: what a played share weighs)
+    const damage = result.played ? result.after?.attacks : undefined
     const cache = new Map<WeaponKey, CountedPassive[]>()
     return (weaponKey: WeaponKey) => {
       const known = cache.get(weaponKey)
@@ -239,7 +255,8 @@ export function useCountedPassives(
                 result.played?.attacks,
                 characterKey,
                 path,
-                value
+                value,
+                damage
               )
             : undefined
         if (!value && timedUptime === undefined) continue
@@ -286,6 +303,9 @@ export function useCountedPassives(
           fight,
           rotation,
           rotationSource,
+          ...(timedUptime !== undefined && damage
+            ? { rotationByDamage: true }
+            : {}),
           source: fightValue !== undefined ? 'kqm' : source,
         })
       }
@@ -314,10 +334,16 @@ export function PassiveTag({ passives }: { passives: CountedPassive[] }) {
               defaultValue: '{{percent}}% of rotations (20 s cooldown)',
               percent: Math.round(p.rotation * 100),
             })
-          : t('teamOpt.kqm.passiveRotation', {
-              defaultValue: '{{percent}}% of hits in this rotation',
-              percent: Math.round(p.rotation * 100),
-            })
+          : p.rotationByDamage
+            ? t('teamOpt.kqm.passiveRotationDamage', {
+                defaultValue:
+                  'on for {{percent}}% of the damage it can buff in this rotation',
+                percent: Math.round(p.rotation * 100),
+              })
+            : t('teamOpt.kqm.passiveRotation', {
+                defaultValue: '{{percent}}% of hits in this rotation',
+                percent: Math.round(p.rotation * 100),
+              })
         : p.source === 'rule'
           ? t('teamOpt.kqm.passiveRule', 'on by rule')
           : t('teamOpt.kqm.passiveSwitch', 'on by your switch')
