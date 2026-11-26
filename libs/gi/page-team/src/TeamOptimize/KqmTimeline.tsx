@@ -18,7 +18,13 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import { alpha, Box, ButtonBase, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
-import { useDeferredValue, useMemo, useState } from 'react'
+import {
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { AttackEditor } from './AttackEditor'
 import { AttackName } from './AttackName'
@@ -36,9 +42,10 @@ import {
   useSimTeam,
   writtenSeconds,
 } from './RotationWriter'
+import { conditionsKey, publishConditions } from './rotationConditionsStore'
 import { useMomentFigures } from './TimelineFigures'
 import type { AuraKey } from './timelineModel'
-import { aurasAt } from './timelineModel'
+import { aurasAt, rotationConditions, timelineTracks } from './timelineModel'
 import {
   focusSx,
   numSx,
@@ -85,12 +92,26 @@ function filterHeldRefs<T extends { owner: string; path: string[] }>(
   })
 }
 
-/** An attack as one of a member's: matches buff states and exclusions for held gear */
+const isGearRef = (entry: { owner: string; path: string[] }) =>
+  entry.owner !== 'team' &&
+  (WEAPON_KEYS.has(entry.path[0]) || SET_KEYS.has(entry.path[0]))
+
+/**
+ * An attack as one of a member's: matches buff states and exclusions for held gear (`anyGear`:
+ * none of the gear's, as Team optimize's saved attacks carry the gear held when they were written)
+ */
 const sameAttack = (
   a: TeamOptAttack,
   b: TeamOptAttack,
-  held?: Partial<Record<CharacterKey, SimGear>>
+  held?: Partial<Record<CharacterKey, SimGear>>,
+  anyGear = false
 ) => {
+  const refs = <T extends { owner: string; path: string[] }>(
+    list: readonly T[] | undefined
+  ) =>
+    anyGear
+      ? (list ?? []).filter((entry) => !isGearRef(entry))
+      : filterHeldRefs(list, held)
   const normalize = (x: TeamOptAttack) => {
     const {
       hits: _hits,
@@ -103,10 +124,10 @@ const sameAttack = (
     const total = x.hits || 1
     return {
       ...rest,
-      states: filterHeldRefs(states, held)
+      states: refs(states)
         .map((s) => `${s.owner}|${s.path.join('.')}=${s.value}`)
         .sort(),
-      limits: filterHeldRefs(limits, held)
+      limits: refs(limits)
         .map(
           (l) =>
             `${l.owner}|${l.path.join('.')}=${l.hits <= 0 ? '0' : (l.hits / total).toFixed(3)}`
@@ -368,6 +389,46 @@ export function KqmTimeline({
       },
     }
   }
+  // a hit's damage with these builds: its attack's (the run's same one) over its hits
+  const heldGear = deferredTeam.gear
+  const hitDamage = useCallback(
+    (hit: SimHit) => {
+      const at = mapping?.hitAttacks.get(hit)
+      const mine = at && mapping?.attacks[at.characterKey]?.[at.index]
+      if (!at || !mine) return undefined
+      const listed = kqmAttacks?.[at.characterKey] ?? []
+      const samePath = (x: TeamOptAttack) =>
+        JSON.stringify(x.path) === JSON.stringify(mine.path)
+      let i = listed.findIndex(
+        (x) => samePath(x) && sameAttack(x, mine, heldGear)
+      )
+      if (i < 0)
+        i = listed.findIndex(
+          (x) => samePath(x) && sameAttack(x, mine, heldGear, true)
+        )
+      const total = i < 0 ? undefined : kqmDamage?.[at.characterKey]?.[i]
+      return total === undefined ? undefined : total / (listed[i].hits || 1)
+    },
+    [mapping, kqmAttacks, kqmDamage, heldGear]
+  )
+  // (the rotation's Cryo Resonance and Polestar Field, for Damage share beside it)
+  const conditions = useMemo(
+    () =>
+      result?.sim
+        ? rotationConditions(
+            result.sim,
+            timelineTracks(result.sim),
+            members.map((m) => m.characterKey),
+            kqmDamage ? hitDamage : undefined
+          )
+        : undefined,
+    [result, members, kqmDamage, hitDamage]
+  )
+  const shownKey = conditionsKey(teamId, isKqm ? 'kqm' : 'team')
+  useEffect(() => {
+    publishConditions(shownKey, conditions)
+    return () => publishConditions(shownKey, undefined)
+  }, [shownKey, conditions])
   // a hit's mark clicked (an off-field member's too, which has no bar): its attack, as it landed
   const openHit = (hit: SimHit) => {
     const part = partOf(hit)

@@ -1,3 +1,4 @@
+import { InfoTooltipInline } from '@genshin-optimizer/common/ui'
 import { objPathValue } from '@genshin-optimizer/common/util'
 import type {
   CharacterKey,
@@ -14,7 +15,9 @@ import { type ReactNode, useId, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatRateFull } from './format'
 import { MemberAvatar } from './MemberAvatar'
-import { numSx, SubsectionTitle, tokens, type } from './ui'
+import { useRotationConditions } from './rotationConditionsStore'
+import type { RotationConditions } from './timelineModel'
+import { hairline, numSx, SubsectionTitle, tokens, type } from './ui'
 
 /** A part of the whole: who or what dealt it, its colour, its damage */
 interface Slice {
@@ -140,6 +143,7 @@ export function DamageShare({
   attacks,
   teamData,
   rotationTime,
+  conditionsKey,
 }: {
   members: CharacterKey[]
   evaluation: TeamOptEvaluation
@@ -147,8 +151,11 @@ export function DamageShare({
   attacks: Partial<Record<CharacterKey, TeamOptAttack[]>>
   teamData: TeamData | undefined
   rotationTime?: number
+  /** Where the results' timeline puts the rotation's conditions (`rotationConditionsStore`) */
+  conditionsKey?: string
 }) {
   const { t } = useTranslation(['page_team', 'charNames_gen', 'sheet_gen'])
+  const conditions = useRotationConditions(conditionsKey)
   const byMember = useMemo<Slice[]>(() => {
     // (members of one element: the second its other shade, so the parts stay apart)
     const used = new Map<string, number>()
@@ -274,7 +281,145 @@ export function DamageShare({
             lead
           />
         )}
+        {conditions && <Conditions conditions={conditions} />}
       </Box>
+    </Box>
+  )
+}
+
+/** What the rotation's damage was dealt under (Cryo Resonance, the Polestar Field): a row under the rings, each in a ring's column */
+function Conditions({ conditions }: { conditions: RotationConditions }) {
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
+  const { cryo, polestar } = conditions
+  if (!cryo && !polestar) return null
+  const pct = (x: number) => `${Math.round(x * 100)}%`
+  const figure = (value: string, caption: string) => (
+    <Box key={caption} sx={{ minWidth: 0 }}>
+      <Typography noWrap sx={{ ...type.stat, fontSize: 16 }}>
+        {value}
+      </Typography>
+      <Typography
+        noWrap
+        sx={{ fontSize: 11.5, color: 'text.secondary', lineHeight: 1.4 }}
+      >
+        {caption}
+      </Typography>
+    </Box>
+  )
+  const group = (
+    key: string,
+    icon: ReactNode | undefined,
+    label: string,
+    tip: string,
+    figures: ReactNode[]
+  ) => (
+    <Box key={key} aria-label={label} sx={{ minWidth: 0 }}>
+      <Typography
+        sx={{
+          ...type.label,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          mb: 0.75,
+        }}
+      >
+        {icon}
+        {label}
+        <InfoTooltipInline title={tip} />
+      </Typography>
+      <Box
+        sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 3.5, rowGap: 1 }}
+      >
+        {figures}
+      </Box>
+    </Box>
+  )
+  return (
+    <Box
+      sx={{
+        gridColumn: '1 / -1',
+        display: 'grid',
+        gridTemplateColumns: 'subgrid',
+        rowGap: 2,
+        pt: 2,
+        borderTop: hairline,
+      }}
+    >
+      {cryo &&
+        group(
+          'cryo',
+          <ElementIcon ele="cryo" iconProps={{ sx: { fontSize: 15 } }} />,
+          t('teamOpt.timeline.cryoResonance', 'Cryo Resonance'),
+          cryo.damage === undefined
+            ? t(
+                'teamOpt.timeline.cryoResonanceTipTime',
+                '+15% CRIT Rate while the enemy has Cryo or is Frozen.'
+              )
+            : t(
+                'teamOpt.timeline.cryoResonanceTip',
+                '+15% CRIT Rate while the enemy has Cryo or is Frozen. Damage counts only hits that can crit.'
+              ),
+          [
+            figure(pct(cryo.time), t('teamOpt.timeline.uptime', 'uptime')),
+            ...(cryo.damage === undefined
+              ? []
+              : [
+                  figure(
+                    pct(cryo.damage),
+                    t('teamOpt.timeline.ofDamageShort', 'of damage')
+                  ),
+                ]),
+          ]
+        )}
+      {polestar &&
+        group(
+          'polestar',
+          undefined,
+          t('teamOpt.timeline.polestarField', 'Polestar Field'),
+          [
+            polestar.bonus.length
+              ? t('teamOpt.timeline.polestarStacksTipBonus', {
+                  defaultValue:
+                    'Avg stacks: while the field is up, incl. {{bonus}}.',
+                  bonus: polestar.bonus
+                    .map(({ characterKey, stacks }) =>
+                      t('teamOpt.timeline.polestarBonus', {
+                        defaultValue: '+{{stacks}} from {{name}}',
+                        stacks,
+                        name: t(`charNames_gen:${characterKey}`, characterKey),
+                      })
+                    )
+                    .join(', '),
+                })
+              : t(
+                  'teamOpt.timeline.polestarStacksTip',
+                  'Avg stacks: while the field is up.'
+                ),
+            ...(polestar.damageStacks === undefined
+              ? []
+              : [
+                  t(
+                    'teamOpt.timeline.polestarDamageTip',
+                    'By damage: on the Cryo, Electro and Stellar-Conduct hits it boosts.'
+                  ),
+                ]),
+          ].join(' '),
+          [
+            figure(pct(polestar.time), t('teamOpt.timeline.uptime', 'uptime')),
+            figure(
+              polestar.stacks.toFixed(1),
+              t('teamOpt.timeline.avgStacks', 'avg stacks')
+            ),
+            ...(polestar.damageStacks === undefined
+              ? []
+              : [
+                  figure(
+                    polestar.damageStacks.toFixed(1),
+                    t('teamOpt.timeline.stacksByDamage', 'by damage')
+                  ),
+                ]),
+          ]
+        )}
     </Box>
   )
 }

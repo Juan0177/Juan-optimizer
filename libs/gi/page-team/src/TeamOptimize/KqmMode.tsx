@@ -122,6 +122,7 @@ import {
   useAppliedRotation,
   useRotationSettings,
 } from './RotationWriter'
+import { conditionsKey } from './rotationConditionsStore'
 import { elementColor } from './TeamOptResults'
 import {
   FieldLabel,
@@ -2748,6 +2749,7 @@ export function KqmResults({
           attacks={view.played?.attacks ?? runSettings.attacks}
           teamData={teamData}
           rotationTime={view.played?.rotationTime ?? rotationTime}
+          conditionsKey={conditionsKey(teamId, 'kqm')}
         />
       </Box>
       {timeline}

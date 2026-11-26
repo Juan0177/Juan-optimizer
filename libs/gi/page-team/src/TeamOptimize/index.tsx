@@ -120,6 +120,7 @@ import {
   useSimTeam,
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
+import { conditionsKey } from './rotationConditionsStore'
 import { sameBuildRoster, teamRoster } from './runScope'
 import { TeamOptInspector } from './TeamOptInspector'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
@@ -1626,6 +1627,7 @@ export default function TeamBuildWorkspace({
                     attacks={shownTeamOpt.attacks}
                     teamData={teamData}
                     rotationTime={shownResultTime}
+                    conditionsKey={conditionsKey(teamId, 'team')}
                   />
                 </Box>
               )
