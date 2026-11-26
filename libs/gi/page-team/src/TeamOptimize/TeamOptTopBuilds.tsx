@@ -14,11 +14,20 @@ import type {
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import { teamOptSetKey } from '@genshin-optimizer/gi/ui'
-import { Box, Button, CircularProgress, Typography } from '@mui/material'
+import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded'
+import StopRoundedIcon from '@mui/icons-material/StopRounded'
+import {
+  alpha,
+  Box,
+  Button,
+  CircularProgress,
+  LinearProgress,
+  Typography,
+} from '@mui/material'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TopBuilds } from './KqmTopTeams'
-import { tokens, type } from './ui'
+import { insetSx, numSx, quickSx, SubsectionTitle, tokens, type } from './ui'
 
 const MAX = 50
 
@@ -36,6 +45,15 @@ interface TeamOptTopOption extends KqmTeamOption {
 const assignmentKey = ({ changed, builds, weapons }: TeamOptGearComparison) =>
   JSON.stringify([...changed].sort().map((ck) => [ck, weapons[ck], builds[ck]]))
 
+export interface GearRankingControlProps {
+  done: number
+  total: number
+  running: boolean
+  error?: string
+  onStart: () => void
+  onStop: () => void
+}
+
 export function TeamOptTopBuilds({
   members,
   result,
@@ -44,6 +62,7 @@ export function TeamOptTopBuilds({
   disabled,
   optionsRunning,
   comparison,
+  ranking,
   onPick,
   onCompare,
 }: {
@@ -57,6 +76,8 @@ export function TeamOptTopBuilds({
   disabled?: boolean
   optionsRunning?: boolean
   comparison?: TeamOptGearComparison
+  /** Optional equipment ranking controls: shown as a balanced card until 2+ builds exist, or compact above the table while partial */
+  ranking?: GearRankingControlProps
   /** No member: the run's team */
   onPick: (characterKey?: CharacterKey, pick?: TeamOptPick) => void
   onCompare: (comparison: TeamOptGearComparison) => void
@@ -186,7 +207,10 @@ export function TeamOptTopBuilds({
               teamOptSetKey(o.pick) === teamOptSetKey(picked[0][1])
           )
         : -1
-  return (
+  if (options.length < 2)
+    return ranking ? <GearRankingControls {...ranking} standalone /> : null
+
+  const table = (
     <TopBuilds
       options={options}
       members={members.filter((ck) => result.optimized.includes(ck))}
@@ -201,6 +225,31 @@ export function TeamOptTopBuilds({
       }
     />
   )
+
+  if (!ranking) return table
+  return (
+    <Box
+      sx={{
+        minWidth: 0,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.25,
+      }}
+    >
+      <GearRankingControls {...ranking} />
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        {table}
+      </Box>
+    </Box>
+  )
 }
 
 /** Progress and cancellation live with the optional equipment rankings. */
@@ -209,58 +258,272 @@ export function GearRankingControls({
   total,
   running,
   error,
+  standalone = false,
   onStart,
   onStop,
-}: {
-  done: number
-  total: number
-  running: boolean
-  error?: string
-  onStart: () => void
-  onStop: () => void
+}: GearRankingControlProps & {
+  /** True when no Top builds table is visible yet: renders a balanced card alongside Damage share */
+  standalone?: boolean
 }) {
   const { t } = useTranslation('page_team')
+  const progress = total > 0 ? Math.min(100, (done / total) * 100) : 0
+  const statusText =
+    running || done > 0
+      ? t(
+          'teamOpt.result.rankingReady',
+          '{{done}} of {{total}} members ranked',
+          {
+            done,
+            total,
+          }
+        )
+      : t(
+          'teamOpt.result.rankOptional',
+          'Compare alternative weapons and sets for this result.'
+        )
+
+  const actionButton = (
+    <Button
+      size="small"
+      onClick={running ? onStop : onStart}
+      startIcon={
+        running ? (
+          <StopRoundedIcon sx={{ fontSize: 16 }} />
+        ) : (
+          <LeaderboardRoundedIcon sx={{ fontSize: 16 }} />
+        )
+      }
+      sx={
+        running
+          ? {
+              flexShrink: 0,
+              px: 1.5,
+              py: 0.65,
+              borderRadius: tokens.radius.control,
+              fontSize: 13,
+              fontWeight: 600,
+              textTransform: 'none',
+              color: 'text.secondary',
+              bgcolor: 'transparent',
+              border: `1px solid ${tokens.hairlineStrong}`,
+              ...quickSx,
+              '&:hover': {
+                color: 'text.primary',
+                bgcolor: tokens.hover,
+              },
+            }
+          : {
+              flexShrink: 0,
+              px: 1.75,
+              py: 0.7,
+              borderRadius: tokens.radius.control,
+              fontSize: 13,
+              fontWeight: 600,
+              textTransform: 'none',
+              color: tokens.gold,
+              bgcolor: alpha(tokens.gold, 0.12),
+              border: `1px solid ${alpha(tokens.gold, 0.38)}`,
+              ...quickSx,
+              '&:hover': {
+                bgcolor: alpha(tokens.gold, 0.2),
+                borderColor: alpha(tokens.gold, 0.65),
+              },
+            }
+      }
+    >
+      {running
+        ? t('teamOpt.result.stopRanking', 'Stop ranking')
+        : t('teamOpt.result.rankEquipment', 'Rank equipment')}
+    </Button>
+  )
+
+  if (standalone) {
+    const title = t('teamOpt.kqm.topBuilds', 'Top builds')
+    return (
+      <Box
+        component="section"
+        aria-label={title}
+        sx={{
+          minWidth: 0,
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <SubsectionTitle
+          info={t(
+            'teamOpt.result.topBuildsTip',
+            'Weapon and artifact comparisons include coordinated changes across the team. Pick a row to preview the team.'
+          )}
+        >
+          {title}
+        </SubsectionTitle>
+        <Box
+          sx={{
+            ...insetSx,
+            borderColor: tokens.hairlineStrong,
+            flex: 1,
+            p: { xs: 2, sm: 2.5 },
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 1.75,
+            backgroundImage: `radial-gradient(460px 220px at 0% 0%, ${alpha(tokens.gold, 0.08)}, transparent 70%)`,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+            <Box
+              aria-hidden
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 2,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                color: tokens.gold,
+                bgcolor: alpha(tokens.gold, 0.1),
+                border: `1px solid ${alpha(tokens.gold, 0.24)}`,
+              }}
+            >
+              {running ? (
+                <CircularProgress
+                  size={18}
+                  thickness={5}
+                  sx={{ color: tokens.gold }}
+                />
+              ) : (
+                <LeaderboardRoundedIcon sx={{ fontSize: 20 }} />
+              )}
+            </Box>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography
+                sx={{
+                  fontSize: 15,
+                  fontWeight: 650,
+                  letterSpacing: '-0.005em',
+                  lineHeight: 1.3,
+                }}
+              >
+                {running
+                  ? t('teamOpt.result.rankingTitle', 'Ranking equipment…')
+                  : t(
+                      'teamOpt.result.rankCardTitle',
+                      'Compare alternative builds'
+                    )}
+              </Typography>
+              <Typography
+                role="status"
+                sx={{
+                  ...type.label,
+                  mt: 0.5,
+                  lineHeight: 1.5,
+                  maxWidth: 440,
+                  ...numSx,
+                }}
+              >
+                {statusText}
+              </Typography>
+            </Box>
+          </Box>
+          {(running || done > 0) && (
+            <Box sx={{ pl: { sm: '52px' } }}>
+              <LinearProgress
+                variant={
+                  running && done === 0 ? 'indeterminate' : 'determinate'
+                }
+                value={progress}
+                sx={{
+                  height: 4,
+                  borderRadius: 2,
+                  bgcolor: alpha(tokens.gold, 0.12),
+                  '& .MuiLinearProgress-bar': {
+                    bgcolor: tokens.gold,
+                    borderRadius: 2,
+                  },
+                }}
+              />
+            </Box>
+          )}
+          <Box
+            sx={{
+              pl: { sm: '52px' },
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 1.25,
+            }}
+          >
+            {actionButton}
+            {error && (
+              <Typography
+                role="alert"
+                color="warning.main"
+                sx={{ ...type.label, width: '100%' }}
+              >
+                {error}
+              </Typography>
+            )}
+          </Box>
+        </Box>
+      </Box>
+    )
+  }
+
   return (
     <Box
       sx={{
+        ...insetSx,
+        borderColor: tokens.hairlineStrong,
+        flexShrink: 0,
+        px: 1.5,
+        py: 1,
         display: 'flex',
-        gap: 1,
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        mb: 1,
+        flexDirection: 'column',
+        gap: 0.75,
       }}
     >
-      {running && (
-        <CircularProgress size={14} thickness={5} sx={{ color: tokens.gold }} />
-      )}
-      <Typography role="status" sx={type.label}>
-        {running || done > 0
-          ? t(
-              'teamOpt.result.rankingReady',
-              '{{done}} of {{total}} members ranked',
-              { done, total }
-            )
-          : t(
-              'teamOpt.result.rankOptional',
-              'Compare alternative weapons and sets for this result.'
-            )}
-      </Typography>
-      <Button
-        size="small"
-        variant="outlined"
-        color="inherit"
-        onClick={running ? onStop : onStart}
+      <Box
+        sx={{
+          display: 'flex',
+          gap: 1.25,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
       >
-        {running
-          ? t('teamOpt.result.stopRanking', 'Stop ranking')
-          : t('teamOpt.result.rankEquipment', 'Rank equipment')}
-      </Button>
+        {running ? (
+          <CircularProgress
+            size={14}
+            thickness={5}
+            sx={{ color: tokens.gold, flexShrink: 0 }}
+          />
+        ) : (
+          <LeaderboardRoundedIcon
+            sx={{ fontSize: 16, color: tokens.gold, flexShrink: 0 }}
+          />
+        )}
+        <Typography role="status" sx={{ ...type.label, ...numSx, flex: 1 }}>
+          {statusText}
+        </Typography>
+        {actionButton}
+      </Box>
+      {(running || done > 0) && (
+        <LinearProgress
+          variant={running && done === 0 ? 'indeterminate' : 'determinate'}
+          value={progress}
+          sx={{
+            height: 3,
+            borderRadius: 2,
+            bgcolor: alpha(tokens.gold, 0.12),
+            '& .MuiLinearProgress-bar': {
+              bgcolor: tokens.gold,
+              borderRadius: 2,
+            },
+          }}
+        />
+      )}
       {error && (
-        <Typography
-          role="alert"
-          color="warning.main"
-          sx={{ ...type.label, width: '100%' }}
-        >
+        <Typography role="alert" color="warning.main" sx={type.label}>
           {error}
         </Typography>
       )}

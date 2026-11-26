@@ -129,7 +129,7 @@ import {
   TeamEquipUndo,
   TeamOptResults,
 } from './TeamOptResults'
-import { GearRankingControls, TeamOptTopBuilds } from './TeamOptTopBuilds'
+import { TeamOptTopBuilds } from './TeamOptTopBuilds'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -1579,44 +1579,47 @@ export default function TeamBuildWorkspace({
                       'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
                   }}
                 >
-                  <Box sx={{ minWidth: 0 }}>
-                    {!teamBaseStale &&
-                      !result.result.rankingsComplete &&
-                      !!result.result.optimized.length && (
-                        <GearRankingControls
-                          done={result.result.rankedMembers?.length ?? 0}
-                          total={result.result.optimized.length}
-                          running={!!result.optionsRunning}
-                          error={result.optionsError}
-                          onStart={() => void rankEquipment(result)}
-                          onStop={cancel}
-                        />
-                      )}
-                    {result.result.options ||
-                    result.result.gearComparisons?.length ? (
-                      <TeamOptTopBuilds
-                        key={result.savedAt ?? result.seconds}
-                        members={members.map((m) => m.characterKey)}
-                        result={result.result}
-                        picks={picks}
-                        optionsRunning={result.optionsRunning}
-                        comparison={gearComparison}
-                        rotationTime={baseResultTime}
-                        onPick={(characterKey, next) => {
-                          setGearComparison(undefined)
-                          setPicks(
-                            characterKey && next ? { [characterKey]: next } : {}
-                          )
-                          if (characterKey) setInspected(characterKey)
-                        }}
-                        onCompare={(next) => {
-                          setPicks({})
-                          setPickView(undefined)
-                          setGearComparison(next)
-                        }}
-                      />
-                    ) : null}
-                  </Box>
+                  {(!teamBaseStale &&
+                    !result.result.rankingsComplete &&
+                    !!result.result.optimized.length) ||
+                  result.result.options ||
+                  result.result.gearComparisons?.length ? (
+                    <TeamOptTopBuilds
+                      key={result.savedAt ?? result.seconds}
+                      members={members.map((m) => m.characterKey)}
+                      result={result.result}
+                      picks={picks}
+                      optionsRunning={result.optionsRunning}
+                      comparison={gearComparison}
+                      rotationTime={baseResultTime}
+                      ranking={
+                        !teamBaseStale &&
+                        !result.result.rankingsComplete &&
+                        !!result.result.optimized.length
+                          ? {
+                              done: result.result.rankedMembers?.length ?? 0,
+                              total: result.result.optimized.length,
+                              running: !!result.optionsRunning,
+                              error: result.optionsError,
+                              onStart: () => void rankEquipment(result),
+                              onStop: cancel,
+                            }
+                          : undefined
+                      }
+                      onPick={(characterKey, next) => {
+                        setGearComparison(undefined)
+                        setPicks(
+                          characterKey && next ? { [characterKey]: next } : {}
+                        )
+                        if (characterKey) setInspected(characterKey)
+                      }}
+                      onCompare={(next) => {
+                        setPicks({})
+                        setPickView(undefined)
+                        setGearComparison(next)
+                      }}
+                    />
+                  ) : null}
                   <DamageShare
                     members={members.map((m) => m.characterKey)}
                     evaluation={shown.after}
