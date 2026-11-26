@@ -45,6 +45,8 @@ export interface TeamOptRunJob {
   rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
   maxWorkers: number
   lowImpact: boolean
+  ranking?: boolean
+  rankFrom?: Pick<TeamOptResult, 'builds' | 'weapons' | 'optimized'>
 }
 
 export interface TeamOptRunUpdates {
@@ -169,6 +171,9 @@ export async function runTeamOpt(
     teamId,
     gender,
     teamOpt: attacks ? { ...teamOpt, attacks } : teamOpt,
+    maxRounds: job.rankFrom ? 0 : undefined,
+    from: job.rankFrom,
+    skipRankings: job.ranking === false,
     rotationForWeapons: rotation?.forWeapons,
     rotationKey: rotation?.key,
     attackStates,
@@ -196,7 +201,7 @@ export async function runTeamOpt(
           ? {
               ...result,
               attacks: result.attacks ?? attacks,
-              ...(rotation?.forWeapons && { writtenRotation: job.rotation }),
+              writtenRotation: job.rotation,
             }
           : result
       ),

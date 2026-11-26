@@ -116,8 +116,6 @@ const a1AfterOverload_pyro_enemyRes_ = greaterEq(
 const a1AfterOverload_electro_enemyRes_ = { ...a1AfterOverload_pyro_enemyRes_ }
 
 const [condA4AfterBallPath, condA4AfterBall] = cond(key, 'a4AfterBall')
-// TODO: Check if this is premod or total.
-// Should be premod since it's a stat that shows on the char screen.
 const a4AfterBall_atk_opt = greaterEq(
   input.asc,
   4,
@@ -127,7 +125,7 @@ const a4AfterBall_atk_opt = greaterEq(
     min(
       prod(
         percent(dm.passive2.atk_),
-        infoMut({ ...input.premod.hp }, { pivot: true }),
+        infoMut({ ...input.total.hp }, { pivot: true }),
         1 / 1000
       ),
       percent(dm.passive2.max_atk_)

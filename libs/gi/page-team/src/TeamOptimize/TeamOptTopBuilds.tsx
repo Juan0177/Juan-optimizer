@@ -14,11 +14,11 @@ import type {
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import { teamOptSetKey } from '@genshin-optimizer/gi/ui'
-import { Box, CircularProgress, Typography } from '@mui/material'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TopBuilds } from './KqmTopTeams'
-import { SubsectionTitle, tokens, type } from './ui'
+import { tokens, type } from './ui'
 
 const MAX = 50
 
@@ -203,54 +203,67 @@ export function TeamOptTopBuilds({
   )
 }
 
-/**
- * Top builds' place while the members' other builds are ranked: as tall as the table, so it comes
- * in without moving the page
- */
-export function TopBuildsPending({
+/** Progress and cancellation live with the optional equipment rankings. */
+export function GearRankingControls({
   done,
   total,
+  running,
+  error,
+  onStart,
+  onStop,
 }: {
   done: number
   total: number
+  running: boolean
+  error?: string
+  onStart: () => void
+  onStop: () => void
 }) {
   const { t } = useTranslation('page_team')
   return (
     <Box
-      component="section"
-      aria-busy
       sx={{
-        minWidth: 0,
-        height: '100%',
         display: 'flex',
-        flexDirection: 'column',
+        gap: 1,
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        mb: 1,
       }}
     >
-      <SubsectionTitle>
-        {t('teamOpt.kqm.topBuilds', 'Top builds')}
-      </SubsectionTitle>
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 330,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 1,
-          border: `1px solid ${tokens.hairlineStrong}`,
-          borderRadius: tokens.radius.inset,
-          color: 'text.secondary',
-        }}
-      >
+      {running && (
         <CircularProgress size={14} thickness={5} sx={{ color: tokens.gold }} />
-        <Typography sx={type.label}>
-          {t('teamOpt.result.ranking', {
-            defaultValue: 'Ranking other builds · {{done}} of {{total}}',
-            done,
-            total,
-          })}
+      )}
+      <Typography role="status" sx={type.label}>
+        {running || done > 0
+          ? t(
+              'teamOpt.result.rankingReady',
+              '{{done}} of {{total}} members ranked',
+              { done, total }
+            )
+          : t(
+              'teamOpt.result.rankOptional',
+              'Compare alternative weapons and sets for this result.'
+            )}
+      </Typography>
+      <Button
+        size="small"
+        variant="outlined"
+        color="inherit"
+        onClick={running ? onStop : onStart}
+      >
+        {running
+          ? t('teamOpt.result.stopRanking', 'Stop ranking')
+          : t('teamOpt.result.rankEquipment', 'Rank equipment')}
+      </Button>
+      {error && (
+        <Typography
+          role="alert"
+          color="warning.main"
+          sx={{ ...type.label, width: '100%' }}
+        >
+          {error}
         </Typography>
-      </Box>
+      )}
     </Box>
   )
 }

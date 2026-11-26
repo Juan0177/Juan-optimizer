@@ -39,8 +39,8 @@ import { SetLines } from './KqmBuildView'
 import {
   CopyRankingButton,
   compactFieldSx,
-  type RankOption,
   RankList,
+  type RankOption,
   RankTabs,
   WeaponLabel,
 } from './KqmComparison'
@@ -87,6 +87,7 @@ export function TeamOptInspector({
   characterKey,
   result,
   optionsRunning,
+  onRank,
   session,
   picks,
   onPicks,
@@ -99,6 +100,7 @@ export function TeamOptInspector({
   result: TeamOptResult
   /** Its first rankings are still being searched */
   optionsRunning: boolean
+  onRank?: () => void
   session: () => Promise<TeamOptSession | undefined>
   picks: TeamOptPicks
   onPicks: (picks: TeamOptPicks) => void
@@ -519,6 +521,11 @@ export function TeamOptInspector({
               ...(!rankings && optionsRunning && { minHeight: 240 }),
             }}
           >
+            {!rankings && !busy && onRank && (
+              <Button size="small" onClick={onRank}>
+                {t('teamOpt.result.rankEquipment', 'Rank equipment')}
+              </Button>
+            )}
             <RankList
               key={category}
               options={list}

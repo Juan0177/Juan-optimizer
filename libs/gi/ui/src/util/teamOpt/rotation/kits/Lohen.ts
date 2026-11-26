@@ -2,6 +2,7 @@ import type { InputPremodKey } from '@genshin-optimizer/gi/wr-types'
 import { HEXEREI_CHARACTERS } from '../gearEffects'
 import type { DamageOutcome, KitModel, SimContext, SimHit } from '../types'
 import {
+  flatEnergy,
   KQMSIM,
   type NormalHit,
   normalString,
@@ -10,17 +11,7 @@ import {
 } from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), pinned by KQMSIM below.
- * Unlike the pinned skillPierce, consume Joy and count the three special skills.
- * See priority-coverage/reference-audits/lohen.md for unresolved source differences.
- *
- * Constellations (kqmsim cons.go, checked against the game text): C1 raises the Will cap to 300
- * and multiplies its gains by 5; C2's Evilsbane Blade (after a Masterstroke Etch or burst, 4 s
- * cooldown) makes the next Masterstroke normal or charged hit add a 500% ATK Cryo strike and give
- * the others 200 EM for 8 s; C4 maxes Will for a Masterstroke burst (its energy is not modelled);
- * C6 (once per 7 s) keeps the Will instead of consuming it, maxes Joy, and the next Etch extends
- * Masterstroke by 1.25 s. Following the text, C6 allows two more Etches in that Masterstroke
- * (kqmsim adds one per extension). The sheet gives every Etch C6's +175% CRIT DMG; a burst gets
- * it when it triggers or follows the C6 effect, as in kqmsim. */
+ * See priority-coverage/reference-audits/lohen.md for unresolved source differences. */
 
 const normals: NormalHit[] = [
   {
@@ -75,11 +66,9 @@ interface State {
   skills: number
   /** Etches allowed in this Masterstroke (3; C6 adds 2) */
   maxSkills: number
-  /** C2: Evilsbane Blade until, and its 4 s cooldown */
   c2Until: number
   c2Ready: number
-  /** C6: the effect (18 s, for the next Etch or burst) until, and its 7 s cooldown */
-  c6Until: number
+  c6Mark: boolean
   c6Ready: number
   will: Map<number, number>
   highSpiritsReady: number
@@ -94,14 +83,13 @@ export function lohenWillAfterHit(
   previous: ReadonlyMap<number, number>,
   outcomes: readonly DamageOutcome[],
   baseAtk: number,
-  /** C1: the cap is 300 and every gain counts 5 times */
   c1 = false
 ): Map<number, number> {
   const next = new Map<number, number>()
   for (const [will, p] of previous)
     for (const roll of outcomes) {
       const gain =
-        ((roll.damage > 10 * baseAtk ? 20 : 1) +
+        ((roll.damage >= 10 * baseAtk ? 20 : 1) +
           (roll.damage >= 30 * baseAtk ? 60 : 0)) *
         (c1 ? 5 : 1)
       const value = Math.min(c1 ? 300 : 100, will + gain)
@@ -113,17 +101,20 @@ export function lohenWillAfterHit(
 function finish(c: SimContext, s: State) {
   s.end = c.now
   s.joy = 0
+  s.c2Until = -1
+  s.c6Mark = false
   s.will = new Map([[0, 1]])
 }
 function consume(c: SimContext, s: State, burst: boolean) {
   const cons = c.constellation('Lohen')
-  // C4: a Masterstroke burst maxes the Will first
-  if (burst && cons >= 4 && active(c, s))
+  const inMaster = active(c, s)
+  if (burst && cons >= 4 && inMaster)
     s.will = new Map([[cons >= 1 ? 300 : 100, 1]])
-  const distribution = active(c, s) ? s.will : new Map([[0, 1]])
+  const distribution = inMaster ? s.will : new Map([[0, 1]])
   const mean = [...distribution].reduce((sum, [will, p]) => sum + will * p, 0)
+  const halfMax = cons >= 1 ? 150 : 50
   const probability = [...distribution].reduce(
-    (sum, [will, p]) => sum + (will >= 50 ? p : 0),
+    (sum, [will, p]) => sum + (will >= halfMax ? p : 0),
     0
   )
   if (
@@ -131,54 +122,64 @@ function consume(c: SimContext, s: State, burst: boolean) {
     probability > 0
   )
     s.hex.push({ end: c.now + 360, probability })
-  // C6 (in Masterstroke): the first Etch or burst after its cooldown keeps the Will, maxes Joy
-  // and starts the 18 s effect; the next one uses the effect up. Both get its CRIT DMG
-  let c6 = false
+  const c6 = cons >= 6 && inMaster
   let keep = false
-  if (cons >= 6 && active(c, s)) {
-    if (c.now < s.c6Until) {
-      s.c6Until = -1
-      c6 = true
-    } else if (c.now >= s.c6Ready) {
-      s.c6Until = c.now + 1080
-      s.c6Ready = c.now + 420
+  let refilledJoy = false
+  if (c6 && c.now >= s.c6Ready) {
+    keep = true
+    s.c6Ready = c.now + 420
+    if ((burst ? s.skills : s.skills + 1) < s.maxSkills) {
       s.joy = 100
-      if (s.maxSkills < 5) s.maxSkills = 5
-      c6 = keep = true
+      s.c6Mark = true
+      refilledJoy = true
     }
   }
   if (!keep) s.will = new Map([[0, 1]])
-  // C2: Evilsbane Blade for the next Masterstroke normal or charged hit (4 s, 4 s cooldown)
-  if (cons >= 2 && active(c, s) && c.now >= s.c2Ready) {
+  if (cons >= 2 && inMaster && c.now >= s.c2Ready) {
     s.c2Until = c.now + 240
     s.c2Ready = c.now + 240
   }
-  return { talentMultiplier: 1 + mean * 0.004, c6 }
+  return { talentMultiplier: 1 + mean * 0.004, c6, refilledJoy }
 }
 const snapshots = (c: SimContext) =>
-  (['atk', 'critRate_', 'critDMG_', 'cryo_dmg_', 'eleMas'] as const).map(
-    (stat) => ({
-      stat: (stat === 'atk' ? 'atk' : stat) as InputPremodKey,
-      path: ['total', stat],
-      t: c.now,
-      onField: c.onField,
-    })
-  )
+  (
+    [
+      'atk',
+      'critRate_',
+      'critDMG_',
+      'cryo_dmg_',
+      'all_dmg_',
+      'skill_dmg_',
+      'burst_dmg_',
+      'eleMas',
+    ] as const
+  ).map((stat) => ({
+    stat: stat as InputPremodKey,
+    path: ['total', stat],
+    t: c.now,
+    onField: c.onField,
+  }))
 function resourceAttack(c: SimContext, s: State, burst: boolean) {
   const first = burst ? 101 : 28
-  // C6: an Etch used while its effect is up extends Masterstroke by 1.25 s at once
-  if (!burst && c.constellation('Lohen') >= 6 && c.now < s.c6Until) s.end += 75
+  if (!burst && c.constellation('Lohen') >= 6 && s.c6Mark) {
+    s.c6Mark = false
+    s.end += 75
+  }
+  let refilledJoy = false
   c.at(first - 1, (at) => {
-    const { talentMultiplier, c6 } = consume(at, s, burst)
+    const res = consume(at, s, burst)
+    refilledJoy = res.refilledJoy
     const statSnapshots = snapshots(at)
-    for (const delay of burst ? [101, 122, 128, 137, 162] : [28, 35, 45, 52])
+    for (const delay of burst
+      ? [101, 125, 131, 137, 143, 167]
+      : [28, 35, 45, 52])
       at.hit(delay - first + 1, {
         path: burst ? ['burst', 'burstDmg'] : ['skill', 'etchDmg'],
         tag: burst ? 'burst' : 'skill',
         element: 'cryo',
         applies: true,
         icd: burst ? 'burst' : 'skill',
-        talentMultiplier,
+        talentMultiplier: res.talentMultiplier,
         statSnapshots,
         ...(burst
           ? {
@@ -186,7 +187,7 @@ function resourceAttack(c: SimContext, s: State, burst: boolean) {
                 {
                   owner: 'Lohen' as const,
                   path: ['Lohen', 'c6BurstMaster'],
-                  value: c6 ? 'on' : '',
+                  value: res.c6 ? 'on' : '',
                 },
               ],
             }
@@ -196,9 +197,7 @@ function resourceAttack(c: SimContext, s: State, burst: boolean) {
   })
   if (!burst)
     c.at(first, () => {
-      // (C6's trigger maxed the Joy again)
-      if (!(c.constellation('Lohen') >= 6 && s.c6Until > c.now && s.joy >= 100))
-        s.joy = 0
+      if (!refilledJoy) s.joy = 0
       s.skills++
     })
 }
@@ -216,7 +215,7 @@ export const kit: KitModel = {
     maxSkills: 3,
     c2Until: -1,
     c2Ready: -1,
-    c6Until: -1,
+    c6Mark: false,
     c6Ready: -1,
     will: new Map([[0, 1]]),
     highSpiritsReady: -1,
@@ -229,12 +228,22 @@ export const kit: KitModel = {
       'lockBuff',
       'a4MasterCryo',
       'a0HighSpirits',
+      'c2Blade',
+      'c6BurstMaster',
     ])
       c.state('Lohen', ['Lohen', condition], '')
     c.note(
-      'Lohen: Burst follows the pinned five-hit timeline; sheet data describes six hits. N3, Joy consumption, the three-use limit and the per-member Will gain ICD follow the skill descriptions, correcting omissions in the pinned source. C4 energy is not modelled.'
+      'Lohen: Burst follows the six-hit timeline; N3, Joy consumption, the use limit and the per-member Will gain ICD follow the skill descriptions, correcting omissions in the pinned source.'
     )
   },
+  simOnlyBuffs: () => [
+    ['Lohen', 'willConsumed'],
+    ['Lohen', 'lockBuff'],
+    ['Lohen', 'a4MasterCryo'],
+    ['Lohen', 'a0HighSpirits'],
+    ['Lohen', 'c2Blade'],
+    ['Lohen', 'c6BurstMaster'],
+  ],
   cooldownKey(s: State, action, now) {
     return action.kind === 'skill'
       ? now < s.end
@@ -396,7 +405,7 @@ export const kit: KitModel = {
   onSwapOut: finish,
   onHitlag(c, s: State, frames) {
     if (active(c, s)) s.end += frames
-    for (const k of ['c2Until', 'c2Ready', 'c6Until', 'c6Ready'] as const)
+    for (const k of ['c2Until', 'c2Ready', 'c6Ready'] as const)
       if (s[k] > c.now) s[k] += frames
     if (s.joyReady > c.now && c.now > s.joyAt) s.joyReady += frames
     if (s.highSpiritsReady > c.now) s.highSpiritsReady += frames

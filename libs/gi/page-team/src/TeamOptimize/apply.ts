@@ -196,8 +196,10 @@ export function saveTeamResult(
   result: TeamOptResult,
   name: string
 ) {
+  const saved: NonNullable<Team['savedOptimization']> = {}
   for (const member of changedMembers(database, teamId, result)) {
     const { characterKey, teamCharId, loadoutDatum } = member
+    if (loadoutDatum.buildType === 'tc') continue
     const weaponId =
       result.weapons?.[characterKey] ??
       database.teams.getLoadoutWeaponId(loadoutDatum)
@@ -208,9 +210,58 @@ export function saveTeamResult(
       weaponId,
       srcTeamCharId: teamCharId,
     })
-    database.teams.setLoadoutDatum(teamId, teamCharId, {
-      buildType: 'real',
-      buildId,
-    })
+    if (buildId)
+      saved[teamCharId] = {
+        previousType: loadoutDatum.buildType,
+        previousBuildId: loadoutDatum.buildId,
+        savedBuildId: buildId,
+      }
   }
+  if (!Object.keys(saved).length) return
+  database.teams.set(teamId, (team) => {
+    team.savedOptimization = saved
+    team.loadoutData = team.loadoutData.map((datum) => {
+      const choice = datum && saved[datum.teamCharId]
+      return datum && choice
+        ? { ...datum, buildType: 'real', buildId: choice.savedBuildId }
+        : datum
+    })
+  })
+}
+
+/** Restore the loadout selection. The saved builds are still available in the build list. */
+export function restoreTeamBuilds(database: ArtCharDatabase, teamId: string) {
+  const team = database.teams.get(teamId)
+  const saved = team?.savedOptimization
+  if (
+    !team ||
+    !saved ||
+    !Object.entries(saved).every(
+      ([id, change]) =>
+        team.loadoutData.some(
+          (datum) =>
+            datum?.teamCharId === id &&
+            datum.buildType === 'real' &&
+            datum.buildId === change.savedBuildId
+        ) &&
+        (change.previousType === 'equipped' ||
+          !!database.builds.get(change.previousBuildId))
+    )
+  )
+    return false
+
+  database.teams.set(teamId, (draft) => {
+    draft.loadoutData = draft.loadoutData.map((datum) => {
+      const change = datum && saved[datum.teamCharId]
+      return datum && change
+        ? {
+            ...datum,
+            buildType: change.previousType,
+            buildId: change.previousBuildId,
+          }
+        : datum
+    })
+    delete draft.savedOptimization
+  })
+  return true
 }

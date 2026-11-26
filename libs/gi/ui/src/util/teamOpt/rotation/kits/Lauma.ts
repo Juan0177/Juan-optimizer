@@ -37,10 +37,10 @@ interface LaumaState {
   /** Spirit Envoy: its status runs over [deerStart, deerEnd) */
   deerStart: number
   deerEnd: number
-  /** The latest skill's frame: its Frostgrove ticks stop when a new skill is cast */
   skillSrc: number
-  /** C6: Frostgrove Sanctuary's Lunar-Bloom hits this skill (max 8) */
   c6Count: number
+  c1End: number
+  c1Icd: number
 }
 
 const deerActive = (s: LaumaState, t: number) =>
@@ -81,9 +81,8 @@ function addC6Hymn(ctx: SimContext, s: LaumaState, count: number) {
   syncHymn(ctx, s)
   ctx.at(900, (c) => syncHymn(c, s))
 }
-/** Spend one Pale Hymn stack (C6's first, then the Moon Song's, then the burst's) */
 function spendHymn(ctx: SimContext, s: LaumaState) {
-  for (const kind of ['c6', 'song', 'burst'] as const) {
+  for (const kind of ['c6', 'burst', 'song'] as const) {
     if (s.pools[kind].count > 0) {
       s.pools[kind].count--
       break
@@ -108,6 +107,12 @@ export const kit: KitModel = {
   moonsign: 1,
   element: 'dendro',
   source: `${KQMSIM}/lauma`,
+  simOnlyBuffs: () => [
+    ['Lauma', 'a1AfterSkill'],
+    ['Lauma', 'skillAfterHit'],
+    ['Lauma', 'burstPaleHymn'],
+    ['Lauma', 'skillVerdantDew'],
+  ],
   init: (): LaumaState => ({
     particles: new Map(),
     pools: {
@@ -123,8 +128,26 @@ export const kit: KitModel = {
     deerEnd: -1e9,
     skillSrc: -1,
     c6Count: 0,
+    c1End: -1,
+    c1Icd: -1e9,
   }),
   onHit(ctx, s: LaumaState, hit) {
+    if (
+      ctx.constellation('Lauma') >= 1 &&
+      hit.path[0] === '_reaction' &&
+      hit.path[1] === 'lunarBloom' &&
+      hit.t < s.c1End &&
+      hit.t >= s.c1Icd
+    ) {
+      s.c1Icd = hit.t + 114
+      ctx.hit(0, {
+        characterKey: 'Lauma',
+        path: ['_heal', 'constellation1', 'heal'],
+        tag: 'other',
+        element: 'physical',
+        label: 'Lauma C1 (Heal)',
+      })
+    }
     const direct =
       hit.label.includes('Lunar-Bloom') && !hit.path[0].startsWith('_')
     const core =
@@ -242,7 +265,7 @@ export const kit: KitModel = {
       }
       case 'skill': {
         endDeer(s, now)
-        // A1 (the bloom crit, on the sheet's ascension) for 20 s; C1 (the heal) is not modelled
+        s.c1End = now + 1200
         ctx.buff('Lauma', ['Lauma', 'a1AfterSkill'], 'on', 0, 1200)
         // Frostgrove Sanctuary: 8 ticks from 62 frames, 117 apart, for 15 s; each tick shreds RES
         // for 10 s (the cond) and at C6 adds a Lunar-Bloom hit (max 8 per skill)
@@ -259,7 +282,12 @@ export const kit: KitModel = {
             if (s.skillSrc !== src) return
             frostgroveTick(c2, s)
           })
-        if (action.hold) return holdSkill(ctx, s)
+        if (action.hold) {
+          if (ctx.dew >= 1) return holdSkill(ctx, s)
+          ctx.note(
+            'Lauma: Hold Skill needs at least 1 Verdant Dew; played as Tap Skill.'
+          )
+        }
         ctx.hit(16, {
           path: ['skill', 'pressDmg'],
           tag: 'skill',
@@ -287,6 +315,7 @@ export const kit: KitModel = {
         s.burstEnd = -1
         s.songUsed = false
         ctx.at(96, (c) => {
+          s.c1End = c.now + 1200
           s.burstEnd = c.now + 900
           setHymn(c, s, 'burst', 18)
           if (c.now < s.songEnd && s.song > 0) moonSong(c, s, s.song)
@@ -376,9 +405,8 @@ function frostgroveTick(c: SimContext, s: LaumaState) {
     icd: 'none',
     label: 'Frostgrove Sanctuary',
   })
-  // its particles: 1, or 2 at a 30% chance, 3.3 s ICD on Lauma's clock (kqmsim particleCB)
   if (turretReady(s.particles, 'sanctuary', c.characterFrame('Lauma'), 198))
-    turretParticles(c, 0, 1.3, 'Lauma')
+    turretParticles(c, 0, 4 / 3, 'Lauma')
   // C4: 4 Energy as it hits, once per 5 s (the game text; the reference restores 5)
   if (
     c.constellation('Lauma') >= 4 &&

@@ -192,17 +192,21 @@ const c2ShieldEleMas = unequal(
 const c2NsFreezeMelt_pyro_enemyRes_ = greaterEq(
   input.constellation,
   2,
-  {
-    ...a1NsFreezeMelt_pyro_enemyRes_,
-  },
+  greaterEq(
+    input.asc,
+    1,
+    equal(condA1NsFreezeMelt, 'on', -dm.constellation2.pyroHydro_enemyRes_)
+  ),
   { path: 'pyro_enemyRes_', isTeamBuff: true }
 )
 const c2NsFreezeMelt_hydro_enemyRes_ = greaterEq(
   input.constellation,
   2,
-  {
-    ...a1NsFreezeMelt_hydro_enemyRes_,
-  },
+  greaterEq(
+    input.asc,
+    1,
+    equal(condA1NsFreezeMelt, 'on', -dm.constellation2.pyroHydro_enemyRes_)
+  ),
   { path: 'hydro_enemyRes_', isTeamBuff: true }
 )
 

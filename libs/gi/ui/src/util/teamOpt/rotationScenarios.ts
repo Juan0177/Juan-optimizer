@@ -332,6 +332,7 @@ export function buildRotationScenarios({
 
   const seen = new Set<string>()
   const scenarios: RotationScenario[] = []
+  const currentText = wordsRotationText(rotationWords(baseText, names))
 
   for (const choices of combos) {
     const text = rewriteBurstRotation(baseText, names, choices)
@@ -346,11 +347,13 @@ export function buildRotationScenarios({
     if (seen.has(sig)) continue
     seen.add(sig)
 
-    const isBaseline = activeConfigs.every((cfg) => {
-      const ch = choices[cfg.characterKey]
-      const base = baselineBurstEvery?.[cfg.characterKey] ?? 1
-      return ch?.cadence === base
-    })
+    const isBaseline =
+      text === currentText &&
+      activeConfigs.every((cfg) => {
+        const ch = choices[cfg.characterKey]
+        const base = baselineBurstEvery?.[cfg.characterKey] ?? 1
+        return ch?.cadence === base
+      })
 
     const id =
       activeConfigs
@@ -370,7 +373,16 @@ export function buildRotationScenarios({
     })
   }
 
-  // Ensure baseline appears first before optimization runs
+  // Keep the unmodified rotation available even when every selected variant rewrites it.
+  if (!scenarios.some((scenario) => scenario.isBaseline))
+    scenarios.unshift({
+      id: 'current',
+      kind: 'cadence',
+      text: baseText,
+      burstEvery: { ...baselineBurstEvery },
+      choices: {},
+      isBaseline: true,
+    })
   scenarios.sort((a, b) => Number(b.isBaseline) - Number(a.isBaseline))
 
   for (const custom of validCustoms) {
@@ -385,7 +397,11 @@ export function buildRotationScenarios({
     })
   }
 
-  return { scenarios, totalCount, truncated }
+  return {
+    scenarios,
+    totalCount: totalCount + Number(scenarios[0]?.id === 'current'),
+    truncated,
+  }
 }
 
 /**

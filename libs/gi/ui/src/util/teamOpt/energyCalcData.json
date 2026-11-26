@@ -499,7 +499,7 @@
         "label": "Press",
         "particles": 0,
         "flatEnergy": 0,
-        "variance": 0.5,
+        "variance": 0.25,
         "perSecond": 0.33,
         "duration": 25,
         "cooldown": 17
@@ -1366,7 +1366,7 @@
         "label": "Press",
         "particles": 0,
         "flatEnergy": 0,
-        "variance": 0.5,
+        "variance": 0.25,
         "perSecond": 0.33,
         "duration": 15,
         "cooldown": 12

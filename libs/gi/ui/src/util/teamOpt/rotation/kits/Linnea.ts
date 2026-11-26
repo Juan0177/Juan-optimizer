@@ -67,13 +67,15 @@ function lumiParticles(ctx: SimContext, s: LinneaState) {
 function lumiAttack(ctx: SimContext, s: LinneaState, token: number) {
   if (token !== s.token || ctx.now >= s.end) return
   if (!s.standard && s.index === 1) {
+    if (ctx.constellation('Linnea') >= 2 && ctx.moonsign >= 2)
+      ctx.triggerHarmony()
     ctx.hit(0, {
       path: ['skill', 'hammerDmg'],
       tag: 'directLunarCrystallize',
       element: 'geo',
-      triggersHarmony: ctx.constellation('Linnea') >= 2 && ctx.moonsign >= 2,
       label: 'Lumi Heavy Overdrive Hammer (Lunar-Crystallize)',
     })
+    lumiParticles(ctx, s)
   } else {
     for (const delay of [0, 12])
       ctx.at(delay, (c) => {
@@ -104,9 +106,8 @@ function activate(
   s.end = ctx.now + 1500
   if (!standard && ctx.moondrifts > 0) s.index = 1
   const shred = (c: SimContext) => {
-    if (token !== s.token) return
+    if (token !== s.token || c.now >= s.end) return
     c.buff('Linnea', ['Linnea', 'a1Lumi'], 'on', 0, 120)
-    // The pinned native A1 ticker is tied to the summon source, including its lingering tail.
     c.at(60, shred)
   }
   shred(ctx)
@@ -125,6 +126,13 @@ export const kit: KitModel = {
   moonsign: 1,
   element: 'geo',
   source: `${KQMSIM}/linnea`,
+  simOnlyBuffs: () => [
+    ['Linnea', 'a1Lumi'],
+    ['Linnea', 'c1TeamStacks'],
+    ['Linnea', 'c1LumiStacks'],
+    ['Linnea', 'c2Moondrift'],
+    ['Linnea', 'c4Moondrift'],
+  ],
   init: (): LinneaState => ({
     particles: new Map(),
     end: -1,
@@ -221,15 +229,17 @@ export const kit: KitModel = {
             s.recastEnd = ctx.now
             s.index = 0
             activate(ctx, s, true, 98)
-            ctx.hit(50, {
-              path: ['skill', 'crushDmg'],
-              tag: 'directLunarCrystallize',
-              element: 'geo',
-              triggersHarmony:
-                ctx.constellation('Linnea') >= 2 && ctx.moonsign >= 2,
-              label: 'Lumi Million Ton Crush (Lunar-Crystallize)',
+            ctx.at(50, (c) => {
+              if (c.constellation('Linnea') >= 2 && c.moonsign >= 2)
+                c.triggerHarmony()
+              c.hit(0, {
+                path: ['skill', 'crushDmg'],
+                tag: 'directLunarCrystallize',
+                element: 'geo',
+                label: 'Lumi Million Ton Crush (Lunar-Crystallize)',
+              })
+              lumiParticles(c, s)
             })
-            ctx.at(50, (c) => lumiParticles(c, s))
           } else expireRecast(ctx, s)
           return { frames: 10 }
         }
@@ -263,12 +273,11 @@ export const kit: KitModel = {
           weight: ctx.members.length,
           label: 'Survival Guide (Initial Heal)',
         })
-        for (let i = 1; i <= 5; i++)
-          ctx.hit(97 + i * 120, {
+        for (let i = 1; i <= 12; i++)
+          ctx.hit(97 + i * 60, {
             path: ['_heal', 'burst', 'continuousHeal'],
             tag: 'other',
             element: 'physical',
-            weight: ctx.members.length,
             label: 'Survival Guide (Heal)',
           })
         return {

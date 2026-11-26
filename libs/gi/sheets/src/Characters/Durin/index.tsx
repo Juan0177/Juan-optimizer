@@ -14,7 +14,7 @@ import {
   target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
-import { cond, st, stg } from '../../SheetUtil'
+import { any, cond, st, stg } from '../../SheetUtil'
 import { CharacterSheet } from '../CharacterSheet'
 import { charTemplates } from '../charTemplates'
 import {
@@ -117,6 +117,12 @@ const dm = {
 
 const [condBurstFormPath, condBurstForm] = cond(key, 'burstForm')
 
+const [condA1WhiteResPath, condA1WhiteRes] = cond(key, 'a1WhiteRes')
+const a1WhiteActive = any(
+  1,
+  equal(condBurstForm, 'white', 1),
+  equal(condA1WhiteRes, 'on', 1)
+)
 const [condA1WhiteDendroPath, condA1WhiteDendro] = cond(key, 'a1WhiteDendro')
 const [condA1WhiteElectroPath, condA1WhiteElectro] = cond(key, 'a1WhiteElectro')
 const [condA1WhiteAnemoPath, condA1WhiteAnemo] = cond(key, 'a1WhiteAnemo')
@@ -125,8 +131,8 @@ const a1White_pyro_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condBurstForm,
-    'white',
+    a1WhiteActive,
+    1,
     greaterEq(
       sum(
         equal(condA1WhiteDendro, 'dendro', 1),
@@ -143,8 +149,8 @@ const a1White_dendro_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condBurstForm,
-    'white',
+    a1WhiteActive,
+    1,
     equal(condA1WhiteDendro, 'dendro', -dm.passive1.enemyRes_)
   )
 )
@@ -152,8 +158,8 @@ const a1White_electro_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condBurstForm,
-    'white',
+    a1WhiteActive,
+    1,
     equal(condA1WhiteElectro, 'electro', -dm.passive1.enemyRes_)
   )
 )
@@ -161,19 +167,15 @@ const a1White_anemo_enemyRes_ = greaterEq(
   input.asc,
   1,
   equal(
-    condBurstForm,
-    'white',
+    a1WhiteActive,
+    1,
     equal(condA1WhiteAnemo, 'anemo', -dm.passive1.enemyRes_)
   )
 )
 const a1White_geo_enemyRes_ = greaterEq(
   input.asc,
   1,
-  equal(
-    condBurstForm,
-    'white',
-    equal(condA1WhiteGeo, 'geo', -dm.passive1.enemyRes_)
-  )
+  equal(a1WhiteActive, 1, equal(condA1WhiteGeo, 'geo', -dm.passive1.enemyRes_))
 )
 
 const a1Dark_vaporize_dmg_ = greaterEq(
@@ -422,11 +424,7 @@ const [condC6LightBurstHitPath, condC6LightBurstHit] = cond(
 const c6LightBurstHit_defRed_ = greaterEq(
   input.constellation,
   6,
-  equal(
-    condBurstForm,
-    'white',
-    equal(condC6LightBurstHit, 'on', dm.constellation6.light_defRed_)
-  )
+  equal(condC6LightBurstHit, 'on', dm.constellation6.light_defRed_)
 )
 const c6_dark_burst_defIgn_ = greaterEq(
   input.constellation,
@@ -721,7 +719,19 @@ const sheet: TalentSheet = {
 
   passive1: ct.talentTem('passive1', [
     ct.condTem('passive1', {
-      canShow: equal(condBurstForm, 'white', 1),
+      path: condA1WhiteResPath,
+      value: condA1WhiteRes,
+      canShow: equal(condA1WhiteRes, 'on', 1),
+      teamBuff: true,
+      name: ct.ch('whiteForm'),
+      states: {
+        on: {
+          fields: [],
+        },
+      },
+    }),
+    ct.condTem('passive1', {
+      canShow: equal(a1WhiteActive, 1, 1),
       teamBuff: true,
       states: {
         dendro: {
@@ -752,8 +762,8 @@ const sheet: TalentSheet = {
     }),
     ct.fieldsTem('passive1', {
       canShow: equal(
-        condBurstForm,
-        'white',
+        a1WhiteActive,
+        1,
         greaterEq(
           sum(
             equal(condA1WhiteDendro, 'dendro', 1),
@@ -865,8 +875,8 @@ const sheet: TalentSheet = {
           input.asc,
           1,
           equal(
-            condBurstForm,
-            'white',
+            a1WhiteActive,
+            1,
             greaterEq(
               sum(
                 equal(condA1WhiteDendro, 'dendro', 1),
@@ -1158,7 +1168,11 @@ const sheet: TalentSheet = {
       path: condC6LightBurstHitPath,
       value: condC6LightBurstHit,
       teamBuff: true,
-      canShow: equal(condBurstForm, 'white', 1),
+      canShow: any(
+        1,
+        equal(condBurstForm, 'white', 1),
+        equal(condC6LightBurstHit, 'on', 1)
+      ),
       name: st('hitOp.burst'),
       states: {
         on: {

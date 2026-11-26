@@ -14,6 +14,7 @@ import {
   stellarDmgNode,
   subscript,
   sum,
+  target,
   unequal,
 } from '@genshin-optimizer/gi/wr'
 import { cond, st, stg } from '../../SheetUtil'
@@ -187,21 +188,28 @@ const c1Awaiting_stellarswirl_dmgInc = greaterEq(
   )
 )
 
+const c2Dream_dmg_disp = objKeyValMap(absorbableEle, (ele) => [
+  `${ele}_dmg_`,
+  infoMut(
+    greaterEq(
+      input.constellation,
+      2,
+      equal(
+        condSkillDream,
+        'on',
+        equal(
+          input.activeCharKey,
+          key,
+          prod(percent(dm.constellation2.phec_dmg_), input.premod.eleMas)
+        )
+      )
+    ),
+    { path: `${ele}_dmg_`, isTeamBuff: true }
+  ),
+])
 const c2Dream_dmg_ = objKeyValMap(absorbableEle, (ele) => [
   `${ele}_dmg_`,
-  greaterEq(
-    input.constellation,
-    2,
-    equal(
-      condSkillDream,
-      'on',
-      equal(
-        input.activeCharKey,
-        key,
-        prod(percent(dm.constellation2.phec_dmg_), input.total.eleMas)
-      )
-    )
-  ),
+  unequal(target.charKey, key, c2Dream_dmg_disp[`${ele}_dmg_`]),
 ])
 const c2Dream_res_ = objKeyValMap([...absorbableEle, 'anemo'], (ele) => [
   `${ele}_enemyRes_`,
@@ -256,7 +264,6 @@ const c6Dream_stellarswirl_critDMG_ = greaterEq(
     equal(input.activeCharKey, key, dm.constellation6.stellarswirl_critDMG_)
   )
 )
-// TODO: Verify if this reads premod or total
 const c6_critRate_ = greaterEq(
   input.constellation,
   6,
@@ -388,7 +395,7 @@ const dmgFormulas = {
     ),
   },
   constellation2: {
-    ...c2Dream_dmg_,
+    ...c2Dream_dmg_disp,
   },
   constellation4: {
     heal: greaterEq(
@@ -427,17 +434,16 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
       swirl_dmg_: skillDream_swirl_dmg_,
       stellarswirl_dmg_: skillDream_stellarswirl_dmg_,
       swirl_dmgInc: c1Awaiting_swirl_dmgInc,
-      stellarswirl_dmgInc: c1Awaiting_stellarswirl_dmgInc,
-      ...c2Dream_dmg_, // Maybe should be total?
+      stellarswirl_reactionDmgInc: c1Awaiting_stellarswirl_dmgInc,
       ...c2Dream_res_,
       swirl_critRate_: c6Dream_swirlCritRate_,
       swirl_critDMG_: c6Dream_swirlCritDMG_,
       stellarswirl_critRate_: c6Dream_stellarswirl_critRate_,
       stellarswirl_critDMG_: c6Dream_stellarswirl_critDMG_,
     },
-    // Maybe should be premod?
     total: {
       eleMas: lockDream_eleMas,
+      ...c2Dream_dmg_,
     },
   },
   flags: {
@@ -543,6 +549,7 @@ const sheet: TalentSheet = {
     }),
     ct.headerTem('lockedPassive', {
       canShow: equal(condSkillDream, 'on', equal(input.activeCharKey, key, 1)),
+      teamBuff: true,
       fields: [
         {
           node: lockDream_eleMas,
@@ -550,10 +557,10 @@ const sheet: TalentSheet = {
       ],
     }),
     ct.headerTem('constellation2', {
-      canShow: equal(condSkillDream, 'on', 1),
+      canShow: equal(condSkillDream, 'on', equal(input.activeCharKey, key, 1)),
       teamBuff: true,
       fields: [
-        ...Object.values(c2Dream_dmg_).map((node) => ({ node })),
+        ...Object.values(c2Dream_dmg_disp).map((node) => ({ node })),
         ...Object.values(c2Dream_res_).map((node) => ({ node })),
       ],
     }),

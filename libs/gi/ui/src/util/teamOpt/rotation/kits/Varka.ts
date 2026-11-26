@@ -269,6 +269,8 @@ function azureDevour(
       tag: 'other',
       element: 'anemo',
       applies: false,
+      blunt: true,
+      poiseDamage: 20,
       label: 'Varka C2',
     })
   for (const t of [40, 60])
@@ -339,6 +341,8 @@ function fourWinds(
       tag: 'other',
       element: 'anemo',
       applies: false,
+      blunt: true,
+      poiseDamage: 20,
       label: 'Varka C2',
     })
   ctx.hit(34, {
@@ -410,8 +414,10 @@ function varkaAct(
       return chargedAttack(ctx, s, windup, sturm)
     }
     case 'skill': {
-      if (s.timed.sturm !== undefined && s.conv !== 'physical')
+      if (s.timed.sturm !== undefined && s.conv !== 'physical') {
+        if (s.timed.c6Ca !== undefined) return azureDevour(ctx, s, 0, true)
         return fourWinds(ctx, s, s.timed.c6Skill !== undefined)
+      }
       // Windbound Execution (tap): Sturm und Drang for 12 s; 16 s cooldown from frame 39
       ctx.hit(40, {
         path: ['skill', 'skillDmg'],
@@ -520,6 +526,10 @@ export const kit: KitModel = {
     lastEnd: -1,
   }),
   charges: () => ({ special: 2 }),
+  simOnlyBuffs: () => [
+    ['Varka', 'a4Stacks'],
+    ...CONVERSIONS.map((ele) => ['Varka', `c4Swirl${ele}`]),
+  ],
   onStart(ctx, s: VarkaState) {
     const poll = (at: SimContext) => {
       s.a1Snapshot = { t: at.now, onField: at.onField }
@@ -527,6 +537,8 @@ export const kit: KitModel = {
     }
     poll(ctx)
     ctx.state('Varka', ['Varka', 'a4Stacks'], '')
+    for (const ele of CONVERSIONS)
+      ctx.state('Varka', ['Varka', `c4Swirl${ele}`], '')
   },
   onHit(ctx, s: VarkaState, hit) {
     if (hit.path[0] === '_reaction' && hit.path[1].endsWith('Swirl')) {
@@ -594,7 +606,9 @@ export const kit: KitModel = {
       return undefined
     const mode = 'Sturm und Drang'
     if (action.kind === 'skill')
-      return { key: 'sturm', label: "Four Winds' Ascension", mode }
+      return s.timed.c6Ca !== undefined
+        ? { key: 'azure', label: 'Azure Devour', mode }
+        : { key: 'sturm', label: "Four Winds' Ascension", mode }
     if (
       action.kind === 'charged' &&
       (s.timed.c6Ca !== undefined || ctx.cooldownReadyAt('special') <= ctx.now)
@@ -611,7 +625,9 @@ export const kit: KitModel = {
   cooldownKey: (s: VarkaState, action) => {
     if (action.kind === 'skill') {
       if (s.timed.sturm !== undefined && s.conv !== 'physical')
-        return s.timed.c6Skill !== undefined ? undefined : 'special'
+        return s.timed.c6Skill !== undefined || s.timed.c6Ca !== undefined
+          ? undefined
+          : 'special'
       return 'skill'
     }
     return action.kind === 'burst' ? 'burst' : undefined

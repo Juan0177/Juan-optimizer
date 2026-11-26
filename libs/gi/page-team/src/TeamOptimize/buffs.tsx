@@ -227,6 +227,10 @@ const SHOWN_AS: Partial<
     path: ['Bennett', 'activeInArea'],
     value: 'activeInArea',
   },
+  'Cyno.c1Together': {
+    path: ['Cyno', 'c1Together'],
+    value: 'on',
+  },
 }
 
 /** `describe` for a buff the simulation timed: its own switches as the conditional they stand for */

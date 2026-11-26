@@ -119,7 +119,7 @@ const skill_enemyRes_ = subscript(input.total.skillIndex, dm.skill.enemyRes_, {
 })
 const sourceActive_geo_enemyRes_ = greaterEq(
   sum(
-    equal(condSourceActive, 'on', 1),
+    greaterEq(convertedSources, 2, equal(condSourceActive, 'on', 1)),
     equal(condNsBlessing, 'on', 1),
     greaterEq(input.constellation, 2, 1)
   ),
@@ -128,7 +128,11 @@ const sourceActive_geo_enemyRes_ = greaterEq(
 )
 const sourceActive_other_enemyRes_ = objKeyValMap(buffableEle, (ele) => [
   `${ele}_enemyRes_`,
-  equal(condSourceActive, 'on', greaterEq(tally[ele], 1, skill_enemyRes_)),
+  greaterEq(
+    convertedSources,
+    2,
+    equal(condSourceActive, 'on', greaterEq(tally[ele], 1, skill_enemyRes_))
+  ),
 ])
 
 const a1_normal_dmg_ = greaterEq(

@@ -26,7 +26,6 @@ interface State {
   a4: number
   a4End: number
   c4: number
-  refundCredit: number
   c1EnergyReady: number
 }
 const hit = (
@@ -155,6 +154,7 @@ function gainTick(c: SimContext, s: State) {
   c.at(90, (c2) => gainTick(c2, s))
 }
 export const kit: KitModel = {
+  sampled: (constellation) => constellation >= 6,
   characterKey: 'Mitya',
   element: 'electro',
   source: `${KQMSIM}/mitya`,
@@ -171,7 +171,6 @@ export const kit: KitModel = {
     a4: 0,
     a4End: -1,
     c4: 0,
-    refundCredit: 0,
     c1EnergyReady: -1,
   }),
   onStart(c) {
@@ -295,16 +294,8 @@ export const kit: KitModel = {
               ['charged', 'gradientStellarDmg'],
               'Special Charge (Stellar-Conduct)'
             )
-            if (c2.constellation('Mitya') >= 6) {
-              c2.note(
-                'Mitya C6: random prism refunds use accumulated probability for reproducible channel timing.'
-              )
-              s.refundCredit += 0.34
-              if (s.refundCredit >= 1) {
-                s.refundCredit--
-                addPrism(c2, s)
-              }
-            }
+            if (c2.constellation('Mitya') >= 6 && c2.random() < 0.34)
+              addPrism(c2, s)
             sync(c2, s)
             if (delay === 15) tick(c2)
           })

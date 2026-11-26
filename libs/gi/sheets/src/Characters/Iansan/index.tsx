@@ -177,7 +177,11 @@ const dmgFormulas = {
     burstNs_atkDisp,
   },
   passive2: {
-    heal: customHealNode(prod(percent(dm.passive2.heal), input.total.atk)),
+    heal: greaterEq(
+      input.asc,
+      4,
+      customHealNode(prod(percent(dm.passive2.heal), input.total.atk))
+    ),
   },
 }
 const skillC3 = greaterEq(input.constellation, 3, 3)

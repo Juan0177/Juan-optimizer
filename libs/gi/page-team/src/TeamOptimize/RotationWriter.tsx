@@ -53,16 +53,19 @@ import {
   type SimHit,
   type SimTeam,
   simTeamOf,
+  STEADY_COUNTED,
+  STEADY_REPEATS,
   simulateWritten,
   simulateWrittenAsync,
   syncEnergyCalculator,
+  teamBurstEvery,
   teamOptMembers,
   templatesForTeam,
   type WrittenRotation,
   withRotationEnergy,
   writtenKqmReplay,
   writtenSeconds,
-  writtenTeamReplay,
+  replayTeamAttacks,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -107,7 +110,11 @@ import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import { RotationCode } from './RotationCode'
-import { TemplatesButton, templateText } from './RotationTemplates'
+import {
+  starterRotation,
+  TemplatesButton,
+  templateText,
+} from './RotationTemplates'
 import type { TimelineMoment, TimelinePin } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
@@ -116,9 +123,7 @@ import {
   frameOverrides,
   RotationsDropdown,
   type RotationTimingSettings,
-  STEADY_COUNTED,
   STEADY_RANGE,
-  STEADY_REPEATS,
   timingPing,
 } from './RotationTiming'
 import { teamQuickTokens, teamSyntaxRows } from './rotationWriterHints'
@@ -729,7 +734,7 @@ export function teamRotationEnergy({
   names,
   team,
   text: given,
-  burstEvery,
+  burstEvery: givenBurstEvery,
   saved,
 }: {
   database: Database
@@ -756,6 +761,10 @@ export function teamRotationEnergy({
     return undefined
   const text = given ?? readStored(database, storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
+  const burstEvery =
+    givenBurstEvery !== undefined
+      ? givenBurstEvery
+      : teamBurstEvery(database.teams.get(teamId)?.teamOpt)
   const played = simulateWritten({
     text,
     opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
@@ -789,41 +798,7 @@ export function teamRotationEnergy({
   }
 }
 
-/**
- * The team's written rotation as "Use this rotation" plays it, with the members' gear from `gearOf`
- * (their own gear given). Nothing written, attacks entered by hand, or a rotation that can't be
- * played: undefined.
- */
-function teamReplayWith(
-  database: Database,
-  gender: GenderKey,
-  i18n: i18n,
-  teamId: string,
-  teamOpt: TeamOpt,
-  gearOf: (own: SimTeam['gear']) => SimTeam['gear']
-): TeamOpt['attacks'] | undefined {
-  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
-  const members = teamOptMembers(database, teamId)
-  try {
-    return writtenTeamReplay({
-      database,
-      teamId,
-      members,
-      gender,
-      names: memberNamesOf(members, i18n, gender),
-      teamOpt,
-      text: readStored(database, storageKey(teamId)) ?? '',
-      opener: readStored(database, openerKey(teamId)) ?? '',
-      timing: parseTiming(readStored(database, timingKey(teamId))),
-      frameData: parseFrameData(readStored(database, frameDataKey)),
-    })?.({ gear: gearOf(simTeamOf(members, database).gear), overrides: {} })
-      .attacks
-  } catch {
-    return undefined
-  }
-}
-
-/** The writer settings a Team Optimize worker needs to replay the rotation. */
+/** The saved rotation to replay for a gear search, with localized member aliases. */
 export function teamRunRotation(
   database: Database,
   gender: GenderKey,
@@ -831,12 +806,12 @@ export function teamRunRotation(
   teamId: string
 ): TeamOptRunRotation | undefined {
   if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
-  const text = readStored(database, storageKey(teamId)) ?? ''
+  const { text, opener, timing } = writtenRotationOf(database, teamId)
   if (!text.trim()) return undefined
   return {
     text,
-    opener: readStored(database, openerKey(teamId)) ?? '',
-    timing: parseTiming(readStored(database, timingKey(teamId))),
+    opener,
+    timing: parseTiming(timing),
     frameData: parseFrameData(readStored(database, frameDataKey)),
     names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
   }
@@ -873,20 +848,17 @@ export function teamTimedSetEffects(
 ) {
   const key = timedKey(teamId, teamOpt)
   if (timedSetEffects.has(key)) return timedSetEffects.get(key)
-  const attacks = teamReplayWith(
-    database,
-    gender,
-    i18n,
-    teamId,
-    teamOpt,
-    (own) =>
+  const rotation = teamRunRotation(database, gender, i18n, teamId)
+  const attacks =
+    rotation &&
+    replayTeamAttacks(database, teamId, gender, teamOpt, rotation, (own) =>
       Object.fromEntries(
         Object.entries(own).map(([k, gear]) => [
           k,
           { ...gear, candidates: { sets: allArtifactSetKeys, weapons: [] } },
         ])
       )
-  )
+    )
   const timed = attacks && timedRefs(attacks)
   timedSetEffects.set(key, timed)
   // (a few rotations kept: the ones a session goes back and forth between)
@@ -1188,6 +1160,7 @@ export function useRotationWriter({
   // (another tab's rotation: what was said about this one's goes)
   useEffect(() => setApplied(undefined), [rid, setApplied])
   const isKqm = !!kqm
+  // biome-ignore lint/correctness/useExhaustiveDependencies: replay only when the applied rotation or constellations change.
   useEffect(() => {
     const key = consKey(rid)
     if (!appliedText.trim()) return
@@ -1452,8 +1425,8 @@ export type SearchButton = (rotation: {
   text: string
   names: RotationMember[]
   setText: (text: string) => void
-  /** Live opener, timing (including rotations counted) and frame data in the modal */
-  saved?: {
+  close: () => void
+  saved: {
     opener: string
     timing: RotationTimingSettings
     frameData: FrameData
@@ -1499,11 +1472,9 @@ function useSettled<T>(value: T, playMs: { current: number }) {
  * (shown once there is a rotation text; reads the saved text itself, so typing re-renders only it)
  */
 export function RotationConfigureButton({
-  teamId,
   writer,
   disabled,
 }: {
-  teamId: string
   writer: RotationWriterHandle
   disabled?: boolean
 }) {
@@ -1672,9 +1643,7 @@ function WriterModal({
   )
   const deferredOpener = useSettled(openerText, playMs)
   const [openerShown, setOpenerShown] = useState(() => !!openerText.trim())
-  const isDraft =
-    (changed || (openerShown ? openerText : '') !== savedOpener) &&
-    !!applied.trim()
+  const isDraft = changed || (openerShown ? openerText : '') !== savedOpener
   const revert = () => {
     setText(applied)
     setOpenerText(savedOpener)
@@ -2227,9 +2196,6 @@ function WriterModal({
     onClose()
   }
 
-  const overrides = result?.rotation
-    ? frameOverrides(result.rotation, timing.edits)
-    : {}
   const editedSteps = useMemo(
     () =>
       new Set(
@@ -2377,7 +2343,11 @@ function WriterModal({
                   }}
                 >
                   <EditorHead
-                    label={t('teamOpt.writer.loop', 'Rotation')}
+                    label={
+                      isDraft
+                        ? t('teamOpt.writer.rotationDraft', 'Rotation draft')
+                        : t('teamOpt.writer.loop', 'Rotation')
+                    }
                     aside={
                       <>
                         {isDraft && (
@@ -2391,13 +2361,14 @@ function WriterModal({
                               fontSize: 12.5,
                             }}
                           >
-                            {t('teamOpt.writer.revert', 'Undo')}
+                            {t('teamOpt.writer.discardDraft', 'Discard draft')}
                           </Button>
                         )}
                         {searchButton?.({
                           text,
                           names,
                           setText,
+                          close: onClose,
                           saved: {
                             opener: openerShown ? openerText : '',
                             timing,
@@ -2408,6 +2379,13 @@ function WriterModal({
                           templates={templates}
                           team={memberKeys}
                           onPick={pickTemplate}
+                          onStarter={() => {
+                            setText(
+                              starterRotation(names, templates[0]?.characterKey)
+                            )
+                            setOpenerText('')
+                            setOpenerShown(false)
+                          }}
                         />
                         <Button
                           size="small"
@@ -3046,7 +3024,7 @@ function WriterModal({
             </Typography>
           )}
           <Button color="secondary" onClick={onClose}>
-            {t('teamOpt.runDialog.cancel', 'Cancel')}
+            {t('teamOpt.editor.close', 'Close')}
           </Button>
           <Button
             variant="contained"
@@ -3911,6 +3889,7 @@ function EditorHead({
     <Box
       sx={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 0.75,
         minHeight: 30,
@@ -3923,10 +3902,14 @@ function EditorHead({
       {info && <InfoTooltipInline title={info} />}
       <Box
         sx={{
-          ml: 'auto',
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           gap: 0.5,
+          minWidth: 0,
+          maxWidth: '100%',
+          ml: { xs: 0, sm: 'auto' },
+          flexBasis: { xs: '100%', sm: 'auto' },
         }}
       >
         {aside}

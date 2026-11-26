@@ -44,13 +44,14 @@ import { teamRuleConditionals } from './ruleConditionals'
  */
 
 /**
- * The ER calculator's "Burst: Every 2nd": that member's Burst in one of every 2 rotations (KQM's
- * runs, its timeline); none unless the ER comes from the calculator
+ * An ER calculator's "Burst: Every 2nd" / "Every 3rd": members whose Burst plays only every Nth
+ * rotation (`energySource === 'calculator'`); undefined when every member bursts every rotation.
  */
-export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
-  const calculator =
-    kqm?.energySource === 'calculator' ? kqm.energyCalculator : undefined
-  if (!calculator) return undefined
+function burstEveryOf(
+  energySource: TeamOpt['energySource'] | undefined,
+  calculator: TeamOpt['energyCalculator'] | undefined
+) {
+  if (energySource !== 'calculator' || !calculator) return undefined
   const every = Object.fromEntries(
     Object.entries(calculator.members).map(([k, m]) => [k, m?.burstEvery ?? 1])
   ) as Partial<Record<CharacterKey, number>>
@@ -61,6 +62,10 @@ export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
  * Team optimize's ER calculator "Burst: Every 2nd / 3rd / Skip" per member;
  * none unless the ER comes from the calculator with a non-1 cadence.
  */
+export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
+  return burstEveryOf(kqm?.energySource, kqm?.energyCalculator)
+}
+
 export function teamBurstEvery(teamOpt: TeamOpt | undefined) {
   const calculator =
     teamOpt?.energySource === 'calculator'
@@ -282,7 +287,8 @@ function prepareWritten({
     team.members,
     kitModels,
     samples ?? (steady ? 32 : undefined),
-    sacrificial ? team.gear : undefined
+    sacrificial ? team.gear : undefined,
+    team.constellations
   )
   const options: Parameters<typeof simulateRotationSamples>[0] = {
     ...team,

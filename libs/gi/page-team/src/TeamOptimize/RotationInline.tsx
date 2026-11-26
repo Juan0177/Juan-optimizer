@@ -89,6 +89,7 @@ const shortcut =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
     ? '⌘ Enter'
     : 'Ctrl+Enter'
+const narrowRotation = '@container (max-width: 640px)'
 
 /**
  * The rotation as text, on the page: read as the members' steps, a click opens the writer dialog
@@ -106,7 +107,7 @@ export function RotationInline({
   kqmBuilds,
   trailing,
 }: {
-  /** At the line's right end, beside the rotation (its time) */
+  /** Controls alongside or below the rotation readout */
   trailing?: ReactNode
   /** KQM theorycrafting's settings, on its tab: previewed at its constellations, no own gear */
   kqm?: TeamOptKqm
@@ -286,8 +287,9 @@ export function RotationInline({
         sx={{
           ...insetSx,
           ...quickSx,
+          containerType: 'inline-size',
           display: 'flex',
-          flexDirection: { xs: 'column', sm: 'row' },
+          flexWrap: 'wrap',
           alignItems: 'stretch',
           minHeight: 48,
           '&:hover': { borderColor: tokens.hairlineStrong },
@@ -303,6 +305,7 @@ export function RotationInline({
             ...quickSx,
             flex: 1,
             minWidth: 0,
+            [narrowRotation]: { flexBasis: '100%' },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'flex-start',
@@ -376,11 +379,16 @@ export function RotationInline({
               justifyContent: 'flex-end',
               flexWrap: 'wrap',
               gap: 0.25,
-              flexShrink: 0,
+              maxWidth: '100%',
               px: 0.875,
-              py: { xs: 0.625, sm: 0 },
-              borderLeft: { xs: 0, sm: hairline },
-              borderTop: { xs: hairline, sm: 0 },
+              borderLeft: hairline,
+              [narrowRotation]: {
+                flexBasis: '100%',
+                justifyContent: 'flex-start',
+                py: 0.625,
+                borderLeft: 0,
+                borderTop: hairline,
+              },
             }}
           >
             {trailing}

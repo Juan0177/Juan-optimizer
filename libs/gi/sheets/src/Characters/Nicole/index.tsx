@@ -14,6 +14,7 @@ import {
   percent,
   prod,
   subscript,
+  sum,
   tally,
   target,
   unequal,
@@ -119,18 +120,6 @@ const [condSkillGraceActivePath, condSkillGraceActive] = cond(
   key,
   'skillGraceActive'
 )
-const skillGraceActive_atk = equal(
-  condSkillGraceActive,
-  'on',
-  min(
-    prod(
-      subscript(input.total.skillIndex, dm.skill.atkRatio, { unit: '%' }),
-      input.premod.atk
-    ),
-    subscript(input.total.skillIndex, dm.skill.maxAtk)
-  )
-)
-
 const [condA1GuidanceActivePath, condA1GuidanceActive] = cond(
   key,
   'a1GuidanceActive'
@@ -139,55 +128,76 @@ const [condA4NicoleGuidancePath, condA4NicoleGuidance] = cond(
   key,
   'a4NicoleGuidance'
 )
-const a1GuidanceActive_atkDisp = greaterEq(
-  input.asc,
-  1,
-  equal(
-    condSkillGraceActive,
-    'on',
-    equal(condA1GuidanceActive, 'on', dm.passive1.atk)
-  )
-)
-// Before C6, Guidance can only be triggered on active char
-const a1GuidanceActive_atk = any(
-  a1GuidanceActive_atkDisp,
-  // If target is the active char
-  equal(active.charKey, target.charKey, 1),
-  // Or if Nicole is C6, then all chars will have Guidance if Nicole has Guidance
-  // Don't apply to off-fielf Nicole though, since she has her own A4 conditional for Guidance
-  greaterEq(
-    input.constellation,
-    6,
-    any(
-      1,
-      // Nicole has guidance either with a4 (handled below) or by being active char
-      unequal(target.charKey, key, equal(condA4NicoleGuidance, 'on', 1)),
-      equal(active.charKey, key, 1)
-    )
-  )
-)
-
-// Don't apply if Nicole is active, since we handled it above, and will hide this conditional
 const a4NicoleGuidanceActive_atk = greaterEq(
   input.asc,
   4,
   equal(
     condSkillGraceActive,
     'on',
-    equal(
-      condA4NicoleGuidance,
-      'on',
-      unequal(active.charKey, key, dm.passive1.atk)
-    )
+    equal(condA4NicoleGuidance, 'on', dm.passive1.atk)
   )
 )
-
 const c2GraceActive_atk = greaterEq(
   input.constellation,
   2,
   equal(condSkillGraceActive, 'on', dm.constellation2.atk)
 )
-// TODO: To properly support C6, we should make Guidance be a per-char toggle somehow. Just applying it team-wide now as a simple solution
+// Skill cast removes Nicole's own A4/C2 premod ATK buffs before snapshotting FIGHT_PROP_NONEXTRA_ATTACK
+const skillGraceActive_atk = equal(
+  condSkillGraceActive,
+  'on',
+  min(
+    prod(
+      subscript(input.total.skillIndex, dm.skill.atkRatio, { unit: '%' }),
+      sum(
+        input.premod.atk,
+        prod(-1, c2GraceActive_atk),
+        prod(-1, a4NicoleGuidanceActive_atk)
+      )
+    ),
+    subscript(input.total.skillIndex, dm.skill.maxAtk)
+  )
+)
+
+const a1GuidanceActive_atkDisp = equal(
+  condSkillGraceActive,
+  'on',
+  any(
+    dm.passive1.atk,
+    greaterEq(input.asc, 1, equal(condA1GuidanceActive, 'on', 1)),
+    greaterEq(
+      input.constellation,
+      6,
+      greaterEq(input.asc, 4, equal(condA4NicoleGuidance, 'on', 1))
+    )
+  )
+)
+const a1GuidanceActive_atk = unequal(
+  target.charKey,
+  key,
+  equal(
+    condSkillGraceActive,
+    'on',
+    any(
+      dm.passive1.atk,
+      greaterEq(
+        input.asc,
+        1,
+        equal(
+          condA1GuidanceActive,
+          'on',
+          equal(active.charKey, target.charKey, 1)
+        )
+      ),
+      greaterEq(
+        input.constellation,
+        6,
+        greaterEq(input.asc, 4, equal(condA4NicoleGuidance, 'on', 1))
+      )
+    )
+  )
+)
+
 const c2GuidanceActive_eleRes_obj = objKeyValMap(
   allElementKeys,
   (ele) =>
@@ -201,22 +211,39 @@ const c2GuidanceActive_eleRes_obj = objKeyValMap(
           'on',
           any(
             dm.constellation2.ele_enemyRes_,
-            equal(condA1GuidanceActive, 'on', equal(active.charEle, ele, 1)),
+            greaterEq(
+              input.asc,
+              1,
+              equal(
+                condA1GuidanceActive,
+                'on',
+                unequal(active.charKey, key, equal(active.charEle, ele, 1))
+              )
+            ),
             greaterEq(
               input.constellation,
               6,
-              equal(
-                condA4NicoleGuidance,
-                'on',
-                any(
-                  1,
-                  equal(inactive1.charEle, ele, 1),
-                  equal(inactive2.charEle, ele, 1),
-                  equal(inactive3.charEle, ele, 1)
+              greaterEq(
+                input.asc,
+                4,
+                equal(
+                  condA4NicoleGuidance,
+                  'on',
+                  any(
+                    1,
+                    equal(active.charEle, ele, 1),
+                    equal(inactive1.charEle, ele, 1),
+                    equal(inactive2.charEle, ele, 1),
+                    equal(inactive3.charEle, ele, 1)
+                  )
                 )
               )
             ),
-            equal(condA4NicoleGuidance, 'on', equal(ele, 'pyro', 1))
+            greaterEq(
+              input.asc,
+              4,
+              equal(condA4NicoleGuidance, 'on', equal(ele, 'pyro', 1))
+            )
           )
         )
       ),
@@ -246,15 +273,23 @@ const c6Guidance_enemyDefIgn_disp = greaterEq(
     'on',
     any(
       dm.constellation6.enemyDefIgn_,
-      equal(condA1GuidanceActive, 'on', 1),
-      equal(condA4NicoleGuidance, 'on', 1)
+      greaterEq(input.asc, 1, equal(condA1GuidanceActive, 'on', 1)),
+      greaterEq(input.asc, 4, equal(condA4NicoleGuidance, 'on', 1))
     )
   )
 )
 const c6Guidance_enemyDefIgn_ = any(
   c6Guidance_enemyDefIgn_disp,
-  equal(condA1GuidanceActive, 'on', equal(active.charKey, target.charKey, 1)),
-  equal(condA4NicoleGuidance, 'on', 1)
+  greaterEq(
+    input.asc,
+    1,
+    equal(
+      condA1GuidanceActive,
+      'on',
+      unequal(target.charKey, key, equal(active.charKey, target.charKey, 1))
+    )
+  ),
+  greaterEq(input.asc, 4, equal(condA4NicoleGuidance, 'on', 1))
 )
 
 const dmgFormulas = {
@@ -526,12 +561,7 @@ const sheet: TalentSheet = {
     ct.condTem('passive2', {
       path: condA4NicoleGuidancePath,
       value: condA4NicoleGuidance,
-      // Don't show if Nicole is active, since A1 will control Guidance instead
-      canShow: unequal(
-        active.charKey,
-        key,
-        equal(condSkillGraceActive, 'on', 1)
-      ),
+      canShow: equal(condSkillGraceActive, 'on', 1),
       teamBuff: true,
       name: ct.ch('nicoleGuidanceCond'),
       states: {

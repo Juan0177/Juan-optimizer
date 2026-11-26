@@ -227,6 +227,11 @@ export interface TeamOptResult {
   writtenRotation?: TeamOptRunRotation
   /** Each optimized member's other builds: with each weapon it may take, in each set it may wear */
   options?: Partial<Record<CharacterKey, TeamOptMemberOptions>>
+  /** Members whose weapon rankings finished, including those with no alternatives. */
+  rankedMembers?: CharacterKey[]
+  /** All member rankings and coordinated gear comparisons finished. */
+  rankingsComplete?: boolean
+  rankingBonusStats?: Partial<Record<CharacterKey, BonusStats>>
   gearComparisons?: TeamOptGearComparison[]
 }
 
@@ -867,6 +872,7 @@ export async function optimizeTeam({
   onOptions,
   onSetOptions,
   onGearComparisons,
+  skipRankings,
   onSession,
   from,
   skipProvisional,
@@ -910,6 +916,7 @@ export async function optimizeTeam({
     characterKey: CharacterKey,
     options: TeamOptMemberOptions
   ) => void
+  skipRankings?: boolean
   onGearComparisons?: (comparisons: TeamOptGearComparison[]) => void
   /** Given the team found, to try other equipment on (`TeamOptSession`) */
   onSession?: (session: TeamOptSession) => void
@@ -2872,6 +2879,7 @@ export async function optimizeTeam({
   onSession?.(session)
   if (!onResult) return result
   onResult(result)
+  if (skipRankings) return result
   // Publish set comparisons before the usually longer weapon rankings.
   const options: NonNullable<TeamOptResult['options']> = {}
   const compare = async (weapons: boolean) => {

@@ -335,3 +335,110 @@ describe('Mavuika Skill recast (form switch), cancelled CA finishers, and Citlal
     ).toBeCloseTo(5, 2)
   })
 })
+
+describe('Mavuika Skill recast (form switch), cancelled CA finishers, and Citlali Melt combos', () => {
+  it('recasts E during Nightsoul’s Blessing while E is on CD to switch Ring <-> Flamestrider without damage, particles, or a 15 s stall', () => {
+    // E enters Ring (15 s CD); E at frame 19 recasts to Flamestrider (13 f into CA, 60 f recast CD);
+    // C -> Q cancels the unreached Finisher; second recast switches back to Ring.
+    const sim = run('Mavuika E E C Q W2 E W3', 2)
+    const skills = sim.actions.filter(
+      (a) => a.characterKey === 'Mavuika' && a.text === 'E'
+    )
+    expect(skills.length).toBe(3)
+    expect(skills[0].variant).toBeUndefined()
+    expect(skills[1].variant?.key).toBe('recastBike')
+    expect(skills[1].frames).toBe(13)
+    expect(skills[2].variant?.key).toBe('recastRing')
+    // No 15 s cooldown stall on either recast
+    expect(sim.stalls).toEqual({})
+    // Only the initial E deals skill damage and produces particles (5 Pyro, 1 use)
+    const skillDmg = sim.hits.filter(
+      (h) =>
+        h.characterKey === 'Mavuika' && h.path.join('.') === 'skill.skillDmg'
+    )
+    expect(skillDmg).toHaveLength(1)
+    const energy = energyFromRotation(sim, members, 1, { Mavuika: 2 })
+    expect(energy.members.Mavuika!.skillUses).toBe(1)
+    // C2 Ring shred turns off when switching to Bike and turns back on when switching to Ring
+    expect(stateAt(sim, 'c2RingForm', skills[1].start - 1)).toBe('on')
+    expect(stateAt(sim, 'c2RingForm', skills[1].start + 1)).toBe('')
+    expect(stateAt(sim, 'c2RingForm', skills[2].start + 1)).toBe('on')
+    // Cancelled C before Q must NOT fire a phantom Finisher during Q
+    const finals = sim.hits.filter(
+      (h) => h.label === 'Flamestrider Charged Attack (Final)'
+    )
+    expect(finals).toHaveLength(0)
+  })
+
+  it('respects the 60-frame skillRecast cooldown between consecutive form switches', () => {
+    const sim = run('Mavuika E E E', 0)
+    const skills = sim.actions.filter(
+      (a) => a.characterKey === 'Mavuika' && a.text === 'E'
+    )
+    expect(skills).toHaveLength(3)
+    expect(skills[1].variant?.key).toBe('recastBike')
+    expect(skills[2].variant?.key).toBe('recastRing')
+    expect(skills[2].start - skills[1].start).toBe(60)
+  })
+
+  it('uses 6 f dash charge-cancel after CD/C3F/CF and 20 f inside CDC lockout (C2D)', () => {
+    const cdc = run('Mavuika hE C D C', 0)
+    const cdcDash = cdc.actions.find((a) => a.text === 'D')!
+    expect(cdcDash.frames).toBe(6)
+    const c2d = run('Mavuika hE C2 D C2', 0)
+    const c2dDash = c2d.actions.find((a) => a.text === 'D')!
+    expect(c2dDash.frames).toBe(20)
+  })
+
+  it('Melts Sunfell Slice and 5 Flamestrider Charged Attacks in Citlali Melt teams with Skill recast', () => {
+    const team: CharacterKey[] = ['Mavuika', 'Citlali', 'Xilonen', 'Bennett']
+    const names = team.map((characterKey) => ({
+      characterKey,
+      name: characterKey,
+    }))
+    const text =
+      'Mavuika E -> Bennett E -> Xilonen E N2 -> Bennett Q -> Citlali E Q N1 -> Mavuika E C Q CD C3F D CF D CF D CD C2 D -> Mavuika'
+    const sim = simulateRotationSamples({
+      rotation: parseRotation(text, names),
+      members: team,
+      elements: {
+        Mavuika: 'pyro',
+        Citlali: 'cryo',
+        Xilonen: 'geo',
+        Bennett: 'pyro',
+      },
+      constellations: { Mavuika: 2, Bennett: 6 },
+      repeats: 4,
+      keep: 'last2',
+    })
+    const samples = sim.samples ?? [{ probability: 1, result: sim }]
+    const avg = (fn: (r: typeof sim) => number) =>
+      samples.reduce((sum, s) => sum + s.probability * fn(s.result), 0) / 2
+    // ~18.2 s with no cooldown stalls (previously stretched to 30.6 s without recast)
+    expect(sim.frames / 120).toBeLessThan(18.5)
+    expect(sim.stalls).toEqual({})
+    // Sunfell Slice + 2 Cyclic + 3 Final Charged Attacks Melt across all Citlali Skull samples
+    expect(
+      avg(
+        (r) =>
+          r.hits.filter(
+            (h) =>
+              h.characterKey === 'Mavuika' &&
+              h.label === 'Sunfell Slice' &&
+              h.reaction === 'melt'
+          ).length
+      )
+    ).toBeCloseTo(1, 2)
+    expect(
+      avg(
+        (r) =>
+          r.hits.filter(
+            (h) =>
+              h.characterKey === 'Mavuika' &&
+              h.label?.startsWith('Flamestrider Charged Attack') &&
+              h.reaction === 'melt'
+          ).length
+      )
+    ).toBeCloseTo(5, 2)
+  })
+})

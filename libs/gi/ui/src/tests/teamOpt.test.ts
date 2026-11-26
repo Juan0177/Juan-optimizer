@@ -2778,51 +2778,56 @@ describe('team optimize', () => {
     expect(result.weapons['Furina']).toBe(fav)
     expect(result.after.unmet[ayaka]).toBeUndefined()
   })
-})
 
-describe('teamOptRunGear', () => {
-  it('gives each optimized member the sets its pool can wear four of, and the weapons it may take', () => {
-    const { database, teamId, ayakaId, ids } = setup()
-    database.weapons.new({
+  it('never assigns a member a weapon excluded for them during optimizeTeam', async () => {
+    const { database, teamId, ayakaId } = setup()
+    database.chars.getWithInitWeapon('Furina')
+    const furinaId = database.teamChars.new('Furina')
+    const team = database.teams.get(teamId)!
+    database.teams.set(teamId, {
+      loadoutData: [
+        team.loadoutData[0],
+        { teamCharId: furinaId, buildType: 'equipped' } as LoadoutDatum,
+      ],
+    })
+    const mist = database.chars.get(ayaka)!.equippedWeapon
+    const fav = database.weapons.new({
       key: 'FavoniusSword',
       level: 90,
       ascension: 6,
-      refinement: 1,
+      refinement: 5,
       location: '',
       lock: false,
     })
+    // Give Ayaka a 126% ER requirement (her atk pieces give 26% ER; Favonius lets her use crit!)
     database.optConfigs.set(database.teamChars.get(ayakaId)!.optConfigId, {
-      artSetExclusion: { BlizzardStrayer: [4] },
+      statFilters: {
+        [JSON.stringify(['basic', 'enerRech_'])]: [
+          { value: 126, disabled: false },
+        ],
+      },
     })
-    const gear = {
-      [ayaka]: { sets: { NoblesseOblige: 5 } },
-      [shenhe]: { weapon: 'CalamityQueller' },
-    }
-    // (two Gladiator's Finale pieces left out: three slots, no 4-piece)
-    const base: TeamOpt = {
-      ...initTeamOpt(),
-      excludedArts: [ids.weak.flower, ids.weak.plume],
-    }
-    const run = teamOptRunGear(database, teamId, base, gear)
-    expect(run[ayaka]).toEqual({
-      sets: { NoblesseOblige: 5 },
-      candidates: { sets: ['NoblesseOblige'], weapons: [] },
-    })
-    expect([...run[shenhe]!.candidates!.sets!].sort()).toEqual([
-      'BlizzardStrayer',
-      'NoblesseOblige',
-    ])
-    const kept = teamOptRunGear(
+    const result = (await optimizeTeam({
       database,
       teamId,
-      { ...base, keep: [shenhe], optimizeWeapons: true },
-      gear
-    )
-    expect(kept[shenhe]).toEqual({ weapon: 'CalamityQueller' })
-    expect([...kept[ayaka]!.candidates!.weapons!].sort()).toEqual([
-      'FavoniusSword',
-      'MistsplitterReforged',
-    ])
+      gender: 'F',
+      teamOpt: {
+        ...initTeamOpt(),
+        useOtherChars: true,
+        optimizeWeapons: true,
+        excludedWeaponMembers: { [fav]: [ayaka] },
+        weaponEnergy: { [fav]: { [ayaka]: 26 } },
+        attacks: {
+          [ayaka]: [attack(['burst', 'cutting'], 19)],
+          Furina: [attack(['skill', 'gentilhommeDmg'], 4)],
+        },
+      },
+      solve: bruteForce,
+    }))!
+    // Furina picks up Favonius (relieving Ayaka's ER!), while Ayaka keeps Mistsplitter
+    expect(result.weapons[ayaka]).toBe(mist)
+    expect(result.weapons['Furina']).toBe(fav)
+    expect(result.after.unmet[ayaka]).toBeUndefined()
   })
 })
 

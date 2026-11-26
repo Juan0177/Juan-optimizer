@@ -3,6 +3,7 @@ import { absorbableEle, type CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
 import type { Data } from '@genshin-optimizer/gi/wr'
 import {
+  compareEq,
   constant,
   equal,
   greaterEq,
@@ -20,7 +21,7 @@ import {
   threshold,
   unequal,
 } from '@genshin-optimizer/gi/wr'
-import { cond, condReadNode, st, stg } from '../../SheetUtil'
+import { any, cond, condReadNode, st, stg } from '../../SheetUtil'
 import { CharacterSheet } from '../CharacterSheet'
 import { charTemplates } from '../charTemplates'
 import {
@@ -184,21 +185,26 @@ const a1Phec_sturm_mult_ = sum(
   greaterEq(
     input.asc,
     1,
-    unequal(
-      phecElement,
-      'physical',
-      subscript(
-        sum(
-          greaterEq(lookup(phecElement, tally, naught), 2, 1),
-          greaterEq(tally.anemo, 2, 1)
+    subscript(
+      sum(
+        greaterEq(
+          sum(
+            greaterEq(tally.pyro, 2, 1),
+            greaterEq(tally.hydro, 2, 1),
+            greaterEq(tally.electro, 2, 1),
+            greaterEq(tally.cryo, 2, 1)
+          ),
+          1,
+          1
         ),
-        [
-          0,
-          dm.passive1.twoAnemoOrTwoPhec_mult_ - 1,
-          dm.passive1.twoAnemoAndTwoPhec_mult_ - 1,
-        ],
-        { unit: '%' }
-      )
+        greaterEq(tally.anemo, 2, 1)
+      ),
+      [
+        0,
+        dm.passive1.twoAnemoOrTwoPhec_mult_ - 1,
+        dm.passive1.twoAnemoAndTwoPhec_mult_ - 1,
+      ],
+      { unit: '%' }
     )
   )
 )
@@ -427,7 +433,11 @@ const dmgFormulas = {
     ),
   },
   burst: {
-    dmg1: dmgNode('atk', dm.burst.dmg1, 'burst', { hit: { ele: phecElement } }),
+    dmg1: dmgNode('atk', dm.burst.dmg1, 'burst', {
+      hit: {
+        ele: compareEq(phecElement, 'physical', constant('anemo'), phecElement),
+      },
+    }),
     dmg2: dmgNode('atk', dm.burst.dmg2, 'burst'),
   },
   passive1: {
@@ -688,7 +698,11 @@ const sheet: TalentSheet = {
 
   passive1: ct.talentTem('passive1', [
     ct.fieldsTem('passive1', {
-      canShow: unequal(phecElement, 'physical', 1),
+      canShow: any(
+        1,
+        unequal(phecElement, 'physical', 1),
+        greaterEq(tally.anemo, 2, 1)
+      ),
       fields: [
         {
           node: a1Phec_anemo_dmg_,

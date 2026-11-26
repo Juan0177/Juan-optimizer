@@ -171,6 +171,8 @@ const [condC1TogetherPath, condC1Together] = cond(key, 'c1Together')
  * Together We Rise's holder: the member a rotation names (`c1Together` is its key: Cyno, then the
  * first member switched in after him, who keeps it), or set on by hand ('on'), the active one
  */
+const hasTogether = (node: NumNode) =>
+  unequal(condC1Together, undefined, unequal(condC1Together, '', node))
 const togetherHolder = (node: NumNode) =>
   sum(
     equal(
@@ -183,17 +185,9 @@ const togetherHolder = (node: NumNode) =>
 const c1Together_eleMasValue = greaterEq(
   input.constellation,
   1,
-  equal(
-    condLockRevelation,
-    'on',
-    equal(condLockStellarRadianceSc, 'on', dm.constellation1.eleMas)
-  )
+  equal(condLockRevelation, 'on', dm.constellation1.eleMas)
 )
-const c1Together_eleMasDisp = equal(
-  condC1Together,
-  'on',
-  c1Together_eleMasValue
-)
+const c1Together_eleMasDisp = hasTogether(c1Together_eleMasValue)
 const c1Together_eleMas = togetherHolder(c1Together_eleMasValue)
 
 const c2NormHitStacksArr = range(1, dm.constellation2.maxStacks)
@@ -225,22 +219,18 @@ const c2TeamHit_stellarconduct_dmg_value = greaterEq(
   equal(
     condLockRevelation,
     'on',
-    equal(
-      condLockStellarRadianceSc,
-      'on',
-      prod(
-        lookup(
-          condC2TeamHit,
-          objKeyMap(c2TeamHitStacksArr, (stack) => constant(stack)),
-          naught
-        ),
-        percent(dm.constellation2.stellarconduct_dmg_)
-      )
+    prod(
+      lookup(
+        condC2TeamHit,
+        objKeyMap(c2TeamHitStacksArr, (stack) => constant(stack)),
+        naught
+      ),
+      percent(dm.constellation2.stellarconduct_dmg_)
     )
   )
 )
 const c2TeamHit_stellarconduct_dmg_disp = infoMut(
-  equal(condC1Together, 'on', c2TeamHit_stellarconduct_dmg_value),
+  hasTogether(c2TeamHit_stellarconduct_dmg_value),
   { path: 'stellarconduct_dmg_', isTeamBuff: true }
 )
 const c2TeamHit_stellarconduct_dmg_ = togetherHolder(
@@ -624,11 +614,7 @@ const sheet: TalentSheet = {
       value: condC1Together,
       teamBuff: true,
       name: ct.ch('c1Cond'),
-      canShow: equal(
-        condLockRevelation,
-        'on',
-        equal(condLockStellarRadianceSc, 'on', 1)
-      ),
+      canShow: equal(condLockRevelation, 'on', 1),
       states: {
         on: {
           fields: [
@@ -661,12 +647,9 @@ const sheet: TalentSheet = {
     ct.condTem('constellation2', {
       path: condC2TeamHitPath,
       value: condC2TeamHit,
+      teamBuff: true,
       name: ct.ch('c2Cond'),
-      canShow: equal(
-        condLockRevelation,
-        'on',
-        equal(condLockStellarRadianceSc, 'on', equal(condC1Together, 'on', 1))
-      ),
+      canShow: equal(condLockRevelation, 'on', hasTogether(constant(1))),
       states: objKeyMap(c2TeamHitStacksArr, (stack) => ({
         name: st('hits', { count: stack }),
         fields: [

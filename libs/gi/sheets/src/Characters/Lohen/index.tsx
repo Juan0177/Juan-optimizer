@@ -381,7 +381,7 @@ const sheet: TalentSheet = {
         },
         {
           text: ct.chg('skill.skillParams.6'),
-          value: dm.charged.stam,
+          value: dm.skill.castam,
         },
         {
           node: infoMut(dmgFormulas.skill.dmg, {
@@ -406,6 +406,7 @@ const sheet: TalentSheet = {
         {
           node: infoMut(dmgFormulas.skill.etchDmg, {
             name: ct.chg('skill.skillParams.10'),
+            multi: 4,
           }),
         },
         {

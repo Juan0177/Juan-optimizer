@@ -50,8 +50,15 @@ export interface RotationReactions {
   addMoonridgeDew?: () => void
   /** Verdant Dew accrues `rate` times faster from `from` until `until` */
   boostDew?: (from: number, until: number, rate: number) => void
+  endDewBoost?: (now: number) => void
   /** Bursts every live Dendro Core */
   ruptureCores?: (ctx: SimContext) => void
+  suppressCores?: (now: number, duration: number) => number
+  triggerForcedHarmony?: (
+    ctx: SimContext,
+    owner: CharacterKey,
+    emitSync?: (hit: SimHit) => void
+  ) => void
 }
 
 export interface SimulationResult {
@@ -540,6 +547,7 @@ export function simulateRotation({
   const auraLog: NonNullable<SimulationResult['auras']> = []
   reactions ??= elementalReactions({
     members,
+    elements,
     domainActive: (t) => windowOn('Columbina', 'burstDomain', t),
     // Nilou's A1 (Golden Chalice's Bounty) is on the whole party
     bountiful: (_m, t) => windowOn('Nilou', 'a1AfterSkill', t),
@@ -877,8 +885,19 @@ export function simulateRotation({
     boostDew(duration, rate) {
       reactions?.boostDew?.(t, t + duration, rate)
     },
+    endDewBoost() {
+      reactions?.endDewBoost?.(t)
+    },
     ruptureDendroCores() {
       reactions?.ruptureCores?.(ctxAt(t, actor))
+    },
+    suppressCores(duration) {
+      return reactions?.suppressCores?.(t, duration) ?? 0
+    },
+    triggerHarmony() {
+      reactions?.triggerForcedHarmony?.(ctxAt(t, actor), actor, (mHit) =>
+        land({ ...mHit, onField })
+      )
     },
     get isBurning() {
       return reactions?.burningAt?.(t) ?? false
@@ -1430,6 +1449,16 @@ export function simulateRotation({
             states.get(recipient),
             m,
             amount
+          )
+      }
+      if (previous !== undefined && next.points > previous.points + 1e-7) {
+        const gain = next.points - previous.points
+        for (const recipient of members)
+          kits[recipient]?.onNightsoulGain?.(
+            nightsoulCtx(frame, recipient),
+            states.get(recipient),
+            m,
+            gain
           )
       }
       setState(
@@ -2046,13 +2075,25 @@ export function simulateRotation({
               : keptLoop
         ]
   const end = bounds[whole || keep === 'last2' ? repeats : keptLoop + 1]
-  const kept = all.filter((h) => h.t >= start && h.t < end)
+  const kept: SimHit[] = []
+  const keptIndex = new Map<number, number>()
+  all.forEach((hit, index) => {
+    if (hit.t < start || hit.t >= end) return
+    keptIndex.set(index, kept.length)
+    kept.push(hit)
+  })
   const countedBuffs: SimCountedBuff[] = []
   for (const m of members) {
     const kit = kits[m]
     if (!kit?.countedBuffs) continue
-    // (indices into `kept`)
-    countedBuffs.push(...kit.countedBuffs(kept, constellations[m] ?? 0).buffs)
+    for (const buff of kit.countedBuffs(all, constellations[m] ?? 0).buffs) {
+      const hits = new Set<number>()
+      for (const i of buff.hits) {
+        const mapped = keptIndex.get(i)
+        if (mapped !== undefined) hits.add(mapped)
+      }
+      if (hits.size) countedBuffs.push({ ...buff, hits })
+    }
   }
   for (const m of unsupported)
     warnings.push(`${m}: no kit model yet (their actions were skipped)`)
@@ -2233,14 +2274,17 @@ export function rotationSamples(
   members: readonly CharacterKey[],
   kits: Partial<Record<CharacterKey, KitModel>> = kitModels,
   requested?: number,
-  gear?: Partial<Record<CharacterKey, SimGear>>
+  gear?: Partial<Record<CharacterKey, SimGear>>,
+  constellations: Partial<Record<CharacterKey, number>> = {}
 ) {
   const need = Math.max(
     members.some((member) => isSacrificialWeapon(gear?.[member]?.weapon))
       ? 16
       : 1,
     ...members.map((m) => {
-      const sampled = kits[m]?.sampled
+      const own = kits[m]?.sampled
+      const sampled =
+        typeof own === 'function' ? own(constellations[m] ?? 0) : own
       return sampled === true ? 64 : typeof sampled === 'number' ? sampled : 1
     })
   )
@@ -2257,7 +2301,8 @@ export function simulateRotationSamples(
     options.members,
     options.kits ?? kitModels,
     undefined,
-    options.sacrificial === false ? undefined : options.gear
+    options.sacrificial === false ? undefined : options.gear,
+    options.constellations
   ),
   seed = 0x4b514d
 ): SimulationResult {

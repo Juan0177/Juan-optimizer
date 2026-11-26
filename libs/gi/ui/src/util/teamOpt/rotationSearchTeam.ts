@@ -14,6 +14,7 @@ import type {
   SimGear,
 } from './rotation'
 import type { RotationSearchSetup } from './rotationSearchScore'
+import type { SimTeam } from './writtenRotation'
 import { simTeamOf, simulateWritten, teamBurstEvery } from './writtenRotation'
 
 /**
@@ -115,6 +116,39 @@ export function writtenTeamReplay({
         }),
       }),
     }
+  }
+}
+
+export type TeamReplayDocument = Pick<
+  Parameters<typeof writtenTeamReplay>[0],
+  'names' | 'text' | 'opener' | 'timing' | 'frameData'
+>
+
+/** Replay a saved rotation with the gear candidates supplied by its caller. */
+export function replayTeamAttacks(
+  database: ArtCharDatabase,
+  teamId: string,
+  gender: GenderKey,
+  teamOpt: TeamOpt,
+  rotation: TeamReplayDocument,
+  gearOf: (own: SimTeam['gear']) => SimTeam['gear']
+) {
+  const members = teamOptMembers(database, teamId)
+  try {
+    return writtenTeamReplay({
+      database,
+      teamId,
+      members,
+      gender,
+      teamOpt,
+      ...rotation,
+      includeEnergy: false,
+    })?.({
+      gear: gearOf(simTeamOf(members, database).gear),
+      overrides: {},
+    }).attacks
+  } catch {
+    return undefined
   }
 }
 

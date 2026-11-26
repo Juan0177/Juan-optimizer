@@ -104,6 +104,7 @@ import { MemberRotation } from './MemberRotation'
 import { RotationCompareButton } from './RotationCompare'
 import { RotationInline, RotationsSetting } from './RotationInline'
 import { type RotationSearchBase, RotationSearchButton } from './RotationSearch'
+import { starterRotation } from './RotationTemplates'
 import { RotationTransfer } from './RotationTransfer'
 import {
   copyRotationFromKqm,
@@ -122,8 +123,13 @@ import { RunDialog } from './RunDialog'
 import { sameBuildRoster, teamRoster } from './runScope'
 import { TeamOptInspector } from './TeamOptInspector'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
-import { Shortfalls, TeamEquipUndo, TeamOptResults } from './TeamOptResults'
-import { TeamOptTopBuilds, TopBuildsPending } from './TeamOptTopBuilds'
+import {
+  RestoreTeamBuildsButton,
+  Shortfalls,
+  TeamEquipUndo,
+  TeamOptResults,
+} from './TeamOptResults'
+import { GearRankingControls, TeamOptTopBuilds } from './TeamOptTopBuilds'
 import { TeamSensitivity } from './TeamSensitivity'
 import {
   Disclosure,
@@ -269,8 +275,16 @@ export default function TeamBuildWorkspace({
     mode === 'inventory' ? teamData : undefined,
     wolfStates
   )
-  const { state, status, run, cancel, clear, requirementsKey, sessionOf } =
-    useTeamOptRun(teamId)
+  const {
+    state,
+    status,
+    run,
+    cancel,
+    clear,
+    requirementsKey,
+    sessionOf,
+    rankEquipment,
+  } = useTeamOptRun(teamId)
   const kqm = useKqmRun(teamId)
   const kqmRunning = kqm.state.type === 'running'
   // either run in progress: the settings stay as they are
@@ -375,6 +389,7 @@ export default function TeamBuildWorkspace({
     : undefined
   const poolSize = usePoolSize(members, teamOpt)
   const [runDialog, setRunDialog] = useState(false)
+  const startedHere = useRef<{ previous?: number; scroll: number }>()
   useEffect(() => setRunDialog(false), [mode])
   // (the members' attacks shown: a flag of its own, so flipping it doesn't re-render the page)
   const [rotationOpen] = useState(() => expandStore(!attackCount))
@@ -545,9 +560,14 @@ export default function TeamBuildWorkspace({
   const kqmSearchBase = useMemo<RotationSearchBase | undefined>(
     () =>
       kqmShown && kqmRunTeamOpt
-        ? { tab: 'kqm', result: kqmShown, teamOpt: kqmRunTeamOpt }
+        ? {
+            tab: 'kqm',
+            result: kqmShown,
+            teamOpt: kqmRunTeamOpt,
+            rotationKey: kqmResult?.rotationKey,
+          }
         : undefined,
-    [kqmShown, kqmRunTeamOpt]
+    [kqmShown, kqmRunTeamOpt, kqmResult?.rotationKey]
   )
   const teamSearchBase = useMemo<RotationSearchBase | undefined>(
     () =>
@@ -556,6 +576,7 @@ export default function TeamBuildWorkspace({
             tab: 'team',
             result: shown,
             teamOpt: shownTeamOpt,
+            rotationKey: result.rotationKey,
             rankingBonusStats: fightBuffsNow,
           }
         : undefined,
@@ -581,7 +602,7 @@ export default function TeamBuildWorkspace({
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchBaseStale = mode === 'kqm' ? kqmBaseStale : teamBaseStale
   const searchButton = useCallback<SearchButton>(
-    ({ text, names, setText, saved }) => (
+    ({ text, names, setText, saved, close }) => (
       <>
         <RotationCompareButton
           tab={mode === 'kqm' ? 'kqm' : 'team'}
@@ -607,10 +628,26 @@ export default function TeamBuildWorkspace({
           attackStates={attackStatesNow}
           savedOverride={saved}
           onUse={setText}
+          onSetup={
+            mode === 'inventory' && attackCount
+              ? () => {
+                  close()
+                  setRunDialog(true)
+                }
+              : undefined
+          }
         />
       </>
     ),
-    [teamId, teamOpt, setTeamOpt, searchBase, searchBaseStale, mode]
+    [
+      teamId,
+      teamOpt,
+      setTeamOpt,
+      searchBase,
+      searchBaseStale,
+      mode,
+      attackCount,
+    ]
   )
   // the rotation written as text (inline), and its writer dialog with Undo
   const writer = useRotationWriter({
@@ -849,27 +886,35 @@ export default function TeamBuildWorkspace({
       appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS,
     opening: applications?.opening?.attacks,
   })
-  // a new result: the rotation folds away (it opens again with a click) and the result, below it,
-  // comes into view (once per result, not again as its other builds finish ranking)
-  const revealedResult = useRef<string | undefined>(undefined)
-  const resultKey =
-    mode === 'inventory' && result
-      ? `${teamId}:${result.savedAt ?? result.seconds}`
-      : undefined
+  // Reveal only a result that this visit started. Rankings and restored results stay in place.
+  const resultTime = result?.savedAt
   useEffect(() => {
-    if (!resultKey) {
-      revealedResult.current = undefined
-      return
-    }
-    if (revealedResult.current === resultKey) return
-    revealedResult.current = resultKey
-    rotationOpen.set(false)
-    requestAnimationFrame(() =>
-      document
-        .getElementById(`teamopt-results-${teamId}`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (mode !== 'inventory') startedHere.current = undefined
+    if (
+      !startedHere.current ||
+      resultTime === undefined ||
+      resultTime === startedHere.current.previous
     )
-  }, [resultKey, teamId, rotationOpen])
+      return
+    const { scroll } = startedHere.current
+    startedHere.current = undefined
+    const frame = requestAnimationFrame(() => {
+      if (
+        document.hidden ||
+        document.activeElement?.matches(':focus-visible') ||
+        Math.abs(window.scrollY - scroll) > 80
+      )
+        return
+      rotationOpen.set(false)
+      document.getElementById(`teamopt-results-${teamId}`)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'instant'
+          : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [mode, resultTime, teamId, rotationOpen])
 
   if (!members.length) return <EmptyTeam teamId={teamId} />
 
@@ -945,11 +990,7 @@ export default function TeamBuildWorkspace({
           )}
           {/* (the start screen has its own ways in: write, add attacks, import) */}
           {!showStart && (
-            <RotationConfigureButton
-              teamId={teamId}
-              writer={writer}
-              disabled={running}
-            />
+            <RotationConfigureButton writer={writer} disabled={running} />
           )}
           {!showStart && canCopyInventoryRotation && (
             <Tooltip
@@ -1070,6 +1111,14 @@ export default function TeamBuildWorkspace({
             members={members.map((m) => m.characterKey)}
             onWrite={writer.openWriter}
             onTemplate={writer.openTemplate}
+            onStarter={() => {
+              setRotationDraft(
+                database,
+                rotationIdOf(teamId, mode === 'kqm'),
+                starterRotation(memberNames)
+              )
+              writer.openWriter()
+            }}
             onManual={chooseManual}
             disabled={running}
             footer={
@@ -1114,6 +1163,11 @@ export default function TeamBuildWorkspace({
                     teamOpt={teamOpt}
                     attackStates={attackStatesNow}
                     disabled={running}
+                    onSetup={
+                      mode === 'inventory' && attackCount
+                        ? () => setRunDialog(true)
+                        : undefined
+                    }
                     onUse={(chosen) => {
                       setRotationDraft(
                         database,
@@ -1133,20 +1187,30 @@ export default function TeamBuildWorkspace({
                       flexShrink: 0,
                     }}
                   />
-                  <RotationsSetting
-                    compact
-                    teamId={teamId}
-                    members={members}
-                    setTeamOpt={setTeamOpt}
-                    writer={writer}
-                    disabled={running}
-                    kqm={
-                      mode === 'kqm'
-                        ? (teamOpt.kqm ?? defaultTeamOptKqm)
-                        : undefined
-                    }
-                  />
-                  {rotationTimeInput(true)}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      maxWidth: '100%',
+                      minWidth: 0,
+                    }}
+                  >
+                    <RotationsSetting
+                      compact
+                      teamId={teamId}
+                      members={members}
+                      setTeamOpt={setTeamOpt}
+                      writer={writer}
+                      disabled={running}
+                      kqm={
+                        mode === 'kqm'
+                          ? (teamOpt.kqm ?? defaultTeamOptKqm)
+                          : undefined
+                      }
+                    />
+                    {rotationTimeInput(true)}
+                  </Box>
                 </>
               }
               teamId={teamId}
@@ -1343,7 +1407,13 @@ export default function TeamBuildWorkspace({
         <RunDialog
           open
           onClose={() => setRunDialog(false)}
-          onStart={() => run(lowHp?.states, fightBuffs)}
+          onStart={() => {
+            startedHere.current = {
+              previous: resultTime,
+              scroll: window.scrollY,
+            }
+            void run(lowHp?.states, fightBuffs)
+          }}
           teamId={teamId}
           members={members}
           teamData={teamData}
@@ -1419,6 +1489,14 @@ export default function TeamBuildWorkspace({
       )}
       {/* the run's result, below what it was run with (the rotation) */}
       {mode === 'inventory' && !result && <TeamEquipUndo teamId={teamId} />}
+      {mode === 'inventory' &&
+        !result &&
+        !running &&
+        !!team?.savedOptimization && (
+          <Box sx={{ alignSelf: 'flex-start' }}>
+            <RestoreTeamBuildsButton teamId={teamId} />
+          </Box>
+        )}
       {mode === 'inventory' && state.type === 'error' && (
         <Alert severity="error" onClose={clear}>
           {state.setRulesUnmet?.length ? (
@@ -1471,6 +1549,9 @@ export default function TeamBuildWorkspace({
                   characterKey={inspected}
                   result={result.result}
                   optionsRunning={!!result.optionsRunning}
+                  onRank={
+                    teamBaseStale ? undefined : () => void rankEquipment(result)
+                  }
                   session={sessionOfResult}
                   picks={picks}
                   onPicks={setPicks}
@@ -1479,14 +1560,6 @@ export default function TeamBuildWorkspace({
                   rotationTime={shownResultTime}
                 />
               )
-            }
-            ranking={
-              result.optionsRunning
-                ? {
-                    done: result.weaponsRanked ?? 0,
-                    total: result.result.optimized.length,
-                  }
-                : undefined
             }
             supplement={
               // (as the KQM tab: the best teams that change one member, and how the shown team's
@@ -1503,35 +1576,44 @@ export default function TeamBuildWorkspace({
                       'repeat(auto-fit, minmax(min(100%, 440px), 1fr))',
                   }}
                 >
-                  {result.optionsRunning && !result.result.options && (
-                    <TopBuildsPending
-                      done={Object.keys(result.result.options ?? {}).length}
-                      total={result.result.optimized.length}
-                    />
-                  )}
-                  {(result.result.options || !result.optionsRunning) && (
-                    <TeamOptTopBuilds
-                      key={result.savedAt ?? result.seconds}
-                      members={members.map((m) => m.characterKey)}
-                      result={result.result}
-                      picks={picks}
-                      optionsRunning={result.optionsRunning}
-                      comparison={gearComparison}
-                      rotationTime={baseResultTime}
-                      onPick={(characterKey, next) => {
-                        setGearComparison(undefined)
-                        setPicks(
-                          characterKey && next ? { [characterKey]: next } : {}
-                        )
-                        if (characterKey) setInspected(characterKey)
-                      }}
-                      onCompare={(next) => {
-                        setPicks({})
-                        setPickView(undefined)
-                        setGearComparison(next)
-                      }}
-                    />
-                  )}
+                  <Box sx={{ minWidth: 0 }}>
+                    {!teamBaseStale &&
+                      !result.result.rankingsComplete &&
+                      !!result.result.optimized.length && (
+                        <GearRankingControls
+                          done={result.result.rankedMembers?.length ?? 0}
+                          total={result.result.optimized.length}
+                          running={!!result.optionsRunning}
+                          error={result.optionsError}
+                          onStart={() => void rankEquipment(result)}
+                          onStop={cancel}
+                        />
+                      )}
+                    {result.result.options ||
+                    result.result.gearComparisons?.length ? (
+                      <TeamOptTopBuilds
+                        key={result.savedAt ?? result.seconds}
+                        members={members.map((m) => m.characterKey)}
+                        result={result.result}
+                        picks={picks}
+                        optionsRunning={result.optionsRunning}
+                        comparison={gearComparison}
+                        rotationTime={baseResultTime}
+                        onPick={(characterKey, next) => {
+                          setGearComparison(undefined)
+                          setPicks(
+                            characterKey && next ? { [characterKey]: next } : {}
+                          )
+                          if (characterKey) setInspected(characterKey)
+                        }}
+                        onCompare={(next) => {
+                          setPicks({})
+                          setPickView(undefined)
+                          setGearComparison(next)
+                        }}
+                      />
+                    ) : null}
+                  </Box>
                   <DamageShare
                     members={members.map((m) => m.characterKey)}
                     evaluation={shown.after}
@@ -2136,7 +2218,7 @@ function RunBar({
     !blocked && !optimizable.length
       ? t(
           'teamOpt.run.allSwitchedOff',
-          'Every member is switched off: turn members on in Optimize team.'
+          'Every member is switched off: turn members on in Optimize gear.'
         )
       : undefined
 
@@ -2275,7 +2357,7 @@ function RunBar({
             !blocked && giCtaSx,
           ]}
         >
-          {t('teamOpt.run.button', 'Optimize team')}
+          {t('teamOpt.run.gear', 'Optimize gear')}
         </Button>
       )}
     </Box>
@@ -2402,10 +2484,6 @@ function RunProgress({
   // the run's step, kept with its counters (see `TeamOptStatus.step`)
   const step = status.step ?? state.step
   const seconds = (performance.now() - state.startTime) / 1000
-  const total = Number.isFinite(status.total) ? status.total : 0
-  // (the GPU's sweep before the exact total: a share of every combination, not a count of builds)
-  const upper = status.upper && Number.isFinite(status.upper) ? status.upper : 0
-  const done = status.tested + status.skipped
   return (
     <>
       <Typography noWrap sx={{ ...type.body, ...numSx, minWidth: 0 }}>
@@ -2421,8 +2499,9 @@ function RunProgress({
             <CharacterName characterKey={step.characterKey} gender={gender} /> (
             {step.step}/{step.steps})
             {!!step.weapons &&
-              ` · ${t('teamOpt.run.weapon', {
-                defaultValue: 'weapon {{weapon}}/{{weapons}}',
+              !!step.weapon &&
+              ` · ${t('teamOpt.run.weaponCandidate', {
+                defaultValue: 'weapon candidate {{weapon}}/{{weapons}}',
                 weapon: step.weapon,
                 weapons: step.weapons,
               })}`}
@@ -2445,29 +2524,9 @@ function RunProgress({
             defaultValue: '{{seconds}} s',
             seconds: Math.round(seconds),
           })}
-          {' · '}
-          {!total && upper
-            ? t('teamOpt.run.share', {
-                defaultValue: 'searching · {{percent}}%',
-                percent: Math.floor(Math.min(1, done / upper) * 100),
-              })
-            : !total
-              ? t('teamOpt.run.setup', 'setting up the search')
-              : !done
-                ? t('teamOpt.run.searching', {
-                    defaultValue: 'searching {{total}} builds',
-                    total: formatDamage(total),
-                  })
-                : t('teamOpt.run.builds', {
-                    defaultValue: '{{done}} of {{total}} builds',
-                    done: formatDamage(done),
-                    total: formatDamage(total),
-                  })}
         </Box>
       </Typography>
-      <ProgressLine
-        value={total && done ? Math.min(100, (done / total) * 100) : undefined}
-      />
+      <ProgressLine />
     </>
   )
 }

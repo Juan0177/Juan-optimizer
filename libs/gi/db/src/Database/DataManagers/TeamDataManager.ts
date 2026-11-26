@@ -26,7 +26,9 @@ import type { ICachedArtifact } from './ArtifactDataManager'
 import type { TeamFightSettings } from './TeamEnemy'
 import { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
 import {
+  type TeamBuildSave,
   type TeamEquipmentUndo,
+  teamBuildSaveSchema,
   teamEquipmentUndoSchema,
 } from './TeamEquipmentUndo'
 import type { TeamOpt } from './TeamOpt'
@@ -105,6 +107,7 @@ export interface Team {
   lastEdit: number
   rotationDocuments?: RotationDocuments
   equipmentUndo?: TeamEquipmentUndo
+  savedOptimization?: TeamBuildSave
   /** Team Optimize settings: only stored once the user sets something there */
   teamOpt?: TeamOpt
   /**
@@ -383,6 +386,11 @@ export class TeamDataManager extends DataManager<
       (obj as Team).equipmentUndo
     )
     if (equipmentUndo.success) validated.equipmentUndo = equipmentUndo.data
+    const savedOptimization = teamBuildSaveSchema.safeParse(
+      (obj as Team).savedOptimization
+    )
+    if (savedOptimization.success)
+      validated.savedOptimization = savedOptimization.data
     const rotationDocuments = validateRotationDocuments(
       (obj as Team).rotationDocuments
     )
@@ -562,6 +570,7 @@ export class TeamDataManager extends DataManager<
     team.name = `${team.name} (duplicated)`
     team.lastEdit = Date.now()
     delete team.equipmentUndo
+    delete team.savedOptimization
     for (const document of Object.values(team.rotationDocuments ?? {}))
       delete document.Draft
     return this.new(team)
@@ -576,6 +585,7 @@ export class TeamDataManager extends DataManager<
       loadoutData,
       rotationDocuments,
       equipmentUndo: _undo,
+      savedOptimization: _savedOptimization,
       // (an id of this database's: a team exported alone is not a version)
       versionOf: _versionOf,
       versionCons: _versionCons,
@@ -645,6 +655,7 @@ export class TeamDataManager extends DataManager<
       {
         ...rest,
         equipmentUndo: undefined,
+        savedOptimization: undefined,
         versionOf: undefined,
         versionCons: undefined,
         showInTeams: undefined,

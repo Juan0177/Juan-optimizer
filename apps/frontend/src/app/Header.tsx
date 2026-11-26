@@ -403,7 +403,13 @@ function SettingsMenu({
   )
 }
 
-function Brand({ onClick }: { onClick?: () => void }) {
+function Brand({
+  onClick,
+  compact,
+}: {
+  onClick?: () => void
+  compact?: boolean
+}) {
   const { t } = useTranslation('ui')
   const select = useContext(SelectNavContext)
   return (
@@ -422,7 +428,8 @@ function Brand({ onClick }: { onClick?: () => void }) {
         borderRadius: 2,
         color: 'text.primary',
         textDecoration: 'none',
-        flexShrink: 0,
+        flexShrink: compact ? 1 : 0,
+        minWidth: 0,
       }}
     >
       {/* the logo: gold orbit + polestar mark with the serif wordmark (outlined, no font file) */}
@@ -430,7 +437,15 @@ function Brand({ onClick }: { onClick?: () => void }) {
         component="img"
         src={goLogo}
         alt={t('pageTitle')}
-        sx={{ height: 22, width: 'auto', display: 'block' }}
+        sx={{
+          height: 22,
+          width: 'auto',
+          maxWidth: '100%',
+          objectFit: 'contain',
+          objectPosition: 'left',
+          display: 'block',
+          minWidth: 0,
+        }}
       />
       {shouldShowDevComponents && (
         <Box
@@ -443,6 +458,9 @@ function Brand({ onClick }: { onClick?: () => void }) {
             fontSize: '0.75rem',
             fontWeight: 700,
             lineHeight: '20px',
+            ...(compact && {
+              '@media (max-width: 380px)': { display: 'none' },
+            }),
           }}
         >
           Dev
@@ -601,16 +619,20 @@ function MobileHeader({
             </ButtonBase>
           </Box>
         </Drawer>
-        <Toolbar sx={{ minHeight: '56px !important' }}>
-          <Brand />
+        <Toolbar
+          sx={{
+            minHeight: '56px !important',
+            pr: 'max(16px, env(safe-area-inset-right))',
+          }}
+        >
+          <Brand compact />
           <BetaBadge />
           <Box flexGrow={1} />
           <IconButton
             aria-label={t('openMenu')}
-            edge="end"
             onClick={toggle}
             // (the menu's one way in on phones: as bright as the title)
-            sx={{ color: 'text.primary' }}
+            sx={{ color: 'text.primary', flexShrink: 0 }}
           >
             <MenuIcon />
           </IconButton>

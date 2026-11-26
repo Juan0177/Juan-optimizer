@@ -13,8 +13,8 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 import { deriveCoreStats } from '../../libs/gi/stats/src/coreStats/derive'
 import pkg from '../../package.json' with { type: 'json' }
 import {
-  betaKeyTest,
   betaKeys,
+  betaKeyTest,
   readBetaContent,
   releasedOnlyPlugin,
   stripBetaKeys,
@@ -23,14 +23,14 @@ import { seoPagesPlugin } from './vite-plugin-seo-pages.mts'
 import { webpAssets } from './vite-plugin-webp.mts'
 
 /**
- * Workers show no images: one their code imports (the game data's art, in the KQM formula
- * builder's) is an empty URL there, so their build emits no copy of it (as PNG: the WebP step is
- * the page's)
+ * Workers use game data without rendering its sheets. Discard artwork and styles so the bundle
+ * neither duplicates the page's images nor tries to inject CSS into a worker's missing DOM.
  */
-const noWorkerImages = (): Plugin => ({
-  name: 'no-worker-images',
+const noWorkerPresentation = (): Plugin => ({
+  name: 'no-worker-presentation',
   enforce: 'pre',
   load(id) {
+    if (/\.css(?:\?.*)?$/i.test(id)) return ''
     if (/\.(png|jpe?g|webp|gif|svg|avif)(\?.*)?$/i.test(id))
       return 'export default ""'
     return undefined
@@ -268,11 +268,11 @@ export default defineConfig(({ command }) => ({
     plugins: () =>
       released
         ? [
-            noWorkerImages(),
+            noWorkerPresentation(),
             releasedOnlyPlugin(beta, { locales: false }),
             nxViteTsPaths(),
           ]
-        : [noWorkerImages(), nxViteTsPaths()],
+        : [noWorkerPresentation(), nxViteTsPaths()],
   },
 
   build: {

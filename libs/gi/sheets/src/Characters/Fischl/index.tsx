@@ -2,7 +2,6 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allStats } from '@genshin-optimizer/gi/stats'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
 import {
-  compareEq,
   constant,
   equal,
   greaterEq,
@@ -102,6 +101,14 @@ const dm = {
 } as const
 
 const [condLockC6OzPath, condLockC6Oz] = cond(key, 'lockC6Oz')
+const c6HexMult = sum(
+  constant(1),
+  greaterEq(
+    input.constellation,
+    6,
+    equal(condLockC6Oz, 'on', dm.constellation6.lockIncrease_)
+  )
+)
 const [condLockOverloadPath, condLockOverload] = cond(key, 'lockOverload')
 const lockOverload_atk_disp = greaterEq(
   tally.hexerei,
@@ -109,15 +116,7 @@ const lockOverload_atk_disp = greaterEq(
   equal(
     condLockHomework,
     'on',
-    equal(
-      condLockHomework,
-      'on',
-      equal(
-        condLockOverload,
-        'on',
-        prod(compareEq(condLockC6Oz, 'on', 2, 1), dm.lockedPassive.atk_)
-      )
-    )
+    equal(condLockOverload, 'on', prod(c6HexMult, dm.lockedPassive.atk_))
   )
 )
 const lockOverload_atk_self = { ...lockOverload_atk_disp }
@@ -134,15 +133,7 @@ const lockEcLc_eleMasDisp = greaterEq(
   equal(
     condLockHomework,
     'on',
-    equal(
-      condLockHomework,
-      'on',
-      equal(
-        condLockEcLc,
-        'on',
-        prod(compareEq(condLockC6Oz, 'on', 2, 1), dm.lockedPassive.eleMas)
-      )
-    )
+    equal(condLockEcLc, 'on', prod(c6HexMult, dm.lockedPassive.eleMas))
   )
 )
 const lockEcLc_eleMasSelf = { ...lockEcLc_eleMasDisp }

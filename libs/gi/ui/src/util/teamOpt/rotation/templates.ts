@@ -93,7 +93,13 @@ export function templatesForTeam(members: CharacterKey[]) {
   return rotationTemplates
     .filter((t) => members.includes(t.characterKey))
     .map((t, i) => ({ t, i, n: has(t) }))
-    .sort((a, b) => b.n - a.n || a.i - b.i)
+    .sort(
+      (a, b) =>
+        Number(b.n === b.t.members.length) -
+          Number(a.n === a.t.members.length) ||
+        b.n - a.n ||
+        a.i - b.i
+    )
     .map(({ t }) => t)
 }
 

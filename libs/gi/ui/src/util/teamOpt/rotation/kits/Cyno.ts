@@ -19,7 +19,7 @@ import {
  * gives Together We Rise (EM, passed to the next character on swap), C2 adds its Stellar-Conduct
  * stacks and C6 fires Starsame bolts. The pinned kqmsim has none of this (E>E there waits for
  * Secret Rite's cooldown). Pactsworn, Endseer and the C1/C2/C6 timers run on Cyno's clock (they
- * are hitlag-extended in gcsim). Not modelled: C4 (energy), plunge collision and the airborne
+ * are hitlag-extended in gcsim). Not modelled: plunge collision and the airborne
  * check of plunges (plunges are the low plunge).
  */
 
@@ -193,6 +193,10 @@ function pactExpiry(ctx: SimContext, s: CynoState, id: number) {
 function endPact(ctx: SimContext, s: CynoState) {
   s.pactActive = false
   s.pactEnd = Math.min(s.pactEnd, clock(ctx))
+  s.c4Left = 0
+  s.c6Stacks = 0
+  s.c6End = -1e9
+  s.c6Armed = false
   ctx.state('Cyno', ['Cyno', 'afterBurst'], '')
 }
 
@@ -337,6 +341,14 @@ export const kit: KitModel = {
     // Revelation is unlocked (gcsim's default)
     ctx.state('Cyno', ['Cyno', 'lockRevelation'], 'on')
   },
+  simOnlyBuffs: () => [
+    ['Cyno', 'afterBurst'],
+    ['Cyno', 'a1Judication'],
+    ['Cyno', 'c1Together'],
+    ['Cyno', 'c2NormHitStacks'],
+    ['Cyno', 'c2TeamHit'],
+    ['Cyno', 'lockStellarRadianceSc'],
+  ],
   // C1: Normal Attack SPD +20% while already in a normal attack (gcsim's NormalAttackState check)
   normalAttackSpeed: (ctx, s: CynoState, actor, alreadyNormal) =>
     actor === 'Cyno' && alreadyNormal && clock(ctx) < s.c1End ? 0.2 : 0,
@@ -393,6 +405,7 @@ export const kit: KitModel = {
               element: 'electro',
               applies: true,
               icd: 'normal',
+              ...(i === 2 || i === 4 ? { blunt: true } : {}),
               label: `Pactsworn N${i + 1}`,
             }),
           combo
@@ -491,6 +504,7 @@ export const kit: KitModel = {
             element: 'electro',
             applies: true,
             icd: 'none',
+            blunt: true,
             label: 'Mortuary Rite',
           })
           // its particles (gcsim's particleCB: 1, or 2 a third of the time): the ER sheet's
@@ -617,12 +631,20 @@ export const kit: KitModel = {
         : undefined,
   linkedCooldowns: { skill: ['skillB'] },
   onHit(ctx, s: CynoState, hit) {
-    ctx.state(
-      'Cyno',
-      ['Cyno', 'lockStellarRadianceSc'],
-      stellar(ctx) ? 'on' : ''
-    )
+    const inPolestar = stellar(ctx)
+    ctx.state('Cyno', ['Cyno', 'lockStellarRadianceSc'], inPolestar ? 'on' : '')
     const c = ctx.constellation('Cyno')
+    if (
+      c >= 1 &&
+      s.pactActive &&
+      !s.togetherHolder &&
+      !s.togetherPass &&
+      inPolestar
+    ) {
+      s.c2TeamStacks = 0
+      ctx.state('Cyno', ['Cyno', 'c2TeamHit'], '')
+      setTogether(ctx, s, s.pactEnd)
+    }
     // C4: his Electro reactions in Pactsworn give the others 3 Energy, 5 times a Sacred Rite;
     // (Revelation) a Together We Rise holder's give him 20, once per 18 s
     const c4Reaction =
@@ -634,7 +656,6 @@ export const kit: KitModel = {
         flatEnergy(ctx, 0, 3, 'Cyno C4', { owner: 'Cyno', to: 'others' })
       } else if (
         hit.characterKey !== 'Cyno' &&
-        stellar(ctx) &&
         hit.characterKey === s.togetherHolder &&
         clock(ctx) >= s.c4TeamReady
       ) {
@@ -675,7 +696,7 @@ export const kit: KitModel = {
       s.c6Stacks--
       ctx.hit(
         0,
-        t < s.togetherEnd
+        inPolestar
           ? {
               characterKey: 'Cyno',
               path: ['passive1', 'boltStellarDmg'],

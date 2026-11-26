@@ -1370,7 +1370,9 @@ export function energyFromRotation(
       constellations?.[key] ?? (getCharStat(key).rarity === 4 ? 6 : 0)
     const usable = (i: number) =>
       energySkillConstellation(data.skills[i].label) <= cons
-    const base = defaultSkillMode(key, constellations?.[key])
+    const base = FLAT_ENERGY_KIT_MARKED.has(key)
+      ? 0
+      : defaultSkillMode(key, constellations?.[key])
     const modeFor = (hold: boolean) => {
       const found = data.skills.findIndex(
         (skill, i) =>
@@ -1533,7 +1535,7 @@ export function energyFromRotation(
     }
     // (every field it fills is set, none left out: a rotation without, after one with, clears it)
     member.flatEnergy =
-      SKILL_FLAT_ENERGY[key] !== undefined
+      SKILL_FLAT_ENERGY[key] !== undefined && !FLAT_ENERGY_KIT_MARKED.has(key)
         ? (SKILL_FLAT_ENERGY[key]! * uses.length) / per
         : 0
     // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
@@ -1925,6 +1927,11 @@ const KIT_ENERGY: Partial<Record<CharacterKey, KitEnergy>> = {
   Barbara: barbaraEnergyFromRotation,
   Danica: maidEnergyFromRotation,
 }
+const FLAT_ENERGY_KIT_MARKED = new Set<CharacterKey>([
+  'Citlali',
+  'Durin',
+  'Iansan',
+])
 /**
  * The turrets whose kits mark the particles they make (`turretParticles`, kqmsim's particle
  * callbacks): counted as made in the rotation (one entry per line)

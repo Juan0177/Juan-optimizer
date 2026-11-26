@@ -85,12 +85,14 @@ export type RotationSearchBase =
       result: KqmResult
       /** The settings it was run with */
       teamOpt: TeamOpt
+      rotationKey?: string
     }
   | {
       tab: 'team'
       /** The team build shown (the result, or one of its next best) */
       result: TeamOptResult
       teamOpt: TeamOpt
+      rotationKey?: string
       /** The bonus stats a run ranks builds with now (the fight's averaged buffs) */
       rankingBonusStats?: RefObject<
         Partial<Record<CharacterKey, BonusStats>> | undefined
@@ -109,6 +111,7 @@ export function RotationSearchButton({
   base,
   teamOpt,
   onUse,
+  onSetup,
   compact,
   disabled,
   attackStates,
@@ -124,6 +127,7 @@ export function RotationSearchButton({
   /** Current tab settings (for confirming builds with live ER/weapon/filter settings) */
   teamOpt?: TeamOpt
   onUse: (text: string) => void
+  onSetup?: () => void
   /** The states a run gives every attack now (Wolf's Gravestone's uptime) */
   attackStates?: RefObject<readonly RunAttackState[] | undefined>
   /** Live modal rotation settings when launched from the Write rotation modal */
@@ -183,7 +187,7 @@ export function RotationSearchButton({
         <span>
           {compact ? (
             <ButtonBase
-              disabled={!ready}
+              disabled={disabled}
               onClick={() => setOpen(true)}
               sx={{
                 ...quickSx,
@@ -205,13 +209,13 @@ export function RotationSearchButton({
               }}
             >
               <AutoFixHighIcon sx={{ fontSize: 15, color: tokens.gold }} />
-              {t('teamOpt.search.button', 'Optimize')}
+              {t('teamOpt.search.rotations', 'Search rotations')}
             </ButtonBase>
           ) : (
             <Button
               size="small"
               color="inherit"
-              disabled={!ready}
+              disabled={disabled}
               startIcon={
                 <AutoFixHighIcon sx={{ fontSize: '15px !important' }} />
               }
@@ -222,12 +226,12 @@ export function RotationSearchButton({
                 color: 'text.secondary',
               }}
             >
-              {t('teamOpt.search.button', 'Optimize')}
+              {t('teamOpt.search.rotations', 'Search rotations')}
             </Button>
           )}
         </span>
       </Tooltip>
-      {open && base?.tab === tab && (
+      {open && ready && base?.tab === tab && (
         <RotationSearchDialog
           teamId={teamId}
           seed={text}
@@ -242,6 +246,50 @@ export function RotationSearchButton({
             setOpen(false)
           }}
         />
+      )}
+      {open && !ready && (
+        <ModalWrapper
+          open
+          onClose={() => setOpen(false)}
+          aria-label={t('teamOpt.search.rotations', 'Search rotations')}
+          containerProps={{ maxWidth: 'xs' }}
+        >
+          <CardThemed>
+            <DialogHead
+              title={t('teamOpt.search.rotations', 'Search rotations')}
+              onClose={() => setOpen(false)}
+            />
+            <Box sx={{ p: 2, display: 'grid', gap: 1.5 }}>
+              <Typography>
+                {!written
+                  ? t(
+                      'teamOpt.search.needsText',
+                      'Write a rotation first: the search starts from it.'
+                    )
+                  : team
+                    ? t(
+                        'teamOpt.search.gearRequired',
+                        'Run gear optimization first. Rotation search uses those builds as a baseline.'
+                      )
+                    : t(
+                        'teamOpt.search.kqmRequired',
+                        'Generate KQM builds first to give rotation search a baseline.'
+                      )}
+              </Typography>
+              {written && !base && onSetup && (
+                <Button
+                  variant="contained"
+                  onClick={() => {
+                    setOpen(false)
+                    onSetup()
+                  }}
+                >
+                  {t('teamOpt.run.gear', 'Optimize gear')}
+                </Button>
+              )}
+            </Box>
+          </CardThemed>
+        </ModalWrapper>
       )}
     </>
   )
@@ -601,11 +649,11 @@ function RotationSearchDialog({
       open
       onClose={onClose}
       containerProps={{ maxWidth: 'md' }}
-      aria-label={t('teamOpt.search.title', 'Optimize rotation')}
+      aria-label={t('teamOpt.search.rotations', 'Search rotations')}
     >
       <CardThemed>
         <DialogHead
-          title={t('teamOpt.search.title', 'Optimize rotation')}
+          title={t('teamOpt.search.rotations', 'Search rotations')}
           info={
             team
               ? t(
@@ -641,7 +689,7 @@ function RotationSearchDialog({
               }}
             >
               <Typography sx={{ ...type.label, flexGrow: 1 }}>
-                {t('teamOpt.search.yours', 'Your rotation')}
+                {t('teamOpt.search.replayedRotation', 'Your rotation · replay')}
               </Typography>
               {seedScore && (
                 <>
@@ -990,7 +1038,7 @@ const fullStageText = (
 
 const endedText = (t: TFunction, ended: RotationSearchResult['ended']) =>
   ended === 'converged'
-    ? t('teamOpt.search.converged', 'nothing better nearby')
+    ? t('teamOpt.search.noFurtherGains', 'no further gains in the last pass')
     : ended === 'time'
       ? t('teamOpt.search.timeUp', 'time up')
       : ended === 'cancelled'
@@ -1366,6 +1414,7 @@ function ErLine({
         const over = need > has
         const item = (
           <Box
+            key={characterKey}
             component="span"
             aria-label={name}
             sx={{
@@ -1580,6 +1629,20 @@ const CandidateRow = memo(function CandidateRow({
                         dps: formatDamage(candidate.dps, true),
                       })
                     : `${formatDamage(candidate.dps, true)} DPS`}
+            </Typography>
+            <Typography sx={{ ...type.label, ...numSx }}>
+              {checked
+                ? t(
+                    'teamOpt.search.vsBuildRun',
+                    'vs {{dps}} DPS · prior build run',
+                    { dps: formatDamage(runDps, true) }
+                  )
+                : t('teamOpt.search.vsReplay', 'vs {{dps}} DPS · {{method}}', {
+                    dps: formatDamage(seed.estimate, true),
+                    method: estimated
+                      ? t('teamOpt.search.estimate', 'estimate')
+                      : t('teamOpt.search.replay', 'same builds'),
+                  })}
             </Typography>
           </Box>
         </Tooltip>
