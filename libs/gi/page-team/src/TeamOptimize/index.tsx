@@ -927,6 +927,14 @@ export default function TeamBuildWorkspace({
         gap: mode === 'kqm' ? { xs: 2.5, sm: 3.5 } : 2,
       }}
     >
+      {kqmTheorycraftingEnabled && mode === 'kqm' && (
+        <>
+          <Box sx={{ alignSelf: { xs: 'flex-start', sm: 'flex-end' } }}>
+            <VersionsButton teamId={teamId} />
+          </Box>
+          <VersionsDrawer teamId={teamId} />
+        </>
+      )}
       {/* the rotation: what it is with its actions and figures, then its settings, then the team */}
       <Box
         component="section"
@@ -1377,13 +1385,8 @@ export default function TeamBuildWorkspace({
         )}
       </Box>
 
-      {/* (only on the KQM tab: kept mounted there while its results show, to keep its drafts) */}
       {kqmTheorycraftingEnabled && mode === 'kqm' && versionOf && (
         <VersionNote rootId={versionOf} teamId={teamId} />
-      )}
-      {/* (once on the tab, outside the results: a result coming in leaves it open) */}
-      {kqmTheorycraftingEnabled && mode === 'kqm' && (
-        <VersionsDrawer teamId={teamId} />
       )}
       {kqmTheorycraftingEnabled && mode === 'kqm' && (
         <Box sx={{ ...sectionSx, ...stepAccentSx('setup'), p: 0 }}>
@@ -1483,7 +1486,7 @@ export default function TeamBuildWorkspace({
               kqm.clear()
               rotationOpen.set(true)
             }}
-            actions={<VersionsButton teamId={teamId} />}
+            actions={<VersionsButton teamId={teamId} compare />}
           />
         </Box>
       )}

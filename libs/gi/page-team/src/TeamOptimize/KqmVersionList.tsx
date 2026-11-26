@@ -226,17 +226,31 @@ function usePanelFor() {
   )
 }
 
-/**
- * "Versions" beside the KQM result's Share (and on a version's page): opens the panel of the
- * team's versions (`VersionsDrawer`), with their count, and a spinner while some run
- */
-export function VersionsButton({ teamId }: { teamId: string }) {
+/** The KQM entry point and result shortcut both open the team's variants drawer. */
+export function VersionsButton({
+  teamId,
+  compare = false,
+}: {
+  teamId: string
+  compare?: boolean
+}) {
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   useDataManagerValues(database.teams)
   const queue = useVersionQueue()
   const rootId = versionRoot(database, teamId)
-  const count = versionsOf(database, rootId).length
+  const versionIds = versionsOf(database, rootId)
+  const count = versionIds.length
+  const running = queue.some((id) => id === rootId || versionIds.includes(id))
+  const open = usePanelFor() === rootId
+  const label = compare
+    ? t('teamOpt.versions.compareVariants', 'Compare variants')
+    : count
+      ? t('teamOpt.versions.teamVariantsCount', {
+          defaultValue: 'Team variants ({{count}})',
+          count,
+        })
+      : t('teamOpt.versions.teamVariants', 'Team variants')
   return (
     <Button
       variant="outlined"
@@ -244,10 +258,11 @@ export function VersionsButton({ teamId }: { teamId: string }) {
       startIcon={<CallSplitRoundedIcon sx={{ fontSize: '19px !important' }} />}
       onClick={() => setPanelFor(rootId)}
       aria-haspopup="dialog"
+      aria-expanded={open}
       sx={{
         ...quickSx,
         ...focusSx,
-        height: 40,
+        minHeight: { xs: 44, sm: 40 },
         px: 2,
         borderRadius: 999,
         textTransform: 'none',
@@ -257,18 +272,9 @@ export function VersionsButton({ teamId }: { teamId: string }) {
         '& .MuiButton-startIcon': { mr: 0.75 },
       }}
     >
-      {t('teamOpt.versions.title', 'Versions')}
-      {queue.length > 0 ? (
-        <CircularProgress size={14} thickness={5} sx={{ ml: 1 }} />
-      ) : (
-        count > 0 && (
-          <Box
-            component="span"
-            sx={{ ml: 0.75, color: 'text.secondary', ...numSx }}
-          >
-            {count}
-          </Box>
-        )
+      {label}
+      {running && (
+        <CircularProgress aria-hidden size={14} thickness={5} sx={{ ml: 1 }} />
       )}
     </Button>
   )
@@ -297,7 +303,7 @@ export function VersionsDrawer({ teamId }: { teamId: string }) {
       PaperProps={{
         role: 'dialog',
         'aria-modal': true,
-        'aria-label': t('teamOpt.versions.title', 'Versions'),
+        'aria-label': t('teamOpt.versions.teamVariants', 'Team variants'),
         sx: {
           width: { xs: '100%', md: 840, lg: 940 },
           maxWidth: '100%',
@@ -538,9 +544,16 @@ export function KqmVersions({
       {/* Unified header: title, count, primary actions, and drawer close */}
       <Box
         sx={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateAreas: {
+            xs: '"title close" "actions actions"',
+            sm: '"title actions close"',
+          },
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr) auto',
+            sm: 'minmax(0, 1fr) auto auto',
+          },
           alignItems: 'center',
-          flexWrap: 'wrap',
           gap: 1,
           pl: { xs: 2, sm: 3 },
           pr: { xs: 1.25, sm: 2 },
@@ -555,12 +568,12 @@ export function KqmVersions({
             display: 'flex',
             alignItems: 'center',
             gap: 1,
-            mr: 'auto',
+            gridArea: 'title',
             minWidth: 0,
           }}
         >
           <Typography component="h2" sx={{ ...type.section, fontSize: 18 }}>
-            {t('page_team:teamOpt.versions.title', 'Versions')}
+            {t('page_team:teamOpt.versions.teamVariants', 'Team variants')}
           </Typography>
           {hasVersions && (
             <Box
@@ -575,70 +588,82 @@ export function KqmVersions({
                 bgcolor: alpha(giTokens.parchment, 0.08),
               }}
             >
-              {all.length}
+              {rows.versions.length}
             </Box>
           )}
         </Box>
 
-        <Button
-          size="small"
-          variant={hasVersions ? 'outlined' : 'contained'}
-          color={hasVersions ? 'inherit' : undefined}
-          startIcon={<AddIcon />}
-          onClick={() => setCreating({})}
+        <Box
           sx={{
-            height: 34,
-            px: 1.5,
-            flexShrink: 0,
-            textTransform: 'none',
-            fontWeight: 600,
-            ...(hasVersions ? { borderColor: tokens.hairlineStrong } : giCtaSx),
+            gridArea: 'actions',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: { xs: 0.75, sm: 1 },
           }}
         >
-          {t('page_team:teamOpt.versions.new', 'New version')}
-        </Button>
-        {rows.root.members.length > 0 && (
           <Button
             size="small"
-            variant="outlined"
-            color="inherit"
-            startIcon={
-              <GridViewRoundedIcon sx={{ fontSize: '17px !important' }} />
-            }
-            onClick={() => setCombining(true)}
+            variant={hasVersions ? 'outlined' : 'contained'}
+            color={hasVersions ? 'inherit' : undefined}
+            startIcon={<AddIcon />}
+            onClick={() => setCreating({})}
             sx={{
-              height: 34,
-              px: 1.5,
+              minHeight: { xs: 44, sm: 34 },
+              px: { xs: 1, sm: 1.5 },
               flexShrink: 0,
               textTransform: 'none',
               fontWeight: 600,
-              borderColor: tokens.hairlineStrong,
+              ...(hasVersions
+                ? { borderColor: tokens.hairlineStrong }
+                : giCtaSx),
             }}
           >
-            {t('page_team:teamOpt.versions.combosBtn', 'Combinations')}
+            {t('page_team:teamOpt.versions.newVariant', 'New variant')}
           </Button>
-        )}
-        {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
-        {onClose && (
-          <>
-            <Box
-              aria-hidden
+          {rows.root.members.length > 0 && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="inherit"
+              startIcon={
+                <GridViewRoundedIcon sx={{ fontSize: '17px !important' }} />
+              }
+              onClick={() => setCombining(true)}
               sx={{
-                display: { xs: 'none', sm: 'block' },
-                width: '1px',
-                height: 20,
-                bgcolor: tokens.hairline,
-                mx: 0.25,
+                minHeight: { xs: 44, sm: 34 },
+                px: { xs: 1, sm: 1.5 },
+                flexShrink: 0,
+                textTransform: 'none',
+                fontWeight: 600,
+                borderColor: tokens.hairlineStrong,
+                '& .MuiButton-startIcon': {
+                  display: { xs: 'none', sm: 'flex' },
+                },
               }}
-            />
-            <IconButton
-              onClick={onClose}
-              aria-label={t('page_team:teamOpt.editor.close', 'Close')}
-              sx={{ ...quickSx, ...focusSx }}
             >
-              <CloseIcon />
-            </IconButton>
-          </>
+              {t(
+                'page_team:teamOpt.versions.generateCombinations',
+                'Generate combinations'
+              )}
+            </Button>
+          )}
+          {hasVersions && <VersionsShare rows={all} rootId={rootId} />}
+        </Box>
+        {onClose && (
+          <IconButton
+            onClick={onClose}
+            aria-label={t('page_team:teamOpt.editor.close', 'Close')}
+            sx={{
+              ...quickSx,
+              ...focusSx,
+              gridArea: 'close',
+              width: { xs: 44, sm: 40 },
+              height: { xs: 44, sm: 40 },
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
         )}
       </Box>
 
@@ -1070,8 +1095,8 @@ export function KqmVersions({
               sx={{ ...type.label, px: 2, py: 1.75, borderTop: hairline }}
             >
               {t(
-                'page_team:teamOpt.versions.none',
-                'No versions yet: swap members or generate combinations to compare teams.'
+                'page_team:teamOpt.versions.noVariants',
+                'Create a variant to compare lineups, constellations, or signature weapons using this team’s KQM settings.'
               )}
             </Typography>
           )}
@@ -2261,7 +2286,7 @@ function NewVersionDialog({
                       defaultValue: 'Duplicate “{{name}}”',
                       name: copied.name,
                     })
-                  : t('teamOpt.versions.newTitle', 'New version')}
+                  : t('teamOpt.versions.newVariant', 'New variant')}
               </Typography>
             </Box>
             <IconButton
@@ -2708,7 +2733,6 @@ export function VersionNote({
       >
         {t('teamOpt.versions.openOriginal', 'Open the original')}
       </Button>
-      <VersionsButton teamId={rootId} />
     </Box>
   )
 }
