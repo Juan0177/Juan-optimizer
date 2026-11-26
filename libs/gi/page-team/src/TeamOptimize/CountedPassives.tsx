@@ -47,33 +47,32 @@ export interface CountedPassive {
  * formulas): its share is measured over those hits. A sheet's `teamBuff` flag only shows the switch
  * on the team's side (an enemy or HP condition), so it doesn't say who is buffed.
  */
-const PASSIVE_RECIPIENTS: Record<
-  string,
-  'all' | 'active' | 'holderAndActive' | 'others' | 'element'
-> = {
-  'BreezeborneRefrain.viper': 'all',
-  'CranesEchoingCall.passive': 'all',
-  'ElegyForTheEnd.ThePartingRefrain': 'all',
-  'FracturedHalo.afterShield': 'all',
-  'FreedomSworn.MillennialMovement': 'all',
-  'KeyOfKhajNisut.afterSkill': 'all',
-  'NightweaversLookingGlass.afterHydroOrDendro': 'all',
-  'NightweaversLookingGlass.afterLunarBloom': 'all',
-  'PeakPatrolSong.odeMaxed': 'all',
-  'PeakPatrolSong.odeStacks': 'all',
-  'SongOfBrokenPines.RebelsBannerHymn': 'all',
-  'SymphonistOfScents.healing': 'all',
-  'WolfsGravestone.WolfishTracker': 'all',
-  'AngelosHeptades.shield': 'active',
-  'ForestRegalia.passive': 'active',
-  'Moonpiercer.passive': 'active',
-  'SapwoodBlade.passive': 'active',
-  'StarcallersWatch.shield': 'active',
-  'AthameArtis.burstHit': 'holderAndActive',
-  'TorrentsOfSpring.royalDecree': 'holderAndActive',
-  'GoldenFrostboundOath.moondrift': 'others',
+type Recipients = 'all' | 'active' | 'holderAndActive' | 'others' | 'element'
+const PASSIVE_RECIPIENTS: Record<string, Record<string, Recipients>> = {
+  BreezeborneRefrain: { viper: 'all' },
+  CranesEchoingCall: { passive: 'all' },
+  ElegyForTheEnd: { ThePartingRefrain: 'all' },
+  FracturedHalo: { afterShield: 'all' },
+  FreedomSworn: { MillennialMovement: 'all' },
+  KeyOfKhajNisut: { afterSkill: 'all' },
+  NightweaversLookingGlass: {
+    afterHydroOrDendro: 'all',
+    afterLunarBloom: 'all',
+  },
+  PeakPatrolSong: { odeMaxed: 'all', odeStacks: 'all' },
+  SongOfBrokenPines: { RebelsBannerHymn: 'all' },
+  SymphonistOfScents: { healing: 'all' },
+  WolfsGravestone: { WolfishTracker: 'all' },
+  AngelosHeptades: { shield: 'active' },
+  ForestRegalia: { passive: 'active' },
+  Moonpiercer: { passive: 'active' },
+  SapwoodBlade: { passive: 'active' },
+  StarcallersWatch: { shield: 'active' },
+  AthameArtis: { burstHit: 'holderAndActive' },
+  TorrentsOfSpring: { royalDecree: 'holderAndActive' },
+  GoldenFrostboundOath: { moondrift: 'others' },
   // (members of the reaction's element, and Electro members)
-  'HakushinRing.SakuraSaiguu': 'element',
+  HakushinRing: { SakuraSaiguu: 'element' },
 }
 /** Passives only some holders get: nobody else's is counted */
 const PASSIVE_HOLDERS: Record<string, (holder: CharacterKey) => boolean> = {
@@ -146,7 +145,7 @@ export function playedWeaponPassiveUptime(
     return total > 0 ? Math.min(1, on / total) : 0
   }
 
-  const recipients = PASSIVE_RECIPIENTS[key]
+  const recipients = PASSIVE_RECIPIENTS[path[0]]?.[path[1]]
   const elements = new Set<string>(['electro'])
   if (recipients === 'element') {
     if (baseValue) elements.add(baseValue)
