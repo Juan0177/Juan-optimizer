@@ -7,10 +7,10 @@ import type {
   BonusStats,
   RunAttackState,
   RunEnemy,
+  TeamOptGearComparison,
   TeamOptMemberOptions,
   TeamOptResult,
   TeamOptSession,
-  TeamOptSetComparison,
   TeamOptShortfall,
   TeamOptStatus,
   TeamOptStep,
@@ -322,9 +322,9 @@ export function useTeamOptRun(teamId: string) {
             addOptions(ck, options, true),
           onSetOptions: (ck: CharacterKey, options: TeamOptMemberOptions) =>
             addOptions(ck, options, false),
-          onSetComparisons: (setComparisons: TeamOptSetComparison[]) => {
+          onGearComparisons: (gearComparisons: TeamOptGearComparison[]) => {
             if (shown)
-              show({ ...shown, result: { ...shown.result, setComparisons } })
+              show({ ...shown, result: { ...shown.result, gearComparisons } })
           },
         }
         try {
@@ -401,11 +401,7 @@ export function useTeamOptRun(teamId: string) {
           teamOpt: run.result.attacks
             ? { ...run.teamOpt, attacks: run.result.attacks }
             : run.teamOpt,
-          solve: teamOptSolver(initStatus(), maxWorkers, () => {}, {
-            responsive: true,
-            lowImpact:
-              window.matchMedia?.('(pointer: coarse)').matches ?? false,
-          }),
+          solve: teamOptSolver(initStatus(), maxWorkers, () => {}),
           maxRounds: 0,
           from: run.result,
           attackStates: run.result.attackStates,

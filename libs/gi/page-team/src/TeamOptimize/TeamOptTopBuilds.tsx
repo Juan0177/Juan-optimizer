@@ -8,18 +8,16 @@ import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import type {
   KqmSets,
   KqmTeamOption,
+  TeamOptGearComparison,
   TeamOptPick,
   TeamOptPicks,
   TeamOptResult,
-  TeamOptSession,
-  TeamOptSetComparison,
 } from '@genshin-optimizer/gi/ui'
 import { teamOptSetKey } from '@genshin-optimizer/gi/ui'
 import { Box, CircularProgress, Typography } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TopBuilds } from './KqmTopTeams'
-import { TeamOptCompareSets } from './TeamOptCompareSets'
 import { SubsectionTitle, tokens, type } from './ui'
 
 const MAX = 50
@@ -27,14 +25,16 @@ const MAX = 50
 /** A row: the team's gear, and the pick that shows it (none: the run's own team) */
 interface TeamOptTopOption extends KqmTeamOption {
   pick?: TeamOptPick
-  comparison?: TeamOptSetComparison
+  comparison?: TeamOptGearComparison
   changedMembers?: CharacterKey[]
   disabled?: boolean
   rank?: number
+  rotationTime?: number
+  id?: string
 }
 
-const assignmentKey = ({ sets }: TeamOptSetComparison) =>
-  JSON.stringify(Object.entries(sets).sort())
+const assignmentKey = ({ changed, builds, weapons }: TeamOptGearComparison) =>
+  JSON.stringify([...changed].sort().map((ck) => [ck, weapons[ck], builds[ck]]))
 
 export function TeamOptTopBuilds({
   members,
@@ -44,7 +44,6 @@ export function TeamOptTopBuilds({
   disabled,
   optionsRunning,
   comparison,
-  session,
   onPick,
   onCompare,
 }: {
@@ -57,15 +56,13 @@ export function TeamOptTopBuilds({
   rotationTime?: number
   disabled?: boolean
   optionsRunning?: boolean
-  comparison?: TeamOptSetComparison
-  session: () => Promise<TeamOptSession | undefined>
+  comparison?: TeamOptGearComparison
   /** No member: the run's team */
   onPick: (characterKey?: CharacterKey, pick?: TeamOptPick) => void
-  onCompare: (comparison: TeamOptSetComparison) => void
+  onCompare: (comparison: TeamOptGearComparison) => void
 }) {
   const database = useDatabase()
-  const [manual, setManual] = useState<TeamOptSetComparison[]>([])
-  const { options, currentSets } = useMemo(() => {
+  const options = useMemo(() => {
     const weaponOf = (id: string | undefined) => {
       const weapon = id ? database.weapons.get(id) : undefined
       return weapon
@@ -86,15 +83,11 @@ export function TeamOptTopBuilds({
       return sets
     }
     const own: KqmTeamOption['builds'] = {}
-    const currentSets: Partial<Record<CharacterKey, string>> = {}
     for (const ck of result.optimized) {
       const weapon = weaponOf(result.weapons[ck])
       if (!weapon) continue
       const sets = setsOf(result.builds[ck])
       own[ck] = { weapon, sets }
-      currentSets[ck] = Object.keys(sets).find(
-        (set) => sets[set as ArtifactSetKey] === 4
-      )
     }
     const gear = (b: KqmTeamOption['builds'][CharacterKey]) =>
       b
@@ -130,34 +123,43 @@ export function TeamOptTopBuilds({
         })
       }
     }
-    const pairs = new Map(
-      [...(result.setComparisons ?? []), ...manual].map((item) => [
-        assignmentKey(item),
-        item,
-      ])
-    )
-    for (const pair of pairs.values()) {
+    for (const pair of result.gearComparisons ?? []) {
       if (
         !Object.values(pair.builds).every((b) =>
           Object.values(b ?? {}).every((id) => !id || database.arts.get(id))
         )
       )
         continue
-      const changedMembers = result.optimized.filter((ck) => pair.sets[ck])
+      const changedMembers = result.optimized.filter((ck) =>
+        pair.changed.includes(ck)
+      )
       const builds = { ...own }
       for (const ck of changedMembers) {
-        if (own[ck]) builds[ck] = { ...own[ck], sets: setsOf(pair.builds[ck]) }
+        const weapon = weaponOf(pair.weapons[ck])
+        if (weapon) builds[ck] = { weapon, sets: setsOf(pair.builds[ck]) }
       }
       rows.push({
         comparison: pair,
         changedMembers,
         builds,
         total: pair.after.total,
+        rotationTime: pair.rotationTime,
+        id: assignmentKey(pair),
       })
     }
     const base = { builds: own, total: result.after.total }
     rows.unshift(base)
-    rows.sort((a, b) => b.total - a.total)
+    const rateOf = (row: TeamOptTopOption) =>
+      row.total / (row.rotationTime ?? rotationTime ?? 1)
+    rows.sort((a, b) => {
+      const first = rateOf(a)
+      const second = rateOf(b)
+      const diff = second - first
+      return Math.abs(diff) <=
+        Math.max(Math.abs(first), Math.abs(second)) * 1e-9
+        ? 0
+        : diff
+    })
     rows.forEach((row, i) => {
       row.rank = i + 1
     })
@@ -169,14 +171,15 @@ export function TeamOptTopBuilds({
           row.comparison &&
           assignmentKey(row.comparison) === assignmentKey(comparison)
       )
-    const extra = [base, active].filter(
+    const bestPair = rows.find((row) => row.comparison)
+    const extra = [...new Set([base, active, bestPair])].filter(
       (row): row is TeamOptTopOption => !!row && !top.includes(row)
     )
     // Keep the original and the selected comparison available alongside the highest ranks.
     top.splice(MAX - extra.length, extra.length, ...extra)
     top.sort((a, b) => a.rank! - b.rank!)
-    return { options: top, currentSets }
-  }, [result, database, manual, optionsRunning, comparison])
+    return top
+  }, [result, database, optionsRunning, comparison, rotationTime])
 
   const picked = Object.entries(picks) as [CharacterKey, TeamOptPick][]
   const current = comparison
@@ -207,25 +210,6 @@ export function TeamOptTopBuilds({
         option.comparison
           ? onCompare(option.comparison)
           : onPick(option.changed, option.pick)
-      }
-      actions={
-        result.optimized.length > 1 && (
-          <TeamOptCompareSets
-            members={result.optimized}
-            currentSets={currentSets}
-            session={session}
-            disabled={disabled || optionsRunning}
-            onCompared={(next) => {
-              setManual((before) => [
-                ...before
-                  .filter((item) => assignmentKey(item) !== assignmentKey(next))
-                  .slice(-5),
-                next,
-              ])
-              onCompare(next)
-            }}
-          />
-        )
       }
     />
   )

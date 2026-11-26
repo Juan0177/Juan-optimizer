@@ -957,7 +957,6 @@ describe('team optimize', () => {
       },
     }
     const events: string[] = []
-    let session: TeamOptSession | undefined
     const result = (await optimizeTeam({
       database,
       teamId,
@@ -977,11 +976,8 @@ describe('team optimize', () => {
       maxRounds: 0,
       onResult: () => events.push('result'),
       onSetOptions: (ck) => events.push(`sets:${ck}`),
-      onSetComparisons: () => events.push('comparisons'),
+      onGearComparisons: () => events.push('comparisons'),
       onOptions: (ck) => events.push(`weapons:${ck}`),
-      onSession: (next) => {
-        session = next
-      },
     }))!
     expect(events).toEqual([
       'result',
@@ -994,25 +990,108 @@ describe('team optimize', () => {
     expect(
       result.options?.[ayaka]?.sets.some((o) => o.set === 'NoblesseOblige')
     ).toBe(false)
-    const sets = { [ayaka]: 'NoblesseOblige', [shenhe]: 'BlizzardStrayer' }
-    const found = result.setComparisons?.find(
-      ({ sets: chosen }) =>
-        chosen[ayaka] === sets[ayaka] && chosen[shenhe] === sets[shenhe]
+    const wearing = (build: Record<string, string | undefined>, set: string) =>
+      Object.values(build).filter(
+        (id) => id && database.arts.get(id)?.setKey === set
+      ).length >= 4
+    const found = result.gearComparisons?.find(
+      ({ builds }) =>
+        wearing(builds[ayaka]!, 'NoblesseOblige') &&
+        wearing(builds[shenhe]!, 'BlizzardStrayer')
     )
     expect(found).toBeDefined()
-    expect(await session!.compareSets(sets)).toEqual(found)
     const artifactIds = Object.values(found!.builds).flatMap((build) =>
       Object.values(build)
     )
     expect(new Set(artifactIds).size).toBe(10)
     expect(found!.after.total).toBeGreaterThan(0)
     expect(
-      await session!.compareSets({
-        [ayaka]: 'NoblesseOblige',
-        [shenhe]: 'NoblesseOblige',
+      result.gearComparisons?.some(
+        ({ builds }) =>
+          wearing(builds[ayaka]!, 'NoblesseOblige') &&
+          wearing(builds[shenhe]!, 'NoblesseOblige')
+      )
+    ).toBe(false)
+  })
+
+  it('checks three members trading weapons already held by the team', async () => {
+    const { database, teamId, ayakaId, ids } = setup()
+    const xingqiu = 'Xingqiu'
+    const kaeya = 'Kaeya'
+    for (const [ck, weapon] of [
+      [xingqiu, 'SacrificialSword'],
+      [kaeya, 'FavoniusSword'],
+    ] as const) {
+      database.chars.set(ck, {
+        key: ck,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
       })
-    ).toBeUndefined()
-    expect(await session!.compareSets(sets, () => true)).toBeUndefined()
+      database.weapons.new({
+        key: weapon,
+        level: 90,
+        ascension: 6,
+        refinement: 1,
+        location: ck,
+        lock: false,
+      })
+    }
+    const xingqiuId = database.teamChars.new(xingqiu)
+    const kaeyaId = database.teamChars.new(kaeya)
+    database.teams.set(teamId, {
+      loadoutData: [
+        { teamCharId: ayakaId },
+        { teamCharId: xingqiuId },
+        { teamCharId: kaeyaId },
+      ],
+    })
+    for (const id of Object.values(ids.crit))
+      database.arts.set(id, { location: '' })
+    const builds = { [ayaka]: ids.crit, [xingqiu]: ids.atk, [kaeya]: ids.weak }
+    const weapons = Object.fromEntries(
+      teamOptMembers(database, teamId).map((m) => [m.characterKey, m.weaponId])
+    )
+    const attacks = { [ayaka]: [attack(['burst', 'cutting'], 19)] }
+    const events: string[] = []
+    const result = (await optimizeTeam({
+      database,
+      teamId,
+      gender: 'F',
+      solve: bruteForce,
+      teamOpt: { ...initTeamOpt(), optimizeWeapons: true, attacks },
+      from: { builds, weapons, optimized: [ayaka, xingqiu, kaeya] },
+      maxRounds: 0,
+      onResult: () => {},
+      onSetOptions: () => {},
+      onOptions: (ck) => events.push(ck),
+      onGearComparisons: (comparisons) => {
+        if (
+          comparisons.some((row) =>
+            row.changed.every((ck) => row.weapons[ck] !== weapons[ck])
+          )
+        )
+          events.push('weapon comparisons')
+      },
+      rotationForWeapons: (gear) => ({
+        attacks,
+        rotationTime: gear[ayaka]?.key === 'MistsplitterReforged' ? 20 : 18,
+      }),
+    }))!
+    const alt = result.gearComparisons?.find(
+      ({ changed, weapons: next }) =>
+        changed.length === 3 && changed.every((ck) => weapons[ck] !== next[ck])
+    )
+    expect(alt).toBeDefined()
+    expect(new Set(Object.values(alt!.weapons))).toEqual(
+      new Set(Object.values(weapons))
+    )
+    expect(
+      new Set(Object.values(alt!.builds).flatMap(Object.values)).size
+    ).toBe(15)
+    expect(alt!.rotationTime).toBe(18)
+    expect(events).toEqual([ayaka, xingqiu, kaeya, 'weapon comparisons'])
   })
 
   it('only searches the four required set slots when ranking a set with one missing slot', async () => {

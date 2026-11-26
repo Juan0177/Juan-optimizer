@@ -19,9 +19,9 @@ import { writtenTeamReplay } from './rotationSearchTeam'
 import { type TeamOptStatus, teamOptSolver } from './runSolver'
 import {
   optimizeTeam,
+  type TeamOptGearComparison,
   type TeamOptMemberOptions,
   type TeamOptResult,
-  type TeamOptSetComparison,
   teamOptRunGear,
 } from './solve'
 import { simTeamOf } from './writtenRotation'
@@ -54,7 +54,7 @@ export interface TeamOptRunUpdates {
     characterKey: CharacterKey,
     options: TeamOptMemberOptions
   ) => void
-  onSetComparisons?: (comparisons: TeamOptSetComparison[]) => void
+  onGearComparisons?: (comparisons: TeamOptGearComparison[]) => void
 }
 
 export function teamOptRotationForRun(
@@ -148,7 +148,7 @@ export async function runTeamOpt(
   database: ArtCharDatabase,
   job: TeamOptRunJob,
   status: TeamOptStatus,
-  { onResult, onOptions, onSetOptions, onSetComparisons }: TeamOptRunUpdates,
+  { onResult, onOptions, onSetOptions, onGearComparisons }: TeamOptRunUpdates,
   isCancelled?: () => boolean,
   onSolver: (stop: (() => void) | undefined) => void = () => {}
 ) {
@@ -202,7 +202,7 @@ export async function runTeamOpt(
       ),
     onOptions,
     onSetOptions,
-    onSetComparisons,
+    onGearComparisons,
   })
   if (!result) throw new Error('The team could not be computed.')
 }

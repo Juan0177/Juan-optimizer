@@ -20,10 +20,10 @@ import type {
   SimGear,
   TeamData,
   TeamOptEvaluation,
+  TeamOptGearComparison,
   TeamOptMember,
   TeamOptPicks,
   TeamOptPickView,
-  TeamOptSetComparison,
   TeamOptShortfall,
 } from '@genshin-optimizer/gi/ui'
 import {
@@ -488,7 +488,7 @@ export default function TeamBuildWorkspace({
   // equipment picked by hand in a member's inspector (the best team build's), and the team with it
   const [picks, setPicks] = useState<TeamOptPicks>({})
   const [pickView, setPickView] = useState<TeamOptPickView>()
-  const [setComparison, setSetComparison] = useState<TeamOptSetComparison>()
+  const [gearComparison, setGearComparison] = useState<TeamOptGearComparison>()
   const [inspected, setInspected] = useState<CharacterKey>()
   const sessionOfResult = useCallback(
     () => (result ? sessionOf(result) : Promise.resolve(undefined)),
@@ -499,17 +499,20 @@ export default function TeamBuildWorkspace({
   useEffect(() => {
     setPicks({})
     setPickView(undefined)
-    setSetComparison(undefined)
+    setGearComparison(undefined)
     // (the biggest damage dealer's, as the KQM tab opens on its first member)
     setInspected(firstOptimized)
   }, [result?.savedAt])
   // the result's settings with the attacks its run played (`TeamOptResult.attacks`); no result: the
   // tab's
-  const resultAttacks = pickView?.attacks ?? result?.result.attacks
-  const resultRotationTime =
-    pickView?.rotationTime ?? result?.result.rotationTime
+  const resultAttacks =
+    gearComparison?.attacks ?? pickView?.attacks ?? result?.result.attacks
   const savedSettings = result?.teamOpt
   const resultSettings = savedSettings ?? teamOpt
+  const baseResultTime =
+    picked?.rotationTime ?? resultSettings.rotationTime ?? rotationTime
+  const shownResultTime =
+    gearComparison?.rotationTime ?? pickView?.rotationTime ?? baseResultTime
   const resultSettingsChanged = useMemo(
     () =>
       !!savedSettings &&
@@ -517,20 +520,17 @@ export default function TeamBuildWorkspace({
     [savedSettings, teamOpt]
   )
   const shownTeamOpt = useMemo(
-    () =>
-      resultAttacks
-        ? {
-            ...resultSettings,
-            attacks: resultAttacks,
-            rotationTime: resultRotationTime ?? resultSettings.rotationTime,
-          }
-        : resultSettings,
-    [resultAttacks, resultRotationTime, resultSettings]
+    () => ({
+      ...resultSettings,
+      ...(resultAttacks && { attacks: resultAttacks }),
+      rotationTime: shownResultTime,
+    }),
+    [resultAttacks, shownResultTime, resultSettings]
   )
-  const hasPicks = !!setComparison || Object.keys(picks).length > 0
+  const hasPicks = !!gearComparison || Object.keys(picks).length > 0
   const shown =
-    picked && setComparison
-      ? { ...picked, builds: setComparison.builds, after: setComparison.after }
+    picked && gearComparison
+      ? { ...picked, ...gearComparison }
       : pickView && picked && Object.keys(picks).length
         ? { ...picked, ...pickView }
         : picked
@@ -577,9 +577,7 @@ export default function TeamBuildWorkspace({
     mode === 'inventory' && result && shown && !teamBaseStale
       ? shown
       : undefined
-  const teamShownTime = teamShown
-    ? (shownTeamOpt.rotationTime ?? rotationTime)
-    : rotationTime
+  const teamShownTime = teamShown ? shownResultTime : rotationTime
   const searchBase = mode === 'kqm' ? kqmSearchBase : teamSearchBase
   const searchBaseStale = mode === 'kqm' ? kqmBaseStale : teamBaseStale
   const searchButton = useCallback<SearchButton>(
@@ -1454,7 +1452,7 @@ export default function TeamBuildWorkspace({
             }
             seconds={result.seconds}
             runTeamOpt={shownTeamOpt}
-            rotationTime={shownTeamOpt.rotationTime ?? rotationTime}
+            rotationTime={shownResultTime}
             // (trying other equipment)
             selected={inspected}
             onSelect={setInspected}
@@ -1462,12 +1460,12 @@ export default function TeamBuildWorkspace({
             onResetPicks={() => {
               setPicks({})
               setPickView(undefined)
-              setSetComparison(undefined)
+              setGearComparison(undefined)
             }}
             inspector={
               inspected &&
               picked &&
-              !setComparison && (
+              !gearComparison && (
                 <TeamOptInspector
                   key={inspected}
                   characterKey={inspected}
@@ -1478,7 +1476,7 @@ export default function TeamBuildWorkspace({
                   onPicks={setPicks}
                   view={pickView}
                   onView={setPickView}
-                  rotationTime={rotationTime}
+                  rotationTime={shownResultTime}
                 />
               )
             }
@@ -1518,11 +1516,10 @@ export default function TeamBuildWorkspace({
                       result={result.result}
                       picks={picks}
                       optionsRunning={result.optionsRunning}
-                      comparison={setComparison}
-                      session={sessionOfResult}
-                      rotationTime={rotationTime}
+                      comparison={gearComparison}
+                      rotationTime={baseResultTime}
                       onPick={(characterKey, next) => {
-                        setSetComparison(undefined)
+                        setGearComparison(undefined)
                         setPicks(
                           characterKey && next ? { [characterKey]: next } : {}
                         )
@@ -1531,7 +1528,7 @@ export default function TeamBuildWorkspace({
                       onCompare={(next) => {
                         setPicks({})
                         setPickView(undefined)
-                        setSetComparison(next)
+                        setGearComparison(next)
                       }}
                     />
                   )}
@@ -1540,7 +1537,7 @@ export default function TeamBuildWorkspace({
                     evaluation={shown.after}
                     attacks={shownTeamOpt.attacks}
                     teamData={teamData}
-                    rotationTime={rotationTime}
+                    rotationTime={shownResultTime}
                   />
                 </Box>
               )

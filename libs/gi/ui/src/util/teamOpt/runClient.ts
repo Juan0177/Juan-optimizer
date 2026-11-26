@@ -3,9 +3,9 @@ import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import type { TeamOptStatus } from './runSolver'
 import type { TeamOptRunJob, TeamOptRunUpdates } from './runTeam'
 import type {
+  TeamOptGearComparison,
   TeamOptMemberOptions,
   TeamOptResult,
-  TeamOptSetComparison,
   TeamOptShortfall,
 } from './solve'
 import {
@@ -33,7 +33,7 @@ export type TeamOptWorkerReply =
       characterKey: CharacterKey
       options: TeamOptMemberOptions
     }
-  | { type: 'setComparisons'; comparisons: TeamOptSetComparison[] }
+  | { type: 'gearComparisons'; comparisons: TeamOptGearComparison[] }
   | { type: 'done' }
   | { type: 'unavailable'; message: string }
   | {
@@ -98,7 +98,7 @@ export function startTeamOptWorker(
     onResult,
     onOptions,
     onSetOptions,
-    onSetComparisons,
+    onGearComparisons,
     onProgress,
   }: TeamOptRunUpdates & { onProgress: (status: TeamOptStatus) => void }
 ) {
@@ -167,8 +167,8 @@ export function startTeamOptWorker(
         case 'setOptions':
           onSetOptions?.(data.characterKey, data.options)
           break
-        case 'setComparisons':
-          onSetComparisons?.(data.comparisons)
+        case 'gearComparisons':
+          onGearComparisons?.(data.comparisons)
           break
         case 'done':
           finish(undefined, true)

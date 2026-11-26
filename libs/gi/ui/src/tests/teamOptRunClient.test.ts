@@ -36,7 +36,7 @@ function start() {
     onResult: vi.fn(),
     onOptions: vi.fn(),
     onSetOptions: vi.fn(),
-    onSetComparisons: vi.fn(),
+    onGearComparisons: vi.fn(),
     onProgress: vi.fn(),
   }
   const run = startTeamOptWorker(
@@ -80,16 +80,21 @@ describe('Team Optimize worker', () => {
     worker.reply({ type: 'result', result })
     worker.reply({ type: 'setOptions', characterKey: 'Sucrose', options })
     const comparisons = [
-      { sets: { Sucrose: 'Instructor' }, builds: {}, after: evaluation },
+      {
+        changed: ['Sucrose' as const],
+        builds: {},
+        weapons: {},
+        after: evaluation,
+      },
     ]
-    worker.reply({ type: 'setComparisons', comparisons })
+    worker.reply({ type: 'gearComparisons', comparisons })
     worker.reply({ type: 'options', characterKey: 'Sucrose', options })
     worker.reply({ type: 'done' })
     await run.done
     expect(updates.onProgress).toHaveBeenCalledWith(status)
     expect(updates.onResult).toHaveBeenCalledWith(result)
     expect(updates.onSetOptions).toHaveBeenCalledWith('Sucrose', options)
-    expect(updates.onSetComparisons).toHaveBeenCalledWith(comparisons)
+    expect(updates.onGearComparisons).toHaveBeenCalledWith(comparisons)
     expect(updates.onOptions).toHaveBeenCalledWith('Sucrose', options)
     // Pooled warm instead of terminated immediately
     expect(worker.terminate).not.toHaveBeenCalled()
