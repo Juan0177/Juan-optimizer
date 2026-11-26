@@ -486,7 +486,7 @@ export function teamSyntaxRows(
       code: '->',
       meaning: t(
         'teamOpt.writer.syntax.next',
-        'Next step. Also →, >, a comma or a new line.'
+        'Next step. Also →, >, -, –, a comma or a new line.'
       ),
     },
     {

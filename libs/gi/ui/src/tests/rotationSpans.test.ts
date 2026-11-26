@@ -68,4 +68,16 @@ describe('rotationSpans (the writer’s colours)', () => {
       'separator:,',
     ])
   })
+  it('highlights en-dash, em-dash, and spaced hyphen as separators while keeping N3-4 an action', () => {
+    expect(pieces('Odette EE – Mitya N3-4 - Odette Q')).toEqual([
+      'member(Odette):Odette',
+      'action:EE',
+      'separator:–',
+      'member(Mitya):Mitya',
+      'action:N3-4',
+      'separator:-',
+      'member(Odette):Odette',
+      'action:Q',
+    ])
+  })
 })

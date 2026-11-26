@@ -16,6 +16,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import ReplayRoundedIcon from '@mui/icons-material/ReplayRounded'
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
   Box,
@@ -604,8 +605,8 @@ export function RotationReadout({
   )
   const nameOf = (ck: CharacterKey) =>
     names.find((n) => n.characterKey === ck)?.name ?? ck
-  // what the reader cannot show as steps is shown as written
-  if (parsed.warnings.length || !parsed.steps.length)
+  // only fall back to plain text when no steps could be parsed at all
+  if (!parsed.steps.length)
     return (
       <Box
         component="span"
@@ -699,6 +700,23 @@ export function RotationReadout({
             </Box>
           </Tooltip>
         </>
+      )}
+      {!!parsed.warnings.length && (
+        <Tooltip
+          arrow
+          title={
+            <Box component="span" sx={{ display: 'grid', gap: 0.25 }}>
+              {parsed.warnings.map((w) => (
+                <span key={w}>{w}</span>
+              ))}
+            </Box>
+          }
+        >
+          <WarningAmberRoundedIcon
+            aria-label={parsed.warnings.join('; ')}
+            sx={{ fontSize: 16, color: 'warning.main', flexShrink: 0 }}
+          />
+        </Tooltip>
       )}
     </Box>
   )
