@@ -1,4 +1,8 @@
-import type { CharacterKey, WeaponKey } from '@genshin-optimizer/gi/consts'
+import {
+  type CharacterKey,
+  signatureWeapons,
+  type WeaponKey,
+} from '@genshin-optimizer/gi/consts'
 import type { TeamOptKqm } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
@@ -39,6 +43,43 @@ import {
   type,
 } from './ui'
 import type { TeamOptUpdate } from './useTeamOpt'
+
+/**
+ * Lock a member to a weapon, or to none (`undefined`: Any). A signature refinement
+ * (`TeamOptKqm.signature`, a team variant's "R1") locks first, so this choice replaces it; the
+ * signature weapon chosen here keeps that refinement.
+ */
+export function lockWeapon(
+  settings: TeamOptKqm,
+  characterKey: CharacterKey,
+  key: WeaponKey | undefined
+) {
+  const next = { ...settings.lockedWeapons }
+  if (key) next[characterKey] = key
+  else delete next[characterKey]
+  settings.lockedWeapons = Object.keys(next).length ? next : undefined
+  const sigRefinement = settings.signature?.[characterKey]
+  if (!sigRefinement) return
+  const signature = { ...settings.signature }
+  delete signature[characterKey]
+  settings.signature = Object.keys(signature).length ? signature : undefined
+  if (key && key === signatureWeapons[characterKey])
+    settings.refinements = { ...settings.refinements, [key]: sigRefinement }
+}
+/** The locked weapon's refinement: the signature refinement when that is what locks it */
+export function setLockedRefinement(
+  settings: TeamOptKqm,
+  characterKey: CharacterKey,
+  key: WeaponKey,
+  refinement: number
+) {
+  if (
+    settings.signature?.[characterKey] &&
+    key === signatureWeapons[characterKey]
+  )
+    settings.signature = { ...settings.signature, [characterKey]: refinement }
+  else settings.refinements = { ...settings.refinements, [key]: refinement }
+}
 
 /** The one-copy weapons locked for members other than `characterKey`, with who has them */
 function lockedElsewhere(
@@ -93,18 +134,18 @@ export function KqmWeaponLock({
     : weapons
   const lock = (key: WeaponKey | undefined) => {
     setTeamOpt((o) => {
-      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-      const next = { ...settings.lockedWeapons }
-      if (key) next[characterKey] = key
-      else delete next[characterKey]
-      settings.lockedWeapons = Object.keys(next).length ? next : undefined
+      lockWeapon((o.kqm ??= { ...defaultTeamOptKqm }), characterKey, key)
     })
     setAnchor(null)
   }
   const setRefinement = (key: WeaponKey, refinement: number) =>
     setTeamOpt((o) => {
-      const settings = (o.kqm ??= { ...defaultTeamOptKqm })
-      settings.refinements = { ...settings.refinements, [key]: refinement }
+      setLockedRefinement(
+        (o.kqm ??= { ...defaultTeamOptKqm }),
+        characterKey,
+        key,
+        refinement
+      )
     })
   const anyLabel = t('teamOpt.kqm.weaponAny', 'Any')
   return (
