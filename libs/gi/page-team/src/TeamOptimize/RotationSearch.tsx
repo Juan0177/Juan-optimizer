@@ -587,6 +587,7 @@ function RotationSearchDialog({
         funded: source.funded,
         erCost,
         kinds,
+        constellations: source.setup.constellations,
         isCancelled: () => cancelled.current,
         onProgress: (p) => {
           const now = Date.now()

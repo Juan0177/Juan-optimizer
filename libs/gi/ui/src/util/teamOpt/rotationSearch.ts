@@ -183,6 +183,56 @@ export function holdsSkill(characterKey: CharacterKey): boolean {
 }
 const groupWords = (inner: string) => inner.split(/\s+/).filter(Boolean)
 
+const normalLength = new Map<CharacterKey, number>()
+/**
+ * The hits of a member's Normal Attack string as its kit plays it (6 when its kit can't be played
+ * alone, as before): a longer "N" starts the string over, so the search offers none longer
+ */
+export function normalStringLength(characterKey: CharacterKey): number {
+  let length = normalLength.get(characterKey)
+  if (length === undefined) {
+    let most = 0
+    try {
+      simulateRotation({
+        rotation: {
+          steps: [
+            {
+              characterKey,
+              actions: [{ kind: 'normal', count: 1, text: 'N1' }],
+            },
+          ],
+          loopsTo: characterKey,
+          warnings: [],
+        },
+        members: [characterKey],
+        elements: { [characterKey]: getCharEle(characterKey) } as never,
+        constellations: {},
+        repeats: 1,
+        keep: 'all',
+        normalStrings: (k, n) => {
+          if (k === characterKey) most = Math.max(most, n)
+        },
+      })
+    } catch {
+      most = 0
+    }
+    length = most || 6
+    normalLength.set(characterKey, length)
+  }
+  return length
+}
+/** The longest "N" a member's words write, inside groups too */
+const longestNormal = (words: readonly string[]): number =>
+  words.reduce((most, word) => {
+    const group = GROUP.exec(word)
+    if (group) return Math.max(most, longestNormal(groupWords(group[2])))
+    const n = /^N([1-6])$/i.exec(word)
+    return n ? Math.max(most, Number(n[1])) : most
+  }, 0)
+/** The longest "N" a search may write for a member: its string, or longer if its words are */
+const normalMost = (characterKey: CharacterKey, words: readonly string[]) =>
+  Math.max(normalStringLength(characterKey), longestNormal(words))
+
 /** The field attacks (Normal, Charged and Plunging) a member's words make, a group's repeats counted */
 export function fieldAttacks(words: readonly string[]): number {
   let n = 0
@@ -218,11 +268,13 @@ export function mainMember(
  * The Normal Attack string at every other length ("N3": "N1", "N2", "N4"…): a search reaches the
  * best length in one step, inside a repeated group too, where each change counts every repeat
  */
-const otherStrings = (word: string) => {
+const otherStrings = (word: string, most = 6) => {
   const n = /^N([1-6])$/i.exec(word)
   if (!n) return []
   const hits = Number(n[1])
-  return [1, 2, 3, 4, 5, 6].filter((h) => h !== hits).map((h) => `N${h}`)
+  return [1, 2, 3, 4, 5, 6]
+    .filter((h) => h !== hits && h <= most)
+    .map((h) => `N${h}`)
 }
 
 /**
@@ -271,7 +323,8 @@ function hasBadCancel(
  */
 function groupEdits(
   words: readonly string[],
-  alternatives: (word: string) => string[]
+  alternatives: (word: string) => string[],
+  most = 6
 ): string[][] {
   const out: string[][] = []
   const baseBad = countBadAdjacentWords(words, true)
@@ -288,7 +341,7 @@ function groupEdits(
       swapped[j + 1] = word
       if (valid(swapped)) out.push(swapped)
     }
-    for (const other of [...otherStrings(word), ...alternatives(word)]) {
+    for (const other of [...otherStrings(word, most), ...alternatives(word)]) {
       const next = [...words.slice(0, j), other, ...words.slice(j + 1)]
       if (valid(next)) out.push(next)
     }
@@ -400,6 +453,7 @@ export function rotationEdits(
     if (!words.length) return
     const allowLeadingDash = DASH_KIT_MEMBERS.has(characterKey)
     const baseBad = countBadAdjacentWords(words)
+    const most = normalMost(characterKey, memberWords(steps, characterKey))
     const alternatives = (word: string) => {
       const action = actionOf(word)
       return action
@@ -425,7 +479,7 @@ export function rotationEdits(
         )
           out.push(withStep(i, next))
       }
-      for (const other of [...otherStrings(word), ...alternatives(word)])
+      for (const other of [...otherStrings(word, most), ...alternatives(word)])
         if (wordKind(word, other)) replace([other])
       const group = GROUP.exec(word)
       if (group && kinds.attacks) {
@@ -434,7 +488,11 @@ export function rotationEdits(
           if (next < 1 || next > 20) continue
           replace(next === 1 ? groupWords(group[2]) : [`${next}[${group[2]}]`])
         }
-        for (const inner of groupEdits(groupWords(group[2]), alternatives))
+        for (const inner of groupEdits(
+          groupWords(group[2]),
+          alternatives,
+          most
+        ))
           replace([`${times}[${inner.join(' ')}]`])
       }
       if (
@@ -509,7 +567,10 @@ export function stepOrders(
  * combos), its kit's own ways of writing them (`actionVariants`), and every plunge for a member
  * that plunges
  */
-export function rotationVocabulary(steps: readonly RotationWordStep[]) {
+export function rotationVocabulary(
+  steps: readonly RotationWordStep[],
+  constellations: Partial<Record<CharacterKey, number>> = {}
+) {
   const vocabulary: Partial<Record<CharacterKey, string[]>> = {}
   const main = mainMember(steps)
   const onField = new Set<CharacterKey>()
@@ -521,6 +582,7 @@ export function rotationVocabulary(steps: readonly RotationWordStep[]) {
     if (fieldAttacks(words) >= 3) onField.add(characterKey)
   for (const { characterKey, words } of steps) {
     const list = (vocabulary[characterKey] ??= [])
+    const most = normalMost(characterKey, memberWords(steps, characterKey))
     const plunges = words.some((w) => actionOf(w) === 'plunge')
       ? ['P', 'HP', 'LP', 'HP[collision]']
       : []
@@ -531,8 +593,11 @@ export function rotationVocabulary(steps: readonly RotationWordStep[]) {
         : SUPPORT_COMMON_WORDS
     for (const word of [
       ...words,
-      ...common.filter((w) => w !== 'hE' || holdsSkill(characterKey)),
-      ...actionVariants(characterKey),
+      ...common.filter(
+        (w) =>
+          (w !== 'hE' || holdsSkill(characterKey)) && longestNormal([w]) <= most
+      ),
+      ...actionVariants(characterKey, constellations[characterKey]),
       ...plunges,
     ])
       if (
@@ -662,6 +727,7 @@ export async function searchRotations({
   plan,
   widen,
   reference,
+  constellations,
   onProgress,
   isCancelled = () => false,
 }: {
@@ -689,6 +755,8 @@ export async function searchRotations({
    * starts, compared): the seed's play by default
    */
   reference?: RotationScore & { text?: string; robustEstimate?: number }
+  /** The members' constellations the rotations are played at: what their actions may be */
+  constellations?: Partial<Record<CharacterKey, number>>
   onProgress?: (progress: RotationSearchProgress) => void
   isCancelled?: () => boolean
 }): Promise<RotationSearchResult> {
@@ -803,7 +871,7 @@ export async function searchRotations({
   const ok = rotationGuard(
     plan === undefined ? seedSteps : rotationWords(plan, members)
   )
-  const vocabulary = rotationVocabulary(seedSteps)
+  const vocabulary = rotationVocabulary(seedSteps, constellations)
   const seen = new Set([seedKey])
   let pool = [start]
   let played = 1

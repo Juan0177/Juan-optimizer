@@ -352,6 +352,7 @@ export function simulateRotation({
   frameData = {},
   openerCounted = false,
   freezeImmune = false,
+  normalStrings,
 }: {
   rotation: ParsedRotation
   members: CharacterKey[]
@@ -398,6 +399,8 @@ export function simulateRotation({
   openerCounted?: boolean
   /** The enemy can't be frozen (see `ReactionOptions.freezeImmune`) */
   freezeImmune?: boolean
+  /** Each Normal Attack string a kit plays: its member and how many hits the whole string has */
+  normalStrings?: (characterKey: CharacterKey, length: number) => void
 }): SimulationResult {
   const notes = new Set<string>()
   const warnings = [...rotation.warnings]
@@ -911,6 +914,7 @@ export function simulateRotation({
     constellation: (ck) => constellations[ck] ?? 0,
     partyCount: (el) => members.filter((m) => elements[m] === el).length,
     normalSequence(length, count) {
+      normalStrings?.(actor, length)
       const first = normalCounter % length
       normalCounter = (first + count) % length
       return first

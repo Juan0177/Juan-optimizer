@@ -237,7 +237,9 @@ export function matchMember(
 }
 
 /** Members whose Charged Attack takes a number of beams ("CA[beams=2]"), and the most it can take */
-const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
+const CHARGE_BEAMS: Partial<
+  Record<CharacterKey, (constellation: number) => number>
+> = { Sandrone: (constellation) => (constellation >= 1 ? 6 : 3) }
 /** Members whose Charged Attack loads a number of bullets ("CA[bullets=4]"), and the most */
 const CHARGE_BULLETS: Partial<Record<CharacterKey, number>> = { Chasca: 6 }
 /** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
@@ -253,14 +255,18 @@ const MOVEMENT_WORD = /\[\s*movement\s*=\s*([^\]]*?)\s*\](\?)?/iy
  * The ways a member's kit lets its actions be written beyond the plain ones, for a rotation
  * search to try: Charged Attacks with beams (Sandrone) or bullets (Chasca), Flamestrider spins and
  * finisher (Mavuika), a cancelled Charged Attack (Arlecchino, then a dash), a held Skill's stacks
- * (Beidou). What the member's constellations do not allow, the simulation warns about.
+ * (Beidou). Sandrone's beams go up to what her constellation allows (3, 6 from C1); what else
+ * the member's constellations do not allow, the simulation warns about.
  */
-export function actionVariants(characterKey: CharacterKey): string[] {
+export function actionVariants(
+  characterKey: CharacterKey,
+  constellation = 0
+): string[] {
   const out: string[] = []
   const counted = (most: number | undefined, word: (n: number) => string) => {
     for (let n = 1; most && n <= most; n++) out.push(word(n))
   }
-  counted(CHARGE_BEAMS[characterKey], (n) => `CA[beams=${n}]`)
+  counted(CHARGE_BEAMS[characterKey]?.(constellation), (n) => `CA[beams=${n}]`)
   counted(CHARGE_BULLETS[characterKey], (n) => `CA[bullets=${n}]`)
   const spins = CHARGE_SPINS[characterKey]
   counted(spins, (n) => `C${n}`)
@@ -550,8 +556,12 @@ function parseActions(
       const [, option, n] = /^(\w+)\s*=\s*(\d+)$/.exec(m[13] ?? '') ?? []
       const bullets = option?.toLowerCase() === 'bullets'
       const count = n !== undefined ? Number(n) : undefined
-      const most =
-        characterKey && (bullets ? CHARGE_BULLETS : CHARGE_BEAMS)[characterKey]
+      // (the most at any constellation: the kit warns about beams its constellation can't fire)
+      const most = !characterKey
+        ? undefined
+        : bullets
+          ? CHARGE_BULLETS[characterKey]
+          : CHARGE_BEAMS[characterKey]?.(6)
       const what = bullets ? 'bullets' : 'beams'
       if (count === undefined) actions.push({ kind: 'charged', text: raw })
       else if (!most) {
