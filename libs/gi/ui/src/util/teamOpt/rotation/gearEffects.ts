@@ -6,6 +6,7 @@ import {
 } from '@genshin-optimizer/gi/stats'
 import { energyCalcData, isFrostbreathReaction } from '../energyCalc'
 import type { RotationAction } from './parse'
+import { isSacrificialWeapon, sacrificialPassive } from './sacrificial'
 import type {
   NormalStateStart,
   SimBuffOwner,
@@ -15,6 +16,27 @@ import type {
 } from './types'
 import { weaponEffects } from './weaponEffects'
 import { WEAPON_MODULES } from './weapons'
+
+// Timed-only effects run for every candidate. Custom effects can inspect what is worn,
+// and damage procs only run for the equipped weapon.
+const equippedWeaponEffects = new Set(
+  WEAPON_MODULES.filter((module) => module.custom || module.procs?.length).map(
+    (module) => module.weapon
+  )
+)
+
+/** The equipped identity that can change a rotation with a fixed list of candidates. */
+export function rotationWeaponKey(gear?: SimGear) {
+  const weapon = gear?.weapon
+  const equippedMatters =
+    weapon &&
+    (!gear?.candidates?.weapons?.includes(weapon) ||
+      equippedWeaponEffects.has(weapon) ||
+      weapon === 'PrototypeAmber' ||
+      isSacrificialWeapon(weapon))
+  // Candidate passives may read the equipped refinement even when they only create buff windows.
+  return [equippedMatters ? weapon : undefined, gear?.refinement ?? 1] as const
+}
 
 /*
  * Artifact set effects the simulation plays from what happens in the rotation (gcsim's
@@ -150,16 +172,15 @@ export function gearEffects({
   gear,
   inNightsoul,
   onField,
-  cooldown,
   window,
   reduceCooldown,
+  sacrificial,
   onShield,
 }: {
   /** A shield is created (Geo resonance is checked again) */
   onShield?: (t: number) => void
   members: CharacterKey[]
   gear: Partial<Record<CharacterKey, SimGear>>
-  cooldown: (characterKey: CharacterKey, key: string, t: number) => number
   /** Whether a member is in a Nightsoul state at `t` (a Nightsoul conditional of its kit is on) */
   inNightsoul: (characterKey: CharacterKey, t: number) => boolean
   /** Who starts on the field */
@@ -179,6 +200,10 @@ export function gearEffects({
     frames: number,
     t: number
   ) => void
+  sacrificial?: {
+    random: () => number
+    reset: (characterKey: CharacterKey, t: number) => void
+  }
 }): GearEffects {
   const wears = (k: CharacterKey, set: string, n = 4) =>
     (gear[k]?.sets?.[set] ?? 0) >= n
@@ -279,8 +304,16 @@ export function gearEffects({
     CharacterKey,
     { count: number; end: number; ready: number }
   >()
-  const sacCredit = new Map<CharacterKey, number>()
   const sacReady = new Map<CharacterKey, number>()
+  const sac = sacrificial
+    ? new Map(
+        members.flatMap((k) =>
+          isSacrificialWeapon(gear[k]?.weapon)
+            ? [[k, sacrificialPassive(gear[k]?.refinement)] as const]
+            : []
+        )
+      )
+    : undefined
   const vermillion = new Map<
     CharacterKey,
     { start: number; end: number; count: number }
@@ -1131,37 +1164,22 @@ export function gearEffects({
         ctx.buff(k, ['RainbowSerpentsRainBow', 'passive'], 'on', 1, 480, {
           hitlag: 'recipient',
         })
-      // Sacrificial procs are random in game. Use accumulated proc probability as a stable
-      // expected-timing estimate, with the refinement's real ICD and on-field restriction.
+      const passive = hit.tag === 'skill' && hit.onField === k && sac?.get(k)
       if (
-        [
-          'SacrificialFragments',
-          'SacrificialSword',
-          'SacrificialGreatsword',
-          'SacrificialBow',
-        ].includes(gear[k]?.weapon ?? '') &&
-        hit.tag === 'skill' &&
-        hit.onField === k &&
-        t >= (sacReady.get(k) ?? 0) &&
-        cooldown(k, 'skill', t) > 0
+        sacrificial &&
+        passive &&
+        !hit.noSacrificial &&
+        hit.talentMultiplier !== 0
       ) {
-        const refinement = Math.min(5, Math.max(1, gear[k]?.refinement ?? 1))
-        const credit = (sacCredit.get(k) ?? 0) + 0.3 + 0.1 * refinement
-        ctx.note(
-          `${gear[k]!.weapon}: proc timing is estimated from refinement and eligible Skill hits; actual random procs can change rotation length.`
-        )
-        if (credit >= 1 - 1e-9) {
-          reduceCooldown(k, 'skill', Number.MAX_SAFE_INTEGER, t)
-          sacReady.set(
-            k,
-            t +
-              (refinement >= 4
-                ? 19 - (refinement - 4) * 3
-                : 34 - refinement * 4) *
-                60
-          )
-          sacCredit.set(k, credit - 1)
-        } else sacCredit.set(k, credit)
+        const clock = ctx.characterFrame(k)
+        if (
+          clock >= (sacReady.get(k) ?? 0) &&
+          sacrificial.random() < passive.chance
+        ) {
+          // Delayed Skill damage can use Composed even when all charges have recovered.
+          sacReady.set(k, clock + passive.cooldown)
+          sacrificial.reset(k, t)
+        }
       }
       // Deepwood Memories: Dendro RES -30% for 8 s after the wearer's Skill or Burst hits (any
       // element: gcsim deepwood.go)

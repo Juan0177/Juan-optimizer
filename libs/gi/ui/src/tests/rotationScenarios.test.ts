@@ -182,6 +182,39 @@ describe('rotationScenarios', () => {
     expect(both2nd.zibaiNormals).toBeGreaterThan(bothEvery.zibaiNormals)
   })
 
+  it('keeps the written baseline when the ER calculator marks a written Burst unused', () => {
+    const baseText = 'Columbina E Q -> Zibai E N4 Q N4 E Q'
+    const { scenarios } = buildRotationScenarios({
+      baseText,
+      names,
+      configs: [
+        { characterKey: 'Columbina', cadences: [1], instead: '' },
+        { characterKey: 'Zibai', cadences: [1, 0], instead: 'N4' },
+      ],
+      baselineBurstEvery: { Columbina: 1, Zibai: 0 },
+    })
+    expect(scenarios.filter((s) => s.isBaseline)).toMatchObject([
+      { id: 'current', text: baseText },
+    ])
+    const skip = scenarios.find((s) => s.choices.Zibai?.cadence === 0)
+    expect(skip?.isBaseline).toBe(false)
+    expect(skip?.text).toBe('Columbina E Q -> Zibai E N4 N4 N4 E N4')
+  })
+
+  it('does not reuse the baseline when a chosen alternate Burst action is different', () => {
+    const baseText = 'Zibai E N4 Q/N4'
+    const { scenarios } = buildRotationScenarios({
+      baseText,
+      names,
+      configs: [{ characterKey: 'Zibai', cadences: [2], instead: 'N1' }],
+      baselineBurstEvery: { Zibai: 2 },
+    })
+    expect(scenarios).toMatchObject([
+      { text: baseText, isBaseline: true },
+      { text: 'Zibai E N4 Q/N1', isBaseline: false },
+    ])
+  })
+
   it('ranks feasible scenarios strictly above unmet ones and by descending DPS', () => {
     const ranked = rankScenarioResults([
       { id: 'unmet-high', dps: 150000, unmetCount: 1 },

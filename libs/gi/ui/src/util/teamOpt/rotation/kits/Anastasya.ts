@@ -499,7 +499,7 @@ export const kit: KitModel = {
         s.a1End = ctx.now + 1200
         syncAt(ctx, s, s.a1End)
         if (action.hold) {
-          // ESTIMATE frames (see HOLD_*). Blessing of Honor for 15 s; C2 Honor 125% for 15 s.
+          // ESTIMATE frames (see HOLD_*). Blessing of Honor for 15 s; C2 Honor 130% for 15 s (125% before beta 7.2.54).
           hit(
             ctx,
             HOLD_HITMARK,

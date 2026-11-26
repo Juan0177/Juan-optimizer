@@ -61,6 +61,8 @@ export interface SimHit {
   element: HitElement
   /** Applies its element (durability > 0): can trigger reactions */
   applies?: boolean
+  /** Skill damage that cannot trigger Composed (e.g. Mona's A1 phantom). */
+  noSacrificial?: boolean
   /** Its element application's durability (default 25) */
   durability?: number
   /** Its ICD tag: 'none' (always applies) or a name; hits of one tag share a counter */
@@ -279,8 +281,13 @@ export interface SimContext {
   inNightsoul(member: CharacterKey): boolean
   /** Verdant Dew accrues `rate` times faster for `duration` frames from now */
   boostDew(duration: number, rate: number): void
+  endDewBoost(): void
   /** Bursts every Dendro Core now (Kaveh): each blooms a frame later, owned by its creator */
   ruptureDendroCores(): void
+  /** Converts live Dendro Cores into Seeds of Deceit and suppresses new cores for `duration` frames. */
+  suppressCores(duration: number): number
+  /** Forces a Moondrift Harmony immediately (Linnea C2) with all Hydro/Geo members as contributors. */
+  triggerHarmony(): void
   readonly isBurning: boolean
   readonly isFrozen: boolean
   readonly moondrifts: number
@@ -457,9 +464,10 @@ export interface KitModel {
   /**
    * Its timeline has random parts (ctx.random): rotations with it are averaged over seeded samples
    * (simulateRotationSamples), as the reference simulators average over trials. A number: the
-   * samples its randomness needs (a small one plays a rotation fewer times; true: 64)
+   * samples its randomness needs (a small one plays a rotation fewer times; true: 64). A function:
+   * by its constellation, for randomness a constellation adds (Mitya's C6 refunds)
    */
-  sampled?: boolean | number
+  sampled?: boolean | number | ((constellation: number) => boolean | number)
   /** Moonsign levels it adds to the party */
   moonsign?: number
   element: HitElement
@@ -542,6 +550,12 @@ export interface KitModel {
     state: any
   ) => { active: boolean; points: number }
   onNightsoulConsume?: (
+    ctx: SimContext,
+    state: any,
+    actor: CharacterKey,
+    amount: number
+  ) => void
+  onNightsoulGain?: (
     ctx: SimContext,
     state: any,
     actor: CharacterKey,

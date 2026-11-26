@@ -70,8 +70,8 @@ describe('Durin', () => {
       }
     }
     const windows = (cons: number) =>
-      run('Durin E N1 Q W25', cons, vaporize()).buffWindows.filter((w) =>
-        ['c2Hydro', 'c2AfterBurst'].includes(w.path[1])
+      run('Durin E N1 Q W25', cons, vaporize()).buffWindows.filter(
+        (w) => w.value && ['c2Hydro', 'c2AfterBurst'].includes(w.path[1])
       )
     expect(windows(1)).toHaveLength(0)
     expect(windows(2).map((w) => w.end - w.start)).toEqual([360, 360])

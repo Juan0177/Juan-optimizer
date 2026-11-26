@@ -32,7 +32,9 @@ import {
   STEADY_COUNTED,
   STEADY_REPEATS,
   simulateRotationSamples,
+  simulateRotationSamplesAsync,
 } from './rotation'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import { rotationCalculation } from './rotationCalculation'
 import { teamRuleConditionals } from './ruleConditionals'
 
@@ -42,13 +44,14 @@ import { teamRuleConditionals } from './ruleConditionals'
  */
 
 /**
- * The ER calculator's "Burst: Every 2nd": that member's Burst in one of every 2 rotations (KQM's
- * runs, its timeline); none unless the ER comes from the calculator
+ * An ER calculator's "Burst: Every 2nd" / "Every 3rd": members whose Burst plays only every Nth
+ * rotation (`energySource === 'calculator'`); undefined when every member bursts every rotation.
  */
-export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
-  const calculator =
-    kqm?.energySource === 'calculator' ? kqm.energyCalculator : undefined
-  if (!calculator) return undefined
+function burstEveryOf(
+  energySource: TeamOpt['energySource'] | undefined,
+  calculator: TeamOpt['energyCalculator'] | undefined
+) {
+  if (energySource !== 'calculator' || !calculator) return undefined
   const every = Object.fromEntries(
     Object.entries(calculator.members).map(([k, m]) => [k, m?.burstEvery ?? 1])
   ) as Partial<Record<CharacterKey, number>>
@@ -59,6 +62,10 @@ export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
  * Team optimize's ER calculator "Burst: Every 2nd / 3rd / Skip" per member;
  * none unless the ER comes from the calculator with a non-1 cadence.
  */
+export function kqmBurstEvery(kqm: TeamOptKqm | undefined) {
+  return burstEveryOf(kqm?.energySource, kqm?.energyCalculator)
+}
+
 export function teamBurstEvery(teamOpt: TeamOpt | undefined) {
   const calculator =
     teamOpt?.energySource === 'calculator'
@@ -158,7 +165,7 @@ export function tabEnemyFreezeImmune(
  * The written rotation played frame by frame: its steps, the simulation and each member's attacks
  * (only the buff states that differ from the members' own settings go on the attacks)
  */
-export function simulateWritten({
+function prepareWritten({
   text,
   opener,
   timing,
@@ -182,6 +189,7 @@ export function simulateWritten({
   burstEvery,
   withoutBursts,
   timelineOnly,
+  sacrificial = true,
 }: {
   /** The KQM tab's: its own switches are the states where no attack sets one (`current` absent) */
   kqm?: boolean
@@ -189,6 +197,8 @@ export function simulateWritten({
   withoutBursts?: boolean
   /** Only shown on a timeline: no attacks worked out */
   timelineOnly?: boolean
+  /** Replay with Composed disabled for an ER target that does not rely on resets. */
+  sacrificial?: boolean
   /** Record the enemy's auras over time (the writer's timeline; never KQM's many replays) */
   auraTimeline?: boolean
   /** The enemy can't be frozen (default: as the tab's enemy is, `tabEnemyFreezeImmune`) */
@@ -251,7 +261,10 @@ export function simulateWritten({
     rotation.steps = strip(rotation.steps)
     if (rotation.opener) rotation.opener = strip(rotation.opener)
   }
-  if (!rotation.steps.length) return { rotation }
+  if (!rotation.steps.length) {
+    const empty: UnplayedRotation = { rotation }
+    return { empty }
+  }
   // (a Burst every Nth rotation: N written rotations played as one, timing edits kept per copy)
   const nth = burstEvery ? everyNthBursts(rotation, burstEvery) : undefined
   const edits = frameOverrides(rotation, timing.edits)
@@ -270,72 +283,109 @@ export function simulateWritten({
       : openerCounted
         ? 1 + (first - 1) * loops
         : first * loops
-  const sampled = team.members.some((m) => kitModels[m]?.sampled)
-  const sim = simulateRotationSamples(
-    {
-      ...team,
-      calculate: needsRotationCalculation(team.members, team.gear)
-        ? (calculate ??
-          rotationCalculation(database, teamId, gender, calculation))
-        : undefined,
-      rotation: nth?.rotation ?? rotation,
-      frameOverrides: nth
-        ? Object.fromEntries(
-            nth.index.flatMap((written, played) =>
-              edits[written] === undefined ? [] : [[played, edits[written]]]
-            )
-          )
-        : edits,
-      swapFrames: timing.swapFrames,
-      frameData,
-      repeats: first ?? (steady ? STEADY_REPEATS : repeats),
-      keep: first ? 'all' : steady ? 'last2' : keep,
-      openerCounted,
-      auraTimeline,
-      freezeImmune: freezeImmune ?? tabEnemyFreezeImmune(database, teamId, kqm),
-    },
-    // (two rotations kept: half the samples each, as much as one rotation of 64)
-    // (no more than the members' kits need: a small randomness, few plays)
-    sampled
-      ? rotationSamples(
-          team.members,
-          kitModels,
-          samples ?? (steady ? 32 : undefined)
-        )
-      : undefined
+  const sampleCount = rotationSamples(
+    team.members,
+    kitModels,
+    samples ?? (steady ? 32 : undefined),
+    sacrificial ? team.gear : undefined,
+    team.constellations
   )
-  const own =
-    current ??
-    ((owner: SimBuffOwner, path: string[]) =>
-      (kqm ? kqmConditional : ownConditional)(
-        database,
-        teamId,
-        members,
-        owner,
-        path
-      ))
-  if (!steady)
+  const options: Parameters<typeof simulateRotationSamples>[0] = {
+    ...team,
+    calculate: needsRotationCalculation(team.members, team.gear)
+      ? (calculate ??
+        rotationCalculation(database, teamId, gender, calculation))
+      : undefined,
+    rotation: nth?.rotation ?? rotation,
+    frameOverrides: nth
+      ? Object.fromEntries(
+          nth.index.flatMap((written, played) =>
+            edits[written] === undefined ? [] : [[played, edits[written]]]
+          )
+        )
+      : edits,
+    swapFrames: timing.swapFrames,
+    frameData,
+    repeats: first ?? (steady ? STEADY_REPEATS : repeats),
+    keep: first ? 'all' : steady ? 'last2' : keep,
+    openerCounted,
+    auraTimeline,
+    sacrificial,
+    freezeImmune: freezeImmune ?? tabEnemyFreezeImmune(database, teamId, kqm),
+  }
+  return { options, sampleCount, finish }
+
+  function finish(sim: ReturnType<typeof simulateRotationSamples>) {
+    const own =
+      current ??
+      ((owner: SimBuffOwner, path: string[]) =>
+        (kqm ? kqmConditional : ownConditional)(
+          database,
+          teamId,
+          members,
+          owner,
+          path
+        ))
+    if (!steady)
+      return {
+        rotation,
+        sim,
+        own,
+        attacks: timelineOnly ? {} : rotationAttacks(sim, own),
+        counted: undefined,
+        loops,
+        fromStart,
+      }
+    const counted = fromStart ?? STEADY_COUNTED * loops
     return {
       rotation,
-      sim,
+      // (what the timeline shows: the last of the two counted; the first few, all of them)
+      sim: first ? sim : lastRotation(sim),
       own,
-      attacks: timelineOnly ? {} : rotationAttacks(sim, own),
-      counted: undefined,
+      // per rotation: the hits of those counted, averaged
+      attacks: timelineOnly
+        ? {}
+        : perRotation(rotationAttacks(sim, own), counted),
+      counted: { sim, rotations: counted, openerCounted },
       loops,
       fromStart,
     }
-  const counted = fromStart ?? STEADY_COUNTED * loops
-  return {
-    rotation,
-    // (what the timeline shows: the last of the two counted; the first few, all of them)
-    sim: first ? sim : lastRotation(sim),
-    own,
-    // per rotation: the hits of those counted, averaged
-    attacks: perRotation(rotationAttacks(sim, own), counted),
-    counted: { sim, rotations: counted, openerCounted },
-    loops,
-    fromStart,
   }
+}
+
+type WrittenOptions = Parameters<typeof prepareWritten>[0]
+interface UnplayedRotation {
+  rotation: ReturnType<typeof parseRotation>
+  sim?: never
+  own?: never
+  attacks?: never
+  counted?: never
+  loops?: never
+  fromStart?: never
+}
+
+export function simulateWritten(args: WrittenOptions) {
+  const prepared = prepareWritten(args)
+  if (!prepared) return undefined
+  if (prepared.empty) return prepared.empty
+  const { options, sampleCount, finish } = prepared
+  return finish(simulateRotationSamples(options, sampleCount))
+}
+
+export async function simulateWrittenAsync(
+  args: WrittenOptions,
+  isCancelled: () => boolean
+) {
+  const prepared = prepareWritten(args)
+  if (!prepared) return undefined
+  if (prepared.empty) return prepared.empty
+  const { options, sampleCount, finish } = prepared
+  const sim = await simulateRotationSamplesAsync(
+    options,
+    sampleCount,
+    isCancelled
+  )
+  return sim && !isCancelled() ? finish(sim) : undefined
 }
 
 /** Attacks of `rotations` rotations, per rotation */
@@ -525,19 +575,20 @@ export function writtenKqmReplay({
       )?.[path[0]]?.[path[1]]
       return rule
     }
-    const played = simulateWritten({
+    const playArgs = {
       ...common,
       team: { members: keys, constellations, elements, gear },
       calculation: overrides,
       calculate,
       current,
       repeats: KQM_REPEATS,
-      keep: 'last2',
+      keep: 'last2' as const,
       burstEvery,
       freezeImmune,
       // (two rotations kept: fewer samples, as much as the writer's one rotation of 64)
       samples: 32,
-    })
+    }
+    const played = simulateWritten(playArgs)
     // (written but nothing to play: an error, not the attacks Team optimize played)
     if (!played?.sim || !played.attacks)
       throw new Error(
@@ -559,12 +610,25 @@ export function writtenKqmReplay({
       .map(([label, frames]) => ({ label, seconds: frames / 60 / counted }))
       .filter((s) => s.seconds >= 0.3)
       .sort((a, b) => b.seconds - a.seconds)
+    const energySim = keys.some((key) => isSacrificialWeapon(gear[key]?.weapon))
+      ? (simulateWritten({
+          ...playArgs,
+          sacrificial: false,
+          timelineOnly: true,
+        })?.sim ?? played.sim)
+      : played.sim
+    const exactTime = played.sim.frames / 60 / counted
     return {
       attacks,
-      rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
+      rotationTime: Math.round(exactTime * 10) / 10,
+      exactTime,
       stalls,
       // (the ER calculator's inputs as this rotation plays them)
-      energy: energyFromRotation(played.sim, keys, counted, constellations),
+      energy: energyFromRotation(energySim, keys, counted, constellations),
+      ...(energySim !== played.sim && {
+        energyRotationTime:
+          Math.round((energySim.frames / 60 / counted) * 10) / 10,
+      }),
     }
   }
 }

@@ -8,6 +8,7 @@ import type {
   RotationSearchResult,
 } from '@genshin-optimizer/gi/ui'
 import {
+  candidateRank,
   energyFits,
   erCostOf,
   mainMember,
@@ -23,8 +24,8 @@ import {
   templatesForTeam,
   wordsRotationText,
 } from '@genshin-optimizer/gi/ui'
-import type { RotationSearchSource } from './rotationSearchSource'
 import { templateText } from './RotationTemplates'
+import type { RotationSearchSource } from './rotationSearchSource'
 
 /** The best rotations of a search that get builds of their own */
 export const CONFIRMED = 3
@@ -79,7 +80,8 @@ export function templateSeeds(
 const distinct = (list: readonly RotationCandidate[]) => {
   const out: RotationCandidate[] = []
   for (const c of [...list].sort(
-    (a, b) => b.estimate - a.estimate || a.text.length - b.text.length
+    (a, b) =>
+      candidateRank(b) - candidateRank(a) || a.text.length - b.text.length
   ))
     if (!out.some((o) => samePlay(o, c))) out.push(c)
   return out
@@ -118,6 +120,7 @@ export async function fullRotationSearch({
   onProgress,
   onConfirmed,
   onThreads,
+  onAbort,
 }: {
   database: ArtCharDatabase
   names: RotationMember[]
@@ -132,6 +135,7 @@ export async function fullRotationSearch({
   onProgress?: (progress: RotationSearchProgress) => void
   onConfirmed?: (dps: Record<string, number | null>) => void
   onThreads?: (threads: number) => void
+  onAbort?: (abort: (() => void) | undefined) => void
 }): Promise<
   RotationSearchResult & {
     /** Each rotation's DPS with its own builds (null: none found) */
@@ -148,6 +152,14 @@ export async function fullRotationSearch({
   const runs = new Map<string, RotationSearchSource>()
   const found = new Map<string, RotationCandidate>()
   const stop = () => isCancelled() || Date.now() > deadline
+  const totalBudget = Math.max(0, deadline - Date.now())
+  // Keep a small confirmation reserve so a pass that runs up to the time limit can still confirm
+  // its best candidates before the hard deadline.
+  const searchDeadline =
+    totalBudget > 15_000
+      ? deadline - Math.min(120_000, Math.round(totalBudget * 0.15))
+      : deadline
+  const stopSearch = () => isCancelled() || Date.now() > searchDeadline
   let base = source
   let from = written
   let yours: RotationCandidate | undefined
@@ -177,16 +189,33 @@ export async function fullRotationSearch({
     try {
       // (what the pass measures from: the rotation it starts from, with its builds)
       onStage?.({ pass, phase: 'starts' })
-      const [reference] = await player.score([from], undefined, stop)
+      const [reference] = await player.score([from], undefined, stopSearch)
       if (!reference) {
         ended = isCancelled() ? 'cancelled' : 'time'
         break
       }
-      lastFrom = { text: from, ...reference, estimate: reference.dps }
+      const refCost = erCost(reference, reference)
+      const estimate = (s: RotationScore) =>
+        s.dps + refCost - erCost(s, reference)
+      let refRobust: number | undefined
+      if (!stopSearch()) {
+        const [offsets] = await player.verify([from], stopSearch)
+        if (offsets) {
+          const valid = offsets.filter(
+            (s): s is RotationScore => !!s && s.dps > 0
+          )
+          const all = [reference, ...valid]
+          refRobust = all.reduce((sum, s) => sum + estimate(s), 0) / all.length
+        }
+      }
+      lastFrom = {
+        text: from,
+        ...reference,
+        estimate: reference.dps,
+        ...(refRobust !== undefined ? { robustEstimate: refRobust } : {}),
+      }
       if (pass === 1) yours = lastFrom
       const fits = energyFits(reference, 20, funded)
-      const estimate = (s: RotationScore) =>
-        s.dps + erCost(reference) - erCost(s)
       // (every other order of its steps and the templates on the first pass; the others with
       // their own builds after)
       const others = [
@@ -202,7 +231,7 @@ export async function fullRotationSearch({
         ),
       ].filter((t) => t !== from)
       const scores = others.length
-        ? await player.score(others, undefined, stop)
+        ? await player.score(others, undefined, stopSearch)
         : []
       played += 1 + scores.filter(Boolean).length
       const starts = [
@@ -243,7 +272,7 @@ export async function fullRotationSearch({
         })
       }
       for (const [i, start] of starts.entries()) {
-        if (stop()) {
+        if (stopSearch()) {
           ended = isCancelled() ? 'cancelled' : 'time'
           break
         }
@@ -251,10 +280,11 @@ export async function fullRotationSearch({
         const search = await searchRotations({
           seed: start,
           plan: seed,
-          reference,
+          reference: passFrom,
           members: names,
           score: player.score,
-          deadline,
+          verify: player.verify,
+          deadline: searchDeadline,
           maxRounds: 40,
           keep: 6,
           widen: 24,
@@ -268,13 +298,12 @@ export async function fullRotationSearch({
         rounds += search.rounds
         for (const c of search.best) {
           const had = pool.get(c.text)
-          if (!had || had.estimate < c.estimate) pool.set(c.text, c)
+          if (!had || candidateRank(had) < candidateRank(c)) pool.set(c.text, c)
         }
         if (search.ended === 'cancelled') {
           ended = 'cancelled'
           break
         }
-        // (out of time: the best so far still get their own builds)
         if (search.ended === 'time') {
           ended = 'time'
           break
@@ -282,24 +311,65 @@ export async function fullRotationSearch({
       }
     } finally {
       player.release()
+      onThreads?.(0)
     }
     last = distinct([...pool.values()])
     for (const c of last) found.set(c.text, c)
-    if (isCancelled()) {
-      ended = 'cancelled'
+    if (stop()) {
+      ended = isCancelled() ? 'cancelled' : 'time'
       break
     }
-    // (the best few that have no builds of their own yet)
+    // (the best few that beat the pass's start and have no builds of their own yet)
+    const refBase = lastFrom!
     const best = last
-      .filter((c) => c.text !== written && !(c.text in confirmed))
+      .filter(
+        (c) =>
+          c.text !== written &&
+          !(c.text in confirmed) &&
+          c.estimate > refBase.estimate * (1 + 1e-4) &&
+          candidateRank(c) > candidateRank(refBase) * (1 + 1e-4)
+      )
       .slice(0, CONFIRMED)
-    for (const [i, c] of best.entries()) {
-      onStage?.({ pass, phase: 'builds', done: i, total: best.length })
-      const run = await base.confirm(c.text, isCancelled).catch(() => undefined)
-      if (isCancelled()) break
-      confirmed[c.text] = run ? run.dps : null
-      if (run) runs.set(c.text, run.next)
-      onConfirmed?.({ ...confirmed })
+    let activeAbort: (() => void) | undefined
+    let confirmTimedOut = false
+    const confirmStop = () => confirmTimedOut || stop()
+    const timer =
+      best.length > 0
+        ? setTimeout(
+            () => {
+              confirmTimedOut = true
+              activeAbort?.()
+            },
+            Math.max(0, deadline - Date.now())
+          )
+        : undefined
+    try {
+      for (const [i, c] of best.entries()) {
+        if (confirmStop()) {
+          ended = isCancelled() ? 'cancelled' : 'time'
+          break
+        }
+        onStage?.({ pass, phase: 'builds', done: i, total: best.length })
+        const run = await base
+          .confirm(c.text, confirmStop, (abort) => {
+            activeAbort = abort
+            onAbort?.(abort)
+          })
+          .catch(() => undefined)
+        activeAbort = undefined
+        onAbort?.(undefined)
+        if (confirmStop()) {
+          ended = isCancelled() ? 'cancelled' : 'time'
+          break
+        }
+        confirmed[c.text] = run ? run.dps : null
+        if (run) runs.set(c.text, run.next)
+        onConfirmed?.({ ...confirmed })
+      }
+    } finally {
+      if (timer !== undefined) clearTimeout(timer)
+      activeAbort = undefined
+      onAbort?.(undefined)
     }
     if (isCancelled()) {
       ended = 'cancelled'

@@ -95,4 +95,16 @@ describe('Vesna constellations', () => {
     expect(sim.hits.filter((h) => h.tag === 'normal')).toHaveLength(6)
     expect(sim.warnings).toEqual([])
   })
+
+  it('C6: the tap replaced by Transpose does not start a Normal Attack combo', () => {
+    const sim = run('Vesna E E E Q E N1 C W1', ['Vesna'], { Vesna: 6 })
+    expect(sim.hits.some((h) => h.tag === 'charged')).toBe(false)
+    expect(sim.warnings).toEqual([
+      expect.stringContaining('requires a Normal Attack'),
+    ])
+
+    const withNormal = run('Vesna E E E Q E N2 C W1', ['Vesna'], { Vesna: 6 })
+    expect(withNormal.hits.filter((h) => h.tag === 'charged')).toHaveLength(1)
+    expect(withNormal.warnings).toEqual([])
+  })
 })

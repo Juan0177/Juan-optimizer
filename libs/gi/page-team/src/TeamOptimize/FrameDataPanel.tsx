@@ -130,13 +130,13 @@ export function FrameDataPanel({
   const anyEdit =
     members.some(memberEdited) ||
     timing.swapFrames !== undefined ||
-    timing.rotations !== undefined ||
     stepEdits > 0
   const resetAll = () => {
     const next = { ...frameData }
     for (const m of members) delete next[m]
     setFrameData(next)
-    setTiming({ edits: {} })
+    const { swapFrames: _swap, edits: _edits, ...keep } = timing
+    setTiming({ ...keep, edits: {} })
   }
   const swap = timing.swapFrames ?? DEFAULT_SWAP_FRAMES
   // a step's action, for every rotation: the member's frame data, that action open

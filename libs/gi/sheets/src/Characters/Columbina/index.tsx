@@ -300,7 +300,7 @@ const c4Buff_lunarcrystallize_dmgInc = greaterEq(
   equal(
     condC4Buff,
     'on',
-    prod(percent(dm.constellation4.lunarcharged_dmg_), input.total.hp)
+    prod(percent(dm.constellation4.lunarcrystallize_dmg_), input.total.hp)
   )
 )
 const c4_lunar_specialDmg_ = greaterEq(
@@ -560,6 +560,7 @@ const sheet: TalentSheet = {
         {
           text: ct.chg('skill.skillParams.6'),
           value: dm.skill.duration,
+          unit: 's',
         },
         {
           text: stg('cd'),

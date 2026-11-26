@@ -138,12 +138,14 @@ describe('flat Energy from constellations and passives', () => {
     )
   })
 
-  it('Columbina C1: 6 to the active member on a Lunar-Charged Gravity Interference; C4: 4 on each', () => {
-    const at = (cons: number) =>
-      marks('Columbina E W2', ['Columbina'], { Columbina: cons }).map(
+  it('Columbina C1: 6 to the active member on a Lunar-Charged Gravity Interference (Ascendant Gleam); C4: 4 on each', () => {
+    const at = (cons: number, team: CharacterKey[] = ['Columbina', 'Ineffa']) =>
+      marks('Columbina E W2', team, { Columbina: cons }).map(
         ([, , amount, to]) => [amount, to]
       )
     expect(at(0)).toEqual([])
+    expect(at(1, ['Columbina'])).toEqual([])
+    expect(at(4, ['Columbina'])).toEqual([[4, '']])
     expect(at(1)).toEqual([[6, 'active']])
     expect(at(4)).toEqual([
       [6, 'active'],
@@ -243,7 +245,13 @@ describe('flat Energy from constellations and passives', () => {
       [1.5, 1.5, 1.5, 1.5],
     ],
     ['Varesa C6', ['Varesa'], 'Varesa E W1 P W2', { Varesa: 6 }, [30, 11.5]],
-    ['Varesa C2 Kablam', ['Varesa'], 'Varesa E W1 P Q W2', { Varesa: 2 }, [11.5, 11.5]],
+    [
+      'Varesa C2 Kablam',
+      ['Varesa'],
+      'Varesa E W1 P Q W2',
+      { Varesa: 2 },
+      [11.5, 11.5],
+    ],
     ['Lyney A1', ['Lyney'], 'Lyney CA W8', {}, [3]],
     [
       'Albedo C1',

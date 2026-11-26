@@ -10,7 +10,12 @@ import type {
   RotationMember,
   RotationTimingSettings,
 } from './rotation'
-import type { RotationScore, RotationScorer } from './rotationSearch'
+import { DEFAULT_SWAP_FRAMES } from './rotation'
+import type {
+  RotationScore,
+  RotationScorer,
+  RotationVerifier,
+} from './rotationSearch'
 import type { RotationSearchSetup } from './rotationSearchScore'
 import { rotationScorer } from './rotationSearchScore'
 
@@ -26,10 +31,39 @@ export type RotationSearchCommand =
   | ({ type: 'data' } & Snapshot)
   | { type: 'setup'; key: string; setup: RotationSearchSetup }
   | { type: 'play'; id: number; key: string; dataKey: string; texts: string[] }
+  | {
+      type: 'verify'
+      id: number
+      key: string
+      dataKey: string
+      texts: string[]
+      offsets: number[]
+    }
 export type RotationSearchReply =
   | { type: 'played'; id: number; scores: (RotationScore | undefined)[] }
+  | {
+      type: 'verified'
+      id: number
+      scores: (RotationScore | undefined)[][]
+    }
   | { type: 'missing'; id: number }
   | { type: 'error'; id: number; message: string }
+
+/** Swap-frame perturbations (about ±16–33 ms of ping) used to verify top candidates */
+export const JITTER_SWAP_OFFSETS = [-4, -2, 2, 4] as const
+
+/** Distinct non-zero swap offsets relative to `baseSwap` after clamping swapFrames >= 1 */
+export function jitterSwapOffsets(baseSwap = DEFAULT_SWAP_FRAMES): number[] {
+  const seen = new Set<number>([Math.max(1, baseSwap)])
+  const offsets: number[] = []
+  for (const offset of JITTER_SWAP_OFFSETS) {
+    const target = Math.max(1, baseSwap + offset)
+    if (seen.has(target)) continue
+    seen.add(target)
+    offsets.push(target - baseSwap)
+  }
+  return offsets
+}
 
 /** The builds a KQM rotation search plays with: a KQM result's, as they played the rotation */
 export type RotationSearchBase = Pick<
@@ -70,6 +104,8 @@ export function kqmRotationSearchSetup(
 
 /** Rotations sent to a worker at once */
 const RUN = 6
+/** Rotations verified per worker batch (each runs several swap offsets) */
+const VERIFY_RUN = 2
 
 const cores = () => globalThis.navigator?.hardwareConcurrency || 4
 /**
@@ -90,17 +126,27 @@ interface Slot {
   setupKey?: string
   run?: Run
 }
-interface Run {
-  id: number
-  texts: string[]
-  done: (scores: (RotationScore | undefined)[]) => void
-}
+type Run =
+  | {
+      kind: 'play'
+      id: number
+      texts: string[]
+      done: (scores: (RotationScore | undefined)[]) => void
+    }
+  | {
+      kind: 'verify'
+      id: number
+      texts: string[]
+      offsets: number[]
+      done: (scores: ((RotationScore | undefined)[] | undefined)[]) => void
+    }
 
 let nextId = 1
 
 /**
  * The player of one search: `score` plays rotations with `setup`'s builds in workers (the
- * database copied once); `release` ends them. One search at a time per player.
+ * database copied once); `verify` re-scores top candidates at nearby swap-frame offsets;
+ * `release` ends them. One search at a time per player.
  */
 export function rotationSearchPlayer(
   database: ArtCharDatabase,
@@ -108,27 +154,69 @@ export function rotationSearchPlayer(
   threads = rotationSearchThreads()
 ): {
   score: RotationScorer
+  verify: RotationVerifier
   /** The threads playing: the workers', or 1 when they could not start */
   threads: () => number
   release: () => void
 } {
   const setupKey = `${Date.now()}:${nextId++}`
+  const offsets = jitterSwapOffsets(setup.timing.swapFrames)
   let slots: Slot[] = []
   let broken = typeof Worker === 'undefined'
   let snapshot: Snapshot | undefined
-  let here: ((text: string) => RotationScore | undefined) | undefined
+  let here:
+    | ((text: string, swapOffset?: number) => RotationScore | undefined)
+    | undefined
   const queue: Run[] = []
 
-  const playHere = async (texts: string[]) => {
+  const cancelRun = (run: Run) => {
+    if (run.kind === 'play') run.done(run.texts.map(() => undefined))
+    else run.done(run.texts.map(() => undefined))
+  }
+  const playHere = async (texts: string[], stop?: () => boolean) => {
     here ??= rotationScorer(database, setup)
     const scores: (RotationScore | undefined)[] = []
     for (const text of texts) {
+      if (stop?.()) {
+        scores.push(undefined)
+        continue
+      }
       await yieldTask()
       try {
         scores.push(here(text))
       } catch {
         scores.push(undefined)
       }
+    }
+    return scores
+  }
+  const verifyHere = async (
+    texts: string[],
+    offs: number[],
+    stop?: () => boolean
+  ) => {
+    here ??= rotationScorer(database, setup)
+    const scores: ((RotationScore | undefined)[] | undefined)[] = []
+    for (const text of texts) {
+      if (stop?.()) {
+        scores.push(undefined)
+        continue
+      }
+      const perOffset: (RotationScore | undefined)[] = []
+      let aborted = false
+      for (const offset of offs) {
+        if (stop?.()) {
+          aborted = true
+          break
+        }
+        await yieldTask()
+        try {
+          perOffset.push(here(text, offset))
+        } catch {
+          perOffset.push(undefined)
+        }
+      }
+      scores.push(aborted ? undefined : perOffset)
     }
     return scores
   }
@@ -168,9 +256,13 @@ export function rotationSearchPlayer(
     if (!slots.length) playAllHere()
     else dispatch()
   }
+  const runHere = (run: Run) => {
+    if (run.kind === 'play') playHere(run.texts).then(run.done)
+    else verifyHere(run.texts, run.offsets).then(run.done)
+  }
   const playAllHere = () => {
     broken = true
-    for (const run of queue.splice(0)) playHere(run.texts).then(run.done)
+    for (const run of queue.splice(0)) runHere(run)
   }
   const send = (slot: Slot, run: Run) => {
     slot.run = run
@@ -191,13 +283,23 @@ export function rotationSearchPlayer(
       } satisfies RotationSearchCommand)
       slot.setupKey = setupKey
     }
-    slot.worker.postMessage({
-      type: 'play',
-      id: run.id,
-      key: setupKey,
-      dataKey: snapshot.key,
-      texts: run.texts,
-    } satisfies RotationSearchCommand)
+    if (run.kind === 'play')
+      slot.worker.postMessage({
+        type: 'play',
+        id: run.id,
+        key: setupKey,
+        dataKey: snapshot.key,
+        texts: run.texts,
+      } satisfies RotationSearchCommand)
+    else
+      slot.worker.postMessage({
+        type: 'verify',
+        id: run.id,
+        key: setupKey,
+        dataKey: snapshot.key,
+        texts: run.texts,
+        offsets: run.offsets,
+      } satisfies RotationSearchCommand)
   }
   const dispatch = () => {
     for (const slot of slots) {
@@ -211,11 +313,13 @@ export function rotationSearchPlayer(
     const run = slot.run
     slot.run = undefined
     if (!run || run.id !== reply.id) return dispatch()
-    if (reply.type === 'played') run.done(reply.scores)
+    if (reply.type === 'played' && run.kind === 'play') run.done(reply.scores)
+    else if (reply.type === 'verified' && run.kind === 'verify')
+      run.done(reply.scores)
     else if (reply.type === 'missing') {
       slot.dataKey = undefined
       queue.unshift(run)
-    } else playHere(run.texts).then(run.done)
+    } else runHere(run)
     dispatch()
   }
 
@@ -237,21 +341,59 @@ export function rotationSearchPlayer(
             resolve()
           }
           const run: Run = {
+            kind: 'play',
             id: nextId++,
             texts: part,
             done: (got) => {
               // (asked to stop: what is left is not played)
-              if (stop?.())
-                queue
-                  .splice(0)
-                  .forEach((r) => r.done(r.texts.map(() => undefined)))
+              if (stop?.()) queue.splice(0).forEach(cancelRun)
               done(got)
             },
           }
           if (broken)
             (stop?.()
               ? Promise.resolve(part.map(() => undefined))
-              : playHere(part)
+              : playHere(part, stop)
+            ).then(done)
+          else queue.push(run)
+        })
+      )
+    }
+    dispatch()
+    await Promise.all(runs)
+    return scores
+  }
+  const verify: RotationVerifier = async (texts, stop) => {
+    if (!offsets.length) return texts.map(() => [])
+    const scores: ((RotationScore | undefined)[] | undefined)[] = texts.map(
+      () => undefined
+    )
+    start()
+    const runs: Promise<void>[] = []
+    for (let at = 0; at < texts.length; at += VERIFY_RUN) {
+      const part = texts.slice(at, at + VERIFY_RUN)
+      runs.push(
+        new Promise<void>((resolve) => {
+          const done = (got: ((RotationScore | undefined)[] | undefined)[]) => {
+            got.forEach((s, i) => {
+              scores[at + i] = s
+            })
+            resolve()
+          }
+          const run: Run = {
+            kind: 'verify',
+            id: nextId++,
+            texts: part,
+            offsets,
+            done: (got) => {
+              if (stop?.()) queue.splice(0).forEach(cancelRun)
+              done(got)
+            },
+          }
+          if (broken)
+            (stop?.()
+              ? Promise.resolve(part.map(() => undefined))
+              : verifyHere(part, offsets, stop)
             ).then(done)
           else queue.push(run)
         })
@@ -263,13 +405,13 @@ export function rotationSearchPlayer(
   }
   return {
     score,
+    verify,
     threads: () => (broken ? 1 : slots.length || threads),
     release: () => {
       const running = slots.flatMap((s) => (s.run ? [s.run] : []))
       for (const slot of slots) slot.worker.terminate()
       slots = []
-      for (const run of [...running, ...queue.splice(0)])
-        run.done(run.texts.map(() => undefined))
+      for (const run of [...running, ...queue.splice(0)]) cancelRun(run)
     },
   }
 }

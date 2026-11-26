@@ -128,10 +128,14 @@ const NICKNAMES: Partial<Record<CharacterKey, string[]>> = {
   Anastasya: ['ana', 'tsaritsa', 'anastasya'],
   AratakiItto: ['itto'],
   RaidenShogun: ['raiden', 'ei'],
-  KaedeharaKazuha: ['kazuha'],
+  KaedeharaKazuha: ['kazuha', 'kaz'],
   KamisatoAyaka: ['ayaka'],
   KamisatoAyato: ['ayato'],
+  KujouSara: ['sara'],
+  KukiShinobu: ['kuki', 'shinobu'],
   SangonomiyaKokomi: ['kokomi'],
+  ShikanoinHeizou: ['heizou'],
+  YaeMiko: ['yae', 'miko'],
   YumemizukiMizuki: ['mizuki'],
   Alhaitham: ['haitham'],
   Furina: ['furina'],
@@ -609,8 +613,8 @@ function parseActions(
   return actions
 }
 
-/** Between steps: `->`, `→`, `=>`, `>`, `,`, `;` (or their full-width forms) or a new line */
-const SEPARATOR = /->|→|=>|>|,|;|，|；|\n/
+/** Between steps: `->`, `→`, `=>`, `>`, `–`, `—`, ` - `, `,`, `;` (or their full-width forms) or a new line */
+const SEPARATOR = /->|→|=>|>|(?<!\d)[–—](?!\d)|(?<=\s)-(?=\s)|,|;|，|；|\n/
 
 export function parseRotation(
   text: string,

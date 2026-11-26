@@ -23,7 +23,9 @@
     "alert": "Eliminando la squadra verranno rimossi i buff di risonanza e le impostazioni del nemico salvati nella squadra. Anche le configurazioni presenti solo in questa squadra sono selezionate per l'eliminazione in modo predefinito.",
     "delBtn": "Elimina",
     "onlyCrrTeam": "Solo nella squadra attuale",
-    "usingMltTeams": "In {{count}} squadre"
+    "usingMltTeams": "In {{count}} squadre",
+    "deleteVersions_one": "Elimina anche la sua {{count}} versione (togli la spunta per tenerla come squadra separata)",
+    "deleteVersions_other": "Elimina anche le sue {{count}} versioni (togli la spunta per tenerle come squadre separate)"
   },
   "teamSettings": {
     "tab": {
@@ -788,7 +790,9 @@
       "erAutoTarget": "Calcolata dal calcolatore di ER per questa rotazione, e di nuovo per ogni arma che una build prova. Scegli Manuale per scrivere la tua.",
       "weaponLockedShort": "bloccato su",
       "memberNoWeapon": "scegli almeno un'arma per lui prima di generare le build.",
-      "copyRotationTip": "Sostituisci la rotazione KQM con quella di Ottimizza squadra"
+      "copyRotationTip": "Sostituisci la rotazione KQM con quella di Ottimizza squadra",
+      "passiveCooldown": "{{percent}}% delle rotazioni (ricarica di 20 s)",
+      "passiveRotation": "{{percent}}% dei colpi di questa rotazione"
     },
     "card": {
       "button": "Card della squadra",
@@ -900,7 +904,22 @@
       "erReducedTip": "Abbassata di −{{relief}}% da {{base}}",
       "erNowTip": "Impostazione attuale: {{value}}",
       "erPill": "ER {{value}}",
-      "belowNowUnmet": "non può tenere la build attuale: non soddisfa i suoi requisiti (es. ER min.)"
+      "belowNowUnmet": "non può tenere la build attuale: non soddisfa i suoi requisiti (es. ER min.)",
+      "topBuildsTip": "I confronti di armi e manufatti includono i cambi coordinati in tutta la squadra. Scegli una riga per vedere la squadra in anteprima.",
+      "topBuildsChangesTip": "Mostra l'equipaggiamento che cambia rispetto al risultato dell'ottimizzatore",
+      "sameAsOptimizer": "Uguale al risultato dell'ottimizzatore",
+      "rankEquipment": "Classifica l'equipaggiamento",
+      "usingSaved": "Build salvate in uso",
+      "saveAndUse": "Salva e usa in questa squadra",
+      "discardTitle": "Scartare questo risultato?",
+      "discardInfo": "Esegui di nuovo l'ottimizzazione dell'equipaggiamento per calcolare un risultato. Le build salvate o equipaggiate restano.",
+      "restoreBuilds": "Ripristina le build precedenti",
+      "restoreBuildsConflict": "La squadra o le build precedenti sono cambiate dopo il salvataggio. Controlla le build interessate per ripristinarle.",
+      "rankingReady": "{{done}} membri su {{total}} classificati",
+      "rankOptional": "Confronta armi e set alternativi per questo risultato.",
+      "stopRanking": "Ferma la classifica",
+      "rankingTitle": "Classifica dell'equipaggiamento…",
+      "rankCardTitle": "Confronta build alternative"
     },
     "editor": {
       "close": "Chiudi",
@@ -1110,7 +1129,11 @@
         "dashWanderer": "Scatto (Vagabondo: D?/CA scatta solo con Discesa, altrimenti CA)",
         "waitBasic": "Attesa: W1.5 è 1,5 s, W90f è 90 frame",
         "holdTeam": "Abilità elementale (prolungata): {{names}}",
-        "swapTeam": "Solo ingresso: effetto d'ingresso di {{names}} (un nome da solo a metà rotazione è lo stesso)"
+        "swapTeam": "Solo ingresso: effetto d'ingresso di {{names}} (un nome da solo a metà rotazione è lo stesso)",
+        "caSandroneC1": "Sandrone (C1+): CA da solo resta a 3 raggi; scrivi CA[beams=6] per la carica completa della C1 (da 1 a 6)",
+        "plungeSimple": "Attacco in picchiata",
+        "caWeakspot": "{{names}}: CA[weakspot] conta un colpo mirato sul punto debole (attiva la Luna crescente prototipo)",
+        "plungeHeights": "Attacco in picchiata ({{names}}: HP alta, LP bassa, HP[collision] aggiunge il colpo d'impatto)"
       },
       "hitCount_one": "{{count, number}} colpo",
       "hitCount_other": "{{count, number}} colpi",
@@ -1151,7 +1174,10 @@
         "skillTapOnly": "Abilità elementale",
         "dashJump": "Scatto · salto",
         "holdTeam": "Abilità elementale prolungata ({{names}})",
-        "entryTeam": "Solo ingresso, per l'effetto d'ingresso di {{names}} (un nome da solo a metà rotazione è lo stesso)"
+        "entryTeam": "Solo ingresso, per l'effetto d'ingresso di {{names}} (un nome da solo a metà rotazione è lo stesso)",
+        "beamsC1": "Sandrone (C1+): carica completa a 6 raggi (CA da solo resta a 3; scrivi da CA[beams=1] a CA[beams=6])",
+        "weakspotTeam": "{{names}}: tiro mirato caricato su un punto debole (attiva la Luna crescente prototipo)",
+        "plungeTeam": "{{names}}: picchiata alta o bassa (P da sola: l'altezza solita); HP[collision] aggiunge il colpo d'impatto durante la discesa (HP[collision=0.5] su metà)"
       },
       "handEdited": "Attacchi modificati",
       "handEditedTip": "Gli attacchi sono stati modificati a mano dopo che la rotazione è stata giocata. Cambiare la rotazione o quante rotazioni contano la rigioca e sostituisce queste modifiche (per qualche secondo si può annullare).",
@@ -1169,7 +1195,30 @@
       "waitsSwap": "cambio",
       "waitsShortHint": "Non pronto in tempo",
       "waitsTip": "Giocata di seguito, un'azione può essere ancora in ricarica quando la rotazione ci arriva di nuovo (un Tripudio usato tardi in una rotazione e presto nella successiva): la squadra resta ferma finché non è pronta. Il tempo per rotazione comprende le attese, quindi abbassano il DPS. Usala più avanti nella rotazione o allunga la rotazione. La timeline mostra ogni attesa tratteggiata; Tutte le rotazioni le mostra dove avvengono.",
-      "waitsTitle": "Attende {{seconds}} s per rotazione"
+      "waitsTitle": "Attende {{seconds}} s per rotazione",
+      "rotationDraft": "Bozza di rotazione",
+      "discardDraft": "Scarta la bozza",
+      "sacUsed": "Abilità in più usata",
+      "sacSkipped": "Abilità in più saltata",
+      "sacEnergy": "Confronta l'ER con le armi Sacrificali",
+      "sacSkipReason": "All'E? l'abilità era ancora in ricarica.",
+      "sacEnergyLoading": "Calcolo dell'ER…",
+      "sacEnergyUnavailable": "Confronto dell'ER non disponibile.",
+      "sacMember": "Membro",
+      "sacSafe": "Senza azzeramento",
+      "sacAverage": "Media con le Sacrificali",
+      "sacOptionalTip": "Usa di nuovo l'abilità se è pronta",
+      "optionalHint": {
+        "prefix": "Suggerimento:",
+        "slash": "/",
+        "ready": "solo se pronta (salta invece di aspettare) ·",
+        "or": "o",
+        "fallback": "un'alternativa se non è pronta ·",
+        "repeat": "ripete una combo",
+        "more": "Altra sintassi"
+      },
+      "sacPercent": "· abilità in più usata nel {{percent}}% delle rotazioni campionate",
+      "insertToken": "Inserisci {{token}}"
     },
     "timeline": {
       "aura": {
@@ -1277,7 +1326,9 @@
       "effectsTimedHint": "La tua rotazione attiva e disattiva gli effetti dei set a ogni colpo, per ogni set che un'esecuzione prova. Gli interruttori contano solo per i pochi che non può temporizzare.",
       "effectsTimed": "Dalla rotazione",
       "effectsNone": "Nessun effetto attivo",
-      "setsFew": "{{count}} set"
+      "setsFew": "{{count}} set",
+      "optimizeNamed": "Ottimizza i manufatti di {{character}}",
+      "constraintsNamed": "Vincoli di {{character}}"
     },
     "onField": {
       "info": "Chi è in campo durante i colpi della rotazione, a meno che un attacco non dica altro (aprilo per cambiarlo). I buff per il personaggio attivo, come il DAN da CRIT della C1 di Mitya, vanno a lui, e quelli per i personaggi fuori campo agli altri. Nel resto del sito si considera in campo il primo membro della squadra.",
@@ -1396,7 +1447,11 @@
       "keepNeedsOriginal": "Esegui prima l'originale: questa versione prende il gear dei compagni dal suo risultato.",
       "requirementsUnmetWhy": "La ricerca usa i set, le statistiche principali, i livelli dei manufatti e le armi ammessi. Per cambiare un minimo manuale, apri la scheda Ottimizza del membro.",
       "requirementsUnmet": "La ricerca non ha trovato una build che rispetti i minimi per",
-      "automaticErShortfall": "L'ER automatica prende l'obiettivo dal calcolatore di ER della squadra. Può cambiare con la rotazione e con le armi della squadra."
+      "automaticErShortfall": "L'ER automatica prende l'obiettivo dal calcolatore di ER della squadra. Può cambiare con la rotazione e con le armi della squadra.",
+      "gear": "Ottimizza l'equipaggiamento",
+      "resetSetup": "Annulla le modifiche",
+      "setupSaved": "Le impostazioni si salvano mentre le modifichi.",
+      "weaponCandidate": "arma candidata {{weapon}}/{{weapons}}"
     },
     "runDialog": {
       "anyMain": "Qualsiasi",
@@ -1420,7 +1475,12 @@
       "emptySlotsFix": "Attiva i manufatti degli altri personaggi o ammetti livelli più bassi.",
       "noArtifacts": "Nessun manufatto tra cui scegliere",
       "mainStatsEdit": "Scegli le statistiche principali",
-      "emptySlotsShort": "Nessun {{slots}} tra cui scegliere"
+      "emptySlotsShort": "Nessun {{slots}} tra cui scegliere",
+      "scopeHint": "Le combinazioni di manufatti sono contate prima delle regole sui set e della potatura Rapida. Più armi candidate aggiungono lavoro. Restringi la scelta o tieni la build attuale di un membro per accorciare la ricerca.",
+      "weaponCandidates_one": "{{count}} arma candidata all'inizio",
+      "weaponCandidates_other": "{{count}} armi candidate all'inizio",
+      "mainStatsNamed": "Scegli le statistiche principali di {{character}}",
+      "rawSize": "{{size}} combinazioni di manufatti"
     },
     "sens": {
       "hideNoGain": "Nascondi queste righe",
@@ -1613,7 +1673,8 @@
       "optimizedTip": "Con le build ottimizzate mostrate sotto",
       "currentStaleTip": "Con le tue build attuali (il risultato sotto viene da impostazioni precedenti)",
       "teamDps": "DPS della squadra",
-      "equippedBaseline": "Equipaggiate: {{dps}} DPS ({{dmg}})"
+      "equippedBaseline": "Equipaggiate: {{dps}} DPS ({{dmg}})",
+      "dmgShort": "DAN"
     },
     "hitMode": {
       "avgHit": "Medio",
@@ -1700,7 +1761,8 @@
       "rotations_one": "{{count}} rotazione · {{s}} s",
       "rotations_other": "{{count}} rotazioni · {{s}} s",
       "seconds": "{{s}} s",
-      "rotations": "{{count}} rotazioni · {{s}} s"
+      "rotations": "{{count}} rotazioni · {{s}} s",
+      "starter": "Bozza per questa squadra"
     },
     "search": {
       "again": "Cerca di nuovo",
@@ -1764,7 +1826,17 @@
       "teamPlayedTip": "Giocata con le build della tua esecuzione.",
       "teamTip": "Prova migliaia di piccole modifiche a questa rotazione (ordine dei passi, azioni, lunghezza degli attacchi normali, opzioni dei kit come i raggi di Sandrone) e gioca ognuna con le build della tua ultima esecuzione. Le migliori ricevono poi build fatte con i tuoi manufatti e le tue armi. Il tuo DPS principale tiene il suo Tripudio e il suo tempo in campo.",
       "teamNeedsErTip": "Giocata con le build della tua esecuzione, che non raggiungono la ricarica di energia di questa rotazione: ottimizzare le build per essa può dare meno DPS.",
-      "teamNeedsErDps": "{{dps}} DPS · serve più ER"
+      "teamNeedsErDps": "{{dps}} DPS · serve più ER",
+      "rotations": "Cerca rotazioni",
+      "gearRequired": "Ottimizza prima l'equipaggiamento: la ricerca delle rotazioni usa quelle build come base.",
+      "kqmRequired": "Genera prima le build KQM per dare una base alla ricerca delle rotazioni.",
+      "replayedRotation": "La tua rotazione · rigiocata",
+      "noFurtherGains": "nessun miglioramento nell'ultimo passaggio",
+      "vsBuildRun": "contro {{dps}} DPS · esecuzione delle build precedente",
+      "vsReplay": "contro {{dps}} DPS · {{method}}",
+      "estimate": "stima",
+      "replay": "stesse build",
+      "teamEstimateTip": "Con le build della tua esecuzione fa {{dps}} DPS; con build adattate alla ricarica di energia che le serve farebbe circa {{estimate}}."
     },
     "versions": {
       "cancel": "Annulla",
@@ -1833,14 +1905,84 @@
       "keepTeammates": "Tieni fisso il gear dei compagni",
       "keepTeammatesHint": "I membri in comune con l'originale tengono le sue build (arma, set, statistiche): si ricalcolano solo quelli cambiati. Esegui prima l'originale.",
       "allRun": "Tutte eseguite con queste impostazioni",
-      "runEvery": "Esegui tutte"
+      "runEvery": "Esegui tutte",
+      "compareVariants": "Confronta le varianti",
+      "teamVariants": "Varianti della squadra",
+      "sortDpsFull": "DPS migliore",
+      "sortOriginal": "Originale",
+      "newVariant": "Nuova variante",
+      "generateCombinations": "Genera combinazioni",
+      "searchPlaceholder": "Cerca personaggio o nome...",
+      "clearSearch": "Cancella la ricerca",
+      "hideRotations": "Nascondi le anteprime delle rotazioni",
+      "showRotations": "Mostra le anteprime delle rotazioni",
+      "rotationsToggle": "Rotazioni",
+      "doneSelecting": "Esci dalla selezione",
+      "selectMultiple": "Seleziona le versioni da eliminare",
+      "selectDone": "Fatto",
+      "selectBtn": "Seleziona",
+      "clearFilters": "Azzera",
+      "noMatches": "Nessuna versione corrisponde al filtro.",
+      "noVariants": "Crea una variante per confrontare formazioni, costellazioni o armi signature con le impostazioni KQM di questa squadra.",
+      "deselectAll": "Deseleziona tutte",
+      "selectAll": "Seleziona tutte",
+      "bulkDeleteText": "Le versioni selezionate, le loro rotazioni e i loro risultati vengono eliminati definitivamente. L'originale resta.",
+      "inTeamsTip": "Mostrata nella scheda Squadre",
+      "inTeams": "In Squadre",
+      "hideFromTeams": "Nascondi dalla scheda Squadre",
+      "showInTeams": "Mostra nella scheda Squadre",
+      "showInTeamsOption": "Mostrala anche nella scheda Squadre",
+      "hideFromTeamsTip": "Mostrata nella scheda Squadre: clicca per tenerla solo tra le Versioni.",
+      "showInTeamsTip": "Nascosta dalla scheda Squadre: clicca per elencarla anche lì.",
+      "teamVariantsCount": "Varianti della squadra ({{count}})",
+      "showingCount": "{{shown}} di {{total}}",
+      "selectedCount_one": "{{count}} selezionata",
+      "selectedCount_other": "{{count}} selezionate",
+      "deleteSelected": "Elimina {{count}}",
+      "bulkDeleteTitle_one": "Eliminare {{count}} versione?",
+      "bulkDeleteTitle_other": "Eliminare {{count}} versioni?",
+      "selectRow": "Seleziona {{name}}",
+      "combosTitle": "Combinazioni",
+      "combosTip": "Scegli fino a 8 personaggi per generare in una volta le combinazioni di squadra. Blocca i membri fissi per tenerli in ogni squadra, e clicca l'etichetta dell'azione di un personaggio aggiunto per cambiarne il passo nella rotazione in tutte le squadre.",
+      "poolTitle": "Personaggi",
+      "resetPool": "Ripristina",
+      "editCharAction": "Passo della rotazione compilato in automatico: clicca per cambiarlo",
+      "unlockChar": "Bloccato in ogni squadra: clicca per sbloccarlo",
+      "lockChar": "Libero: clicca per tenerlo in ogni squadra",
+      "lockMax": "Lascia almeno un posto libero",
+      "unlockCharShort": "Sblocca {{name}}",
+      "lockCharShort": "Blocca {{name}}",
+      "removeChar": "Rimuovi {{name}}",
+      "noCharFound": "Nessun personaggio corrispondente",
+      "addPoolPlaceholder": "Aggiungi un personaggio per nome...",
+      "browseChars": "Sfoglia",
+      "quickAddLabel": "Compagni frequenti",
+      "selectNone": "Nessuno",
+      "needMoreChars": "Aggiungi personaggi perché la scelta ne abbia almeno {{count}}.",
+      "addMoreToCombine": "Aggiungi un personaggio qui sopra per vedere le combinazioni.",
+      "sameMembers": "Stessa squadra",
+      "badgeTemplate": "Modello",
+      "badgeEdited": "Modificata",
+      "defaultShort": "predefinito",
+      "rotationStep": "Passo dell'azione",
+      "actionsOf": "Azioni della rotazione di {{name}}",
+      "previewTitle": "Nuove versioni ({{selected}} di {{total}})",
+      "alreadyExist_one": "{{count}} esiste già",
+      "alreadyExist_other": "{{count}} esistono già",
+      "creatingBatch": "Creazione {{done}} / {{total}}",
+      "createBatch_one": "Crea ed esegui {{count}}",
+      "createBatch_other": "Crea ed esegui {{count}}"
     },
     "inspect": {
       "bestSet": "Il migliore di qualsiasi set",
       "compareTip": "Scegli un set per riordinare le armi, o un'arma per riordinare i set. I suoi manufatti vengono cercati di nuovo nel tuo inventario. I compagni tengono le build di questa esecuzione.",
       "showingPicks": "Con l'equipaggiamento che hai scelto",
       "reset": "Ripristina",
-      "picksShort": "Le tue scelte"
+      "picksShort": "Le tue scelte",
+      "rankTitle": "Classifica armi e set di manufatti",
+      "rankBody": "Confronta armi e set di manufatti alternativi del tuo inventario mentre i compagni tengono le loro build.",
+      "rankingWait": "Ricerca di armi e set di manufatti alternativi nel tuo inventario…",
+      "rankStale": "Esegui di nuovo Ottimizza squadra per classificare l'equipaggiamento con queste impostazioni."
     },
     "compare": {
       "everyShort": "Sempre",
@@ -1897,7 +2039,17 @@
       "capped": "Primi {{max}} di {{total}}",
       "run_one": "Confronta {{count}} scenario",
       "run_other": "Confronta {{count}} scenari",
-      "progress": "Ottimizzazione {{current}} di {{total}} · {{label}}"
+      "progress": "Ottimizzazione {{current}} di {{total}} · {{label}}",
+      "currentRotation": "Rotazione attuale",
+      "applyUnmet": "Questa build ha requisiti non soddisfatti. Sostituire comunque la rotazione scritta e gli obiettivi di ER? L'equipaggiamento resta com'è.",
+      "applyChange": "Sostituire la rotazione scritta e gli obiettivi di ER con questo scenario? L'equipaggiamento resta com'è.",
+      "cadenceMismatch": "Il calcolatore di ER segna {{names}} come Non usato, ma la rotazione scritta contiene il suo Tripudio. Rotazione attuale mantiene le azioni scritte; Mai le toglie.",
+      "frequencyFor": "Frequenza del Tripudio di {{name}}",
+      "includeNamed": "Includi {{scenario}}",
+      "namedShortfall": "{{name}} · {{stat}}: {{value}}, serve {{min}}",
+      "erShortfall": "{{name}}: {{achieved}}% ER, serve {{target}}%",
+      "statShortfall": "{{name}}: requisito di statistica non soddisfatto",
+      "detailsNamed": "Dettagli di {{scenario}}"
     },
     "copyKqmRotationTip": "Sostituisci la rotazione di Ottimizza squadra con quella di KQM Theorycrafting"
   },

@@ -25,7 +25,7 @@ describe('rotationWriterHints', () => {
       'KamisatoAyaka',
       'Furina',
       'Xingqiu',
-      'Yelan',
+      'Escoffier',
     ])
     const tokens = teamQuickTokens(members, names, t)
     const texts = tokens.map((tok) => tok.text)
@@ -34,8 +34,10 @@ describe('rotationWriterHints', () => {
     expect(texts).not.toContain('P')
     expect(texts).not.toContain('hE')
     expect(texts).not.toContain('CA[beams=2]')
-    expect(texts).not.toContain('CA[cancel]')
+    expect(texts).not.toContain('CA[cancel] D')
     expect(texts).not.toContain('C3F')
+    expect(tokens.find((tok) => tok.text === 'E')?.label).toContain('E?')
+    expect(tokens.find((tok) => tok.text === 'Q')?.label).toContain('Q?/N4')
     expect(tokens.find((tok) => tok.text === 'CA')?.label).toBe(
       'Charged Attack'
     )
@@ -43,6 +45,7 @@ describe('rotationWriterHints', () => {
     const { teamRows, generalRows } = teamSyntaxRows(members, names, t)
     expect(teamRows).toEqual([])
     expect(generalRows[0].code).toBe('KamisatoAyaka E Q')
+    expect(generalRows.some((r) => r.code.includes('Q?/N4'))).toBe(true)
     expect(generalRows.some((r) => r.meaning.includes('Beidou'))).toBe(false)
     expect(generalRows.some((r) => r.meaning.includes('Sandrone'))).toBe(false)
   })
@@ -59,7 +62,7 @@ describe('rotationWriterHints', () => {
 
     expect(texts).toContain('hE')
     expect(texts).toContain('P')
-    expect(texts).toContain('CA[cancel]')
+    expect(texts).toContain('CA[cancel] D')
     expect(texts).toContain('N3[movement=4]')
     expect(texts).not.toContain('entry')
     expect(texts).not.toContain('C3F')
@@ -70,15 +73,33 @@ describe('rotationWriterHints', () => {
     expect(tokens.find((tok) => tok.text === 'CA')?.label).not.toContain(
       'Mavuika'
     )
+    // Kazuha doesn't model plungeHeights (Diluc/Xiao only)
+    expect(tokens.find((tok) => tok.text === 'P')?.label).toBe(
+      'Plunging Attack'
+    )
 
     const { teamRows } = teamSyntaxRows(members, names, t)
     const codes = teamRows.map((r) => r.code)
     expect(codes).toContain('hE')
-    expect(codes).toContain('HP · LP')
-    expect(codes).toContain('CA[cancel]')
+    expect(codes).not.toContain('HP · LP · HP[collision]')
+    expect(codes).toContain('CA[cancel] D')
     expect(codes).toContain('N3[movement=4]')
     expect(codes).not.toContain('entry')
     expect(codes).not.toContain('C3F · C2D')
+  })
+
+  it('shows HP/LP/collision only for plunge-height kits and CA[weakspot] for bow users', () => {
+    const { members, names } = makeTeam(['Xiao', 'Xianyun', 'Furina', 'Ganyu'])
+    const tokens = teamQuickTokens(members, names, t)
+    expect(tokens.find((tok) => tok.text === 'P')?.label).toContain(
+      'HP[collision]'
+    )
+    expect(tokens.map((tok) => tok.text)).toContain('CA[weakspot]')
+
+    const { teamRows } = teamSyntaxRows(members, names, t)
+    const codes = teamRows.map((r) => r.code)
+    expect(codes).toContain('HP · LP · HP[collision]')
+    expect(codes).toContain('CA[weakspot]')
   })
 
   it('includes entry chip and names teammates dynamically for kits with onSwapIn', () => {
@@ -95,5 +116,20 @@ describe('rotationWriterHints', () => {
 
     const { teamRows } = teamSyntaxRows(members, names, t)
     expect(teamRows.some((r) => r.code === 'entry')).toBe(true)
+  })
+
+  it('surfaces CA[beams=6] for C1+ Sandrone and keeps CA[beams=2] at C0', () => {
+    const { members, names } = makeTeam(['Sandrone', 'Mitya'])
+    expect(
+      teamQuickTokens(members, names, t, { Sandrone: 0 }).map((x) => x.text)
+    ).toContain('CA[beams=2]')
+    expect(
+      teamQuickTokens(members, names, t, { Sandrone: 1 }).map((x) => x.text)
+    ).toContain('CA[beams=6]')
+    expect(
+      teamSyntaxRows(members, names, t, { Sandrone: 1 }).teamRows.some(
+        (r) => r.characterKey === 'Sandrone' && r.code.includes('CA[beams=6]')
+      )
+    ).toBe(true)
   })
 })

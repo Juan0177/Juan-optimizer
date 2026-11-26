@@ -5,6 +5,7 @@ import { ArtCharDatabase, initTeamOpt } from '@genshin-optimizer/gi/db'
 import { describe, expect, it } from 'vitest'
 import {
   defaultEnergyCalculator,
+  erCostOf,
   evaluateTeamRotation,
   kqmRotationSearchSetup,
   optimizeTeamKqm,
@@ -12,6 +13,7 @@ import {
   parseTiming,
   rotationScorer,
   simTeamOf,
+  teamErPrices,
   teamOptMembers,
   teamRotationSearchSetup,
   updateEnergyCalcMember,
@@ -177,7 +179,13 @@ describe('a rotation search’s player', () => {
     })!.total
     const scored = score(text)!
     expect(scored.time).toBe(played.rotationTime)
-    expect(scored.dps).toBeCloseTo(total / played.rotationTime!, 6)
+    expect(played.exactTime).toBeGreaterThan(0)
+    expect(scored.dps).toBeCloseTo(total / played.exactTime!, 6)
+    // Offset plays shift swapFrames without corrupting nominal cached results
+    const shifted = score(text, 4)!
+    expect(shifted.dps).toBeGreaterThan(0)
+    expect(shifted.time).toBeGreaterThanOrEqual(scored.time)
+    expect(score(text)).toEqual(scored)
     // (the build counts: its weapon is not Ayaka's own)
     const own = evaluateTeamRotation(database, teamId, 'F', {
       arts: {},
@@ -265,5 +273,110 @@ describe('a rotation search’s player', () => {
     // Without enemy particles Ayaka needs more ER, and Shenhe skipping Burst drops to 100%
     expect(customScore.er[ayaka]!).toBeGreaterThan(baseScore.er[ayaka]!)
     expect(customScore.er[shenhe]).toBe(100)
+  })
+
+  it('prices Team Optimize ER changes from inventory builds and skips kept members', async () => {
+    const database = new ArtCharDatabase(1, new SandboxStorage({}))
+    const weapons: Record<string, string> = {}
+    const builds: Record<string, Record<string, string>> = {}
+    for (const [key, weapon] of [
+      [ayaka, 'AmenomaKageuchi'],
+      [shenhe, 'Deathmatch'],
+    ] as const) {
+      database.chars.set(key, {
+        key,
+        level: 90,
+        ascension: 6,
+        talent: { auto: 9, skill: 9, burst: 9 },
+        constellation: 0,
+      })
+      weapons[key] = database.weapons.new({
+        key: weapon,
+        level: 90,
+        ascension: 6,
+        refinement: 1,
+        location: key,
+        lock: false,
+      })
+      builds[key] = {
+        flower: database.arts.new({
+          setKey: 'BlizzardStrayer',
+          slotKey: 'flower',
+          level: 20,
+          rarity: 5,
+          mainStatKey: 'hp',
+          location: key,
+          lock: false,
+          substats: [
+            { key: 'critRate_', value: 10 },
+            { key: 'critDMG_', value: 20 },
+            { key: 'atk_', value: 10 },
+            { key: 'enerRech_', value: 15 },
+          ],
+        }),
+        sands: database.arts.new({
+          setKey: 'BlizzardStrayer',
+          slotKey: 'sands',
+          level: 20,
+          rarity: 5,
+          mainStatKey: 'enerRech_',
+          location: key,
+          lock: false,
+          substats: [
+            { key: 'critRate_', value: 10 },
+            { key: 'critDMG_', value: 20 },
+            { key: 'atk_', value: 10 },
+            { key: 'hp_', value: 5 },
+          ],
+        }),
+      }
+    }
+    const teamId = database.teams.new({
+      loadoutData: [
+        { teamCharId: database.teamChars.new(ayaka) },
+        { teamCharId: database.teamChars.new(shenhe) },
+      ] as LoadoutDatum[],
+    })
+    const teamOpt: TeamOpt = {
+      ...initTeamOpt(),
+      rotationTime: 20,
+      attacks: {
+        [ayaka]: [{ path: ['burst', 'cutting'], hits: 19, hitMode: 'avgHit' }],
+        [shenhe]: [{ path: ['skill', 'press'], hits: 2, hitMode: 'avgHit' }],
+      },
+    }
+    const prices = await teamErPrices(database, teamId, 'F', teamOpt, {
+      builds: builds as never,
+      weapons: weapons as never,
+    })
+    // Both have non-ER weapons, so artifact ER (51.8 + 15) is excluded from floor -> floor = 100
+    expect(prices[ayaka]?.roll).toBeGreaterThan(0)
+    expect(prices[ayaka]?.floor).toBeCloseTo(100, 1)
+    expect(prices[ayaka]?.saveScale).toBeLessThan(1)
+    expect(prices[shenhe]?.roll).toBeGreaterThan(0)
+    const cost = erCostOf(prices)
+    const baseScore = { dps: 0, time: 20, er: { [ayaka]: 140 }, warnings: [] }
+    const low = cost(
+      { dps: 0, time: 20, er: { [ayaka]: 120 }, warnings: [] },
+      baseScore
+    )
+    const high = cost(
+      { dps: 0, time: 20, er: { [ayaka]: 160 }, warnings: [] },
+      baseScore
+    )
+    const baseCost = cost(baseScore, baseScore)
+    // Raising ER by +20% costs more than lowering ER by -20% credits (asymmetric inventory pricing)
+    expect(high - baseCost).toBeGreaterThan((baseCost - low) * 2)
+
+    // Kept members are not re-optimized, so they are not priced
+    const keptPrices = await teamErPrices(
+      database,
+      teamId,
+      'F',
+      { ...teamOpt, keep: [shenhe] },
+      { builds: builds as never, weapons: weapons as never }
+    )
+    expect(keptPrices[ayaka]).toBeDefined()
+    expect(keptPrices[shenhe]).toBeUndefined()
   })
 })

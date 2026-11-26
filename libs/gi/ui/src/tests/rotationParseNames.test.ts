@@ -79,4 +79,27 @@ describe('rotation names in any language', () => {
       'Flins E Q',
     ])
   })
+  it('accepts en-dash, em-dash, and spaced hyphens as step separators without breaking N3-4', () => {
+    const members = team({
+      Odette: 'Odette',
+      YaeMiko: 'Yae Miko',
+      Danica: 'Danica',
+      Anastasya: 'Anastasya',
+    })
+    expect(
+      steps('Odette EE – Yae EEE – Danica Q – Ana hE Q 2N5E N5', members)
+    ).toEqual({
+      steps: [
+        'Odette E E',
+        'YaeMiko E E E',
+        'Danica Q',
+        'Anastasya hE Q N5 E N5 E N5',
+      ],
+      warnings: [],
+    })
+    expect(steps('Odette EE - Yae EEE — Danica N3-4', members)).toEqual({
+      steps: ['Odette E E', 'YaeMiko E E E', 'Danica N3-4'],
+      warnings: [],
+    })
+  })
 })

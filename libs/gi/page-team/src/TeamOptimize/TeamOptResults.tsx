@@ -67,8 +67,12 @@ import {
   Box,
   Button,
   ButtonBase,
-  CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   FormControlLabel,
   IconButton,
   Snackbar,
@@ -83,6 +87,7 @@ import {
   memo,
   useDeferredValue,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -93,6 +98,7 @@ import {
   changedMembers,
   equipChanges,
   equipTeamResult,
+  restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
 } from './apply'
@@ -173,11 +179,8 @@ export function TeamOptResults({
   onResetPicks,
   fresh,
   supplement,
-  ranking,
 }: {
   teamId: string
-  /** The members' other builds still being ranked: how many members are done (the run's team is final) */
-  ranking?: { done: number; total: number }
   /** Below the inspector: the top builds and how the team's damage splits */
   supplement?: ReactNode
   /** The member whose equipment is compared (`inspector`), and choosing one */
@@ -263,9 +266,28 @@ export function TeamOptResults({
     [database, teamId, result, team]
   )
   const [confirm, setConfirm] = useState(false)
-  const [application, setApplied] = useState<'equip' | 'save'>()
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const discardTitleId = useId()
+  const [equipped, setEquipped] = useState(false)
+  const saved = team?.savedOptimization
+  const usingSaved =
+    !!saved &&
+    !changed.length &&
+    Object.keys(saved).length > 0 &&
+    Object.entries(saved).every(([id, choice]) =>
+      team?.loadoutData.some(
+        (datum) =>
+          datum?.teamCharId === id &&
+          datum.buildType === 'real' &&
+          datum.buildId === choice.savedBuildId
+      )
+    )
   const applied =
-    application === 'equip' && !team?.equipmentUndo ? undefined : application
+    equipped && team?.equipmentUndo && !toEquip.length
+      ? 'equip'
+      : usingSaved
+        ? 'save'
+        : undefined
   // artifacts excluded from this team's optimization (from here or the settings)
   const [liveTeamOpt, setTeamOpt] = useTeamOpt(teamId)
   const optConfigs = useDataManagerEntries(database.optConfigs)
@@ -629,7 +651,6 @@ export function TeamOptResults({
                 )}
               </>
             )}
-            <RankingStatus ranking={ranking} />
           </Typography>
         </Box>
 
@@ -736,9 +757,12 @@ export function TeamOptResults({
             ) : (
               <>
                 {applied === 'save' ? (
-                  <AppliedStatus>
-                    {t('teamOpt.result.saved', 'Saved as builds')}
-                  </AppliedStatus>
+                  <>
+                    <AppliedStatus>
+                      {t('teamOpt.result.usingSaved', 'Using saved builds')}
+                    </AppliedStatus>
+                    <RestoreTeamBuildsButton teamId={teamId} />
+                  </>
                 ) : (
                   <Tooltip
                     arrow
@@ -763,7 +787,6 @@ export function TeamOptResults({
                               team: team?.name ?? '',
                             })
                           )
-                          setApplied('save')
                         }}
                         sx={{
                           borderColor: tokens.hairlineStrong,
@@ -773,7 +796,10 @@ export function TeamOptResults({
                           },
                         }}
                       >
-                        {t('teamOpt.result.save', 'Save as builds')}
+                        {t(
+                          'teamOpt.result.saveAndUse',
+                          'Save and use on this team'
+                        )}
                       </Button>
                     </span>
                   </Tooltip>
@@ -795,7 +821,7 @@ export function TeamOptResults({
 
         <Tooltip arrow title={discardLabel}>
           <IconButton
-            onClick={onDiscard}
+            onClick={() => setConfirmDiscard(true)}
             aria-label={discardLabel}
             sx={{
               gridArea: 'close',
@@ -816,6 +842,37 @@ export function TeamOptResults({
           </IconButton>
         </Tooltip>
       </Box>
+      <Dialog
+        open={confirmDiscard}
+        onClose={() => setConfirmDiscard(false)}
+        aria-labelledby={discardTitleId}
+      >
+        <DialogTitle id={discardTitleId}>
+          {t('teamOpt.result.discardTitle', 'Discard this result?')}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {t(
+              'teamOpt.result.discardInfo',
+              'Run gear optimization again to calculate a result. Any builds you saved or equipped are kept.'
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button autoFocus onClick={() => setConfirmDiscard(false)}>
+            {t('teamOpt.runDialog.cancel', 'Cancel')}
+          </Button>
+          <Button
+            color="error"
+            onClick={() => {
+              setConfirmDiscard(false)
+              onDiscard()
+            }}
+          >
+            {discardLabel}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Collapse
         in={confirm && applied !== 'equip' && !stale}
@@ -841,7 +898,7 @@ export function TeamOptResults({
                 onClick={() => {
                   equipTeamResult(database, teamId, result)
                   setConfirm(false)
-                  setApplied('equip')
+                  setEquipped(true)
                 }}
               >
                 {t('teamOpt.result.equipConfirm', 'Equip')}
@@ -1119,6 +1176,33 @@ export function TeamEquipUndo({ teamId }: { teamId: string }) {
             'Restore the equipment and saved builds from before the last Equip action on this team.'
           )}
     </Notice>
+  )
+}
+
+export function RestoreTeamBuildsButton({ teamId }: { teamId: string }) {
+  const { t } = useTranslation('page_team')
+  const database = useDatabase()
+  const saved = useTeam(teamId)?.savedOptimization
+  const [failed, setFailed] = useState(false)
+  if (!saved) return null
+  return (
+    <>
+      <Button
+        size="small"
+        color="inherit"
+        onClick={() => setFailed(!restoreTeamBuilds(database, teamId))}
+      >
+        {t('teamOpt.result.restoreBuilds', 'Restore previous builds')}
+      </Button>
+      {failed && (
+        <Typography role="alert" color="warning.main" sx={type.label}>
+          {t(
+            'teamOpt.result.restoreBuildsConflict',
+            'The team selection or previous builds changed after saving. Review the affected builds to restore them.'
+          )}
+        </Typography>
+      )}
+    </>
   )
 }
 
@@ -2449,67 +2533,3 @@ export function WeaponThumb({
 // (moved to gi/ui so the Teams page can show the same tooltip)
 // (the weapon tooltip lives in gi/ui now; this file's users still take it from here)
 export { WeaponDetails }
-
-/**
- * After "Found in": the members' other builds (Top builds, the inspector's rankings) still being
- * ranked, then for a moment that they are done. In the line: its height never changes.
- */
-function RankingStatus({
-  ranking,
-}: {
-  ranking: { done: number; total: number } | undefined
-}) {
-  const { t } = useTranslation('page_team')
-  const [finished, setFinished] = useState(false)
-  const was = useRef(!!ranking)
-  useEffect(() => {
-    const before = was.current
-    was.current = !!ranking
-    if (!before || ranking) return undefined
-    setFinished(true)
-    const id = setTimeout(() => setFinished(false), 4000)
-    return () => clearTimeout(id)
-  }, [ranking])
-  if (!ranking && !finished) return null
-  const status = (
-    <Box
-      component="span"
-      role="status"
-      aria-live="polite"
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.5,
-        ml: 1,
-        verticalAlign: 'middle',
-        color: ranking ? tokens.gold : 'success.main',
-        fontWeight: 600,
-      }}
-    >
-      {ranking ? (
-        <CircularProgress size={10} thickness={6} sx={{ color: 'inherit' }} />
-      ) : (
-        <CheckIcon sx={{ fontSize: 13 }} />
-      )}
-      {ranking
-        ? t('teamOpt.result.ranking', {
-            defaultValue: 'Ranking other builds · {{done}} of {{total}}',
-            done: ranking.done,
-            total: ranking.total,
-          })
-        : t('teamOpt.result.ranked', 'Other builds ranked')}
-    </Box>
-  )
-  return ranking ? (
-    <Tooltip
-      title={t(
-        'teamOpt.result.rankingTip',
-        'This team and its damage are final. Each member’s other weapons and sets are still being ranked: Top builds and the equipment rankings fill in when they are done.'
-      )}
-    >
-      {status}
-    </Tooltip>
-  ) : (
-    status
-  )
-}

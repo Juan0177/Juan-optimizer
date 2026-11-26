@@ -4,13 +4,41 @@ import {
   charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
 import { useDBMeta } from '@genshin-optimizer/gi/db-ui'
-import type { RotationTemplate } from '@genshin-optimizer/gi/ui'
-import { rotationTemplateKinds } from '@genshin-optimizer/gi/ui'
+import type { RotationMember, RotationTemplate } from '@genshin-optimizer/gi/ui'
+import {
+  mainPart,
+  rotationTemplateKinds,
+  supportPart,
+} from '@genshin-optimizer/gi/ui'
 import { alpha, Box, Button, ButtonBase, Menu, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MemberAvatar } from './MemberAvatar'
 import { focusSx, hairline, numSx, quickSx, tokens, type } from './ui'
+
+/** Assemble a draft from the current roster using the same parts as the template search. */
+export function starterRotation(
+  names: RotationMember[],
+  main = names[0]?.characterKey
+) {
+  return [
+    ...names.filter((member) => member.characterKey !== main),
+    ...names.filter((member) => member.characterKey === main),
+  ]
+    .map(
+      ({ characterKey, name }) =>
+        `${name} ${characterKey === main ? (mainPart(characterKey) ?? 'E N3') : supportPart(characterKey)}`
+    )
+    .join(' -> ')
+}
+
+const hasCompatibleTemplate = (
+  templates: RotationTemplate[],
+  team: CharacterKey[]
+) =>
+  templates.some((template) =>
+    template.members.every((key) => team.includes(key))
+  )
 
 /** The template's text with the team's own names leading each step (the parser reads keys too) */
 export function templateText(
@@ -136,13 +164,15 @@ export function TemplateCards({
   templates,
   team,
   onPick,
+  onStarter,
 }: {
   templates: RotationTemplate[]
   team: CharacterKey[]
   onPick: (template: RotationTemplate) => void
+  onStarter: () => void
 }) {
   const { t } = useTranslation('page_team')
-  if (!templates.length) return null
+  const useStarter = !hasCompatibleTemplate(templates, team)
   return (
     <Box sx={{ width: '100%', maxWidth: 620, mt: 2.5 }}>
       <Typography
@@ -158,6 +188,17 @@ export function TemplateCards({
         {t('teamOpt.templates.heading', 'Templates')}
         <InfoTooltipInline title={infoText(t)} />
       </Typography>
+      {useStarter && (
+        <Button
+          size="small"
+          variant="outlined"
+          color="inherit"
+          onClick={onStarter}
+          sx={{ mb: 1 }}
+        >
+          {t('teamOpt.templates.starter', 'Draft for this team')}
+        </Button>
+      )}
       <Box
         sx={{
           display: 'grid',
@@ -206,14 +247,16 @@ export function TemplatesButton({
   templates,
   team,
   onPick,
+  onStarter,
 }: {
   templates: RotationTemplate[]
   team: CharacterKey[]
   onPick: (template: RotationTemplate) => void
+  onStarter: () => void
 }) {
   const { t } = useTranslation('page_team')
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
-  if (!templates.length) return null
+  const useStarter = !hasCompatibleTemplate(templates, team)
   return (
     <>
       <Button
@@ -252,6 +295,25 @@ export function TemplatesButton({
           {t('teamOpt.templates.replace', 'Replaces the rotation written here')}
           <InfoTooltipInline title={infoText(t)} />
         </Typography>
+        {useStarter && (
+          <ButtonBase
+            role="menuitem"
+            onClick={() => {
+              setAnchor(null)
+              onStarter()
+            }}
+            sx={{
+              display: 'block',
+              textAlign: 'left',
+              width: '100%',
+              px: 2,
+              py: 1.25,
+              ...focusSx,
+            }}
+          >
+            {t('teamOpt.templates.starter', 'Draft for this team')}
+          </ButtonBase>
+        )}
         {templates.map((template) => (
           <ButtonBase
             key={template.id}

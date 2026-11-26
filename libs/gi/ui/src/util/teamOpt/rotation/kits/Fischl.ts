@@ -73,19 +73,21 @@ function startOz(
  */
 const ozStats = (s: FischlState) =>
   s.ozSnapshot
-    ? [
-        { stat: 'atk' as const, path: ['total', 'atk'], ...s.ozSnapshot },
-        {
-          stat: 'critDMG_' as const,
-          path: ['total', 'critDMG_'],
-          ...s.ozSnapshot,
-        },
-        {
-          stat: 'electro_dmg_' as const,
-          path: ['total', 'electro_dmg_'],
-          ...s.ozSnapshot,
-        },
-      ]
+    ? (
+        [
+          'atk',
+          'critRate_',
+          'critDMG_',
+          'eleMas',
+          'electro_dmg_',
+          'all_dmg_',
+          'skill_dmg_',
+        ] as const
+      ).map((stat) => ({
+        stat,
+        path: ['total', stat],
+        ...s.ozSnapshot!,
+      }))
     : undefined
 
 /** Oz's attack timer (restarted by a recast): ticks every 59 frames from `firstTick` */
@@ -141,6 +143,15 @@ export const kit: KitModel = {
     recastReady: -1,
     ozPending: false,
   }),
+  onStart(ctx) {
+    for (const condition of ['lockOverload', 'lockEcLc', 'lockC6Oz'])
+      ctx.state('Fischl', ['Fischl', condition], '')
+  },
+  simOnlyBuffs: () => [
+    ['Fischl', 'lockOverload'],
+    ['Fischl', 'lockEcLc'],
+    ['Fischl', 'lockC6Oz'],
+  ],
   // The skill's wait is in actionReadyAt (it needs the cooldown): the summon once the skill is
   // ready and Oz has left (his last frame, when gcsim's removeOz runs); before that, with Oz out,
   // the recast (its own 92-frame CD); else the skill's cooldown
@@ -177,8 +188,9 @@ export const kit: KitModel = {
         delay: ctx.normalAnimationDelay(actor, 'yelan'),
         active: (c) => c.now < s.ozEnd,
         fire: (c) => {
-          // Hexerei: C6 doubles the Lock effects, for 10 s from each Evernight Raven
-          c.buff('Fischl', ['Fischl', 'lockC6Oz'], 'on', 0, 600)
+          c.buff('Fischl', ['Fischl', 'lockC6Oz'], 'on', 0, 600, {
+            hitlag: 'recipient',
+          })
           c.hit(10, {
             characterKey: 'Fischl',
             path: ['constellation6', 'ozActiveCharDmg'],

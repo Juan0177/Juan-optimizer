@@ -119,6 +119,7 @@ export const kit: KitModel = {
           ctx.hit(18, {
             path: ['skill', 'wheelDmg'],
             tag: 'skill',
+            noSacrificial: true,
             element: 'anemo',
             applies: true,
             durability: 25,

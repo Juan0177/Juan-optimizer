@@ -7,6 +7,7 @@ import type { ArtifactSlotKey, MainStatKey } from '@genshin-optimizer/gi/consts'
 import {
   allArtifactSlotKeys,
   artSlotMainKeys,
+  charKeyToLocGenderedCharKey,
 } from '@genshin-optimizer/gi/consts'
 import type { StatFilters, TeamOpt } from '@genshin-optimizer/gi/db'
 import type { TeamCharacterContextObj } from '@genshin-optimizer/gi/db-ui'
@@ -23,6 +24,7 @@ import type { TeamData, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
   CharacterName,
   teamOptPool,
+  teamOptWeaponCandidates,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
 import BoltIcon from '@mui/icons-material/Bolt'
@@ -110,32 +112,112 @@ export function RunDialog({
   // (the set effects the rotation times in a run: their switches play no part)
   const timed = useTimedSetEffects(teamId, teamOpt, open)
   const artifacts = useDataManagerValues(database.arts)
-  const configs = new Map(useDataManagerEntries(database.optConfigs))
-  const toOptimize = members.filter(
-    (m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)
-  )
-  const locations = new Set(members.map((member) => member.location as string))
-  const reserved = new Set(
-    members
-      .filter((m) => !toOptimize.includes(m))
-      .flatMap((m) => Object.values(m.artifactIds))
-      .filter((id): id is string => !!id)
-  )
-  const eligible = toOptimize.every((member) => {
-    const config = configs.get(member.teamChar.optConfigId)
-    if (!config) return false
-    const pool = teamOptPool(
-      artifacts,
-      member,
+  const configEntries = useDataManagerEntries(database.optConfigs)
+  const inventoryWeapons = useDataManagerValues(database.weapons)
+  const [original] = useState(() => ({
+    teamOpt: database.teams.get(teamId)?.teamOpt,
+    members: members.map(({ teamCharId, teamChar }) => ({
+      teamCharId,
+      optConfigId: teamChar.optConfigId,
+      conditional: teamChar.conditional,
+      config: database.optConfigs.get(teamChar.optConfigId),
+    })),
+  }))
+  const resetSetup = () => {
+    database.teams.set(teamId, { teamOpt: original.teamOpt })
+    for (const {
+      teamCharId,
+      optConfigId,
+      conditional,
       config,
-      teamOpt,
-      locations,
-      reserved
+    } of original.members) {
+      if (database.teamChars.get(teamCharId)?.optConfigId !== optConfigId)
+        continue
+      database.teamChars.set(teamCharId, { conditional })
+      if (config) {
+        const { mainStatKeys, statFilters, artSetExclusion } = config
+        database.optConfigs.set(optConfigId, {
+          mainStatKeys,
+          statFilters,
+          artSetExclusion,
+        })
+      }
+    }
+  }
+  const toOptimize = useMemo(
+    () =>
+      members.filter((m) => !m.isTc && !teamOpt.keep.includes(m.characterKey)),
+    [members, teamOpt.keep]
+  )
+  const locations = useMemo(
+    () => new Set(members.map((member) => member.location as string)),
+    [members]
+  )
+  const reserved = useMemo(
+    () =>
+      new Set(
+        members
+          .filter((m) => !toOptimize.includes(m))
+          .flatMap((m) => Object.values(m.artifactIds))
+          .filter((id): id is string => !!id)
+      ),
+    [members, toOptimize]
+  )
+  const pools = useMemo(() => {
+    const configs = new Map(configEntries)
+    return Object.fromEntries(
+      members.flatMap((member) => {
+        const config = configs.get(member.teamChar.optConfigId)
+        if (!config) return []
+        const counts = Object.fromEntries(
+          allArtifactSlotKeys.map((slot) => [slot, 0])
+        ) as Record<ArtifactSlotKey, number>
+        for (const artifact of teamOptPool(
+          artifacts,
+          member,
+          config,
+          teamOpt,
+          locations,
+          reserved
+        ))
+          counts[artifact.slotKey]++
+        return [
+          [
+            member.characterKey,
+            {
+              size: Object.values(counts).reduce((a, b) => a * b, 1),
+              emptySlots: allArtifactSlotKeys.filter((slot) => !counts[slot]),
+            },
+          ],
+        ]
+      })
     )
-    return allArtifactSlotKeys.every((slot) =>
-      pool.some((art) => art.slotKey === slot)
+  }, [artifacts, configEntries, members, teamOpt, locations, reserved])
+  const eligible = toOptimize.every(
+    (member) => !!pools[member.characterKey]?.size
+  )
+  const weaponCounts = useMemo(() => {
+    if (!teamOpt.optimizeWeapons) return {}
+    const taken = new Set(
+      members
+        .filter((member) => !toOptimize.includes(member))
+        .map((member) => member.weaponId)
     )
-  })
+    return Object.fromEntries(
+      toOptimize.map((member) => [
+        member.characterKey,
+        teamOptWeaponCandidates(
+          database,
+          member,
+          member.weaponId,
+          teamOpt,
+          locations,
+          taken
+        ).length,
+      ])
+    )
+    // A weapon can be added or edited from inside the chooser.
+  }, [database, inventoryWeapons, locations, members, teamOpt, toOptimize])
   const asItIs = !!evaluateOnly && !toOptimize.length
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   const canStart =
@@ -164,11 +246,18 @@ export function RunDialog({
         maxWidth: false,
         sx: { p: { xs: 1 }, maxWidth: 1340 },
       }}
-      aria-label={t('teamOpt.runDialog.title', 'Optimize team')}
+      aria-label={t('teamOpt.run.gear', 'Optimize gear')}
     >
-      <CardThemed>
+      <CardThemed
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          maxHeight: { xs: 'calc(100dvh - 16px)', sm: '90dvh' },
+          '& > :first-child': { flexShrink: 0 },
+        }}
+      >
         <DialogHead
-          title={t('teamOpt.runDialog.title', 'Optimize team')}
+          title={t('teamOpt.run.gear', 'Optimize gear')}
           info={t(
             'teamOpt.run.how',
             'Each member is optimized in turn for the whole rotation’s damage, the others fixed, the biggest damage dealer first. Rounds repeat until no build changes; then members trade pieces and weapons where the team gains.'
@@ -183,7 +272,7 @@ export function RunDialog({
             display: 'flex',
             flexDirection: 'column',
             gap: 3,
-            maxHeight: { xs: 'calc(100dvh - 150px)', sm: '76vh' },
+            minHeight: 0,
             overflowY: 'auto',
             // (a scrolling column: its children keep their height)
             '& > *': { flexShrink: 0 },
@@ -202,8 +291,8 @@ export function RunDialog({
             <PanelHeader
               title={t('teamOpt.runDialog.members', 'Members')}
               info={t(
-                'teamOpt.runDialog.sizeHint',
-                'Builds to search: the combinations of the artifacts a member may use with these settings (sets not counted). Fewer main stats make it smaller, so the run faster.'
+                'teamOpt.runDialog.scopeHint',
+                'Raw artifact combinations are counted before set rules and Quick pruning. More weapon candidates add work. Narrow the pool or keep a member’s current build to shorten the search.'
               )}
               actions={
                 <>
@@ -268,13 +357,22 @@ export function RunDialog({
                   teamOpt={teamOpt}
                   setTeamOpt={setTeamOpt}
                   energy={energy}
+                  pool={pools[member.characterKey]}
+                  weaponCount={weaponCounts[member.characterKey]}
                   timed={timed?.[member.characterKey]}
                 />
               ))}
             </Box>
           </Box>
         </Box>
-        <Box sx={{ px: { xs: 1.5, sm: 3 }, py: 1.5, borderTop: hairline }}>
+        <Box
+          sx={{
+            flexShrink: 0,
+            px: { xs: 1.5, sm: 3 },
+            py: 1.5,
+            borderTop: hairline,
+          }}
+        >
           {notice && (
             <Alert severity="info" role="status" sx={{ mb: 1.5 }}>
               {notice}
@@ -323,12 +421,11 @@ export function RunDialog({
             <Box sx={{ flexGrow: 1 }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* (phones: the title bar's close is the cancel) */}
-              <Button
-                color="inherit"
-                onClick={onClose}
-                sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
-              >
-                {t('teamOpt.runDialog.cancel', 'Cancel')}
+              <Button color="inherit" size="small" onClick={resetSetup}>
+                {t('teamOpt.run.resetSetup', 'Reset edits')}
+              </Button>
+              <Button color="inherit" size="small" onClick={onClose}>
+                {t('teamOpt.editor.close', 'Close')}
               </Button>
               <Button
                 variant="contained"
@@ -345,6 +442,9 @@ export function RunDialog({
               </Button>
             </Box>
           </Box>
+          <Typography role="status" sx={{ ...type.label, mt: 0.5 }}>
+            {t('teamOpt.run.setupSaved', 'Settings are saved as you edit.')}
+          </Typography>
         </Box>
         <TeamEnergyDrawer members={members} energy={energy} />
       </CardThemed>
@@ -471,6 +571,8 @@ function MemberRunRow({
   teamOpt,
   setTeamOpt,
   energy,
+  pool,
+  weaponCount,
   timed,
 }: {
   teamId: string
@@ -480,14 +582,19 @@ function MemberRunRow({
   teamOpt: TeamOpt
   setTeamOpt: (update: TeamOptUpdate) => void
   energy: TeamEnergy
+  pool?: { size: number; emptySlots: ArtifactSlotKey[] }
+  weaponCount?: number
   /** Its set effects the rotation times (`teamTimedSetEffects`) */
   timed?: ReadonlySet<string>
 }) {
-  const { t } = useTranslation(['page_team', 'artifact'])
+  const { t } = useTranslation(['page_team', 'artifact', 'charNames_gen'])
   const database = useDatabase()
   const { gender } = useDBMeta()
   const team = useTeam(teamId)
   const { characterKey, isTc, teamCharId, loadoutDatum } = member
+  const characterName = t(
+    `charNames_gen:${charKeyToLocGenderedCharKey(characterKey, gender)}`
+  )
   const teamChar = database.teamChars.get(teamCharId) ?? member.teamChar
   const optConfig = useOptConfig(teamChar.optConfigId)
   const kept = isTc || teamOpt.keep.includes(characterKey)
@@ -508,26 +615,10 @@ function MemberRunRow({
     [members]
   )
   // its search: the builds of its artifacts these settings allow (sets not counted)
-  const { size, emptySlots } = useMemo(() => {
-    if (!optConfig || kept) return { size: 0, emptySlots: [] }
-    const pool = teamOptPool(
-      database.arts.values,
-      member,
-      optConfig,
-      teamOpt,
-      locations,
-      new Set()
-    )
-    const perSlot = Object.fromEntries(
-      allArtifactSlotKeys.map((s) => [s, 0])
-    ) as Record<ArtifactSlotKey, number>
-    for (const art of pool) perSlot[art.slotKey]++
-    return {
-      size: Object.values(perSlot).reduce((a, b) => a * b, 1),
-      // (a slot with nothing to choose from: no build can be made for it)
-      emptySlots: allArtifactSlotKeys.filter((slot) => !perSlot[slot]),
-    }
-  }, [database, member, optConfig, teamOpt, locations, kept])
+  const { size, emptySlots } = pool ?? {
+    size: 0,
+    emptySlots: allArtifactSlotKeys,
+  }
 
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState<'all' | 'sets'>()
@@ -562,8 +653,8 @@ function MemberRunRow({
       </Box>
     </Tooltip>
   ) : (
-    t('teamOpt.runDialog.size', {
-      defaultValue: '≈ {{size}} builds to search',
+    t('teamOpt.runDialog.rawSize', {
+      defaultValue: '{{size}} raw artifact combinations',
       size: formatDamage(size),
     })
   )
@@ -613,8 +704,9 @@ function MemberRunRow({
                 }
                 inputProps={{
                   'aria-label': t(
-                    'teamOpt.member.optimize',
-                    'Optimize artifacts'
+                    'teamOpt.member.optimizeNamed',
+                    'Optimize artifacts for {{character}}',
+                    { character: characterName }
                   ),
                 }}
               />
@@ -644,10 +736,18 @@ function MemberRunRow({
             </Typography>
             <Typography
               component="div"
-              noWrap
               sx={{ ...type.label, fontSize: 12, lineHeight: 1.4, ...numSx }}
             >
               {meta}
+              {!kept && weaponCount !== undefined && (
+                <Box component="span" sx={{ display: 'block' }}>
+                  {t(
+                    'teamOpt.runDialog.weaponCandidates',
+                    '{{count}} weapon candidates at start',
+                    { count: weaponCount }
+                  )}
+                </Box>
+              )}
             </Typography>
           </Box>
         </Box>
@@ -682,8 +782,9 @@ function MemberRunRow({
                 disabled={!teamCharContext}
                 aria-expanded={expanded}
                 aria-label={t(
-                  'teamOpt.runDialog.mainStatsEdit',
-                  'Choose main stats'
+                  'teamOpt.runDialog.mainStatsNamed',
+                  'Choose main stats for {{character}}',
+                  { character: characterName }
                 )}
                 sx={(theme) => ({
                   maxWidth: '100%',
@@ -742,7 +843,7 @@ function MemberRunRow({
                     {t('teamOpt.kqm.minEr', 'Min ER')}
                   </CellLabel>
                   <MinErField
-                    characterKey={characterKey}
+                    characterName={characterName}
                     optConfigId={teamChar.optConfigId}
                     statFilters={optConfig.statFilters}
                     calculated={
@@ -762,6 +863,7 @@ function MemberRunRow({
             )}
             <Box sx={{ gridArea: 'req', justifySelf: 'end' }}>
               <RequirementsButton
+                characterName={characterName}
                 minimums={minimums}
                 onClick={() => setSettings('all')}
               />
@@ -795,9 +897,11 @@ function MemberRunRow({
 
 /** A member's stat constraints (minimums besides ER): their count on the button, the editor on a click */
 function RequirementsButton({
+  characterName,
   minimums,
   onClick,
 }: {
+  characterName: string
   minimums: Requirement[]
   onClick: () => void
 }) {
@@ -830,7 +934,11 @@ function RequirementsButton({
       <IconButton
         size="small"
         onClick={onClick}
-        aria-label={label}
+        aria-label={t(
+          'teamOpt.member.constraintsNamed',
+          'Constraints for {{character}}',
+          { character: characterName }
+        )}
         aria-haspopup="dialog"
         sx={{
           position: 'relative',
@@ -877,12 +985,12 @@ const BASE_ER = 100
  * (empty: none). Saved when the field is left or Enter is pressed.
  */
 function MinErField({
-  characterKey,
+  characterName,
   optConfigId,
   statFilters,
   calculated,
 }: {
-  characterKey: TeamOptMember['characterKey']
+  characterName: string
   optConfigId: string
   statFilters: StatFilters
   /** Automatic ER: the calculator's target for it, shown (not typed); NaN: it has none */
@@ -929,7 +1037,7 @@ function MinErField({
           tabIndex={0}
           aria-label={t('teamOpt.kqm.erInput', {
             defaultValue: '{{character}} minimum ER (%)',
-            character: characterKey,
+            character: characterName,
           })}
           sx={{
             display: 'inline-flex',
@@ -977,7 +1085,7 @@ function MinErField({
         inputMode: 'decimal',
         'aria-label': t('teamOpt.kqm.erInput', {
           defaultValue: '{{character}} minimum ER (%)',
-          character: characterKey,
+          character: characterName,
         }),
       }}
       InputProps={{

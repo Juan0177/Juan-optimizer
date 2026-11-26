@@ -28,25 +28,36 @@ const neferNormals: NormalHit[] = [
 // (N3's two hits share the sheet's node 2: the game lists it as one ×2 multiplier)
 const normalNode = (i: number, _j: number) => (i < 3 ? i : 3)
 
-/** Shadow Dance: 9 s, or until 3 Phantasm Performances */
 const SHADOW = 540
 const PERFORMANCES = 3
-/** Seeds of Deceit replace the cores of Lunar-Blooms for 15 s after the skill */
 const SEED_WINDOW = 900
+const SEED_LIFE = 360
+const SEED_CAP = 5
 
 interface NeferState {
+  inShadow: boolean
   shadowEnd: number
+  shadowToken: number
+  c4ResToken: number
   performances: number
   seedEnd: number
-  seeds: number
-  /** Veil of Falsehood stacks: each one's end frame */
+  seeds: number[]
   veils: number[]
+}
+
+const activeSeeds = (s: NeferState, now: number) =>
+  s.seeds.filter((end) => end > now)
+
+function addSeeds(s: NeferState, now: number, n: number) {
+  if (n <= 0) return
+  const seeds = activeSeeds(s, now)
+  for (let i = 0; i < n; i++) seeds.push(now + SEED_LIFE)
+  s.seeds = seeds.slice(-SEED_CAP)
 }
 
 const activeVeils = (s: NeferState, now: number) =>
   s.veils.filter((end) => end > now)
 
-/** Adds Veil stacks (oldest dropped past the cap) and updates the A1 / C2 conditions */
 function addVeils(c: SimContext, s: NeferState, n: number) {
   if (n <= 0) return
   const c2 = c.constellation('Nefer') >= 2
@@ -54,9 +65,26 @@ function addVeils(c: SimContext, s: NeferState, n: number) {
   const life = c2 ? 840 : 540
   const veils = activeVeils(s, c.now)
   for (let i = 0; i < n; i++) veils.push(c.now + life)
+  const reachedCap = veils.length >= cap
   s.veils = veils.slice(-cap)
-  // (the sheet's A1 / C2 Elemental Mastery follows the stack count)
+  if (reachedCap && c.moonsign >= 2)
+    c.buff('Nefer', ['Nefer', 'a1MaxVeilEm'], 'on', 0, 480)
   syncVeils(c, s)
+}
+
+function endShadow(ctx: SimContext, s: NeferState) {
+  if (!s.inShadow) return
+  s.inShadow = false
+  s.shadowEnd = -1
+  ++s.shadowToken
+  if (ctx.constellation('Nefer') >= 4) {
+    ctx.endDewBoost()
+    const resToken = ++s.c4ResToken
+    ctx.at(270, (c) => {
+      if (s.c4ResToken === resToken)
+        c.state('Nefer', ['Nefer', 'c4ShadowDance'], '')
+    })
+  }
 }
 
 /** The Veil count as the sheet's condition, until the next stack expires */
@@ -90,12 +118,21 @@ export const kit: KitModel = {
   source: 'in-game text and talent data (no gcsim kit); frames estimated',
   // Moonsign Benediction: +1 to the party's Moonsign
   moonsign: 1,
+  simOnlyBuffs: () => [
+    ['Nefer', 'a1VeilStacks'],
+    ['Nefer', 'a1MaxVeilEm'],
+    ['Nefer', 'burstVeilsAbsorbed'],
+    ['Nefer', 'c4ShadowDance'],
+  ],
   charges: () => ({ skill: 2 }),
   init: (): NeferState => ({
+    inShadow: false,
     shadowEnd: -1,
+    shadowToken: 0,
+    c4ResToken: 0,
     performances: 0,
     seedEnd: -1,
-    seeds: 0,
+    seeds: [],
     veils: [],
   }),
   onStart(c) {
@@ -103,19 +140,21 @@ export const kit: KitModel = {
       'Nefer: action frames are estimates (no published frame data). Seeds of Deceit are one per Lunar-Bloom in the 15 s after her skill; A4 (Slither Dew) is not modelled.'
     )
   },
+  onSwapOut(ctx, s: NeferState) {
+    endShadow(ctx, s)
+  },
   onHit(c, s: NeferState, hit) {
-    // A1 (Ascendant Gleam): Lunar-Blooms in the window leave Seeds of Deceit
     if (
       hit.path[0] === '_reaction' &&
       hit.path[1] === 'lunarBloom' &&
       c.now < s.seedEnd &&
       c.moonsign >= 2
     )
-      s.seeds++
+      addSeeds(s, c.now, 1)
   },
-  // In Shadow Dance with Verdant Dew her charged attack is Phantasm Performance (its own frames)
   variant(ctx, s: NeferState, action) {
     return action.kind === 'charged' &&
+      s.inShadow &&
       ctx.now < s.shadowEnd &&
       s.performances < PERFORMANCES &&
       ctx.dew >= 1
@@ -128,7 +167,8 @@ export const kit: KitModel = {
   },
   act(ctx, s: NeferState, action, previous) {
     const c = ctx.constellation('Nefer')
-    const shadow = ctx.now < s.shadowEnd && s.performances < PERFORMANCES
+    const shadow =
+      s.inShadow && ctx.now < s.shadowEnd && s.performances < PERFORMANCES
     switch (action.kind) {
       case 'normal':
         return normalString(
@@ -154,16 +194,23 @@ export const kit: KitModel = {
           icd: 'skill',
           label: 'Senet Strategy',
         })
+        s.inShadow = true
         s.shadowEnd = ctx.now + SHADOW
+        const shadowToken = ++s.shadowToken
         s.performances = 0
         s.seedEnd = ctx.now + SEED_WINDOW
-        // C2: two Veils at once
-        if (c >= 2 && ctx.moonsign >= 2) addVeils(ctx, s, 2)
+        if (ctx.moonsign >= 2)
+          addSeeds(s, ctx.now, ctx.suppressCores(SEED_WINDOW))
+        if (c >= 2) addVeils(ctx, s, 2)
         if (c >= 4) {
-          // C4: Dendro RES -20% in Shadow Dance (until 4.5 s after it); Dew 25% faster on field
-          ctx.buff('Nefer', ['Nefer', 'c4ShadowDance'], 'on', 0, SHADOW + 270)
+          ++s.c4ResToken
+          ctx.state('Nefer', ['Nefer', 'c4ShadowDance'], 'on')
+          ctx.endDewBoost()
           ctx.boostDew(SHADOW, 1.25)
         }
+        ctx.at(SHADOW, (c2) => {
+          if (s.shadowToken === shadowToken) endShadow(c2, s)
+        })
         return {
           frames: 40,
           framesInto: { charged: 30, normal: 34, burst: 34, swap: 36 },
@@ -171,10 +218,10 @@ export const kit: KitModel = {
         }
       }
       case 'charged': {
-        // A Charged Attack or a performance absorbs the Seeds of Deceit (one Veil each)
-        if (s.seeds) {
-          addVeils(ctx, s, s.seeds)
-          s.seeds = 0
+        const seeds = activeSeeds(s, ctx.now).length
+        if (seeds) {
+          addVeils(ctx, s, seeds)
+          s.seeds = []
         }
         if (shadow && ctx.dew >= 1) {
           // Phantasm Performance: 1 Dew; Nefer's two hits, then the shades' three Lunar-Bloom hits
@@ -231,7 +278,12 @@ export const kit: KitModel = {
               ['constellation6', 'dmg'],
               'Phantasm Performance end (C6)'
             )
-          if (s.performances >= PERFORMANCES) s.shadowEnd = ctx.now + 100
+          if (s.performances >= PERFORMANCES) {
+            const token = s.shadowToken
+            ctx.at(100, (c2) => {
+              if (s.shadowToken === token) endShadow(c2, s)
+            })
+          }
           return {
             frames: 100,
             framesInto: {

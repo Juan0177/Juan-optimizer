@@ -33,9 +33,11 @@ import type {
 import {
   actionFrameDefaults,
   CharacterName,
+  calculateEnergyRecharge,
   energyFromRotation,
   type FrameData,
   HEXEREI_CHARACTERS,
+  isSacrificialWeapon,
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
@@ -50,13 +52,19 @@ import {
   type SimHit,
   type SimTeam,
   simTeamOf,
+  STEADY_COUNTED,
+  STEADY_REPEATS,
   simulateWritten,
+  simulateWrittenAsync,
+  syncEnergyCalculator,
+  teamBurstEvery,
   teamOptMembers,
   templatesForTeam,
   type WrittenRotation,
+  withRotationEnergy,
   writtenKqmReplay,
   writtenSeconds,
-  writtenTeamReplay,
+  replayTeamAttacks,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -103,17 +111,20 @@ import { useTeamBuffs } from './buffs'
 import { FrameDataPanel } from './FrameDataPanel'
 import { MemberAvatar } from './MemberAvatar'
 import { RotationCode } from './RotationCode'
-import { TemplatesButton, templateText } from './RotationTemplates'
+import {
+  starterRotation,
+  TemplatesButton,
+  templateText,
+} from './RotationTemplates'
 import type { TimelineMoment, TimelinePin } from './RotationTimeline'
 import { laneColor, RotationTimeline, SHORT_SCREEN } from './RotationTimeline'
 import {
   DEFAULT_SWAP_FRAMES,
   firstRotations,
   frameOverrides,
+  RotationsDropdown,
   type RotationTimingSettings,
-  STEADY_COUNTED,
   STEADY_RANGE,
-  STEADY_REPEATS,
   timingPing,
 } from './RotationTiming'
 import { teamQuickTokens, teamSyntaxRows } from './rotationWriterHints'
@@ -735,7 +746,7 @@ export function teamRotationEnergy({
   names,
   team,
   text: given,
-  burstEvery,
+  burstEvery: givenBurstEvery,
   saved,
 }: {
   database: Database
@@ -762,6 +773,10 @@ export function teamRotationEnergy({
     return undefined
   const text = given ?? readStored(database, storageKey(teamId)) ?? ''
   if (!text.trim()) return undefined
+  const burstEvery =
+    givenBurstEvery !== undefined
+      ? givenBurstEvery
+      : teamBurstEvery(database.teams.get(teamId)?.teamOpt)
   const played = simulateWritten({
     text,
     opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
@@ -780,6 +795,7 @@ export function teamRotationEnergy({
     keep: 'last2',
     samples: 32,
     burstEvery,
+    sacrificial: false,
   })
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
@@ -794,41 +810,7 @@ export function teamRotationEnergy({
   }
 }
 
-/**
- * The team's written rotation as "Use this rotation" plays it, with the members' gear from `gearOf`
- * (their own gear given). Nothing written, attacks entered by hand, or a rotation that can't be
- * played: undefined.
- */
-function teamReplayWith(
-  database: Database,
-  gender: GenderKey,
-  i18n: i18n,
-  teamId: string,
-  teamOpt: TeamOpt,
-  gearOf: (own: SimTeam['gear']) => SimTeam['gear']
-): TeamOpt['attacks'] | undefined {
-  if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
-  const members = teamOptMembers(database, teamId)
-  try {
-    return writtenTeamReplay({
-      database,
-      teamId,
-      members,
-      gender,
-      names: memberNamesOf(members, i18n, gender),
-      teamOpt,
-      text: readStored(database, storageKey(teamId)) ?? '',
-      opener: readStored(database, openerKey(teamId)) ?? '',
-      timing: parseTiming(readStored(database, timingKey(teamId))),
-      frameData: parseFrameData(readStored(database, frameDataKey)),
-    })?.({ gear: gearOf(simTeamOf(members, database).gear), overrides: {} })
-      .attacks
-  } catch {
-    return undefined
-  }
-}
-
-/** The writer settings a Team Optimize worker needs to replay the rotation. */
+/** The saved rotation to replay for a gear search, with localized member aliases. */
 export function teamRunRotation(
   database: Database,
   gender: GenderKey,
@@ -836,12 +818,12 @@ export function teamRunRotation(
   teamId: string
 ): TeamOptRunRotation | undefined {
   if (readStored(database, manualAttacksKey(teamId)) === '1') return undefined
-  const text = readStored(database, storageKey(teamId)) ?? ''
+  const { text, opener, timing } = writtenRotationOf(database, teamId)
   if (!text.trim()) return undefined
   return {
     text,
-    opener: readStored(database, openerKey(teamId)) ?? '',
-    timing: parseTiming(readStored(database, timingKey(teamId))),
+    opener,
+    timing: parseTiming(timing),
     frameData: parseFrameData(readStored(database, frameDataKey)),
     names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
   }
@@ -878,20 +860,17 @@ export function teamTimedSetEffects(
 ) {
   const key = timedKey(teamId, teamOpt)
   if (timedSetEffects.has(key)) return timedSetEffects.get(key)
-  const attacks = teamReplayWith(
-    database,
-    gender,
-    i18n,
-    teamId,
-    teamOpt,
-    (own) =>
+  const rotation = teamRunRotation(database, gender, i18n, teamId)
+  const attacks =
+    rotation &&
+    replayTeamAttacks(database, teamId, gender, teamOpt, rotation, (own) =>
       Object.fromEntries(
         Object.entries(own).map(([k, gear]) => [
           k,
           { ...gear, candidates: { sets: allArtifactSetKeys, weapons: [] } },
         ])
       )
-  )
+    )
   const timed = attacks && timedRefs(attacks)
   timedSetEffects.set(key, timed)
   // (a few rotations kept: the ones a session goes back and forth between)
@@ -1193,6 +1172,7 @@ export function useRotationWriter({
   // (another tab's rotation: what was said about this one's goes)
   useEffect(() => setApplied(undefined), [rid, setApplied])
   const isKqm = !!kqm
+  // biome-ignore lint/correctness/useExhaustiveDependencies: replay only when the applied rotation or constellations change.
   useEffect(() => {
     const key = consKey(rid)
     if (!appliedText.trim()) return
@@ -1457,6 +1437,12 @@ export type SearchButton = (rotation: {
   text: string
   names: RotationMember[]
   setText: (text: string) => void
+  close: () => void
+  saved: {
+    opener: string
+    timing: RotationTimingSettings
+    frameData: FrameData
+  }
 }) => ReactNode
 
 function WriterHost({
@@ -1498,11 +1484,9 @@ function useSettled<T>(value: T, playMs: { current: number }) {
  * (shown once there is a rotation text; reads the saved text itself, so typing re-renders only it)
  */
 export function RotationConfigureButton({
-  teamId,
   writer,
   disabled,
 }: {
-  teamId: string
   writer: RotationWriterHandle
   disabled?: boolean
 }) {
@@ -1678,9 +1662,7 @@ function WriterModal({
   )
   const deferredOpener = useSettled(openerText, playMs)
   const [openerShown, setOpenerShown] = useState(() => !!openerText.trim())
-  const isDraft =
-    (changed || (openerShown ? openerText : '') !== savedOpener) &&
-    !!applied.trim()
+  const isDraft = changed || (openerShown ? openerText : '') !== savedOpener
   const revert = () => {
     setText(applied)
     setOpenerText(savedOpener)
@@ -1736,6 +1718,11 @@ function WriterModal({
   const keys = members.map((m) => m.characterKey)
 
   const team = useSimTeam(members, kqm, kqmBuilds)
+  const sacHolders = useMemo(
+    () =>
+      team.members.filter((key) => isSacrificialWeapon(team.gear[key]?.weapon)),
+    [team]
+  )
   // (the attacks a rotation leaves are the tab's: at the members' own constellations, or KQM's
   // without the shown builds' gear)
   const ownTeam = useSimTeam(members, kqm)
@@ -1799,17 +1786,42 @@ function WriterModal({
       teamId,
     ]
   )
-  const result = useMemo(() => {
-    if (!primed) return undefined
+  const [sacPreview, setSacPreview] = useState<{
+    args: typeof playArgs
+    result: ReturnType<typeof simulateWritten>
+  }>()
+  useEffect(() => {
+    if (!primed || !sacHolders.length || closing.current) return undefined
+    let cancelled = false
+    const start = performance.now()
+    void simulateWrittenAsync(playArgs, () => cancelled || closing.current)
+      .then((played) => {
+        if (cancelled || closing.current) return
+        playMs.current = performance.now() - start
+        lastResult.current = played
+        startTransition(() => setSacPreview({ args: playArgs, result: played }))
+      })
+      .catch(() => {
+        if (!cancelled) setSacPreview({ args: playArgs, result: undefined })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [primed, playArgs, sacHolders])
+  const basicResult = useMemo(() => {
+    if (!primed || sacHolders.length) return undefined
     if (closing.current && lastResult.current) return lastResult.current
     const start = performance.now()
     const played = simulateWritten(playArgs)
     playMs.current = performance.now() - start
     lastResult.current = played
     return played
-  }, [primed, playArgs])
+  }, [primed, playArgs, sacHolders])
+  const result = sacHolders.length ? sacPreview?.result : basicResult
   // (the moment pinned: the same in the timeline here and in the detailed window)
   const [timelinePin, setTimelinePin] = useState<TimelinePin>()
+  const [sacView, setSacView] = useState<'used' | 'skipped'>()
+  const [sacEnergyOpen, setSacEnergyOpen] = useState(false)
   // The timeline's rotations: the last one counted, or every one played (the opener before them)
   // so that waits show where they happen. The whole play is played when asked for, in a task of
   // its own after the preview's (never both in one), and is never counted (a single sample: what
@@ -1834,6 +1846,173 @@ function WriterModal({
   }, [wholeAsked, repeating, primed, playArgs])
   const wholeShown = wholeAsked && repeating && !!whole?.sim
   const shown = wholeShown ? whole : result
+  const countedSim = result?.counted?.sim ?? result?.sim
+  const sacSummary = useMemo(() => {
+    if (!countedSim || !sacHolders.length) return []
+    const runs = countedSim.samples ?? [{ probability: 1, result: countedSim }]
+    return sacHolders.flatMap((key) => {
+      let used = 0
+      let loops = 0
+      for (const { probability, result } of runs) {
+        const attempts = (result.optionalSkills ?? []).filter(
+          (step) => step.characterKey === key
+        )
+        loops +=
+          probability * new Set(attempts.map((step) => step.rotationStart)).size
+        used +=
+          probability *
+          new Set(
+            attempts
+              .filter((step) => step.played)
+              .map((step) => step.rotationStart)
+          ).size
+      }
+      return loops > 0
+        ? [{ key, percent: Math.round((used / loops) * 100) }]
+        : []
+    })
+  }, [countedSim, sacHolders])
+  const examples = useMemo(() => {
+    const out: Partial<Record<'used' | 'skipped', typeof shownSim>> = {}
+    const shownSim = result?.sim
+    if (!shownSim || !sacSummary.length) return out
+    for (const { result: sample } of shownSim.samples ?? [
+      { result: shownSim },
+    ]) {
+      const attempts = (sample.optionalSkills ?? []).filter((step) =>
+        sacHolders.includes(step.characterKey)
+      )
+      if (attempts.length)
+        out[attempts.some((step) => step.played) ? 'used' : 'skipped'] ??=
+          sample
+    }
+    return out
+  }, [result, sacSummary, sacHolders])
+  const timelineSim =
+    (!wholeShown && sacView ? examples[sacView] : undefined) ?? shown?.sim
+  const [sacEnergyPreview, setSacEnergyPreview] = useState<{
+    args: typeof playArgs
+    noReset?: Partial<Record<CharacterKey, number>>
+    average?: Partial<Record<CharacterKey, number>>
+  }>()
+  const sacEnergy =
+    sacEnergyPreview?.args === playArgs ? sacEnergyPreview : undefined
+  useEffect(() => {
+    if (
+      !sacEnergyOpen ||
+      !countedSim ||
+      !sacSummary.length ||
+      sacPreview?.args !== playArgs
+    )
+      return undefined
+    const active = countedSim
+    let cancelled = false
+    const compare = async () => {
+      const noReset = await simulateWrittenAsync(
+        {
+          ...playArgs,
+          sacrificial: false,
+          auraTimeline: false,
+          timelineOnly: true,
+        },
+        () => cancelled
+      )
+      if (!noReset?.sim) return undefined
+      const source = database.teams.get(teamId)?.teamOpt
+      const saved = isKqm
+        ? source?.kqm?.energyCalculator
+        : source?.energyCalculator
+      const rotations = result?.counted?.rotations ?? result?.fromStart ?? 1
+      const weapons = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.weapon])
+      )
+      const refinements = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.refinement])
+      )
+      const sets = Object.fromEntries(
+        team.members.map((key) => [key, team.gear[key]?.sets])
+      )
+      const estimate = async (sim: NonNullable<typeof countedSim>) => {
+        const targets: Partial<Record<CharacterKey, number>> = {}
+        const unavailable = new Set<CharacterKey>()
+        const runs = sim.samples ?? [{ probability: 1, result: sim }]
+        let frame = performance.now()
+        for (const { probability, result: run } of runs) {
+          if (performance.now() - frame >= 10) {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            if (cancelled) return {}
+            frame = performance.now()
+          }
+          const seconds = run.frames / 60 / rotations
+          if (seconds <= 0) return {}
+          const calc = withRotationEnergy(
+            {
+              ...syncEnergyCalculator(
+                team.members,
+                saved,
+                seconds,
+                source?.onField ?? team.members[0],
+                team.constellations
+              ),
+              rotationTime: seconds,
+            },
+            team.members,
+            energyFromRotation(
+              run,
+              team.members,
+              rotations,
+              team.constellations
+            )
+          )
+          const current = calculateEnergyRecharge(
+            team.members,
+            calc,
+            weapons,
+            refinements,
+            sets
+          )
+          for (const key of team.members) {
+            const value = current.targets[key]
+            if (value === undefined || !Number.isFinite(value)) {
+              unavailable.add(key)
+              continue
+            }
+            targets[key] = (targets[key] ?? 0) + probability * value
+          }
+        }
+        for (const key of unavailable) delete targets[key]
+        return targets
+      }
+      return {
+        noReset: await estimate(noReset.counted?.sim ?? noReset.sim),
+        average: await estimate(active),
+      }
+    }
+    void compare()
+      .then((scores) => {
+        if (cancelled) return
+        startTransition(() =>
+          setSacEnergyPreview({ args: playArgs, ...scores })
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setSacEnergyPreview({ args: playArgs })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    sacEnergyOpen,
+    countedSim,
+    sacSummary,
+    sacPreview,
+    playArgs,
+    database,
+    teamId,
+    isKqm,
+    team,
+    result,
+  ])
   const rotationsControl = useMemo(
     () =>
       repeating ? (
@@ -1909,7 +2088,7 @@ function WriterModal({
   // result's (none before a result)
   const timelineFigures = useTimelineFigures(
     teamId,
-    shown?.sim,
+    timelineSim,
     shown?.own,
     figures || !!kqmOverrides,
     figures ? undefined : kqmOverrides
@@ -1967,10 +2146,19 @@ function WriterModal({
   }, [frameDefaults, result])
   const timingEdited =
     timing.swapFrames !== undefined ||
-    timing.rotations !== undefined ||
     keys.some((k) => Object.keys(frameData[k] ?? {}).length > 0) ||
     (!!result &&
       Object.keys(frameOverrides(result.rotation, timing.edits)).length > 0)
+  const updateRotationsTiming = (next: RotationTimingSettings) => {
+    if (
+      next.rotations !== timing.rotations ||
+      next.countOpener !== timing.countOpener
+    ) {
+      setTimelinePin(undefined)
+      setWhole(undefined)
+    }
+    setTiming(next)
+  }
 
   const seconds = result ? writtenSeconds(result) : undefined
   const waited = result ? writtenWaits(result) : undefined
@@ -1982,8 +2170,13 @@ function WriterModal({
   const hadRotation = Object.values(scopeAttacks(database, teamId, !!kqm)).some(
     (a) => !!a?.length
   )
-  // (typed since the preview's play, which waits for a pause on a heavy team: used as it is now)
-  const stale = deferred !== text || deferredOpener !== openerText
+  // (changed since the preview's play, which waits for a pause on a heavy team: used as it is now)
+  const stale =
+    deferred !== text ||
+    deferredOpener !== openerText ||
+    deferredTiming !== timing ||
+    deferredFrameData !== frameData ||
+    (!!sacHolders.length && sacPreview?.args !== playArgs)
   const apply = () => {
     if (!result?.sim && !stale) return
     const applied =
@@ -2022,9 +2215,6 @@ function WriterModal({
     onClose()
   }
 
-  const overrides = result?.rotation
-    ? frameOverrides(result.rotation, timing.edits)
-    : {}
   const editedSteps = useMemo(
     () =>
       new Set(
@@ -2048,11 +2238,12 @@ function WriterModal({
       {/* (phones and tablets: the window scrolls as one; its footer stays at the bottom of the
           screen, so the card must not clip it) */}
       <CardThemed sx={{ overflow: { xs: 'visible', md: 'hidden' } }}>
-        {/* title, the timing inspector's toggle, close */}
+        {/* title, rotations counted dropdown, the timing inspector's toggle, close */}
         <Box
           sx={{
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 1,
             px: { xs: 2, sm: 2.5 },
             py: 1.5,
@@ -2071,6 +2262,12 @@ function WriterModal({
               )}
             />
           </Typography>
+          <RotationsDropdown
+            timing={timing}
+            hasOpener={openerShown && !!openerText.trim()}
+            onChange={updateRotationsTiming}
+            variant="outlined"
+          />
           <Button
             size="small"
             color="inherit"
@@ -2165,7 +2362,11 @@ function WriterModal({
                   }}
                 >
                   <EditorHead
-                    label={t('teamOpt.writer.loop', 'Rotation')}
+                    label={
+                      isDraft
+                        ? t('teamOpt.writer.rotationDraft', 'Rotation draft')
+                        : t('teamOpt.writer.loop', 'Rotation')
+                    }
                     aside={
                       <>
                         {isDraft && (
@@ -2179,14 +2380,31 @@ function WriterModal({
                               fontSize: 12.5,
                             }}
                           >
-                            {t('teamOpt.writer.revert', 'Undo')}
+                            {t('teamOpt.writer.discardDraft', 'Discard draft')}
                           </Button>
                         )}
-                        {searchButton?.({ text, names, setText })}
+                        {searchButton?.({
+                          text,
+                          names,
+                          setText,
+                          close: onClose,
+                          saved: {
+                            opener: openerShown ? openerText : '',
+                            timing,
+                            frameData,
+                          },
+                        })}
                         <TemplatesButton
                           templates={templates}
                           team={memberKeys}
                           onPick={pickTemplate}
+                          onStarter={() => {
+                            setText(
+                              starterRotation(names, templates[0]?.characterKey)
+                            )
+                            setOpenerText('')
+                            setOpenerShown(false)
+                          }}
                         />
                         <Button
                           size="small"
@@ -2316,7 +2534,9 @@ function WriterModal({
                 <WriterQuickRow
                   bar
                   members={members}
+                  constellations={ownTeam.constellations}
                   onInsert={insert}
+                  optionalSkill={sacHolders.length > 0}
                   into={
                     openerShown
                       ? target === 'opener'
@@ -2353,7 +2573,20 @@ function WriterModal({
                     )
                   }
                 />
-                {syntaxOpen && <SyntaxSheet members={members} names={names} />}
+                <OptionalSyntaxHint
+                  bar
+                  onInsert={insert}
+                  onToggleSyntax={
+                    !syntaxOpen ? () => setSyntaxOpen(true) : undefined
+                  }
+                />
+                {syntaxOpen && (
+                  <SyntaxSheet
+                    members={members}
+                    names={names}
+                    constellations={ownTeam.constellations}
+                  />
+                )}
               </Box>
               {!!warnings.length && (
                 <Box
@@ -2438,30 +2671,151 @@ function WriterModal({
                         edited={timing.swapFrames !== undefined}
                         onClick={() => toggleTiming(true)}
                       />
-                      {/* (the rotations counted are set on the page, beside the rotation: shown, not set) */}
-                      <SettingChip
-                        label={t('teamOpt.timing.counted', 'Counted')}
-                        value={
-                          firstRotations(timing) === undefined
-                            ? t('teamOpt.timing.steady', {
-                                defaultValue:
-                                  'Steady DPS (rot {{from}}–{{to}})',
-                                ...STEADY_RANGE,
-                              })
-                            : t('teamOpt.timing.firstN', {
-                                defaultValue: 'First {{count}}',
-                                count: firstRotations(timing),
-                              })
-                        }
-                        edited={firstRotations(timing) !== undefined}
-                      />
                     </Box>
                   </Box>
                   {waited && <WaitsWarning waited={waited} />}
+                  {!!sacSummary.length && (
+                    <Box sx={{ display: 'grid', gap: 0.5, px: 1.5, py: 0.75 }}>
+                      {sacSummary.map(({ key, percent }) => (
+                        <Typography key={key} sx={type.label} component="div">
+                          <CharacterName characterKey={key} gender={gender} />{' '}
+                          {t('teamOpt.writer.sacPercent', {
+                            defaultValue:
+                              '· Extra Skill used in {{percent}}% of sampled rotations',
+                            percent,
+                          })}
+                        </Typography>
+                      ))}
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {!wholeShown && examples.used && examples.skipped && (
+                          <Segmented
+                            size="small"
+                            value={
+                              sacView ??
+                              (timelineSim?.optionalSkills?.some(
+                                (step) =>
+                                  step.played &&
+                                  sacHolders.includes(step.characterKey)
+                              )
+                                ? 'used'
+                                : 'skipped')
+                            }
+                            options={[
+                              {
+                                value: 'used',
+                                label: t(
+                                  'teamOpt.writer.sacUsed',
+                                  'Extra Skill used'
+                                ),
+                              },
+                              {
+                                value: 'skipped',
+                                label: t(
+                                  'teamOpt.writer.sacSkipped',
+                                  'Extra Skill skipped'
+                                ),
+                              },
+                            ]}
+                            onChange={(value) => {
+                              setTimelinePin(undefined)
+                              setSacView(value as 'used' | 'skipped')
+                            }}
+                          />
+                        )}
+                        <Button
+                          size="small"
+                          aria-expanded={sacEnergyOpen}
+                          onClick={() => setSacEnergyOpen(!sacEnergyOpen)}
+                        >
+                          {t(
+                            'teamOpt.writer.sacEnergy',
+                            'Compare ER with Sacrificial'
+                          )}
+                        </Button>
+                      </Box>
+                      {!wholeShown &&
+                        sacView === 'skipped' &&
+                        examples.skipped && (
+                          <Typography sx={type.label}>
+                            {t(
+                              'teamOpt.writer.sacSkipReason',
+                              'The Skill was still on cooldown at E?.'
+                            )}
+                          </Typography>
+                        )}
+                      {sacEnergyOpen && !sacEnergy && (
+                        <Typography role="status" sx={type.label}>
+                          {t(
+                            'teamOpt.writer.sacEnergyLoading',
+                            'Calculating ER…'
+                          )}
+                        </Typography>
+                      )}
+                      {sacEnergyOpen && sacEnergy && !sacEnergy.noReset && (
+                        <Typography role="status" sx={type.label}>
+                          {t(
+                            'teamOpt.writer.sacEnergyUnavailable',
+                            'ER comparison unavailable.'
+                          )}
+                        </Typography>
+                      )}
+                      {sacEnergyOpen &&
+                        sacEnergy?.noReset &&
+                        sacEnergy.average && (
+                          <Box
+                            component="table"
+                            sx={{
+                              fontSize: 12,
+                              textAlign: 'right',
+                              width: '100%',
+                            }}
+                          >
+                            <thead>
+                              <tr>
+                                <th scope="col">
+                                  {t('teamOpt.writer.sacMember', 'Member')}
+                                </th>
+                                <th scope="col">
+                                  {t('teamOpt.writer.sacSafe', 'No reset')}
+                                </th>
+                                <th scope="col">
+                                  {t(
+                                    'teamOpt.writer.sacAverage',
+                                    'Average with Sacrificial'
+                                  )}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {team.members.map((key) => (
+                                <tr key={key}>
+                                  <th scope="row">
+                                    <CharacterName
+                                      characterKey={key}
+                                      gender={gender}
+                                    />
+                                  </th>
+                                  <td>
+                                    {sacEnergy.noReset?.[key] === undefined
+                                      ? '—'
+                                      : `${Math.ceil(sacEnergy.noReset[key]!)}%`}
+                                  </td>
+                                  <td>
+                                    {sacEnergy.average?.[key] === undefined
+                                      ? '—'
+                                      : `${Math.ceil(sacEnergy.average[key]!)}%`}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Box>
+                        )}
+                    </Box>
+                  )}
                   <RotationTimeline
                     {...timelineProps(
                       shown?.rotation ?? result.rotation,
-                      shown?.sim ?? result.sim
+                      timelineSim ?? result.sim
                     )}
                     stats={detailOpen ? undefined : momentStats}
                     effects={detailOpen ? undefined : momentEffects}
@@ -2587,7 +2941,7 @@ function WriterModal({
                         <RotationTimeline
                           {...timelineProps(
                             shown?.rotation ?? result.rotation,
-                            shown?.sim ?? result.sim
+                            timelineSim ?? result.sim
                           )}
                           detail
                           // (a bar here: its step selected and its moment pinned; the window stays,
@@ -2710,7 +3064,7 @@ function WriterModal({
             </Typography>
           )}
           <Button color="secondary" onClick={onClose}>
-            {t('teamOpt.runDialog.cancel', 'Cancel')}
+            {t('teamOpt.editor.close', 'Close')}
           </Button>
           <Button
             variant="contained"
@@ -2854,7 +3208,7 @@ function WaitsWarning({
         <InfoTooltipInline
           title={t(
             'teamOpt.writer.waitsTip',
-            'Played back to back, an action can still be on cooldown when the rotation reaches it again (a Burst used late in one rotation and early in the next): the team stands idle until it is ready. The time per rotation includes the waits, so they lower DPS. Use it later in the rotation or make the rotation longer. The timeline shows each wait hatched; All rotations shows them where they happen.'
+            'Played back to back, an action can still be on cooldown when the rotation reaches it again (a Burst used late in one rotation and early in the next): the team stands idle until it is ready. The time per rotation includes the waits, so they lower DPS. Use it later in the rotation, make the rotation longer, or write E? / Q? (or Q?/N4) to skip or replace it when not ready. The timeline shows each wait hatched; All rotations shows them where they happen.'
           )}
         />
       </Typography>
@@ -3280,13 +3634,16 @@ const keepFocus = (e: { preventDefault: () => void }) => e.preventDefault()
 /** One row under the writer: the members (insert their name) and the action words */
 export function WriterQuickRow({
   members,
+  constellations,
   onInsert,
   draft,
   into,
   trailing,
   bar,
+  optionalSkill,
 }: {
   members: readonly { characterKey: CharacterKey }[]
+  constellations?: Partial<Record<CharacterKey, number>>
   onInsert: (word: string) => void
   draft?: ReactNode
   /** The box the words go into, when there are several (shown with the row) */
@@ -3295,6 +3652,7 @@ export function WriterQuickRow({
   trailing?: ReactNode
   /** The writer's code panel: a bar along its bottom */
   bar?: boolean
+  optionalSkill?: boolean
 }) {
   const { t, i18n } = useTranslation(['page_team', 'charNames_gen'])
   const { gender } = useDBMeta()
@@ -3309,8 +3667,8 @@ export function WriterQuickRow({
     [members, i18n, gender]
   )
   const quickTokens = useMemo(
-    () => teamQuickTokens(members, memberNames, t),
-    [members, memberNames, t]
+    () => teamQuickTokens(members, memberNames, t, constellations),
+    [members, memberNames, t, constellations]
   )
   const chip = (theme: Theme) => ({
     height: 28,
@@ -3438,11 +3796,143 @@ export function WriterQuickRow({
           </ButtonBase>
         </Tooltip>
       ))}
+      {optionalSkill && (
+        <Tooltip
+          arrow
+          title={t('teamOpt.writer.sacOptionalTip', 'Use Skill again if ready')}
+        >
+          <ButtonBase
+            aria-label={t(
+              'teamOpt.writer.sacOptionalTip',
+              'Use Skill again if ready'
+            )}
+            onClick={() => onInsert('E?')}
+            onMouseDown={keepFocus}
+            sx={chip}
+          >
+            E?
+          </ButtonBase>
+        </Tooltip>
+      )}
       {(draft || trailing) && (
         <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
           {draft}
           {trailing}
         </Box>
+      )}
+    </Box>
+  )
+}
+
+/** Always-visible inline hint surfacing optional / fallback notation (`E?`, `Q?`, `Q?/N4`) */
+export function OptionalSyntaxHint({
+  onInsert,
+  onToggleSyntax,
+  bar,
+}: {
+  onInsert?: (word: string) => void
+  onToggleSyntax?: () => void
+  bar?: boolean
+}) {
+  const { t } = useTranslation('page_team')
+  const code = (token: string) => {
+    const sx = (theme: Theme) => ({
+      display: 'inline-flex',
+      alignItems: 'center',
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      fontSize: 11.5,
+      lineHeight: 1.4,
+      px: 0.625,
+      py: 0.125,
+      borderRadius: 0.75,
+      color: 'text.primary',
+      bgcolor: alpha(theme.palette.text.primary, 0.06),
+      boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.text.primary, 0.12)}`,
+      ...(onInsert && {
+        cursor: 'pointer',
+        ...quickSx,
+        '&:hover, &.Mui-focusVisible': {
+          bgcolor: alpha(theme.palette.primary.main, 0.12),
+          boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.5)}`,
+        },
+      }),
+    })
+    return onInsert ? (
+      <ButtonBase
+        component="button"
+        type="button"
+        onMouseDown={keepFocus}
+        onClick={() => onInsert(token)}
+        aria-label={t('teamOpt.writer.insertToken', {
+          defaultValue: 'Insert {{token}}',
+          token,
+        })}
+        sx={sx}
+      >
+        {token}
+      </ButtonBase>
+    ) : (
+      <Box component="code" sx={sx}>
+        {token}
+      </Box>
+    )
+  }
+  return (
+    <Box
+      sx={(theme) => ({
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        columnGap: 0.625,
+        rowGap: 0.5,
+        fontSize: 12,
+        lineHeight: 1.5,
+        color: 'text.secondary',
+        ...(bar && {
+          px: { xs: 1.25, sm: 1.75 },
+          py: 0.875,
+          borderTop: `1px solid ${tokens.hairline}`,
+          bgcolor: alpha(theme.palette.common.black, 0.08),
+        }),
+      })}
+    >
+      <span>{t('teamOpt.writer.optionalHint.prefix', 'Tip:')}</span>
+      {code('E?')}
+      <span>{t('teamOpt.writer.optionalHint.slash', '/')}</span>
+      {code('Q?')}
+      <span>
+        {t(
+          'teamOpt.writer.optionalHint.ready',
+          'cast only when ready (skip instead of waiting) ·'
+        )}
+      </span>
+      {code('Q?/N4')}
+      <span>{t('teamOpt.writer.optionalHint.or', 'or')}</span>
+      {code('E?/N2')}
+      <span>
+        {t(
+          'teamOpt.writer.optionalHint.fallback',
+          'play a fallback when not ready ·'
+        )}
+      </span>
+      {code('3[N3 CA]')}
+      <span>{t('teamOpt.writer.optionalHint.repeat', 'repeats a combo')}</span>
+      {onToggleSyntax && (
+        <ButtonBase
+          type="button"
+          onClick={onToggleSyntax}
+          sx={{
+            ml: { sm: 'auto' },
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'primary.main',
+            borderRadius: 0.75,
+            px: 0.5,
+            '&:hover': { textDecoration: 'underline' },
+          }}
+        >
+          {t('teamOpt.writer.optionalHint.more', 'More syntax')}
+        </ButtonBase>
       )}
     </Box>
   )
@@ -3464,6 +3954,7 @@ function EditorHead({
     <Box
       sx={{
         display: 'flex',
+        flexWrap: 'wrap',
         alignItems: 'center',
         gap: 0.75,
         minHeight: 30,
@@ -3476,10 +3967,14 @@ function EditorHead({
       {info && <InfoTooltipInline title={info} />}
       <Box
         sx={{
-          ml: 'auto',
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
           gap: 0.5,
+          minWidth: 0,
+          maxWidth: '100%',
+          ml: { xs: 0, sm: 'auto' },
+          flexBasis: { xs: '100%', sm: 'auto' },
         }}
       >
         {aside}
@@ -3492,14 +3987,16 @@ function EditorHead({
 function SyntaxSheet({
   members,
   names,
+  constellations,
 }: {
   members: readonly { characterKey: CharacterKey }[]
   names: readonly RotationMember[]
+  constellations?: Partial<Record<CharacterKey, number>>
 }) {
   const { t } = useTranslation('page_team')
   const { teamRows, generalRows } = useMemo(
-    () => teamSyntaxRows(members, names, t),
-    [members, names, t]
+    () => teamSyntaxRows(members, names, t, constellations),
+    [members, names, t, constellations]
   )
   const listSx = {
     m: 0,

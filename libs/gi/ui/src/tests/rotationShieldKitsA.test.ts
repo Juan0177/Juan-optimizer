@@ -81,14 +81,19 @@ describe('kit shield markers', () => {
   })
 
   it('Columbina: C1 a Lunar-Crystallize Gravity Interference gives her the 8 s Rainsea Shield', () => {
-    const members: CharacterKey[] = ['Columbina', 'Zhongli', 'Ningguang']
+    const members: CharacterKey[] = ['Columbina', 'Zibai', 'Ningguang']
     // (C1's cast-time Gravity Interference, 21 frames in: Lunar-Crystallize in a Geo team)
     const { start, shields } = run('Columbina E W2', members, { Columbina: 1 })
-    expect(shields).toEqual([[start('Columbina') + 21, 480, 'Columbina', '']])
+    expect(shields).toEqual([[start('Columbina') + 21, 480, '', '']])
     expect(run('Columbina E W2', members).shields).toEqual([])
+    expect(
+      run('Columbina E W2', ['Columbina', 'Zhongli', 'Ningguang'], {
+        Columbina: 1,
+      }).shields
+    ).toEqual([])
     // (a Lunar-Charged one gives none)
     expect(
-      run('Columbina E W2', ['Columbina', 'Fischl', 'Beidou'], {
+      run('Columbina E W2', ['Columbina', 'Ineffa', 'Beidou'], {
         Columbina: 1,
       }).shields
     ).toEqual([])

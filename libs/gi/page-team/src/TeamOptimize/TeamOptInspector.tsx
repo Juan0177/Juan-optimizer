@@ -21,11 +21,14 @@ import {
   teamOptSetKey,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
+import LeaderboardRoundedIcon from '@mui/icons-material/LeaderboardRounded'
 import UndoIcon from '@mui/icons-material/Undo'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
+  alpha,
   Box,
   Button,
+  CircularProgress,
   LinearProgress,
   MenuItem,
   TextField,
@@ -39,13 +42,13 @@ import { SetLines } from './KqmBuildView'
 import {
   CopyRankingButton,
   compactFieldSx,
-  type RankOption,
   RankList,
+  type RankOption,
   RankTabs,
   WeaponLabel,
 } from './KqmComparison'
 import { MemberAvatar } from './MemberAvatar'
-import { insetSx, numSx, quickSx, type } from './ui'
+import { insetSx, numSx, quickSx, tokens, type } from './ui'
 
 /** Per result: a pick set's team and each member's rankings under it */
 const worked = new WeakMap<
@@ -87,6 +90,7 @@ export function TeamOptInspector({
   characterKey,
   result,
   optionsRunning,
+  onRank,
   session,
   picks,
   onPicks,
@@ -99,6 +103,7 @@ export function TeamOptInspector({
   result: TeamOptResult
   /** Its first rankings are still being searched */
   optionsRunning: boolean
+  onRank?: () => void
   session: () => Promise<TeamOptSession | undefined>
   picks: TeamOptPicks
   onPicks: (picks: TeamOptPicks) => void
@@ -489,66 +494,211 @@ export function TeamOptInspector({
               )}
             />
             <Box sx={{ flex: 1 }} />
-            <CopyRankingButton
-              options={list}
-              kind={category === 0 ? 'weapons' : 'sets'}
-              rotationTime={rotationTime}
-            />
-          </Box>
-          {/* (a thin line while the rankings update; its space is always kept) */}
-          <Box sx={{ height: 2, mb: 0.5 }}>
-            {busy && (
-              <LinearProgress
-                aria-label={t(
-                  'teamOpt.kqm.updatingRankings',
-                  'Updating rankings'
-                )}
-                sx={{ height: 2, borderRadius: 1 }}
+            {list.length > 0 && (
+              <CopyRankingButton
+                options={list}
+                kind={category === 0 ? 'weapons' : 'sets'}
+                rotationTime={rotationTime}
               />
             )}
           </Box>
+          {/* (a thin line while existing rankings update; its space is kept when a list is shown) */}
+          {!!rankings && (
+            <Box sx={{ height: 2, mb: 0.5 }}>
+              {busy && (
+                <LinearProgress
+                  aria-label={t(
+                    'teamOpt.kqm.updatingRankings',
+                    'Updating rankings'
+                  )}
+                  sx={{ height: 2, borderRadius: 1 }}
+                />
+              )}
+            </Box>
+          )}
           <Box
             role="tabpanel"
             id={`kqm-${characterKey}-ranking`}
             aria-labelledby={`kqm-${characterKey}-${category === 0 ? 'weapons' : 'sets'}`}
             sx={{
-              opacity: busy ? 0.55 : 1,
+              opacity: busy && rankings ? 0.55 : 1,
               transition: 'opacity .18s',
-              // (room for the rankings while they are first worked out: they come in without
-              // moving the page)
-              ...(!rankings && optionsRunning && { minHeight: 240 }),
             }}
           >
-            <RankList
-              key={category}
-              options={list}
-              rotationTime={rotationTime}
-              selected={(o) =>
-                category === 0
-                  ? o.option.weaponId === pick.weaponId
-                  : teamOptSetKey(o.option) === teamOptSetKey(pick)
-              }
-              onSelect={(o) =>
-                choose(
+            {!rankings && !busy && onRank ? (
+              <Box
+                sx={{
+                  ...insetSx,
+                  borderColor: tokens.hairlineStrong,
+                  minHeight: 136,
+                  px: { xs: 2, sm: 2.5 },
+                  py: 2.25,
+                  display: 'flex',
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  alignItems: { xs: 'flex-start', sm: 'center' },
+                  justifyContent: 'space-between',
+                  gap: 2,
+                  backgroundImage: `radial-gradient(420px 180px at 0% 0%, ${alpha(tokens.gold, 0.08)}, transparent 70%)`,
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 1.5,
+                    minWidth: 0,
+                  }}
+                >
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 2,
+                      flexShrink: 0,
+                      display: 'grid',
+                      placeItems: 'center',
+                      color: tokens.gold,
+                      bgcolor: alpha(tokens.gold, 0.1),
+                      border: `1px solid ${alpha(tokens.gold, 0.24)}`,
+                    }}
+                  >
+                    <LeaderboardRoundedIcon sx={{ fontSize: 19 }} />
+                  </Box>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: 14.5,
+                        fontWeight: 650,
+                        letterSpacing: '-0.005em',
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {t(
+                        'teamOpt.inspect.rankTitle',
+                        'Rank weapons & artifact sets'
+                      )}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        ...type.label,
+                        mt: 0.4,
+                        lineHeight: 1.45,
+                        maxWidth: 420,
+                      }}
+                    >
+                      {t(
+                        'teamOpt.inspect.rankBody',
+                        'Compare alternative weapons and artifact sets from your inventory while teammates keep their builds.'
+                      )}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Button
+                  size="small"
+                  onClick={onRank}
+                  startIcon={<LeaderboardRoundedIcon sx={{ fontSize: 16 }} />}
+                  sx={{
+                    flexShrink: 0,
+                    px: 1.75,
+                    py: 0.75,
+                    borderRadius: tokens.radius.control,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    textTransform: 'none',
+                    color: tokens.gold,
+                    bgcolor: alpha(tokens.gold, 0.12),
+                    border: `1px solid ${alpha(tokens.gold, 0.38)}`,
+                    ...quickSx,
+                    '&:hover': {
+                      bgcolor: alpha(tokens.gold, 0.2),
+                      borderColor: alpha(tokens.gold, 0.65),
+                    },
+                  }}
+                >
+                  {t('teamOpt.result.rankEquipment', 'Rank equipment')}
+                </Button>
+              </Box>
+            ) : !rankings && busy ? (
+              <Box
+                sx={{
+                  ...insetSx,
+                  borderColor: tokens.hairlineStrong,
+                  minHeight: 136,
+                  px: { xs: 2, sm: 2.5 },
+                  py: 2.25,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                }}
+              >
+                <CircularProgress
+                  size={20}
+                  thickness={4.5}
+                  sx={{ color: tokens.gold, flexShrink: 0 }}
+                />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+                    {t('teamOpt.kqm.updatingRankings', 'Updating rankings')}
+                  </Typography>
+                  <Typography sx={{ ...type.label, mt: 0.25 }}>
+                    {t(
+                      'teamOpt.inspect.rankingWait',
+                      'Searching alternative weapons and artifact sets from your inventory…'
+                    )}
+                  </Typography>
+                </Box>
+              </Box>
+            ) : !rankings ? (
+              <Box
+                sx={{
+                  ...insetSx,
+                  minHeight: 136,
+                  px: { xs: 2, sm: 2.5 },
+                  py: 2.25,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                <Typography sx={type.label}>
+                  {t(
+                    'teamOpt.inspect.rankStale',
+                    'Run Team optimize again to rank equipment for these settings.'
+                  )}
+                </Typography>
+              </Box>
+            ) : (
+              <RankList
+                key={category}
+                options={list}
+                rotationTime={rotationTime}
+                selected={(o) =>
                   category === 0
-                    ? { ...pick, weaponId: o.option.weaponId }
-                    : {
-                        weaponId: pick.weaponId,
-                        set: o.option.set,
-                        setPair: o.option.setPair,
-                      }
-                )
-              }
-              disabled={false}
-              label={(o) => {
-                const weapon = database.weapons.get(o.option.weaponId)
-                return category === 0 && weapon ? (
-                  <WeaponLabel weapon={weapon} />
-                ) : (
-                  <SetLines sets={o.sets} tooltipPlacement="left" />
-                )
-              }}
-            />
+                    ? o.option.weaponId === pick.weaponId
+                    : teamOptSetKey(o.option) === teamOptSetKey(pick)
+                }
+                onSelect={(o) =>
+                  choose(
+                    category === 0
+                      ? { ...pick, weaponId: o.option.weaponId }
+                      : {
+                          weaponId: pick.weaponId,
+                          set: o.option.set,
+                          setPair: o.option.setPair,
+                        }
+                  )
+                }
+                disabled={false}
+                label={(o) => {
+                  const weapon = database.weapons.get(o.option.weaponId)
+                  return category === 0 && weapon ? (
+                    <WeaponLabel weapon={weapon} />
+                  ) : (
+                    <SetLines sets={o.sets} tooltipPlacement="left" />
+                  )
+                }}
+              />
+            )}
           </Box>
         </Box>
       </Box>

@@ -42,6 +42,7 @@ export function TeamOptimizeStart({
   members,
   onWrite,
   onTemplate,
+  onStarter,
   onManual,
   footer,
   disabled,
@@ -49,6 +50,7 @@ export function TeamOptimizeStart({
   members: CharacterKey[]
   onWrite: () => void
   onTemplate: (template: RotationTemplate) => void
+  onStarter: () => void
   onManual: () => void
   footer?: ReactNode
   disabled?: boolean
@@ -105,6 +107,7 @@ export function TeamOptimizeStart({
           templates={templates}
           team={members}
           onPick={onTemplate}
+          onStarter={onStarter}
         />
       )}
       {footer && <Box sx={{ mt: 2 }}>{footer}</Box>}

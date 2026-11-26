@@ -76,7 +76,9 @@ import {
   calculateEnergyRecharge,
   isCalcEnergyWeapon,
   isFavonius,
+  type RotationEnergy,
   syncEnergyCalculator,
+  withRotationEnergy,
 } from './energyCalc'
 import { itemConditionals } from './itemConditionals'
 import type { KqmBuiltProblem } from './kqmBuild'
@@ -93,6 +95,7 @@ import {
 } from './lowHpUptime'
 import { constValue, teamRotationNodes } from './objective'
 import { HEXEREI_CHARACTERS } from './rotation/gearEffects'
+import { isSacrificialWeapon } from './rotation/sacrificial'
 import type { RotationCalculation, SimGear } from './rotation/types'
 import { memberCtx } from './ruleConditionals'
 import type { TeamOptEvaluation } from './solve'
@@ -337,8 +340,13 @@ export interface KqmResult {
 /** The written rotation played for KQM builds: each member's attacks per rotation */
 export interface KqmPlayed {
   attacks: TeamOpt['attacks']
-  /** Seconds per rotation (absent: the team's rotation time) */
+  /** Seconds per rotation, rounded to 0.1 s for display and saved settings (absent: the team's rotation time) */
   rotationTime?: number
+  /** Exact seconds per rotation (unrounded, for rotation search DPS without 0.1 s step noise) */
+  exactTime?: number
+  energy?: RotationEnergy
+  /** The same rotation's pace with Sacrificial resets disabled, when applicable. */
+  energyRotationTime?: number
   /** What each rotation waits for to be ready, seconds */
   stalls?: { label: string; seconds: number }[]
 }
@@ -986,7 +994,7 @@ export const kqmOwnSettings = (kqm: TeamOptKqm | undefined) => ({
 export function kqmRuleConditionals(
   database: ArtCharDatabase,
   teamId: string,
-  teamOpt: Pick<TeamOpt, 'attacks'>
+  teamOpt: Pick<TeamOpt, 'attacks' | 'rotationTime'>
 ): Partial<Record<CharacterKey, ReturnType<typeof itemConditionals>>> {
   return Object.fromEntries(
     teamOptMembers(database, teamId).map((m) => {
@@ -1044,6 +1052,7 @@ export function kqmTeamOverrides(
   }
   const rules = kqmRuleConditionals(database, teamId, {
     attacks: result.played?.attacks ?? teamOpt.attacks,
+    rotationTime: result.played ? undefined : teamOpt.rotationTime,
   })
   return {
     arts,
@@ -1443,22 +1452,33 @@ async function runKqm({
   const rotationTimeNow = () => played?.rotationTime ?? teamOpt.rotationTime
   // the calculator's settings as they fit the team now (members, rotation time, constellations
   // may have changed since they were saved)
-  const calculatorFor = (rotationTime: number | undefined) =>
+  const calculatorFor = (
+    rotationTime: number | undefined,
+    simulation = played
+  ) =>
     kqm.energySource === 'calculator' && kqm.energyCalculator
       ? {
-          ...syncEnergyCalculator(
+          ...withRotationEnergy(
+            syncEnergyCalculator(
+              keys,
+              kqm.energyCalculator,
+              rotationTime ?? kqm.energyCalculator.rotationTime,
+              teamOpt.onField ?? keys[0],
+              Object.fromEntries(
+                keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
+              )
+            ),
             keys,
-            kqm.energyCalculator,
-            rotationTime ?? kqm.energyCalculator.rotationTime,
-            teamOpt.onField ?? keys[0],
-            Object.fromEntries(
-              keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
-            )
+            simulation?.energyRotationTime !== undefined
+              ? simulation.energy
+              : undefined
           ),
           rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
         }
       : undefined
-  let calculator = calculatorFor(rotationTimeNow())
+  let calculator = calculatorFor(
+    played?.energyRotationTime ?? rotationTimeNow()
+  )
   if (kqm.energySource === 'calculator') {
     if (!calculator)
       throw new Error(
@@ -1686,7 +1706,10 @@ async function runKqm({
   // over them (the members' own switches for their gear play no part: `ownBuild`)
   // (from what the members do in the rotation: again when it is played differently)
   const ruleConditionals = () => {
-    const ctx = kqmRuleConditionals(database, teamId, { attacks: attacksNow() })
+    const ctx = kqmRuleConditionals(database, teamId, {
+      attacks: attacksNow(),
+      rotationTime: played ? undefined : teamOpt.rotationTime,
+    })
     return {
       ctx,
       extra: Object.fromEntries(
@@ -1731,15 +1754,18 @@ async function runKqm({
     return { arts, weapons }
   }
   // (every member has a KQM build in `state`: its weapon is the one counted)
-  const filtersFor = (state: Partial<Record<CharacterKey, KqmBuild>>) => {
+  const filtersFor = (
+    state: Partial<Record<CharacterKey, KqmBuild>>,
+    settings = calculator
+  ) => {
     const relief = kqmEnergyRelief(
       Object.values(state).map((b) => b!.weapon.key),
       teamOpt
     )
-    const calculated = calculator
+    const calculated = settings
       ? calculateEnergyRecharge(
           keys,
-          calculator,
+          settings,
           Object.fromEntries(
             Object.entries(state).map(([ck, b]) => [ck, b!.weapon.key])
           ),
@@ -1782,8 +1808,15 @@ async function runKqm({
   ) => {
     const own = state[ck]
     if (!own || own.weapon.key === weapon.key) return []
-    const before = filtersFor(state)
-    const after = filtersFor({ ...state, [ck]: { ...own, weapon } })
+    const candidate = { ...state, [ck]: { ...own, weapon } }
+    const before = filtersFor(
+      state,
+      candidateCalculator(sacrificialPlay(state))
+    )
+    const after = filtersFor(
+      candidate,
+      candidateCalculator(sacrificialPlay(candidate))
+    )
     return optimized
       .map((m) => m.characterKey)
       .filter(
@@ -1908,20 +1941,21 @@ async function runKqm({
       return kept
     }
     const withWeapon = { ...state, [ck]: { ...state[ck]!, weapon } }
+    const candidate = sacrificialPlay(withWeapon)
+    const settings = candidateCalculator(candidate)
+    const filters = filtersFor(withWeapon, settings)
     const { arts, weapons } = gearOf(withWeapon)
     delete arts[ck]
     const built = builder.build(teamId, gender, {
       dyn: ck,
       arts,
       attacks: kqmProblemAttacks(
-        attacksNow(),
+        candidate?.attacks ?? attacksNow(),
         ck,
         withWeapon,
         setsOf(ck)?.sets
       ),
-      statFilters: calculator
-        ? filtersFor(withWeapon)
-        : { [ck]: filtersFor(withWeapon)[ck] ?? {} },
+      statFilters: settings ? filters : { [ck]: filters[ck] ?? {} },
       weapons,
       extraConditionals,
       conditionalOverrides,
@@ -2989,26 +3023,56 @@ async function runKqm({
 
   let replayedFor: string | undefined
   let lastReplayed: Partial<Record<CharacterKey, KqmBuild>> = {}
-  /**
-   * The rotation played for `state` (with its weapons and sets when `withGear`): when it plays
-   * differently from before, the run counts it from now on (its time, the ER calculator's targets
-   * and the rule effects follow) and true is returned
-   */
-  const replayFor = (
+  const sacrificialPlays = new Map<string, KqmPlayed | undefined>()
+  const sacKey = (state: Partial<Record<CharacterKey, KqmBuild>>) =>
+    optimized
+      .map(({ characterKey: ck }) => {
+        const weapon = state[ck]?.weapon
+        return weapon && isSacrificialWeapon(weapon.key)
+          ? `${weapon.key}@${weapon.refinement}`
+          : ''
+      })
+      .join('|')
+  // Candidates with different reset weapons can add or remove whole actions. Keep the
+  // base play for all the other weapon/set effects, and reuse simulations across stat rolls.
+  function sacrificialPlay(state: Partial<Record<CharacterKey, KqmBuild>>) {
+    if (!replay) return undefined
+    const signature = sacKey(state)
+    if (signature === sacKey(lastReplayed)) return undefined
+    if (sacrificialPlays.has(signature)) return sacrificialPlays.get(signature)
+    const candidate = { ...lastReplayed }
+    for (const { characterKey: ck } of optimized) {
+      const build = state[ck]
+      if (!build) continue
+      const base = lastReplayed[ck]
+      if (
+        !base ||
+        isSacrificialWeapon(base.weapon.key) ||
+        isSacrificialWeapon(build.weapon.key)
+      )
+        candidate[ck] = { ...(base ?? build), weapon: build.weapon }
+    }
+    const simulation = playBuilds(candidate, true)
+    sacrificialPlays.set(signature, simulation)
+    if (sacrificialPlays.size > 32)
+      sacrificialPlays.delete(sacrificialPlays.keys().next().value!)
+    return simulation
+  }
+  function candidateCalculator(simulation?: KqmPlayed) {
+    return simulation
+      ? calculatorFor(
+          simulation.energyRotationTime ?? simulation.rotationTime,
+          simulation
+        )
+      : calculator
+  }
+
+  function playBuilds(
     state: Partial<Record<CharacterKey, KqmBuild>>,
     withGear: boolean
-  ) => {
-    if (!replay) return false
-    const replaying = withGear
-      ? optimized
-          .map(({ characterKey: ck }) => (state[ck] ? buildId(state[ck]!) : ''))
-          .join(';')
-      : ''
-    if (withGear && replaying === replayedFor) return false
-    replayedFor = replaying
-    if (withGear) lastReplayed = { ...state }
+  ) {
     const { arts, weapons } = gearOf(state)
-    const next = replay({
+    return replay?.({
       constellations,
       // (every member's allowed sets and weapons as candidates: the effects that only open their
       // own buff windows are played for each of them, so the search judges every option with
@@ -3032,13 +3096,35 @@ async function runKqm({
         ...kqmOwnSettings(kqm),
       },
     })
+  }
+
+  /**
+   * The rotation played for `state` (with its weapons and sets when `withGear`): when it plays
+   * differently from before, the run counts it from now on (its time, the ER calculator's targets
+   * and the rule effects follow) and true is returned
+   */
+  const replayFor = (
+    state: Partial<Record<CharacterKey, KqmBuild>>,
+    withGear: boolean
+  ) => {
+    if (!replay) return false
+    const replaying = withGear
+      ? optimized
+          .map(({ characterKey: ck }) => (state[ck] ? buildId(state[ck]!) : ''))
+          .join(';')
+      : ''
+    if (withGear && replaying === replayedFor) return false
+    replayedFor = replaying
+    if (withGear) lastReplayed = { ...state }
+    sacrificialPlays.clear()
+    const next = playBuilds(state, withGear)
     if (!next) return false
     const playedId = (p: KqmPlayed) =>
-      JSON.stringify([p.attacks, p.rotationTime])
+      JSON.stringify([p.attacks, p.rotationTime, p.energyRotationTime])
     const changed = !played || playedId(next) !== playedId(played)
     played = next
     if (!changed) return false
-    calculator = calculatorFor(rotationTimeNow())
+    calculator = calculatorFor(played.energyRotationTime ?? rotationTimeNow())
     ;({ ctx: ctxConditionals, extra: extraConditionals } = ruleConditionals())
     // (problems and searches were for the attacks before: a comparison takes its run's for
     // these, if any)

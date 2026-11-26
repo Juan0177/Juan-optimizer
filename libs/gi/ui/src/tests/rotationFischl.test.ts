@@ -121,7 +121,11 @@ it('snapshots Oz’s Electro DMG Bonus with his ATK and CRIT DMG at his spawn (g
   const shot = sim.hits.find((h) => h.label === 'Oz')!
   expect(shot.statSnapshots?.map((s) => [s.stat, s.t])).toEqual([
     ['atk', 18],
+    ['critRate_', 18],
     ['critDMG_', 18],
+    ['eleMas', 18],
     ['electro_dmg_', 18],
+    ['all_dmg_', 18],
+    ['skill_dmg_', 18],
   ])
 })

@@ -124,7 +124,9 @@ function sakuraTick(c: SimContext, s: YaeState, totem: Totem, c2: boolean) {
   }
   // C4: a lightning hit gives the team +20% Electro DMG for 5 s, and Yae 8 Energy (5 s ICD)
   if (c.constellation('YaeMiko') >= 4) {
-    c.buff('YaeMiko', ['YaeMiko', 'c4'], 'hit', 1, 5 * 60)
+    c.buff('YaeMiko', ['YaeMiko', 'c4'], 'hit', 1, 5 * 60, {
+      hitlag: 'recipient',
+    })
     if (t + 1 >= s.c4EnergyReady) {
       s.c4EnergyReady = t + 1 + 301
       flatEnergy(c, 1, 8, 'Yae Miko C4', { owner: 'YaeMiko' })
@@ -183,6 +185,12 @@ export const kit: KitModel = {
     // Revelation is unlocked (gcsim's default): longer Sakura, enhanced lightning, C1/C2/C4/C6
     ctx.state('YaeMiko', ['YaeMiko', 'lockRevelation'], 'on')
   },
+  simOnlyBuffs: () => [
+    ['YaeMiko', 'c1'],
+    ['YaeMiko', 'c2'],
+    ['YaeMiko', 'c4'],
+    ['YaeMiko', 'lockStellarRadianceSc'],
+  ],
   act(ctx, s: YaeState, action, previous) {
     const swappedIn = !s.onField
     s.onField = true
@@ -210,7 +218,7 @@ export const kit: KitModel = {
         // ICDGroupDamageSequence 1, 0, 0, ...), so one target takes one hit, as in the game (the
         // boxes kqmsim lands for 0 damage are left out)
         const { distance, radius } = ctx.target
-        let gate = -Infinity
+        let gate = Number.NEGATIVE_INFINITY
         for (let i = 0; i < 5; i++) {
           const centre = 1.65 * (i + 1)
           if (

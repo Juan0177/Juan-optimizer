@@ -1,5 +1,7 @@
+import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ActionResult, KitModel, SimContext } from '../types'
 import {
+  flatEnergy,
   GCSIM,
   type NormalHit,
   normalString,

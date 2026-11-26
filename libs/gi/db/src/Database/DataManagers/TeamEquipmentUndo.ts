@@ -22,3 +22,13 @@ export const teamEquipmentUndoSchema = z.object({
   loadouts: z.record(z.string(), z.string()).optional(),
 })
 export type TeamEquipmentUndo = z.infer<typeof teamEquipmentUndoSchema>
+
+export const teamBuildSaveSchema = z.record(
+  z.string(),
+  z.object({
+    previousType: z.enum(['equipped', 'real']),
+    previousBuildId: z.string(),
+    savedBuildId: z.string(),
+  })
+)
+export type TeamBuildSave = z.infer<typeof teamBuildSaveSchema>

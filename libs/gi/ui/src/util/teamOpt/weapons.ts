@@ -10,6 +10,33 @@ import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type { TeamOptMember } from './data'
 import { calculateEnergyRecharge } from './energyCalc'
 
+export const DEFAULT_WEAPON_MIN_RARITY = 4
+export const DEFAULT_WEAPON_MIN_LEVEL = 70
+
+/**
+ * Weapons shown and enabled by default in Team optimize: 4★ and 5★ weapons at level 70+.
+ * 1–3★ weapons and weapons below level 70 are hidden and disabled by default unless explicitly
+ * ticked by the user (`TeamOpt.includedWeapons`).
+ */
+export function isDefaultTeamOptWeapon(
+  weapon: Pick<ICachedWeapon, 'key' | 'level'>
+): boolean {
+  return (
+    (getWeaponStat(weapon.key)?.rarity ?? 0) >= DEFAULT_WEAPON_MIN_RARITY &&
+    weapon.level >= DEFAULT_WEAPON_MIN_LEVEL
+  )
+}
+
+/** Whether `weapon` is excluded globally (explicitly excluded, or hidden-by-default and not included) */
+export function isWeaponGloballyExcluded(
+  weapon: Pick<ICachedWeapon, 'id' | 'key' | 'level'>,
+  teamOpt: Pick<TeamOpt, 'excludedWeapons' | 'includedWeapons'>
+): boolean {
+  if (isDefaultTeamOptWeapon(weapon))
+    return teamOpt.excludedWeapons.includes(weapon.id)
+  return !teamOpt.includedWeapons?.includes(weapon.id)
+}
+
 /** Whether a weapon can be wielded by `characterKey` */
 export function canWield(characterKey: CharacterKey, weapon: ICachedWeapon) {
   return (
@@ -17,15 +44,18 @@ export function canWield(characterKey: CharacterKey, weapon: ICachedWeapon) {
   )
 }
 
-/** Whether `weaponId` is left out for `characterKey` (globally or for this member) */
+/** Whether `weapon` is left out for `characterKey` (globally or for this member) */
 export function isWeaponExcludedFor(
   characterKey: CharacterKey,
-  weaponId: string,
-  teamOpt: Pick<TeamOpt, 'excludedWeapons' | 'excludedWeaponMembers'>
+  weapon: Pick<ICachedWeapon, 'id' | 'key' | 'level'>,
+  teamOpt: Pick<
+    TeamOpt,
+    'excludedWeapons' | 'includedWeapons' | 'excludedWeaponMembers'
+  >
 ): boolean {
   return (
-    teamOpt.excludedWeapons.includes(weaponId) ||
-    !!teamOpt.excludedWeaponMembers?.[weaponId]?.includes(characterKey)
+    isWeaponGloballyExcluded(weapon, teamOpt) ||
+    !!teamOpt.excludedWeaponMembers?.[weapon.id]?.includes(characterKey)
   )
 }
 
@@ -80,17 +110,19 @@ export function teamOptWeaponCandidates(
   teamLocations: ReadonlySet<string>,
   taken: ReadonlySet<string>
 ): ICachedWeapon[] {
-  const excludedFor = (ck: CharacterKey, weaponId: string) =>
-    isWeaponExcludedFor(ck, weaponId, teamOpt)
+  const excludedFor = (ck: CharacterKey, weapon: ICachedWeapon) =>
+    isWeaponExcludedFor(ck, weapon, teamOpt)
   const current = database.weapons.get(currentWeaponId)
   // equipping a teammate's weapon gives it this one's: not when it is left out
-  const currentExcluded = excludedFor(member.characterKey, currentWeaponId)
+  const currentExcluded = current
+    ? excludedFor(member.characterKey, current)
+    : false
   const holderCanSwap = (weapon: ICachedWeapon) => {
     if (!weapon.location || weapon.location === member.location) return true
     if (!teamLocations.has(weapon.location)) return true
     if (currentExcluded) return false
     const holder = database.chars.LocationToCharacterKey(weapon.location)
-    if (!current || !excludedFor(holder, current.id)) return true
+    if (!current || !excludedFor(holder, current)) return true
     // If giving `current` to `holder` would leave `holder` on a weapon excluded for them,
     // allow it only when `holder` has another untaken weapon they can switch to.
     return database.weapons.values.some(
@@ -99,7 +131,7 @@ export function teamOptWeaponCandidates(
         w.id !== current.id &&
         !taken.has(w.id) &&
         canWield(holder, w) &&
-        !excludedFor(holder, w.id)
+        !excludedFor(holder, w)
     )
   }
   const rarity = (weapon: ICachedWeapon) =>
@@ -109,7 +141,7 @@ export function teamOptWeaponCandidates(
       (weapon) =>
         weapon.id !== currentWeaponId &&
         canWield(member.characterKey, weapon) &&
-        !excludedFor(member.characterKey, weapon.id) &&
+        !excludedFor(member.characterKey, weapon) &&
         !taken.has(weapon.id) &&
         holderCanSwap(weapon)
     )
@@ -122,7 +154,7 @@ export function teamOptWeaponCandidates(
   const keepCurrent =
     current &&
     !taken.has(current.id) &&
-    (!excludedFor(member.characterKey, current.id) || !others.length)
+    (!excludedFor(member.characterKey, current) || !others.length)
   const candidates = keepCurrent ? [current, ...others] : others
   // Copies of the same weapon (key, level, ascension, refinement, energy and member settings) give
   // the same builds: one of each is tried, the one that moves least: the member's own, an
@@ -179,6 +211,7 @@ export function teamOptWeaponCandidates(
  * theirs
  */
 export function teamOptUntickedWeapons(
+  database: ArtCharDatabase,
   members: readonly TeamOptMember[],
   weapons: Partial<Record<CharacterKey, string>>,
   teamOpt: TeamOpt
@@ -186,13 +219,10 @@ export function teamOptUntickedWeapons(
   if (!teamOpt.optimizeWeapons) return []
   return members
     .filter((m) => !m.isTc)
-    .filter((m) =>
-      isWeaponExcludedFor(
-        m.characterKey,
-        weapons[m.characterKey] ?? m.weaponId,
-        teamOpt
-      )
-    )
+    .filter((m) => {
+      const weapon = database.weapons.get(weapons[m.characterKey] ?? m.weaponId)
+      return !!weapon && isWeaponExcludedFor(m.characterKey, weapon, teamOpt)
+    })
     .map((m) => m.characterKey)
 }
 

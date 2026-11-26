@@ -19,10 +19,16 @@ import type {
 import {
   kqmErPrices,
   kqmRotationSearchSetup,
-  optimizeTeam,
+  runTeamOpt,
   simTeamOf,
+  startTeamOptWorker,
   syncEnergyCalculator,
+  TeamOptCancelled,
+  TeamOptRequirementsUnmet,
+  TeamOptSetRulesUnmet,
+  TeamOptWorkerUnavailable,
   teamBurstEvery,
+  teamErPrices,
   teamOptBonusStats,
   teamOptMembers,
   teamOptResultGear,
@@ -36,7 +42,7 @@ import { uiInput } from '@genshin-optimizer/gi/wr'
 import type { i18n } from 'i18next'
 import { teamRotationEnergy } from './RotationWriter'
 import { kqmResultDps, kqmRotationRun } from './rotationConfirm'
-import { initStatus, teamOptSolver } from './useTeamOptRun'
+import { initStatus } from './useTeamOptRun'
 
 /**
  * What a rotation search plays rotations with, and how a tab finds builds of its own for one: the
@@ -60,13 +66,19 @@ export interface RotationSearchSource {
    */
   confirm: (
     text: string,
-    isCancelled: () => boolean
+    isCancelled: () => boolean,
+    onAbort?: (abort: (() => void) | undefined) => void
   ) => Promise<{ dps: number; next: RotationSearchSource } | undefined>
 }
 
 /** Each KQM result's Energy Recharge prices, worked out once */
 const kqmPrices = new WeakMap<
   KqmResult,
+  Promise<Partial<Record<CharacterKey, ErPrice>>>
+>()
+/** Each Team Optimize result's Energy Recharge prices, worked out once */
+const teamPrices = new WeakMap<
+  Pick<TeamOptResult, 'builds' | 'weapons' | 'after' | 'attackStates'>,
   Promise<Partial<Record<CharacterKey, ErPrice>>>
 >()
 
@@ -220,13 +232,29 @@ export function teamSearchSource(args: {
       ])
     ),
     dps: time > 0 ? result.after.total / time : 0,
-    prices: async () => ({}),
-    confirm: async (text, isCancelled) => {
+    prices: (pause) => {
+      let prices = teamPrices.get(result)
+      if (!prices) {
+        prices = teamErPrices(
+          database,
+          teamId,
+          gender,
+          teamOpt,
+          result,
+          pause
+        ).catch(() => ({}))
+        teamPrices.set(result, prices)
+      }
+      return prices
+    },
+    confirm: async (text, isCancelled, onAbort) => {
       const run = await teamRotationRun({
         ...args,
         teamOpt: confirmTeamOpt,
         text,
+        warmStart: { builds: result.builds, weapons: result.weapons },
         isCancelled,
+        onAbort,
       }).catch(() => undefined)
       if (!run) return undefined
       const runTime = run.teamOpt.rotationTime ?? 0
@@ -247,7 +275,8 @@ export function teamSearchSource(args: {
  * Team optimize's builds for another rotation, as "Generate builds" would find them once it is
  * used: the rotation played as "Use this rotation" plays it (the members' own constellations and
  * gear) for its attacks and time, the ER calculator, when the requirements come from it, filled
- * from that rotation, and a run on the inventory with the same settings. Nothing is saved.
+ * from that rotation, and a run on the inventory with the same settings (off the main thread in
+ * the pooled worker when available, warm-started from the base result). Nothing is saved.
  */
 export async function teamRotationRun({
   database,
@@ -260,7 +289,9 @@ export async function teamRotationRun({
   attackStates,
   rankingBonusStats,
   maxWorkers,
+  warmStart,
   isCancelled,
+  onAbort,
 }: {
   database: ArtCharDatabase
   gender: GenderKey
@@ -276,8 +307,11 @@ export async function teamRotationRun({
   attackStates: () => readonly RunAttackState[] | undefined
   rankingBonusStats: () => Partial<Record<CharacterKey, BonusStats>> | undefined
   maxWorkers: number
+  warmStart?: Pick<TeamOptResult, 'builds' | 'weapons'>
   isCancelled: () => boolean
+  onAbort?: (abort: (() => void) | undefined) => void
 }): Promise<{ result: TeamOptResult; teamOpt: TeamOpt } | undefined> {
+  if (isCancelled()) return undefined
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
   const own = simTeamOf(members, database)
@@ -294,8 +328,8 @@ export async function teamRotationRun({
     gear: teamOptRunGear(database, teamId, teamOpt, own.gear),
     overrides: {},
   })
-  if (!played?.rotationTime) return undefined
-  const runTeamOpt: TeamOpt = {
+  if (!played?.rotationTime || isCancelled()) return undefined
+  const nextTeamOpt: TeamOpt = {
     ...teamOpt,
     attacks: played.attacks,
     rotationTime: played.rotationTime,
@@ -313,8 +347,8 @@ export async function teamRotationRun({
       saved,
     })
     if (worked) {
-      runTeamOpt.energySource = 'calculator'
-      runTeamOpt.energyCalculator = {
+      nextTeamOpt.energySource = 'calculator'
+      nextTeamOpt.energyCalculator = {
         ...withRotationEnergy(
           syncEnergyCalculator(
             keys,
@@ -330,24 +364,76 @@ export async function teamRotationRun({
       }
     }
   }
-  let stop: (() => void) | undefined
-  const cancelled = () => {
-    if (!isCancelled()) return false
-    stop?.()
-    return true
+  if (isCancelled()) return undefined
+  let found: TeamOptResult | undefined
+  let stopWorker: (() => void) | undefined
+  let stopSolver: (() => void) | undefined
+  const abort = () => {
+    stopWorker?.()
+    stopSolver?.()
   }
-  const result = await optimizeTeam({
-    database,
+  onAbort?.(abort)
+  const job = {
     teamId,
     gender,
-    teamOpt: runTeamOpt,
-    solve: teamOptSolver(initStatus(), maxWorkers, (s) => {
-      stop = s
-    }),
-    builds: 1,
+    teamOpt: nextTeamOpt,
+    ...(nextTeamOpt.optimizeWeapons
+      ? { rotation: { names, text, ...saved } }
+      : {}),
     attackStates: attackStates(),
     rankingBonusStats: rankingBonusStats(),
-    isCancelled: cancelled,
-  })
-  return result && !isCancelled() ? { result, teamOpt: runTeamOpt } : undefined
+    maxWorkers,
+    lowImpact:
+      typeof window !== 'undefined'
+        ? (window.matchMedia?.('(pointer: coarse)').matches ?? false)
+        : false,
+    ranking: false,
+    ...(warmStart ? { warmStart, skipProvisional: true } : {}),
+  }
+  const updates = {
+    onProgress: () => {},
+    onResult: (r: TeamOptResult) => {
+      found = r
+    },
+    onOptions: () => {},
+  }
+  try {
+    try {
+      const worker = startTeamOptWorker(database, job, updates)
+      stopWorker = worker.stop
+      if (isCancelled()) {
+        worker.stop()
+        return undefined
+      }
+      await worker.done
+    } catch (error) {
+      if (!(error instanceof TeamOptWorkerUnavailable) || isCancelled())
+        throw error
+      stopWorker = undefined
+      await runTeamOpt(
+        database,
+        job,
+        initStatus(),
+        updates,
+        isCancelled,
+        (next) => {
+          stopSolver = next
+          if (isCancelled()) next?.()
+        }
+      )
+    }
+  } catch (error) {
+    if (
+      error instanceof TeamOptCancelled ||
+      error instanceof TeamOptRequirementsUnmet ||
+      error instanceof TeamOptSetRulesUnmet
+    )
+      return undefined
+    throw error
+  } finally {
+    onAbort?.(undefined)
+  }
+  return found && !isCancelled()
+    ? { result: found, teamOpt: nextTeamOpt }
+    : undefined
 }

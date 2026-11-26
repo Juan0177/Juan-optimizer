@@ -23,6 +23,7 @@ import type {
   RotationScenario,
   RotationTimingSettings,
   RunAttackState,
+  TeamOptEvaluation,
   TeamOptMember,
   TeamOptResult,
   TeamOptStep,
@@ -90,6 +91,8 @@ export interface ScenarioRunResult {
   weapons: Partial<Record<CharacterKey, { key: WeaponKey; refinement: number }>>
   sets: Partial<Record<CharacterKey, Partial<Record<ArtifactSetKey, number>>>>
   unmetCount: number
+  unmetMembers?: CharacterKey[]
+  shortfalls?: TeamOptEvaluation['shortfalls']
   stalls: { label: string; seconds: number }[]
   warnings: string[]
   /** Seconds spent optimizing this scenario */
@@ -115,6 +118,7 @@ export interface ScenarioRunContext {
   base?: RotationSearchBase
   /** True when settings/rotation changed since `base` was computed (still warm-starts, does not skip baseline solve) */
   baseStale?: boolean
+  rotationKey?: string
   /** Baseline burst cadences per member (used to identify unchanged teammates for safe KQM pruning) */
   baselineBurstEvery?: Partial<Record<CharacterKey, number>>
   saved: {
@@ -158,11 +162,13 @@ function teamScenarioSettings(
     scenario.burstEvery,
     true
   )
-  const seedTeamOpt: TeamOpt = {
-    ...teamOpt,
-    energySource: 'calculator',
-    energyCalculator: seedCalc,
-  }
+  const seedTeamOpt: TeamOpt = scenario.isBaseline
+    ? teamOpt
+    : {
+        ...teamOpt,
+        energySource: 'calculator',
+        energyCalculator: seedCalc,
+      }
 
   // writtenTeamReplay returns both attacks and energy in one simulation pass
   const played = writtenTeamReplay({
@@ -182,6 +188,13 @@ function teamScenarioSettings(
 
   if (!played?.rotationTime)
     throw new Error('Could not play this rotation scenario.')
+
+  if (scenario.isBaseline)
+    return {
+      runTeamOpt: { ...teamOpt, attacks: played.attacks, topN: undefined },
+      stalls: played.stalls ?? [],
+      warnings,
+    }
 
   const synced = syncEnergyCalculator(
     keys,
@@ -223,6 +236,19 @@ function kqmScenarioSettings(
   const { database, gender, i18n, teamId, teamOpt } = ctx
   const keys = members.map((m) => m.characterKey)
   const baseKqm = teamOpt.kqm ?? defaultTeamOptKqm
+  if (scenario.isBaseline)
+    return {
+      runTeamOpt: teamOpt,
+      rotationTime: kqmRotationEnergyOf(
+        database,
+        gender,
+        i18n,
+        teamId,
+        teamOpt,
+        members,
+        scenario.text
+      ).rotationTime,
+    }
 
   const seedCalc = withScenarioBurstEvery(
     syncEnergyCalculator(
@@ -640,6 +666,8 @@ function toTeamScenarioResult(
     weapons,
     sets: teamResultSets(ctx.database, members, result),
     unmetCount,
+    unmetMembers: keys.filter((k) => !!result.after.unmet[k]?.length),
+    shortfalls: result.after.shortfalls,
     stalls,
     warnings,
     elapsedSeconds,
@@ -707,6 +735,8 @@ function toKqmScenarioResult(
     weapons,
     sets,
     unmetCount,
+    unmetMembers: keys.filter((k) => !!kqmResult.after.unmet[k]?.length),
+    shortfalls: kqmResult.after.shortfalls,
     stalls: kqmResult.played?.stalls ?? [],
     warnings,
     elapsedSeconds,
@@ -723,7 +753,15 @@ export function baselineScenarioResult(
   ctx: ScenarioRunContext,
   scenario: RotationScenario
 ): ScenarioRunResult | undefined {
-  if (!scenario.isBaseline || ctx.baseStale || ctx.base?.tab !== ctx.tab)
+  if (
+    !scenario.isBaseline ||
+    ctx.baseStale ||
+    ctx.base?.tab !== ctx.tab ||
+    !ctx.rotationKey ||
+    ctx.base.rotationKey !== ctx.rotationKey ||
+    (ctx.tab === 'team' &&
+      ctx.base.teamOpt.rotationTime !== ctx.teamOpt.rotationTime)
+  )
     return undefined
   const members = teamOptMembers(ctx.database, ctx.teamId)
   const keys = members.map((m) => m.characterKey)
@@ -1170,9 +1208,10 @@ export async function runRotationScenario(
         stalls,
         warnings,
       } = teamScenarioSettings(ctx, scenario, members)
-      const teamPlan = isFast
-        ? fastTeamPlan(ctx, scenario, members, baseRunTeamOpt)
-        : undefined
+      const teamPlan =
+        isFast && !scenario.isBaseline
+          ? fastTeamPlan(ctx, scenario, members, baseRunTeamOpt)
+          : undefined
       const runTeamOpt: TeamOpt = teamPlan
         ? { ...baseRunTeamOpt, keep: teamPlan.keep }
         : baseRunTeamOpt
@@ -1225,6 +1264,7 @@ export async function runRotationScenario(
           gender: ctx.gender,
           teamOpt: runTeamOpt,
           builds: 1,
+          skipRankings: true,
           from: fromTeam,
           ...(teamPlan && {
             maxRounds: teamPlan.maxRounds,
@@ -1309,7 +1349,7 @@ export async function runRotationScenario(
     // In fast mode, build a surgical per-member space from the base run's builds & rankings
     // (0 problems for unchanged teammates, 1 problem for ER-only refits, ~4-6 for changed members).
     const spaceLimits =
-      isFast && fromKqm
+      isFast && fromKqm && !scenario.isBaseline
         ? fastKqmSpaceLimits(ctx, scenario, keys, runTeamOpt)
         : undefined
 
@@ -1450,6 +1490,7 @@ export function applyRotationScenario({
   onTextApplied?: (text: string) => void
 }): boolean {
   const { tab, database, gender, teamId, names, teamOpt, saved } = ctx
+  if (scenario.isBaseline) return false
   const isKqm = tab === 'kqm'
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)

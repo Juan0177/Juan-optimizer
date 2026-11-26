@@ -246,6 +246,12 @@ export const kit: KitModel = {
     // Revelation (Vast Be the Dream) is on, as gcsim's default
     ctx.state('YumemizukiMizuki', ['YumemizukiMizuki', 'lockRevelation'], 'on')
   },
+  simOnlyBuffs: () => [
+    ['YumemizukiMizuki', 'skillDream'],
+    ['YumemizukiMizuki', 'a4Phec'],
+    ['YumemizukiMizuki', 'c1Awaiting'],
+    ['YumemizukiMizuki', 'lockStellarRadiance'],
+  ],
   act(ctx, s: MizukiState, action, previous) {
     const result = act(ctx, s, action, previous)
     if (!result.failed) s.animEnd = ctx.now + result.frames
@@ -269,6 +275,11 @@ export const kit: KitModel = {
         ? 'skill'
         : undefined,
   onHit(ctx, s: MizukiState, hit) {
+    ctx.state(
+      'YumemizukiMizuki',
+      ['YumemizukiMizuki', 'lockStellarRadiance'],
+      ctx.radiance === 'swirl' || ctx.hasStellarSwirl ? 'ss' : ''
+    )
     if (hit.path[0] === '_reaction') {
       if (!SWIRLS.includes(hit.path[1])) return
       if (hit.characterKey !== 'YumemizukiMizuki' || !dreaming(s, hit.t)) return
@@ -320,26 +331,26 @@ export const kit: KitModel = {
       })
       return
     }
-    // A4: other party members' Pyro, Hydro, Cryo or Electro hits in the Dreamdrifter give her EM
-    // +100 for 4 s (the 0.3 s ICD is spent by any hit by others)
     if (hit.path[0].startsWith('_')) return
     if (!dreaming(s, hit.t)) return
     if (hit.characterKey === 'YumemizukiMizuki') return
+    if (
+      hit.element !== 'pyro' &&
+      hit.element !== 'hydro' &&
+      hit.element !== 'cryo' &&
+      hit.element !== 'electro'
+    )
+      return
     if (hit.t < s.a4IcdUntil) return
     s.a4IcdUntil = hit.t + A4_ICD
-    if (
-      hit.element === 'pyro' ||
-      hit.element === 'hydro' ||
-      hit.element === 'cryo' ||
-      hit.element === 'electro'
+    ctx.buff(
+      'YumemizukiMizuki',
+      ['YumemizukiMizuki', 'a4Phec'],
+      'on',
+      0,
+      A4_DURATION,
+      { hitlag: 'recipient' }
     )
-      ctx.buff(
-        'YumemizukiMizuki',
-        ['YumemizukiMizuki', 'a4Phec'],
-        'on',
-        0,
-        A4_DURATION
-      )
   },
   onSwapOut(ctx, s: MizukiState) {
     // leaving the field ends the Dreamdrifter
@@ -547,16 +558,21 @@ function snackPickup(c: SimContext, snapshot: SimSnapshot) {
         healTargets: [c.onField],
         label: 'Snack Pick-Up (Heal)',
       })
-  if (cons >= 4 && c.healthTracked) {
-    const lowest = c.members.reduce((low, m) =>
-      (c.hpRatio(m) ?? 1) < (c.hpRatio(low) ?? 1) ? m : low
-    )
-    c.hit(0, {
-      path: ['_heal', 'constellation4', 'heal'],
-      tag: 'other',
-      element: 'anemo',
-      healTargets: [lowest],
-      label: 'Snack Pick-Up (C4 Heal)',
-    })
+  if (cons >= 4) {
+    const others = c.members.filter((m) => m !== c.onField)
+    if (others.length) {
+      const lowest = c.healthTracked
+        ? others.reduce((low, m) =>
+            (c.hpRatio(m) ?? 1) < (c.hpRatio(low) ?? 1) ? m : low
+          )
+        : others[0]
+      c.hit(0, {
+        path: ['_heal', 'constellation4', 'heal'],
+        tag: 'other',
+        element: 'anemo',
+        healTargets: [lowest],
+        label: 'Snack Pick-Up (C4 Heal)',
+      })
+    }
   }
 }

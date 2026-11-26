@@ -16,7 +16,9 @@ import {
   Button,
   CardContent,
   CardHeader,
+  Checkbox,
   Divider,
+  FormControlLabel,
   IconButton,
   Typography,
 } from '@mui/material'
@@ -54,6 +56,14 @@ export function TeamDelModal({
       }),
     [teams, loadoutData]
   )
+  const versionIds = useMemo(
+    () =>
+      database.teams.keys.filter(
+        (id) => id !== teamId && database.teams.get(id)?.versionOf === teamId
+      ),
+    [database, teamId]
+  )
+  const [deleteVersions, setDeleteVersions] = useState(true)
   const [selection, setSelection] = useState<number[]>()
   const delArr =
     selection ??
@@ -62,9 +72,13 @@ export function TeamDelModal({
       .filter(notEmpty)
   const close = () => {
     setSelection(undefined)
+    setDeleteVersions(true)
     onHide()
   }
   const onDelete = () => {
+    if (deleteVersions && versionIds.length) {
+      for (const vid of versionIds) database.teams.remove(vid)
+    }
     database.teams.remove(teamId)
     loadoutData.forEach((loadoutDatum, i) => {
       if (!loadoutDatum || !delArr.includes(i)) return
@@ -120,6 +134,23 @@ export function TeamDelModal({
               'Deleting the team also deletes its rotations, its Team optimize and KQM results, and its buffs and enemy settings. Loadouts used only by this team are ticked to be deleted too: untick any you want to keep.'
             )}
           </Alert>
+          {versionIds.length > 0 && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={deleteVersions}
+                  onChange={(_, checked) => setDeleteVersions(checked)}
+                />
+              }
+              label={t('teamDelModal.deleteVersions', {
+                defaultValue:
+                  'Also delete its {{count}} versions (untick to keep them as separate teams)',
+                count: versionIds.length,
+              })}
+              sx={{ m: 0, '& .MuiFormControlLabel-label': { fontSize: 13.5 } }}
+            />
+          )}
           {loadoutData.map((loadoutDatum, i) =>
             loadoutDatum ? (
               <LoadoutDisplay

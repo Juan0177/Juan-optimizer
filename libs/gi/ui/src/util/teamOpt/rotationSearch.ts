@@ -33,7 +33,16 @@ export interface RotationCandidate extends RotationScore {
    * damage stats a lower need frees or a higher one takes. Without a cost, its DPS.
    */
   estimate: number
+  /**
+   * Timing-jitter-averaged estimate (`verify`), when checked: rotations that only win on a narrow
+   * frame boundary or phase alignment drop here instead of winning the hill climb.
+   */
+  robustEstimate?: number
 }
+
+/** The ranking value of a candidate: its jitter-verified estimate when checked, else its estimate */
+export const candidateRank = (c: RotationCandidate) =>
+  c.robustEstimate ?? c.estimate
 
 /**
  * Plays rotations with the search's builds, several at once; `stop` ends it early (the rotations
@@ -45,9 +54,93 @@ export type RotationScorer = (
   stop?: () => boolean
 ) => Promise<(RotationScore | undefined)[]>
 
-/** Actions every member may get, besides those its own steps have */
-const COMMON_WORDS = ['N1', 'N2', 'N3', 'N4', 'CA', 'E', 'hE', 'Q', 'D', 'J']
+/**
+ * Plays rotations at nearby swap-timing offsets to check whether a gain holds under small timing
+ * shifts: one array of offset scores per rotation (undefined when stopped early)
+ */
+export type RotationVerifier = (
+  texts: string[],
+  stop?: () => boolean
+) => Promise<((RotationScore | undefined)[] | undefined)[]>
+
+/** Actions active attackers may get, besides those their own steps have */
+const FIELD_COMMON_WORDS = [
+  'N1',
+  'N2',
+  'N3',
+  'N4',
+  'CA',
+  'E',
+  'hE',
+  'Q',
+  'D',
+  'J',
+]
+/** Actions pure off-field supports may get: no idle dashes, jumps or multi-hit NA/CA filler */
+const SUPPORT_COMMON_WORDS = ['N1', 'E', 'hE', 'Q']
+/** Kits whose dash is an elemental attack/infusion (alternate sprint) rather than a pure cancel */
+const DASH_KIT_MEMBERS = new Set<CharacterKey>(['KamisatoAyaka', 'Mona'])
 const GROUP = /^(\d+)\[(.*)\]$/
+const isCancel = (word: string) => /^([DJ])(?![a-z])/i.test(word)
+const isDash = (word: string) => /^D(?![a-z])/i.test(word)
+const isJump = (word: string) => /^J(?![a-z])/i.test(word)
+const isNormal = (word: string) => /^N[1-6](?![a-z])/i.test(word)
+const isOptional = (word: string) => /\?/.test(word)
+const edgeWord = (word: string, end: 'first' | 'last'): string => {
+  const group = GROUP.exec(word)
+  if (!group) return word
+  const inner = groupWords(group[2])
+  if (!inner.length) return word
+  return edgeWord(inner[end === 'first' ? 0 : inner.length - 1], end)
+}
+/**
+ * Count unplayable adjacent patterns inside a step or repeating group: consecutive Normal Attack
+ * strings without an intervening cancel (`N2 N3`, `N4 N1`, `2[N3]`), back-to-back Bursts
+ * (`Q Q`, `Q Q?`), or an optional action adjacent to the same action (`E E?`, `Q? Q`).
+ */
+function countBadAdjacentWords(
+  words: readonly string[],
+  cyclic = false
+): number {
+  const badPair = (a: string, b: string) => {
+    const left = edgeWord(a, 'last')
+    const right = edgeWord(b, 'first')
+    if (isNormal(left) && isNormal(right)) return true
+    const leftAct = actionOf(left)
+    const rightAct = actionOf(right)
+    if (leftAct === 'burst' && rightAct === 'burst') return true
+    if (
+      leftAct &&
+      leftAct === rightAct &&
+      (isOptional(left) || isOptional(right))
+    )
+      return true
+    return false
+  }
+  let n = 0
+  for (let k = 0; k + 1 < words.length; k++)
+    if (badPair(words[k], words[k + 1])) n++
+  if (cyclic && words.length > 0 && badPair(words[words.length - 1], words[0]))
+    n++
+  return n
+}
+/** Count consecutive steps belonging to the same member (including across the cyclic loop back) */
+function countAdjacentSameMember(
+  steps: readonly RotationWordStep[],
+  loops: boolean
+): number {
+  const movable = loops ? steps.length - 1 : steps.length
+  let n = 0
+  for (let k = 0; k + 1 < movable; k++)
+    if (steps[k].characterKey === steps[k + 1].characterKey) n++
+  if (
+    loops &&
+    movable > 1 &&
+    steps[0].characterKey === steps[movable - 1].characterKey
+  )
+    n++
+  return n
+}
 
 const heldSkill = new Map<CharacterKey, boolean>()
 /**
@@ -96,7 +189,7 @@ export function fieldAttacks(words: readonly string[]): number {
   for (const word of words) {
     const group = GROUP.exec(word)
     if (group) n += Number(group[1]) * fieldAttacks(groupWords(group[2]))
-    else if (/^(N[1-6]|CA|C\d|CF|[HL]?P)(?![a-z])/i.test(word)) n++
+    else if (/^(N[1-6]|CA|C\d*F?|[HL]?P)(?![a-z])/i.test(word)) n++
   }
   return n
 }
@@ -139,8 +232,37 @@ const otherStrings = (word: string) => {
 function actionOf(word: string) {
   if (/^(CA|C\d*F?)(?![a-z])/i.test(word)) return 'charged'
   if (/^[th]?E(?![a-z])/i.test(word)) return 'skill'
+  if (/^Q(?![a-z])/i.test(word)) return 'burst'
   if (/^[HL]?P(?![a-z])/i.test(word)) return 'plunge'
   return undefined
+}
+
+/** Whether `words[j]` is a jump immediately launching a plunge (`J HP`, `J P`) */
+const isPlungeJump = (words: readonly string[], j: number) =>
+  isJump(words[j]) &&
+  j + 1 < words.length &&
+  actionOf(edgeWord(words[j + 1], 'first')) === 'plunge'
+
+/**
+ * Whether a step's cancels (D / J) sit in meaningless delay positions: leading a step (unless an
+ * alt-sprint dash), back-to-back cancels (`D D`, `D J`), or trailing a non-attack word (swap
+ * already cancels skills/bursts without an extra dash/jump).
+ */
+function hasBadCancel(
+  words: readonly string[],
+  allowLeadingDash: boolean
+): boolean {
+  if (!words.length) return false
+  if (isCancel(words[0]) && !(allowLeadingDash && isDash(words[0]))) return true
+  for (let k = 0; k + 1 < words.length; k++)
+    if (isCancel(words[k]) && isCancel(words[k + 1])) return true
+  if (
+    words.length > 1 &&
+    isCancel(words[words.length - 1]) &&
+    !attackWord(words[words.length - 2])
+  )
+    return true
+  return false
 }
 
 /**
@@ -152,17 +274,24 @@ function groupEdits(
   alternatives: (word: string) => string[]
 ): string[][] {
   const out: string[][] = []
+  const baseBad = countBadAdjacentWords(words, true)
+  const valid = (next: string[]) =>
+    !hasBadCancel(next, false) && countBadAdjacentWords(next, true) <= baseBad
   words.forEach((word, j) => {
-    if (words.length > 1)
-      out.push([...words.slice(0, j), ...words.slice(j + 1)])
-    if (j + 1 < words.length) {
+    if (words.length > 1 && !isPlungeJump(words, j)) {
+      const next = [...words.slice(0, j), ...words.slice(j + 1)]
+      if (valid(next)) out.push(next)
+    }
+    if (j + 1 < words.length && !isPlungeJump(words, j)) {
       const swapped = [...words]
       swapped[j] = words[j + 1]
       swapped[j + 1] = word
-      out.push(swapped)
+      if (valid(swapped)) out.push(swapped)
     }
-    for (const other of [...otherStrings(word), ...alternatives(word)])
-      out.push([...words.slice(0, j), other, ...words.slice(j + 1)])
+    for (const other of [...otherStrings(word), ...alternatives(word)]) {
+      const next = [...words.slice(0, j), other, ...words.slice(j + 1)]
+      if (valid(next)) out.push(next)
+    }
   })
   return out
 }
@@ -215,18 +344,22 @@ export function rotationEdits(
   const withStep = (i: number, words: string[]) =>
     steps.map((s, j) => (j === i ? { ...s, words } : s))
   const tail = steps.slice(movable)
+  const baseSame = countAdjacentSameMember(steps, loops)
+  const pushSteps = (next: RotationWordStep[]) => {
+    if (countAdjacentSameMember(next, loops) <= baseSame) out.push(next)
+  }
   for (let i = 0; kinds.order && i + 1 < movable; i++) {
     const swapped = [...steps]
     swapped[i] = steps[i + 1]
     swapped[i + 1] = steps[i]
-    out.push(swapped)
+    pushSteps(swapped)
   }
   for (let i = 0; kinds.order && i < movable; i++)
     for (let j = 0; j < movable; j++) {
       if (Math.abs(i - j) <= 1) continue
       const moved = steps.slice(0, movable).filter((_, k) => k !== i)
       moved.splice(j, 0, steps[i])
-      out.push([...moved, ...tail])
+      pushSteps([...moved, ...tail])
     }
   const visits = new Map<CharacterKey, number>()
   for (const s of steps.slice(0, movable))
@@ -234,7 +367,7 @@ export function rotationEdits(
       visits.set(s.characterKey, (visits.get(s.characterKey) ?? 0) + 1)
   for (let i = 0; kinds.visits && i < movable; i++)
     if ((visits.get(steps[i].characterKey) ?? 0) > 1)
-      out.push(steps.filter((_, k) => k !== i))
+      pushSteps(steps.filter((_, k) => k !== i))
   for (const [characterKey, words] of Object.entries(vocabulary) as [
     CharacterKey,
     string[],
@@ -249,10 +382,14 @@ export function rotationEdits(
       for (let j = 0; j <= movable; j++) {
         if (
           steps[j - 1]?.characterKey === characterKey ||
-          (j < movable && steps[j].characterKey === characterKey)
+          (j < movable && steps[j].characterKey === characterKey) ||
+          (loops && j === movable && steps[0]?.characterKey === characterKey) ||
+          (loops &&
+            j === 0 &&
+            steps[movable - 1]?.characterKey === characterKey)
         )
           continue
-        out.push([
+        pushSteps([
           ...steps.slice(0, j),
           { characterKey, name, words: [word] },
           ...steps.slice(j),
@@ -261,6 +398,8 @@ export function rotationEdits(
   }
   steps.forEach(({ characterKey, words }, i) => {
     if (!words.length) return
+    const allowLeadingDash = DASH_KIT_MEMBERS.has(characterKey)
+    const baseBad = countBadAdjacentWords(words)
     const alternatives = (word: string) => {
       const action = actionOf(word)
       return action
@@ -270,12 +409,22 @@ export function rotationEdits(
         : []
     }
     words.forEach((word, j) => {
-      if (words.length > 1 && wordKind(word))
-        out.push(withStep(i, [...words.slice(0, j), ...words.slice(j + 1)]))
-      const replace = (as: string[]) =>
-        out.push(
-          withStep(i, [...words.slice(0, j), ...as, ...words.slice(j + 1)])
+      if (words.length > 1 && wordKind(word) && !isPlungeJump(words, j)) {
+        const next = [...words.slice(0, j), ...words.slice(j + 1)]
+        if (
+          !hasBadCancel(next, allowLeadingDash) &&
+          countBadAdjacentWords(next) <= baseBad
         )
+          out.push(withStep(i, next))
+      }
+      const replace = (as: string[]) => {
+        const next = [...words.slice(0, j), ...as, ...words.slice(j + 1)]
+        if (
+          !hasBadCancel(next, allowLeadingDash) &&
+          countBadAdjacentWords(next) <= baseBad
+        )
+          out.push(withStep(i, next))
+      }
       for (const other of [...otherStrings(word), ...alternatives(word)])
         if (wordKind(word, other)) replace([other])
       const group = GROUP.exec(word)
@@ -288,16 +437,28 @@ export function rotationEdits(
         for (const inner of groupEdits(groupWords(group[2]), alternatives))
           replace([`${times}[${inner.join(' ')}]`])
       }
-      if (j + 1 < words.length && wordKind(word, words[j + 1])) {
+      if (
+        j + 1 < words.length &&
+        wordKind(word, words[j + 1]) &&
+        !isPlungeJump(words, j)
+      ) {
         const swapped = [...words]
         swapped[j] = words[j + 1]
         swapped[j + 1] = word
-        out.push(withStep(i, swapped))
+        if (
+          !hasBadCancel(swapped, allowLeadingDash) &&
+          countBadAdjacentWords(swapped) <= baseBad
+        )
+          out.push(withStep(i, swapped))
       }
     })
     for (const word of vocabulary[characterKey] ?? [])
-      for (let j = 0; wordKind(word) && j <= words.length; j++)
-        out.push(withStep(i, [...words.slice(0, j), word, ...words.slice(j)]))
+      for (let j = 0; wordKind(word) && j <= words.length; j++) {
+        const next = [...words.slice(0, j), word, ...words.slice(j)]
+        if (isCancel(word) && hasBadCancel(next, allowLeadingDash)) continue
+        if (countBadAdjacentWords(next) > baseBad) continue
+        out.push(withStep(i, next))
+      }
   })
   // (a loop back to the member who used to play first would add a swap to them at the end)
   return loops
@@ -343,19 +504,34 @@ export function stepOrders(
 }
 
 /**
- * Each member's words to add: its own (not its waits, swaps or groups), the common ones, its kit's
- * own ways of writing them (`actionVariants`), and every plunge for a member that plunges
+ * Each member's words to add: its own (not its waits, swaps or groups), common words appropriate
+ * to its role (off-field supports get Skills, Bursts and N1 without idle dashes/jumps/multi-hit
+ * combos), its kit's own ways of writing them (`actionVariants`), and every plunge for a member
+ * that plunges
  */
 export function rotationVocabulary(steps: readonly RotationWordStep[]) {
   const vocabulary: Partial<Record<CharacterKey, string[]>> = {}
+  const main = mainMember(steps)
+  const onField = new Set<CharacterKey>()
+  if (main) onField.add(main)
+  // Secondary carries with a real multi-hit combo step (>= 3 field attacks) also keep full combos,
+  // while supports with 1-2 weave NAs (e.g. Shenhe hE N1 Q, Zhongli N1 hE D, Xilonen E N2) stay
+  // on support vocabulary so they don't get idle dashes, jumps, or multi-hit NA/CA filler.
+  for (const { characterKey, words } of steps)
+    if (fieldAttacks(words) >= 3) onField.add(characterKey)
   for (const { characterKey, words } of steps) {
     const list = (vocabulary[characterKey] ??= [])
     const plunges = words.some((w) => actionOf(w) === 'plunge')
       ? ['P', 'HP', 'LP', 'HP[collision]']
       : []
+    const common = onField.has(characterKey)
+      ? FIELD_COMMON_WORDS
+      : DASH_KIT_MEMBERS.has(characterKey)
+        ? [...SUPPORT_COMMON_WORDS, 'D']
+        : SUPPORT_COMMON_WORDS
     for (const word of [
       ...words,
-      ...COMMON_WORDS.filter((w) => w !== 'hE' || holdsSkill(characterKey)),
+      ...common.filter((w) => w !== 'hE' || holdsSkill(characterKey)),
       ...actionVariants(characterKey),
       ...plunges,
     ])
@@ -475,6 +651,7 @@ export async function searchRotations({
   seed,
   members,
   score,
+  verify,
   deadline,
   maxRounds = 12,
   keep = 4,
@@ -491,6 +668,8 @@ export async function searchRotations({
   seed: string
   members: readonly RotationMember[]
   score: RotationScorer
+  /** Timing-jitter verifier for top candidates (prevents overfitting single-frame cliffs) */
+  verify?: RotationVerifier
   deadline: number
   maxRounds?: number
   keep?: number
@@ -498,7 +677,7 @@ export async function searchRotations({
   /** Each member's Energy Recharge with the builds the rotations are played with (%) */
   funded?: Partial<Record<CharacterKey, number>>
   /** The DPS the builds give up to have the Energy Recharge a rotation needs */
-  erCost?: (score: RotationScore) => number
+  erCost?: (score: RotationScore, base?: RotationScore) => number
   /** What it may change (`rotationEdits`) */
   kinds?: RotationEditKinds
   /** The rotation whose plan every rotation keeps to (`rotationGuard`); the seed by default */
@@ -509,7 +688,7 @@ export async function searchRotations({
    * What estimates and Energy Recharge fits are measured from (several searches from different
    * starts, compared): the seed's play by default
    */
-  reference?: RotationScore
+  reference?: RotationScore & { text?: string; robustEstimate?: number }
   onProgress?: (progress: RotationSearchProgress) => void
   isCancelled?: () => boolean
 }): Promise<RotationSearchResult> {
@@ -519,13 +698,97 @@ export async function searchRotations({
   if (!seedScore || !(seedScore.dps > 0))
     throw new Error('The rotation could not be played.')
   const base = reference ?? seedScore
-  const seedCost = erCost?.(base) ?? 0
+  const seedCost = erCost?.(base, base) ?? 0
   const estimate = (s: RotationScore) =>
-    erCost ? s.dps + seedCost - erCost(s) : s.dps
+    erCost ? s.dps + seedCost - erCost(s, base) : s.dps
   const start: RotationCandidate = {
     text: seedText,
     ...seedScore,
     estimate: estimate(seedScore),
+  }
+  const known = new Set(seedScore.warnings)
+  const stop = () => isCancelled() || Date.now() > deadline
+  const verified = new Map<string, number>()
+  const seedKey = playedKey(seedText, members)
+  if (verify) {
+    if (
+      reference?.text === seedText &&
+      reference.robustEstimate !== undefined
+    ) {
+      start.robustEstimate = reference.robustEstimate
+      verified.set(seedKey, reference.robustEstimate)
+    } else if (!stop()) {
+      const [offsets] = await verify([seedText], stop)
+      if (offsets) {
+        const valid = offsets.filter(
+          (s): s is RotationScore => !!s && s.dps > 0
+        )
+        if (!reference)
+          for (const s of valid) for (const w of s.warnings) known.add(w)
+        const all = [seedScore, ...valid]
+        start.robustEstimate =
+          all.reduce((sum, s) => sum + estimate(s), 0) / all.length
+        verified.set(seedKey, start.robustEstimate)
+      }
+    }
+  }
+  const baselineRank = reference?.robustEstimate ?? candidateRank(start)
+  const verifyTop = async (
+    list: RotationCandidate[],
+    want: number
+  ): Promise<RotationCandidate[]> => {
+    if (!verify || stop()) return list
+    const sortList = (items: RotationCandidate[]) =>
+      items.sort(
+        (a, b) =>
+          candidateRank(b) - candidateRank(a) || a.text.length - b.text.length
+      )
+    sortList(list)
+    // Up to two passes so if cliff-artifact candidates drop after jitter verification, the real
+    // candidates that surface into the top `want` also get verified before becoming parents.
+    for (let pass = 0; pass < 2 && !stop(); pass++) {
+      const batchSize = pass === 0 ? Math.max(want * 2, 8) : want
+      const todo: { candidate: RotationCandidate; key: string }[] = []
+      for (const c of list) {
+        if (todo.length >= batchSize) break
+        const k = playedKey(c.text, members)
+        if (verified.has(k)) {
+          c.robustEstimate = verified.get(k)
+          continue
+        }
+        if (todo.length >= want && c.estimate < baselineRank * 0.98) break
+        todo.push({ candidate: c, key: k })
+      }
+      if (!todo.length) break
+      const results = await verify(
+        todo.map((t) => t.candidate.text),
+        stop
+      )
+      let demoted = false
+      todo.forEach(({ candidate: c, key }, idx) => {
+        const offsets = results[idx]
+        if (!offsets) return
+        const fragile = offsets.some(
+          (s) => s && !s.warnings.every((w) => known.has(w))
+        )
+        let robust: number
+        if (fragile) {
+          robust = Math.min(c.estimate, baselineRank)
+        } else {
+          const valid = offsets.filter(
+            (s): s is RotationScore => !!s && s.dps > 0
+          )
+          const all = [c, ...valid]
+          robust = all.reduce((sum, s) => sum + estimate(s), 0) / all.length
+        }
+        if (robust < c.estimate * (1 - 1e-4)) demoted = true
+        c.robustEstimate = robust
+        verified.set(key, robust)
+      })
+      sortList(list)
+      if (!demoted) break
+    }
+    return list
   }
   onProgress?.({
     round: 0,
@@ -537,19 +800,17 @@ export async function searchRotations({
     top: [start],
   })
   const fits = energyFits(base, erSlack, funded)
-  const known = new Set(seedScore.warnings)
   const ok = rotationGuard(
     plan === undefined ? seedSteps : rotationWords(plan, members)
   )
   const vocabulary = rotationVocabulary(seedSteps)
-  const seen = new Set([playedKey(seedText, members)])
+  const seen = new Set([seedKey])
   let pool = [start]
   let played = 1
   let stale = 0
   let round = 0
   let width = keep
   let ended: RotationSearchResult['ended'] = 'rounds'
-  const stop = () => isCancelled() || Date.now() > deadline
   while (round < maxRounds) {
     if (stop()) {
       ended = isCancelled() ? 'cancelled' : 'time'
@@ -583,7 +844,7 @@ export async function searchRotations({
       ended = 'converged'
       break
     }
-    const bestBefore = pool[0].estimate
+    const bestBefore = candidateRank(pool[0])
     const top = pool.slice(0, KEPT)
     onProgress?.({
       round,
@@ -618,9 +879,11 @@ export async function searchRotations({
     // (rotations that play the same, as an action written that changes nothing: the shortest)
     const merged: RotationCandidate[] = []
     for (const c of [...pool, ...found].sort(
-      (a, b) => b.estimate - a.estimate || a.text.length - b.text.length
+      (a, b) =>
+        candidateRank(b) - candidateRank(a) || a.text.length - b.text.length
     ))
       if (!merged.some((m) => samePlay(m, c))) merged.push(c)
+    await verifyTop(merged, Math.max(width, 6))
     pool = merged.slice(0, Math.max(KEPT, widen ?? 0))
     onProgress?.({
       round,
@@ -635,7 +898,7 @@ export async function searchRotations({
       ended = isCancelled() ? 'cancelled' : 'time'
       break
     }
-    if (pool[0].estimate > bestBefore * (1 + 1e-4)) {
+    if (candidateRank(pool[0]) > bestBefore * (1 + 1e-4)) {
       stale = 0
       width = keep
     } else stale++

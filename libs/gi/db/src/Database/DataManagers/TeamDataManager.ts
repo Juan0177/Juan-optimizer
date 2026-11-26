@@ -26,7 +26,9 @@ import type { ICachedArtifact } from './ArtifactDataManager'
 import type { TeamFightSettings } from './TeamEnemy'
 import { MAX_ENEMY_HP, validateFightSettings } from './TeamEnemy'
 import {
+  type TeamBuildSave,
   type TeamEquipmentUndo,
+  teamBuildSaveSchema,
   teamEquipmentUndoSchema,
 } from './TeamEquipmentUndo'
 import type { TeamOpt } from './TeamOpt'
@@ -105,6 +107,7 @@ export interface Team {
   lastEdit: number
   rotationDocuments?: RotationDocuments
   equipmentUndo?: TeamEquipmentUndo
+  savedOptimization?: TeamBuildSave
   /** Team Optimize settings: only stored once the user sets something there */
   teamOpt?: TeamOpt
   /**
@@ -128,6 +131,11 @@ export interface Team {
   versionOf?: string
   /** A version's own constellations, over the original's KQM ones (the rest are shared) */
   versionCons?: Partial<Record<CharacterKey, number>>
+  /**
+   * Whether a version is also shown on the main Teams tab (absent/false: hidden there so versions
+   * stay in their original's Versions panel without cluttering the Teams list)
+   */
+  showInTeams?: boolean
   /**
    * Imported from a team link (another site's): its members start on that site's builds as
    * theorycraft builds, and Optimize team switches the members the player has to their own gear
@@ -312,6 +320,7 @@ export class TeamDataManager extends DataManager<
       enemyHp,
       versionOf,
       versionCons,
+      showInTeams,
       importedFrom,
       freezeImmune,
     } = obj as Team
@@ -345,6 +354,8 @@ export class TeamDataManager extends DataManager<
         ? { versionOf }
         : {}),
     }
+    if (validated.versionOf && showInTeams === true)
+      validated.showInTeams = true
     if (importedFrom && typeof importedFrom === 'object') {
       const text = (v: unknown, max: number) =>
         typeof v === 'string' && v.length <= max ? v : undefined
@@ -375,6 +386,11 @@ export class TeamDataManager extends DataManager<
       (obj as Team).equipmentUndo
     )
     if (equipmentUndo.success) validated.equipmentUndo = equipmentUndo.data
+    const savedOptimization = teamBuildSaveSchema.safeParse(
+      (obj as Team).savedOptimization
+    )
+    if (savedOptimization.success)
+      validated.savedOptimization = savedOptimization.data
     const rotationDocuments = validateRotationDocuments(
       (obj as Team).rotationDocuments
     )
@@ -529,9 +545,15 @@ export class TeamDataManager extends DataManager<
         if (this.get(id)?.versionOf === key)
           this.set(id, (team) => {
             delete team.versionOf
+            delete team.showInTeams
           })
     }
     return removed
+  }
+  /** True when this team is a version whose original exists and is not pinned to the Teams tab */
+  isHiddenVersion(teamId: string): boolean {
+    const team = this.get(teamId)
+    return !!(team?.versionOf && this.get(team.versionOf) && !team.showInTeams)
   }
   new(value: Partial<Team> = {}): string {
     const id = `team_${crypto.randomUUID?.() ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) => n.toString(16).padStart(2, '0')).join('')}`
@@ -548,6 +570,7 @@ export class TeamDataManager extends DataManager<
     team.name = `${team.name} (duplicated)`
     team.lastEdit = Date.now()
     delete team.equipmentUndo
+    delete team.savedOptimization
     for (const document of Object.values(team.rotationDocuments ?? {}))
       delete document.Draft
     return this.new(team)
@@ -562,9 +585,11 @@ export class TeamDataManager extends DataManager<
       loadoutData,
       rotationDocuments,
       equipmentUndo: _undo,
+      savedOptimization: _savedOptimization,
       // (an id of this database's: a team exported alone is not a version)
       versionOf: _versionOf,
       versionCons: _versionCons,
+      showInTeams: _showInTeams,
       ...rest
     } = this.deCache(team)
     const documents = deepClone(rotationDocuments ?? {})
@@ -630,8 +655,10 @@ export class TeamDataManager extends DataManager<
       {
         ...rest,
         equipmentUndo: undefined,
+        savedOptimization: undefined,
         versionOf: undefined,
         versionCons: undefined,
+        showInTeams: undefined,
         loadoutData: [],
       },
       ''

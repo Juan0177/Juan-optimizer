@@ -112,6 +112,12 @@ const dm = {
   },
 } as const
 
+const hasVeilSource = greaterEq(
+  sum(greaterEq(tally.moonsign, 2, 1), greaterEq(input.constellation, 2, 1)),
+  1,
+  1
+)
+
 const burstVeilsAbsorbedArr = range(1, 5)
 const [condBurstVeilsAbsorbedPath, condBurstVeilsAbsorbed] = cond(
   key,
@@ -121,8 +127,8 @@ const burstVeilsAbsorbed_burst_dmg_ = greaterEq(
   input.asc,
   1,
   greaterEq(
-    tally.moonsign,
-    2,
+    hasVeilSource,
+    1,
     lookup(
       condBurstVeilsAbsorbed,
       objKeyMap(burstVeilsAbsorbedArr, (veils) => {
@@ -149,8 +155,8 @@ const a1VeilStacks_pp_mult_ = sum(
     input.asc,
     1,
     greaterEq(
-      tally.moonsign,
-      2,
+      hasVeilSource,
+      1,
       lookup(
         condA1VeilStacks,
         objKeyMap(a1VeilStacksArr, (veils) => {
@@ -166,23 +172,23 @@ const a1VeilStacks_pp_mult_ = sum(
     )
   )
 )
-const a1VeilStacks_eleMas = greaterEq(
+
+const [condA1MaxVeilEmPath, condA1MaxVeilEm] = cond(key, 'a1MaxVeilEm')
+const a1MaxVeilEm_eleMas = greaterEq(
   input.asc,
   1,
   greaterEq(
     tally.moonsign,
     2,
-    lookup(
-      condA1VeilStacks,
-      objKeyMap(a1VeilStacksArr, (veils) =>
-        threshold(
-          input.constellation,
-          2,
-          greaterEq(veils, 5, dm.constellation2.newEleMas),
-          greaterEq(veils, 3, dm.passive1.maxVeilEleMas)
-        )
-      ),
-      naught
+    equal(
+      condA1MaxVeilEm,
+      'on',
+      threshold(
+        input.constellation,
+        2,
+        dm.constellation2.newEleMas,
+        dm.passive1.maxVeilEleMas
+      )
     )
   )
 )
@@ -320,7 +326,7 @@ export const data = dataObjForCharacterSheet(key, dmgFormulas, {
     burstBoost: burstC5,
     skillBoost: skillC3,
     burst_dmg_: burstVeilsAbsorbed_burst_dmg_,
-    eleMas: a1VeilStacks_eleMas,
+    eleMas: a1MaxVeilEm_eleMas,
     lunarbloom_specialDmg_: c6Gleam_lunarbloom_specialDmg_,
   },
   teamBuff: {
@@ -466,7 +472,7 @@ const sheet: TalentSheet = {
       ],
     },
     ct.condTem('burst', {
-      canShow: greaterEq(input.asc, 1, greaterEq(tally.moonsign, 2, 1)),
+      canShow: greaterEq(input.asc, 1, hasVeilSource),
       path: condBurstVeilsAbsorbedPath,
       value: condBurstVeilsAbsorbed,
       name: ct.ch('burstVeilsAbsorbedCond'),
@@ -487,6 +493,7 @@ const sheet: TalentSheet = {
 
   passive1: ct.talentTem('passive1', [
     ct.condTem('passive1', {
+      canShow: hasVeilSource,
       path: condA1VeilStacksPath,
       value: condA1VeilStacks,
       name: ct.ch('a1VeilStacksCond'),
@@ -500,9 +507,6 @@ const sheet: TalentSheet = {
                 node: infoMut(a1VeilStacks_pp_mult_, { name: ct.ch('a1Mult') }),
               },
               {
-                node: a1VeilStacks_eleMas,
-              },
-              {
                 text: stg('duration'),
                 value: (data) =>
                   data.get(input.constellation).value >= 2
@@ -513,6 +517,26 @@ const sheet: TalentSheet = {
             ],
           })
         ),
+    }),
+    ct.condTem('passive1', {
+      canShow: greaterEq(tally.moonsign, 2, 1),
+      path: condA1MaxVeilEmPath,
+      value: condA1MaxVeilEm,
+      name: st('maxStacks'),
+      states: {
+        on: {
+          fields: [
+            {
+              node: a1MaxVeilEm_eleMas,
+            },
+            {
+              text: stg('duration'),
+              value: dm.passive1.eleMasDuration,
+              unit: 's',
+            },
+          ],
+        },
+      },
     }),
   ]),
   passive2: ct.talentTem('passive2'),

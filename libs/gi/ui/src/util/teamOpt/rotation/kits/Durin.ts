@@ -1,6 +1,14 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
+import { allStats } from '@genshin-optimizer/gi/stats'
 import type { KitModel, SimContext, SimHit } from '../types'
-import { KQMSIM, type NormalHit, normalString, templateJump } from './common'
+import {
+  flatEnergy,
+  KQMSIM,
+  type NormalHit,
+  normalString,
+  particleMarker,
+  templateJump,
+} from './common'
 
 /* Adapted from KQM-git/kqmsim (AGPLv3), commit 7bdf45f, internal/characters/durin. */
 
@@ -50,28 +58,49 @@ const darkTicks = Array.from({ length: 16 }, (_, i) =>
 )
 const DARK_TRAVEL = 9
 const BURST_CD = 18 * 60
-/** Burst status starts on the first initial hit, and lasts 20.5 seconds or until recast. */
-const FORM_LENGTH = 1230
+const WHITE_FORM_LENGTH = 1230
+const DARK_FORM_LENGTH = 1260
+const SKILL_ENERGY_ICD = 6 * 60
+const SKILL_ENERGY = allStats.char.skillParam.Durin.skill[4]
+const TIMED_BUFFS = [
+  'burstForm',
+  'a4Stack',
+  'c1Stacks',
+  'c2AfterBurst',
+  'c2Hydro',
+  'c2Cryo',
+  'a1WhiteRes',
+  'a1WhiteDendro',
+  'a1WhiteElectro',
+  'a1WhiteAnemo',
+  'a1WhiteGeo',
+  'c6LightBurstHit',
+] as const
 
 interface DurinState {
-  /** Confirmation of Purity / Denial of Darkness recast window (6 s after the Skill tap) */
   window: boolean
   windowId: number
-  /** Denial of Darkness is on until this frame: the next burst is the Dark form */
   blackUntil: number
-  /** The latest burst: its DoT ticks stop when a newer burst is cast */
   whiteStart: number
   whiteEnd: number
-  /** The Dark form's status window (from the first initial hit, 20.5 s) */
   darkStart: number
   darkEnd: number
+  c2End: number
+  energyIcdUntil: number
   burstId: number
-  /**
-   * C1: Cycle of Enlightenment stacks per member (White: the others'; Dark: Durin's own), and
-   * C4's expected saving (30% of the consumptions spend nothing) as a running credit
-   */
   c1Stacks: Partial<Record<CharacterKey, number>>
-  c1Credit: number
+  c1Credit: Partial<Record<CharacterKey, number>>
+}
+
+function skillEnergy(ctx: SimContext, s: DurinState, delay: number) {
+  if (ctx.now < s.energyIcdUntil) return
+  s.energyIcdUntil = ctx.now + SKILL_ENERGY_ICD
+  const idx = ctx.calculate('Durin', ['total', 'skillIndex']) ?? 8
+  const amount =
+    SKILL_ENERGY[
+      Math.min(SKILL_ENERGY.length - 1, Math.max(0, Math.round(idx)))
+    ]!
+  flatEnergy(ctx, delay, amount, 'Binary Form: Energy')
 }
 
 /** C2: the reactions (by anyone) that buff Pyro and the element involved, as the sheet's flags */
@@ -97,9 +126,15 @@ export const kit: KitModel = {
     whiteEnd: -1,
     darkStart: -1,
     darkEnd: -1,
+    c2End: -1,
+    energyIcdUntil: Number.NEGATIVE_INFINITY,
     c1Stacks: {},
-    c1Credit: 0,
+    c1Credit: {},
   }),
+  simOnlyBuffs: () => TIMED_BUFFS.map((name) => ['Durin', name]),
+  onStart(ctx) {
+    for (const name of TIMED_BUFFS) ctx.state('Durin', ['Durin', name], '')
+  },
   onBeforeHit(ctx, s: DurinState, hit) {
     // C1: Cycle of Enlightenment. White: the active member's (not Durin's) Normal, Charged,
     // Plunging, Skill or Burst DMG spends 1 of their stacks for +60% of Durin's ATK. Dark: Durin's
@@ -126,13 +161,8 @@ export const kit: KitModel = {
     spendC1(ctx, s, hit, dark ? 2 : 1)
   },
   onHit(ctx, s: DurinState, hit) {
-    // A1 (White form): Burning, Overloaded, Pyro Swirl and Pyro Crystallize, or Pyro / Dendro DMG
-    // on a Burning enemy, shred Pyro and that element's RES for 6 s (the sheet's a1White flags).
-    // C2 (either form, 20 s): the same and Vaporize / Melt give the party +50% Pyro DMG and that
-    // element's DMG for 6 s (the sheet reads the same flags, plus c2Hydro / c2Cryo).
     const inWhite = ctx.now >= s.whiteStart && ctx.now < s.whiteEnd
-    const inDark = ctx.now >= s.darkStart && ctx.now < s.darkEnd
-    const c2 = ctx.constellation('Durin') >= 2 && (inWhite || inDark)
+    const c2 = ctx.constellation('Durin') >= 2 && ctx.now < s.c2End
     if (!inWhite && !c2) return
     let flag: [string, string] | undefined
     if (hit.path[0] === '_reaction') {
@@ -148,10 +178,20 @@ export const kit: KitModel = {
       flag = ['a1WhiteDendro', 'dendro']
     if (!flag) return
     const [cond, value] = flag
-    // (Vaporize and Melt are C2 only)
-    if (!cond.startsWith('a1') && !c2) return
-    ctx.buff('Durin', ['Durin', cond], value, 0, 360)
-    if (c2) ctx.buff('Durin', ['Durin', 'c2AfterBurst'], 'on', 0, 360)
+    const isA1 = cond.startsWith('a1')
+    if (!isA1 && !c2) return
+    if (inWhite && isA1) {
+      ctx.buff('Durin', ['Durin', 'a1WhiteRes'], 'on', 0, 360, {
+        hitlag: 'enemy',
+      })
+      ctx.buff('Durin', ['Durin', cond], value, 0, 360, { hitlag: 'enemy' })
+    }
+    if (c2) {
+      ctx.buff('Durin', ['Durin', cond], value, 0, 360, { hitlag: 'recipient' })
+      ctx.buff('Durin', ['Durin', 'c2AfterBurst'], 'on', 0, 360, {
+        hitlag: 'recipient',
+      })
+    }
   },
   // In Essential Transmutation (the window after his E) his normal attack is Denial of Darkness
   // and his E is Confirmation of Purity, each with frames of its own (his Dark Q keeps the Q's)
@@ -176,10 +216,11 @@ export const kit: KitModel = {
     switch (action.kind) {
       case 'normal': {
         if (s.window) {
-          // Denial of Darkness (recast, in place of the normal attack): 3 hits; starts the Dark form
           s.window = false
           s.windowId++
           s.blackUntil = ctx.now + 30 * 60
+          skillEnergy(ctx, s, 0)
+          particleMarker(ctx, 32, 'Durin Skill particles')
           for (let i = 0; i < 3; i++)
             ctx.hit([32, 37, 42][i], {
               path: ['skill', `darkDmg${i + 1}`],
@@ -238,10 +279,11 @@ export const kit: KitModel = {
         }
       case 'skill': {
         if (s.window) {
-          // Confirmation of Purity (recast): closes the window; clears the Denial of Darkness form
           s.window = false
           s.windowId++
           s.blackUntil = -1
+          skillEnergy(ctx, s, 0)
+          particleMarker(ctx, 35, 'Durin Skill particles')
           ctx.hit(35, {
             path: ['skill', 'purityDmg'],
             tag: 'skill',
@@ -285,6 +327,10 @@ export const kit: KitModel = {
         const dark = ctx.now < s.blackUntil
         const id = ++s.burstId
         const c6 = ctx.constellation('Durin') >= 6
+        const prevForm =
+          ctx.now < s.darkEnd ? 'dark' : ctx.now < s.whiteEnd ? 'white' : ''
+        const nextForm = dark ? 'dark' : 'white'
+        s.c2End = ctx.now + 20 * 60
         for (const [i, t] of [97, 121, 154].entries())
           ctx.hit(t, {
             path: ['burst', `${dark ? 'dark' : 'purity'}Dmg${i + 1}`],
@@ -295,20 +341,19 @@ export const kit: KitModel = {
             label: dark ? 'As the Stars Smolder' : 'As the Light Shifts',
           })
         s.whiteStart = dark ? -1 : ctx.now + 97
-        s.whiteEnd = dark ? -1 : ctx.now + 97 + FORM_LENGTH
+        s.whiteEnd = dark ? -1 : ctx.now + 97 + WHITE_FORM_LENGTH
         s.darkStart = dark ? ctx.now + 97 : -1
-        s.darkEnd = dark ? ctx.now + 97 + FORM_LENGTH : -1
-        // C1: 20 Cycle of Enlightenment stacks (White: every other member; Dark: Durin), used
-        // from the first initial hit (the form's window); a new burst refreshes them
+        s.darkEnd = dark ? ctx.now + 97 + DARK_FORM_LENGTH : -1
         if (ctx.constellation('Durin') >= 1)
           s.c1Stacks = Object.fromEntries(
             ctx.members.map((m) => [m, (m === 'Durin') === dark ? 20 : 0])
           )
-        ctx.state('Durin', ['Durin', 'burstForm'], '')
+        if (prevForm && prevForm !== nextForm)
+          ctx.state('Durin', ['Durin', 'burstForm'], '')
         ctx.at(97, (c) => {
           if (id !== s.burstId) return
-          c.state('Durin', ['Durin', 'burstForm'], dark ? 'dark' : 'white')
-          c.at(FORM_LENGTH, (end) => {
+          c.state('Durin', ['Durin', 'burstForm'], nextForm)
+          c.at(dark ? DARK_FORM_LENGTH : WHITE_FORM_LENGTH, (end) => {
             if (id === s.burstId) end.state('Durin', ['Durin', 'burstForm'], '')
           })
         })
@@ -337,13 +382,23 @@ export const kit: KitModel = {
                 icd: 'DurinBurstWhite',
                 label: 'Dragon of White Flame',
               })
-              // C6: the enemy's DEF -30% for 6 s after each white hit
               if (c6)
-                c2.buff('Durin', ['Durin', 'c6LightBurstHit'], 'on', 0, 6 * 60)
+                c2.buff(
+                  'Durin',
+                  ['Durin', 'c6LightBurstHit'],
+                  'on',
+                  0,
+                  6 * 60,
+                  {
+                    hitlag: 'enemy',
+                  }
+                )
             })
           if (c6)
             for (const d of [97, 121, 154])
-              ctx.buff('Durin', ['Durin', 'c6LightBurstHit'], 'on', d, 6 * 60)
+              ctx.buff('Durin', ['Durin', 'c6LightBurstHit'], 'on', d, 6 * 60, {
+                hitlag: 'enemy',
+              })
         }
         // A4: the first 10 DoT ticks get the ATK-scaled bonus (a stack each)
         const a4Ticks = (dark ? darkTicks : whiteTicks).slice(0, 10)
@@ -387,13 +442,15 @@ export const kit: KitModel = {
 }
 
 function spendC1(ctx: SimContext, s: DurinState, hit: SimHit, count: number) {
-  // C4: 30% of the consumptions spend nothing (the expected rate, as a running credit)
   if (ctx.constellation('Durin') < 4) {
     s.c1Stacks[hit.characterKey] = (s.c1Stacks[hit.characterKey] ?? 0) - count
     return
   }
-  s.c1Credit += 0.7
-  if (s.c1Credit < 1) return
-  s.c1Credit--
+  const credit = (s.c1Credit[hit.characterKey] ?? 0) + 0.7
+  if (credit < 1) {
+    s.c1Credit[hit.characterKey] = credit
+    return
+  }
+  s.c1Credit[hit.characterKey] = credit - 1
   s.c1Stacks[hit.characterKey] = (s.c1Stacks[hit.characterKey] ?? 0) - count
 }

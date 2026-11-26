@@ -4,6 +4,7 @@ import { normalString, withHitlag } from '../util/teamOpt/rotation/kits/common'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
 import { simulateRotation } from '../util/teamOpt/rotation/simulate'
 import type { KitModel } from '../util/teamOpt/rotation/types'
+import { searchRotations } from '../util/teamOpt/rotationSearch'
 
 const run = (
   text: string,
@@ -59,6 +60,47 @@ it('summons Wind Pinions only in Armed for Action', () => {
     run(text).hits.filter((h) => h.label === 'Wind Pinion').length
   expect(pinions('Vesna N1 CA W1')).toBe(0)
   expect(pinions('Vesna E N1 CA W1')).toBe(2)
+})
+
+it.each([
+  ['Vesna E N1 E C W1', 1, 0],
+  ['Vesna E N6 C W1', 6, 0],
+  ['Vesna E N1 C E W1', 2, 1],
+  ['Vesna E N1 W1 C E W1', 2, 1],
+])('checks the Charged Attack input in %s', (text, pinions, charges) => {
+  const sim = run(text)
+  expect(sim.hits.filter(({ label }) => label === 'Wind Pinion')).toHaveLength(
+    pinions
+  )
+  expect(sim.hits.filter(({ tag }) => tag === 'charged')).toHaveLength(charges)
+  if (charges) expect(sim.warnings).toEqual([])
+  else
+    expect(sim.warnings).toEqual([
+      expect.stringContaining('requires a Normal Attack'),
+    ])
+})
+
+it('does not recommend putting a Skill between N1 and Charged Attack', async () => {
+  const invalid = 'Vesna E N1 E C'
+  const tried = new Set<string>()
+  const result = await searchRotations({
+    seed: 'Vesna E N1 C E',
+    members: [{ characterKey: 'Vesna', name: 'Vesna' }],
+    deadline: Date.now() + 60_000,
+    maxRounds: 1,
+    score: async (texts) =>
+      texts.map((text) => {
+        tried.add(text)
+        return {
+          dps: text === invalid ? 100 : 1,
+          time: 1,
+          er: {},
+          warnings: run(text).warnings,
+        }
+      }),
+  })
+  expect(tried.has(invalid)).toBe(true)
+  expect(result.best.every(({ warnings }) => !warnings.length)).toBe(true)
 })
 
 it('keeps a Burst’s Sword Essence for her next Skill, and caps Sword Essence at 3', () => {

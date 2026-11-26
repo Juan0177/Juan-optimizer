@@ -15,6 +15,8 @@ export interface TeamOptSavedRun {
   roster?: string
   /** The character optimization requirements used for this run. */
   requirementsKey?: string
+  /** Written text, opener, timing and frame data used by the run. */
+  rotationKey?: string
   /** How long the run took (seconds) */
   seconds: number
   /** The settings it was found with: its rotation (the result's attack indices follow it) */
@@ -94,6 +96,7 @@ export class TeamOptResultsEntry extends DataEntry<
         enemy,
         roster,
         requirementsKey,
+        rotationKey,
       } = run
       const settings = validateTeamOpt(teamOpt)
       if (!settings || !isObject(result)) continue
@@ -109,6 +112,7 @@ export class TeamOptResultsEntry extends DataEntry<
         savedAt: typeof savedAt === 'number' ? savedAt : 0,
         ...(typeof roster === 'string' ? { roster } : {}),
         ...(typeof requirementsKey === 'string' ? { requirementsKey } : {}),
+        ...(typeof rotationKey === 'string' ? { rotationKey } : {}),
         seconds: typeof seconds === 'number' ? seconds : 0,
         teamOpt: settings,
         ...(validEnemy(enemy) ? { enemy } : {}),

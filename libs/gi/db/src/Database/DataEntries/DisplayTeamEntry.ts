@@ -17,6 +17,7 @@ const displayTeamSchema = z.object({
   sortType: zodEnumWithDefault(teamSortKeys, teamSortKeys[0]),
   charKeys: zodFilteredArray(allCharacterKeys, []),
   searchTerm: zodString(),
+  showVersions: zodBoolean(),
 })
 export type IDisplayTeamEntry = z.infer<typeof displayTeamSchema>
 
