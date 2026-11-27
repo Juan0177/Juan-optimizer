@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.50.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.0) (2026-11-27)
+
+### New
+
+- Import from Enka: enter your UID to bring in the characters from your in-game Character Showcase, with their level, constellation, talents, weapon and artifacts. It's on the Characters page and in Getting Started on the home page.
+- Importing again updates those characters. Weapons and artifacts you already have are matched, not added twice.
+
 ## [v1.49.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.4) (2026-11-27)
 
 ### Fixed

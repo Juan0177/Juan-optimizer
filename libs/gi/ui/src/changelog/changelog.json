@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.50.0",
+    "date": "2026-11-27",
+    "new": [
+      "Import from Enka: enter your UID to bring in the characters from your in-game Character Showcase, with their level, constellation, talents, weapon and artifacts. It's on the Characters page and in Getting Started on the home page.",
+      "Importing again updates those characters. Weapons and artifacts you already have are matched, not added twice."
+    ]
+  },
+  {
     "version": "1.49.4",
     "date": "2026-11-27",
     "fixed": [
