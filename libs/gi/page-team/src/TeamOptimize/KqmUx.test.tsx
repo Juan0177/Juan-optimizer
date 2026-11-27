@@ -103,6 +103,7 @@ vi.mock('@genshin-optimizer/gi/assets', () => ({
   artifactDefIcon: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
   characterAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
   weaponAsset: () => 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+  imgAssets: { weaponTypes: {} },
 }))
 vi.mock('@genshin-optimizer/gi/util', () => ({ getMainStatValue: () => 0.466 }))
 vi.mock('@genshin-optimizer/gi/i18n', () => ({
@@ -544,7 +545,10 @@ describe('KQM first-time setup', () => {
     const options = (await screen.findAllByRole('option')).map(
       (o) => o.textContent
     )
-    expect(options.filter(Boolean)).toHaveLength(6)
+    expect(options.filter(Boolean)).toHaveLength(7)
+    expect(options.find((o) => /^Casual/.test(o ?? ''))).toMatch(
+      /20 useful rolls/
+    )
     expect(options.find((o) => /^Custom/.test(o ?? ''))).toMatch(/10 to 45/)
     expect(options.find((o) => /^Perfect/.test(o ?? ''))).toMatch(
       /highest value/
@@ -564,18 +568,18 @@ describe('KQM first-time setup', () => {
     await choose(row('KamisatoAyaka')!, /^Great/)
     expect(all().textContent).toBe('Great')
     expect(generated().memberStandards).toBeUndefined()
-    // Custom: a box per member, at the wanted rolls closest to its standard (Great: 35)
+    // Custom: a box per member, at the wanted rolls closest to its standard (Great: 40)
     await choose(all(), /^Custom/)
     for (const key of keys) {
       expect(row(key)).toBeNull()
-      expect(box(key)!.value).toBe('35')
+      expect(box(key)!.value).toBe('40')
     }
-    expect(generated()).toMatchObject({ standard: 35 })
+    expect(generated()).toMatchObject({ standard: 40 })
     fireEvent.change(box('Shenhe')!, { target: { value: '4' } })
     expect(box('Shenhe')!.getAttribute('aria-invalid')).toBe('true')
     fireEvent.change(box('Shenhe')!, { target: { value: '30' } })
     expect(generated()).toMatchObject({
-      standard: 35,
+      standard: 40,
       memberStandards: { Shenhe: 30 },
     })
     await choose(all(), /^KQM Standard/)
@@ -612,13 +616,21 @@ describe('KQM first-time setup', () => {
         'KamisatoAyaka weapon: MistsplitterReforged R5'
       )
     )
-    fireEvent.click(
-      within(await open('KamisatoAyaka')).getByRole('radio', { name: 'R1' })
-    )
+    // (it stays open: the refinement right away, then Done)
+    const picker = screen.getByRole('dialog', {
+      name: 'Weapon for KamisatoAyaka',
+    })
+    fireEvent.click(within(picker).getByRole('radio', { name: 'R1' }))
     await waitFor(() =>
       expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
         'KamisatoAyaka weapon: MistsplitterReforged R1'
       )
+    )
+    fireEvent.click(within(picker).getByRole('button', { name: 'Done' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Weapon for KamisatoAyaka' })
+      ).toBeNull()
     )
     expect(seen.at(-1)?.kqm).toEqual(
       expect.objectContaining({
@@ -626,9 +638,6 @@ describe('KQM first-time setup', () => {
         refinements: { MistsplitterReforged: 1 },
       })
     )
-    fireEvent.keyDown(screen.getByRole('dialog', { name: /KamisatoAyaka/ }), {
-      key: 'Escape',
-    })
     fireEvent.click(
       within(await open('KamisatoAyaka')).getByRole('option', { name: /^Any/ })
     )
@@ -638,6 +647,52 @@ describe('KQM first-time setup', () => {
       )
     )
     expect(seen.at(-1)?.kqm?.lockedWeapons).toBeUndefined()
+  })
+  it('locks from the keyboard: a search, the arrow keys and Enter', async () => {
+    render(<Locks />, { wrapper: wrap })
+    const field = (key: string) =>
+      screen.getByRole('button', {
+        name: new RegExp(`^${key} weapon: `),
+        hidden: true,
+      })
+    fireEvent.click(field('KamisatoAyaka'))
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Weapon for KamisatoAyaka',
+    })
+    const search = within(dialog).getByRole('textbox', {
+      name: 'Search weapons',
+    })
+    fireEvent.change(search, { target: { value: 'mistsplitter' } })
+    await waitFor(() =>
+      expect(search.getAttribute('aria-activedescendant')).toBeTruthy()
+    )
+    const first = search.getAttribute('aria-activedescendant')!
+    expect(document.getElementById(first)?.textContent).toContain(
+      'MistsplitterReforged'
+    )
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
+        'KamisatoAyaka weapon: MistsplitterReforged R5'
+      )
+    )
+    // (Any first while nothing is searched; Down moves past it)
+    fireEvent.click(field('KamisatoAyaka'))
+    const again = await screen.findByRole('dialog', {
+      name: 'Weapon for KamisatoAyaka',
+    })
+    const box = within(again).getByRole('textbox', { name: 'Search weapons' })
+    fireEvent.keyDown(box, { key: 'ArrowDown' })
+    expect(
+      document.getElementById(box.getAttribute('aria-activedescendant')!)
+        ?.textContent
+    ).toMatch(/^Any/)
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() =>
+      expect(field('KamisatoAyaka').getAttribute('aria-label')).toBe(
+        'KamisatoAyaka weapon: Any'
+      )
+    )
   })
   it('keeps a one-copy weapon locked for one member from the others', async () => {
     render(<Locks />, { wrapper: wrap })

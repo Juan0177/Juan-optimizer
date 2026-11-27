@@ -90,7 +90,7 @@ export const reactionEnablers = {
 /** Polestar stacks a member adds to each Polestar Field record (one entry per line: the
  * released-only build drops unreleased characters' lines). Anastasya's Lament for the Lost: 1
  * (7.3 beta, params[0]; it was 2) */
-const polestarBonus: Partial<Record<CharacterKey, number>> = {
+export const polestarBonus: Partial<Record<CharacterKey, number>> = {
   Anastasya: 1,
 }
 /** A new (Wandering) Stellar Vortex starts at this stack count, Level 2, once per 1 s (one entry

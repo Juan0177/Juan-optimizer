@@ -120,7 +120,9 @@ import {
   useSimTeam,
 } from './RotationWriter'
 import { RunDialog } from './RunDialog'
+import { conditionsKey } from './rotationConditionsStore'
 import { sameBuildRoster, teamRoster } from './runScope'
+import { TeamInvestment } from './TeamInvestment'
 import { TeamOptInspector } from './TeamOptInspector'
 import { TeamOptimizeStart, useManualStart } from './TeamOptimizeStart'
 import {
@@ -1494,6 +1496,11 @@ export default function TeamBuildWorkspace({
               kqm.clear()
               rotationOpen.set(true)
             }}
+            onCompareInvestments={() =>
+              document
+                .getElementById(`teamopt-invest-${teamId}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
             actions={<VersionsButton teamId={teamId} compare />}
           />
         </Box>
@@ -1634,6 +1641,7 @@ export default function TeamBuildWorkspace({
                     attacks={shownTeamOpt.attacks}
                     teamData={teamData}
                     rotationTime={shownResultTime}
+                    conditionsKey={conditionsKey(teamId, 'team')}
                   />
                 </Box>
               )
@@ -1650,6 +1658,11 @@ export default function TeamBuildWorkspace({
             applications={applications}
             cocoon={resultCocoon}
             onRunAgain={() => setRunDialog(true)}
+            onCompareInvestments={() =>
+              document
+                .getElementById(`teamopt-invest-${teamId}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            }
             timeline={
               <KqmTimeline
                 teamId={teamId}
@@ -1666,6 +1679,33 @@ export default function TeamBuildWorkspace({
             }
           />
         </Box>
+      )}
+      {/* compare extra 5★ pulls (constellations, R1 signatures, and conditional alt rotations) */}
+      {mode === 'inventory' && result && shown && !result.optionsRunning && (
+        <TeamInvestment
+          teamId={teamId}
+          members={members}
+          mode="inventory"
+          setup={shownTeamOpt}
+          result={shown}
+          rotationTime={shownResultTime}
+          anchorId={`teamopt-invest-${teamId}`}
+        />
+      )}
+      {mode === 'kqm' && kqmResult && (
+        <TeamInvestment
+          teamId={teamId}
+          members={members}
+          mode="kqm"
+          setup={kqmResult.teamOpt}
+          result={kqmResult.result}
+          rotationTime={
+            (kqmResult.runTeamOpt ?? kqmResult.teamOpt).rotationTime ??
+            rotationTime
+          }
+          disabled={running || (!!kqmEarly && kqmResult === kqmEarly)}
+          anchorId={`teamopt-invest-${teamId}`}
+        />
       )}
       {/* what one more roll, talent level or level on each member would add */}
       {/* (not while the run's other builds are ranked: computed, and shown, once they are) */}

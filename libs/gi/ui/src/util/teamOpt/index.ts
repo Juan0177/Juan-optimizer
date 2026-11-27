@@ -2,13 +2,16 @@ export * from './data'
 export * from './display'
 export * from './energyCalc'
 export * from './energyCalcHelp'
+export * from './investmentWorker'
 export * from './itemConditionals'
 export * from './kqm'
 export {
   kqmBuildThreads,
   kqmBuildThreadsAuto,
   kqmBuildThreadsMax,
+  kqmInvestmentConcurrency,
   releaseKqmBuilders,
+  runInvestmentInPool,
   setKqmBuildThreads,
 } from './kqmBuildPool'
 export * from './kqmStats'

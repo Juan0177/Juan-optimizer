@@ -26,6 +26,8 @@ import type { CharacterKey } from '@genshin-optimizer/gi/consts'
  *   W1.5    wait 1.5 s (W90f: 90 frames; Mualani in her blessing walks on Sharky meanwhile)
  *   WK / WK11f  walk (gcsim's walk: 1 frame by default; Tartaglia's next Skill is his walking one)
  *   E? / Q?  only when ready (left out, not waited for, when it is not: "Sucrose N1 E? D")
+ *   [Q EEE]?/[N3 N3 N3]  a group played only when its first Skill or Burst is ready, the
+ *                alternative instead of all of it ("[Q EEE]?" alone: left out)
  *   D? / D?/CA  a dash only when the kit allows it (Wanderer: Descent up), else left out or the
  *                alternative
  *   entry / swap  swap in and straight out again (a name alone mid-rotation is the same): her
@@ -65,6 +67,13 @@ export interface RotationAction {
   optional?: boolean
   /** An optional action's alternative ("Q?/N3", "E?/N2 CA"): played instead when it is not ready */
   otherwise?: RotationAction[]
+  /**
+   * The first action of a group, "[Q EEE]?/[N3 N3 N3]": the group's id. The rest of the group plays
+   * only when this one does; its alternative (`otherwise`) is played instead of all of it.
+   */
+  group?: number
+  /** The rest of a group ("E E E" in "[Q EEE]?"): played only when the group's first action is */
+  inGroup?: number
   /** The metres the active member moves with it, per normal attack of a string ("N3[movement=4]") */
   movement?: number
   /** Charged: Sandrone's condensed beams before she releases it ("CA[beams=2]") */
@@ -237,7 +246,9 @@ export function matchMember(
 }
 
 /** Members whose Charged Attack takes a number of beams ("CA[beams=2]"), and the most it can take */
-const CHARGE_BEAMS: Partial<Record<CharacterKey, number>> = { Sandrone: 6 }
+const CHARGE_BEAMS: Partial<
+  Record<CharacterKey, (constellation: number) => number>
+> = { Sandrone: (constellation) => (constellation >= 1 ? 6 : 3) }
 /** Members whose Charged Attack loads a number of bullets ("CA[bullets=4]"), and the most */
 const CHARGE_BULLETS: Partial<Record<CharacterKey, number>> = { Chasca: 6 }
 /** The Charged Attacks held for spins with a finisher (KQM's "C3F"), at most this many spins */
@@ -253,14 +264,18 @@ const MOVEMENT_WORD = /\[\s*movement\s*=\s*([^\]]*?)\s*\](\?)?/iy
  * The ways a member's kit lets its actions be written beyond the plain ones, for a rotation
  * search to try: Charged Attacks with beams (Sandrone) or bullets (Chasca), Flamestrider spins and
  * finisher (Mavuika), a cancelled Charged Attack (Arlecchino, then a dash), a held Skill's stacks
- * (Beidou). What the member's constellations do not allow, the simulation warns about.
+ * (Beidou). Sandrone's beams go up to what her constellation allows (3, 6 from C1); what else
+ * the member's constellations do not allow, the simulation warns about.
  */
-export function actionVariants(characterKey: CharacterKey): string[] {
+export function actionVariants(
+  characterKey: CharacterKey,
+  constellation = 0
+): string[] {
   const out: string[] = []
   const counted = (most: number | undefined, word: (n: number) => string) => {
     for (let n = 1; most && n <= most; n++) out.push(word(n))
   }
-  counted(CHARGE_BEAMS[characterKey], (n) => `CA[beams=${n}]`)
+  counted(CHARGE_BEAMS[characterKey]?.(constellation), (n) => `CA[beams=${n}]`)
   counted(CHARGE_BULLETS[characterKey], (n) => `CA[bullets=${n}]`)
   const spins = CHARGE_SPINS[characterKey]
   counted(spins, (n) => `C${n}`)
@@ -347,6 +362,90 @@ function optionalBurstAlt(word: string): string | undefined {
   return undefined
 }
 
+/** The index of the "]" closing the "[" at `open` (-1: none) */
+function closingBracket(text: string, open: number) {
+  let depth = 0
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '[') depth++
+    else if (text[i] === ']' && --depth === 0) return i
+  }
+  return -1
+}
+
+/**
+ * A group in a step's text, "[Q EEE]?/[N3 N3 N3]" or "[Q EEE]?" (not a repeat, "3[N3 CA]", nor a
+ * parameter, "[movement=6]"): where it is, what is in it and its alternative
+ */
+function findGroup(text: string) {
+  for (let i = text.indexOf('['); i >= 0; i = text.indexOf('[', i + 1)) {
+    const before = text.slice(0, i)
+    if (i > 0 && !/\s$/.test(before)) continue
+    if (/(^|\s)\d+\s*$/.test(before)) continue
+    const close = closingBracket(text, i)
+    if (close < 0) return undefined
+    const inner = text.slice(i + 1, close)
+    if (/^\s*[a-z_]+\s*=/i.test(inner)) continue
+    let end = close + 1
+    const optional = text[end] === '?'
+    if (optional) end++
+    let alt: string | undefined
+    if (text[end] === '/') {
+      if (text[end + 1] === '[') {
+        const altClose = closingBracket(text, end + 1)
+        if (altClose < 0) return undefined
+        alt = text.slice(end + 2, altClose)
+        end = altClose + 1
+      } else {
+        const space = text.slice(end + 1).search(/\s/)
+        const stop = space < 0 ? text.length : end + 1 + space
+        alt = text.slice(end + 1, stop)
+        end = stop
+      }
+    }
+    // (a bare "[…]" is not one)
+    if (!optional && alt === undefined) continue
+    return { start: i, end, inner, alt }
+  }
+  return undefined
+}
+
+let groupIds = 0
+/** A step's text with a group in it: the actions before, the group's, the actions after */
+function parseGroup(
+  text: string,
+  group: NonNullable<ReturnType<typeof findGroup>>,
+  warnings: string[],
+  who: string,
+  characterKey?: CharacterKey
+): RotationAction[] {
+  const parse = (part: string) =>
+    parseActions(part, warnings, who, characterKey)
+  const before = parse(text.slice(0, group.start))
+  const after = parse(text.slice(group.end))
+  const [lead, ...rest] = parse(group.inner)
+  const written = `[${group.inner.trim()}]?${group.alt === undefined ? '' : `/${group.alt.includes(' ') ? `[${group.alt.trim()}]` : group.alt}`}`
+  if (!lead || (lead.kind !== 'burst' && lead.kind !== 'skill')) {
+    warnings.push(
+      `${who}: "${written}": a group starts with the Skill or Burst it waits for, as "[Q E E E]?" (played as written)`
+    )
+    return [...before, ...(lead ? [lead] : []), ...rest, ...after]
+  }
+  const id = ++groupIds
+  const otherwise = group.alt === undefined ? undefined : parse(group.alt)
+  return [
+    ...before,
+    {
+      ...lead,
+      optional: true,
+      group: id,
+      text: written,
+      ...(otherwise?.length ? { otherwise } : {}),
+    },
+    ...rest.map((a) => ({ ...a, inGroup: id })),
+    ...after,
+  ]
+}
+
 /** One step's actions: "EQ", "E N1 E N4", "tE CA", "N1E", "W1.5" (seconds), "W90f" (frames) */
 function parseActions(
   text: string,
@@ -354,6 +453,9 @@ function parseActions(
   who: string,
   characterKey?: CharacterKey
 ): RotationAction[] {
+  // a group played only when its first action is ready ("[Q EEE]?/[N3 N3 N3]")
+  const group = findGroup(text)
+  if (group) return parseGroup(text, group, warnings, who, characterKey)
   const actions: RotationAction[] = []
   // alternatives: the first one, unless it is a Skill's or Burst's ("Q?/N3" or "Q/N3": N3 when Q
   // is not ready; "EQ/E" or "E/EQ": E with an optional Q)
@@ -550,8 +652,12 @@ function parseActions(
       const [, option, n] = /^(\w+)\s*=\s*(\d+)$/.exec(m[13] ?? '') ?? []
       const bullets = option?.toLowerCase() === 'bullets'
       const count = n !== undefined ? Number(n) : undefined
-      const most =
-        characterKey && (bullets ? CHARGE_BULLETS : CHARGE_BEAMS)[characterKey]
+      // (the most at any constellation: the kit warns about beams its constellation can't fire)
+      const most = !characterKey
+        ? undefined
+        : bullets
+          ? CHARGE_BULLETS[characterKey]
+          : CHARGE_BEAMS[characterKey]?.(6)
       const what = bullets ? 'bullets' : 'beams'
       if (count === undefined) actions.push({ kind: 'charged', text: raw })
       else if (!most) {
@@ -929,6 +1035,31 @@ export function rotationSpans(
         spans.push({ from: w.from, to: w.to, kind: 'unknown' })
       } else if (group && i <= group.last) {
         // (a repeated group written with spaces, "4[N5 CD]": read as one)
+        spans.push({ from: w.from, to: w.to, kind: group.kind })
+      } else if (/^\[/.test(w.word) && !/^\[\s*[a-z_]+\s*=/i.test(w.word)) {
+        // (a group, "[Q EEE]?/[N3 N3 N3]", written with spaces: read as one, to where its
+        // brackets close)
+        let open = 0
+        let last = -1
+        for (let j = i; j < words.length; j++) {
+          open +=
+            (words[j].word.match(/\[/g)?.length ?? 0) -
+            (words[j].word.match(/\]/g)?.length ?? 0)
+          if (open <= 0) {
+            last = j
+            break
+          }
+        }
+        const joined = words
+          .slice(i, last < 0 ? words.length : last + 1)
+          .map((x) => x.word)
+          .join(' ')
+        const problems: string[] = []
+        parseActions(joined, problems, '', key)
+        group = {
+          last: last < 0 ? words.length - 1 : last,
+          kind: last < 0 || problems.length ? 'unknown' : 'action',
+        }
         spans.push({ from: w.from, to: w.to, kind: group.kind })
       } else if (/^\d+\s*\[/.test(w.word) && !w.word.includes(']')) {
         const last = words.findIndex((x, j) => j > i && x.word.includes(']'))

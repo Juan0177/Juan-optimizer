@@ -32,6 +32,8 @@ export function kqmStandardName(t: TFunction, standard: KqmStandard) {
       rolls: standard,
     })
   switch (standard) {
+    case 'casual':
+      return t('teamOpt.kqm.tierCasual', 'Casual')
     case 'good':
       return t('teamOpt.kqm.tierGood', 'Good')
     case 'great':
@@ -54,34 +56,39 @@ export function kqmStandardDetail(t: TFunction, standard: KqmStandard) {
   if (typeof standard === 'number')
     return t('teamOpt.kqm.customDetail', {
       defaultValue:
-        '{{rolls}} of the set’s 45 rolls on wanted stats, the rest random',
+        '{{rolls}} of the set’s 45 rolls on wanted stats, the rest on stats it does not use',
       rolls: standard,
     })
   switch (standard) {
+    case 'casual':
+      return t(
+        'teamOpt.kqm.tierCasualDetail',
+        '20 useful rolls: 2 of a piece’s 4 lines and 2 of its 4 upgrades on wanted stats, the rest on stats it does not use · substat CV up to 132'
+      )
     case 'good':
       return t(
         'teamOpt.kqm.tierGoodDetail',
-        '8 rolls a piece: 2 of its 4 lines on wanted stats, 3 of its 4 upgrades on them'
+        '35 useful rolls: 3 of a piece’s 4 lines and 4 of its 5 upgrades on wanted stats, the rest on a stat it does not use · substat CV up to 199'
       )
     case 'great':
       return t(
         'teamOpt.kqm.tierGreatDetail',
-        '9 rolls a piece: 3 of its 4 lines on wanted stats, 4 of its 5 upgrades on them'
+        '40 useful rolls: 3 of a piece’s 4 lines and all 5 upgrades on wanted stats · substat CV up to 232'
       )
     case 'top':
       return t(
         'teamOpt.kqm.tierTopDetail',
-        '9 rolls a piece: every line on a wanted stat, every upgrade on them'
+        '45 useful rolls: every line and upgrade on wanted stats · substat CV up to 232'
       )
     case 'perfect':
       return t(
         'teamOpt.kqm.tierPerfectDetail',
-        'Top with every roll at its highest value: the best the game can make'
+        'Top with every roll at its highest value: the best the game can make · substat CV up to 272'
       )
     default:
       return t(
         'teamOpt.kqm.tierKqmsDetail',
-        '2 rolls of every substat and 20 placed, at most 2 a piece per stat'
+        '20 placed rolls plus 2 of every substat, at most 2 a piece per stat · substat CV up to 159'
       )
   }
 }
@@ -118,15 +125,22 @@ export function kqmStandardText(
 }
 
 /**
- * Custom's wanted rolls closest to a standard (KQMS about 20; Good's split on 9-roll pieces 25,
- * Great 35, Top 45): where its box starts
+ * Custom's wanted rolls closest to a standard (Casual 20, KQMS about 30 with its fixed rolls,
+ * Good 35, Great 40, Top 45): where its box starts
  */
 const customRollsFor = (standard: KqmStandard) =>
   typeof standard === 'number'
     ? standard
-    : ({ kqms: 20, good: 25, great: 35, top: 45, perfect: 45 } as const)[
-        standard
-      ]
+    : (
+        {
+          casual: 20,
+          kqms: 30,
+          good: 35,
+          great: 40,
+          top: 45,
+          perfect: 45,
+        } as const
+      )[standard]
 
 /** Whether the standards are typed in, one box per member: Custom was picked, or a member is at one */
 export function useKqmCustom(
@@ -239,7 +253,7 @@ export function KqmArtifactStandard({
       <FieldLabel
         tip={t(
           'teamOpt.kqm.standardAllTipCustom',
-          'Sets every member’s artifacts; each can be changed in its row. KQM Standard is KQM’s own: 2 rolls of every substat and 20 placed for damage, at most 2 a piece per stat. Good, Great, Top and Perfect are this site’s: each piece is built as the game makes one (4 different lines, never its main stat, and 4 or 5 upgrades), with more of its lines and upgrades on the stats the build wants at each step. Perfect is the best five artifacts the game can make. Custom: type how many of a member’s 45 rolls land on wanted stats (each piece an even share, the rest random). A 4★ piece has 2 fewer rolls, each 0.8 of a 5★ one.'
+          'Sets every member’s artifacts; each can be changed in its row. KQM Standard is KQM’s own: 20 rolls placed for damage plus 2 of every substat, at most 2 a piece per stat. Casual, Good, Great, Top and Perfect are this site’s: each piece is built as the game makes one (4 different lines, never its main stat, and 4 or 5 upgrades); its useful rolls go on the stats the build wants, the rest on stats it does not use. A piece that cannot hold that many wanted lines (its main stat is one of them) has more random ones. Perfect is the best five artifacts the game can make. Custom: type how many of a member’s 45 rolls land on wanted stats (each piece an even share, the rest on stats it does not use). A 4★ piece has 2 fewer rolls, each 0.8 of a 5★ one. Every roll is KQM’s average roll value (crit rate 3.31%, crit DMG 6.62%), except Perfect’s, at the highest. Substat CV: the most crit value the substats can reach, the circlet’s main stat not counted (Great and Top reach the same: crit is 2 lines, Top’s fourth useful line is another stat). With a crit circlet, add its 62.2 and take a little off the substats (one crit line fewer fits): Good is 192 + 62 = 254 CV.'
         )}
       >
         {t('teamOpt.kqm.standard', 'Artifacts')}

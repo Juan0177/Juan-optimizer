@@ -32,6 +32,7 @@ export const icdGroups: Record<string, { reset: number; apply: number[] }> = {
   AlyoshaBurst: { reset: 96, apply: [1, 0] },
   // KQM-git/kqmsim 7bdf45f, pkg/core/attacks/icd_groups.dm.go
   AnastasyaSkill: { reset: 96, apply: [1, 0] },
+  AnastasyaHonorNormal: { reset: 150, apply: [1, 0, 1, 0, 1, 0, 1, 0] },
   VesnaSkill: { reset: 120, apply: [1, 0] },
   ValeriyBurst: { reset: 120, apply: [1, 0] },
   Amber: {

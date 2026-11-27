@@ -77,7 +77,9 @@ describe('the artifact standard', () => {
   it('a tier’s caps: what its pieces can hold of a stat (a line and every upgrade)', () => {
     expect(kqmRollCaps(mains, 'top').critDMG_).toBe(30)
     expect(kqmRollCaps(mains, 'top').critRate_).toBe(24)
-    expect(kqmRollCaps(mains, 'good').critDMG_).toBe(25)
+    // (Good: 9-roll pieces now; Casual: 8)
+    expect(kqmRollCaps(mains, 'good').critDMG_).toBe(30)
+    expect(kqmRollCaps(mains, 'casual').critDMG_).toBe(25)
   })
   it('4★ pieces: 2 rolls fewer each in KQM Standards', () => {
     const sets = { Instructor: 4 }
@@ -93,7 +95,10 @@ describe('the artifact standard', () => {
           5 * KQM_TIERS[standard].pieceRolls,
           9
         )
-      expect(placed.score.total).toBeGreaterThan(last)
+      // (Top's fourth useful line has no stat left in a build reading only 3: as Great then)
+      if (standard === 'top')
+        expect(placed.score.total).toBeGreaterThanOrEqual(last)
+      else expect(placed.score.total).toBeGreaterThan(last)
       last = placed.score.total
     }
   })

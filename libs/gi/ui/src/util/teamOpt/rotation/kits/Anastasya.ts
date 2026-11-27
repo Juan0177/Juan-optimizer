@@ -455,6 +455,8 @@ export const kit: KitModel = {
                     element: 'cryo',
                     applies: true,
                     icd: 'normal',
+                    // (dump Anastasya_Descender_NormalAttack: every other hit, 2.5 s reset)
+                    icdGroup: 'AnastasyaHonorNormal',
                     label,
                   })
               })

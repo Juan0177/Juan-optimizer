@@ -52,18 +52,23 @@ export function writtenTeamReplay({
   includeEnergy?: boolean
 }):
   | ((
-      input: Pick<KqmReplayInput, 'gear' | 'overrides' | 'calculate'>
+      input: Pick<KqmReplayInput, 'gear' | 'overrides' | 'calculate'> & {
+        constellations?: Partial<Record<CharacterKey, number>>
+      }
     ) => KqmPlayed & { energy?: RotationEnergy })
   | undefined {
   if (!text.trim()) return undefined
   const own = simTeamOf(members, database)
-  return ({ gear, overrides, calculate }) => {
+  return ({ gear, overrides, calculate, constellations }) => {
+    const teamConstellations = constellations
+      ? { ...own.constellations, ...constellations }
+      : own.constellations
     const playArgs = {
       text,
       opener,
       timing,
       frameData,
-      team: { ...own, gear },
+      team: { ...own, constellations: teamConstellations, gear },
       names,
       members,
       database,
@@ -110,7 +115,7 @@ export function writtenTeamReplay({
           energySim ?? sim,
           own.members,
           rotations,
-          own.constellations
+          teamConstellations
         ),
         ...(energySim && {
           energyRotationTime:

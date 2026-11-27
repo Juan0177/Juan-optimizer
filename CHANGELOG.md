@@ -4,6 +4,50 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.47.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.3) (2026-11-27)
+
+### New
+
+- Casual artifact standard, below KQM Standard: 20 useful rolls, as artifacts of average luck.
+
+### Improved
+
+- Artifact standards count only useful rolls; the rest go on stats the build does not use. Good gives 35, Great 40 and Top 45, so Good is now above KQM Standard. KQM results made before this show as out of date.
+- Artifact standards say their substat crit value, and how a crit circlet adds to it.
+
+### Fixed
+
+- Investment comparison counts the ER that extra constellations, R1 signatures and alternative rotations change, and refits the teammates it affects.
+
+## [v1.47.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.0) (2026-11-27)
+
+### New
+
+- Investment comparison: after a run, see which extra 5★ pulls (constellations, R1 signature weapons) raise team DPS the most for a number of pulls.
+- Lock a member's weapon straight from its row in KQM Setup.
+- The ER calculator shows how much energy each teammate gives.
+
+### Improved
+
+- The weapon lock picker is compact: search with the keyboard, weapons grouped by rarity with their substat, and the refinement set as you pick.
+- Artifact standards say whether they use average or highest roll values, and the most crit value their substats reach.
+
+### Fixed
+
+- Vodyanitsa's Skill makes a particle with each Horn of Spring's Call attack (6 a Skill, not 1), so her teammates need less ER.
+- The rotation writer plays Bursts set to every 2nd or 3rd rotation in the ER calculator the way the optimizer does, and says so.
+
+## [v1.46.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.46.0) (2026-11-26)
+
+### New
+
+- Damage share shows how long Cryo Resonance (+15% CRIT Rate) is up in teams with two Cryo members: its share of the rotation's time and of its damage.
+- Damage share shows the Polestar Field too: its uptime and average stacks, over time and by damage (Anastasya's +1 included).
+
+### Fixed
+
+- Anastasya's Normal Attacks in Honor apply Cryo on every other hit (was every third).
+
 ## [v1.45.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.45.0) (2026-11-26)
 
 ### New

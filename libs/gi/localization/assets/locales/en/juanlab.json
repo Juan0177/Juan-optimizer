@@ -139,6 +139,47 @@
     },
     "entries": [
       {
+        "date": "2026-11-27",
+        "title": "Update to Stellar Optimizer 1.47.4",
+        "summary": "Stellar Optimizer’s releases 1.45.1 to 1.47.4 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Investment comparison**: after a run, see which extra 5★ pulls (constellations, R1 signature weapons) raise team DPS the most for a number of pulls.",
+              "**Casual artifact standard**, below KQM Standard: 20 useful rolls, as artifacts of average luck.",
+              "**Damage share**: shows how long Cryo Resonance (+15% CRIT Rate) and the Polestar Field are up, with average stacks (Anastasya’s +1 included).",
+              "Lock a member’s weapon straight from its row in KQM Setup, and the ER calculator shows how much energy each teammate gives.",
+              "In rotations, groups like [Q EEE]?/[N3 N3 N3] play only when their first Skill or Burst is ready, the fallback otherwise."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "Artifact standards count only useful rolls, with Good, Great and Top re-split, and state their substat CV and what a crit circlet adds.",
+              "Each variant keeps its own weapon locks, and Edit variant changes constellations, signatures and name in place.",
+              "The weapon lock picker is more compact: keyboard search, weapons grouped by rarity with their substat."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Anastasya**: her Honor Normal Attacks apply Cryo on every other hit (was every third).",
+              "Vodyanitsa: each Horn of Spring’s Call attack makes a particle, so her teammates need less ER.",
+              "The rotation writer plays Bursts set to every 2nd or 3rd rotation as the optimizer does.",
+              "Less memory used in big optimizations (no more Chrome crashes)."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts are in Italian too, and translated texts Stellar changed were updated.",
+              "Edit variant can also turn “Keep teammates’ gear” on or off."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-26",
         "title": "Update to Stellar Optimizer 1.45.0",
         "summary": "Stellar Optimizer’s releases 1.42.0 to 1.45.0 arrive, with the 7.3 beta V5.",

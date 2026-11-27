@@ -64,6 +64,8 @@ export interface EnergyCalcResult {
           gear: number
           skills: number
         }
+        /** The other members' part of it (`sources.team`), by whose particles they are */
+        fromMembers: Partial<Record<CharacterKey, number>>
         /** Energy its Bursts spend per rotation (the Burst cost over its cadence) */
         burstSpend: number
       }
@@ -290,6 +292,14 @@ export function calculateEnergyRecharge(
         gear: 0,
         skills: 0,
       }
+      const fromMembers: Partial<Record<CharacterKey, number>> = {}
+      const fromMember = (source: CharacterKey, energy: number) => {
+        if (source === recipient) sources.own += energy
+        else {
+          sources.team += energy
+          fromMembers[source] = (fromMembers[source] ?? 0) + energy
+        }
+      }
       for (const source of keys) {
         const member = settings.members[source]!
         const data = energyCalcData[source]!
@@ -316,8 +326,7 @@ export function calculateEnergyRecharge(
             elementValue(source) *
             share(turretCaught ? turretCaught(recipient) : field)
           particles += energy
-          if (source === recipient) sources.own += energy
-          else sources.team += energy
+          fromMember(source, energy)
         }
         for (const [i, { mode, uses }] of (made === undefined
           ? modes
@@ -352,8 +361,7 @@ export function calculateEnergyRecharge(
                 (recipient === source ? 1 - fed : 0)
           const energy = count * elementValue(source) * share(caught)
           particles += energy
-          if (source === recipient) sources.own += energy
-          else sources.team += energy
+          fromMember(source, energy)
         }
         // A Favonius trigger makes 3 clear particles (2 energy each on the field) for whoever
         // is on the field then.
@@ -494,6 +502,7 @@ export function calculateEnergyRecharge(
         burstCost: cost,
         required,
         sources,
+        fromMembers,
         burstSpend:
           own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
       }
@@ -634,6 +643,39 @@ function defaultSkillMode(key: CharacterKey, constellation?: number) {
       mode = i
   })
   return mode
+}
+
+/**
+ * Upgrades un-edited skill modes to any higher `"Constellation N"` mode unlocked by `constellations`
+ * (for ER calculator investment runs without a written rotation; with a written rotation,
+ * `withRotationEnergy` already updates skill modes from the simulation).
+ */
+export function upgradeConstellationModes(
+  settings: TeamOptEnergyCalculator,
+  keys: readonly CharacterKey[],
+  constellations: Partial<Record<CharacterKey, number>>
+): TeamOptEnergyCalculator {
+  let changed = false
+  const members: TeamOptEnergyCalculator['members'] = { ...settings.members }
+  for (const key of keys) {
+    const member = members[key]
+    const cons = constellations[key]
+    if (!member || cons === undefined || member.edited?.includes('skillMode'))
+      continue
+    const mode = defaultSkillMode(key, cons)
+    const curLabel = energyCalcData[key]?.skills[member.skillMode]?.label ?? ''
+    const nextLabel = energyCalcData[key]?.skills[mode]?.label ?? ''
+    if (
+      mode !== member.skillMode &&
+      nextLabel.startsWith('Constellation ') &&
+      (member.skillMode === 0 || curLabel.startsWith('Constellation ')) &&
+      energySkillConstellation(nextLabel) > energySkillConstellation(curLabel)
+    ) {
+      members[key] = { ...member, skillMode: mode }
+      changed = true
+    }
+  }
+  return changed ? { ...settings, members } : settings
 }
 
 /**

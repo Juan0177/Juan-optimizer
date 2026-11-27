@@ -133,11 +133,19 @@ export const kit: KitModel = {
         // C2: Song of Ages Past lasts 9 s longer (the cooldown stays 16 s).
         const song = 960 + (c.constellation('Vodyanitsa') >= 2 ? 540 : 0)
         const id = ++s.skillId
-        // its particle: 1, 0.2 s ICD on her clock (kqmsim particleCB)
-        if (
-          turretReady(s.particles, 'skill', c.characterFrame('Vodyanitsa'), 12)
-        )
-          turretParticles(c, 0, 1, 'Vodyanitsa')
+        // its particle: 1, 0.2 s ICD on her clock (kqmsim particleCB), as from each Horn attack
+        const particle = (at: SimContext) => {
+          if (
+            turretReady(
+              s.particles,
+              'skill',
+              at.characterFrame('Vodyanitsa'),
+              12
+            )
+          )
+            turretParticles(at, 0, 1, 'Vodyanitsa')
+        }
+        particle(c)
         c.hit(0, {
           path: ['skill', 'skillDmg'],
           tag: 'skill',
@@ -199,6 +207,7 @@ export const kit: KitModel = {
             icd: 'skill',
             label: "Horn of Spring's Call",
           })
+          particle(at)
           // C2: each Horn attack grants "Two Voices in Black and White" for 5 s (after this hit).
           if (at.constellation('Vodyanitsa') >= 2)
             at.at(0, (after) => {

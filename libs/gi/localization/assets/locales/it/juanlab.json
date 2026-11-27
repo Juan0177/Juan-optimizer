@@ -139,6 +139,47 @@
     },
     "entries": [
       {
+        "date": "2026-11-27",
+        "title": "Aggiornamento a Stellar Optimizer 1.47.4",
+        "summary": "Arrivano le versioni da 1.45.1 a 1.47.4 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Confronto degli investimenti**: dopo un’esecuzione, scopri quali desideri 5★ in più (costellazioni, armi signature R1) alzano di più il DPS della squadra per un dato numero di desideri.",
+              "**Livello di manufatti Casual**, sotto lo Standard KQM: 20 roll utili, come manufatti di fortuna media.",
+              "**Quota di danno**: mostra quanto resta attiva la Risonanza Cryo (+15% Tasso di CRIT) e il Campo della Stella polare, con gli accumuli medi (compreso il +1 di Anastasya).",
+              "Si può bloccare l’arma di un membro direttamente dalla sua riga nelle impostazioni KQM, e il calcolatore di ER mostra quanta energia dà ogni compagno.",
+              "Nella rotazione, i gruppi come [Q EEE]?/[N3 N3 N3] si giocano solo se la loro prima Abilità o il primo Tripudio è pronto, altrimenti l’alternativa."
+            ]
+          },
+          {
+            "kind": "improved",
+            "items": [
+              "I livelli dei manufatti contano solo i roll utili, con Buono, Ottimo ed Eccellente ridivisi, e dicono il CV delle secondarie e quanto aggiunge una corona critica.",
+              "Ogni variante tiene i propri blocchi d’arma, e “Modifica variante” cambia costellazioni, signature e nome senza crearne una nuova.",
+              "Il selettore dell’arma bloccata è più compatto: ricerca da tastiera, armi raggruppate per rarità con la loro secondaria."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Anastasya**: gli attacchi normali in Onore applicano Cryo a un colpo sì e uno no (prima uno ogni tre).",
+              "Vodyanitsa: ogni attacco del Corno del richiamo primaverile genera una particella, quindi ai compagni serve meno ER.",
+              "Lo scrittore della rotazione gioca i Tripudi impostati a una rotazione su 2 o su 3 come l’ottimizzatore.",
+              "Meno memoria usata durante le ottimizzazioni grandi (niente più crash di Chrome)."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi sono in italiano, e i testi già tradotti che Stellar ha cambiato sono stati aggiornati.",
+              "“Modifica variante” permette di attivare o togliere anche “Tieni l’equipaggiamento dei compagni”."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-26",
         "title": "Aggiornamento a Stellar Optimizer 1.45.0",
         "summary": "Arrivano le versioni da 1.42.0 a 1.45.0 di Stellar Optimizer, con la beta 7.3 V5.",

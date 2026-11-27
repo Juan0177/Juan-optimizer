@@ -35,6 +35,7 @@ import {
 } from './kqmVersionCombos'
 import {
   createVersion,
+  editVersion,
   keepsTeammates,
   keptTeammates,
   KQM_SHARED,
@@ -562,6 +563,94 @@ describe('KQM versions', () => {
     pushVersionSettings(database, id, names)
     expect(database.teams.get(teamId)?.teamOpt?.kqm?.signature).toBeUndefined()
   })
+
+  it('a version’s locked weapons are its own: changing one leaves the others’ results fresh', () => {
+    const { database, teamId } = setup()
+    const a = createVersion(database, teamId, [], names, undefined, {
+      Bennett: 5,
+    })
+    const b = createVersion(database, teamId, [], names, undefined, {
+      Bennett: 4,
+    })
+    const keys = () => [teamId, a, b].map((id) => kqmSharedKey(database, id))
+    const before = keys()
+    database.teams.set(a, (team) => {
+      team.teamOpt!.kqm!.lockedWeapons = { Mavuika: 'AThousandBlazingSuns' }
+    })
+    pushVersionSettings(database, a, names)
+    syncVersion(database, b, names)
+    syncVersion(database, a, names)
+    const after = keys()
+    // (only the version changed goes out of date; the lock stays its own)
+    expect(after[0]).toBe(before[0])
+    expect(after[2]).toBe(before[2])
+    expect(after[1]).not.toBe(before[1])
+    expect(database.teams.get(a)?.teamOpt?.kqm?.lockedWeapons).toEqual({
+      Mavuika: 'AThousandBlazingSuns',
+    })
+    expect(
+      database.teams.get(teamId)?.teamOpt?.kqm?.lockedWeapons
+    ).toBeUndefined()
+    expect(database.teams.get(b)?.teamOpt?.kqm?.lockedWeapons).toBeUndefined()
+    // (a copy takes the locks of the members it keeps)
+    const c = createVersion(
+      database,
+      teamId,
+      [{ from: 'Rosaria', to: 'KaedeharaKazuha' }],
+      names,
+      undefined,
+      {},
+      undefined,
+      a
+    )
+    expect(database.teams.get(c)?.teamOpt?.kqm?.lockedWeapons).toEqual({
+      Mavuika: 'AThousandBlazingSuns',
+    })
+  })
+
+  it('Edit: a version’s constellations, signature weapons and name changed in place', () => {
+    const { database, teamId } = setup()
+    const id = createVersion(
+      database,
+      teamId,
+      [],
+      names,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      { Mavuika: 1 }
+    )
+    const members = keysOf(database, id)
+    const key = kqmSharedKey(database, id)
+    // (nothing changed: nothing saved)
+    expect(
+      editVersion(
+        database,
+        id,
+        names,
+        {},
+        { Mavuika: 1 },
+        database.teams.get(id)!.name
+      )
+    ).toBe(false)
+    // (R1 to Any, Bennett at C5: the name follows when none is typed)
+    expect(editVersion(database, id, names, { Bennett: 5 }, {})).toBe(true)
+    const team = database.teams.get(id)!
+    expect(team.teamOpt?.kqm?.signature).toBeUndefined()
+    expect(team.versionCons).toEqual({ Bennett: 5 })
+    expect(team.teamOpt?.kqm?.constellations?.Bennett).toBe(5)
+    expect(team.name).toBe('Mavuika | Bennett C5 | Citlali | Rosaria')
+    expect(keysOf(database, id)).toEqual(members)
+    expect(versionRoot(database, id)).toBe(teamId)
+    expect(kqmSharedKey(database, id)).not.toBe(key)
+    // (a typed name is kept; the original is never edited this way)
+    expect(editVersion(database, id, names, { Bennett: 5 }, {}, 'Mine')).toBe(
+      true
+    )
+    expect(database.teams.get(id)!.name).toBe('Mine')
+    expect(editVersion(database, teamId, names, { Bennett: 5 })).toBe(false)
+  })
 })
 
 describe("a version that keeps its teammates' gear", () => {
@@ -587,6 +676,32 @@ describe("a version that keeps its teammates' gear", () => {
     return builds
   }
 
+  it("Edit variant turns keeping the teammates' gear on and off, and only that is a change", () => {
+    const { database, teamId } = setup()
+    const id = createVersion(
+      database,
+      teamId,
+      [],
+      names,
+      undefined,
+      { Mavuika: 1 },
+      undefined,
+      undefined,
+      {},
+      false,
+      true
+    )
+    expect(keepsTeammates(database, id)).toBe(true)
+    const cons = { ...database.teams.get(id)?.versionCons }
+    const name = database.teams.get(id)?.name
+    // (as it is: no change)
+    expect(editVersion(database, id, names, cons, {}, name)).toBe(false)
+    expect(editVersion(database, id, names, cons, {}, name, true)).toBe(false)
+    expect(editVersion(database, id, names, cons, {}, name, false)).toBe(true)
+    expect(keepsTeammates(database, id)).toBe(false)
+    expect(editVersion(database, id, names, cons, {}, name, true)).toBe(true)
+    expect(keepsTeammates(database, id)).toBe(true)
+  })
   it('searches only the members that changed: swapped in, or at another constellation or signature', () => {
     const { database, teamId } = setup()
     const id = createVersion(
@@ -637,14 +752,9 @@ describe("a version that keeps its teammates' gear", () => {
     // (its freshness follows the original's run it keeps the gear of)
     expect(kqmSharedKey(database, id)).not.toBe(before)
     // (a version without the choice does not depend on the original's run)
-    const plain = createVersion(
-      database,
-      teamId,
-      [],
-      names,
-      undefined,
-      { Mavuika: 2 }
-    )
+    const plain = createVersion(database, teamId, [], names, undefined, {
+      Mavuika: 2,
+    })
     expect(keptTeammates(database, plain)).toBeUndefined()
   })
 

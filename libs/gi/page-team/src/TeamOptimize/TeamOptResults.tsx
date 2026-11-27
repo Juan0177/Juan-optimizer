@@ -60,6 +60,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import SaveIcon from '@mui/icons-material/Save'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
 import UndoIcon from '@mui/icons-material/Undo'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
@@ -163,6 +164,7 @@ export function TeamOptResults({
   seconds,
   runTeamOpt,
   rotationTime,
+  onCompareInvestments,
   onDiscard,
   teamData,
   stale,
@@ -215,6 +217,8 @@ export function TeamOptResults({
   runTeamOpt: TeamOpt
   /** How long one rotation takes (seconds): damage is then shown per second */
   rotationTime?: number
+  /** Scroll to / focus the interactive Investment comparison panel */
+  onCompareInvestments?: () => void
   onDiscard: () => void
 }) {
   const { t, i18n } = useTranslation('page_team')
@@ -744,6 +748,33 @@ export function TeamOptResults({
               },
             }}
           >
+            {onCompareInvestments && (
+              <Tooltip
+                arrow
+                title={t(
+                  'teamOpt.invest.jumpTip',
+                  'Compare pull budgets across constellations, R1 signatures, and conditional rotations'
+                )}
+              >
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  startIcon={<TrendingUpRoundedIcon sx={{ fontSize: 17 }} />}
+                  onClick={onCompareInvestments}
+                  sx={{
+                    borderColor: alpha(tokens.gold, 0.4),
+                    color: giTokens.goldLight,
+                    bgcolor: alpha(tokens.gold, 0.08),
+                    '&:hover': {
+                      borderColor: alpha(tokens.gold, 0.7),
+                      bgcolor: alpha(tokens.gold, 0.16),
+                    },
+                  }}
+                >
+                  {t('teamOpt.invest.buttonShort', 'Investments')}
+                </Button>
+              </Tooltip>
+            )}
             <TeamCardButton
               teamId={teamId}
               result={result}
