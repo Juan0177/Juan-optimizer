@@ -810,7 +810,43 @@ export function TeamOptResults({
                 ) : (
                   <Box
                     ref={saveGroupRef}
-                    sx={{ display: 'inline-flex', alignItems: 'stretch' }}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'stretch',
+                      minHeight: 34,
+                      borderRadius: tokens.radius.control,
+                      border: `1px solid ${tokens.hairlineStrong}`,
+                      overflow: 'hidden',
+                      opacity: noChange || stale ? 0.45 : 1,
+                      transition: 'border-color 150ms ease',
+                      ...(!noChange &&
+                        !stale && {
+                          '&:hover': {
+                            borderColor: alpha(giTokens.parchment, 0.28),
+                          },
+                        }),
+                      '& > span': { display: 'inline-flex' },
+                      '& > span:first-of-type': { flex: 1 },
+                      '& .MuiButton-root.save-split-main, & .MuiButton-root.save-split-caret':
+                        {
+                          minHeight: 32,
+                          height: '100%',
+                          border: 'none',
+                          borderRadius: 0,
+                          '&:hover': {
+                            bgcolor: alpha(giTokens.parchment, 0.06),
+                          },
+                        },
+                      '& .MuiButton-root.save-split-main': {
+                        flex: 1,
+                        pl: { xs: 1.125, sm: 1.5 },
+                        pr: { xs: 1, sm: 1.25 },
+                      },
+                      '& .MuiButton-root.save-split-caret': {
+                        minWidth: 30,
+                        px: 0.625,
+                      },
+                    }}
                   >
                     <Tooltip
                       arrow
@@ -826,7 +862,8 @@ export function TeamOptResults({
                     >
                       <span>
                         <Button
-                          variant="outlined"
+                          className="save-split-main"
+                          variant="text"
                           color="inherit"
                           startIcon={<SaveIcon />}
                           disabled={noChange || stale}
@@ -841,16 +878,6 @@ export function TeamOptResults({
                               )
                             )
                           }}
-                          sx={{
-                            borderTopRightRadius: 0,
-                            borderBottomRightRadius: 0,
-                            borderColor: tokens.hairlineStrong,
-                            '&:hover': {
-                              borderColor: alpha(giTokens.parchment, 0.28),
-                              bgcolor: alpha(giTokens.parchment, 0.06),
-                              zIndex: 1,
-                            },
-                          }}
                         >
                           {t(
                             'teamOpt.result.saveAndUse',
@@ -859,6 +886,15 @@ export function TeamOptResults({
                         </Button>
                       </span>
                     </Tooltip>
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: '1px',
+                        my: '7px',
+                        bgcolor: tokens.hairlineStrong,
+                        flexShrink: 0,
+                      }}
+                    />
                     <Tooltip
                       arrow
                       title={t(
@@ -868,7 +904,8 @@ export function TeamOptResults({
                     >
                       <span>
                         <Button
-                          variant="outlined"
+                          className="save-split-caret"
+                          variant="text"
                           color="inherit"
                           disabled={noChange || stale}
                           aria-label={t(
@@ -892,23 +929,15 @@ export function TeamOptResults({
                             )
                           }}
                           sx={{
-                            minWidth: 30,
-                            height: '100%',
-                            px: 0.625,
-                            ml: '-1px',
-                            borderTopLeftRadius: 0,
-                            borderBottomLeftRadius: 0,
-                            borderColor: tokens.hairlineStrong,
-                            '&:hover': {
-                              borderColor: alpha(giTokens.parchment, 0.28),
-                              bgcolor: alpha(giTokens.parchment, 0.06),
-                              zIndex: 1,
-                            },
+                            color: saveAnchor
+                              ? giTokens.goldLight
+                              : 'text.secondary',
+                            '&:hover': { color: 'text.primary' },
                           }}
                         >
                           <ExpandMoreIcon
                             sx={{
-                              fontSize: 18,
+                              fontSize: 17,
                               transform: saveAnchor ? 'rotate(180deg)' : 'none',
                               transition: 'transform 140ms ease',
                             }}
