@@ -1,5 +1,22 @@
 [
   {
+    "version": "1.47.0",
+    "date": "2026-11-27",
+    "new": [
+      "Investment comparison: after a run, see which extra 5★ pulls (constellations, R1 signature weapons) raise team DPS the most for a number of pulls.",
+      "Lock a member's weapon straight from its row in KQM Setup.",
+      "The ER calculator shows how much energy each teammate gives."
+    ],
+    "improved": [
+      "The weapon lock picker is compact: search with the keyboard, weapons grouped by rarity with their substat, and the refinement set as you pick.",
+      "Artifact standards say whether they use average or highest roll values, and the most crit value their substats reach."
+    ],
+    "fixed": [
+      "Vodyanitsa's Skill makes a particle with each Horn of Spring's Call attack (6 a Skill, not 1), so her teammates need less ER.",
+      "The rotation writer plays Bursts set to every 2nd or 3rd rotation in the ER calculator the way the optimizer does, and says so."
+    ]
+  },
+  {
     "version": "1.46.0",
     "date": "2026-11-26",
     "new": [

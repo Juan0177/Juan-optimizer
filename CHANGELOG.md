@@ -4,6 +4,24 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.47.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.0) (2026-11-27)
+
+### New
+
+- Investment comparison: after a run, see which extra 5★ pulls (constellations, R1 signature weapons) raise team DPS the most for a number of pulls.
+- Lock a member's weapon straight from its row in KQM Setup.
+- The ER calculator shows how much energy each teammate gives.
+
+### Improved
+
+- The weapon lock picker is compact: search with the keyboard, weapons grouped by rarity with their substat, and the refinement set as you pick.
+- Artifact standards say whether they use average or highest roll values, and the most crit value their substats reach.
+
+### Fixed
+
+- Vodyanitsa's Skill makes a particle with each Horn of Spring's Call attack (6 a Skill, not 1), so her teammates need less ER.
+- The rotation writer plays Bursts set to every 2nd or 3rd rotation in the ER calculator the way the optimizer does, and says so.
+
 ## [v1.46.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.46.0) (2026-11-26)
 
 ### New
