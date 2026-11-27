@@ -1,15 +1,20 @@
 import type { GenderKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
 import { KqmSearchCancelled, yieldTask } from '@genshin-optimizer/gi/solver'
+import {
+  type InvestJob,
+  type InvestResult,
+  runInvestmentJob,
+} from './investmentWorker'
 import type { KqmBuildSettings, KqmBuiltProblem } from './kqmBuild'
 import { buildKqmProblem } from './kqmBuild'
 
 /*
- * The KQM problems' builders: a problem (the team's damage as a function of one member's
- * artifacts, `buildKqmProblem`) takes ~0.1 s to build, and a run builds over a thousand. They are
- * built in a pool of workers, several at once, each with a copy of the page's database (sent
- * once per run, when it changed), so the page stays smooth and a run waits less. Without workers
- * (tests, or a worker that fails to load) the same problems are built here, one at a time.
+ * The KQM problems' builders (and parallel investment evaluators): a problem (`buildKqmProblem`)
+ * or investment evaluation (`runInvestmentJob`) runs in a pool of workers, several at once, each
+ * with a copy of the page's database (sent once per run, when it changed), so the page stays
+ * smooth and runs use multiple CPU cores. Without workers (tests, or a worker that fails to load)
+ * the same work runs here, one at a time.
  */
 
 export type KqmBuildCommand =
@@ -28,8 +33,15 @@ export type KqmBuildCommand =
       gender: GenderKey
       settings: KqmBuildSettings
     }
+  | {
+      type: 'invest'
+      id: number
+      key: string
+      job: InvestJob
+    }
 export type KqmBuildReply =
   | { type: 'built'; id: number; built?: KqmBuiltProblem }
+  | { type: 'invested'; id: number; result?: InvestResult }
   | { type: 'missing'; id: number }
   | { type: 'error'; id: number; message: string }
 
@@ -39,7 +51,8 @@ export interface Snapshot {
   dbIndex: 1 | 2 | 3 | 4
   entries: Record<string, string>
 }
-interface Job {
+interface BuildJob {
+  kind: 'build'
   id: number
   database: ArtCharDatabase
   snapshot: Snapshot
@@ -50,16 +63,28 @@ interface Job {
   resolve: (built: KqmBuiltProblem | undefined) => void
   reject: (e: unknown) => void
 }
+interface InvestPoolJob {
+  kind: 'invest'
+  id: number
+  database: ArtCharDatabase
+  snapshot: Snapshot
+  job: InvestJob
+  isCancelled: () => boolean
+  resolve: (result: InvestResult | undefined) => void
+  reject: (e: unknown) => void
+}
+type PoolJob = BuildJob | InvestPoolJob
+
 interface Slot {
   worker: Worker
   /** The database copy it has */
   key?: string
-  job?: Job
+  job?: PoolJob
 }
 
 let slots: Slot[] = []
 let failed = false
-const queue: Job[] = []
+const queue: PoolJob[] = []
 let nextId = 1
 let idleTimer: ReturnType<typeof setTimeout> | undefined
 let inlineRunning = false
@@ -116,6 +141,11 @@ function poolSize() {
   )
 }
 const workersUsable = () => !failed && typeof Worker !== 'undefined'
+
+/** How many investment evaluations can execute concurrently across the warm worker pool */
+export function kqmInvestmentConcurrency() {
+  return workersUsable() ? Math.max(1, poolSize()) : 1
+}
 
 function dropBuilders() {
   for (const slot of slots) slot.worker.terminate()
@@ -179,10 +209,11 @@ export function kqmProblemBuilder(
     ): Promise<KqmBuiltProblem | undefined> {
       clearTimeout(idleTimer)
       if (!workersUsable())
-        return inline(database, teamId, gender, settings, isCancelled)
+        return inlineBuild(database, teamId, gender, settings, isCancelled)
       copy ??= databaseSnapshot(database)
       return new Promise((resolve, reject) => {
         queue.push({
+          kind: 'build',
           id: nextId++,
           database,
           snapshot: copy!,
@@ -199,10 +230,43 @@ export function kqmProblemBuilder(
           failed = true
         }
         if (workersUsable()) dispatch()
-        else runInline()
+        else void runInline()
       })
     },
   }
+}
+
+/**
+ * Runs one KQM or Inventory investment evaluation on the warm worker pool (several in parallel
+ * across CPU cores, 0ms main-thread blocking). Falls back inline in test environments.
+ */
+export function runInvestmentInPool(
+  database: ArtCharDatabase,
+  job: InvestJob,
+  isCancelled: () => boolean = () => false
+): Promise<InvestResult | undefined> {
+  clearTimeout(idleTimer)
+  if (!workersUsable()) return inlineInvest(database, job, isCancelled)
+  const snapshot = databaseSnapshot(database)
+  return new Promise((resolve, reject) => {
+    queue.push({
+      kind: 'invest',
+      id: nextId++,
+      database,
+      snapshot,
+      job,
+      isCancelled,
+      resolve,
+      reject,
+    })
+    try {
+      startBuilders()
+    } catch {
+      failed = true
+    }
+    if (workersUsable()) dispatch()
+    else void runInline()
+  })
 }
 
 function startBuilders() {
@@ -224,17 +288,17 @@ function startBuilders() {
   }
 }
 
-/** A builder failed (did not load): the problems are built here */
+/** A builder failed (did not load): the work runs here */
 function buildersBroke() {
   if (failed) return
   failed = true
   const running = slots.flatMap((s) => (s.job ? [s.job] : []))
   dropBuilders()
   queue.unshift(...running)
-  runInline()
+  void runInline()
 }
 
-function nextJob(): Job | undefined {
+function nextJob(): PoolJob | undefined {
   while (queue.length) {
     const job = queue.shift()!
     if (!job.isCancelled()) return job
@@ -243,7 +307,7 @@ function nextJob(): Job | undefined {
   return undefined
 }
 
-function send(slot: Slot, job: Job) {
+function send(slot: Slot, job: PoolJob) {
   slot.job = job
   if (slot.key !== job.snapshot.key) {
     const { key, dbIndex, entries } = job.snapshot
@@ -255,18 +319,43 @@ function send(slot: Slot, job: Job) {
     } satisfies KqmBuildCommand)
     slot.key = key
   }
-  slot.worker.postMessage({
-    type: 'build',
-    id: job.id,
-    key: job.snapshot.key,
-    teamId: job.teamId,
-    gender: job.gender,
-    settings: job.settings,
-  } satisfies KqmBuildCommand)
+  if (job.kind === 'build') {
+    slot.worker.postMessage({
+      type: 'build',
+      id: job.id,
+      key: job.snapshot.key,
+      teamId: job.teamId,
+      gender: job.gender,
+      settings: job.settings,
+    } satisfies KqmBuildCommand)
+  } else {
+    slot.worker.postMessage({
+      type: 'invest',
+      id: job.id,
+      key: job.snapshot.key,
+      job: job.job,
+    } satisfies KqmBuildCommand)
+  }
 }
 
 /** Another tab or window in front: nothing is drawn, and a task queued to draw waits long */
 const pageHidden = () => globalThis.document?.visibilityState === 'hidden'
+
+function runJobInline(job: PoolJob) {
+  if (job.kind === 'build') {
+    return inlineBuild(
+      job.database,
+      job.teamId,
+      job.gender,
+      job.settings,
+      job.isCancelled
+    ).then(job.resolve, job.reject)
+  }
+  return inlineInvest(job.database, job.job, job.isCancelled).then(
+    job.resolve,
+    job.reject
+  )
+}
 
 function dispatch() {
   for (const slot of slots) {
@@ -276,16 +365,14 @@ function dispatch() {
     try {
       send(slot, job)
     } catch {
-      // (settings a worker cannot be sent: that problem is built here)
+      // (settings a worker cannot be sent: that job runs here)
       slot.job = undefined
-      inline(
-        job.database,
-        job.teamId,
-        job.gender,
-        job.settings,
-        job.isCancelled
-      ).then(job.resolve, job.reject)
+      void runJobInline(job)
     }
+  }
+  if (!queue.length && slots.every((s) => !s.job)) {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(dropBuilders, 30_000)
   }
 }
 
@@ -295,7 +382,10 @@ function onReply(slot: Slot, reply: KqmBuildReply) {
   if (!job || job.id !== reply.id) return dispatch()
   switch (reply.type) {
     case 'built':
-      job.resolve(reply.built)
+      if (job.kind === 'build') job.resolve(reply.built)
+      break
+    case 'invested':
+      if (job.kind === 'invest') job.resolve(reply.result)
       break
     case 'missing':
       // (it lost its copy: sent again)
@@ -303,24 +393,14 @@ function onReply(slot: Slot, reply: KqmBuildReply) {
       queue.unshift(job)
       break
     case 'error':
-      // (as built here: the same error, or the problem when only the worker failed)
-      inline(
-        job.database,
-        job.teamId,
-        job.gender,
-        job.settings,
-        () => false
-      ).then(job.resolve, job.reject)
+      // (as run here: the same error, or the result when only the worker failed)
+      void runJobInline({ ...job, isCancelled: () => false })
       break
   }
   dispatch()
 }
 
-/**
- * Builds a problem here, after letting the page draw (not when hidden: a hidden page's queued
- * tasks wait long, and nothing is drawn then)
- */
-async function inline(
+async function inlineBuild(
   database: ArtCharDatabase,
   teamId: string,
   gender: GenderKey,
@@ -332,20 +412,23 @@ async function inline(
   return buildKqmProblem(database, teamId, gender, settings)
 }
 
-/** The queue built here, one at a time (the workers failed) */
+async function inlineInvest(
+  database: ArtCharDatabase,
+  job: InvestJob,
+  isCancelled: () => boolean
+) {
+  if (!pageHidden()) await yieldTask()
+  if (isCancelled()) throw new KqmSearchCancelled()
+  return runInvestmentJob(database, job, isCancelled)
+}
+
+/** The queue run here, one at a time (the workers failed) */
 async function runInline() {
   if (inlineRunning) return
   inlineRunning = true
   try {
     for (let job = nextJob(); job; job = nextJob()) {
-      const current = job
-      await inline(
-        current.database,
-        current.teamId,
-        current.gender,
-        current.settings,
-        current.isCancelled
-      ).then(current.resolve, current.reject)
+      await runJobInline(job)
     }
   } finally {
     inlineRunning = false

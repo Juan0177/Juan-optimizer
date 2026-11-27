@@ -1,12 +1,14 @@
 import './kqmBuildWorkerEnv'
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
+import { runInvestmentJob } from './investmentWorker'
 import { buildKqmProblem } from './kqmBuild'
 import type { KqmBuildCommand, KqmBuildReply } from './kqmBuildPool'
 
 /*
- * A KQM problem builder (see `kqmBuildPool`): the page's database, copied once per run (`data`),
- * and each problem built from it as the page would build it (`buildKqmProblem`)
+ * A KQM problem builder & investment evaluator (see `kqmBuildPool`): the page's database, copied
+ * once per run (`data`), then builds KQM problems (`buildKqmProblem`) or runs full investment
+ * evaluations (`runInvestmentJob`) across parallel worker threads.
  */
 let database: ArtCharDatabase | undefined
 let key: string | undefined
@@ -41,6 +43,20 @@ self.onmessage = ({ data }: MessageEvent<KqmBuildCommand>) => {
           message: String((e as Error)?.message ?? e),
         })
       }
+      return
+    }
+    case 'invest': {
+      if (!database || key !== data.key)
+        return post({ type: 'missing', id: data.id })
+      void runInvestmentJob(database, data.job)
+        .then((result) => post({ type: 'invested', id: data.id, result }))
+        .catch((e) =>
+          post({
+            type: 'error',
+            id: data.id,
+            message: String((e as Error)?.message ?? e),
+          })
+        )
       return
     }
   }

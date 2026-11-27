@@ -214,6 +214,15 @@ describe('TeamInvestment panel', () => {
     fireEvent.click(screen.getByRole('button', { name: '+1' }))
     expect(screen.getByText('Top options for +1 pull')).toBeTruthy()
     expect(screen.getAllByText('R1').length).toBeGreaterThan(0)
+    expect(screen.getByText('Best +1')).toBeTruthy()
+
+    // Batched Options editing: toggling checkboxes inside popover applies once on Done
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }))
+    fireEvent.click(screen.getByLabelText('R1 signatures (+1 pull)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() => {
+      expect(screen.queryAllByText('R1').length).toBe(0)
+    })
   })
 
   it('opens Options popover and inline Alt rotations editor', () => {

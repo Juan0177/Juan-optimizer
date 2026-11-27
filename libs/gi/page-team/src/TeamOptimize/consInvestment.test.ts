@@ -155,4 +155,44 @@ describe('constellation investment', () => {
       investmentStateKey(at3[0])
     )
   })
+
+  it('executes single upgrades and combination waves in parallel when concurrency > 1', async () => {
+    const consGain = [
+      [0, 0.14, 0.28, 0.35],
+      [0, 0.11, 0.22, 0.27],
+      [0, 0.08, 0.15, 0.2],
+    ]
+    const BASE = 100_000
+    const truth = (cons: number[], sig: boolean[]) =>
+      BASE *
+      cons.reduce(
+        (p, c, i) => p * (1 + consGain[i][c]) * (sig[i] ? 1.12 : 1),
+        1
+      )
+
+    let inFlight = 0
+    let maxInFlight = 0
+    const plan = await planInvestments({
+      baseCons: [0, 0, 0],
+      maxCons: [3, 3, 3],
+      canAddSig: [true, true, false],
+      baseDps: BASE,
+      maxBudget: 3,
+      topK: 4,
+      concurrency: 4,
+      evaluate: async (state) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await new Promise((r) => setTimeout(r, 5))
+        inFlight--
+        return { dps: truth(state.cons, state.sig) }
+      },
+    })
+
+    expect(maxInFlight).toBeGreaterThanOrEqual(3)
+    expect(plan?.byBudget[3][0].dps).toBeCloseTo(
+      truth([2, 0, 0], [true, false, false]),
+      4
+    )
+  })
 })

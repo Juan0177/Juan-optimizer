@@ -828,6 +828,26 @@ export function teamRunRotation(
   }
 }
 
+/** KQM tab's saved rotation metadata (for running replays inside parallel worker threads). */
+export function kqmRunRotation(
+  database: Database,
+  gender: GenderKey,
+  i18n: i18n,
+  teamId: string
+): TeamOptRunRotation {
+  const kqmId = kqmRotationId(teamId)
+  const useAttacks = readStored(database, manualAttacksKey(kqmId)) === '1'
+  return {
+    text: useAttacks ? '' : (readStored(database, storageKey(kqmId)) ?? ''),
+    opener: useAttacks ? '' : (readStored(database, openerKey(kqmId)) ?? ''),
+    timing: parseTiming(
+      useAttacks ? null : readStored(database, timingKey(kqmId))
+    ),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
+    names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
+  }
+}
+
 const timedSetEffects = new Map<
   string,
   Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined

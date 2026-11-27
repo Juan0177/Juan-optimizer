@@ -1,53 +1,28 @@
-import { notEmpty } from '@genshin-optimizer/common/util'
+import type { CharacterKey, GenderKey } from '@genshin-optimizer/gi/consts'
+import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import type {
-  CharacterKey,
-  GenderKey,
-  RefinementKey,
-  WeaponKey,
-} from '@genshin-optimizer/gi/consts'
-import { signatureWeapons } from '@genshin-optimizer/gi/consts'
-import type {
-  ArtCharDatabase,
-  ICachedArtifact,
-  ICachedWeapon,
-  TeamOpt,
-} from '@genshin-optimizer/gi/db'
-import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
-import { yieldTask } from '@genshin-optimizer/gi/solver'
-import type {
-  CharacterOverride,
-  FrameData,
+  InvestRotationMeta,
   KqmBuild,
   KqmResult,
-  RotationMember,
-  RotationTimingSettings,
-  SimGear,
   TeamOptMember,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
 import {
-  evaluateTeamRotation,
-  optimizeTeamKqm,
+  kqmInvestmentConcurrency,
   playedAttackStates,
-  rotationCalculation,
-  simTeamOf,
-  teamOptBonusStats,
-  teamRuleConditionals,
-  withAttackStates,
-  writtenTeamReplay,
+  runInvestmentInPool,
 } from '@genshin-optimizer/gi/ui'
 import type { i18n } from 'i18next'
-import { kqmReplayOf } from './useKqmRun'
+import { kqmRunRotation } from './RotationWriter'
 
 /**
  * Team investment comparison: for each pull budget (1 extra constellation or 1 R1 signature weapon
  * costs 1 pull), finds both the single best upgrade path and top runner-up paths above the run's
  * baseline.
  *
- * Every allocation is ranked first by a subset-anchored synergy estimate (using the highest-cost
- * evaluated subsets already played, times each further upgrade's gain alone), then the top few
- * candidates per cost are evaluated for real until the next candidate's estimate falls clearly
- * below the top-K threshold.
+ * Phase 1 evaluates independent single-member upgrades in parallel across the warm worker pool.
+ * Phase 2 ranks allocations with a subset-anchored synergy estimator and evaluates only the top
+ * surviving candidates per pull budget in parallel mini-waves with live branch-and-bound pruning.
  */
 
 /** A team played at hypothetical constellations/signatures */
@@ -250,7 +225,6 @@ export function investmentAllocations(
 ): InvestmentAllocation[] {
   const n = consRoom.length
   const out: InvestmentAllocation[] = []
-  // Precompute max remaining room from index `i` onward to prune unreachable branches fast
   const suffixMax = new Array<number>(n + 1).fill(0)
   for (let i = n - 1; i >= 0; i--)
     suffixMax[i] = suffixMax[i + 1] + consRoom[i] + (canAddSig[i] ? 1 : 0)
@@ -306,9 +280,11 @@ export interface InvestmentPlan {
 }
 
 /**
- * Generalized budget-aware investment planner: evaluates single-upgrade building blocks up to
- * `maxBudget`, then finds the top `topK` highest-DPS paths for every pull budget `1..maxBudget`
- * across constellations and optional R1 signature weapons.
+ * Generalized budget-aware investment planner with parallel worker execution and branch-and-bound
+ * pruning:
+ * - Phase 1 evaluates single-upgrade building blocks up to `maxBudget` concurrently (`concurrency`).
+ * - Phase 2 ranks allocations with subset-anchored synergy estimates and evaluates surviving
+ *   candidates in parallel mini-waves with live top-K threshold pruning.
  */
 export async function planInvestments({
   baseCons,
@@ -318,13 +294,15 @@ export async function planInvestments({
   baseSeconds,
   basePoint,
   maxBudget,
-  topK = 6,
-  margin = 0.02,
-  most = 8,
+  topK = 5,
+  margin = 0.015,
+  most = 6,
+  concurrency = 1,
   evaluate,
   cache = new Map<string, InvestmentEval>(),
   isCancelled = () => false,
   onProgress,
+  onPartial,
 }: {
   baseCons: readonly number[]
   maxCons: readonly number[]
@@ -336,12 +314,17 @@ export async function planInvestments({
   topK?: number
   margin?: number
   most?: number
+  /** How many evaluations to run in parallel (typically `kqmInvestmentConcurrency()`) */
+  concurrency?: number
   evaluate: (state: InvestmentState) => Promise<InvestmentEval | undefined>
   /** Reusable evaluation cache keyed by `investmentStateKey(state)` */
   cache?: Map<string, InvestmentEval>
   isCancelled?: () => boolean
   onProgress?: (progress: InvestmentPlanProgress) => void
+  /** Fires after each budget level completes so UI can stream partial results immediately */
+  onPartial?: (partial: InvestmentPlan) => void
 }): Promise<InvestmentPlan | undefined> {
+  const workers = Math.max(1, Math.floor(concurrency))
   const n = baseCons.length
   const baseSig = new Array<boolean>(n).fill(false)
   const rawRoom = baseCons.map((c, i) =>
@@ -402,7 +385,7 @@ export async function planInvestments({
   const singleCons: Record<number, Record<number, InvestmentEval>> = {}
   const singleSig: Record<number, InvestmentEval> = {}
 
-  // Phase 1: evaluate single-member building blocks up to `budget`
+  // Phase 1: evaluate single-member building blocks up to `budget` (cost 1 first, then 2, 3...)
   const singleTasks: {
     memberIndex: number
     targetCons?: number
@@ -432,32 +415,66 @@ export async function planInvestments({
       })
     }
   }
+  singleTasks.sort((a, b) => a.cost - b.cost || a.memberIndex - b.memberIndex)
 
   let singleDone = 0
+  const uncachedTasks: typeof singleTasks = []
   for (const task of singleTasks) {
+    const ev = cache.get(investmentStateKey(task.state))
+    if (ev) {
+      singleDone++
+      remember(task.state, task.cost, ev)
+      if (task.isSig) singleSig[task.memberIndex] = ev
+      else if (task.targetCons !== undefined) {
+        singleCons[task.memberIndex] ??= {}
+        singleCons[task.memberIndex][task.targetCons] = ev
+      }
+    } else {
+      uncachedTasks.push(task)
+    }
+  }
+
+  if (uncachedTasks.length) {
+    let cursor = 0
+    const runSingleWorker = async () => {
+      while (cursor < uncachedTasks.length) {
+        if (isCancelled()) return
+        const task = uncachedTasks[cursor++]
+        onProgress?.({
+          phase: 'singles',
+          done: singleDone,
+          total: singleTasks.length,
+          memberIndex: task.memberIndex,
+          targetCons: task.targetCons,
+          isSig: task.isSig,
+        })
+        const ev = await evaluate(task.state)
+        if (isCancelled()) return
+        singleDone++
+        onProgress?.({
+          phase: 'singles',
+          done: singleDone,
+          total: singleTasks.length,
+          memberIndex: task.memberIndex,
+          targetCons: task.targetCons,
+          isSig: task.isSig,
+        })
+        if (!ev) continue
+        remember(task.state, task.cost, ev)
+        if (task.isSig) singleSig[task.memberIndex] = ev
+        else if (task.targetCons !== undefined) {
+          singleCons[task.memberIndex] ??= {}
+          singleCons[task.memberIndex][task.targetCons] = ev
+        }
+      }
+    }
+    await Promise.all(
+      Array.from(
+        { length: Math.min(workers, uncachedTasks.length) },
+        runSingleWorker
+      )
+    )
     if (isCancelled()) return undefined
-    const key = investmentStateKey(task.state)
-    let ev = cache.get(key)
-    if (!ev) {
-      onProgress?.({
-        phase: 'singles',
-        done: singleDone,
-        total: singleTasks.length,
-        memberIndex: task.memberIndex,
-        targetCons: task.targetCons,
-        isSig: task.isSig,
-      })
-      ev = await evaluate(task.state)
-      if (isCancelled()) return undefined
-    }
-    singleDone++
-    if (!ev) continue
-    remember(task.state, task.cost, ev)
-    if (task.isSig) singleSig[task.memberIndex] = ev
-    else if (task.targetCons !== undefined) {
-      singleCons[task.memberIndex] ??= {}
-      singleCons[task.memberIndex][task.targetCons] = ev
-    }
   }
 
   const aloneConsDps = (i: number, c: number) =>
@@ -512,7 +529,7 @@ export async function planInvestments({
     return count ? sum / count : undefined
   }
 
-  // Phase 2: find top-K evaluated paths at each budget `1..budget`
+  // Phase 2: find top-K evaluated paths at each budget `1..budget` in parallel waves with pruning
   const byBudget: Record<number, InvestmentPath[]> = {}
   const bestByCost: InvestmentPath[] = [basePath]
 
@@ -543,31 +560,60 @@ export async function planInvestments({
     )
 
     const evaluated: InvestmentPath[] = []
-    for (const c of candidates)
+    const pending: typeof candidates = []
+    for (const c of candidates) {
       if (c.exact) evaluated.push(toPath(c.state, cost, c.exact))
+      else pending.push(c)
+    }
     evaluated.sort((a, b) => b.dps - a.dps)
 
     let tried = 0
-    for (const c of candidates) {
-      if (c.exact) continue
-      if (tried >= most) break
-      // Stop once we already have topK evaluated paths AND this candidate's estimate is clearly below the K-th best
+    let pendingIdx = 0
+    while (tried < most && pendingIdx < pending.length) {
+      if (isCancelled()) return undefined
       const threshold =
         evaluated.length >= topK ? evaluated[topK - 1]?.dps : undefined
-      if (threshold !== undefined && c.guess < threshold * (1 - margin)) break
+      // Collect up to `workers` surviving candidates for one parallel wave
+      const wave: typeof candidates = []
+      while (
+        wave.length < workers &&
+        tried + wave.length < most &&
+        pendingIdx < pending.length
+      ) {
+        const c = pending[pendingIdx]
+        if (threshold !== undefined && c.guess < threshold * (1 - margin)) break
+        wave.push(c)
+        pendingIdx++
+      }
+      if (!wave.length) break
+      tried += wave.length
+      const results = await Promise.all(
+        wave.map(async (c) => ({ state: c.state, ev: await evaluate(c.state) }))
+      )
       if (isCancelled()) return undefined
-      tried++
-      const ev = await evaluate(c.state)
-      if (isCancelled()) return undefined
-      if (!ev) continue
-      remember(c.state, cost, ev)
-      evaluated.push(toPath(c.state, cost, ev))
+      for (const { state, ev } of results) {
+        if (!ev) continue
+        remember(state, cost, ev)
+        evaluated.push(toPath(state, cost, ev))
+      }
       evaluated.sort((a, b) => b.dps - a.dps)
     }
 
     const top = evaluated.slice(0, topK)
     byBudget[cost] = top
     if (top[0]) bestByCost.push(top[0])
+    if (onPartial && cost < budget && !isCancelled()) {
+      onPartial({
+        base: basePath,
+        byBudget: { ...byBudget },
+        bestByCost: [...bestByCost],
+        singles: {
+          cons: { ...singleCons },
+          sig: { ...singleSig },
+        },
+        maxBudget: cost,
+      })
+    }
   }
 
   return {
@@ -581,10 +627,8 @@ export async function planInvestments({
 
 /**
  * The team played at other constellations (`cons`: the members raised) and/or R1 signature
- * weapons (`signatures`), from a KQM run's builds: the raised members refitted together (their
- * weapon and sets kept or switched to their signature, main stats and rolls found again), from
- * their builds at those upgrades alone when known (`start`); the others keep the run's. `text`:
- * another rotation to play (absent: the team's written one).
+ * weapons (`signatures`), executed on the warm parallel worker pool with single-pass replay
+ * and optional fast `summaryOnly` finish.
  */
 export async function refitConstellations({
   database,
@@ -597,8 +641,8 @@ export async function refitConstellations({
   signatures,
   start,
   text,
+  summaryOnly = false,
   isCancelled,
-  onProgress,
 }: {
   database: ArtCharDatabase
   teamId: string
@@ -611,88 +655,52 @@ export async function refitConstellations({
   signatures?: Partial<Record<CharacterKey, number>>
   start?: Partial<Record<CharacterKey, KqmBuild>>
   text?: string
+  /** Skip full `finish()` when caller only needs team DPS, builds, and unmet flag */
+  summaryOnly?: boolean
   isCancelled?: () => boolean
   onProgress?: (progress: number) => void
 }): Promise<ConsPoint | undefined> {
-  const kqm = setup.kqm ?? defaultTeamOptKqm
-  const nextSignature = signatures
-    ? { ...kqm.signature, ...signatures }
-    : kqm.signature
-  const teamOpt: TeamOpt = {
-    ...setup,
-    kqm: {
-      ...kqm,
-      constellations: { ...kqm.constellations, ...cons },
-      ...(nextSignature ? { signature: nextSignature } : {}),
-    },
-  }
-  const raisedSet = new Set<CharacterKey>([
-    ...(Object.keys(cons) as CharacterKey[]),
-    ...(Object.keys(signatures ?? {}) as CharacterKey[]),
-  ])
-  const fromBuilds: Partial<Record<CharacterKey, KqmBuild>> = {
-    ...result.builds,
-    ...start,
-  }
-  for (const [ck, ref] of Object.entries(signatures ?? {}) as [
-    CharacterKey,
-    number,
-  ][]) {
-    const sigKey = signatureWeapons[ck]
-    const prev = fromBuilds[ck]
-    if (sigKey && ref && prev)
-      fromBuilds[ck] = { ...prev, weapon: { key: sigKey, refinement: ref } }
-  }
-  const found = await optimizeTeamKqm({
+  const rotation = kqmRunRotation(database, gender, i18n, teamId)
+  return runInvestmentInPool(
     database,
-    teamId,
-    gender,
-    teamOpt,
-    replay: kqmReplayOf(database, gender, i18n, teamId, teamOpt, text),
-    // (as its result was played: Wolf's Gravestone's uptime against the enemy)
-    attackStates: playedAttackStates(result.played),
-    from: fromBuilds,
-    only: [...raisedSet],
-    maxRounds: 1,
-    keepWorkers: true,
-    isCancelled,
-    onStep: (step) => onProgress?.(step.progress ?? 0),
-  })
-  if (!found) return undefined
-  const unmet = Object.values(found.energyRecharge).some(
-    (er) => !!er && er.value + 1e-6 < er.minimum
+    {
+      mode: 'kqm',
+      teamId,
+      gender,
+      setup,
+      from: { ...result.builds, ...start },
+      played: result.played,
+      attackStates: playedAttackStates(result.played),
+      cons,
+      signatures,
+      rotation,
+      text,
+      summaryOnly,
+    },
+    isCancelled
   )
-  return {
-    team: found.after.total,
-    members: found.after.members,
-    seconds:
-      found.played?.rotationTime ?? teamOpt.rotationTime ?? setup.rotationTime,
-    builds: found.builds,
-    unmet,
-  }
 }
 
 /**
  * Evaluate a Team Optimize (real inventory) result at hypothetical constellations and/or R1
- * signature weapons, replaying the written rotation (or a conditional alternative rotation `text`)
- * when available so cooldowns, ATK SPD, extra skill uses, and buff uptimes update accurately.
+ * signature weapons on the warm parallel worker pool.
  */
 export async function evaluateInventoryInvestment({
   database,
   teamId,
   gender,
-  members,
   teamOpt,
   result,
   cons,
   signatures,
   text,
   rotation,
+  isCancelled,
 }: {
   database: ArtCharDatabase
   teamId: string
   gender: GenderKey
-  members: TeamOptMember[]
+  members?: TeamOptMember[]
   teamOpt: TeamOpt
   result: TeamOptResult
   cons: Partial<Record<CharacterKey, number>>
@@ -700,138 +708,29 @@ export async function evaluateInventoryInvestment({
   /** Alternative rotation text for this constellation state (overrides team's written rotation) */
   text?: string
   /** Team Optimize's saved written rotation metadata (for replaying written or alt rotations) */
-  rotation?: {
-    names: RotationMember[]
-    text: string
-    opener: string
-    timing: RotationTimingSettings
-    frameData: FrameData
-  }
+  rotation?: InvestRotationMeta
+  isCancelled?: () => boolean
 }): Promise<ConsPoint | undefined> {
-  await yieldTask()
-  const memberKeys = members.map((m) => m.characterKey)
-  const mainStatAssumptionLevel = teamOpt.assumeMaxMain ? 20 : 0
-  const arts = Object.fromEntries(
-    members
-      .filter((m) => !m.isTc)
-      .map((m) => [
-        m.characterKey,
-        Object.values(result.builds[m.characterKey] ?? {})
-          .map((id) => (id ? database.arts.get(id) : undefined))
-          .filter(notEmpty),
-      ])
-  ) as Partial<Record<CharacterKey, ICachedArtifact[]>>
-
-  const weapons: Partial<Record<CharacterKey, ICachedWeapon>> = {}
-  for (const m of members) {
-    const sigRef = signatures?.[m.characterKey]
-    const sigKey = sigRef ? signatureWeapons[m.characterKey] : undefined
-    if (sigKey && sigRef) {
-      weapons[m.characterKey] = {
-        id: `__invest_sig_${m.characterKey}_${sigKey}_r${sigRef}`,
-        key: sigKey as WeaponKey,
-        level: 90,
-        ascension: 6,
-        refinement: Math.max(
-          1,
-          Math.min(5, Math.round(sigRef))
-        ) as RefinementKey,
-        location: '',
-        lock: false,
-      }
-      continue
-    }
-    if (m.isTc) continue
-    const w = database.weapons.get(
-      result.weapons?.[m.characterKey] ?? m.weaponId
-    )
-    if (w) weapons[m.characterKey] = w
-  }
-
-  const characters: Partial<Record<CharacterKey, CharacterOverride>> = {}
-  for (const [ck, constellation] of Object.entries(cons) as [
-    CharacterKey,
-    number,
-  ][]) {
-    characters[ck] = { constellation }
-  }
-
-  const bonusStats = teamOptBonusStats(teamOpt, memberKeys)
-  let attacks = teamOpt.attacks
-  let seconds = result.rotationTime ?? teamOpt.rotationTime
-
-  const activeText = text?.trim() || rotation?.text?.trim() || ''
-  if (activeText && rotation) {
-    const baseGear = simTeamOf(members, database).gear
-    const gear: Partial<Record<CharacterKey, SimGear>> = { ...baseGear }
-    for (const m of members) {
-      const ck = m.characterKey
-      const sets: Record<string, number> = {}
-      if (!m.isTc) {
-        for (const art of arts[ck] ?? [])
-          sets[art.setKey] = (sets[art.setKey] ?? 0) + 1
-      } else {
-        Object.assign(sets, baseGear[ck]?.sets ?? {})
-      }
-      const w = weapons[ck]
-      gear[ck] = {
-        sets,
-        weapon: w?.key ?? baseGear[ck]?.weapon,
-        refinement: w?.refinement ?? baseGear[ck]?.refinement,
-      }
-    }
-    const replay = writtenTeamReplay({
-      database,
+  return runInvestmentInPool(
+    database,
+    {
+      mode: 'inventory',
       teamId,
-      members,
       gender,
-      names: rotation.names,
       teamOpt,
-      text: activeText,
-      opener: rotation.opener,
-      timing: rotation.timing,
-      frameData: rotation.frameData,
-      includeEnergy: false,
-    })
-    if (replay) {
-      const overrides = {
-        arts,
-        weapons,
-        characters,
-        mainStatAssumptionLevel,
-        bonusStats,
-      }
-      const calculate = rotationCalculation(database, teamId, gender)
-      const played = replay({
-        gear,
-        overrides,
-        calculate,
-        constellations: cons,
-      })
-      attacks = played.attacks
-      if (played.rotationTime) seconds = played.rotationTime
-    }
-  }
-
-  const finalAttacks = withAttackStates(attacks, result.attackStates)
-  const extraConditionals = teamRuleConditionals(database, teamId, finalAttacks)
-  const evaluated = evaluateTeamRotation(database, teamId, gender, {
-    attacks: finalAttacks,
-    arts,
-    weapons,
-    characters,
-    mainStatAssumptionLevel,
-    onField: teamOpt.onField,
-    bonusStats,
-    extraConditionals,
-  })
-  if (!evaluated) return undefined
-  const unmet = Object.values(evaluated.unmet).some((u) => !!u?.length)
-  return {
-    team: evaluated.total,
-    members: evaluated.members,
-    seconds,
-    builds: {},
-    unmet,
-  }
+      result: {
+        builds: result.builds,
+        weapons: result.weapons,
+        attackStates: result.attackStates,
+        rotationTime: result.rotationTime,
+      },
+      cons,
+      signatures,
+      rotation,
+      text,
+    },
+    isCancelled
+  )
 }
+
+export { kqmInvestmentConcurrency }

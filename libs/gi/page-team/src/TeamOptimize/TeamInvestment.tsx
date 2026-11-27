@@ -30,10 +30,12 @@ import {
   TeamOptCancelled,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import StopRoundedIcon from '@mui/icons-material/StopRounded'
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
 import TuneRoundedIcon from '@mui/icons-material/TuneRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
@@ -47,11 +49,13 @@ import {
   FormControlLabel,
   LinearProgress,
   Popover,
+  Skeleton,
   Tooltip,
   Typography,
 } from '@mui/material'
 import {
   Fragment,
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -81,6 +85,7 @@ import {
   type InvestmentPlanProgress,
   type InvestmentState,
   investmentStateKey,
+  kqmInvestmentConcurrency,
   planInvestments,
   refitConstellations,
 } from './consInvestment'
@@ -142,9 +147,10 @@ export interface TeamInvestmentProps {
 }
 
 /**
- * Clean, single-glance investment comparison panel (available in both Team Optimize and KQM
+ * Snappy, single-glance investment comparison panel (available in both Team Optimize and KQM
  * Theorycrafting): compares your team baseline against extra 5★ pulls across constellations,
- * R1 signature weapons, and optional conditional alternative rotations.
+ * R1 signature weapons, and optional conditional alternative rotations, streaming results live
+ * from the parallel worker pool with zero layout shift.
  */
 export function TeamInvestment({
   teamId,
@@ -283,6 +289,7 @@ export function TeamInvestment({
   )
   const [budgetChoice, setBudgetChoice] = useState<number | 'all'>(3)
   const [optionsAnchor, setOptionsAnchor] = useState<HTMLElement | null>(null)
+  const optionsDirtyRef = useRef(false)
 
   const lastTeamKey = useRef(teamKey)
   useEffect(() => {
@@ -535,12 +542,27 @@ export function TeamInvestment({
         basePoint,
         maxBudget: runBudget,
         topK: 5,
-        margin: 0.025,
-        most: mode === 'inventory' ? 14 : 8,
+        margin: 0.015,
+        most: mode === 'inventory' ? 12 : 6,
+        concurrency: kqmInvestmentConcurrency(),
         cache: stateCache,
         isCancelled: () => cancelled,
         onProgress: (p) => {
-          if (!cancelled) setProgress(p)
+          if (!cancelled) startTransition(() => setProgress(p))
+        },
+        onPartial: (partial) => {
+          if (cancelled) return
+          startTransition(() => {
+            setPlan((prev) => {
+              if (!prev || partial.maxBudget >= prev.maxBudget) {
+                setSelectedBudget((b) =>
+                  Math.max(1, Math.min(b, partial.maxBudget))
+                )
+                return partial
+              }
+              return prev
+            })
+          })
         },
         evaluate: async (state) => {
           const { text, label } = resolveRotation(state)
@@ -584,6 +606,7 @@ export function TeamInvestment({
                 : undefined,
               start: startBuilds,
               text,
+              summaryOnly: true,
               isCancelled: () => cancelled,
             })
           } else if (invResult) {
@@ -600,6 +623,7 @@ export function TeamInvestment({
                 : undefined,
               text,
               rotation: invRotMeta,
+              isCancelled: () => cancelled,
             })
           }
 
@@ -655,7 +679,7 @@ export function TeamInvestment({
     }
   }, [plan, planConfigKey, configKey])
 
-  // One-click budget handler: switches immediately if already computed, or extends in place!
+  // One-click budget handler: instant switch if already computed, or extends in place!
   const pickBudget = (choice: number | 'all') => {
     setBudgetChoice(choice)
     const numeric = choice === 'all' ? totalRoom : Math.min(choice, totalRoom)
@@ -667,7 +691,22 @@ export function TeamInvestment({
     }
   }
 
+  // Smooth multi-checkbox editing inside Options popover: applies once when closed!
+  const closeOptions = () => {
+    setOptionsAnchor(null)
+    if (optionsDirtyRef.current) {
+      optionsDirtyRef.current = false
+      if (totalRoom <= 0) {
+        setPlan(undefined)
+        setPlanConfigKey(undefined)
+        return
+      }
+      if (plan && !running) void runComparison()
+    }
+  }
+
   const toggleMember = (ck: CharacterKey) => {
+    optionsDirtyRef.current = true
     const is4 = getCharStat(ck).rarity === 4
     let next4 = includeFourStars
     const nextInc = new Set(included)
@@ -681,17 +720,15 @@ export function TeamInvestment({
     }
     setIncludeFourStars(next4)
     setIncluded(nextInc)
-    if (plan && !running)
-      void runComparison({ included: nextInc, includeFourStars: next4 })
   }
 
   const toggleSig = () => {
-    const next = !includeSig
-    setIncludeSig(next)
-    if (plan && !running) void runComparison({ includeSig: next })
+    optionsDirtyRef.current = true
+    setIncludeSig((v) => !v)
   }
 
   const toggleFourStars = () => {
+    optionsDirtyRef.current = true
     const next4 = !includeFourStars
     const nextInc = new Set(included)
     if (next4) {
@@ -702,8 +739,6 @@ export function TeamInvestment({
     }
     setIncludeFourStars(next4)
     setIncluded(nextInc)
-    if (plan && !running)
-      void runComparison({ included: nextInc, includeFourStars: next4 })
   }
 
   const rotationsChanged = !!plan && !sameNonBudgetConfig
@@ -717,11 +752,21 @@ export function TeamInvestment({
     ? t('teamOpt.kqm.dpsUnit', 'DPS')
     : t('teamOpt.kqm.dmgUnit', 'DMG')
 
-  // Count how many options are non-default so Options button shows a quiet dot if customized
   const customOptionsCount =
     (!includeSig && sigAvailable.some(Boolean) ? 1 : 0) +
     (includeFourStars && hasAnyFourStarRoom ? 1 : 0) +
     keys.filter((k) => defaultIncluded.has(k) !== included.has(k)).length
+
+  // Best single +1 pull upgrade (to subtly highlight on the per-member strip)
+  const bestSingleId = useMemo(() => {
+    const top1 = plan?.byBudget[1]?.[0]
+    if (!top1) return undefined
+    for (let i = 0; i < keys.length; i++) {
+      if (top1.sig[i]) return `${keys[i]}:sig`
+      if (top1.cons[i] > baseCons[i]) return `${keys[i]}:c${top1.cons[i]}`
+    }
+    return undefined
+  }, [plan, keys, baseCons])
 
   // Share PNG chart data (KQM mode)
   const shareChartData = useMemo((): InvestmentChartData | undefined => {
@@ -806,7 +851,7 @@ export function TeamInvestment({
         defaultValue: 'Evaluating {{name}} {{what}} ({{done}} of {{total}})',
         name: charName(ck),
         what,
-        done: progress.done + 1,
+        done: Math.min(progress.done + 1, progress.total),
         total: progress.total,
       })
     }
@@ -821,12 +866,107 @@ export function TeamInvestment({
     ? progress.phase === 'singles'
       ? (progress.done / Math.max(1, progress.total)) * 55
       : 55 + ((progress.done + 0.5) / Math.max(1, progress.total)) * 45
-    : 5
+    : 6
 
-  /** Clean inline upgrade description (no heavy bordered pills!) */
+  /** Reusable Pull Budget segmented selector */
+  const budgetSelector = totalRoom > 0 && (
+    <Box
+      role="group"
+      aria-label={t('teamOpt.invest.budgetLabel', 'Pull budget')}
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        p: '2px',
+        borderRadius: tokens.radius.control,
+        bgcolor: tokens.inset,
+        border: hairline,
+      }}
+    >
+      <Typography
+        component="span"
+        sx={{
+          fontSize: 11.5,
+          fontWeight: 600,
+          color: 'text.secondary',
+          px: 1,
+          display: { xs: 'none', sm: 'inline' },
+        }}
+      >
+        {t('teamOpt.invest.pullsLabel', 'Pulls')}
+      </Typography>
+      {BUDGET_PRESETS.filter((b) => b <= Math.max(1, totalRoom)).map((b) => {
+        const active = plan
+          ? activeBudget === b && sameNonBudgetConfig
+          : budgetChoice === b
+        return (
+          <ButtonBase
+            key={b}
+            disabled={running}
+            onClick={() => pickBudget(b)}
+            sx={{
+              minWidth: 32,
+              height: 28,
+              px: 0.875,
+              borderRadius: 1,
+              fontSize: 12.5,
+              fontWeight: active ? 700 : 550,
+              ...numSx,
+              ...quickSx,
+              ...focusSx,
+              color: active ? giTokens.goldLight : 'text.secondary',
+              bgcolor: active ? alpha(tokens.gold, 0.18) : 'transparent',
+              '&:hover': {
+                color: active ? giTokens.goldLight : 'text.primary',
+                bgcolor: active
+                  ? alpha(tokens.gold, 0.22)
+                  : alpha(giTokens.parchment, 0.06),
+              },
+            }}
+          >
+            +{b}
+          </ButtonBase>
+        )
+      })}
+      {totalRoom > 6 &&
+        (() => {
+          const allActive = plan
+            ? activeBudget === totalRoom && sameNonBudgetConfig
+            : budgetChoice === 'all'
+          return (
+            <ButtonBase
+              disabled={running}
+              onClick={() => pickBudget('all')}
+              sx={{
+                height: 28,
+                px: 1,
+                borderRadius: 1,
+                fontSize: 12.5,
+                fontWeight: allActive ? 700 : 550,
+                ...numSx,
+                ...quickSx,
+                ...focusSx,
+                color: allActive ? giTokens.goldLight : 'text.secondary',
+                bgcolor: allActive ? alpha(tokens.gold, 0.18) : 'transparent',
+                '&:hover': {
+                  color: allActive ? giTokens.goldLight : 'text.primary',
+                  bgcolor: allActive
+                    ? alpha(tokens.gold, 0.22)
+                    : alpha(giTokens.parchment, 0.06),
+                },
+              }}
+            >
+              {t('teamOpt.invest.allShort', 'All')}
+            </ButtonBase>
+          )
+        })()}
+    </Box>
+  )
+
+  /** Clean inline upgrade description (unmistakable `C0→C2` / `R1` typography) */
   const renderUpgradeLine = (
     path: Pick<InvestmentPath, 'cons' | 'sig'>,
-    highlight = false
+    highlight = false,
+    showFrom = true
   ) => {
     const items: {
       key: string
@@ -859,8 +999,8 @@ export function TeamInvestment({
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          columnGap: 1.25,
-          rowGap: 0.5,
+          columnGap: 1.125,
+          rowGap: 0.375,
         }}
       >
         {items.map(({ key, ck, fromC, toC, addedSig }, idx) => {
@@ -902,9 +1042,23 @@ export function TeamInvestment({
                       fontSize: 13.5,
                       fontWeight: 700,
                       color: tokens.gold,
+                      whiteSpace: 'nowrap',
                       ...numSx,
                     }}
                   >
+                    {showFrom && (
+                      <Box
+                        component="span"
+                        sx={{
+                          fontWeight: 500,
+                          fontSize: 12,
+                          color: 'text.secondary',
+                          mr: 0.125,
+                        }}
+                      >
+                        C{fromC}→
+                      </Box>
+                    )}
                     C{toC}
                   </Typography>
                 )}
@@ -941,7 +1095,6 @@ export function TeamInvestment({
     )
   }
 
-  // Members that actually have single-member results to show in the bottom overview strip
   const evaluatedMembers = plan
     ? keys
         .map((ck, i) => ({
@@ -971,8 +1124,8 @@ export function TeamInvestment({
   }
 
   return (
-    <Panel id={anchorId} sx={{ scrollMarginTop: 88 }}>
-      {/* ── Single clean Header Bar: Title + Budget pills + quiet Options / Alt rotations / Action */}
+    <Panel id={anchorId} sx={{ scrollMarginTop: 88, position: 'relative' }}>
+      {/* ── Single clean Header Bar */}
       <Box
         sx={{
           display: 'flex',
@@ -1015,7 +1168,7 @@ export function TeamInvestment({
           </Typography>
         </Box>
 
-        {/* Controls: Pull budget + quiet Options + Alt rotations + Share + Run/Stop */}
+        {/* Header controls (Pulls pill moves into header once results exist) */}
         <Box
           sx={{
             display: 'flex',
@@ -1025,113 +1178,17 @@ export function TeamInvestment({
             ml: 'auto',
           }}
         >
-          {/* Compact Pull Budget pill group */}
-          {totalRoom > 0 && (
-            <Box
-              role="group"
-              aria-label={t('teamOpt.invest.budgetLabel', 'Pull budget')}
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                p: '2px',
-                borderRadius: tokens.radius.control,
-                bgcolor: tokens.inset,
-                border: hairline,
-                mr: 0.5,
-              }}
-            >
-              <Typography
-                component="span"
-                sx={{
-                  fontSize: 11.5,
-                  fontWeight: 600,
-                  color: 'text.secondary',
-                  px: 1,
-                  display: { xs: 'none', sm: 'inline' },
-                }}
-              >
-                {t('teamOpt.invest.pullsLabel', 'Pulls')}
-              </Typography>
-              {BUDGET_PRESETS.filter((b) => b <= Math.max(1, totalRoom)).map(
-                (b) => {
-                  const active = plan
-                    ? activeBudget === b && sameNonBudgetConfig
-                    : budgetChoice === b
-                  return (
-                    <ButtonBase
-                      key={b}
-                      disabled={running}
-                      onClick={() => pickBudget(b)}
-                      sx={{
-                        minWidth: 32,
-                        height: 28,
-                        px: 0.875,
-                        borderRadius: 1,
-                        fontSize: 12.5,
-                        fontWeight: active ? 700 : 550,
-                        ...numSx,
-                        ...quickSx,
-                        ...focusSx,
-                        color: active ? giTokens.goldLight : 'text.secondary',
-                        bgcolor: active
-                          ? alpha(tokens.gold, 0.18)
-                          : 'transparent',
-                        '&:hover': {
-                          color: active ? giTokens.goldLight : 'text.primary',
-                          bgcolor: active
-                            ? alpha(tokens.gold, 0.22)
-                            : alpha(giTokens.parchment, 0.06),
-                        },
-                      }}
-                    >
-                      +{b}
-                    </ButtonBase>
-                  )
-                }
-              )}
-              {totalRoom > 6 && (
-                <ButtonBase
-                  disabled={running}
-                  onClick={() => pickBudget('all')}
-                  sx={{
-                    height: 28,
-                    px: 1,
-                    borderRadius: 1,
-                    fontSize: 12.5,
-                    fontWeight: budgetChoice === 'all' ? 700 : 550,
-                    ...numSx,
-                    ...quickSx,
-                    ...focusSx,
-                    color:
-                      budgetChoice === 'all'
-                        ? giTokens.goldLight
-                        : 'text.secondary',
-                    bgcolor:
-                      budgetChoice === 'all'
-                        ? alpha(tokens.gold, 0.18)
-                        : 'transparent',
-                    '&:hover': {
-                      color:
-                        budgetChoice === 'all'
-                          ? giTokens.goldLight
-                          : 'text.primary',
-                      bgcolor: alpha(giTokens.parchment, 0.06),
-                    },
-                  }}
-                >
-                  {t('teamOpt.invest.allShort', 'All')}
-                </ButtonBase>
-              )}
-            </Box>
-          )}
+          {(plan || running) && budgetSelector}
 
-          {/* Options popover (R1 signatures, 4★ cons, member filter) */}
           <Button
             size="small"
             color="inherit"
             disabled={running}
             startIcon={<TuneRoundedIcon sx={{ fontSize: 17 }} />}
-            onClick={(e) => setOptionsAnchor(e.currentTarget)}
+            onClick={(e) => {
+              optionsDirtyRef.current = false
+              setOptionsAnchor(e.currentTarget)
+            }}
             sx={{
               ...quietActionSx,
               ...(customOptionsCount > 0 && { color: giTokens.goldLight }),
@@ -1141,7 +1198,6 @@ export function TeamInvestment({
             {customOptionsCount > 0 && ` (${customOptionsCount})`}
           </Button>
 
-          {/* Conditional Alt Rotations toggle */}
           <Button
             size="small"
             color="inherit"
@@ -1163,8 +1219,7 @@ export function TeamInvestment({
               : t('teamOpt.invest.altRotations', 'Alt rotations')}
           </Button>
 
-          {/* Share PNG (KQM mode once computed) */}
-          {mode === 'kqm' && plan && shareRender && (
+          {mode === 'kqm' && plan && shareRender && !running && (
             <Tooltip
               arrow
               title={t('teamOpt.invest.sharePng', 'Share investment chart')}
@@ -1181,7 +1236,6 @@ export function TeamInvestment({
             </Tooltip>
           )}
 
-          {/* Primary CTA (only shown before first run, when stopping, or when rotations changed) */}
           {running ? (
             <Button
               size="small"
@@ -1206,7 +1260,8 @@ export function TeamInvestment({
               {t('teamOpt.invest.stop', 'Stop')}
             </Button>
           ) : (
-            (!plan || rotationsChanged) && (
+            plan &&
+            rotationsChanged && (
               <Button
                 size="small"
                 variant="contained"
@@ -1221,20 +1276,18 @@ export function TeamInvestment({
                   borderRadius: tokens.radius.control,
                 }}
               >
-                {plan
-                  ? t('teamOpt.invest.update', 'Update')
-                  : t('teamOpt.invest.compare', 'Compare investments')}
+                {t('teamOpt.invest.update', 'Update')}
               </Button>
             )
           )}
         </Box>
       </Box>
 
-      {/* ── Options Popover (keeps main UI clean while covering every general use case) */}
+      {/* ── Options Popover (smooth multi-toggle, applies once on close) */}
       <Popover
         open={!!optionsAnchor}
         anchorEl={optionsAnchor}
-        onClose={() => setOptionsAnchor(null)}
+        onClose={closeOptions}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{
@@ -1242,7 +1295,7 @@ export function TeamInvestment({
             sx: {
               mt: 0.75,
               p: 2,
-              width: 280,
+              width: 284,
               borderRadius: tokens.radius.inset,
               bgcolor: tokens.raised,
               border: `1px solid ${tokens.hairlineStrong}`,
@@ -1338,6 +1391,18 @@ export function TeamInvestment({
             )
           })}
         </Box>
+        {plan && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1.5 }}>
+            <Button
+              size="small"
+              variant="contained"
+              onClick={closeOptions}
+              sx={{ ...giCtaSx, textTransform: 'none', fontSize: 12.5 }}
+            >
+              {t('teamOpt.invest.done', 'Done')}
+            </Button>
+          </Box>
+        )}
       </Popover>
 
       {/* ── Collapsible Conditional Alternative Rotations Editor */}
@@ -1527,9 +1592,13 @@ export function TeamInvestment({
         </Typography>
       )}
 
-      {/* ── Running progress */}
+      {/* ── Sleek live progress bar (non-blocking: keeps existing or streaming results visible!) */}
       {running && (
-        <Box sx={{ mt: 2, display: 'grid', gap: 0.875 }}>
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{ mt: 1.5, display: 'grid', gap: 0.75 }}
+        >
           <Box
             sx={{
               display: 'flex',
@@ -1538,7 +1607,9 @@ export function TeamInvestment({
               gap: 1,
             }}
           >
-            <Typography sx={{ fontSize: 13.5, fontWeight: 550 }}>
+            <Typography
+              sx={{ fontSize: 13, fontWeight: 550, color: giTokens.goldLight }}
+            >
               {progressText}
             </Typography>
             <Typography sx={{ ...type.label, ...numSx }}>
@@ -1549,7 +1620,7 @@ export function TeamInvestment({
             variant="determinate"
             value={progressPct}
             sx={{
-              height: 4,
+              height: 3,
               borderRadius: 2,
               bgcolor: alpha(tokens.gold, 0.14),
               '& .MuiLinearProgress-bar': {
@@ -1561,48 +1632,148 @@ export function TeamInvestment({
         </Box>
       )}
 
-      {/* ── Clean Idle State (before first click) */}
-      {!running && !plan && (
-        <Box
-          sx={{
-            mt: 1.75,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: 1.5,
-          }}
-        >
-          <Typography sx={{ ...type.label, lineHeight: 1.55 }}>
-            {totalRoom > 0
-              ? t('teamOpt.invest.readySimple', {
-                  defaultValue:
-                    'Find the highest-value ways to spend up to +{{budget}} 5★ pulls across {{members}} members{{sigPart}}.',
-                  budget: targetBudget,
-                  members: effectiveIncluded.filter(Boolean).length,
-                  sigPart: canAddSig.some(Boolean)
-                    ? t('teamOpt.invest.readySigShort', ' (cons & R1 sigs)')
-                    : '',
-                })
-              : t(
-                  'teamOpt.invest.noRoom',
-                  'Select at least one member with available upgrades in Options.'
-                )}
-          </Typography>
-          {mode === 'inventory' && totalRoom > 0 && (
-            <Typography sx={{ ...type.label, fontSize: 12, opacity: 0.8 }}>
-              {t(
-                'teamOpt.invest.invNote',
-                'Uses this run’s artifacts · KQM tab refits stats per upgrade'
-              )}
-            </Typography>
-          )}
+      {/* ── Initial skeleton during first run before first partial wave arrives */}
+      {running && !plan && (
+        <Box sx={{ mt: 2, display: 'grid', gap: 1 }}>
+          {[0, 1, 2].map((i) => (
+            <Skeleton
+              key={i}
+              variant="rounded"
+              height={46}
+              sx={{
+                borderRadius: tokens.radius.control,
+                bgcolor: alpha(giTokens.parchment, 0.05),
+              }}
+            />
+          ))}
         </Box>
       )}
 
-      {/* ── Unified Overall View (No tabs! Everything readable in one glance!) */}
-      {!running && plan && plan.maxBudget > 0 && (
-        <Box sx={{ mt: 2.25, display: 'grid', gap: 2.5 }}>
+      {/* ── Modern Inviting Idle Card (before first comparison) */}
+      {!running && !plan && (
+        <Box
+          sx={{
+            ...insetSx,
+            borderColor: tokens.hairlineStrong,
+            mt: 1.75,
+            px: { xs: 2, sm: 2.5 },
+            py: 2,
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            alignItems: { xs: 'flex-start', md: 'center' },
+            justifyContent: 'space-between',
+            gap: 2,
+            backgroundImage: `radial-gradient(420px 180px at 0% 0%, ${alpha(tokens.gold, 0.08)}, transparent 70%)`,
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1.5,
+              minWidth: 0,
+            }}
+          >
+            <Box
+              aria-hidden
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 2,
+                flexShrink: 0,
+                display: 'grid',
+                placeItems: 'center',
+                color: tokens.gold,
+                bgcolor: alpha(tokens.gold, 0.1),
+                border: `1px solid ${alpha(tokens.gold, 0.24)}`,
+              }}
+            >
+              <TrendingUpRoundedIcon sx={{ fontSize: 19 }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography
+                sx={{ ...type.title, fontSize: 14.5, lineHeight: 1.3 }}
+              >
+                {t(
+                  'teamOpt.invest.idleHeadline',
+                  'Find your highest-value 5★ pulls'
+                )}
+              </Typography>
+              <Typography
+                sx={{
+                  ...type.label,
+                  mt: 0.375,
+                  lineHeight: 1.45,
+                  maxWidth: 500,
+                }}
+              >
+                {totalRoom > 0
+                  ? t('teamOpt.invest.readySimple', {
+                      defaultValue:
+                        'Rank constellations{{sigPart}} across {{members}} members for your pull budget{{invPart}}.',
+                      members: effectiveIncluded.filter(Boolean).length,
+                      sigPart: canAddSig.some(Boolean)
+                        ? t(
+                            'teamOpt.invest.readySigPart2',
+                            ' and R1 signatures'
+                          )
+                        : '',
+                      invPart:
+                        mode === 'inventory'
+                          ? t(
+                              'teamOpt.invest.readyInvPart',
+                              ' using this run’s artifacts'
+                            )
+                          : '',
+                    })
+                  : t(
+                      'teamOpt.invest.noRoom',
+                      'Select at least one member with available upgrades in Options.'
+                    )}
+              </Typography>
+            </Box>
+          </Box>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 1.25,
+              flexShrink: 0,
+            }}
+          >
+            {budgetSelector}
+            <Button
+              size="small"
+              variant="contained"
+              disabled={disabled || totalRoom === 0}
+              startIcon={<PlayArrowRoundedIcon sx={{ fontSize: 18 }} />}
+              onClick={() => void runComparison()}
+              sx={{
+                ...giCtaSx,
+                minHeight: 34,
+                px: 2,
+                fontSize: 13,
+                borderRadius: tokens.radius.control,
+              }}
+            >
+              {t('teamOpt.invest.compare', 'Compare investments')}
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      {/* ── Unified Overall View (stays visibly mounted while updating: zero layout jump!) */}
+      {plan && plan.maxBudget > 0 && (
+        <Box
+          sx={{
+            mt: 2.25,
+            display: 'grid',
+            gap: 2.5,
+            opacity: running ? 0.62 : 1,
+            transition: 'opacity .18s',
+          }}
+        >
           {/* Primary Section: Optimal Ladder (when budget >= 2) beside Ranked Paths for +X pulls */}
           <Box
             sx={{
@@ -1613,20 +1784,20 @@ export function TeamInvestment({
                 plan.maxBudget > 1
                   ? {
                       xs: 'minmax(0, 1fr)',
-                      lg: 'minmax(270px, 0.72fr) minmax(0, 1.28fr)',
+                      lg: 'minmax(280px, 0.76fr) minmax(0, 1.24fr)',
                     }
                   : 'minmax(0, 1fr)',
             }}
           >
-            {/* Left: Optimal Wishing Roadmap (+1 -> +2 -> +3 ...), also acts as instant budget switcher */}
+            {/* Left: Optimal Wishing Roadmap (+1 -> +2 -> +3 ...) — interactive budget switcher */}
             {plan.maxBudget > 1 && (
               <Box sx={{ minWidth: 0 }}>
                 <Typography
                   component="h3"
                   sx={{
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 650,
-                    letterSpacing: '0.03em',
+                    letterSpacing: '0.04em',
                     textTransform: 'uppercase',
                     color: 'text.secondary',
                     mb: 1,
@@ -1634,7 +1805,13 @@ export function TeamInvestment({
                 >
                   {t('teamOpt.invest.optimalOrder', 'Best path by pull count')}
                 </Typography>
-                <Box sx={{ ...insetSx, overflow: 'hidden' }}>
+                <Box
+                  sx={{
+                    ...insetSx,
+                    borderColor: tokens.hairlineStrong,
+                    overflow: 'hidden',
+                  }}
+                >
                   {plan.bestByCost.slice(1).map((row, i) => {
                     const prev = plan.bestByCost[i]
                     const stepGain =
@@ -1648,22 +1825,34 @@ export function TeamInvestment({
                           width: '100%',
                           textAlign: 'left',
                           display: 'grid',
-                          gridTemplateColumns: '42px minmax(0, 1fr) auto',
+                          gridTemplateColumns: '38px minmax(0, 1fr) auto 18px',
                           alignItems: 'center',
-                          columnGap: 1.25,
-                          px: 1.5,
+                          columnGap: 1,
+                          pl: 1.5,
+                          pr: 1,
                           py: 1.25,
                           borderTop: i > 0 ? hairline : 'none',
                           borderLeft: `2px solid ${active ? tokens.gold : 'transparent'}`,
                           bgcolor: active
-                            ? alpha(tokens.gold, 0.09)
+                            ? alpha(tokens.gold, 0.1)
                             : 'transparent',
                           ...quickSx,
                           ...focusSx,
+                          '& .invest-chevron': {
+                            opacity: active ? 1 : 0,
+                            transform: active
+                              ? 'translateX(0)'
+                              : 'translateX(-3px)',
+                            transition: 'opacity .14s, transform .14s',
+                          },
                           '&:hover': {
                             bgcolor: active
-                              ? alpha(tokens.gold, 0.12)
-                              : alpha(giTokens.parchment, 0.04),
+                              ? alpha(tokens.gold, 0.13)
+                              : alpha(giTokens.parchment, 0.045),
+                            '& .invest-chevron': {
+                              opacity: active ? 1 : 0.65,
+                              transform: 'translateX(0)',
+                            },
                           },
                         }}
                       >
@@ -1678,7 +1867,7 @@ export function TeamInvestment({
                           +{row.cost}
                         </Typography>
                         <Box sx={{ minWidth: 0 }}>
-                          {renderUpgradeLine(row, active)}
+                          {renderUpgradeLine(row, active, false)}
                         </Box>
                         <Box sx={{ textAlign: 'right', ...numSx }}>
                           <Typography
@@ -1707,6 +1896,13 @@ export function TeamInvestment({
                             </Typography>
                           )}
                         </Box>
+                        <ChevronRightRoundedIcon
+                          className="invest-chevron"
+                          sx={{
+                            fontSize: 18,
+                            color: active ? tokens.gold : 'text.secondary',
+                          }}
+                        />
                       </ButtonBase>
                     )
                   })}
@@ -1728,9 +1924,9 @@ export function TeamInvestment({
                 <Typography
                   component="h3"
                   sx={{
-                    fontSize: 12.5,
+                    fontSize: 12,
                     fontWeight: 650,
-                    letterSpacing: '0.03em',
+                    letterSpacing: '0.04em',
                     textTransform: 'uppercase',
                     color: 'text.secondary',
                   }}
@@ -1753,7 +1949,13 @@ export function TeamInvestment({
                 </Typography>
               </Box>
 
-              <Box sx={{ ...insetSx, overflow: 'hidden' }}>
+              <Box
+                sx={{
+                  ...insetSx,
+                  borderColor: tokens.hairlineStrong,
+                  overflow: 'hidden',
+                }}
+              >
                 {activePaths.map((path, idx) => {
                   const isWinner = idx === 0
                   const gainBarPct =
@@ -1775,7 +1977,7 @@ export function TeamInvestment({
                         py: 1.375,
                         borderTop: idx > 0 ? hairline : 'none',
                         bgcolor: isWinner
-                          ? alpha(tokens.gold, 0.055)
+                          ? alpha(tokens.gold, 0.06)
                           : undefined,
                         display: 'grid',
                         gap: { xs: 1, sm: 1.75 },
@@ -1784,9 +1986,14 @@ export function TeamInvestment({
                           sm: '22px minmax(0, 1.35fr) minmax(110px, 0.7fr) auto',
                         },
                         alignItems: 'center',
+                        ...quickSx,
+                        '&:hover': {
+                          bgcolor: isWinner
+                            ? alpha(tokens.gold, 0.085)
+                            : alpha(giTokens.parchment, 0.03),
+                        },
                       }}
                     >
-                      {/* Clean numeric rank */}
                       <Typography
                         sx={{
                           display: { xs: 'none', sm: 'block' },
@@ -1799,9 +2006,8 @@ export function TeamInvestment({
                         {idx + 1}
                       </Typography>
 
-                      {/* Upgrade path + optional rotation/unmet note */}
                       <Box sx={{ minWidth: 0, display: 'grid', gap: 0.375 }}>
-                        {renderUpgradeLine(path, isWinner)}
+                        {renderUpgradeLine(path, isWinner, true)}
                         {(path.rotationLabel || timeDiff || path.unmet) && (
                           <Box
                             sx={{
@@ -1864,7 +2070,7 @@ export function TeamInvestment({
                         )}
                       </Box>
 
-                      {/* Gain-scaled comparison bar (shows relative gain clearly!) */}
+                      {/* Smooth animated gain-scaled bar */}
                       <Box
                         sx={{
                           display: { xs: 'none', sm: 'block' },
@@ -1883,16 +2089,19 @@ export function TeamInvestment({
                               bgcolor: isWinner
                                 ? tokens.gold
                                 : alpha(tokens.gold, 0.45),
+                              transition: `width .24s ${tokens.ease}`,
+                              '@media (prefers-reduced-motion: reduce)': {
+                                transition: 'none',
+                              },
                             }}
                           />
                         )}
                       </Box>
 
-                      {/* Clean, uncluttered figures */}
                       <Box
                         sx={{
                           textAlign: 'right',
-                          minWidth: { sm: 136 },
+                          minWidth: { sm: 138 },
                           ...numSx,
                         }}
                       >
@@ -1920,9 +2129,7 @@ export function TeamInvestment({
                               color:
                                 path.gainPct > 0.0005
                                   ? 'success.main'
-                                  : path.gainPct < -0.0005
-                                    ? 'text.secondary'
-                                    : 'text.secondary',
+                                  : 'text.secondary',
                             }}
                           >
                             {formatGain(path.gainPct)}
@@ -1948,15 +2155,15 @@ export function TeamInvestment({
             </Box>
           </Box>
 
-          {/* Bottom Overview Strip: All members' individual upgrades side-by-side (zero tab switching!) */}
+          {/* Bottom Overview Strip: All members' individual upgrades side-by-side */}
           {evaluatedMembers.length > 0 && (
             <Box>
               <Typography
                 component="h3"
                 sx={{
-                  fontSize: 12.5,
+                  fontSize: 12,
                   fontWeight: 650,
-                  letterSpacing: '0.03em',
+                  letterSpacing: '0.04em',
                   textTransform: 'uppercase',
                   color: 'text.secondary',
                   mb: 1,
@@ -1984,11 +2191,13 @@ export function TeamInvestment({
                   let prevDps = baseDps
                   const entries: {
                     id: string
+                    tagId: string
                     icon?: string
                     label: string
                     sub?: string
                     gainVsBase: number
                     stepGain: number
+                    showStep: boolean
                     dps: number
                     rot?: string
                   }[] = []
@@ -1996,11 +2205,13 @@ export function TeamInvestment({
                     const gain = baseDps > 0 ? sigEv.dps / baseDps - 1 : 0
                     entries.push({
                       id: 'sig',
+                      tagId: `${ck}:sig`,
                       icon: weaponAsset(sigKey, true),
                       label: 'R1',
                       sub: t(`weaponNames_gen:${sigKey}`, sigKey),
                       gainVsBase: gain,
                       stepGain: gain,
+                      showStep: false,
                       dps: sigEv.dps,
                       rot: sigEv.rotationLabel,
                     })
@@ -2011,6 +2222,7 @@ export function TeamInvestment({
                     const step = prevDps > 0 ? ev.dps / prevDps - 1 : 0
                     entries.push({
                       id: `c${c}`,
+                      tagId: `${ck}:c${c}`,
                       icon:
                         characterAsset(
                           ck,
@@ -2020,6 +2232,7 @@ export function TeamInvestment({
                       label: `C${c}`,
                       gainVsBase: gain,
                       stepGain: step,
+                      showStep: c > baseC + 1,
                       dps: ev.dps,
                       rot: ev.rotationLabel,
                     })
@@ -2030,6 +2243,7 @@ export function TeamInvestment({
                       key={ck}
                       sx={{
                         ...insetSx,
+                        borderColor: tokens.hairlineStrong,
                         px: 1.5,
                         py: 1.25,
                         minWidth: 0,
@@ -2061,21 +2275,22 @@ export function TeamInvestment({
                         </Typography>
                       </Box>
                       <Box sx={{ display: 'grid', gap: 0.5 }}>
-                        {entries.map((entry) => (
-                          <Tooltip
-                            key={entry.id}
-                            arrow
-                            placement="top"
-                            title={
-                              <Box sx={numSx}>
-                                <div>
-                                  {entry.sub ?? entry.label}:{' '}
-                                  {formatRateFull(entry.dps, undefined)}{' '}
-                                  {unitLabel} ({formatGain(entry.gainVsBase)} vs
-                                  base)
-                                </div>
-                                {entry.id !== 'sig' &&
-                                  entry.label !== `C${baseC + 1}` && (
+                        {entries.map((entry) => {
+                          const isTop1 = bestSingleId === entry.tagId
+                          return (
+                            <Tooltip
+                              key={entry.id}
+                              arrow
+                              placement="top"
+                              title={
+                                <Box sx={numSx}>
+                                  <div>
+                                    {entry.sub ?? entry.label}:{' '}
+                                    {formatRateFull(entry.dps, undefined)}{' '}
+                                    {unitLabel} ({formatGain(entry.gainVsBase)}{' '}
+                                    vs base)
+                                  </div>
+                                  {entry.showStep && (
                                     <div>
                                       {t('teamOpt.invest.stepFromPrev', {
                                         defaultValue: '{{step}} over previous',
@@ -2083,73 +2298,115 @@ export function TeamInvestment({
                                       })}
                                     </div>
                                   )}
-                                {entry.rot && <div>{entry.rot}</div>}
-                              </Box>
-                            }
-                          >
-                            <Box
-                              sx={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 0.75,
-                                py: 0.25,
-                                cursor: 'default',
-                              }}
+                                  {entry.rot && <div>{entry.rot}</div>}
+                                </Box>
+                              }
                             >
-                              {entry.icon && (
-                                <Box
-                                  component="img"
-                                  src={entry.icon}
-                                  alt=""
-                                  aria-hidden
-                                  sx={{
-                                    width: 18,
-                                    height: 18,
-                                    objectFit: 'contain',
-                                    flexShrink: 0,
-                                  }}
-                                />
-                              )}
-                              <Typography
+                              <Box
                                 sx={{
-                                  fontSize: 13,
-                                  fontWeight: 650,
-                                  minWidth: 26,
-                                  ...numSx,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.75,
+                                  py: 0.25,
+                                  cursor: 'default',
                                 }}
                               >
-                                {entry.label}
-                              </Typography>
-                              {entry.sub && (
+                                {entry.icon && (
+                                  <Box
+                                    component="img"
+                                    src={entry.icon}
+                                    alt=""
+                                    aria-hidden
+                                    sx={{
+                                      width: 18,
+                                      height: 18,
+                                      objectFit: 'contain',
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                )}
                                 <Typography
-                                  noWrap
                                   sx={{
-                                    ...type.label,
-                                    fontSize: 11.5,
+                                    fontSize: 13,
+                                    fontWeight: isTop1 ? 750 : 650,
+                                    color: isTop1
+                                      ? tokens.gold
+                                      : 'text.primary',
+                                    minWidth: 26,
+                                    ...numSx,
+                                  }}
+                                >
+                                  {entry.label}
+                                </Typography>
+                                <Box
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 0.625,
                                     flex: 1,
                                     minWidth: 0,
                                   }}
                                 >
-                                  {entry.sub}
+                                  {entry.sub && (
+                                    <Typography
+                                      noWrap
+                                      sx={{
+                                        ...type.label,
+                                        fontSize: 11.5,
+                                        minWidth: 0,
+                                      }}
+                                    >
+                                      {entry.sub}
+                                    </Typography>
+                                  )}
+                                  {isTop1 && (
+                                    <Box
+                                      component="span"
+                                      sx={{
+                                        fontSize: 10.5,
+                                        fontWeight: 700,
+                                        px: 0.625,
+                                        py: 0.1,
+                                        borderRadius: 999,
+                                        flexShrink: 0,
+                                        color: giTokens.goldLight,
+                                        bgcolor: alpha(tokens.gold, 0.15),
+                                      }}
+                                    >
+                                      {t('teamOpt.invest.bestOne', 'Best +1')}
+                                    </Box>
+                                  )}
+                                </Box>
+                                {entry.showStep && (
+                                  <Typography
+                                    sx={{
+                                      fontSize: 11.5,
+                                      color: 'text.secondary',
+                                      ...numSx,
+                                    }}
+                                  >
+                                    ({formatGain(entry.stepGain)})
+                                  </Typography>
+                                )}
+                                <Typography
+                                  sx={{
+                                    fontSize: 13,
+                                    fontWeight: 700,
+                                    minWidth: 46,
+                                    textAlign: 'right',
+                                    ...numSx,
+                                    color:
+                                      entry.gainVsBase > 0.0005
+                                        ? 'success.main'
+                                        : 'text.secondary',
+                                  }}
+                                >
+                                  {formatGain(entry.gainVsBase)}
                                 </Typography>
-                              )}
-                              {!entry.sub && <Box sx={{ flex: 1 }} />}
-                              <Typography
-                                sx={{
-                                  fontSize: 13,
-                                  fontWeight: 700,
-                                  ...numSx,
-                                  color:
-                                    entry.gainVsBase > 0.0005
-                                      ? 'success.main'
-                                      : 'text.secondary',
-                                }}
-                              >
-                                {formatGain(entry.gainVsBase)}
-                              </Typography>
-                            </Box>
-                          </Tooltip>
-                        ))}
+                              </Box>
+                            </Tooltip>
+                          )
+                        })}
                       </Box>
                     </Box>
                   )
