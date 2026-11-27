@@ -424,13 +424,14 @@ export function KqmSettings({
   // rotation, the length KQM plays it at (the inputs it fills in are per that rotation, as in the
   // run)
   const rotationTime = playedTime ?? teamOpt.rotationTime ?? 20
-  const calculatorDraft = useMemo(
-    () => ({
+  const calculatorDraft = useMemo(() => {
+    const settings = {
       ...teamCalculator(members, teamOpt, calculatorInputs, rotationEnergy),
       rotationTime,
-    }),
-    [members, teamOpt, calculatorInputs, rotationTime, rotationEnergy]
-  )
+    }
+    if (!rotationEnergy) delete settings.timeline
+    return settings
+  }, [members, teamOpt, calculatorInputs, rotationTime, rotationEnergy])
   const [calculatorDirty, setCalculatorDirty] = useState(false)
   // (recomputed when the calculator or the KQM weapons change, not on every keystroke; the same
   // estimate as the calculator shows)

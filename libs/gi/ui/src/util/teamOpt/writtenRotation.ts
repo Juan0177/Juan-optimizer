@@ -13,7 +13,11 @@ import {
 } from '../../components/enemy/stygianBosses'
 import type { TeamDataOverrides, TeamOptMember } from './data'
 import type { RotationEnergy } from './energyCalc'
-import { energyFromRotation, openingEnergyFromRotation } from './energyCalc'
+import {
+  energyFromRotation,
+  openingEnergyFromRotation,
+  trackedEnergyFromRotation,
+} from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
 import {
   everyNthBursts,
@@ -34,6 +38,7 @@ import {
   rotationSamples,
   type SimBuffOwner,
   type SimGear,
+  type SimulationResult,
   STEADY_COUNTED,
   STEADY_REPEATS,
   simulateRotationSamples,
@@ -316,7 +321,9 @@ function prepareWritten({
   // unless it is a setup before the start)
   const openerCounted =
     !!rotation.opener?.length &&
-    (startingEmpty === 'first' || openerIsCounted(timing))
+    (startingEmpty === 'first' ||
+      (startingEmpty === 'checks' && !!first && !opener.trim()) ||
+      openerIsCounted(timing))
   /** The written rotations counted from the start (each played copy is `loops` of them) */
   const fromStart =
     first === undefined
@@ -348,7 +355,14 @@ function prepareWritten({
     swapFrames: timing.swapFrames,
     frameData,
     repeats: first ?? (steady ? STEADY_REPEATS : repeats),
-    keep: first ? 'all' : steady ? 'last2' : keep,
+    keep:
+      keep === 'play' || startingEmpty === 'checks'
+        ? 'play'
+        : first
+          ? 'all'
+          : steady
+            ? 'last2'
+            : keep,
     openerCounted,
     skipOptionalBursts: !!startingEmpty,
     auraTimeline,
@@ -397,14 +411,14 @@ function prepareWritten({
 
 type WrittenOptions = Parameters<typeof prepareWritten>[0]
 
-/** Burst-by-Burst checks for a zero-energy start, including the transition to the repeating rotation. */
-export function writtenOpeningEnergy(args: WrittenOptions) {
+/** Play a zero-energy start, including the transition to the repeating rotation. */
+function playOpening(args: WrittenOptions, wholeEncounter: boolean) {
   const onlyOpening =
     firstRotations(args.timing) === 1 &&
     (!args.opener.trim() || openerIsCounted(args.timing))
   const sim = simulateWritten({
     ...args,
-    timing: { ...args.timing, rotations: 0 },
+    timing: wholeEncounter ? args.timing : { ...args.timing, rotations: 0 },
     startingEmpty: onlyOpening ? 'first' : 'checks',
     repeats: 1,
     keep: 'play',
@@ -413,12 +427,66 @@ export function writtenOpeningEnergy(args: WrittenOptions) {
     sacrificial: false,
   })?.sim
   return sim
-    ? openingEnergyFromRotation(
-        sim,
-        args.team.members,
-        args.team.constellations
+}
+
+/** The calculator's editable prefills and the timed gauge used for the written rotation. */
+export function writtenEnergy(
+  sim: SimulationResult,
+  counted: number,
+  args: WrittenOptions,
+  repeated: boolean,
+  zeroEnergy: boolean
+): RotationEnergy {
+  const { members, constellations } = args.team
+  const withCadence = (
+    trace: ReturnType<typeof trackedEnergyFromRotation>['trace']
+  ) =>
+    trace && args.burstEvery ? { ...trace, cadence: args.burstEvery } : trace
+  // A finite encounter can spend energy in an uncounted opener before the first counted loop.
+  let full = sim
+  if (!zeroEnergy && !repeated && sim.start > 0) {
+    const played = simulateWritten({
+      ...args,
+      repeats: 1,
+      keep: 'play',
+      samples: 4,
+      timelineOnly: true,
+      sacrificial: false,
+    })
+    full = played?.counted?.sim ?? played?.sim ?? sim
+  }
+  const tracked = trackedEnergyFromRotation(
+    full,
+    members,
+    counted,
+    constellations,
+    repeated
+  )
+  const energy =
+    full === sim
+      ? tracked.energy
+      : energyFromRotation(sim, members, counted, constellations)
+  let opening: typeof tracked.trace
+  if (zeroEnergy) {
+    const first = playOpening(args, false)
+    if (first)
+      energy.opening = openingEnergyFromRotation(first, members, constellations)
+    const whole =
+      !repeated && firstRotations(args.timing) ? playOpening(args, true) : first
+    if (whole)
+      opening = withCadence(
+        trackedEnergyFromRotation(whole, members, 1, constellations, false)
+          .trace
       )
-    : []
+  }
+  const rotation =
+    zeroEnergy && !repeated ? undefined : withCadence(tracked.trace)
+  if (rotation || opening)
+    energy.timeline = {
+      rotation,
+      opening,
+    }
+  return energy
 }
 interface UnplayedRotation {
   rotation: ReturnType<typeof parseRotation>
@@ -691,10 +759,13 @@ export function writtenKqmReplay({
       exactTime,
       stalls,
       // (the ER calculator's inputs as this rotation plays them)
-      energy: {
-        ...energyFromRotation(energySim, keys, counted, constellations),
-        ...(zeroEnergy && { opening: writtenOpeningEnergy(playArgs) }),
-      },
+      energy: writtenEnergy(
+        energySim,
+        counted,
+        playArgs,
+        played.fromStart === undefined,
+        zeroEnergy
+      ),
       ...(energySim !== played.sim && {
         energyRotationTime:
           Math.round((energySim.frames / 60 / counted) * 10) / 10,

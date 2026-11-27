@@ -34,7 +34,6 @@ import {
   actionFrameDefaults,
   CharacterName,
   calculateEnergyRecharge,
-  energyFromRotation,
   type FrameData,
   HEXEREI_CHARACTERS,
   isSacrificialWeapon,
@@ -64,10 +63,11 @@ import {
   teamBurstEvery,
   teamOptMembers,
   templatesForTeam,
+  trackedEnergyFromRotation,
   type WrittenRotation,
   withRotationEnergy,
+  writtenEnergy,
   writtenKqmReplay,
-  writtenOpeningEnergy,
   writtenSeconds,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
@@ -802,17 +802,13 @@ export function teamRotationEnergy({
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
   return {
-    energy: {
-      ...energyFromRotation(
-        played.sim,
-        members.map((m) => m.characterKey),
-        counted,
-        team.constellations
-      ),
-      ...(tabStartsWithoutEnergy(database, teamId) && {
-        opening: writtenOpeningEnergy(playArgs),
-      }),
-    },
+    energy: writtenEnergy(
+      played.sim,
+      counted,
+      playArgs,
+      played.fromStart === undefined,
+      tabStartsWithoutEnergy(database, teamId)
+    ),
     rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
   }
 }
@@ -1978,6 +1974,13 @@ function WriterModal({
           }
           const seconds = run.frames / 60 / rotations
           if (seconds <= 0) return {}
+          const { energy, trace } = trackedEnergyFromRotation(
+            run,
+            team.members,
+            rotations,
+            team.constellations,
+            result?.fromStart === undefined
+          )
           const calc = withRotationEnergy(
             {
               ...syncEnergyCalculator(
@@ -1990,12 +1993,12 @@ function WriterModal({
               rotationTime: seconds,
             },
             team.members,
-            energyFromRotation(
-              run,
-              team.members,
-              rotations,
-              team.constellations
-            )
+            {
+              ...energy,
+              timeline: trace
+                ? { rotation: { ...trace, cadence: playArgs.burstEvery } }
+                : undefined,
+            }
           )
           const current = calculateEnergyRecharge(
             team.members,

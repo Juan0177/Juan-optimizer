@@ -86,6 +86,11 @@ import {
 import type { EnemyOverride, TeamEnemy } from './TeamEnemy'
 import { validateEnemyOverride, validateTeamEnemy } from './TeamEnemy'
 import type {
+  TeamEnergyEvent,
+  TeamEnergyTimeline,
+  TeamEnergyTrace,
+} from './TeamEnergyTimeline'
+import type {
   TeamOpt,
   TeamOptAttack,
   TeamOptBuffLimit,
@@ -161,6 +166,9 @@ export type {
   Team,
   TeamCharacter,
   TeamEnemy,
+  TeamEnergyEvent,
+  TeamEnergyTimeline,
+  TeamEnergyTrace,
   TeamFightSettings,
   TeamOpt,
   TeamOptAttack,

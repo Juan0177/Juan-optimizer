@@ -22,6 +22,7 @@ import {
   kqmMemberConstellation,
   kqmWeapons,
   shortBurstOf,
+  timedEnergyStatus,
   turretParticlesOf,
   WeaponName,
   weaponCalculatorImpact,
@@ -109,7 +110,11 @@ export function energyEstimate(
     settings,
     gear.weapons
   )
-  if (settings.opening?.length)
+  if (
+    settings.opening?.length ||
+    (settings.method === 'timed' &&
+      timedEnergyStatus(keys, settings) === 'ready')
+  )
     for (const key of keys) {
       const allowed = gear.weapons(key)
       if (allowed.length !== 1) continue
@@ -120,7 +125,8 @@ export function energyEstimate(
 }
 
 /**
- * The KQM ER calculator. The members first, as tabs, each with the ER it needs; then the chosen
+ * The ER calculator shared by Inventory and KQM. After the calculation method come the member
+ * tabs, each with the ER it needs, then the chosen
  * member's energy, nothing folded away: where its energy comes from against what its Bursts spend
  * (why it needs that much), its skills and Burst, its time on the field and who catches its
  * particles, and the extra energy (Favonius, energy weapons, bonus); then the opponent the whole
@@ -150,6 +156,44 @@ export function KqmEnergyCalculator({
   const keys = members.map((m) => m.characterKey)
   const [chosen, setChosen] = useState<CharacterKey | undefined>(keys[0])
   const shown = chosen && keys.includes(chosen) ? chosen : keys[0]
+  const method = settings.method ?? 'average'
+  const methodStatus = timedEnergyStatus(keys, settings)
+  const methodLabel = t('teamOpt.kqm.calc.method', 'Calculation method')
+  const methodHelp =
+    method === 'average'
+      ? methodStatus === 'noRotation'
+        ? t(
+            'teamOpt.kqm.calc.methodNeedsRotation',
+            'Write a playable rotation to use timed tracking.'
+          )
+        : t(
+            'teamOpt.kqm.calc.methodAverageHelp',
+            'Estimate ER from the total Energy gained per rotation.'
+          )
+      : methodStatus === 'noRotation'
+        ? t(
+            'teamOpt.kqm.calc.methodNoRotation',
+            'Using rotation average until a playable written rotation is available.'
+          )
+        : methodStatus === 'editedSources'
+          ? t(
+              'teamOpt.kqm.calc.methodEdits',
+              'Using rotation average with your edited energy inputs.'
+            )
+          : methodStatus === 'pendingCadence'
+            ? t(
+                'teamOpt.kqm.calc.methodCadence',
+                'Using rotation average until the written rotation matches the Burst schedule.'
+              )
+            : methodStatus === 'skippedBurst'
+              ? t(
+                  'teamOpt.kqm.calc.methodSkippedBurst',
+                  'Using rotation average while the written rotation includes a Burst marked unused.'
+                )
+              : t(
+                  'teamOpt.kqm.calc.methodTimedHelp',
+                  'Check the Energy available at each Burst in the written rotation.'
+                )
   const gear = useMemo(() => gearProp ?? kqmEnergyGear(kqm), [gearProp, kqm])
   const estimate = useMemo(
     () =>
@@ -195,7 +239,80 @@ export function KqmEnergyCalculator({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      {/* the members, as tabs: what each one needs, the answer first */}
+      <Box>
+        <Label>{methodLabel}</Label>
+        <Box sx={{ width: '100%', maxWidth: 360 }}>
+          <Segmented
+            aria-label={methodLabel}
+            value={method}
+            fullWidth
+            onChange={(method) =>
+              setSettings((previous) => ({ ...previous, method }))
+            }
+            options={[
+              {
+                value: 'average',
+                label: t('teamOpt.kqm.calc.methodAverage', 'Rotation average'),
+              },
+              {
+                value: 'timed',
+                label: t('teamOpt.kqm.calc.methodTimed', 'Timed rotation'),
+                disabled: methodStatus === 'noRotation' && method !== 'timed',
+              },
+            ]}
+          />
+        </Box>
+        <Box
+          sx={{
+            mt: 0.625,
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 0.75,
+          }}
+        >
+          <Typography
+            role="status"
+            sx={{
+              fontSize: 12,
+              color:
+                method === 'timed' && methodStatus !== 'ready'
+                  ? 'warning.main'
+                  : 'text.secondary',
+            }}
+          >
+            {methodHelp}
+          </Typography>
+          {method === 'timed' &&
+            methodStatus === 'editedSources' &&
+            fromRotation && (
+              <Link
+                component="button"
+                type="button"
+                sx={{ fontSize: 12, minHeight: 24, ...focusSx }}
+                onClick={() =>
+                  setSettings((previous) => {
+                    const members = { ...previous.members }
+                    for (const key of keys) {
+                      const member = members[key]
+                      if (!member) continue
+                      members[key] = {
+                        ...member,
+                        edited: member.edited?.filter(
+                          (field) => field === 'burstEvery'
+                        ),
+                        weaponEnergyTriggers: 0,
+                      }
+                    }
+                    return { ...previous, members, edited: undefined }
+                  })
+                }
+              >
+                {t('teamOpt.kqm.calc.methodUseRotation', 'Use rotation inputs')}
+              </Link>
+            )}
+        </Box>
+      </Box>
       <Box
         role="tablist"
         aria-label={t('teamOpt.kqm.calc.members', 'Members')}
@@ -1033,6 +1150,8 @@ function MemberEnergy({
   const result = estimate.members[characterKey]
   const required = estimate.targets[characterKey]
   const opening = estimate.opening?.[characterKey]
+  const tracked = estimate.tracked?.[characterKey]
+  const average = estimate.averageTargets?.[characterKey]
   // (who caught its particles as the rotation played, when the catcher and its share can't say
   // it: the calculator counts these until a catcher is set by hand)
   const playedShares = (
@@ -1323,7 +1442,7 @@ function MemberEnergy({
                     arrow
                     title={t(
                       'teamOpt.kqm.calc.fromRotationTip',
-                      'Field time, skill uses, Burst cadence and the particle catcher come from the written rotation (particles count when they arrive, about 1.7 s after the hit). Change any of them to set it yourself.'
+                      'The written rotation supplies skill uses, Burst timing and particle catches. Timed ER checks how much Energy is available at each cast. Edited source counts use rotation averages.'
                     )}
                   >
                     <Box component="span" sx={{ cursor: 'help' }}>
@@ -1356,6 +1475,36 @@ function MemberEnergy({
           </Box>
         </Box>
       </Box>
+
+      {tracked && (
+        <Typography
+          variant="body2"
+          color={
+            Number.isFinite(tracked.required)
+              ? 'text.secondary'
+              : 'warning.main'
+          }
+          sx={{ px: 0.25 }}
+        >
+          {Number.isFinite(tracked.required)
+            ? average === undefined
+              ? t('teamOpt.kqm.calc.timedER', {
+                  defaultValue: 'Timed rotation · {{er}}% ER',
+                  er: tracked.required,
+                })
+              : t('teamOpt.kqm.calc.timedComparison', {
+                  defaultValue:
+                    'Timed rotation · {{er}}% ER (rotation average {{average}}%)',
+                  er: tracked.required,
+                  average,
+                })
+            : t('teamOpt.kqm.calc.timedUnreachable', {
+                defaultValue:
+                  'The Burst at {{time}} s needs another energy source before it can be cast.',
+                time: tracked.castTime?.toFixed(1),
+              })}
+        </Typography>
+      )}
 
       {opening && (
         <Typography

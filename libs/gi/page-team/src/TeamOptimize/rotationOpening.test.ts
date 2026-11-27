@@ -17,6 +17,7 @@ import {
   defaultEnergyCalculator,
   solverEnergyTargets,
   teamOptMembers,
+  timedEnergyStatus,
   UNREACHABLE_OPENING_ER,
   withRotationEnergy,
   writtenKqmReplay,
@@ -127,7 +128,11 @@ describe('the first rotation from no energy', () => {
     expect(opening?.sim?.actions.map((a) => a.text)).toEqual(['E', 'Q'])
   })
 
-  const estimate = (opener: string, fullEnergy: boolean) => {
+  const estimate = (
+    opener: string,
+    fullEnergy: boolean,
+    method?: 'average' | 'timed'
+  ) => {
     database.teams.set(teamId, { fightSettings: { fullEnergy } })
     const replay = teamRotationEnergy({
       ...playArgs,
@@ -138,6 +143,7 @@ describe('the first rotation from no energy', () => {
       {
         ...defaultEnergyCalculator(MEMBERS, replay.rotationTime),
         enemyParticles: 0,
+        method,
       },
       MEMBERS,
       replay.energy
@@ -145,9 +151,12 @@ describe('the first rotation from no energy', () => {
     return calculateEnergyRecharge(MEMBERS, calculator, {})
   }
 
-  it('raises ER to the timed opener requirement for a custom enemy', () => {
-    const startFull = estimate('Bennett E W2 Q', true)
-    const startEmpty = estimate('Bennett E W2 Q', false)
+  it.each([
+    'average',
+    'timed',
+  ] as const)('raises %s ER to the opener requirement for a custom enemy', (method) => {
+    const startFull = estimate('Bennett E W2 Q', true, method)
+    const startEmpty = estimate('Bennett E W2 Q', false, method)
     expect(startFull.opening).toBeUndefined()
     expect(startEmpty.opening?.Bennett?.castTime).toBeGreaterThan(2)
     expect(startEmpty.opening?.Bennett?.required).toBeGreaterThan(
@@ -158,12 +167,15 @@ describe('the first rotation from no energy', () => {
     )
   })
 
-  it('requires the particles to arrive before the cast and permits a fallback', () => {
-    const tooEarly = estimate('Bennett E Q', false)
+  it.each([
+    'average',
+    'timed',
+  ] as const)('requires timely particles and supports the alternative action with %s ER', (method) => {
+    const tooEarly = estimate('Bennett E Q', false, method)
     expect(tooEarly.opening?.Bennett?.required).toBe(Number.POSITIVE_INFINITY)
     expect(tooEarly.targets.Bennett).toBeUndefined()
     expect(solverEnergyTargets(tooEarly).Bennett).toBe(UNREACHABLE_OPENING_ER)
-    const fallback = estimate('Bennett E Q/N1 W2', false)
+    const fallback = estimate('Bennett E Q/N1 W2', false, method)
     expect(fallback.targets.Bennett).toBeGreaterThanOrEqual(100)
   })
 
@@ -184,7 +196,10 @@ describe('the first rotation from no energy', () => {
       frameData: {},
     })!({ constellations: {}, gear: {}, overrides: {} })
     const calculator = withRotationEnergy(
-      defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+      {
+        ...defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+        method: 'timed',
+      },
       MEMBERS,
       replay.energy
     )
@@ -192,13 +207,78 @@ describe('the first rotation from no energy', () => {
       ...teamOpt,
       kqm: { ...teamOpt.kqm, energyCalculator: calculator },
     })
-    expect(restored?.kqm?.energyCalculator?.opening?.[0]).toMatchObject({
-      characterKey: 'Bennett',
-      cost: 60,
-    })
+    expect(restored?.kqm?.energyCalculator?.method).toBe('timed')
+    expect(restored?.kqm?.energyCalculator?.opening?.length).toBeGreaterThan(0)
+    expect(
+      restored?.kqm?.energyCalculator?.timeline?.opening?.events
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: 'burst',
+        character: 'Bennett',
+        amount: 60,
+      })
+    )
     expect(
       calculateEnergyRecharge(MEMBERS, restored!.kqm!.energyCalculator!, {})
         .opening?.Bennett?.required
+    ).toBeGreaterThan(100)
+  })
+
+  it('includes an uncounted opener in a finite encounter starting at full Energy', () => {
+    database.teams.set(teamId, { fightSettings: { fullEnergy: true } })
+    const replay = teamRotationEnergy({
+      ...playArgs,
+      text: 'Bennett Q W15 -> Sucrose N1',
+      saved: {
+        opener: 'Bennett Q W16',
+        timing: { edits: {}, rotations: 1 },
+        frameData: {},
+      },
+    })!
+    const rotation = replay.energy.timeline?.rotation
+    expect(rotation?.repeat).toBe(false)
+    expect(
+      rotation?.events.filter((event) => event.kind === 'burst')
+    ).toHaveLength(2)
+    const config = withRotationEnergy(
+      {
+        ...defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+        method: 'timed',
+        enemyParticles: 0,
+      },
+      MEMBERS,
+      replay.energy
+    )
+    expect(
+      calculateEnergyRecharge(MEMBERS, config).tracked?.Bennett?.required
+    ).toBe(Number.POSITIVE_INFINITY)
+  })
+
+  it('waits for an optional Burst’s inferred cadence and tracks it after replay', () => {
+    database.teams.set(teamId, { fightSettings: { fullEnergy: true } })
+    const options = {
+      ...playArgs,
+      text: 'Bennett E W3 Q? W16 -> Sucrose N1',
+      saved: { opener: '', timing: playArgs.timing, frameData: {} },
+    }
+    const estimate = (burstEvery?: { Bennett: number }) => {
+      const replay = teamRotationEnergy({ ...options, burstEvery })!
+      return withRotationEnergy(
+        {
+          ...defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+          method: 'timed',
+        },
+        MEMBERS,
+        replay.energy
+      )
+    }
+    const pending = estimate()
+    expect(pending.members.Bennett?.burstEvery).toBe(2)
+    expect(timedEnergyStatus(MEMBERS, pending)).toBe('pendingCadence')
+    const played = estimate({ Bennett: 2 })
+    expect(timedEnergyStatus(MEMBERS, played)).toBe('ready')
+    expect(
+      calculateEnergyRecharge(MEMBERS, played).tracked?.Bennett?.required
     ).toBeGreaterThan(100)
   })
 })

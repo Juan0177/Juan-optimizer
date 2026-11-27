@@ -1503,7 +1503,10 @@ async function runKqm({
         : isRefit
           ? upgradeConstellationModes(synced, keys, kqmCons)
           : synced),
-      ...(simulation?.energy && { opening: simulation.energy.opening }),
+      ...(simulation?.energy && {
+        opening: simulation.energy.opening,
+        timeline: simulation.energy.timeline,
+      }),
       rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
     }
   }
@@ -3190,7 +3193,13 @@ async function runKqm({
       JSON.stringify(
         isRefit
           ? [p.attacks, p.rotationTime, p.energyRotationTime, p.energy]
-          : [p.attacks, p.rotationTime, p.energyRotationTime, p.energy?.opening]
+          : [
+              p.attacks,
+              p.rotationTime,
+              p.energyRotationTime,
+              p.energy?.opening,
+              p.energy?.timeline,
+            ]
       )
     const changed = !played || playedId(next) !== playedId(played)
     played = next

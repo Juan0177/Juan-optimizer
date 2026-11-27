@@ -223,13 +223,13 @@ export function RunDialog({
   const canStart =
     ((toOptimize.length > 0 && eligible) || asItIs) &&
     !energy.updating &&
-    !energy.blockedOpening
-  const notice = energy.blockedOpening
+    !energy.blockedBurst
+  const notice = energy.blockedBurst
     ? t('teamOpt.kqm.calc.openingBlocked', {
         defaultValue:
           '{{character}} can’t charge their Burst by {{time}} s. Move the Burst later or add particles before the cast.',
-        character: t(`charNames_gen:${energy.blockedOpening[0]}`),
-        time: energy.blockedOpening[1].castTime.toFixed(1),
+        character: t(`charNames_gen:${energy.blockedBurst[0]}`),
+        time: energy.blockedBurst[1].castTime?.toFixed(1),
       })
     : asItIs
       ? t(
@@ -384,7 +384,7 @@ export function RunDialog({
         >
           {notice && (
             <Alert
-              severity={energy.blockedOpening ? 'warning' : 'info'}
+              severity={energy.blockedBurst ? 'warning' : 'info'}
               role="status"
               sx={{ mb: 1.5 }}
             >
