@@ -28,12 +28,20 @@ export const CONSTELLATIONS = [0, 1, 2, 3, 4, 5, 6] as const
 
 /** The rotations written for a member's constellations (one text each; absent: the team's) */
 export type ConsRotationTexts = Partial<Record<number, string>>
+export type ConsRotationScope = 'kqm' | 'inventory'
 
-function allConsRotations(database: ArtCharDatabase, teamId: string) {
+const rotationDocId = (teamId: string, scope: ConsRotationScope) =>
+  scope === 'kqm' ? `${teamId}_kqm` : teamId
+
+function allConsRotations(
+  database: ArtCharDatabase,
+  teamId: string,
+  scope: ConsRotationScope = 'kqm'
+) {
   try {
     const data = JSON.parse(
       database.teams.getRotationField(
-        `${teamId}_kqm`,
+        rotationDocId(teamId, scope),
         'ConstellationRotations'
       ) ?? '{}'
     )
@@ -48,9 +56,10 @@ function allConsRotations(database: ArtCharDatabase, teamId: string) {
 export function readConsRotations(
   database: ArtCharDatabase,
   teamId: string,
-  ck: CharacterKey
+  ck: CharacterKey,
+  scope: ConsRotationScope = 'kqm'
 ): ConsRotationTexts {
-  const rotations = allConsRotations(database, teamId)[ck]
+  const rotations = allConsRotations(database, teamId, scope)[ck]
   return Object.fromEntries(
     CONSTELLATIONS.flatMap((cons) => {
       const text = rotations?.[cons]
@@ -63,13 +72,14 @@ export function writeConsRotations(
   database: ArtCharDatabase,
   teamId: string,
   ck: CharacterKey,
-  rotations: ConsRotationTexts
+  rotations: ConsRotationTexts,
+  scope: ConsRotationScope = 'kqm'
 ) {
-  const all = allConsRotations(database, teamId) ?? {}
+  const all = allConsRotations(database, teamId, scope) ?? {}
   if (Object.keys(rotations).length) all[ck] = rotations
   else delete all[ck]
   database.teams.setRotationField(
-    `${teamId}_kqm`,
+    rotationDocId(teamId, scope),
     'ConstellationRotations',
     Object.keys(all).length ? JSON.stringify(all) : null
   )
@@ -112,6 +122,7 @@ export function ConsRotations({
   teamText,
   names,
   gender,
+  aboveOnly = false,
   onChange,
 }: {
   characterKey: CharacterKey
@@ -121,6 +132,8 @@ export function ConsRotations({
   teamText: string
   names: RotationMember[]
   gender: GenderKey
+  /** Only show `ran` and higher constellations (for investment planning above baseline) */
+  aboveOnly?: boolean
   onChange: (next: ConsRotationTexts) => void
 }) {
   const { t } = useTranslation('page_team')
@@ -175,9 +188,12 @@ export function ConsRotations({
       })
     return t('teamOpt.kqm.share.consTeam', 'Team rotation')
   }
+  const shownCons = aboveOnly
+    ? CONSTELLATIONS.filter((c) => c >= ran)
+    : CONSTELLATIONS
   return (
     <Box sx={{ ...insetSx, overflow: 'hidden' }}>
-      {CONSTELLATIONS.map((cons, i) => {
+      {shownCons.map((cons, i) => {
         const { text: written, from } = played(cons)
         const text = written ?? teamText
         // (another rotation than the team's: shown full; its own: its label in gold)
@@ -417,12 +433,13 @@ export interface ComboRotation {
 }
 export function readComboRotations(
   database: ArtCharDatabase,
-  teamId: string
+  teamId: string,
+  scope: ConsRotationScope = 'kqm'
 ): ComboRotation[] {
   try {
     const saved = JSON.parse(
       database.teams.getRotationField(
-        `${teamId}_kqm`,
+        rotationDocId(teamId, scope),
         'CombinationRotations'
       ) ?? '[]'
     )
@@ -444,10 +461,11 @@ export function readComboRotations(
 export function writeComboRotations(
   database: ArtCharDatabase,
   teamId: string,
-  combos: ComboRotation[]
+  combos: ComboRotation[],
+  scope: ConsRotationScope = 'kqm'
 ) {
   database.teams.setRotationField(
-    `${teamId}_kqm`,
+    rotationDocId(teamId, scope),
     'CombinationRotations',
     combos.length ? JSON.stringify(combos) : null
   )

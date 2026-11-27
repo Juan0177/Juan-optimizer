@@ -20,11 +20,13 @@ import {
   rounded,
 } from './shareStyle'
 
-/** A cost's best constellations for the team, and the team's DPS with them */
+/** A cost's best constellations (and optional R1 signatures) for the team, and the team's DPS with them */
 export type InvestmentRow = {
   cost: number
   /** each member's constellation (in `members`' order) */
   cons: number[]
+  /** whether each member added their R1 signature weapon (in `members`' order) */
+  sig?: boolean[]
   /** the team's DPS (any unit: percentages are of the first row's) */
   value: number
   /** in the bar: the DPS itself, formatted ("61.2K") */
@@ -173,21 +175,23 @@ export async function renderInvestmentChart(
       color: i ? FIGURE : 'rgba(230, 213, 177, 0.6)',
       align: 'center',
     })
-    // each member's constellation: raised ones in gold, the others faint
+    // each member's constellation (and optional R1 sig): upgraded ones in gold, the others faint
     row.cons.forEach((c, j) => {
-      const raised = c > (baseCons[j] ?? 0)
+      const addedSig = !!row.sig?.[j]
+      const raised = c > (baseCons[j] ?? 0) || addedSig
       const x = colX(j)
+      const pillW = addedSig ? 88 : 68
       if (raised) {
         const rgb = hexRgb(data.members[j]?.elementColor ?? '#d3bc8e')
-        rounded(ctx, x - 34, cy - 18, 68, 36, 18)
+        rounded(ctx, x - pillW / 2, cy - 18, pillW, 36, 18)
         ctx.fillStyle = 'rgba(211, 188, 142, 0.2)'
         ctx.fill()
         ctx.strokeStyle = `rgba(${rgb}, 0.7)`
         ctx.lineWidth = 1.5
         ctx.stroke()
       }
-      ink(ctx, `C${c}`, x, cy + 9, {
-        size: raised ? 25 : 22,
+      ink(ctx, addedSig ? `C${c}R1` : `C${c}`, x, cy + (addedSig ? 8 : 9), {
+        size: addedSig ? 21 : raised ? 25 : 22,
         weight: raised ? 800 : 650,
         color: raised ? '#f4e3bc' : 'rgba(236, 229, 216, 0.3)',
         align: 'center',
