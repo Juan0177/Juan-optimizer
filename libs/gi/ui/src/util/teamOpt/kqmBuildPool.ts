@@ -51,6 +51,28 @@ export interface Snapshot {
   dbIndex: 1 | 2 | 3 | 4
   entries: Record<string, string>
 }
+
+/**
+ * Scope for `databaseSnapshot`: trims unrelated teams, inventory artifacts, and cached run blobs
+ * so workers stay compact and immune to volatile result writes.
+ */
+export interface SnapshotScope {
+  /** Only include this team and the characters/loadouts/weapons/builds/optConfigs it references. */
+  teamId?: string
+  /**
+   * Which artifacts to include when `teamId` is set:
+   * - `'none'`: omit all `artifact_*`
+   * - `'team'` (default): only artifacts equipped by `teamId` plus `extraArtifactIds`
+   * - `'all'`: include every `artifact_*` in the database
+   */
+  artifacts?: 'none' | 'team' | 'all'
+  /** Additional artifact IDs to include when `artifacts === 'team'` (e.g. saved run builds) */
+  extraArtifactIds?: Iterable<string | undefined>
+  /** Additional weapon IDs to include when `teamId` is set (e.g. saved run weapons) */
+  extraWeaponIds?: Iterable<string | undefined>
+  /** Include all characters, weapons, and builds (e.g. full Team Optimize with `useOtherChars`) */
+  allEquipment?: boolean
+}
 interface BuildJob {
   kind: 'build'
   id: number
@@ -60,6 +82,7 @@ interface BuildJob {
   gender: GenderKey
   settings: KqmBuildSettings
   isCancelled: () => boolean
+  retried?: boolean
   resolve: (built: KqmBuiltProblem | undefined) => void
   reject: (e: unknown) => void
 }
@@ -70,6 +93,7 @@ interface InvestPoolJob {
   snapshot: Snapshot
   job: InvestJob
   isCancelled: () => boolean
+  retried?: boolean
   resolve: (result: InvestResult | undefined) => void
   reject: (e: unknown) => void
 }
@@ -88,8 +112,9 @@ const queue: PoolJob[] = []
 let nextId = 1
 let idleTimer: ReturnType<typeof setTimeout> | undefined
 let inlineRunning = false
-/** The database's last copy (taken again when it changed) */
-let last: { database: ArtCharDatabase; snapshot: Snapshot } | undefined
+/** Recent snapshots per database keyed by content key (avoids cloning unchanged snapshots) */
+const snapshotCache = new WeakMap<ArtCharDatabase, Map<string, Snapshot>>()
+const SNAPSHOT_CACHE_MAX = 4
 
 // Dev only: workers run the code they were started with, so drop them on hot replacement
 // (this library is typed as CommonJS; the app's bundler and the tests load it as a module)
@@ -140,16 +165,39 @@ function poolSize() {
     kqmBuildThreads() ?? kqmBuildThreadsAuto()
   )
 }
+/**
+ * Heavy investment evaluations run full rotation replays + KQM optimization inside each worker,
+ * so cap concurrent investment workers to stay comfortably inside Chrome's shared 4 GB V8 cage
+ * even when KQM build threads are manually raised to 6–8.
+ */
+function maxInvestWorkers() {
+  const memory =
+    (globalThis.navigator as { deviceMemory?: number } | undefined)
+      ?.deviceMemory ?? 8
+  return memory >= 8 ? 4 : memory >= 4 ? 2 : 1
+}
+function investPoolSize() {
+  return Math.max(1, Math.min(poolSize(), maxInvestWorkers()))
+}
 const workersUsable = () => !failed && typeof Worker !== 'undefined'
 
 /** How many investment evaluations can execute concurrently across the warm worker pool */
 export function kqmInvestmentConcurrency() {
-  return workersUsable() ? Math.max(1, poolSize()) : 1
+  return workersUsable() ? investPoolSize() : 1
 }
 
 function dropBuilders() {
   for (const slot of slots) slot.worker.terminate()
   slots = []
+}
+
+/** Terminate excess idle workers beyond `maxSlots` to immediately reclaim V8 cage memory. */
+function trimIdleBuilders(maxSlots: number) {
+  for (let i = slots.length - 1; i >= maxSlots; i--) {
+    if (slots[i].job) continue
+    slots[i].worker.terminate()
+    slots.splice(i, 1)
+  }
 }
 
 /** Ends the builders once a run is over, after `afterMs` unused (what they hold is large) */
@@ -170,9 +218,128 @@ function hash(text: string, h: number) {
   return h >>> 0
 }
 
-/** The database as it is now, for workers (the last copy when nothing changed) */
-export function databaseSnapshot(database: ArtCharDatabase): Snapshot {
-  const entries = database.storage.entries
+const EXCLUDED_SNAPSHOT_KEYS = new Set(['teamKqmResults', 'teamOptResults'])
+const EXCLUDED_SNAPSHOT_PREFIXES = [
+  'teamKqmRun_',
+  'generatedBuildList_',
+  'pandoGeneratedBuildList_',
+  'pandoOptConfig_',
+  'pandoTeam_',
+  'display_',
+]
+function isExcludedSnapshotKey(key: string) {
+  if (EXCLUDED_SNAPSHOT_KEYS.has(key)) return true
+  for (const prefix of EXCLUDED_SNAPSHOT_PREFIXES)
+    if (key.startsWith(prefix)) return true
+  return false
+}
+/** Strip volatile `lastEdit` from `dbMeta` so saves to unrelated entries never bust worker DBs */
+function normalizeSnapshotValue(key: string, value: string): string {
+  if (key !== 'dbMeta') return value
+  try {
+    const parsed = JSON.parse(value)
+    if (parsed && typeof parsed === 'object' && 'lastEdit' in parsed)
+      return JSON.stringify({ ...parsed, lastEdit: 0 })
+  } catch {
+    // keep raw value
+  }
+  return value
+}
+function isEquipmentKey(key: string) {
+  return (
+    key.startsWith('char_') ||
+    key.startsWith('charMeta_') ||
+    key.startsWith('weapon_') ||
+    key.startsWith('build_') ||
+    key.startsWith('buildTc_')
+  )
+}
+
+function snapshotPairs(
+  database: ArtCharDatabase,
+  scope?: SnapshotScope
+): [string, string][] {
+  const teamId = scope?.teamId
+  const team = teamId ? database.teams.get(teamId) : undefined
+  if (!teamId || !team) {
+    const out: [string, string][] = []
+    for (const [k, v] of database.storage.entries) {
+      if (isExcludedSnapshotKey(k)) continue
+      out.push([k, normalizeSnapshotValue(k, v)])
+    }
+    return out
+  }
+
+  const artifacts = scope.artifacts ?? 'team'
+  const needed = new Set<string>(['db_ver', 'dbIndex', 'dbMeta', teamId])
+  const addId = (id: string | undefined) => {
+    if (id) needed.add(id)
+  }
+  for (const loadoutDatum of team.loadoutData) {
+    if (!loadoutDatum) continue
+    addId(loadoutDatum.teamCharId)
+    const teamChar = database.teamChars.get(loadoutDatum.teamCharId)
+    if (teamChar) {
+      addId(database.chars.toStorageKey(teamChar.key))
+      addId(database.charMeta.toStorageKey(teamChar.key))
+      addId(teamChar.optConfigId)
+      const char = database.chars.get(teamChar.key)
+      if (char) {
+        addId(char.equippedWeapon)
+        if (artifacts === 'team')
+          for (const id of Object.values(char.equippedArtifacts)) addId(id)
+      }
+    }
+    for (const buildId of [loadoutDatum.buildId, loadoutDatum.compareBuildId]) {
+      if (!buildId) continue
+      addId(buildId)
+      const build = database.builds.get(buildId)
+      if (build) {
+        addId(build.weaponId)
+        if (artifacts === 'team')
+          for (const id of Object.values(build.artifactIds)) addId(id)
+      }
+    }
+    addId(loadoutDatum.buildTcId)
+    addId(loadoutDatum.compareBuildTcId)
+    addId(database.teams.getLoadoutWeaponId(loadoutDatum))
+    if (artifacts === 'team')
+      for (const id of Object.values(
+        database.teams.getLoadoutArtifactIds(loadoutDatum)
+      ))
+        addId(id)
+  }
+  if (scope.extraWeaponIds) for (const id of scope.extraWeaponIds) addId(id)
+  if (artifacts === 'team' && scope.extraArtifactIds)
+    for (const id of scope.extraArtifactIds) addId(id)
+
+  const out: [string, string][] = []
+  if (scope.allEquipment || artifacts === 'all') {
+    for (const [k, v] of database.storage.entries) {
+      if (isExcludedSnapshotKey(k)) continue
+      if (
+        needed.has(k) ||
+        (scope.allEquipment && isEquipmentKey(k)) ||
+        (artifacts === 'all' && k.startsWith('artifact_'))
+      )
+        out.push([k, normalizeSnapshotValue(k, v)])
+    }
+    return out
+  }
+
+  for (const k of [...needed].sort()) {
+    const raw = database.storage.getString(k)
+    if (raw !== undefined) out.push([k, normalizeSnapshotValue(k, raw)])
+  }
+  return out
+}
+
+/** The database as it is now, for workers (scoped and cached so unchanged snapshots are reused) */
+export function databaseSnapshot(
+  database: ArtCharDatabase,
+  scope?: SnapshotScope
+): Snapshot {
+  const entries = snapshotPairs(database, scope)
   let h = 2166136261
   let size = 0
   for (const [k, v] of entries) {
@@ -180,15 +347,22 @@ export function databaseSnapshot(database: ArtCharDatabase): Snapshot {
     h = hash(v, h)
     size += k.length + v.length
   }
-  const key = `${database.dbIndex}:${entries.length}:${size}:${h}`
-  if (last?.database === database && last.snapshot.key === key)
-    return last.snapshot
+  const key = `${database.dbIndex}:${scope?.teamId ?? '*'}:${entries.length}:${size}:${h}`
+  let cache = snapshotCache.get(database)
+  const hit = cache?.get(key)
+  if (hit) return hit
   const next: Snapshot = {
     key,
     dbIndex: database.dbIndex,
     entries: Object.fromEntries(entries),
   }
-  last = { database, snapshot: next }
+  if (!cache) {
+    cache = new Map()
+    snapshotCache.set(database, cache)
+  }
+  cache.set(key, next)
+  while (cache.size > SNAPSHOT_CACHE_MAX)
+    cache.delete(cache.keys().next().value!)
   return next
 }
 
@@ -201,6 +375,7 @@ export function kqmProblemBuilder(
   isCancelled: () => boolean
 ) {
   let copy: Snapshot | undefined
+  let copyTeamId: string | undefined
   return {
     build(
       teamId: string,
@@ -210,13 +385,17 @@ export function kqmProblemBuilder(
       clearTimeout(idleTimer)
       if (!workersUsable())
         return inlineBuild(database, teamId, gender, settings, isCancelled)
-      copy ??= databaseSnapshot(database)
+      if (!copy || copyTeamId !== teamId) {
+        copy = databaseSnapshot(database, { teamId, artifacts: 'team' })
+        copyTeamId = teamId
+      }
+      const snapshot = copy
       return new Promise((resolve, reject) => {
         queue.push({
           kind: 'build',
           id: nextId++,
           database,
-          snapshot: copy!,
+          snapshot,
           teamId,
           gender,
           settings,
@@ -225,7 +404,7 @@ export function kqmProblemBuilder(
           reject,
         })
         try {
-          startBuilders()
+          startBuilders(poolSize())
         } catch {
           failed = true
         }
@@ -247,7 +426,18 @@ export function runInvestmentInPool(
 ): Promise<InvestResult | undefined> {
   clearTimeout(idleTimer)
   if (!workersUsable()) return inlineInvest(database, job, isCancelled)
-  const snapshot = databaseSnapshot(database)
+  const scope: SnapshotScope =
+    job.mode === 'kqm'
+      ? { teamId: job.teamId, artifacts: 'team' }
+      : {
+          teamId: job.teamId,
+          artifacts: 'team',
+          extraArtifactIds: Object.values(job.result.builds).flatMap((b) =>
+            Object.values(b ?? {})
+          ),
+          extraWeaponIds: Object.values(job.result.weapons ?? {}),
+        }
+  const snapshot = databaseSnapshot(database, scope)
   return new Promise((resolve, reject) => {
     queue.push({
       kind: 'invest',
@@ -260,7 +450,10 @@ export function runInvestmentInPool(
       reject,
     })
     try {
-      startBuilders()
+      const limit = investPoolSize()
+      // Reclaim memory from excess idle KQM build workers (e.g. 8-thread KQM -> 4-thread invest)
+      trimIdleBuilders(limit)
+      startBuilders(limit)
     } catch {
       failed = true
     }
@@ -269,9 +462,8 @@ export function runInvestmentInPool(
   })
 }
 
-function startBuilders() {
-  if (slots.length) return
-  for (let i = 0; i < poolSize(); i++) {
+function startBuilders(target = poolSize()) {
+  while (slots.length < target) {
     const slot: Slot = {
       // @ts-expect-error TS1470 (as above: loaded as a module)
       worker: new Worker(new URL('./kqmBuildWorker.ts', import.meta.url), {
@@ -298,11 +490,20 @@ function buildersBroke() {
   void runInline()
 }
 
-function nextJob(): PoolJob | undefined {
-  while (queue.length) {
-    const job = queue.shift()!
-    if (!job.isCancelled()) return job
-    job.reject(new KqmSearchCancelled())
+function nextJob(allowInvest = true): PoolJob | undefined {
+  for (let i = 0; i < queue.length; ) {
+    const job = queue[i]
+    if (job.isCancelled()) {
+      queue.splice(i, 1)
+      job.reject(new KqmSearchCancelled())
+      continue
+    }
+    if (!allowInvest && job.kind === 'invest') {
+      i++
+      continue
+    }
+    queue.splice(i, 1)
+    return job
   }
   return undefined
 }
@@ -358,15 +559,19 @@ function runJobInline(job: PoolJob) {
 }
 
 function dispatch() {
+  const investCap = investPoolSize()
+  let activeInvest = slots.filter((s) => s.job?.kind === 'invest').length
   for (const slot of slots) {
     if (slot.job) continue
-    const job = nextJob()
+    const job = nextJob(activeInvest < investCap)
     if (!job) break
+    if (job.kind === 'invest') activeInvest++
     try {
       send(slot, job)
     } catch {
       // (settings a worker cannot be sent: that job runs here)
       slot.job = undefined
+      if (job.kind === 'invest') activeInvest--
       void runJobInline(job)
     }
   }
@@ -388,9 +593,14 @@ function onReply(slot: Slot, reply: KqmBuildReply) {
       if (job.kind === 'invest') job.resolve(reply.result)
       break
     case 'missing':
-      // (it lost its copy: sent again)
+      // (it lost its copy: retry once, otherwise fall back inline to avoid an infinite IPC loop)
       slot.key = undefined
-      queue.unshift(job)
+      if (!job.retried) {
+        job.retried = true
+        queue.unshift(job)
+      } else {
+        void runJobInline({ ...job, isCancelled: () => false })
+      }
       break
     case 'error':
       // (as run here: the same error, or the result when only the worker failed)

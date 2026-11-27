@@ -1,5 +1,6 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { ArtCharDatabase } from '@genshin-optimizer/gi/db'
+import { databaseSnapshot } from './kqmBuildPool'
 import type { TeamOptStatus } from './runSolver'
 import type { TeamOptRunJob, TeamOptRunUpdates } from './runTeam'
 import type {
@@ -188,9 +189,11 @@ export function startTeamOptWorker(
       }
     }
     try {
-      const entries = Object.fromEntries(database.storage.entries)
-      delete entries['teamOptResults']
-      delete entries['teamKqmResults']
+      const { entries } = databaseSnapshot(database, {
+        teamId: job.teamId,
+        artifacts: 'all',
+        allEquipment: true,
+      })
       worker.postMessage({
         ...job,
         dbIndex: database.dbIndex,

@@ -65,8 +65,13 @@ function simEquivCons(ck: CharacterKey, cons: number) {
   return cons
 }
 
-const REPLAY_CACHE_MAX = 48
+const REPLAY_CACHE_MAX = 8
 const kqmReplayCache = new Map<string, KqmPlayed>()
+
+/** Drop cached rotation replays inside a worker (e.g. when its database snapshot changes) */
+export function clearInvestmentReplayCache() {
+  kqmReplayCache.clear()
+}
 
 /** True if switching between `oldKey` and `newKey` could alter rotation simulation or team ER. */
 function weaponAffectsSimulation(
@@ -181,6 +186,10 @@ async function runKqmInvestJob(
     : kqm.signature
   const teamOpt: TeamOpt = {
     ...setup,
+    attacks:
+      Object.keys(setup.attacks ?? {}).length > 0
+        ? setup.attacks
+        : (played?.attacks ?? {}),
     kqm: {
       ...kqm,
       constellations: { ...kqm.constellations, ...cons },

@@ -666,13 +666,22 @@ export async function refitConstellations({
       er ? [[ck, er.minimum]] : []
     )
   ) as Partial<Record<CharacterKey, number>>
+  // Avoid structured-cloning huge attack arrays 3x over worker IPC (`setup.attacks`,
+  // `setup.kqm.attacks`, and `result.played.attacks`) when `result.played` already carries them.
+  const slimSetup: TeamOpt = result.played
+    ? {
+        ...setup,
+        attacks: {},
+        ...(setup.kqm ? { kqm: { ...setup.kqm, attacks: undefined } } : {}),
+      }
+    : setup
   return runInvestmentInPool(
     database,
     {
       mode: 'kqm',
       teamId,
       gender,
-      setup,
+      setup: slimSetup,
       from: { ...result.builds, ...start },
       played: result.played,
       attackStates: playedAttackStates(result.played),

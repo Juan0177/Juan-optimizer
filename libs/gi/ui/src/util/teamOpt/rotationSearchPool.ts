@@ -4,7 +4,7 @@ import { yieldTask } from '@genshin-optimizer/gi/solver'
 import type { KqmResult } from './kqm'
 import { kqmSimGear, kqmTeamOverrides } from './kqm'
 import type { Snapshot } from './kqmBuildPool'
-import { databaseSnapshot } from './kqmBuildPool'
+import { databaseSnapshot, releaseKqmBuilders } from './kqmBuildPool'
 import type {
   FrameData,
   RotationMember,
@@ -244,6 +244,8 @@ export function rotationSearchPlayer(
   }
   const start = () => {
     if (slots.length || broken) return
+    // Release idle KQM builder workers first so two large worker pools don't stack in Chrome's V8 cage
+    releaseKqmBuilders(0)
     for (let i = 0; i < threads; i++) spawn()
     if (!slots.length) playAllHere()
   }
@@ -266,7 +268,10 @@ export function rotationSearchPlayer(
   }
   const send = (slot: Slot, run: Run) => {
     slot.run = run
-    snapshot ??= databaseSnapshot(database)
+    snapshot ??= databaseSnapshot(database, {
+      teamId: setup.teamId,
+      artifacts: setup.play === 'team' ? 'team' : 'none',
+    })
     if (slot.dataKey !== snapshot.key) {
       slot.worker.postMessage({
         type: 'data',
