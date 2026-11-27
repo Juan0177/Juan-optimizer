@@ -234,6 +234,7 @@ export function TeamOptResults({
   const [rememberFormat, setRememberFormat] = useState(false)
   const [editingFormat, setEditingFormat] = useState(false)
   const [formatDraft, setFormatDraft] = useState(savedFormat)
+  const saveGroupRef = useRef<HTMLDivElement>(null)
   const saveInputRef = useRef<HTMLInputElement>(null)
   const formatInputRef = useRef<HTMLInputElement>(null)
   const { before, after } = result
@@ -807,45 +808,115 @@ export function TeamOptResults({
                     <RestoreTeamBuildsButton teamId={teamId} />
                   </>
                 ) : (
-                  <Tooltip
-                    arrow
-                    describeChild
-                    title={t(
-                      'teamOpt.result.saveHint',
-                      'A new build per member, used by this team. Nothing moves between characters.'
-                    )}
+                  <Box
+                    ref={saveGroupRef}
+                    sx={{ display: 'inline-flex', alignItems: 'stretch' }}
                   >
-                    <span>
-                      <Button
-                        variant="outlined"
-                        color="inherit"
-                        startIcon={<SaveIcon />}
-                        disabled={noChange || stale}
-                        aria-expanded={!!saveAnchor}
-                        onClick={(e) => {
-                          setSaveName(
-                            formatSavedBuildName(savedFormat, team?.name ?? '')
-                          )
-                          setRememberFormat(false)
-                          setEditingFormat(false)
-                          setFormatDraft(savedFormat)
-                          setSaveAnchor(e.currentTarget)
-                        }}
-                        sx={{
-                          borderColor: tokens.hairlineStrong,
-                          '&:hover': {
-                            borderColor: alpha(giTokens.parchment, 0.28),
-                            bgcolor: alpha(giTokens.parchment, 0.06),
-                          },
-                        }}
-                      >
-                        {t(
-                          'teamOpt.result.saveAndUse',
-                          'Save and use on this team'
-                        )}
-                      </Button>
-                    </span>
-                  </Tooltip>
+                    <Tooltip
+                      arrow
+                      describeChild
+                      title={t('teamOpt.result.saveAsHint', {
+                        defaultValue:
+                          'Save as “{{name}}” for each changed member. Nothing moves between characters.',
+                        name: formatSavedBuildName(
+                          savedFormat,
+                          team?.name ?? ''
+                        ),
+                      })}
+                    >
+                      <span>
+                        <Button
+                          variant="outlined"
+                          color="inherit"
+                          startIcon={<SaveIcon />}
+                          disabled={noChange || stale}
+                          onClick={() => {
+                            saveTeamResult(
+                              database,
+                              teamId,
+                              result,
+                              formatSavedBuildName(
+                                savedFormat,
+                                team?.name ?? ''
+                              )
+                            )
+                          }}
+                          sx={{
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
+                            borderColor: tokens.hairlineStrong,
+                            '&:hover': {
+                              borderColor: alpha(giTokens.parchment, 0.28),
+                              bgcolor: alpha(giTokens.parchment, 0.06),
+                              zIndex: 1,
+                            },
+                          }}
+                        >
+                          {t(
+                            'teamOpt.result.saveAndUse',
+                            'Save and use on this team'
+                          )}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip
+                      arrow
+                      title={t(
+                        'teamOpt.result.customizeSaveName',
+                        'Customize build name or default format'
+                      )}
+                    >
+                      <span>
+                        <Button
+                          variant="outlined"
+                          color="inherit"
+                          disabled={noChange || stale}
+                          aria-label={t(
+                            'teamOpt.result.customizeSaveName',
+                            'Customize build name or default format'
+                          )}
+                          aria-haspopup="dialog"
+                          aria-expanded={!!saveAnchor}
+                          onClick={(e) => {
+                            setSaveName(
+                              formatSavedBuildName(
+                                savedFormat,
+                                team?.name ?? ''
+                              )
+                            )
+                            setRememberFormat(false)
+                            setEditingFormat(false)
+                            setFormatDraft(savedFormat)
+                            setSaveAnchor(
+                              saveGroupRef.current ?? e.currentTarget
+                            )
+                          }}
+                          sx={{
+                            minWidth: 30,
+                            height: '100%',
+                            px: 0.625,
+                            ml: '-1px',
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            borderColor: tokens.hairlineStrong,
+                            '&:hover': {
+                              borderColor: alpha(giTokens.parchment, 0.28),
+                              bgcolor: alpha(giTokens.parchment, 0.06),
+                              zIndex: 1,
+                            },
+                          }}
+                        >
+                          <ExpandMoreIcon
+                            sx={{
+                              fontSize: 18,
+                              transform: saveAnchor ? 'rotate(180deg)' : 'none',
+                              transition: 'transform 140ms ease',
+                            }}
+                          />
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Box>
                 )}
                 <Popover
                   open={!!saveAnchor}
