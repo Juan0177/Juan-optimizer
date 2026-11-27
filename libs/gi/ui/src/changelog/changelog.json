@@ -1,5 +1,18 @@
 [
   {
+    "version": "1.48.0",
+    "date": "2026-11-27",
+    "new": [
+      "Investment comparison auto-adapts rotations for constellations that add extra Skill casts or beam counts, with one-click Edit, Revert, and an in-place Auto-find rotation search for combo constellations.",
+      "Artifact benchmarks on character overviews compare your equipped useful substat rolls against KQM Standard, Good, and Great targets.",
+      "Timed rotation ER calculation: opt in inside the ER calculator to track Energy at every Burst in your written rotation, including 0 starting Energy on custom enemies and opening Bursts.",
+      "Bulk-level all currently filtered weapons to 90 (1★–2★ to 70) from the Weapons page."
+    ],
+    "fixed": [
+      "KQM weapon and set comparisons always rank a member's own baseline build using the build the run kept, never a weaker refit."
+    ]
+  },
+  {
     "version": "1.47.4",
     "date": "2026-11-27"
   },

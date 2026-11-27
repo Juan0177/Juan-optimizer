@@ -4,6 +4,19 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.48.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.48.0) (2026-11-27)
+
+### New
+
+- Investment comparison auto-adapts rotations for constellations that add extra Skill casts or beam counts, with one-click Edit, Revert, and an in-place Auto-find rotation search for combo constellations.
+- Artifact benchmarks on character overviews compare your equipped useful substat rolls against KQM Standard, Good, and Great targets.
+- Timed rotation ER calculation: opt in inside the ER calculator to track Energy at every Burst in your written rotation, including 0 starting Energy on custom enemies and opening Bursts.
+- Bulk-level all currently filtered weapons to 90 (1★–2★ to 70) from the Weapons page.
+
+### Fixed
+
+- KQM weapon and set comparisons always rank a member's own baseline build using the build the run kept, never a weaker refit.
+
 ## [v1.47.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.3) (2026-11-27)
 
 ### New
