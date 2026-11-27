@@ -7,13 +7,19 @@ import {
   signatureWeapons,
 } from '@genshin-optimizer/gi/consts'
 import type { TeamOpt } from '@genshin-optimizer/gi/db'
+import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
 import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
-import { getCharStat } from '@genshin-optimizer/gi/stats'
+import { getCharEle, getCharStat } from '@genshin-optimizer/gi/stats'
 import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
+  ConsRotationHint,
+  ConsRotationSuggestion,
+  FoundConsRotation,
+  HitElement,
   InvestmentChartData,
   KqmBuild,
   KqmResult,
+  SimGear,
   TeamOptMember,
   TeamOptResult,
 } from '@genshin-optimizer/gi/ui'
@@ -23,15 +29,33 @@ import {
   CharacterName,
   COMPARE_CHART_HEIGHT,
   COMPARE_CHART_WIDTH,
+  constellationHintOf,
+  constellationRotationHints,
+  FPS,
+  findBestConstellationRotations,
+  isAutoAdaptableHint,
+  KEEP_BASE_ROTATION,
   kqmCardFace,
+  kqmRotationSearchSetup,
   kqmTalentLevel,
+  mergeMemberRotations,
+  parseRotation,
   renderInvestmentChart,
+  rotationScorer,
   safeName,
+  simulateRotation,
+  stepDiffSummary,
+  suggestConstellationRotations,
   TeamOptCancelled,
+  teamOptBonusStats,
+  teamOptResultGear,
+  teamRotationSearchSetup,
   WeaponName,
 } from '@genshin-optimizer/gi/ui'
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded'
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded'
 import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded'
+import EditRoundedIcon from '@mui/icons-material/EditRounded'
 import IosShareRoundedIcon from '@mui/icons-material/IosShareRounded'
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded'
 import StopRoundedIcon from '@mui/icons-material/StopRounded'
@@ -47,6 +71,7 @@ import {
   Collapse,
   Divider,
   FormControlLabel,
+  IconButton,
   LinearProgress,
   Popover,
   Skeleton,
@@ -93,7 +118,11 @@ import { formatGain, formatRateFull } from './format'
 import { betaOf, shareStamp } from './KqmShareMenu'
 import { kqmStandardText } from './KqmStandard'
 import { MemberAvatar } from './MemberAvatar'
-import { teamRunRotation, useMemberNames } from './RotationWriter'
+import {
+  kqmRunRotation,
+  teamRunRotation,
+  useMemberNames,
+} from './RotationWriter'
 import {
   focusSx,
   hairline,
@@ -115,9 +144,15 @@ const isPullableFiveStar = (ck: CharacterKey) =>
 const copiesOf = (ck: CharacterKey, cons: number) =>
   isPullableFiveStar(ck) ? cons + 1 : 0
 
+type AutoRotationMap = Partial<
+  Record<CharacterKey, Partial<Record<number, string>>>
+>
+
 interface CachedInvestment {
-  /** Evaluated states keyed by `${stateKey}::${rotText}` */
+  /** Evaluated states keyed by `${stateKey}::${modeTag}` */
   evals: Map<string, InvestmentEval>
+  /** Discovered winning auto-adapted rotations per member/constellation */
+  autoRotations: AutoRotationMap
   last?: {
     plan: InvestmentPlan
     configKey: string
@@ -129,7 +164,7 @@ const resultCache = new WeakMap<object, CachedInvestment>()
 function cacheFor(subject: object): CachedInvestment {
   let hit = resultCache.get(subject)
   if (!hit) {
-    hit = { evals: new Map() }
+    hit = { evals: new Map(), autoRotations: {} }
     resultCache.set(subject, hit)
   }
   return hit
@@ -282,6 +317,7 @@ export function TeamInvestment({
     () => defaultIncluded
   )
   const [includeSig, setIncludeSig] = useState(true)
+  const [autoAdapt, setAutoAdapt] = useState(true)
   const [includeFourStars, setIncludeFourStars] = useState(
     () =>
       defaultIncluded.size > 0 &&
@@ -315,6 +351,9 @@ export function TeamInvestment({
   const [combos, setCombosState] = useState<ComboRotation[]>(() =>
     readComboRotations(database, teamId, mode)
   )
+  const [autoRotations, setAutoRotations] = useState<AutoRotationMap>(() => ({
+    ...cacheFor(result).autoRotations,
+  }))
   useEffect(() => {
     setRotationsOf(
       Object.fromEntries(
@@ -333,16 +372,255 @@ export function TeamInvestment({
     writeComboRotations(database, teamId, next, mode)
   }
 
-  const altRotationCount = useMemo(
-    () =>
-      keys.reduce((n, k) => n + Object.keys(rotationsOf[k] ?? {}).length, 0) +
-      combos.filter((c) => c.text.trim()).length,
-    [keys, rotationsOf, combos]
-  )
-
   const [rotationsOpen, setRotationsOpen] = useState(false)
   const [rotTab, setRotTab] = useState<CharacterKey | 'combos'>(
     () => keys[0] ?? 'combos'
+  )
+  const [focusCons, setFocusCons] = useState<{
+    ck: CharacterKey
+    cons: number
+    seq: number
+  }>()
+  const rotEditorRef = useRef<HTMLDivElement>(null)
+
+  const activeRotTab: CharacterKey | 'combos' =
+    rotTab === 'combos' || keys.includes(rotTab)
+      ? rotTab
+      : (keys[0] ?? 'combos')
+
+  const openConsEditor = useCallback((ck: CharacterKey, cons: number) => {
+    setRotTab(ck)
+    setFocusCons((prev) => ({ ck, cons, seq: (prev?.seq ?? 0) + 1 }))
+    setRotationsOpen(true)
+    requestAnimationFrame(() => {
+      rotEditorRef.current?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'nearest',
+      })
+    })
+  }, [])
+
+  const savedRotMeta = useMemo(() => {
+    try {
+      const meta =
+        mode === 'kqm'
+          ? kqmRunRotation?.(database, gender, i18n, teamId)
+          : teamRunRotation?.(database, gender, i18n, teamId)
+      if (meta) return meta
+    } catch {
+      // fall back cleanly when rotation metadata is unavailable (e.g. unit tests)
+    }
+    return {
+      text: teamText,
+      opener: '',
+      timing: { edits: {} },
+      frameData: {},
+      names,
+    }
+  }, [mode, database, gender, i18n, teamId, teamText, names])
+
+  const memberHintsMap = useMemo(
+    () =>
+      Object.fromEntries(
+        keys.map((ck, i) => [
+          ck,
+          constellationRotationHints(ck, baseCons[i], MAX_CONS),
+        ])
+      ) as Partial<Record<CharacterKey, ConsRotationHint[]>>,
+    [keys, baseCons]
+  )
+
+  const verifiedSuggestions = useMemo(() => {
+    const out: Partial<
+      Record<CharacterKey, Partial<Record<number, ConsRotationSuggestion[]>>>
+    > = {}
+    if (!teamText.trim()) return out
+    const simCtx = {
+      members: keys,
+      constellations: baseConsMap,
+      opener: savedRotMeta.opener,
+      timing: savedRotMeta.timing,
+      frameData: savedRotMeta.frameData,
+    }
+    for (const ck of keys) {
+      for (const hint of memberHintsMap[ck] ?? []) {
+        if (!isAutoAdaptableHint(hint)) continue
+        try {
+          const suggs = suggestConstellationRotations(
+            teamText,
+            names,
+            ck,
+            hint.cons,
+            simCtx
+          )
+          if (suggs.length) {
+            out[ck] ??= {}
+            out[ck]![hint.cons] = suggs
+          }
+        } catch {
+          // ignore if simulation context isn't available
+        }
+      }
+    }
+    return out
+  }, [teamText, keys, baseConsMap, savedRotMeta, memberHintsMap, names])
+
+  const previewSimFor = useCallback(
+    (ck: CharacterKey) => (cons: number, text: string) => {
+      if (!text.trim()) return undefined
+      try {
+        const parsed = parseRotation(text, names)
+        if (!parsed?.steps?.length) return { warnings: parsed?.warnings ?? [] }
+        if (parsed.warnings?.length) return { warnings: parsed.warnings }
+        const elements = Object.fromEntries(
+          keys.map((k) => [k, getCharEle(k) as HitElement])
+        ) as Partial<Record<CharacterKey, HitElement>>
+        const sim = simulateRotation({
+          rotation: parsed,
+          members: keys,
+          elements,
+          constellations: { ...baseConsMap, [ck]: cons },
+          repeats: 2,
+          keep: 'middle',
+          swapFrames: savedRotMeta.timing?.swapFrames,
+          frameData: savedRotMeta.frameData,
+        })
+        return {
+          time: sim.frames
+            ? Math.round((sim.frames / FPS) * 10) / 10
+            : undefined,
+          warnings: sim.warnings,
+        }
+      } catch {
+        return undefined
+      }
+    },
+    [names, keys, baseConsMap, savedRotMeta]
+  )
+
+  const findBestFor = useCallback(
+    (ck: CharacterKey) =>
+      async (
+        cons: number,
+        isCancelled: () => boolean,
+        onProgress: (played: number, bestGainPct: number) => void
+      ): Promise<FoundConsRotation[]> => {
+        if (!teamText.trim()) return []
+        const targetConsMap: Partial<Record<CharacterKey, number>> = {
+          ...baseConsMap,
+          [ck]: cons,
+        }
+        const saved = {
+          opener: savedRotMeta.opener,
+          timing: savedRotMeta.timing,
+          frameData: savedRotMeta.frameData,
+        }
+        if (mode === 'kqm' && kqmResult) {
+          const nextKqm = {
+            ...(setup.kqm ?? defaultTeamOptKqm),
+            constellations: targetConsMap,
+          }
+          const searchSetup = kqmRotationSearchSetup(
+            database,
+            teamId,
+            gender,
+            names,
+            { ...setup, kqm: nextKqm },
+            { ...kqmResult, constellations: targetConsMap },
+            saved
+          )
+          const score = rotationScorer(database, searchSetup)
+          const funded = Object.fromEntries(
+            Object.entries(kqmResult.energyRecharge).map(([k, er]) => [
+              k,
+              er?.value ?? 0,
+            ])
+          )
+          const { candidates } = await findBestConstellationRotations({
+            baseText: teamText,
+            names,
+            characterKey: ck,
+            targetCons: cons,
+            baseConstellations: baseConsMap,
+            score,
+            funded,
+            isCancelled,
+            onProgress,
+          })
+          return candidates
+        }
+        if (invResult) {
+          const builds = teamOptResultGear(database, teamId, invResult)
+          const gear: Partial<Record<CharacterKey, SimGear>> = {}
+          for (const [k, arts] of Object.entries(builds.arts)) {
+            const sets: Record<string, number> = {}
+            for (const art of arts ?? [])
+              sets[art.setKey] = (sets[art.setKey] ?? 0) + 1
+            const weapon = builds.weapons[k as CharacterKey]
+            gear[k as CharacterKey] = {
+              sets,
+              weapon: weapon?.key,
+              refinement: weapon?.refinement,
+            }
+          }
+          const baseSearchSetup = teamRotationSearchSetup(
+            database,
+            teamId,
+            gender,
+            names,
+            setup,
+            {
+              ...builds,
+              characters: { [ck]: { constellation: cons } },
+              mainStatAssumptionLevel: setup.assumeMaxMain ? 20 : 0,
+              bonusStats: teamOptBonusStats(setup, keys),
+            },
+            gear,
+            saved,
+            invResult.attackStates
+          )
+          const searchSetup = {
+            ...baseSearchSetup,
+            constellations: targetConsMap,
+            sim: baseSearchSetup.sim
+              ? {
+                  ...baseSearchSetup.sim,
+                  overrides: {
+                    ...baseSearchSetup.sim.overrides,
+                    characters: { [ck]: { constellation: cons } },
+                  },
+                }
+              : undefined,
+          }
+          const score = rotationScorer(database, searchSetup)
+          const { candidates } = await findBestConstellationRotations({
+            baseText: teamText,
+            names,
+            characterKey: ck,
+            targetCons: cons,
+            baseConstellations: baseConsMap,
+            score,
+            isCancelled,
+            onProgress,
+          })
+          return candidates
+        }
+        return []
+      },
+    [
+      teamText,
+      baseConsMap,
+      savedRotMeta,
+      mode,
+      kqmResult,
+      invResult,
+      setup,
+      database,
+      teamId,
+      gender,
+      names,
+      keys,
+    ]
   )
 
   const computeScope = useCallback(
@@ -399,9 +677,112 @@ export function TeamInvestment({
   const targetBudget =
     budgetChoice === 'all' ? totalRoom : Math.min(budgetChoice, totalRoom)
 
-  const rotationsKey = useMemo(
-    () => JSON.stringify([keys.map((k) => rotationsOf[k] ?? {}), combos]),
+  const activeAutoCount = useMemo(() => {
+    if (!autoAdapt) return 0
+    let n = 0
+    for (let i = 0; i < keys.length; i++) {
+      const ck = keys[i]
+      const autoMap = autoRotations[ck]
+      if (!autoMap) continue
+      for (const [cStr, text] of Object.entries(autoMap)) {
+        const c = Number(cStr)
+        if (!text || c <= baseCons[i]) continue
+        const custom = consRotationOf(rotationsOf[ck] ?? {}, c, baseCons[i])
+        if (!custom.text && !custom.pinnedBase) n++
+      }
+    }
+    return n
+  }, [autoAdapt, keys, autoRotations, baseCons, rotationsOf])
+
+  const customRotationCount = useMemo(
+    () =>
+      keys.reduce(
+        (n, k) =>
+          n +
+          Object.values(rotationsOf[k] ?? {}).filter(
+            (v) => !!v?.trim() && v.trim() !== KEEP_BASE_ROTATION
+          ).length,
+        0
+      ) + combos.filter((c) => c.text.trim()).length,
     [keys, rotationsOf, combos]
+  )
+
+  const altRotationCount = customRotationCount + activeAutoCount
+
+  // Hints in scope for included members (used for idle callout and header indicator)
+  const inScopeHints = useMemo(() => {
+    if (!teamText.trim()) return []
+    const out: (ConsRotationHint & {
+      hasSuggestions: boolean
+      hasCustom: boolean
+      isPinned: boolean
+      hasAuto: boolean
+    })[] = []
+    for (let i = 0; i < keys.length; i++) {
+      if (!effectiveIncluded[i]) continue
+      const ck = keys[i]
+      const cap = Math.min(MAX_CONS, baseCons[i] + Math.max(targetBudget, 1))
+      for (const hint of memberHintsMap[ck] ?? []) {
+        if (hint.cons > cap) continue
+        const custom = consRotationOf(
+          rotationsOf[ck] ?? {},
+          hint.cons,
+          baseCons[i]
+        )
+        const hasSuggs = !!verifiedSuggestions[ck]?.[hint.cons]?.length
+        const hasAuto = !!autoRotations[ck]?.[hint.cons]
+        out.push({
+          ...hint,
+          hasSuggestions: hasSuggs,
+          hasCustom: !!custom.text,
+          isPinned: !!custom.pinnedBase,
+          hasAuto,
+        })
+      }
+    }
+    return out
+  }, [
+    teamText,
+    keys,
+    effectiveIncluded,
+    baseCons,
+    targetBudget,
+    memberHintsMap,
+    rotationsOf,
+    verifiedSuggestions,
+    autoRotations,
+  ])
+
+  const hasAutoAdaptableHints = useMemo(
+    () =>
+      keys.some((ck) =>
+        Object.values(verifiedSuggestions[ck] ?? {}).some((s) => !!s?.length)
+      ),
+    [keys, verifiedSuggestions]
+  )
+
+  const pendingHintCount = useMemo(
+    () =>
+      inScopeHints.filter(
+        (h) =>
+          !h.hasCustom &&
+          !h.isPinned &&
+          !(
+            autoAdapt &&
+            (h.hasAuto || (isAutoAdaptableHint(h) && h.hasSuggestions))
+          )
+      ).length,
+    [inScopeHints, autoAdapt]
+  )
+
+  const rotationsKey = useMemo(
+    () =>
+      JSON.stringify([
+        keys.map((k) => rotationsOf[k] ?? {}),
+        combos,
+        autoAdapt,
+      ]),
+    [keys, rotationsOf, combos, autoAdapt]
   )
   const configKey = useMemo(
     () =>
@@ -434,7 +815,9 @@ export function TeamInvestment({
     setRunning(false)
     setProgress(undefined)
     setError(undefined)
-    const cached = cacheFor(result).last
+    const store = cacheFor(result)
+    setAutoRotations({ ...store.autoRotations })
+    const cached = store.last
     setPlan(cached?.plan)
     setPlanConfigKey(cached?.configKey)
     if (cached?.plan) {
@@ -446,39 +829,148 @@ export function TeamInvestment({
 
   useEffect(() => () => cancelRef.current(), [])
 
-  const resolveRotation = useCallback(
-    (state: InvestmentState) => {
+  const resolveForState = useCallback(
+    (
+      state: InvestmentState,
+      activeRotations: Partial<Record<CharacterKey, ConsRotationTexts>>,
+      activeCombos: readonly ComboRotation[],
+      activeAuto: AutoRotationMap,
+      useAutoAdapt: boolean
+    ) => {
       const consObj = Object.fromEntries(
         keys.map((k, i) => [k, state.cons[i]])
       ) as Partial<Record<CharacterKey, number>>
-      const comboText = comboRotationOf(combos, consObj, baseConsMap)
-      if (comboText)
+      const comboText = comboRotationOf(activeCombos, consObj, baseConsMap)
+      if (comboText) {
         return {
           text: comboText,
           label: t('teamOpt.invest.comboRotBadge', 'Combo rotation'),
+          isAuto: false,
+          autoCandidates: undefined as string[] | undefined,
+          autoTarget: undefined as
+            | { ck: CharacterKey; cons: number }
+            | undefined,
         }
+      }
+
+      const memberEdits: {
+        characterKey: CharacterKey
+        text: string
+        label: string
+        isAuto: boolean
+      }[] = []
+      let pendingAuto:
+        | { ck: CharacterKey; cons: number; candidates: string[] }
+        | undefined
+
       for (let i = 0; i < keys.length; i++) {
         if (state.cons[i] <= baseCons[i]) continue
         const ck = keys[i]
-        const { text, from } = consRotationOf(
-          rotationsOf[ck] ?? {},
+        const custom = consRotationOf(
+          activeRotations[ck] ?? {},
           state.cons[i],
           baseCons[i]
         )
-        if (text) {
-          return {
-            text,
+        if (custom.text) {
+          memberEdits.push({
+            characterKey: ck,
+            text: custom.text,
             label: t('teamOpt.invest.memberRotBadge', {
               defaultValue: '{{name}} C{{cons}} rot',
               name: charName(ck),
-              cons: from ?? state.cons[i],
+              cons: custom.from ?? state.cons[i],
             }),
+            isAuto: false,
+          })
+          continue
+        }
+        if (custom.pinnedBase || !useAutoAdapt) continue
+
+        // Reuse already-discovered auto-adapted rotation for `ck` at <= state.cons[i]
+        const autoMap = activeAuto[ck]
+        let autoFound: { text: string; cons: number } | undefined
+        if (autoMap) {
+          for (let c = state.cons[i]; c > baseCons[i]; c--) {
+            if (autoMap[c]) {
+              autoFound = { text: autoMap[c]!, cons: c }
+              break
+            }
+          }
+        }
+        if (autoFound) {
+          memberEdits.push({
+            characterKey: ck,
+            text: autoFound.text,
+            label: t('teamOpt.invest.autoRotBadge', {
+              defaultValue: 'Auto {{name}} C{{cons}} rot',
+              name: charName(ck),
+              cons: autoFound.cons,
+            }),
+            isAuto: true,
+          })
+          continue
+        }
+
+        // Otherwise provide simulator-verified candidates for deterministic rotation-changing cons
+        const ckSuggs = verifiedSuggestions[ck]
+        if (ckSuggs) {
+          for (let c = state.cons[i]; c > baseCons[i]; c--) {
+            const suggs = ckSuggs[c]
+            if (suggs?.length) {
+              if (!pendingAuto) {
+                pendingAuto = {
+                  ck,
+                  cons: c,
+                  candidates: suggs.map((s) => s.text),
+                }
+              }
+              break
+            }
           }
         }
       }
-      return { text: undefined, label: undefined }
+
+      if (memberEdits.length) {
+        const merged = mergeMemberRotations(teamText, memberEdits, names)
+        if (merged) {
+          return {
+            text: merged.text,
+            label: merged.label,
+            isAuto: merged.isAuto,
+            autoCandidates: undefined,
+            autoTarget: undefined,
+          }
+        }
+      }
+
+      if (pendingAuto) {
+        return {
+          text: undefined,
+          label: undefined,
+          isAuto: false,
+          autoCandidates: pendingAuto.candidates,
+          autoTarget: { ck: pendingAuto.ck, cons: pendingAuto.cons },
+        }
+      }
+
+      return {
+        text: undefined,
+        label: undefined,
+        isAuto: false,
+        autoCandidates: undefined,
+        autoTarget: undefined,
+      }
     },
-    [keys, combos, baseConsMap, baseCons, rotationsOf, t, charName]
+    [
+      keys,
+      baseConsMap,
+      baseCons,
+      verifiedSuggestions,
+      teamText,
+      names,
+      t,
+      charName,
+    ]
   )
 
   const runComparison = async (overrides?: {
@@ -486,10 +978,16 @@ export function TeamInvestment({
     included?: Set<CharacterKey>
     includeSig?: boolean
     includeFourStars?: boolean
+    autoAdapt?: boolean
+    rotationsOf?: Partial<Record<CharacterKey, ConsRotationTexts>>
+    combos?: ComboRotation[]
   }) => {
     const nextInc = overrides?.included ?? included
     const nextSig = overrides?.includeSig ?? includeSig
     const next4 = overrides?.includeFourStars ?? includeFourStars
+    const nextAutoAdapt = overrides?.autoAdapt ?? autoAdapt
+    const activeRotations = overrides?.rotationsOf ?? rotationsOf
+    const activeCombos = overrides?.combos ?? combos
     const scope = computeScope(nextInc, nextSig, next4)
     const desired =
       overrides?.budget ??
@@ -506,19 +1004,41 @@ export function TeamInvestment({
     setProgress(undefined)
 
     const store = cacheFor(result)
+    const runAutoRotations: AutoRotationMap = {}
+    if (nextAutoAdapt) {
+      for (const [k, map] of Object.entries(store.autoRotations)) {
+        if (map) runAutoRotations[k as CharacterKey] = { ...map }
+      }
+    }
+
+    const modeTagOf = (res: ReturnType<typeof resolveForState>) =>
+      res.text
+        ? `rot:${res.text}`
+        : res.autoCandidates?.length
+          ? `auto:${res.autoCandidates.join('\0')}`
+          : 'base'
+
     const stateCache = new Map<string, InvestmentEval>()
     for (const [compoundKey, ev] of store.evals) {
       const sep = compoundKey.indexOf('::')
       if (sep < 0) continue
       const sKey = compoundKey.slice(0, sep)
-      const rText = compoundKey.slice(sep + 2)
+      const rTag = compoundKey.slice(sep + 2)
       const [cStr, sigStr] = sKey.split('|')
       if (!cStr || !sigStr) continue
       const cons = cStr.split(',').map(Number)
       const sig = [...sigStr].map((ch) => ch === '1')
       if (cons.length !== keys.length || sig.length !== keys.length) continue
-      const expected = resolveRotation({ cons, sig }).text ?? ''
-      if (rText === expected) stateCache.set(sKey, ev)
+      const expected = modeTagOf(
+        resolveForState(
+          { cons, sig },
+          activeRotations,
+          activeCombos,
+          runAutoRotations,
+          nextAutoAdapt
+        )
+      )
+      if (rTag === expected) stateCache.set(sKey, ev)
     }
 
     const invRotMeta =
@@ -553,6 +1073,7 @@ export function TeamInvestment({
         onPartial: (partial) => {
           if (cancelled) return
           startTransition(() => {
+            setAutoRotations({ ...store.autoRotations })
             setPlan((prev) => {
               if (!prev || partial.maxBudget >= prev.maxBudget) {
                 setSelectedBudget((b) =>
@@ -565,8 +1086,14 @@ export function TeamInvestment({
           })
         },
         evaluate: async (state) => {
-          const { text, label } = resolveRotation(state)
-          const compoundKey = `${investmentStateKey(state)}::${text ?? ''}`
+          const res = resolveForState(
+            state,
+            activeRotations,
+            activeCombos,
+            runAutoRotations,
+            nextAutoAdapt
+          )
+          const compoundKey = `${investmentStateKey(state)}::${modeTagOf(res)}`
           const hit = store.evals.get(compoundKey)
           if (hit) return hit
 
@@ -582,9 +1109,15 @@ export function TeamInvestment({
                 cons: baseCons.map((b, j) => (j === i ? state.cons[i] : b)),
                 sig: keys.map(() => false),
               }
-              const sRot = resolveRotation(singleState).text ?? ''
+              const sRes = resolveForState(
+                singleState,
+                activeRotations,
+                activeCombos,
+                runAutoRotations,
+                nextAutoAdapt
+              )
               const sBuild = store.evals.get(
-                `${investmentStateKey(singleState)}::${sRot}`
+                `${investmentStateKey(singleState)}::${modeTagOf(sRes)}`
               )?.point?.builds[ck]
               if (sBuild) startBuilds[ck] = sBuild
             }
@@ -605,7 +1138,8 @@ export function TeamInvestment({
                 ? sigOverrides
                 : undefined,
               start: startBuilds,
-              text,
+              text: res.text,
+              autoCandidates: res.autoCandidates,
               summaryOnly: true,
               isCancelled: () => cancelled,
             })
@@ -621,35 +1155,71 @@ export function TeamInvestment({
               signatures: Object.keys(sigOverrides).length
                 ? sigOverrides
                 : undefined,
-              text,
+              text: res.text,
+              autoCandidates: res.autoCandidates,
               rotation: invRotMeta,
               isCancelled: () => cancelled,
             })
           }
 
           if (!point || cancelled) return undefined
+          let finalLabel = res.label
+          let finalAuto = res.isAuto
+          let finalText = res.text
+          if (point.autoRotation && res.autoTarget) {
+            const { ck, cons: targetC } = res.autoTarget
+            runAutoRotations[ck] = {
+              ...(runAutoRotations[ck] ?? {}),
+              [targetC]: point.autoRotation,
+            }
+            store.autoRotations[ck] = {
+              ...(store.autoRotations[ck] ?? {}),
+              [targetC]: point.autoRotation,
+            }
+            finalText = point.autoRotation
+            finalAuto = true
+            finalLabel = t('teamOpt.invest.autoRotBadge', {
+              defaultValue: 'Auto {{name}} C{{cons}} rot',
+              name: charName(ck),
+              cons: targetC,
+            })
+          }
           const ev: InvestmentEval = {
             dps: dpsOf(point),
             seconds: point.seconds,
-            rotationLabel: label,
+            rotationLabel: finalLabel,
+            autoAdapted: finalAuto,
+            rotationText: finalText,
             unmet: point.unmet,
             point,
           }
           store.evals.set(compoundKey, ev)
+          if (point.autoRotation) {
+            store.evals.set(
+              `${investmentStateKey(state)}::rot:${point.autoRotation}`,
+              ev
+            )
+          }
           return ev
         },
       })
 
       if (cancelled || !nextPlan) return
+      const activeRotationsKey = JSON.stringify([
+        keys.map((k) => activeRotations[k] ?? {}),
+        activeCombos,
+        nextAutoAdapt,
+      ])
       const runConfigKey = JSON.stringify([
         keys,
         baseCons,
         scope.maxCons,
         scope.canAddSig,
         runBudget,
-        rotationsKey,
+        activeRotationsKey,
       ])
       store.last = { plan: nextPlan, configKey: runConfigKey }
+      setAutoRotations({ ...store.autoRotations })
       setPlan(nextPlan)
       setPlanConfigKey(runConfigKey)
       setSelectedBudget(runBudget)
@@ -727,6 +1297,11 @@ export function TeamInvestment({
     setIncludeSig((v) => !v)
   }
 
+  const toggleAutoAdapt = () => {
+    optionsDirtyRef.current = true
+    setAutoAdapt((v) => !v)
+  }
+
   const toggleFourStars = () => {
     optionsDirtyRef.current = true
     const next4 = !includeFourStars
@@ -754,6 +1329,7 @@ export function TeamInvestment({
 
   const customOptionsCount =
     (!includeSig && sigAvailable.some(Boolean) ? 1 : 0) +
+    (!autoAdapt && hasAutoAdaptableHints ? 1 : 0) +
     (includeFourStars && hasAnyFourStarRoom ? 1 : 0) +
     keys.filter((k) => defaultIncluded.has(k) !== included.has(k)).length
 
@@ -1198,26 +1774,49 @@ export function TeamInvestment({
             {customOptionsCount > 0 && ` (${customOptionsCount})`}
           </Button>
 
-          <Button
-            size="small"
-            color="inherit"
-            startIcon={<EditNoteRoundedIcon sx={{ fontSize: 18 }} />}
-            onClick={() => setRotationsOpen((o) => !o)}
-            sx={{
-              ...quietActionSx,
-              ...((rotationsOpen || altRotationCount > 0) && {
-                color: giTokens.goldLight,
-                bgcolor: rotationsOpen ? alpha(tokens.gold, 0.1) : undefined,
-              }),
-            }}
+          <Tooltip
+            arrow
+            describeChild
+            title={t(
+              'teamOpt.invest.consRotationsTip',
+              'Customize or auto-adapt rotations for constellations that add extra skill casts or change combos'
+            )}
           >
-            {altRotationCount > 0
-              ? t('teamOpt.invest.altRotationsCount', {
-                  defaultValue: 'Alt rotations ({{count}})',
-                  count: altRotationCount,
-                })
-              : t('teamOpt.invest.altRotations', 'Alt rotations')}
-          </Button>
+            <Button
+              size="small"
+              color="inherit"
+              startIcon={<EditNoteRoundedIcon sx={{ fontSize: 18 }} />}
+              onClick={() => setRotationsOpen((o) => !o)}
+              sx={{
+                ...quietActionSx,
+                ...((rotationsOpen || altRotationCount > 0) && {
+                  color: giTokens.goldLight,
+                  bgcolor: rotationsOpen ? alpha(tokens.gold, 0.1) : undefined,
+                }),
+              }}
+            >
+              {altRotationCount > 0
+                ? t('teamOpt.invest.consRotationsCount', {
+                    defaultValue: 'Cons rotations ({{count}})',
+                    count: altRotationCount,
+                  })
+                : t('teamOpt.invest.consRotations', 'Cons rotations')}
+              {altRotationCount === 0 && pendingHintCount > 0 && (
+                <Box
+                  component="span"
+                  aria-hidden
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: '50%',
+                    bgcolor: 'warning.main',
+                    ml: 0.75,
+                    flexShrink: 0,
+                  }}
+                />
+              )}
+            </Button>
+          </Tooltip>
 
           {mode === 'kqm' && plan && shareRender && !running && (
             <Tooltip
@@ -1342,8 +1941,42 @@ export function TeamInvestment({
               sx={{ m: 0 }}
             />
           )}
+          {!!teamText.trim() && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  size="small"
+                  checked={autoAdapt}
+                  onChange={toggleAutoAdapt}
+                />
+              }
+              label={
+                <Box>
+                  <Typography sx={{ fontSize: 13, lineHeight: 1.25 }}>
+                    {t(
+                      'teamOpt.invest.autoAdaptCons',
+                      'Auto-adapt cons rotations'
+                    )}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>
+                    {t(
+                      'teamOpt.invest.autoAdaptConsDesc',
+                      'Test extra skill/beam casts for cons like C1 +E'
+                    )}
+                  </Typography>
+                </Box>
+              }
+              sx={{
+                m: 0,
+                alignItems: 'flex-start',
+                '& .MuiCheckbox-root': { pt: 0.375 },
+              }}
+            />
+          )}
         </Box>
-        {(sigAvailable.some(Boolean) || hasAnyFourStarRoom) && (
+        {(sigAvailable.some(Boolean) ||
+          hasAnyFourStarRoom ||
+          !!teamText.trim()) && (
           <Divider sx={{ my: 1.25, borderColor: tokens.hairline }} />
         )}
         <Typography sx={{ ...type.title, fontSize: 13.5, mb: 0.75 }}>
@@ -1408,6 +2041,7 @@ export function TeamInvestment({
       {/* ── Collapsible Conditional Alternative Rotations Editor */}
       <Collapse in={rotationsOpen} unmountOnExit>
         <Box
+          ref={rotEditorRef}
           sx={{
             mt: 1.75,
             p: { xs: 1.5, sm: 2 },
@@ -1433,10 +2067,10 @@ export function TeamInvestment({
                   'Conditional rotations for unlocked constellations'
                 )}
               </Typography>
-              <Typography sx={{ ...type.label, mt: 0.25, maxWidth: 660 }}>
+              <Typography sx={{ ...type.label, mt: 0.25, maxWidth: 680 }}>
                 {t(
-                  'teamOpt.invest.altRotDesc',
-                  'For constellations that unlock extra skill casts, faster ATK SPD, or longer combos, set an alternative rotation below. Higher constellations inherit it automatically.'
+                  'teamOpt.invest.altRotDesc2',
+                  'Extra skill charges and condensed beams auto-adapt during comparison. For custom or complex combo constellations, click any row below to edit or run Auto-find — higher constellations inherit it automatically.'
                 )}
               </Typography>
             </Box>
@@ -1474,9 +2108,42 @@ export function TeamInvestment({
               mb: 1.25,
             }}
           >
-            {keys.map((k) => {
-              const count = Object.keys(rotationsOf[k] ?? {}).length
-              const active = rotTab === k
+            {keys.map((k, idx) => {
+              const customCnt = Object.values(rotationsOf[k] ?? {}).filter(
+                (v) => !!v?.trim() && v.trim() !== KEEP_BASE_ROTATION
+              ).length
+              const autoCnt = autoAdapt
+                ? Object.entries(autoRotations[k] ?? {}).filter(([cStr, v]) => {
+                    const c = Number(cStr)
+                    if (!v || c <= baseCons[idx]) return false
+                    const cur = consRotationOf(
+                      rotationsOf[k] ?? {},
+                      c,
+                      baseCons[idx]
+                    )
+                    return !cur.text && !cur.pinnedBase
+                  }).length
+                : 0
+              const count = customCnt + autoCnt
+              const hasPendingHint =
+                !!teamText.trim() &&
+                (memberHintsMap[k] ?? []).some((h) => {
+                  const cur = consRotationOf(
+                    rotationsOf[k] ?? {},
+                    h.cons,
+                    baseCons[idx]
+                  )
+                  if (cur.text || cur.pinnedBase) return false
+                  if (
+                    autoAdapt &&
+                    (autoRotations[k]?.[h.cons] ||
+                      (isAutoAdaptableHint(h) &&
+                        !!verifiedSuggestions[k]?.[h.cons]?.length))
+                  )
+                    return false
+                  return true
+                })
+              const active = activeRotTab === k
               return (
                 <ButtonBase
                   key={k}
@@ -1500,7 +2167,7 @@ export function TeamInvestment({
                 >
                   <MemberAvatar characterKey={k} size={20} />
                   <span>{charName(k)}</span>
-                  {count > 0 && (
+                  {count > 0 ? (
                     <Box
                       component="span"
                       sx={{
@@ -1515,6 +2182,19 @@ export function TeamInvestment({
                     >
                       {count}
                     </Box>
+                  ) : (
+                    hasPendingHint && (
+                      <Box
+                        component="span"
+                        aria-hidden
+                        sx={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          bgcolor: 'warning.main',
+                        }}
+                      />
+                    )
                   )}
                 </ButtonBase>
               )
@@ -1527,14 +2207,16 @@ export function TeamInvestment({
                 gap: 0.625,
                 borderRadius: 999,
                 fontSize: 12.5,
-                fontWeight: rotTab === 'combos' ? 650 : 550,
+                fontWeight: activeRotTab === 'combos' ? 650 : 550,
                 color:
-                  rotTab === 'combos' ? giTokens.goldLight : 'text.secondary',
+                  activeRotTab === 'combos'
+                    ? giTokens.goldLight
+                    : 'text.secondary',
                 bgcolor:
-                  rotTab === 'combos'
+                  activeRotTab === 'combos'
                     ? alpha(tokens.gold, 0.14)
                     : alpha(giTokens.parchment, 0.04),
-                border: `1px solid ${rotTab === 'combos' ? alpha(tokens.gold, 0.45) : tokens.hairline}`,
+                border: `1px solid ${activeRotTab === 'combos' ? alpha(tokens.gold, 0.45) : tokens.hairline}`,
                 ...quickSx,
                 ...focusSx,
               }}
@@ -1561,7 +2243,7 @@ export function TeamInvestment({
             </ButtonBase>
           </Box>
 
-          {rotTab === 'combos' ? (
+          {activeRotTab === 'combos' ? (
             <ComboRotations
               keys={keys}
               base={baseConsMap}
@@ -1572,14 +2254,39 @@ export function TeamInvestment({
             />
           ) : (
             <ConsRotations
-              characterKey={rotTab}
-              ran={baseConsMap[rotTab] ?? 0}
-              rotations={rotationsOf[rotTab] ?? {}}
+              characterKey={activeRotTab}
+              ran={baseConsMap[activeRotTab] ?? 0}
+              rotations={rotationsOf[activeRotTab] ?? {}}
+              autoRotations={
+                autoAdapt ? autoRotations[activeRotTab] : undefined
+              }
+              suggestionsOf={(c) =>
+                verifiedSuggestions[activeRotTab]?.[c] ?? []
+              }
+              previewSim={previewSimFor(activeRotTab)}
+              onFindBest={
+                teamText.trim() ? findBestFor(activeRotTab) : undefined
+              }
+              focusCons={
+                focusCons && focusCons.ck === activeRotTab
+                  ? { cons: focusCons.cons, seq: focusCons.seq }
+                  : undefined
+              }
               teamText={teamText}
               names={names}
               gender={gender}
               aboveOnly
-              onChange={(next) => setRotations(rotTab, next)}
+              onChange={(next) => setRotations(activeRotTab, next)}
+              onSaveAndRun={
+                plan && !running
+                  ? (next) => {
+                      const nextAll = { ...rotationsOf, [activeRotTab]: next }
+                      setRotations(activeRotTab, next)
+                      setRotationsOpen(false)
+                      void runComparison({ rotationsOf: nextAll })
+                    }
+                  : undefined
+              }
             />
           )}
         </Box>
@@ -1731,6 +2438,100 @@ export function TeamInvestment({
                       'Select at least one member with available upgrades in Options.'
                     )}
               </Typography>
+              {inScopeHints.length > 0 &&
+                (() => {
+                  const autoHints = inScopeHints.filter(
+                    (h) =>
+                      autoAdapt &&
+                      !h.hasCustom &&
+                      !h.isPinned &&
+                      isAutoAdaptableHint(h) &&
+                      h.hasSuggestions
+                  )
+                  const manualHints = inScopeHints.filter(
+                    (h) =>
+                      !h.hasCustom &&
+                      !h.isPinned &&
+                      !(autoAdapt && isAutoAdaptableHint(h) && h.hasSuggestions)
+                  )
+                  const lead = manualHints[0] ?? autoHints[0]
+                  if (!lead) return null
+                  return (
+                    <Box
+                      sx={{
+                        mt: 0.75,
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: 0.75,
+                      }}
+                    >
+                      {autoHints.length > 0 && (
+                        <Typography
+                          sx={{
+                            fontSize: 12,
+                            color: 'text.secondary',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                          }}
+                        >
+                          <AutoAwesomeRoundedIcon
+                            sx={{ fontSize: 13, color: tokens.gold }}
+                          />
+                          {t('teamOpt.invest.idleAutoHint', {
+                            defaultValue:
+                              'Auto-adapts {{list}} during comparison',
+                            list: autoHints
+                              .slice(0, 2)
+                              .map(
+                                (h) => `${charName(h.characterKey)} C${h.cons}`
+                              )
+                              .join(', '),
+                          })}
+                        </Typography>
+                      )}
+                      {manualHints.length > 0 && (
+                        <Typography
+                          sx={{
+                            fontSize: 12,
+                            color: 'warning.main',
+                          }}
+                        >
+                          {t('teamOpt.invest.idleManualHint', {
+                            defaultValue:
+                              '{{name}} C{{cons}} alters rotation ({{cue}})',
+                            name: charName(manualHints[0].characterKey),
+                            cons: manualHints[0].cons,
+                            cue: manualHints[0].cue,
+                          })}
+                        </Typography>
+                      )}
+                      <ButtonBase
+                        onClick={() =>
+                          openConsEditor(lead.characterKey, lead.cons)
+                        }
+                        sx={{
+                          fontSize: 12,
+                          fontWeight: 650,
+                          color: giTokens.goldLight,
+                          textDecoration: 'underline',
+                          textUnderlineOffset: '2px',
+                          borderRadius: 0.5,
+                          px: 0.25,
+                          ...focusSx,
+                        }}
+                      >
+                        {manualHints.length > 0
+                          ? t('teamOpt.invest.setConsRotShort', {
+                              defaultValue: 'Set C{{cons}} rotation',
+                              cons: manualHints[0].cons,
+                            })
+                          : t('teamOpt.invest.customizeShort', 'Customize')}
+                      </ButtonBase>
+                    </Box>
+                  )
+                })()}
             </Box>
           </Box>
           <Box
@@ -2008,66 +2809,218 @@ export function TeamInvestment({
 
                       <Box sx={{ minWidth: 0, display: 'grid', gap: 0.375 }}>
                         {renderUpgradeLine(path, isWinner, true)}
-                        {(path.rotationLabel || timeDiff || path.unmet) && (
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              flexWrap: 'wrap',
-                              alignItems: 'center',
-                              gap: 1,
-                              ...numSx,
-                            }}
-                          >
-                            {path.rotationLabel && (
-                              <Typography
-                                sx={{
-                                  fontSize: 11.5,
-                                  fontWeight: 600,
-                                  color: giTokens.goldLight,
-                                }}
-                              >
-                                {path.rotationLabel}
-                                {path.seconds
-                                  ? ` · ${path.seconds.toFixed(1)}s`
-                                  : ''}
-                              </Typography>
-                            )}
-                            {!path.rotationLabel && timeDiff && (
-                              <Typography
-                                sx={{ fontSize: 11.5, color: 'text.secondary' }}
-                              >
-                                {baseSeconds?.toFixed(1)}s →{' '}
-                                {path.seconds?.toFixed(1)}s
-                              </Typography>
-                            )}
-                            {path.unmet && (
-                              <Tooltip
-                                arrow
-                                title={t(
-                                  'teamOpt.invest.erUnmetTip',
-                                  'A member missed an ER/stat target with this upgrade (e.g. swapping off an ER weapon).'
-                                )}
-                              >
-                                <Box
-                                  component="span"
+                        {(() => {
+                          const firstRaisedIdx = keys.findIndex(
+                            (_, i) => path.cons[i] > baseCons[i]
+                          )
+                          const unconfiguredHint =
+                            !path.rotationLabel && teamText.trim()
+                              ? keys.flatMap((ck, i) =>
+                                  path.cons[i] > baseCons[i]
+                                    ? (memberHintsMap[ck] ?? []).filter((h) => {
+                                        if (h.cons > path.cons[i]) return false
+                                        const cur = consRotationOf(
+                                          rotationsOf[ck] ?? {},
+                                          h.cons,
+                                          baseCons[i]
+                                        )
+                                        return !cur.text && !cur.pinnedBase
+                                      })
+                                    : []
+                                )[0]
+                              : undefined
+                          if (
+                            !path.rotationLabel &&
+                            !timeDiff &&
+                            !path.unmet &&
+                            !unconfiguredHint
+                          )
+                            return null
+                          const diffText =
+                            path.rotationText && teamText.trim()
+                              ? stepDiffSummary(
+                                  teamText,
+                                  path.rotationText,
+                                  names
+                                )
+                              : undefined
+                          return (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                flexWrap: 'wrap',
+                                alignItems: 'center',
+                                gap: 1,
+                                ...numSx,
+                              }}
+                            >
+                              {path.rotationLabel && (
+                                <Tooltip
+                                  arrow
+                                  title={
+                                    <Box>
+                                      {diffText && <div>{diffText}</div>}
+                                      <div>
+                                        {t(
+                                          'teamOpt.invest.clickEditRot',
+                                          'Click to edit or revert rotation'
+                                        )}
+                                      </div>
+                                    </Box>
+                                  }
+                                >
+                                  <ButtonBase
+                                    onClick={() => {
+                                      if (firstRaisedIdx >= 0) {
+                                        const ck = keys[firstRaisedIdx]
+                                        const baseC = baseCons[firstRaisedIdx]
+                                        const targetC =
+                                          path.cons[firstRaisedIdx]
+                                        const custom = consRotationOf(
+                                          rotationsOf[ck] ?? {},
+                                          targetC,
+                                          baseC
+                                        )
+                                        let openC = custom.from ?? targetC
+                                        if (!custom.text && path.autoAdapted) {
+                                          for (
+                                            let c = targetC;
+                                            c > baseC;
+                                            c--
+                                          ) {
+                                            if (autoRotations[ck]?.[c]) {
+                                              openC = c
+                                              break
+                                            }
+                                          }
+                                        }
+                                        openConsEditor(ck, openC)
+                                      } else {
+                                        setRotationsOpen(true)
+                                      }
+                                    }}
+                                    sx={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 0.375,
+                                      fontSize: 11.5,
+                                      fontWeight: 600,
+                                      px: 0.75,
+                                      py: 0.125,
+                                      borderRadius: 999,
+                                      color: giTokens.goldLight,
+                                      bgcolor: alpha(tokens.gold, 0.12),
+                                      border: `1px solid ${alpha(tokens.gold, 0.28)}`,
+                                      ...quickSx,
+                                      ...focusSx,
+                                      '&:hover': {
+                                        bgcolor: alpha(tokens.gold, 0.2),
+                                      },
+                                    }}
+                                  >
+                                    {path.autoAdapted && (
+                                      <AutoAwesomeRoundedIcon
+                                        sx={{
+                                          fontSize: 12,
+                                          color: tokens.gold,
+                                        }}
+                                      />
+                                    )}
+                                    <span>
+                                      {path.rotationLabel}
+                                      {path.seconds
+                                        ? ` · ${path.seconds.toFixed(1)}s`
+                                        : ''}
+                                    </span>
+                                  </ButtonBase>
+                                </Tooltip>
+                              )}
+                              {!path.rotationLabel && unconfiguredHint && (
+                                <Tooltip
+                                  arrow
+                                  title={`${unconfiguredHint.summary} — ${unconfiguredHint.cue}`}
+                                >
+                                  <ButtonBase
+                                    onClick={() =>
+                                      openConsEditor(
+                                        unconfiguredHint.characterKey,
+                                        unconfiguredHint.cons
+                                      )
+                                    }
+                                    sx={{
+                                      fontSize: 11,
+                                      fontWeight: 650,
+                                      px: 0.75,
+                                      py: 0.125,
+                                      borderRadius: 999,
+                                      color: 'warning.main',
+                                      bgcolor: (theme) =>
+                                        alpha(theme.palette.warning.main, 0.12),
+                                      ...quickSx,
+                                      ...focusSx,
+                                      '&:hover': {
+                                        bgcolor: (theme) =>
+                                          alpha(
+                                            theme.palette.warning.main,
+                                            0.22
+                                          ),
+                                      },
+                                    }}
+                                  >
+                                    {t('teamOpt.invest.needsConsRot', {
+                                      defaultValue:
+                                        'Set {{name}} C{{cons}} rot',
+                                      name: charName(
+                                        unconfiguredHint.characterKey
+                                      ),
+                                      cons: unconfiguredHint.cons,
+                                    })}
+                                  </ButtonBase>
+                                </Tooltip>
+                              )}
+                              {!path.rotationLabel && timeDiff && (
+                                <Typography
                                   sx={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 0.375,
                                     fontSize: 11.5,
-                                    fontWeight: 600,
-                                    color: 'warning.main',
+                                    color: 'text.secondary',
                                   }}
                                 >
-                                  <WarningAmberRoundedIcon
-                                    sx={{ fontSize: 13 }}
-                                  />
-                                  {t('teamOpt.invest.erShortfall', 'ER unmet')}
-                                </Box>
-                              </Tooltip>
-                            )}
-                          </Box>
-                        )}
+                                  {baseSeconds?.toFixed(1)}s →{' '}
+                                  {path.seconds?.toFixed(1)}s
+                                </Typography>
+                              )}
+                              {path.unmet && (
+                                <Tooltip
+                                  arrow
+                                  title={t(
+                                    'teamOpt.invest.erUnmetTip',
+                                    'A member missed an ER/stat target with this upgrade (e.g. swapping off an ER weapon).'
+                                  )}
+                                >
+                                  <Box
+                                    component="span"
+                                    sx={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 0.375,
+                                      fontSize: 11.5,
+                                      fontWeight: 600,
+                                      color: 'warning.main',
+                                    }}
+                                  >
+                                    <WarningAmberRoundedIcon
+                                      sx={{ fontSize: 13 }}
+                                    />
+                                    {t(
+                                      'teamOpt.invest.erShortfall',
+                                      'ER unmet'
+                                    )}
+                                  </Box>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          )
+                        })()}
                       </Box>
 
                       {/* Smooth animated gain-scaled bar */}
@@ -2192,6 +3145,7 @@ export function TeamInvestment({
                   const entries: {
                     id: string
                     tagId: string
+                    cons?: number
                     icon?: string
                     label: string
                     sub?: string
@@ -2200,6 +3154,10 @@ export function TeamInvestment({
                     showStep: boolean
                     dps: number
                     rot?: string
+                    rotText?: string
+                    autoAdapted?: boolean
+                    customOwn?: boolean
+                    needsRotHint?: ConsRotationHint
                   }[] = []
                   if (sigEv && sigKey) {
                     const gain = baseDps > 0 ? sigEv.dps / baseDps - 1 : 0
@@ -2220,9 +3178,30 @@ export function TeamInvestment({
                     const ev = consMap[c]
                     const gain = baseDps > 0 ? ev.dps / baseDps - 1 : 0
                     const step = prevDps > 0 ? ev.dps / prevDps - 1 : 0
+                    const customRot = consRotationOf(
+                      rotationsOf[ck] ?? {},
+                      c,
+                      baseC
+                    )
+                    const exactHint = constellationHintOf(ck, c)
+                    const needsRotHint =
+                      exactHint &&
+                      !ev.autoAdapted &&
+                      !customRot.text &&
+                      !customRot.pinnedBase &&
+                      teamText.trim()
+                        ? exactHint
+                        : undefined
+                    const autoOwn =
+                      !!ev.autoAdapted &&
+                      (!!autoRotations[ck]?.[c] ||
+                        !Object.keys(autoRotations[ck] ?? {}).some(
+                          (k) => Number(k) < c && Number(k) > baseC
+                        ))
                     entries.push({
                       id: `c${c}`,
                       tagId: `${ck}:c${c}`,
+                      cons: c,
                       icon:
                         characterAsset(
                           ck,
@@ -2235,6 +3214,10 @@ export function TeamInvestment({
                       showStep: c > baseC + 1,
                       dps: ev.dps,
                       rot: ev.rotationLabel,
+                      rotText: ev.rotationText,
+                      autoAdapted: autoOwn,
+                      customOwn: !!customRot.text && customRot.from === c,
+                      needsRotHint,
                     })
                     prevDps = ev.dps
                   }
@@ -2277,6 +3260,15 @@ export function TeamInvestment({
                       <Box sx={{ display: 'grid', gap: 0.5 }}>
                         {entries.map((entry) => {
                           const isTop1 = bestSingleId === entry.tagId
+                          const diffLine =
+                            entry.rotText && teamText.trim()
+                              ? stepDiffSummary(
+                                  teamText,
+                                  entry.rotText,
+                                  names,
+                                  ck
+                                )
+                              : undefined
                           return (
                             <Tooltip
                               key={entry.id}
@@ -2299,6 +3291,13 @@ export function TeamInvestment({
                                     </div>
                                   )}
                                   {entry.rot && <div>{entry.rot}</div>}
+                                  {diffLine && <div>{diffLine}</div>}
+                                  {entry.needsRotHint && (
+                                    <div>
+                                      {entry.needsRotHint.summary} —{' '}
+                                      {entry.needsRotHint.cue}
+                                    </div>
+                                  )}
                                 </Box>
                               }
                             >
@@ -2306,9 +3305,13 @@ export function TeamInvestment({
                                 sx={{
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: 0.75,
+                                  gap: 0.625,
                                   py: 0.25,
+                                  borderRadius: 1,
                                   cursor: 'default',
+                                  '& .cons-edit-btn': { opacity: 0 },
+                                  '&:hover .cons-edit-btn, &:focus-within .cons-edit-btn':
+                                    { opacity: 0.85 },
                                 }}
                               >
                                 {entry.icon && (
@@ -2342,7 +3345,7 @@ export function TeamInvestment({
                                   sx={{
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: 0.625,
+                                    gap: 0.5,
                                     flex: 1,
                                     minWidth: 0,
                                   }}
@@ -2376,6 +3379,141 @@ export function TeamInvestment({
                                       {t('teamOpt.invest.bestOne', 'Best +1')}
                                     </Box>
                                   )}
+                                  {entry.cons !== undefined &&
+                                    entry.autoAdapted && (
+                                      <ButtonBase
+                                        onClick={() =>
+                                          openConsEditor(ck, entry.cons!)
+                                        }
+                                        sx={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 0.25,
+                                          fontSize: 10.5,
+                                          fontWeight: 650,
+                                          px: 0.625,
+                                          py: 0.1,
+                                          borderRadius: 999,
+                                          flexShrink: 0,
+                                          color: giTokens.goldLight,
+                                          bgcolor: alpha(tokens.gold, 0.14),
+                                          border: `1px solid ${alpha(tokens.gold, 0.3)}`,
+                                          ...quickSx,
+                                          ...focusSx,
+                                          '&:hover': {
+                                            bgcolor: alpha(tokens.gold, 0.24),
+                                          },
+                                        }}
+                                      >
+                                        <AutoAwesomeRoundedIcon
+                                          sx={{
+                                            fontSize: 11,
+                                            color: tokens.gold,
+                                          }}
+                                        />
+                                        {t(
+                                          'teamOpt.invest.autoRotPill',
+                                          'Auto rot'
+                                        )}
+                                      </ButtonBase>
+                                    )}
+                                  {entry.cons !== undefined &&
+                                    !entry.autoAdapted &&
+                                    entry.customOwn && (
+                                      <ButtonBase
+                                        onClick={() =>
+                                          openConsEditor(ck, entry.cons!)
+                                        }
+                                        sx={{
+                                          fontSize: 10.5,
+                                          fontWeight: 650,
+                                          px: 0.625,
+                                          py: 0.1,
+                                          borderRadius: 999,
+                                          flexShrink: 0,
+                                          color: giTokens.goldLight,
+                                          bgcolor: alpha(tokens.gold, 0.14),
+                                          ...quickSx,
+                                          ...focusSx,
+                                          '&:hover': {
+                                            bgcolor: alpha(tokens.gold, 0.24),
+                                          },
+                                        }}
+                                      >
+                                        {t('teamOpt.invest.customRotPill', {
+                                          defaultValue: 'C{{cons}} rot',
+                                          cons: entry.cons,
+                                        })}
+                                      </ButtonBase>
+                                    )}
+                                  {entry.cons !== undefined &&
+                                    entry.needsRotHint && (
+                                      <ButtonBase
+                                        onClick={() =>
+                                          openConsEditor(ck, entry.cons!)
+                                        }
+                                        sx={{
+                                          fontSize: 10.5,
+                                          fontWeight: 700,
+                                          px: 0.625,
+                                          py: 0.1,
+                                          borderRadius: 999,
+                                          flexShrink: 0,
+                                          color: 'warning.main',
+                                          bgcolor: (theme) =>
+                                            alpha(
+                                              theme.palette.warning.main,
+                                              0.14
+                                            ),
+                                          ...quickSx,
+                                          ...focusSx,
+                                          '&:hover': {
+                                            bgcolor: (theme) =>
+                                              alpha(
+                                                theme.palette.warning.main,
+                                                0.24
+                                              ),
+                                          },
+                                        }}
+                                      >
+                                        {t(
+                                          'teamOpt.invest.needsRotPill',
+                                          'Needs rot'
+                                        )}
+                                      </ButtonBase>
+                                    )}
+                                  {entry.cons !== undefined &&
+                                    !entry.autoAdapted &&
+                                    !entry.customOwn &&
+                                    !entry.needsRotHint &&
+                                    !!teamText.trim() && (
+                                      <IconButton
+                                        className="cons-edit-btn"
+                                        size="small"
+                                        aria-label={t(
+                                          'teamOpt.invest.editConsRotAria',
+                                          {
+                                            defaultValue:
+                                              'Edit {{name}} C{{cons}} rotation',
+                                            name: charName(ck),
+                                            cons: entry.cons,
+                                          }
+                                        )}
+                                        onClick={() =>
+                                          openConsEditor(ck, entry.cons!)
+                                        }
+                                        sx={{
+                                          p: 0.25,
+                                          color: 'text.secondary',
+                                          ...quickSx,
+                                          '&:hover': { color: 'text.primary' },
+                                        }}
+                                      >
+                                        <EditRoundedIcon
+                                          sx={{ fontSize: 13 }}
+                                        />
+                                      </IconButton>
+                                    )}
                                 </Box>
                                 {entry.showStep && (
                                   <Typography
