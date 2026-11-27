@@ -622,9 +622,19 @@ export function useRotationSettings(teamId: string) {
 export function useMemberNames(members: TeamOptMember[]) {
   const { i18n } = useTranslation('charNames_gen')
   const { gender } = useDBMeta()
+  const rosterKey = members.map((m) => m.characterKey).join(',')
   return useMemo(
-    () => memberNamesOf(members, i18n, gender),
-    [members, gender, i18n]
+    () =>
+      memberNamesOf(
+        rosterKey
+          ? (rosterKey.split(',') as CharacterKey[]).map((characterKey) => ({
+              characterKey,
+            }))
+          : [],
+        i18n,
+        gender
+      ),
+    [rosterKey, gender, i18n]
   )
 }
 /** `useMemberNames` outside a page */
@@ -656,10 +666,14 @@ export function useSimTeam(
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
 ) {
   const database = useDatabase()
-  return useMemo(
-    () => simTeamFor(members, database, kqm, kqmBuilds),
-    [members, database, kqm, kqmBuilds]
-  )
+  const prev = useRef<{ sig: string; value: SimTeam }>()
+  return useMemo(() => {
+    const next = simTeamFor(members, database, kqm, kqmBuilds)
+    const sig = JSON.stringify(next)
+    if (prev.current?.sig === sig) return prev.current.value
+    prev.current = { sig, value: next }
+    return next
+  }, [members, database, kqm, kqmBuilds])
 }
 /** `useSimTeam` outside a page */
 export function simTeamFor(

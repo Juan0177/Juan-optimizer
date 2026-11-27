@@ -210,14 +210,14 @@ export function TeamInvestment({
   const kqmResult = mode === 'kqm' ? (result as KqmResult) : undefined
   const invResult = mode === 'inventory' ? (result as TeamOptResult) : undefined
 
+  const keysSig = (
+    kqmResult
+      ? members.map((m) => m.characterKey).filter((k) => !!kqmResult.builds[k])
+      : members.map((m) => m.characterKey)
+  ).join(',')
   const keys = useMemo(
-    () =>
-      kqmResult
-        ? members
-            .map((m) => m.characterKey)
-            .filter((k) => !!kqmResult.builds[k])
-        : members.map((m) => m.characterKey),
-    [members, kqmResult]
+    () => (keysSig ? (keysSig.split(',') as CharacterKey[]) : []),
+    [keysSig]
   )
 
   const charName = useCallback(
@@ -226,20 +226,22 @@ export function TeamInvestment({
     [t, gender]
   )
 
+  const baseConsSig = keys
+    .map((k) => {
+      if (kqmResult) return kqmResult.constellations[k] ?? 0
+      const m = members.find((x) => x.characterKey === k)
+      if (!m) return 0
+      return (
+        (m.isTc
+          ? database.buildTcs.get(m.loadoutDatum.buildTcId)?.character
+              ?.constellation
+          : database.chars.get(k)?.constellation) ?? 0
+      )
+    })
+    .join(',')
   const baseCons = useMemo(
-    () =>
-      keys.map((k) => {
-        if (kqmResult) return kqmResult.constellations[k] ?? 0
-        const m = members.find((x) => x.characterKey === k)
-        if (!m) return 0
-        return (
-          (m.isTc
-            ? database.buildTcs.get(m.loadoutDatum.buildTcId)?.character
-                ?.constellation
-            : database.chars.get(k)?.constellation) ?? 0
-        )
-      }),
-    [keys, kqmResult, members, database]
+    () => (baseConsSig ? baseConsSig.split(',').map(Number) : []),
+    [baseConsSig]
   )
 
   const baseConsMap = useMemo(

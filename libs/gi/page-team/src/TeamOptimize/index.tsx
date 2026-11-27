@@ -236,11 +236,36 @@ export default function TeamBuildWorkspace({
   )
   // `teamData` is recomputed whenever a member, a build or a conditional changes (never for Team
   // optimize's own settings, which are saved on the team too: the members stay the same object,
-  // and what is worked out from them, the timeline's play, is not done again)
+  // and what is worked out from them, the timeline's play, is not done again).
+  // Keep the previous array reference when the member loadouts and gear didn't change (e.g. the
+  // deferred `teamData` pass right after a loadout switch on Save/Equip).
   const loadouts = JSON.stringify(team?.loadoutData)
-  const members = useMemo(
-    () => teamOptMembers(database, teamId),
-    [database, teamId, loadouts, teamData]
+  const prevMembers = useRef<TeamOptMember[]>()
+  const members = useMemo(() => {
+    const next = teamOptMembers(database, teamId)
+    const prev = prevMembers.current
+    if (
+      prev &&
+      prev.length === next.length &&
+      prev.every(
+        (m, i) =>
+          m.characterKey === next[i].characterKey &&
+          m.teamCharId === next[i].teamCharId &&
+          m.teamChar === next[i].teamChar &&
+          m.loadoutDatum === next[i].loadoutDatum &&
+          m.weaponId === next[i].weaponId &&
+          m.isTc === next[i].isTc &&
+          JSON.stringify(m.artifactIds) === JSON.stringify(next[i].artifactIds)
+      )
+    )
+      return prev
+    prevMembers.current = next
+    return next
+  }, [database, teamId, loadouts, teamData])
+  const rosterKey = members.map((m) => m.characterKey).join(',')
+  const memberKeys = useMemo(
+    () => (rosterKey ? (rosterKey.split(',') as CharacterKey[]) : []),
+    [rosterKey]
   )
   // (the KQM tab's rotation, the first time: a copy of Team optimize's)
   const kqmSetUp = storedTeamOpt.kqm?.attacks !== undefined
@@ -412,7 +437,6 @@ export default function TeamBuildWorkspace({
   const [extraOpen, setExtraOpen] = useState(() => extraCount > 0)
   // (while it runs: its builds so far once it has some, else the last result)
   const roster = teamRoster(database, teamId)
-  const memberKeys = members.map((m) => m.characterKey)
   // (a run's builds: its members not on a theorycraft build, which it keeps as they are)
   const inventoryKeys = members
     .filter((m) => !m.isTc)
@@ -875,12 +899,9 @@ export default function TeamBuildWorkspace({
       shownGear && {
         ...shownGear,
         mainStatAssumptionLevel: shownTeamOpt.assumeMaxMain ? 20 : 0,
-        bonusStats: teamOptBonusStats(
-          shownTeamOpt,
-          members.map((m) => m.characterKey)
-        ),
+        bonusStats: teamOptBonusStats(shownTeamOpt, memberKeys),
       },
-    [shownGear, shownTeamOpt, members]
+    [shownGear, shownTeamOpt, memberKeys]
   )
   // the shown builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
   const resultCocoonSettings = useMemo(

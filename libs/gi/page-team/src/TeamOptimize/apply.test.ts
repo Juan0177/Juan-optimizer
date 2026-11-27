@@ -2,6 +2,8 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import {
   ArtCharDatabase,
+  initTeamOpt,
+  initTeamOptAttack,
   type LoadoutDatum,
   randomDevArtifact,
 } from '@genshin-optimizer/gi/db'
@@ -165,5 +167,27 @@ describe('Team Optimize Equip recovery', () => {
     )
     expect(inferBuildNameFormat('Rational', 'Rational')).toBe('{team}')
     expect(inferBuildNameFormat('Fixed Name', 'Rational')).toBe('Fixed Name')
+  })
+
+  it('keeps unchanged teamOpt referentially stable across saveTeamResult while validating real edits', () => {
+    const { database, teamId, result } = setup()
+    database.teams.set(teamId, (team) => {
+      team.teamOpt = {
+        ...initTeamOpt(),
+        attacks: { Bennett: [initTeamOptAttack(['burst', 'dmg'], 1)] },
+      }
+    })
+    const teamOptBefore = database.teams.get(teamId)!.teamOpt
+    expect(teamOptBefore).toBeDefined()
+
+    saveTeamResult(database, teamId, result, 'Saved')
+    expect(database.teams.get(teamId)?.teamOpt).toBe(teamOptBefore)
+
+    database.teams.set(teamId, (team) => {
+      team.teamOpt = { ...team.teamOpt!, rotationTime: 24 }
+    })
+    const teamOptAfterEdit = database.teams.get(teamId)?.teamOpt
+    expect(teamOptAfterEdit).not.toBe(teamOptBefore)
+    expect(teamOptAfterEdit?.rotationTime).toBe(24)
   })
 })
