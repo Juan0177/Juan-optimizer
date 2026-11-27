@@ -8,9 +8,11 @@ import {
 import type { TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_BUILD_NAME_FORMAT,
   equipChanges,
   equipTeamResult,
   formatSavedBuildName,
+  inferBuildNameFormat,
   restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
@@ -139,18 +141,29 @@ describe('Team Optimize Equip recovery', () => {
     expect(database.arts.get(borrowed)?.location).toBe('')
   })
 
-  it('formats saved build names with custom, appended, or cleared parenthesis labels', () => {
-    expect(formatSavedBuildName('Rational', 'team optimized')).toBe(
+  it('expands and infers reusable saved build name formats with {team}', () => {
+    expect(formatSavedBuildName(DEFAULT_BUILD_NAME_FORMAT, 'Rational')).toBe(
       'Rational (team optimized)'
     )
-    expect(formatSavedBuildName('Rational', 'Abyss 12')).toBe(
-      'Rational (Abyss 12)'
+    expect(formatSavedBuildName('{team} - Abyss 12', 'Rational')).toBe(
+      'Rational - Abyss 12'
     )
-    expect(formatSavedBuildName('Rational', 'team optimized - Fav')).toBe(
-      'Rational (team optimized - Fav)'
+    expect(formatSavedBuildName('[SO] {team}', 'Rational')).toBe(
+      '[SO] Rational'
     )
-    expect(formatSavedBuildName('Rational', '   ')).toBe('Rational')
-    expect(formatSavedBuildName('', 'Boss')).toBe('Boss')
-    expect(formatSavedBuildName('', '')).toBe('team optimized')
+    expect(formatSavedBuildName('{team}', 'Rational')).toBe('Rational')
+    expect(formatSavedBuildName('Custom Static Name', 'Rational')).toBe(
+      'Custom Static Name'
+    )
+    expect(formatSavedBuildName('{team} - Boss', '')).toBe('- Boss')
+
+    expect(inferBuildNameFormat('Rational - Abyss 12', 'Rational')).toBe(
+      '{team} - Abyss 12'
+    )
+    expect(inferBuildNameFormat('[SO] Rational', 'Rational')).toBe(
+      '[SO] {team}'
+    )
+    expect(inferBuildNameFormat('Rational', 'Rational')).toBe('{team}')
+    expect(inferBuildNameFormat('Fixed Name', 'Rational')).toBe('Fixed Name')
   })
 })

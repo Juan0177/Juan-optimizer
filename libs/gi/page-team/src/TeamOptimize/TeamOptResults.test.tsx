@@ -23,10 +23,15 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_BUILD_NAME_FORMAT } from './apply'
 import {
   readAutoRankEquipment,
   setAutoRankEquipment,
 } from './autoRankEquipment'
+import {
+  readSavedBuildNameFormat,
+  setSavedBuildNameFormat,
+} from './savedBuildNameFormat'
 import { TeamOptResults } from './TeamOptResults'
 import { GearRankingControls, TeamOptTopBuilds } from './TeamOptTopBuilds'
 
@@ -154,6 +159,7 @@ afterEach(() => {
   cleanup()
   optConfigEntries = []
   setAutoRankEquipment(false)
+  setSavedBuildNameFormat(DEFAULT_BUILD_NAME_FORMAT)
 })
 
 const theme = createTheme({ palette: { mode: 'dark' } })
@@ -435,7 +441,7 @@ describe('TeamOptResults ER requirement display', () => {
     expect(onStart).not.toHaveBeenCalled()
   })
 
-  it('lets the user customize or append the parenthesis label when saving builds for the team', () => {
+  it('persists a custom build name format for future saves and allows per-save edits', () => {
     mockSaveTeamResult.mockClear()
     render(
       <ThemeProvider theme={theme}>
@@ -452,31 +458,35 @@ describe('TeamOptResults ER requirement display', () => {
       </ThemeProvider>
     )
 
+    // 1. Edit build name and persist as reusable `{team}` format for future saves
     fireEvent.click(
       screen.getByRole('button', { name: 'Save and use on this team' })
     )
-    const input = screen.getByLabelText(
-      'Label in parentheses (optional)'
-    ) as HTMLInputElement
-    expect(input.value).toBe('team optimized')
-    expect(screen.getByText('(team optimized)')).toBeTruthy()
+    const input = screen.getByLabelText('Build name') as HTMLInputElement
+    expect(input.value).toBe('Abyss Team (team optimized)')
 
-    fireEvent.change(input, { target: { value: 'Stygian Fearless' } })
-    expect(screen.getByText('(Stygian Fearless)')).toBeTruthy()
-
+    fireEvent.change(input, { target: { value: 'Abyss Team - SO' } })
+    fireEvent.click(
+      screen.getByLabelText(/Save as default format for future saves/i)
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
     expect(mockSaveTeamResult).toHaveBeenCalledTimes(1)
-    expect(mockSaveTeamResult.mock.calls[0][3]).toBe(
-      'Abyss Team (Stygian Fearless)'
-    )
+    expect(mockSaveTeamResult.mock.calls[0][3]).toBe('Abyss Team - SO')
+    expect(readSavedBuildNameFormat()).toBe('{team} - SO')
 
-    // Clearing the label saves just the team name with no parentheses
+    // 2. Re-opening uses the persisted format automatically, and a one-off edit doesn't overwrite it
     fireEvent.click(
       screen.getByRole('button', { name: 'Save and use on this team' })
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Clear label' }))
+    const input2 = screen.getByLabelText('Build name') as HTMLInputElement
+    expect(input2.value).toBe('Abyss Team - SO')
+
+    fireEvent.change(input2, { target: { value: 'One-off Boss Run' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
     expect(mockSaveTeamResult).toHaveBeenCalledTimes(2)
-    expect(mockSaveTeamResult.mock.calls[1][3]).toBe('Abyss Team')
+    expect(mockSaveTeamResult.mock.calls[1][3]).toBe('One-off Boss Run')
+    expect(readSavedBuildNameFormat()).toBe('{team} - SO')
   })
 })

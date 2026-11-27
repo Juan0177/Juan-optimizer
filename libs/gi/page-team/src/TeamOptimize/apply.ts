@@ -186,21 +186,38 @@ export function equipTeamResult(
     })
 }
 
+export const DEFAULT_BUILD_NAME_FORMAT = '{team} (team optimized)'
+
 /**
- * Formats the saved build name created by "Save and use on this team":
- * `Team Name (label)` when both are present, `Team Name` when label is cleared,
- * or `label` / `fallbackLabel` when the team has no name.
+ * Expands a saved build name format (supporting `{team}`) for a specific team.
  */
 export function formatSavedBuildName(
+  format: string,
   teamName: string,
-  label: string,
-  fallbackLabel = 'team optimized'
+  fallback = 'team optimized'
 ): string {
+  const template = format.trim() || DEFAULT_BUILD_NAME_FORMAT
   const base = teamName.trim()
-  const tag = label.trim()
-  if (base && tag) return `${base} (${tag})`
-  if (base) return base
-  return tag || fallbackLabel
+  const filled = template
+    .replace(/\{team\}/gi, base)
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return filled || base || fallback
+}
+
+/**
+ * Infers a reusable `{team}` format string from a user-edited build name so saving
+ * as default carries cleanly across other teams.
+ */
+export function inferBuildNameFormat(
+  buildName: string,
+  teamName: string
+): string {
+  const trimmed = buildName.trim()
+  const base = teamName.trim()
+  if (!trimmed) return DEFAULT_BUILD_NAME_FORMAT
+  if (base && trimmed.includes(base)) return trimmed.replace(base, '{team}')
+  return trimmed
 }
 
 /**
