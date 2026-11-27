@@ -109,6 +109,13 @@ export function energyEstimate(
     settings,
     gear.weapons
   )
+  if (settings.opening?.length)
+    for (const key of keys) {
+      const allowed = gear.weapons(key)
+      if (allowed.length !== 1) continue
+      weapons[key] = allowed[0].key
+      refinements[key] = allowed[0].refinement
+    }
   return calculateEnergyRecharge(keys, settings, weapons, refinements)
 }
 
@@ -1025,6 +1032,7 @@ function MemberEnergy({
     )
   const result = estimate.members[characterKey]
   const required = estimate.targets[characterKey]
+  const opening = estimate.opening?.[characterKey]
   // (who caught its particles as the rotation played, when the catcher and its share can't say
   // it: the calculator counts these until a catcher is set by hand)
   const playedShares = (
@@ -1337,7 +1345,10 @@ function MemberEnergy({
                   required !== undefined ? 'text.primary' : 'text.secondary',
               }}
             >
-              {required !== undefined ? `${required}%` : '—'}
+              {required !== undefined &&
+              (!opening || Number.isFinite(opening.required))
+                ? `${required}%`
+                : '—'}
             </Typography>
             <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
               {t('teamOpt.kqm.calc.erNeeded', 'ER needed')}
@@ -1345,6 +1356,30 @@ function MemberEnergy({
           </Box>
         </Box>
       </Box>
+
+      {opening && (
+        <Typography
+          variant="body2"
+          color={
+            Number.isFinite(opening.required)
+              ? 'text.secondary'
+              : 'warning.main'
+          }
+          sx={{ px: 0.25 }}
+        >
+          {Number.isFinite(opening.required)
+            ? t('teamOpt.kqm.calc.openingEr', {
+                defaultValue: 'Opening Burst at {{time}} s · {{er}}% ER',
+                time: opening.castTime.toFixed(1),
+                er: (Math.ceil(opening.required * 10 - 1e-9) / 10).toFixed(1),
+              })
+            : t('teamOpt.kqm.calc.openingUnreachable', {
+                defaultValue:
+                  'Burst at {{time}} s can’t charge with these energy sources. Move it later or add particles before the cast.',
+                time: opening.castTime.toFixed(1),
+              })}
+        </Typography>
+      )}
 
       {/* why: what it gets against what its Bursts cost */}
       <EnergyBalance result={result} short={short} shortUses={shortUses} />

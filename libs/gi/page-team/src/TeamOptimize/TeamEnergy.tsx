@@ -10,7 +10,7 @@ import type {
   TeamOpt,
   TeamOptEnergyCalculator,
 } from '@genshin-optimizer/gi/db'
-import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { RotationEnergy, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
@@ -18,7 +18,9 @@ import {
   isCalcEnergyWeapon,
   isFavonius,
   isWeaponExcludedFor,
+  startsWithoutEnergy,
   syncEnergyCalculator,
+  teamCalculatorEnergy,
   teamCalculatorTargets,
   teamEnergyAuto,
   teamOptCurrentWeapons,
@@ -98,6 +100,7 @@ export function useTeamEnergy(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
+  const zeroEnergy = startsWithoutEnergy(useTeam(teamId))
   const inventoryWeapons = useDataManagerValues(database.weapons)
   const optConfigs = useDataManagerEntries(database.optConfigs)
   const keys = useMemo(() => members.map((m) => m.characterKey), [members])
@@ -137,7 +140,7 @@ export function useTeamEnergy(
     ? `${text.trim()}|${JSON.stringify([opener, timing, frameData])}`
     : ''
   const burstEvery = useMemo(() => teamBurstEvery(teamOpt), [teamOpt])
-  const playKey = `${written}|${JSON.stringify([own.constellations, own.gear, burstEvery])}`
+  const playKey = `${written}|${JSON.stringify([own.constellations, own.gear, burstEvery, zeroEnergy])}`
   const [worked, setWorked] = useState<{
     for: string
     energy?: RotationEnergy
@@ -185,21 +188,30 @@ export function useTeamEnergy(
   const playedTime = ready ? worked?.rotationTime : undefined
 
   const calculatorOf = useCallback(
-    (saved: TeamOptEnergyCalculator | undefined) => ({
-      ...withRotationEnergy(
-        syncEnergyCalculator(
-          keys,
-          saved,
-          teamOpt.rotationTime ?? 20,
-          teamOpt.onField ?? keys[0],
-          own.constellations
-        ),
+    (saved: TeamOptEnergyCalculator | undefined) => {
+      const settings = syncEnergyCalculator(
         keys,
-        energy
-      ),
-      rotationTime: playedTime || (teamOpt.rotationTime ?? 20),
-    }),
-    [keys, teamOpt.rotationTime, teamOpt.onField, own, energy, playedTime]
+        saved,
+        teamOpt.rotationTime ?? 20,
+        teamOpt.onField ?? keys[0],
+        own.constellations
+      )
+      if (!zeroEnergy || !written) delete settings.opening
+      return {
+        ...withRotationEnergy(settings, keys, energy),
+        rotationTime: playedTime || (teamOpt.rotationTime ?? 20),
+      }
+    },
+    [
+      keys,
+      teamOpt.rotationTime,
+      teamOpt.onField,
+      own,
+      energy,
+      playedTime,
+      zeroEnergy,
+      written,
+    ]
   )
 
   // Automatic ER follows the rotation and the members: it applies by itself once a rotation is
@@ -244,6 +256,15 @@ export function useTeamEnergy(
         : undefined,
     [calculated, keys, currentWeapons, teamOpt]
   )
+  const blockedOpening = useMemo(() => {
+    if (!zeroEnergy || !ready) return undefined
+    const result = teamCalculatorEnergy(keys, currentWeapons, teamOpt)
+    return Object.entries(result?.opening ?? {}).find(
+      ([, opening]) =>
+        !Number.isFinite(opening.required) &&
+        (!teamOpt.optimizeWeapons || opening.castTime === 0)
+    )
+  }, [keys, currentWeapons, teamOpt, zeroEnergy, ready])
   // Per member, how a ticked energy / Favonius weapon shifts their ER requirement during a run
   const erHints = useMemo<Partial<Record<CharacterKey, MemberErHint>>>(() => {
     if (!teamOpt.optimizeWeapons) return {}
@@ -407,6 +428,7 @@ export function useTeamEnergy(
   return {
     calculated,
     targets,
+    blockedOpening,
     erHints,
     gear,
     fromRotation: ready,

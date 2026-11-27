@@ -54,7 +54,7 @@ export interface FightApplications {
   /** One rotation's hits as played, and how long it takes (its damage over time) */
   played?: PlayedHits
   /**
-   * Its first rotation from no energy: played once from the start without its Bursts, its
+   * Its first rotation from no energy: played once from the start, its
    * attacks and how long it takes
    */
   opening?: {
@@ -398,8 +398,6 @@ export function useRotationApplications(
           hits: playedHits(sim.hits, sim.start, sim.frames),
         },
       }
-      // (a fight from no energy: its first rotation without Bursts, whatever the tab counts; not
-      // counted from the start, so `repeats` is what plays)
       const opening = simulateWritten({
         kqm: isKqm,
         text: applied,
@@ -416,7 +414,7 @@ export function useRotationApplications(
         samples: 4,
         repeats: 1,
         keep: 'all',
-        withoutBursts: true,
+        startingEmpty: 'first',
       })
       const span = opening?.sim && opening.sim.start + opening.sim.frames
       return opening?.attacks && span && span > 0

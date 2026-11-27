@@ -423,3 +423,17 @@ export function appliedStygianPreset(
   )?.key
   return { boss, phase: found, difficulty }
 }
+
+/** The opening energy for a custom enemy or a Stygian preset. */
+export function startsWithoutEnergy(
+  enemy:
+    | Pick<Team, 'enemyOverride' | 'enemyPreset' | 'fightSettings'>
+    | undefined
+): boolean {
+  return (
+    enemy?.fightSettings?.fullEnergy === false ||
+    (enemy?.fightSettings?.fullEnergy === undefined &&
+      !!enemy &&
+      !!appliedStygianPreset(enemy))
+  )
+}

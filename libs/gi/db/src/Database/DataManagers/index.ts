@@ -94,6 +94,7 @@ import type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
   TeamOptKqm,
+  TeamOptOpeningEnergy,
 } from './TeamOpt'
 import {
   defaultTeamOptKqm,
@@ -169,6 +170,7 @@ export type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
   TeamOptKqm,
+  TeamOptOpeningEnergy,
   TeamRotation,
 }
 export {

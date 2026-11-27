@@ -257,6 +257,19 @@ export interface TeamOptEnergyMember {
   edited?: TeamOptEnergyRotationField[]
 }
 
+/** Rotation energy sources between a character's previous Burst and their next required cast. */
+export interface TeamOptOpeningEnergy {
+  characterKey: CharacterKey
+  castTime: number
+  seconds: number
+  cost: number
+  electroInterval: number
+  nightsoulBursts?: number
+  members: TeamOptEnergyCalculator['members']
+  /** Ticks from earlier Bursts that land inside this window (Prototype Amber / The Exile). */
+  burstRefundTicks?: Partial<Record<CharacterKey, number>>
+}
+
 export interface TeamOptEnergyCalculator {
   rotationTime: number
   clearTime: number
@@ -267,6 +280,7 @@ export interface TeamOptEnergyCalculator {
   /** Nightsoul Bursts a rotation, as the written rotation plays them (Scroll of the Hero of Cinder City) */
   nightsoulBursts?: number
   members: Partial<Record<CharacterKey, TeamOptEnergyMember>>
+  opening?: TeamOptOpeningEnergy[]
   /** Encounter inputs set by hand: the written rotation no longer fills them in */
   edited?: 'electroInterval'[]
 }
@@ -592,6 +606,26 @@ const energyCalculatorSchema = z.object({
   rng: z.enum(['average', 'safe', 'worst']),
   electroInterval: z.number().finite().min(0),
   nightsoulBursts: z.number().finite().min(0).optional().catch(undefined),
+  opening: z
+    .array(
+      z.object({
+        characterKey: z.enum(allCharacterKeys),
+        castTime: z.number().finite().nonnegative(),
+        seconds: z.number().finite().nonnegative(),
+        cost: z.number().finite().positive(),
+        electroInterval: z.number().finite().nonnegative(),
+        nightsoulBursts: z.number().finite().nonnegative().optional(),
+        members: z.partialRecord(z.enum(allCharacterKeys), energyMemberSchema),
+        burstRefundTicks: z
+          .partialRecord(
+            z.enum(allCharacterKeys),
+            z.number().int().nonnegative()
+          )
+          .optional(),
+      })
+    )
+    .optional()
+    .catch(undefined),
   edited: z
     .array(z.enum(['electroInterval']))
     .optional()

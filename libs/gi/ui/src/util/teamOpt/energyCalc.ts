@@ -3,6 +3,7 @@ import type {
   TeamOptEnergyCalculator,
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
+  TeamOptOpeningEnergy,
 } from '@genshin-optimizer/gi/db'
 import { teamOptEnergyRotationFields } from '@genshin-optimizer/gi/db'
 import {
@@ -72,7 +73,14 @@ export interface EnergyCalcResult {
     >
   >
   errors: string[]
+  /** The tightest opening Burst per member, including casts with no feasible ER. */
+  opening?: Partial<
+    Record<CharacterKey, { castTime: number; required: number }>
+  >
 }
+
+/** Solver constraint for a Burst that cannot be charged by its written cast time. */
+export const UNREACHABLE_OPENING_ER = 1_000_000
 
 /**
  * The energy weapons the calculator counts per trigger (a member's "energy weapon triggers"),
@@ -179,7 +187,8 @@ export function calculateEnergyRecharge(
    * The members' artifact sets (KQM's picks): The Exile's 4-piece gives the others energy on the
    * wearer's Burst. Absent: none.
    */
-  sets?: Partial<Record<CharacterKey, Partial<Record<string, number>>>>
+  sets?: Partial<Record<CharacterKey, Partial<Record<string, number>>>>,
+  checkpoint?: TeamOptOpeningEnergy
 ): EnergyCalcResult {
   const result: EnergyCalcResult = { targets: {}, members: {}, errors: [] }
   const finite = (n: number, min: number, max = Number.POSITIVE_INFINITY) =>
@@ -375,7 +384,10 @@ export function calculateEnergyRecharge(
                   (member.edited?.includes('favoniusProcs')
                     ? 1
                     : favoniusChance(refinements?.[source])),
-                settings.rotationTime / favoniusCooldown(refinements?.[source])
+                checkpoint
+                  ? Number.POSITIVE_INFINITY
+                  : settings.rotationTime /
+                      favoniusCooldown(refinements?.[source])
               )
             : 0
         const favoniusCaught = typed.includes('favoniusCatchBy')
@@ -402,7 +414,10 @@ export function calculateEnergyRecharge(
       sources.enemies = enemies
       if (hasElectroResonance && settings.electroInterval > 0) {
         const resonance =
-          (settings.rotationTime / Math.max(5, settings.electroInterval)) *
+          (settings.rotationTime /
+            (checkpoint
+              ? settings.electroInterval
+              : Math.max(5, settings.electroInterval))) *
           (getCharEle(recipient) === 'electro' ? 3 : 1) *
           share(field)
         particles += resonance
@@ -424,6 +439,8 @@ export function calculateEnergyRecharge(
           return 0
         // (Prototype Amber: once per Burst of its wielder, whatever was entered)
         if (energyWeaponPerBurst(weapons?.[member])) {
+          if (checkpoint)
+            return (checkpoint.burstRefundTicks?.[member] ?? 0) / 3
           const every = settings.members[member]?.burstEvery ?? 0
           return every > 0 ? 1 / every : 0
         }
@@ -431,10 +448,12 @@ export function calculateEnergyRecharge(
         const inputs = settings.members[member]
         const weapon = weapons?.[member]
         const entered =
-          (inputs?.weaponEnergyTriggers ?? 0) > 0
+          !checkpoint && (inputs?.weaponEnergyTriggers ?? 0) > 0
             ? inputs!.weaponEnergyTriggers
             : ((weapon && inputs?.weaponTriggers?.[weapon]) ?? 0)
-        return energyWeaponTriggers(weapon, entered, settings.rotationTime)
+        return checkpoint
+          ? entered
+          : energyWeaponTriggers(weapon, entered, settings.rotationTime)
       }
       const teamWeaponEnergy = keys
         .filter((k) => k !== recipient)
@@ -452,6 +471,7 @@ export function calculateEnergyRecharge(
         ...keys
           .filter((k) => k !== recipient && (sets?.[k]?.['TheExile'] ?? 0) >= 4)
           .map((k) => {
+            if (checkpoint) return 2 * (checkpoint.burstRefundTicks?.[k] ?? 0)
             const every = settings.members[k]?.burstEvery ?? 0
             return every > 0 ? 6 / every : 0
           })
@@ -488,8 +508,13 @@ export function calculateEnergyRecharge(
       const flat = sources.bonus + sources.gear + sources.skills
       const cost = Math.max(0, ownData.burstCost - ownData.burstDiscount)
       // (without the Burst, still the energy it spends: Varesa's Kablam is -30 a use)
-      const needed =
-        (own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery) - flat
+      const spend =
+        checkpoint?.characterKey === recipient
+          ? checkpoint.cost
+          : own.burstEvery === 0 || cost === 0
+            ? 0
+            : cost / own.burstEvery
+      const needed = spend - flat
       const required =
         needed <= 0
           ? 100
@@ -503,8 +528,7 @@ export function calculateEnergyRecharge(
         required,
         sources,
         fromMembers,
-        burstSpend:
-          own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
+        burstSpend: spend,
       }
       if (!Number.isFinite(required))
         result.errors.push(
@@ -513,7 +537,61 @@ export function calculateEnergyRecharge(
       else result.targets[recipient] = Math.ceil(required * 10 - 1e-9) / 10
     }
   }
+  if (settings.opening?.length) {
+    const opening: NonNullable<EnergyCalcResult['opening']> = {}
+    for (const window of settings.opening) {
+      const {
+        characterKey,
+        castTime,
+        seconds,
+        electroInterval,
+        nightsoulBursts,
+        members,
+      } = window
+      if (!keys.includes(characterKey) || keys.some((key) => !members[key]))
+        continue
+      const required = calculateEnergyRecharge(
+        keys,
+        {
+          rotationTime: Math.max(0.1, seconds),
+          clearTime: settings.clearTime,
+          // Average enemy drops from the repeating rotation have no opening timestamps.
+          enemyParticles: 0,
+          rng: settings.rng,
+          electroInterval,
+          nightsoulBursts,
+          members,
+        },
+        weapons,
+        refinements,
+        sets,
+        window
+      ).members[characterKey]?.required
+      if (required === undefined) continue
+      if (!opening[characterKey] || required > opening[characterKey].required)
+        opening[characterKey] = { castTime, required }
+      const requiredInLoop = result.targets[characterKey]
+      if (Number.isFinite(required) && requiredInLoop !== undefined)
+        result.targets[characterKey] = Math.max(
+          requiredInLoop,
+          Math.ceil(required * 10 - 1e-9) / 10
+        )
+    }
+    result.opening = opening
+    for (const [key, check] of Object.entries(opening))
+      if (!Number.isFinite(check.required))
+        delete result.targets[key as CharacterKey]
+  }
   return result
+}
+
+/** Solver targets include an infeasible constraint for a Burst with no timely energy. */
+export function solverEnergyTargets(result: EnergyCalcResult) {
+  const targets = { ...result.targets }
+  for (const [key, opening] of Object.entries(result.opening ?? {}))
+    if (!Number.isFinite(opening.required))
+      targets[key as CharacterKey] = UNREACHABLE_OPENING_ER
+  return targets
 }
 
 /**
@@ -834,6 +912,7 @@ export interface RotationEnergy {
   electroInterval?: number
   /** Nightsoul Bursts a rotation */
   nightsoulBursts?: number
+  opening?: TeamOptOpeningEnergy[]
   members: Partial<
     Record<
       CharacterKey,
@@ -1203,7 +1282,8 @@ export function favoniusFromRotation(
   sim: Pick<SimulationResult, 'start' | 'frames' | 'hits'>,
   keys: readonly CharacterKey[],
   rotations = 1,
-  onFieldAt: (t: number) => CharacterKey = (t) => keys[0] ?? ('' as never)
+  onFieldAt: (t: number) => CharacterKey = (t) => keys[0] ?? ('' as never),
+  bounded = false
 ): Partial<
   Record<
     CharacterKey,
@@ -1256,9 +1336,10 @@ export function favoniusFromRotation(
       for (const t of hits) {
         if (t < ready || random() >= FAVONIUS_ASSUMED.crit) continue
         ready = t + FAVONIUS_ASSUMED.cooldown
-        if (t < start) continue
+        const arrival = t + particleDelay(key)
+        if (bounded ? arrival < start || arrival >= end : t < start) continue
         procs++
-        const who = onFieldAt(t + particleDelay(key))
+        const who = onFieldAt(arrival)
         caught.set(who, (caught.get(who) ?? 0) + 1)
       }
     }
@@ -1306,7 +1387,8 @@ export function energyFromRotation(
   >,
   keys: readonly CharacterKey[],
   rotations = 1,
-  constellations?: Partial<Record<CharacterKey, number>>
+  constellations?: Partial<Record<CharacterKey, number>>,
+  bounded = false
 ): RotationEnergy {
   const start = sim.start
   const end = sim.start + sim.frames
@@ -1328,7 +1410,8 @@ export function energyFromRotation(
   // as the last kept one did from its start (its swap in included)
   const lastStart = sim.rotationStarts?.at(-1) ?? start
   const arrivalAt = (t: number) =>
-    onFieldAt(t < end ? t : lastStart + (t - end))
+    onFieldAt(bounded || t < end ? t : lastStart + (t - end))
+  const inWindow = (t: number) => t >= start && t < end
   const field = new Map<CharacterKey, number>()
   {
     let from = start
@@ -1353,23 +1436,25 @@ export function energyFromRotation(
     let procs = 0
     for (const h of sim.hits)
       if (
-        h.t >= start &&
+        (bounded || h.t >= start) &&
         h.t < end &&
         h.path[0] === '_reaction' &&
         ELECTRO_RESONANCE_REACTIONS.includes(h.path[1]) &&
         h.t - last >= 300
       ) {
-        procs++
         last = h.t
+        if (!bounded || inWindow(h.t + 100)) procs++
       }
     electroInterval = procs
-      ? Math.round((sim.frames / 60 / procs) * 10) / 10
+      ? bounded
+        ? Math.max(0.1, sim.frames / 60) / procs
+        : Math.round((sim.frames / 60 / procs) * 10) / 10
       : 0
   }
   // (the random Energy of Normal and Charged Attack hits, a member's own)
   const attackEnergy = attackEnergyFromRotation(sim, keys, per)
   // (Favonius: what each member's hits would trigger with one, counted only if it holds one)
-  const favonius = favoniusFromRotation(sim, keys, per, arrivalAt)
+  const favonius = favoniusFromRotation(sim, keys, per, arrivalAt, bounded)
   // (energy weapons: what each member would trigger with one, counted only if it holds one)
   const weaponTriggers = weaponTriggersFromRotation(sim, keys, per)
   // (members whose constellations give flat Energy as the rotation plays them)
@@ -1427,7 +1512,7 @@ export function energyFromRotation(
     const markers = sim.hits.filter(
       (h) =>
         h.characterKey === key &&
-        h.t >= start &&
+        (bounded || h.t >= start) &&
         h.t < end &&
         h.path[0] === '_marker' &&
         h.path[1] === 'particles'
@@ -1437,7 +1522,7 @@ export function energyFromRotation(
         .reverse()
         .find((a) => a.characterKey === key && a.start <= t)
     // (the sheet option a marker names: the kit's, or the one its markers count as: Flins)
-    const uses: {
+    const skillUses: {
       t: number
       hold: boolean
       particlesAt?: number
@@ -1451,12 +1536,13 @@ export function energyFromRotation(
             option: m.path[2] || MARKER_OPTIONS[key],
           }))
         : (sim.skillUses ?? []).filter(
-            (u) => u.characterKey === key && u.t >= start && u.t < end
+            (u) =>
+              u.characterKey === key && (bounded || u.t >= start) && u.t < end
           )
-    uses.sort((a, b) => a.t - b.t)
+    skillUses.sort((a, b) => a.t - b.t)
     // each use's first Skill hit (its particles' for most kits) before the next use
-    const firstHits = uses.map((u, i) => {
-      const until = uses[i + 1]?.t ?? u.t + 20 * 60
+    const skillHits = skillUses.map((u, i) => {
+      const until = skillUses[i + 1]?.t ?? u.t + 20 * 60
       return sim.hits.find(
         (h) =>
           h.characterKey === key &&
@@ -1466,6 +1552,13 @@ export function energyFromRotation(
           (h.tag === 'skill' || h.path[0] === 'skill')
       )
     })
+    const useIndices = skillUses.flatMap((use, i) => {
+      if (!bounded) return [i]
+      const made = use.particlesAt ?? skillHits[i]?.t ?? use.t
+      return inWindow(made + particleDelay(key)) ? [i] : []
+    })
+    const uses = useIndices.map((i) => skillUses[i])
+    const firstHits = useIndices.map((i) => skillHits[i])
     // (the rotation loops: the last use lasts to the first one's next loop, its hits past the end
     // are the first ones of the kept span)
     const useHits = (i: number) => {
@@ -1476,7 +1569,7 @@ export function energyFromRotation(
         .flatMap((h) =>
           h.t >= from && h.t < to
             ? [h]
-            : h.t >= start && h.t < to - sim.frames
+            : !bounded && h.t >= start && h.t < to - sim.frames
               ? [{ ...h, t: h.t + sim.frames }]
               : []
         )
@@ -1548,7 +1641,7 @@ export function energyFromRotation(
       member.secondaryMode = burstOption
       member.secondaryUses = bursts / per
     }
-    if (shortOption >= 0 && !modes[1]) {
+    if (shortOption >= 0 && !modes[1] && !bounded) {
       member.secondaryMode = shortOption
       member.secondaryUses = shortBursts / per
     }
@@ -1562,8 +1655,7 @@ export function energyFromRotation(
       for (const h of sim.hits)
         if (
           h.characterKey === key &&
-          h.t >= start &&
-          h.t < end &&
+          (bounded ? inWindow(h.t + particleDelay(key)) : inWindow(h.t)) &&
           h.path[0] === '_marker' &&
           h.path[1] === 'turretParticles'
         ) {
@@ -1578,7 +1670,9 @@ export function energyFromRotation(
     // (every field it fills is set, none left out: a rotation without, after one with, clears it)
     member.flatEnergy =
       SKILL_FLAT_ENERGY[key] !== undefined && !FLAT_ENERGY_KIT_MARKED.has(key)
-        ? (SKILL_FLAT_ENERGY[key]! * uses.length) / per
+        ? (SKILL_FLAT_ENERGY[key]! *
+            skillUses.filter((use) => inWindow(use.t)).length) /
+          per
         : 0
     // energy on the party's reactions (Flins' C1: 8 on a Lunar-Charged, once per 5.5 s), counted
     // as the rotation triggers them
@@ -1646,6 +1740,105 @@ export function energyFromRotation(
     ...(electroInterval !== undefined && { electroInterval }),
     ...(nightsoulBursts > 0 && { nightsoulBursts }),
   }
+}
+
+/**
+ * Time-limited energy budgets from frame zero and after each Burst expenditure. After a full cast
+ * the gauge is empty. After a short cast it can carry at most the full gauge minus that cast's cost.
+ */
+export function openingEnergyFromRotation(
+  sim: SimulationResult,
+  keys: readonly CharacterKey[],
+  constellations: Partial<Record<CharacterKey, number>>
+): TeamOptOpeningEnergy[] {
+  const windows: TeamOptOpeningEnergy[] = []
+  const bursts = sim.actions.filter((a) => a.frameKey?.startsWith('burst'))
+  const prepared = new Map<
+    string,
+    Omit<TeamOptOpeningEnergy, 'characterKey' | 'cost'>
+  >()
+  const inputsFor = (from: number, to: number) => {
+    const id = `${from}:${to}`
+    const cached = prepared.get(id)
+    if (cached) return cached
+    const seconds = (to - from) / 60
+    const energy = energyFromRotation(
+      {
+        ...sim,
+        start: from,
+        frames: to - from,
+        hits: sim.hits.filter((h) => h.t < to),
+      },
+      keys,
+      1,
+      constellations,
+      true
+    )
+    const settings = withRotationEnergy(
+      defaultEnergyCalculator(keys, seconds, keys[0], constellations),
+      keys,
+      energy
+    )
+    const burstRefundTicks: NonNullable<
+      TeamOptOpeningEnergy['burstRefundTicks']
+    > = {}
+    for (const burst of bursts) {
+      if (burst.start >= to) break
+      for (const delay of [120, 240, 360]) {
+        const tick = burst.start + delay
+        if (tick < from || tick >= to) continue
+        const key = burst.characterKey
+        burstRefundTicks[key] = (burstRefundTicks[key] ?? 0) + 1
+      }
+    }
+    const inputs = {
+      castTime: to / 60,
+      seconds,
+      members: settings.members,
+      electroInterval: energy.electroInterval ?? 0,
+      nightsoulBursts: energy.nightsoulBursts,
+      burstRefundTicks,
+    }
+    prepared.set(id, inputs)
+    return inputs
+  }
+  for (const characterKey of keys) {
+    const data = energyCalcData[characterKey]
+    if (!data) continue
+    const full = Math.max(0, data.burstCost - data.burstDiscount)
+    if (!full) continue
+    const short = SHORT_BURSTS[characterKey]
+    const shortCost = -(
+      data.skills.find((skill) => skill.label === short?.label)?.flatEnergy ?? 0
+    )
+    let spent = 0
+    let anchors = [{ at: 0, credit: 0, spent: 0 }]
+    for (const burst of bursts) {
+      if (burst.characterKey !== characterKey || burst.optional) continue
+      const cost =
+        shortCost > 0 && burst.variant?.key === short?.variant
+          ? shortCost
+          : full
+      spent += cost
+      for (const anchor of anchors) {
+        const need = spent - anchor.spent - anchor.credit
+        if (need > 0)
+          windows.push({
+            characterKey,
+            cost: need,
+            ...inputsFor(anchor.at, burst.start),
+          })
+      }
+      const anchor = {
+        at: burst.start,
+        credit: Math.max(0, full - cost),
+        spent,
+      }
+      if (cost >= full) anchors = [anchor]
+      else anchors.push(anchor)
+    }
+  }
+  return windows
 }
 
 /**
@@ -1735,7 +1928,10 @@ export function withRotationEnergy(
       members[k] = { ...members[k]!, fieldTime: rounded[i]! / 10 }
     })
   }
-  return { ...settings, ...electro, ...nightsoul, members }
+  const next = { ...settings, ...electro, ...nightsoul, members }
+  if (energy.opening?.length) next.opening = energy.opening
+  else delete next.opening
+  return next
 }
 
 /**

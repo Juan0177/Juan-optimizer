@@ -36,6 +36,7 @@ import {
   kqmTeamOverrides,
   MOONGECKO_BOSS,
   sameRunEnemy,
+  startsWithoutEnergy,
   teamEnergyAuto,
   teamLinkOwnGear,
   teamLinkUseImported,
@@ -709,9 +710,16 @@ export default function TeamBuildWorkspace({
   )
   // the Moongecko's Radiant Cocoon and Disentangled: the damage shown evaluated in them too (the
   // equipped builds', or the KQM builds' played)
+  const hasOpening = !!applications?.opening
+  const liveOpening = hasOpening && startsWithoutEnergy(enemyTeam)
+  const resultFightEnemy =
+    result?.enemy && team && sameRunEnemy(result.enemy, team)
+      ? team
+      : result?.enemy
+  const resultOpening = hasOpening && startsWithoutEnergy(resultFightEnemy)
   const cocoonSettings = useMemo(
     () =>
-      !stygian
+      !stygian && !liveOpening
         ? undefined
         : mode === 'kqm'
           ? kqmOverrides && kqmAttacks
@@ -722,11 +730,11 @@ export default function TeamBuildWorkspace({
               }
             : undefined
           : evaluationSettings,
-    [stygian, mode, kqmOverrides, kqmAttacks, evaluationSettings]
+    [stygian, liveOpening, mode, kqmOverrides, kqmAttacks, evaluationSettings]
   )
   const cocoonNow = useCocoonEvaluations(teamId, cocoonSettings, {
     cocoon: stygian?.boss.id === MOONGECKO_BOSS,
-    opening: applications?.opening?.attacks,
+    opening: liveOpening ? applications?.opening?.attacks : undefined,
   })
   const fightNow = useMemo(
     () =>
@@ -877,16 +885,18 @@ export default function TeamBuildWorkspace({
   // the shown builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
   const resultCocoonSettings = useMemo(
     () =>
-      shownOverrides && result?.enemy && appliedStygianPreset(result.enemy)
+      shownOverrides &&
+      result?.enemy &&
+      (appliedStygianPreset(result.enemy) || resultOpening)
         ? { ...shownOverrides, attacks: shownTeamOpt.attacks }
         : undefined,
-    [shownOverrides, result?.enemy, shownTeamOpt.attacks]
+    [shownOverrides, result?.enemy, shownTeamOpt.attacks, resultOpening]
   )
   const resultCocoon = useCocoonEvaluations(teamId, resultCocoonSettings, {
     cocoon:
       !!result?.enemy &&
       appliedStygianPreset(result.enemy)?.boss.id === MOONGECKO_BOSS,
-    opening: applications?.opening?.attacks,
+    opening: resultOpening ? applications?.opening?.attacks : undefined,
   })
   // Reveal only a result that this visit started. Rankings and restored results stay in place.
   const resultTime = result?.savedAt
@@ -1602,7 +1612,7 @@ export default function TeamBuildWorkspace({
                       ranking={
                         !teamBaseStale &&
                         !result.result.rankingsComplete &&
-                        !!result.result.optimized.length
+                        result.result.optimized.length
                           ? {
                               done: result.result.rankedMembers?.length ?? 0,
                               total: result.result.optimized.length,

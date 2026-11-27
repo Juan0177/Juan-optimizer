@@ -1,16 +1,28 @@
 // @vitest-environment jsdom
 /**
- * A fight from no energy plays its first rotation without Bursts. What their Burst would have made
- * ready (a Skill it resets) is left out, not waited for: a player moves on.
+ * An automatic opener omits Bursts. A written opener can require a Burst at a particular time.
  */
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import type { LoadoutDatum } from '@genshin-optimizer/gi/db'
-import { ArtCharDatabase } from '@genshin-optimizer/gi/db'
+import {
+  ArtCharDatabase,
+  defaultTeamOptKqm,
+  initTeamOpt,
+  validateTeamOpt,
+} from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
-import { teamOptMembers } from '@genshin-optimizer/gi/ui'
+import {
+  calculateEnergyRecharge,
+  defaultEnergyCalculator,
+  solverEnergyTargets,
+  teamOptMembers,
+  UNREACHABLE_OPENING_ER,
+  withRotationEnergy,
+  writtenKqmReplay,
+} from '@genshin-optimizer/gi/ui'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { simulateWritten } from './RotationWriter'
+import { simulateWritten, teamRotationEnergy } from './RotationWriter'
 
 const MEMBERS: CharacterKey[] = ['Bennett', 'Sucrose']
 const stored = new Map<string, string>()
@@ -49,29 +61,32 @@ describe('the first rotation from no energy', () => {
     loadoutData: ids.map((teamCharId) => ({ teamCharId })) as LoadoutDatum[],
   })
   const members = teamOptMembers(database, teamId)
+  const playArgs = {
+    timing: { edits: {} },
+    frameData: {},
+    team: {
+      members: MEMBERS,
+      constellations: {},
+      elements: Object.fromEntries(
+        MEMBERS.map((m) => [m, getCharEle(m)])
+      ) as never,
+      gear: {},
+    },
+    names: MEMBERS.map((characterKey) => ({
+      characterKey,
+      name: characterKey,
+    })),
+    members,
+    database: database as never,
+    teamId,
+    gender: 'F' as const,
+    openerWarning: (w: string) => w,
+  }
   const play = (text: string, withoutBursts: boolean) =>
     simulateWritten({
+      ...playArgs,
       text,
       opener: '',
-      timing: { edits: {} },
-      frameData: {},
-      team: {
-        members: MEMBERS,
-        constellations: {},
-        elements: Object.fromEntries(
-          MEMBERS.map((m) => [m, getCharEle(m)])
-        ) as never,
-        gear: {},
-      },
-      names: MEMBERS.map((characterKey) => ({
-        characterKey,
-        name: characterKey,
-      })),
-      members,
-      database: database as never,
-      teamId,
-      gender: 'F',
-      openerWarning: (w) => w,
       repeats: 1,
       keep: 'all',
       withoutBursts,
@@ -100,5 +115,90 @@ describe('the first rotation from no energy', () => {
       )
     ).toBe(true)
     expect(opening.sim!.actions.some((a) => a.text === 'Q')).toBe(false)
+  })
+  it('plays the explicit zero-Energy opener instead of stripping its required Burst', () => {
+    const opening = simulateWritten({
+      ...playArgs,
+      text: 'Bennett N1 W10',
+      opener: 'Bennett E W2 Q',
+      startingEmpty: 'first',
+      repeats: 1,
+    })
+    expect(opening?.sim?.actions.map((a) => a.text)).toEqual(['E', 'Q'])
+  })
+
+  const estimate = (opener: string, fullEnergy: boolean) => {
+    database.teams.set(teamId, { fightSettings: { fullEnergy } })
+    const replay = teamRotationEnergy({
+      ...playArgs,
+      text: 'Bennett E W6 E W2 Q W12 -> Sucrose N1',
+      saved: { opener, timing: playArgs.timing, frameData: {} },
+    })!
+    const calculator = withRotationEnergy(
+      {
+        ...defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+        enemyParticles: 0,
+      },
+      MEMBERS,
+      replay.energy
+    )
+    return calculateEnergyRecharge(MEMBERS, calculator, {})
+  }
+
+  it('raises ER to the timed opener requirement for a custom enemy', () => {
+    const startFull = estimate('Bennett E W2 Q', true)
+    const startEmpty = estimate('Bennett E W2 Q', false)
+    expect(startFull.opening).toBeUndefined()
+    expect(startEmpty.opening?.Bennett?.castTime).toBeGreaterThan(2)
+    expect(startEmpty.opening?.Bennett?.required).toBeGreaterThan(
+      startFull.targets.Bennett!
+    )
+    expect(startEmpty.targets.Bennett).toBeGreaterThan(
+      startFull.targets.Bennett!
+    )
+  })
+
+  it('requires the particles to arrive before the cast and permits a fallback', () => {
+    const tooEarly = estimate('Bennett E Q', false)
+    expect(tooEarly.opening?.Bennett?.required).toBe(Number.POSITIVE_INFINITY)
+    expect(tooEarly.targets.Bennett).toBeUndefined()
+    expect(solverEnergyTargets(tooEarly).Bennett).toBe(UNREACHABLE_OPENING_ER)
+    const fallback = estimate('Bennett E Q/N1 W2', false)
+    expect(fallback.targets.Bennett).toBeGreaterThanOrEqual(100)
+  })
+
+  it('uses the KQM tab’s custom enemy and preserves the timed requirements in saved settings', () => {
+    database.teams.set(teamId, { fightSettings: { fullEnergy: true } })
+    const teamOpt = {
+      ...initTeamOpt(),
+      kqm: {
+        ...defaultTeamOptKqm,
+        enemy: { enemyOverride: {}, fightSettings: { fullEnergy: false } },
+      },
+    }
+    const replay = writtenKqmReplay({
+      ...playArgs,
+      teamOpt,
+      text: 'Bennett E W6 E W2 Q W12 -> Sucrose N1',
+      opener: 'Bennett E W2 Q',
+      frameData: {},
+    })!({ constellations: {}, gear: {}, overrides: {} })
+    const calculator = withRotationEnergy(
+      defaultEnergyCalculator(MEMBERS, replay.rotationTime),
+      MEMBERS,
+      replay.energy
+    )
+    const restored = validateTeamOpt({
+      ...teamOpt,
+      kqm: { ...teamOpt.kqm, energyCalculator: calculator },
+    })
+    expect(restored?.kqm?.energyCalculator?.opening?.[0]).toMatchObject({
+      characterKey: 'Bennett',
+      cost: 60,
+    })
+    expect(
+      calculateEnergyRecharge(MEMBERS, restored!.kqm!.energyCalculator!, {})
+        .opening?.Bennett?.required
+    ).toBeGreaterThan(100)
   })
 })

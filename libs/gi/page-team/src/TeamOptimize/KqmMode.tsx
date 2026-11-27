@@ -46,6 +46,7 @@ import {
   MOONGECKO_BOSS,
   sameRunEnemy,
   setKqmBuildThreads,
+  startsWithoutEnergy,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
@@ -172,6 +173,7 @@ const compactFieldSx = {
 
 type RotationWorked = {
   for: string
+  replayKey: string
   energy?: RotationEnergy
   rotationTime?: number
 }
@@ -226,9 +228,11 @@ function useRotationEnergy(
   const { i18n } = useTranslation()
   // (with the rotation text it was worked out for: a newer text's is still on its way)
   const [worked, setWorked] = useState<RotationWorked>()
-  const latest = useRef(teamOpt)
-  latest.current = teamOpt
+  const latest = useRef({ teamOpt, members })
+  latest.current = { teamOpt, members }
   const text = useAppliedRotation(kqmRotationId(teamId))
+  const team = useTeam(teamId)
+  const zeroEnergy = startsWithoutEnergy(teamOpt.kqm?.enemy ?? team)
   const constellations = JSON.stringify(
     members.map((m) => kqmMemberConstellation(m.characterKey, teamOpt.kqm))
   )
@@ -250,8 +254,8 @@ function useRotationEnergy(
   const { opener, timing, frameData } = useRotationSettings(
     kqmRotationId(teamId)
   )
-  const played = JSON.stringify([opener, timing, frameData])
-  const rotation = playedRotationKey(text, opener, timing, frameData)
+  const written = playedRotationKey(text, opener, timing, frameData)
+  const rotation = written && zeroEnergy ? `${written}|0 Energy` : written
   const replayKey = JSON.stringify([
     gender,
     i18n?.language,
@@ -265,9 +269,14 @@ function useRotationEnergy(
   const [cached] = useState(() =>
     rotation ? cachedReplay(database, teamId, replayKey) : undefined
   )
-  const shown = rotation ? (worked ?? cached) : undefined
+  const shown =
+    worked?.replayKey === replayKey
+      ? worked
+      : cached?.replayKey === replayKey
+        ? cached
+        : undefined
   useEffect(() => {
-    if (!text.trim()) {
+    if (!rotation) {
       setWorked(undefined)
       return
     }
@@ -283,11 +292,16 @@ function useRotationEnergy(
         gender,
         i18n,
         teamId,
-        latest.current,
-        members
+        latest.current.teamOpt,
+        latest.current.members
       )
       if (cancelled) return
-      const result = { for: rotation, energy: next, rotationTime: seconds }
+      const result = {
+        for: rotation,
+        replayKey,
+        energy: next,
+        rotationTime: seconds,
+      }
       const byTeam = workedReplays.get(database) ?? new Map()
       workedReplays.set(database, byTeam)
       byTeam.set(teamId, {
@@ -310,19 +324,7 @@ function useRotationEnergy(
       cancelled = true
       clearTimeout(id)
     }
-    // (members by their keys; the rest of the team's settings read when it runs)
-  }, [
-    database,
-    gender,
-    i18n,
-    teamId,
-    text,
-    constellations,
-    cadence,
-    keys,
-    played,
-    replayKey,
-  ])
+  }, [database, gender, i18n, teamId, rotation, replayKey])
   return {
     text,
     rotation,
@@ -487,8 +489,17 @@ export function KqmSettings({
   const erTextInvalid = (text = '') =>
     !!text.trim() && !kqmHasEnergyRequirement(Number(text.replace(',', '.')))
   const missingEr = members.filter((m) => erTextInvalid(erText[m.characterKey]))
+  const openingAtZero =
+    kqm.energySource !== 'manual' &&
+    energyFor === writtenRotation &&
+    Object.values(calculatorEstimate.opening ?? {}).some(
+      (check) => check.castTime === 0 && !Number.isFinite(check.required)
+    )
   const blocked =
-    !optimized.length || !!missingWeapons.length || !!missingEr.length
+    !optimized.length ||
+    !!missingWeapons.length ||
+    !!missingEr.length ||
+    openingAtZero
   const setEr = (characterKey: CharacterKey, text: string) => {
     setErText((previous) => ({ ...previous, [characterKey]: text }))
     const value = text.trim() ? Number(text.replace(',', '.')) : undefined
@@ -499,17 +510,22 @@ export function KqmSettings({
       else delete requirements[characterKey]
     })
   }
+  const appliedEr = teamOpt.kqm?.energyRecharge
+  const erSource = teamOpt.kqm?.energySource
   useEffect(() => {
-    if (teamOpt.kqm?.energySource === 'calculator')
+    if (erSource === 'calculator')
       setErText(
         Object.fromEntries(
           members.map(({ characterKey }) => [
             characterKey,
-            kqmEnergyRequirement(teamOpt.kqm, characterKey).toString(),
+            kqmEnergyRequirement(
+              { energyRecharge: appliedEr },
+              characterKey
+            ).toString(),
           ])
         )
       )
-  }, [teamOpt.kqm?.energyRecharge, teamOpt.kqm?.energySource, members])
+  }, [appliedEr, erSource, members])
   // Applied ER targets stay current when the common rotation length or the written rotation's
   // inputs change. They also apply by themselves: with a written rotation (its energy worked
   // out), for a team that has not typed its own, and whenever the rotation is saved or changed
@@ -552,17 +568,23 @@ export function KqmSettings({
         ? t('teamOpt.kqm.noWeaponsShort', 'Select weapons')
         : calculatorDirty
           ? t('teamOpt.kqm.calc.review', 'Apply ER changes')
-          : missingEr.length
-            ? t('teamOpt.kqm.erInvalidShort', {
-                defaultValue: '{{count}} ER targets below 100%',
-                count: missingEr.length,
-              })
-            : ''
+          : openingAtZero
+            ? t(
+                'teamOpt.kqm.calc.openingAtZero',
+                'Add energy before the first Burst'
+              )
+            : missingEr.length
+              ? t('teamOpt.kqm.erInvalidShort', {
+                  defaultValue: '{{count}} ER targets below 100%',
+                  count: missingEr.length,
+                })
+              : ''
   // the first problem is ER targets below 100%: one click sets them to 100% (no requirement)
   const problemIsEr =
     !!canRun &&
     !!optimized.length &&
     !missingWeapons.length &&
+    !openingAtZero &&
     !calculatorDirty &&
     !!missingEr.length
   const fillMissingEr = () => {
@@ -2286,10 +2308,18 @@ export function KqmResults({
   const [shown, setShown] = useState<CharacterKey | undefined>(
     result.optimized[0]
   )
+  // Fight settings follow the live enemy while it takes the same damage.
+  const fightEnemy = useMemo(
+    () => (enemy && kqmTeam && sameRunEnemy(enemy, kqmTeam) ? kqmTeam : enemy),
+    [enemy, kqmTeam]
+  )
+  const opening = startsWithoutEnergy(fightEnemy)
+    ? applications?.opening
+    : undefined
   // the builds in the Moongecko's Radiant Cocoon and Disentangled, when the run's enemy is it
   const cocoonSettings = useMemo(
     () =>
-      enemy && appliedStygianPreset(enemy)
+      enemy && (appliedStygianPreset(enemy) || opening)
         ? (() => {
             const overrides = kqmTeamOverrides(
               database,
@@ -2304,13 +2334,13 @@ export function KqmResults({
             }
           })()
         : undefined,
-    [enemy, database, teamId, runSettings, result]
+    [enemy, opening, database, teamId, runSettings, result]
   )
   const moongecko =
     !!enemy && appliedStygianPreset(enemy)?.boss.id === MOONGECKO_BOSS
   const cocoon = useCocoonEvaluations(teamId, cocoonSettings, {
     cocoon: moongecko,
-    opening: applications?.opening?.attacks,
+    opening: opening?.attacks,
   })
   const compared =
     shown && result.optimized.includes(shown) ? shown : result.optimized[0]
@@ -2329,12 +2359,7 @@ export function KqmResults({
   // (a new run starts from its own builds)
   useEffect(() => setComparing(undefined), [result])
   const view = comparing ?? result
-  // the enemy the builds are for: the team's now while it takes the same damage (its preset and
-  // HP too: the builds do not depend on them), else the one they were found for
-  const fightEnemy = useMemo(
-    () => (enemy && kqmTeam && sameRunEnemy(enemy, kqmTeam) ? kqmTeam : enemy),
-    [enemy, kqmTeam]
-  )
+  const dataEnemy = team?.enemyOverride
   const fight = useMemo(
     () =>
       // (the Moongecko's fight needs its cocoon evaluations: no estimate without them)
@@ -2346,7 +2371,7 @@ export function KqmResults({
             teamData,
             rotationTime,
             enemyOverride: enemy.enemyOverride,
-            ...(team ? { dataEnemy: team.enemyOverride } : {}),
+            dataEnemy,
             applications,
             cocoon,
           })
@@ -2359,6 +2384,7 @@ export function KqmResults({
       runSettings.attacks,
       teamData,
       rotationTime,
+      dataEnemy,
       applications,
       cocoon,
     ]

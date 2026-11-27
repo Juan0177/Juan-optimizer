@@ -13,8 +13,8 @@ import {
   type RotationAction,
 } from './parse'
 import { rotationRandom, stratifiedRandoms } from './random'
-import { isSacrificialWeapon } from './sacrificial'
 import { type AuraTrace, elementalReactions } from './reactions'
+import { isSacrificialWeapon } from './sacrificial'
 import type {
   ActionResult,
   ActionVariant,
@@ -351,6 +351,7 @@ export function simulateRotation({
   frameOverrides = {},
   frameData = {},
   openerCounted = false,
+  skipOptionalBursts = false,
   freezeImmune = false,
   normalStrings,
 }: {
@@ -397,6 +398,8 @@ export function simulateRotation({
    * rotations and not counted (a setup for the loop)
    */
   openerCounted?: boolean
+  /** Opening ER estimates take the fallback for optional Bursts. */
+  skipOptionalBursts?: boolean
   /** The enemy can't be frozen (see `ReactionOptions.freezeImmune`) */
   freezeImmune?: boolean
   /** Each Normal Attack string a kit plays: its member and how many hits the whole string has */
@@ -1715,7 +1718,9 @@ export function simulateRotation({
     // Cooldowns and resource gates both wait, as native ActionReady does. A queued
     // reaction can fill a resource, expire a mode, or change the cooldown being checked.
     const waitStart = now
-    const decided = decidedNotReady === action
+    const decided =
+      decidedNotReady === action ||
+      (skipOptionalBursts && action.kind === 'burst' && action.optional)
     decidedNotReady = undefined
     for (;;) {
       const readyAt = decided

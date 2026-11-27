@@ -79,6 +79,7 @@ import {
   isCalcEnergyWeapon,
   isFavonius,
   type RotationEnergy,
+  solverEnergyTargets,
   syncEnergyCalculator,
   upgradeConstellationModes,
   withRotationEnergy,
@@ -1502,6 +1503,7 @@ async function runKqm({
         : isRefit
           ? upgradeConstellationModes(synced, keys, kqmCons)
           : synced),
+      ...(simulation?.energy && { opening: simulation.energy.opening }),
       rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
     }
   }
@@ -1808,15 +1810,16 @@ async function runKqm({
         )
       : undefined
     if (calculated?.errors.length) throw new Error(calculated.errors.join(' '))
+    const targets = calculated && solverEnergyTargets(calculated)
     return Object.fromEntries(
       Object.entries(baseFilters).map(([ck, f]) => [
         ck,
-        calculated
+        targets
           ? {
               ...f,
               [JSON.stringify(['basic', 'enerRech_'])]: [
                 {
-                  value: calculated.targets[ck as CharacterKey]!,
+                  value: targets[ck as CharacterKey]!,
                   disabled: false,
                 },
               ],
@@ -3187,7 +3190,7 @@ async function runKqm({
       JSON.stringify(
         isRefit
           ? [p.attacks, p.rotationTime, p.energyRotationTime, p.energy]
-          : [p.attacks, p.rotationTime, p.energyRotationTime]
+          : [p.attacks, p.rotationTime, p.energyRotationTime, p.energy?.opening]
       )
     const changed = !played || playedId(next) !== playedId(played)
     played = next

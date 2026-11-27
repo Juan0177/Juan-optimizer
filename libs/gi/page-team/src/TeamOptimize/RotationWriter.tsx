@@ -49,24 +49,26 @@ import {
   perRotation,
   REACTION_NAMES,
   type RotationMember,
+  replayTeamAttacks,
   rotationAttacks,
   rotationBuffDefaults,
   type SimHit,
   type SimTeam,
-  simTeamOf,
   STEADY_COUNTED,
   STEADY_REPEATS,
+  simTeamOf,
   simulateWritten,
   simulateWrittenAsync,
   syncEnergyCalculator,
+  tabStartsWithoutEnergy,
   teamBurstEvery,
   teamOptMembers,
   templatesForTeam,
   type WrittenRotation,
   withRotationEnergy,
   writtenKqmReplay,
+  writtenOpeningEnergy,
   writtenSeconds,
-  replayTeamAttacks,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -776,7 +778,7 @@ export function teamRotationEnergy({
     givenBurstEvery !== undefined
       ? givenBurstEvery
       : teamBurstEvery(database.teams.get(teamId)?.teamOpt)
-  const played = simulateWritten({
+  const playArgs = {
     text,
     opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
     timing:
@@ -791,20 +793,26 @@ export function teamRotationEnergy({
     openerWarning: (w: string) => w,
     team,
     repeats: KQM_REPEATS,
-    keep: 'last2',
+    keep: 'last2' as const,
     samples: 32,
     burstEvery,
     sacrificial: false,
-  })
+  }
+  const played = simulateWritten(playArgs)
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
   return {
-    energy: energyFromRotation(
-      played.sim,
-      members.map((m) => m.characterKey),
-      counted,
-      team.constellations
-    ),
+    energy: {
+      ...energyFromRotation(
+        played.sim,
+        members.map((m) => m.characterKey),
+        counted,
+        team.constellations
+      ),
+      ...(tabStartsWithoutEnergy(database, teamId) && {
+        opening: writtenOpeningEnergy(playArgs),
+      }),
+    },
     rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
   }
 }
@@ -2474,7 +2482,7 @@ function WriterModal({
                         )}
                         info={t('teamOpt.writer.openerTip', {
                           defaultValue:
-                            'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. It only sets up cooldowns, summons and auras and is not counted; counting from the start, tick Counted to make it the first rotation.',
+                            'Write a different first rotation for setup or a 0 Energy start. Automatic ER checks mandatory Bursts at their written cast time. Use Q? to make a Burst optional, or Q/N1 to give it a fallback. With From the start timing, turn on Counted to include the opener in rotation damage.',
                           ...STEADY_RANGE,
                         })}
                         aside={

@@ -138,6 +138,7 @@ vi.mock('react-i18next', () => ({
   }),
 }))
 vi.mock('@genshin-optimizer/gi/ui', () => ({
+  startsWithoutEnergy: () => false,
   CharacterName: ({ characterKey }: { characterKey: string }) => (
     <>{characterKey}</>
   ),

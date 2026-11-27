@@ -1,4 +1,20 @@
 {
+  "artifactBenchmarks": {
+    "title": "Artifact benchmarks",
+    "rolls_one": "{{rolls}} useful roll",
+    "rolls_other": "{{rolls}} useful rolls",
+    "pieces": "{{equipped}} of 5 equipped",
+    "method": "Compares substat value in average 5★ rolls for the stats your optimization target or stat minimums use. Benchmarks cover five slots and account for equipped 4★ pieces and main-stat restrictions.",
+    "stats": "Useful stats · {{stats}}",
+    "noArtifacts": "Equip artifacts to compare them with KQM Standard, Good and Great.",
+    "noTarget": "Pick an optimization target to see how these artifacts compare.",
+    "noUsefulStats": "This optimization target has no artifact substats to compare.",
+    "met": "Benchmark met",
+    "above_one": "{{rolls}} roll above",
+    "above_other": "{{rolls}} rolls above",
+    "short_one": "{{rolls}} roll short",
+    "short_other": "{{rolls}} rolls short"
+  },
   "searchLabel": {
     "char": "Characters",
     "team": "Team Name"

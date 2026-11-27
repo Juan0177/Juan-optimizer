@@ -2,7 +2,11 @@ import type { Team, TeamFightSettings } from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
 import type { FightTeam } from '@genshin-optimizer/gi/ui'
-import { enemyFreezeImmune, MOONGECKO } from '@genshin-optimizer/gi/ui'
+import {
+  enemyFreezeImmune,
+  MOONGECKO,
+  startsWithoutEnergy,
+} from '@genshin-optimizer/gi/ui'
 import { alpha, Box, ButtonBase, InputBase, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
@@ -315,10 +319,7 @@ export function FreezeSetting({
   )
 }
 
-/**
- * A Stygian Onslaught fight's start: with no energy (as the game starts it: the first rotation
- * without its Bursts), or with full energy
- */
+/** Starting Energy for either kind of encounter. */
 export function StartEnergySetting({
   teamId,
   team,
@@ -330,13 +331,10 @@ export function StartEnergySetting({
 }) {
   const { t } = useTranslation('page_team')
   const setEnemy = useSetEnemy(teamId)
-  const full = !!team.fightSettings?.fullEnergy
+  const full = !startsWithoutEnergy(team)
   const set = (fullEnergy: boolean) =>
     setEnemy((team) => {
-      const next: TeamFightSettings = { ...team.fightSettings }
-      if (fullEnergy) next.fullEnergy = true
-      else delete next.fullEnergy
-      team.fightSettings = Object.keys(next).length ? next : undefined
+      team.fightSettings = { ...team.fightSettings, fullEnergy }
     })
   return (
     <Row
@@ -346,12 +344,12 @@ export function StartEnergySetting({
           ? undefined
           : t(
               'enemy.startEnergyNone',
-              'The first rotation without Bursts, as the game starts it'
+              'Write a First rotation only to time your opening Bursts. Automatic ER checks the Energy gained before they’re cast.'
             )
       }
     >
       <Toggle on={!full} disabled={disabled} onClick={() => set(false)}>
-        {t('enemy.startEnergyZero', 'None')}
+        {t('enemy.startEnergyZero', '0 Energy')}
       </Toggle>
       <Toggle on={full} disabled={disabled} onClick={() => set(true)}>
         {t('enemy.startEnergyFull', 'Full')}

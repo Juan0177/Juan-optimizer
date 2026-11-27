@@ -107,7 +107,7 @@ export function RunDialog({
   /** With no member to optimize, Start still computes the team as it is (an imported team's builds) */
   evaluateOnly?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   // (the set effects the rotation times in a run: their switches play no part)
   const timed = useTimedSetEffects(teamId, teamOpt, open)
@@ -221,23 +221,32 @@ export function RunDialog({
   const asItIs = !!evaluateOnly && !toOptimize.length
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   const canStart =
-    ((toOptimize.length > 0 && eligible) || asItIs) && !energy.updating
-  const notice = asItIs
-    ? t(
-        'teamOpt.runDialog.asItIs',
-        'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
-      )
-    : toOptimize.length && !eligible
-      ? artifacts.length
-        ? t(
-            'teamOpt.runDialog.incompleteInventory',
-            'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
-          )
-        : t(
-            'teamOpt.runDialog.emptyInventory',
-            'Add or import artifacts before optimizing the team.'
-          )
-      : undefined
+    ((toOptimize.length > 0 && eligible) || asItIs) &&
+    !energy.updating &&
+    !energy.blockedOpening
+  const notice = energy.blockedOpening
+    ? t('teamOpt.kqm.calc.openingBlocked', {
+        defaultValue:
+          '{{character}} can’t charge their Burst by {{time}} s. Move the Burst later or add particles before the cast.',
+        character: t(`charNames_gen:${energy.blockedOpening[0]}`),
+        time: energy.blockedOpening[1].castTime.toFixed(1),
+      })
+    : asItIs
+      ? t(
+          'teamOpt.runDialog.asItIs',
+          'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
+        )
+      : toOptimize.length && !eligible
+        ? artifacts.length
+          ? t(
+              'teamOpt.runDialog.incompleteInventory',
+              'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
+            )
+          : t(
+              'teamOpt.runDialog.emptyInventory',
+              'Add or import artifacts before optimizing the team.'
+            )
+        : undefined
   return (
     <ModalWrapper
       open={open}
@@ -374,7 +383,11 @@ export function RunDialog({
           }}
         >
           {notice && (
-            <Alert severity="info" role="status" sx={{ mb: 1.5 }}>
+            <Alert
+              severity={energy.blockedOpening ? 'warning' : 'info'}
+              role="status"
+              sx={{ mb: 1.5 }}
+            >
               {notice}
             </Alert>
           )}
