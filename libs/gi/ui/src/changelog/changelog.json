@@ -1,5 +1,19 @@
 [
   {
+    "version": "1.47.3",
+    "date": "2026-11-27",
+    "new": [
+      "Casual artifact standard, below KQM Standard: 20 useful rolls, as artifacts of average luck."
+    ],
+    "improved": [
+      "Artifact standards count only useful rolls; the rest go on stats the build does not use. Good gives 35, Great 40 and Top 45, so Good is now above KQM Standard. KQM results made before this show as out of date.",
+      "Artifact standards say their substat crit value, and how a crit circlet adds to it."
+    ],
+    "fixed": [
+      "Investment comparison counts the ER that extra constellations, R1 signatures and alternative rotations change, and refits the teammates it affects."
+    ]
+  },
+  {
     "version": "1.47.2",
     "date": "2026-11-27"
   },

@@ -4,6 +4,21 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.47.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.3) (2026-11-27)
+
+### New
+
+- Casual artifact standard, below KQM Standard: 20 useful rolls, as artifacts of average luck.
+
+### Improved
+
+- Artifact standards count only useful rolls; the rest go on stats the build does not use. Good gives 35, Great 40 and Top 45, so Good is now above KQM Standard. KQM results made before this show as out of date.
+- Artifact standards say their substat crit value, and how a crit circlet adds to it.
+
+### Fixed
+
+- Investment comparison counts the ER that extra constellations, R1 signatures and alternative rotations change, and refits the teammates it affects.
+
 ## [v1.47.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.0) (2026-11-27)
 
 ### New
