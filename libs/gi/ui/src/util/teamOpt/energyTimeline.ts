@@ -5,6 +5,7 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
 import {
+  enemyDropStart,
   energyCalcData,
   energyWeaponFlat,
   energyWeaponPerBurst,
@@ -54,8 +55,7 @@ interface GaugeEvent {
 function gaugeEvents(
   trace: TeamEnergyTrace,
   settings: TeamOptEnergyCalculator,
-  { weapons, refinements, sets }: Loadout,
-  opening: boolean
+  { weapons, refinements, sets }: Loadout
 ) {
   const keys = trace.members
   const by = new Map(keys.map((key) => [key, [] as GaugeEvent[]]))
@@ -223,13 +223,18 @@ function gaugeEvents(
   }
   // The calculator exposes a drop rate, without damage thresholds or a drop schedule.
   // Integrate the expected rate over each active interval, at most a second per installment.
-  if (!opening && settings.enemyParticles > 0)
+  const dropsFrom = trace.repeat ? 0 : 60 * enemyDropStart(settings)
+  if (settings.enemyParticles > 0)
     for (const [i, active] of trace.active.entries()) {
       const end = Math.min(
         trace.frames,
         trace.active[i + 1]?.frame ?? trace.frames
       )
-      for (let from = active.frame; from < end; from += 60) {
+      for (
+        let from = Math.max(active.frame, dropsFrom);
+        from < end;
+        from += 60
+      ) {
         const span = Math.min(60, end - from)
         particles(
           from + span / 2,
@@ -357,7 +362,7 @@ export function trackEnergyRecharge(
   if (!entries) cache.set(trace, (entries = new Map()))
   const cached = entries.get(signature)
   if (cached) return cached
-  const gauges = gaugeEvents(trace, settings, loadout, opening)
+  const gauges = gaugeEvents(trace, settings, loadout)
   let result: Requirements = {}
   let er: TeamValues<number> = {}
   const scaled = trace.events.some(

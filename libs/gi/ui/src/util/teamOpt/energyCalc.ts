@@ -571,13 +571,18 @@ export function calculateEnergyRecharge(
       } = window
       if (!keys.includes(characterKey) || keys.some((key) => !members[key]))
         continue
+      const fromStart = castTime - seconds < 1e-6
+      const dropSeconds = Math.max(
+        0,
+        seconds - (fromStart ? enemyDropStart(settings) : 0)
+      )
       const required = calculateEnergyRecharge(
         keys,
         {
           rotationTime: Math.max(0.1, seconds),
           clearTime: settings.clearTime,
-          // Average enemy drops from the repeating rotation have no opening timestamps.
-          enemyParticles: 0,
+          enemyParticles:
+            (settings.enemyParticles * dropSeconds) / Math.max(0.1, seconds),
           rng: settings.rng,
           electroInterval,
           nightsoulBursts,
@@ -1031,6 +1036,16 @@ export const SKILL_FLAT_ENERGY: Partial<Record<CharacterKey, number>> = {
 /** gcsim's ParticleDelay: frames from the hit that makes a Skill's particles to their arrival */
 export const particleDelay = (key: CharacterKey) =>
   key === 'Bennett' ? 80 : 100
+
+/**
+ * Seconds into the fight from which the enemy drop rate counts: kqmsim's first drop comes one
+ * interval in, so its expected drops by t are t / interval − ½ (the rate from half an interval)
+ */
+export const enemyDropStart = ({
+  clearTime,
+  enemyParticles,
+}: Pick<TeamOptEnergyCalculator, 'clearTime' | 'enemyParticles'>) =>
+  enemyParticles > 0 ? clearTime / enemyParticles / 2 : 0
 
 /** The reactions that make Electro resonance's particle (gcsim's, every 5 s at most) */
 const ELECTRO_RESONANCE_REACTIONS = [

@@ -141,6 +141,46 @@ describe('the written rotation Energy gauge', () => {
     expect(solverEnergyTargets(empty).Bennett).toBe(UNREACHABLE_OPENING_ER)
   })
 
+  it('counts enemy drops in an empty opening from half a drop interval in', () => {
+    // (9 drops in 90 s: one every 10 s, from 5 s on; 2 Energy each, on the field)
+    const config = { ...settings(), enemyParticles: 9 }
+    const timed = (frame: number) =>
+      trackEnergyRecharge(
+        { ...trace([cast(frame)], false), frames: 1800 },
+        config,
+        {},
+        true
+      ).Bennett?.required
+    expect(timed(240)).toBe(Number.POSITIVE_INFINITY)
+    expect(timed(1500)).toBe(1500)
+
+    const members = {
+      Bennett: {
+        ...config.members.Bennett!,
+        fieldTime: 100,
+        skillUses: 0,
+        favoniusProcs: 0,
+      },
+    }
+    const window = (castTime: number) =>
+      calculateEnergyRecharge(['Bennett'], {
+        ...config,
+        members,
+        opening: [
+          {
+            characterKey: 'Bennett',
+            cost: 60,
+            castTime,
+            seconds: 25,
+            electroInterval: 0,
+            members,
+          },
+        ],
+      }).opening?.Bennett?.required
+    expect(window(25)).toBeCloseTo(1500)
+    expect(window(35)).toBeCloseTo(1200)
+  })
+
   it('credits a particle on the cast frame and respects the selected particle RNG', () => {
     const opening = trace(
       [{ ...particles(180, 20), variance: 0.25 } as TeamEnergyEvent, cast(180)],
