@@ -41,6 +41,7 @@ import {
   characterSortConfigs,
   characterSortMap,
   ElementToggle,
+  EnkaImportButton,
   useCharSelectionCallback,
   WeaponToggle,
 } from '@genshin-optimizer/gi/ui'
@@ -224,13 +225,16 @@ export default function PageCharacter() {
         title={t('ui:tabs.characters')}
         count={totalCharNum}
         actions={
-          <Button
-            sx={giCtaSx}
-            startIcon={<AddIcon />}
-            onClick={() => setnewCharacter(true)}
-          >
-            {t('header.add')}
-          </Button>
+          <>
+            <EnkaImportButton variant="outlined" color="inherit" />
+            <Button
+              sx={giCtaSx}
+              startIcon={<AddIcon />}
+              onClick={() => setnewCharacter(true)}
+            >
+              {t('header.add')}
+            </Button>
+          </>
         }
       />
       <CardThemed>
@@ -303,12 +307,17 @@ export default function PageCharacter() {
           title={t('page_character:empty.title')}
           description={t('page_character:empty.description')}
           actions={
-            <Button
-              onClick={() => setnewCharacter(true)}
-              startIcon={<AddIcon />}
-            >
-              {t('page_character:empty.add')}
-            </Button>
+            <>
+              <EnkaImportButton />
+              <Button
+                variant="outlined"
+                color="inherit"
+                onClick={() => setnewCharacter(true)}
+                startIcon={<AddIcon />}
+              >
+                {t('page_character:empty.add')}
+              </Button>
+            </>
           }
         />
       )}
