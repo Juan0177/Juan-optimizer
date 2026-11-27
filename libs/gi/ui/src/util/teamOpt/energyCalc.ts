@@ -64,6 +64,8 @@ export interface EnergyCalcResult {
           gear: number
           skills: number
         }
+        /** The other members' part of it (`sources.team`), by whose particles they are */
+        fromMembers: Partial<Record<CharacterKey, number>>
         /** Energy its Bursts spend per rotation (the Burst cost over its cadence) */
         burstSpend: number
       }
@@ -290,6 +292,14 @@ export function calculateEnergyRecharge(
         gear: 0,
         skills: 0,
       }
+      const fromMembers: Partial<Record<CharacterKey, number>> = {}
+      const fromMember = (source: CharacterKey, energy: number) => {
+        if (source === recipient) sources.own += energy
+        else {
+          sources.team += energy
+          fromMembers[source] = (fromMembers[source] ?? 0) + energy
+        }
+      }
       for (const source of keys) {
         const member = settings.members[source]!
         const data = energyCalcData[source]!
@@ -316,8 +326,7 @@ export function calculateEnergyRecharge(
             elementValue(source) *
             share(turretCaught ? turretCaught(recipient) : field)
           particles += energy
-          if (source === recipient) sources.own += energy
-          else sources.team += energy
+          fromMember(source, energy)
         }
         for (const [i, { mode, uses }] of (made === undefined
           ? modes
@@ -352,8 +361,7 @@ export function calculateEnergyRecharge(
                 (recipient === source ? 1 - fed : 0)
           const energy = count * elementValue(source) * share(caught)
           particles += energy
-          if (source === recipient) sources.own += energy
-          else sources.team += energy
+          fromMember(source, energy)
         }
         // A Favonius trigger makes 3 clear particles (2 energy each on the field) for whoever
         // is on the field then.
@@ -494,6 +502,7 @@ export function calculateEnergyRecharge(
         burstCost: cost,
         required,
         sources,
+        fromMembers,
         burstSpend:
           own.burstEvery === 0 || cost === 0 ? 0 : cost / own.burstEvery,
       }

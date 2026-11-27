@@ -54,34 +54,34 @@ export function kqmStandardDetail(t: TFunction, standard: KqmStandard) {
   if (typeof standard === 'number')
     return t('teamOpt.kqm.customDetail', {
       defaultValue:
-        '{{rolls}} of the set’s 45 rolls on wanted stats, the rest random',
+        '{{rolls}} of the set’s 45 rolls on wanted stats, the rest random · average rolls',
       rolls: standard,
     })
   switch (standard) {
     case 'good':
       return t(
         'teamOpt.kqm.tierGoodDetail',
-        '8 rolls a piece: 2 of its 4 lines on wanted stats, 3 of its 4 upgrades on them'
+        '8 rolls a piece: 2 of its 4 lines on wanted stats, 3 of its 4 upgrades on them · average rolls, up to 182 CV'
       )
     case 'great':
       return t(
         'teamOpt.kqm.tierGreatDetail',
-        '9 rolls a piece: 3 of its 4 lines on wanted stats, 4 of its 5 upgrades on them'
+        '9 rolls a piece: 3 of its 4 lines on wanted stats, 4 of its 5 upgrades on them · average rolls, up to 215 CV'
       )
     case 'top':
       return t(
         'teamOpt.kqm.tierTopDetail',
-        '9 rolls a piece: every line on a wanted stat, every upgrade on them'
+        '9 rolls a piece: every line on a wanted stat, every upgrade on them · average rolls, up to 232 CV'
       )
     case 'perfect':
       return t(
         'teamOpt.kqm.tierPerfectDetail',
-        'Top with every roll at its highest value: the best the game can make'
+        'Top with every roll at its highest value: the best the game can make · up to 272 CV'
       )
     default:
       return t(
         'teamOpt.kqm.tierKqmsDetail',
-        '2 rolls of every substat and 20 placed, at most 2 a piece per stat'
+        '2 rolls of every substat and 20 placed, at most 2 a piece per stat · average rolls, up to 159 CV'
       )
   }
 }
@@ -239,7 +239,7 @@ export function KqmArtifactStandard({
       <FieldLabel
         tip={t(
           'teamOpt.kqm.standardAllTipCustom',
-          'Sets every member’s artifacts; each can be changed in its row. KQM Standard is KQM’s own: 2 rolls of every substat and 20 placed for damage, at most 2 a piece per stat. Good, Great, Top and Perfect are this site’s: each piece is built as the game makes one (4 different lines, never its main stat, and 4 or 5 upgrades), with more of its lines and upgrades on the stats the build wants at each step. Perfect is the best five artifacts the game can make. Custom: type how many of a member’s 45 rolls land on wanted stats (each piece an even share, the rest random). A 4★ piece has 2 fewer rolls, each 0.8 of a 5★ one.'
+          'Sets every member’s artifacts; each can be changed in its row. KQM Standard is KQM’s own: 2 rolls of every substat and 20 placed for damage, at most 2 a piece per stat. Good, Great, Top and Perfect are this site’s: each piece is built as the game makes one (4 different lines, never its main stat, and 4 or 5 upgrades), with more of its lines and upgrades on the stats the build wants at each step. Perfect is the best five artifacts the game can make. Custom: type how many of a member’s 45 rolls land on wanted stats (each piece an even share, the rest random). A 4★ piece has 2 fewer rolls, each 0.8 of a 5★ one. Every roll is KQM’s average roll value (crit rate 3.31%, crit DMG 6.62%), except Perfect’s, at the highest. CV: the most crit value the substats can reach (without a crit circlet; a crit circlet holds fewer crit rolls).'
         )}
       >
         {t('teamOpt.kqm.standard', 'Artifacts')}

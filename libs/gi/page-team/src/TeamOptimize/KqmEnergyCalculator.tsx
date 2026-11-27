@@ -676,9 +676,16 @@ function EnergyBalance({
   short?: { label: string }
   shortUses: number
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
+  const { gender } = useDBMeta()
   if (!result) return null
   const { sources, burstSpend } = result
+  // (the teammates' part, by whose particles: the largest first)
+  const givers = (
+    Object.entries(result.fromMembers) as [CharacterKey, number][]
+  )
+    .filter(([, v]) => v > 0.05)
+    .sort((a, b) => b[1] - a[1])
   // (a partial Burst spends energy: its skills' flat energy below zero)
   const partialSpend = Math.max(0, -sources.skills)
   const needs = burstSpend + partialSpend
@@ -787,17 +794,42 @@ function EnergyBalance({
             display: 'flex',
           })}
         >
-          {parts.map((p) => (
-            <Tooltip key={p.key} arrow title={`${p.label}: ${n(p.value)}`}>
-              <Box
-                sx={{
-                  width: `${(p.value / scale) * 100}%`,
-                  bgcolor: p.color,
-                  '& + &': { borderLeft: '2px solid rgba(20, 20, 26, 0.7)' },
-                }}
-              />
-            </Tooltip>
-          ))}
+          {parts
+            .flatMap((p) =>
+              p.key === 'team' && givers.length
+                ? givers.map(([k, v], i) => ({
+                    key: `team-${k}`,
+                    title: `${p.label} · ${t(`charNames_gen:${k}`, k)}: ${n(v)}`,
+                    value: v,
+                    color: p.color,
+                    // (the teammates apart by a thin line, the sources by a wider one)
+                    thin: i > 0,
+                  }))
+                : [
+                    {
+                      key: p.key,
+                      title: `${p.label}: ${n(p.value)}`,
+                      value: p.value,
+                      color: p.color,
+                      thin: false,
+                    },
+                  ]
+            )
+            .map((p) => (
+              <Tooltip key={p.key} arrow title={p.title}>
+                <Box
+                  sx={{
+                    width: `${(p.value / scale) * 100}%`,
+                    bgcolor: p.color,
+                    '& + &': {
+                      borderLeft: p.thin
+                        ? '1px solid rgba(20, 20, 26, 0.45)'
+                        : '2px solid rgba(20, 20, 26, 0.7)',
+                    },
+                  }}
+                />
+              </Tooltip>
+            ))}
         </Box>
       </Box>
       {/* the sources, named with their share */}
@@ -832,6 +864,37 @@ function EnergyBalance({
           </Box>
         ))}
       </Box>
+      {/* the teammates' particles, by whose */}
+      {!!givers.length && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 1.5,
+            rowGap: 0.75,
+            mt: -0.75,
+          }}
+        >
+          <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+            {t('teamOpt.kqm.calc.fromTeammates', 'From teammates')}
+          </Typography>
+          {givers.map(([k, v]) => (
+            <Box
+              key={k}
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}
+            >
+              <MemberAvatar characterKey={k} size={18} />
+              <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                <CharacterName characterKey={k} gender={gender} />
+              </Typography>
+              <Typography sx={{ fontSize: 12.5, fontWeight: 650, ...numSx }}>
+                {n(v)}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      )}
     </Section>
   )
 }

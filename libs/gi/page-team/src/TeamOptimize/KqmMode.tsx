@@ -53,6 +53,7 @@ import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import CloseIcon from '@mui/icons-material/Close'
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined'
+import TrendingUpRoundedIcon from '@mui/icons-material/TrendingUpRounded'
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded'
 import {
   alpha,
@@ -110,6 +111,7 @@ import {
   useKqmCustom,
 } from './KqmStandard'
 import { KqmTopTeams } from './KqmTopTeams'
+import { KqmWeaponLock } from './KqmWeaponLock'
 import {
   kqmEnergyUpdate,
   kqmRotationEnergyOf,
@@ -907,6 +909,15 @@ export function KqmSettings({
                       gender={gender}
                     />
                   </Typography>
+                  <Box sx={{ ml: 'auto', pl: 0.5, display: 'flex' }}>
+                    <KqmWeaponLock
+                      compact
+                      characterKey={characterKey}
+                      members={members}
+                      kqm={kqm}
+                      setTeamOpt={setTeamOpt}
+                    />
+                  </Box>
                 </Box>
                 <Box sx={{ gridArea: 'cons', minWidth: 0 }}>
                   <KqmConstellationSelect
@@ -2223,6 +2234,7 @@ export function KqmResults({
   improving,
   onDiscard,
   actions,
+  onCompareInvestments,
   onView,
   teamData,
   timeline,
@@ -2261,6 +2273,8 @@ export function KqmResults({
   onDiscard: () => void
   /** More actions beside Share (the team's versions) */
   actions?: ReactNode
+  /** Scroll to / focus the interactive Investment comparison panel */
+  onCompareInvestments?: () => void
   /** The builds shown now: the run's, or the team with other equipment picked here */
   onView?: (view: KqmResult) => void
 }) {
@@ -2456,11 +2470,51 @@ export function KqmResults({
           sx={{
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 1,
             ml: 'auto',
           }}
         >
           {actions}
+          {onCompareInvestments && (
+            <Tooltip
+              arrow
+              title={t(
+                'teamOpt.invest.jumpTip',
+                'Compare pull budgets across constellations, R1 signatures, and conditional rotations'
+              )}
+            >
+              <span>
+                <Button
+                  variant="outlined"
+                  color="inherit"
+                  disabled={running}
+                  startIcon={<TrendingUpRoundedIcon sx={{ fontSize: 18 }} />}
+                  onClick={onCompareInvestments}
+                  sx={{
+                    height: 40,
+                    px: 1.75,
+                    borderRadius: 999,
+                    textTransform: 'none',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    borderColor: tokens.hairlineStrong,
+                    color: 'text.primary',
+                    bgcolor: alpha(giTokens.parchment, 0.04),
+                    ...quickSx,
+                    ...focusSx,
+                    '&:hover': {
+                      borderColor: alpha(tokens.gold, 0.6),
+                      bgcolor: alpha(tokens.gold, 0.1),
+                      color: giTokens.goldLight,
+                    },
+                  }}
+                >
+                  {t('teamOpt.invest.buttonShort', 'Investments')}
+                </Button>
+              </span>
+            </Tooltip>
+          )}
           <KqmShareMenu
             teamId={teamId}
             result={result}
