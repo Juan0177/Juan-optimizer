@@ -187,6 +187,23 @@ export function equipTeamResult(
 }
 
 /**
+ * Formats the saved build name created by "Save and use on this team":
+ * `Team Name (label)` when both are present, `Team Name` when label is cleared,
+ * or `label` / `fallbackLabel` when the team has no name.
+ */
+export function formatSavedBuildName(
+  teamName: string,
+  label: string,
+  fallbackLabel = 'team optimized'
+): string {
+  const base = teamName.trim()
+  const tag = label.trim()
+  if (base && tag) return `${base} (${tag})`
+  if (base) return base
+  return tag || fallbackLabel
+}
+
+/**
  * Saves the result as a new build per member and switches the team to them: nothing is moved
  * between characters (the builds can be equipped later, from each member's build list).
  */

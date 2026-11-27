@@ -39,6 +39,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { readAutoRankEquipment } from './autoRankEquipment'
 import { playedRotationKey, teamRunRotation } from './RotationWriter'
 import { sameBuildRoster, teamRoster, teamRunKey } from './runScope'
 import { inventoryRequirementsKey } from './useTeamOpt'
@@ -275,6 +276,32 @@ export function useTeamOptRun(teamId: string) {
         if (teamRoster(database, teamId) !== roster) stop()
       })
       let shown: (TeamOptRunState & { type: 'done' }) | undefined
+      const autoRank = readAutoRankEquipment()
+      const rankedMembers = new Set<CharacterKey>()
+      const settle = (
+        found: TeamOptRunState & { type: 'done' },
+        optionsError?: string,
+        completed = false
+      ) => {
+        const { optionsRunning: _, ...done } = found
+        const next: TeamOptRunState & { type: 'done' } = {
+          ...done,
+          ...(optionsError ? { optionsError } : {}),
+          result: completed
+            ? {
+                ...done.result,
+                rankingsComplete:
+                  rankedMembers.size === done.result.optimized.length,
+              }
+            : done.result,
+        }
+        if (mine()) startTransition(() => setState(next, true))
+        else {
+          const last = lastRuns[key]
+          if (last?.type === 'done' && last.savedAt === next.savedAt)
+            lastRuns[key] = next
+        }
+      }
       const startTime = performance.now()
       Object.assign(status.current, initStatus(), { step: undefined })
       setState({ type: 'running', startTime })
@@ -285,18 +312,58 @@ export function useTeamOptRun(teamId: string) {
         const teamOpt = team?.teamOpt ?? initTeamOpt()
         const requirementsKey = inventoryRequirementsKey(database, teamId)
         const enemy = team && runEnemyOf(team)
-        const show = (next: TeamOptRunState & { type: 'done' }) => {
+        const show = (
+          next: TeamOptRunState & { type: 'done' },
+          save = false
+        ) => {
           if (!mine() || cancelled || teamRoster(database, teamId) !== roster)
             return
-          shown = next
-          startTransition(() => setState(next))
+          const found: TeamOptRunState & { type: 'done' } = {
+            ...next,
+            savedAt: shown?.savedAt ?? Date.now(),
+          }
+          shown = found
+          if (save) {
+            startTransition(() => setState(found, true))
+          } else {
+            lastRuns[key] = found
+            startTransition(() => {
+              if (mounted.current) setStateRaw(found)
+            })
+          }
+        }
+        const addOptions = (
+          ck: CharacterKey,
+          ranked: TeamOptMemberOptions,
+          weapons: boolean
+        ) => {
+          if (!shown) return
+          if (weapons) rankedMembers.add(ck)
+          const prior = shown.result.options?.[ck]
+          show({
+            ...shown,
+            optionsRunning: true,
+            result: {
+              ...shown.result,
+              rankedMembers: [...rankedMembers],
+              options: {
+                ...shown.result.options,
+                [ck]: {
+                  ...ranked,
+                  weapons: weapons
+                    ? ranked.weapons
+                    : (prior?.weapons ?? ranked.weapons),
+                },
+              },
+            },
+          })
         }
         const job = {
           teamId,
           gender,
           teamOpt,
           rotation: teamRunRotation(database, gender, i18n, teamId),
-          ranking: false,
+          ranking: autoRank,
           attackStates,
           rankingBonusStats,
           maxWorkers,
@@ -305,26 +372,42 @@ export function useTeamOptRun(teamId: string) {
         const updates = {
           onResult: (result: TeamOptResult) => {
             const rotation = result.writtenRotation
-            show({
-              type: 'done',
-              roster,
-              requirementsKey,
-              rotationKey:
-                rotation &&
-                playedRotationKey(
-                  rotation.text,
-                  rotation.opener,
-                  rotation.timing,
-                  rotation.frameData
-                ),
-              result: { ...result, rankingBonusStats },
-              seconds: (performance.now() - startTime) / 1000,
-              teamOpt,
-              rankingBonusStats,
-              ...(enemy ? { enemy } : {}),
-            })
+            const willRank = autoRank && result.optimized.length > 0
+            show(
+              {
+                type: 'done',
+                roster,
+                requirementsKey,
+                rotationKey:
+                  rotation &&
+                  playedRotationKey(
+                    rotation.text,
+                    rotation.opener,
+                    rotation.timing,
+                    rotation.frameData
+                  ),
+                result: { ...result, rankingBonusStats },
+                seconds: (performance.now() - startTime) / 1000,
+                teamOpt,
+                rankingBonusStats,
+                ...(enemy ? { enemy } : {}),
+                ...(willRank ? { optionsRunning: true } : {}),
+              },
+              true
+            )
           },
-          onOptions: () => {},
+          onOptions: (ck: CharacterKey, ranked: TeamOptMemberOptions) =>
+            addOptions(ck, ranked, true),
+          onSetOptions: (ck: CharacterKey, ranked: TeamOptMemberOptions) =>
+            addOptions(ck, ranked, false),
+          onGearComparisons: (gearComparisons: TeamOptGearComparison[]) => {
+            if (shown)
+              show({
+                ...shown,
+                optionsRunning: true,
+                result: { ...shown.result, gearComparisons },
+              })
+          },
         }
         try {
           const worker = startTeamOptWorker(database, job, {
@@ -349,8 +432,18 @@ export function useTeamOptRun(teamId: string) {
             }
           )
         }
+        if (shown?.optionsRunning) settle(shown, undefined, !cancelled)
       } catch (e) {
-        if (shown) return
+        if (shown) {
+          const optionsError =
+            !cancelled && !(e instanceof TeamOptCancelled)
+              ? e instanceof Error
+                ? e.message
+                : String(e)
+              : undefined
+          settle(shown, optionsError, false)
+          return
+        }
         if (!mine()) return
         if (cancelled || e instanceof TeamOptCancelled)
           setState(lastRun(database, teamId))
@@ -373,7 +466,7 @@ export function useTeamOptRun(teamId: string) {
         if (mine()) cancelRef.current = () => {}
       }
     },
-    [database, teamId, gender, i18n, maxWorkers, setState]
+    [database, teamId, gender, i18n, maxWorkers, setState, key]
   )
 
   /**

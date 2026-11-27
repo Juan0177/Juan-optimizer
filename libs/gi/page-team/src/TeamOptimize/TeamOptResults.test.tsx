@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { allArtifactSetKeys } from '@genshin-optimizer/gi/consts'
 import type {
   ArtifactSetKey,
   CharacterKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
+import { allArtifactSetKeys } from '@genshin-optimizer/gi/consts'
 import type {
   ICachedWeapon,
   StatFilters,
@@ -23,8 +23,12 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import {
+  readAutoRankEquipment,
+  setAutoRankEquipment,
+} from './autoRankEquipment'
 import { TeamOptResults } from './TeamOptResults'
-import { TeamOptTopBuilds } from './TeamOptTopBuilds'
+import { GearRankingControls, TeamOptTopBuilds } from './TeamOptTopBuilds'
 
 const ER_FILTER = JSON.stringify(['basic', 'enerRech_'])
 
@@ -90,16 +94,18 @@ vi.mock('@genshin-optimizer/common/database-ui', () => ({
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mockDatabase,
   useDBMeta: () => ({ gender: 'F' }),
-  useTeam: () => undefined,
+  useTeam: () => ({ name: 'Abyss Team' }),
 }))
 vi.mock('./useTeamOpt', () => ({
   useTeamOpt: () => [initTeamOpt(), vi.fn()],
 }))
-vi.mock('./apply', () => ({
+const mockSaveTeamResult = vi.fn()
+vi.mock('./apply', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   changedMembers: () => ['Sandrone'],
   equipChanges: () => [],
   equipTeamResult: vi.fn(),
-  saveTeamResult: vi.fn(),
+  saveTeamResult: (...args: unknown[]) => mockSaveTeamResult(...args),
   undoTeamEquip: vi.fn(),
 }))
 vi.mock('./ResultDetails', () => ({
@@ -147,6 +153,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   optConfigEntries = []
+  setAutoRankEquipment(false)
 })
 
 const theme = createTheme({ palette: { mode: 'dark' } })
@@ -399,5 +406,77 @@ describe('TeamOptResults ER requirement display', () => {
     expect(
       await screen.findByText(/it misses their requirements/i)
     ).toBeTruthy()
+  })
+
+  it('persists the Auto-rank after optimize toggle in GearRankingControls', () => {
+    setAutoRankEquipment(false)
+    const onStart = vi.fn()
+    render(
+      <ThemeProvider theme={theme}>
+        <GearRankingControls
+          done={0}
+          total={2}
+          running={false}
+          standalone
+          onStart={onStart}
+          onStop={vi.fn()}
+        />
+      </ThemeProvider>
+    )
+    const toggle = screen.getByRole('checkbox', {
+      name: /Auto-rank after optimize/i,
+    }) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    expect(readAutoRankEquipment()).toBe(false)
+
+    fireEvent.click(toggle)
+    expect(toggle.checked).toBe(true)
+    expect(readAutoRankEquipment()).toBe(true)
+    expect(onStart).not.toHaveBeenCalled()
+  })
+
+  it('lets the user customize or append the parenthesis label when saving builds for the team', () => {
+    mockSaveTeamResult.mockClear()
+    render(
+      <ThemeProvider theme={theme}>
+        <TeamOptResults
+          teamId="team_1"
+          members={baseMembers}
+          result={makeResult()}
+          seconds={12}
+          runTeamOpt={initTeamOpt()}
+          rotationTime={20}
+          teamData={undefined}
+          onDiscard={vi.fn()}
+        />
+      </ThemeProvider>
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save and use on this team' })
+    )
+    const input = screen.getByLabelText(
+      'Label in parentheses (optional)'
+    ) as HTMLInputElement
+    expect(input.value).toBe('team optimized')
+    expect(screen.getByText('(team optimized)')).toBeTruthy()
+
+    fireEvent.change(input, { target: { value: 'Stygian Fearless' } })
+    expect(screen.getByText('(Stygian Fearless)')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(1)
+    expect(mockSaveTeamResult.mock.calls[0][3]).toBe(
+      'Abyss Team (Stygian Fearless)'
+    )
+
+    // Clearing the label saves just the team name with no parentheses
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save and use on this team' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Clear label' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(2)
+    expect(mockSaveTeamResult.mock.calls[1][3]).toBe('Abyss Team')
   })
 })

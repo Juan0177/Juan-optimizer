@@ -50,6 +50,7 @@ import type { ReactNode } from 'react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Components/MainStatSelectionCard'
+import { AutoRankToggle } from './AutoRankToggle'
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
@@ -431,6 +432,18 @@ export function RunDialog({
                 ]}
               />
             </Box>
+            <Box
+              aria-hidden
+              sx={{
+                display: { xs: 'none', sm: 'block' },
+                width: '1px',
+                height: 20,
+                bgcolor: tokens.hairlineStrong,
+              }}
+            />
+            <AutoRankToggle
+              label={t('teamOpt.run.autoRank', 'Auto-rank equipment')}
+            />
             <Box sx={{ flexGrow: 1 }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* (phones: the title bar's close is the cancel) */}

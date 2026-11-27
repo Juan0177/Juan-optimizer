@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   equipChanges,
   equipTeamResult,
+  formatSavedBuildName,
   restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
@@ -136,5 +137,20 @@ describe('Team Optimize Equip recovery', () => {
     expect(undoTeamEquip(database, teamId)).toBe(false)
     expect(database.arts.get(edit)?.location).toBe('Bennett')
     expect(database.arts.get(borrowed)?.location).toBe('')
+  })
+
+  it('formats saved build names with custom, appended, or cleared parenthesis labels', () => {
+    expect(formatSavedBuildName('Rational', 'team optimized')).toBe(
+      'Rational (team optimized)'
+    )
+    expect(formatSavedBuildName('Rational', 'Abyss 12')).toBe(
+      'Rational (Abyss 12)'
+    )
+    expect(formatSavedBuildName('Rational', 'team optimized - Fav')).toBe(
+      'Rational (team optimized - Fav)'
+    )
+    expect(formatSavedBuildName('Rational', '   ')).toBe('Rational')
+    expect(formatSavedBuildName('', 'Boss')).toBe('Boss')
+    expect(formatSavedBuildName('', '')).toBe('team optimized')
   })
 })

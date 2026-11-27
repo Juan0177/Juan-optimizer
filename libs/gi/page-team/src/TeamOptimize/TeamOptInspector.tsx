@@ -37,6 +37,7 @@ import {
 } from '@mui/material'
 import { startTransition, useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AutoRankToggle } from './AutoRankToggle'
 import { formatGain, formatRateFull } from './format'
 import { SetLines } from './KqmBuildView'
 import {
@@ -594,30 +595,41 @@ export function TeamOptInspector({
                     </Typography>
                   </Box>
                 </Box>
-                <Button
-                  size="small"
-                  onClick={onRank}
-                  startIcon={<LeaderboardRoundedIcon sx={{ fontSize: 16 }} />}
+                <Box
                   sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 1.25,
                     flexShrink: 0,
-                    px: 1.75,
-                    py: 0.75,
-                    borderRadius: tokens.radius.control,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    color: tokens.gold,
-                    bgcolor: alpha(tokens.gold, 0.12),
-                    border: `1px solid ${alpha(tokens.gold, 0.38)}`,
-                    ...quickSx,
-                    '&:hover': {
-                      bgcolor: alpha(tokens.gold, 0.2),
-                      borderColor: alpha(tokens.gold, 0.65),
-                    },
                   }}
                 >
-                  {t('teamOpt.result.rankEquipment', 'Rank equipment')}
-                </Button>
+                  <AutoRankToggle />
+                  <Button
+                    size="small"
+                    onClick={onRank}
+                    startIcon={<LeaderboardRoundedIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      flexShrink: 0,
+                      px: 1.75,
+                      py: 0.75,
+                      borderRadius: tokens.radius.control,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      color: tokens.gold,
+                      bgcolor: alpha(tokens.gold, 0.12),
+                      border: `1px solid ${alpha(tokens.gold, 0.38)}`,
+                      ...quickSx,
+                      '&:hover': {
+                        bgcolor: alpha(tokens.gold, 0.2),
+                        borderColor: alpha(tokens.gold, 0.65),
+                      },
+                    }}
+                  >
+                    {t('teamOpt.result.rankEquipment', 'Rank equipment')}
+                  </Button>
+                </Box>
               </Box>
             ) : !rankings && busy ? (
               <Box

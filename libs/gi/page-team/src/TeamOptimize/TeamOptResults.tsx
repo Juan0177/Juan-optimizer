@@ -22,7 +22,7 @@ import {
   weaponHasRefinement,
 } from '@genshin-optimizer/gi/stats'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
-import { giTokens } from '@genshin-optimizer/gi/theme'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   RunEnemy,
   TeamData,
@@ -76,8 +76,11 @@ import {
   DialogTitle,
   FormControlLabel,
   IconButton,
+  InputAdornment,
+  Popover,
   Snackbar,
   Switch,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -99,6 +102,7 @@ import {
   changedMembers,
   equipChanges,
   equipTeamResult,
+  formatSavedBuildName,
   restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
@@ -219,6 +223,10 @@ export function TeamOptResults({
   const { t } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
+  const defaultBuildTag = t('teamOpt.result.buildTagDefault', 'team optimized')
+  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null)
+  const [saveTag, setSaveTag] = useState(defaultBuildTag)
+  const saveInputRef = useRef<HTMLInputElement>(null)
   const { before, after } = result
   // (once, as it appears: not again when the page re-renders it)
   const [reveal] = useState(() => !!fresh && !prefersReducedMotion())
@@ -792,6 +800,7 @@ export function TeamOptResults({
                 ) : (
                   <Tooltip
                     arrow
+                    describeChild
                     title={t(
                       'teamOpt.result.saveHint',
                       'A new build per member, used by this team. Nothing moves between characters.'
@@ -803,16 +812,10 @@ export function TeamOptResults({
                         color="inherit"
                         startIcon={<SaveIcon />}
                         disabled={noChange || stale}
-                        onClick={() => {
-                          saveTeamResult(
-                            database,
-                            teamId,
-                            result,
-                            t('teamOpt.result.buildName', {
-                              defaultValue: '{{team}} (team optimized)',
-                              team: team?.name ?? '',
-                            })
-                          )
+                        aria-expanded={!!saveAnchor}
+                        onClick={(e) => {
+                          setSaveTag(defaultBuildTag)
+                          setSaveAnchor(e.currentTarget)
                         }}
                         sx={{
                           borderColor: tokens.hairlineStrong,
@@ -830,6 +833,235 @@ export function TeamOptResults({
                     </span>
                   </Tooltip>
                 )}
+                <Popover
+                  open={!!saveAnchor}
+                  anchorEl={saveAnchor}
+                  onClose={() => setSaveAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  TransitionProps={{
+                    onEntered: () => {
+                      saveInputRef.current?.focus()
+                      saveInputRef.current?.select()
+                    },
+                  }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        mt: 0.75,
+                        p: 2,
+                        width: 344,
+                        maxWidth: 'calc(100vw - 24px)',
+                        borderRadius: tokens.radius.inset,
+                        bgcolor: tokens.raised,
+                        border: `1px solid ${tokens.hairlineStrong}`,
+                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55)',
+                      },
+                    },
+                  }}
+                >
+                  {(() => {
+                    const teamName = team?.name?.trim() ?? ''
+                    const tagTrimmed = saveTag.trim()
+                    const previewName = formatSavedBuildName(
+                      teamName,
+                      saveTag,
+                      defaultBuildTag
+                    )
+                    return (
+                      <Box
+                        component="form"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          saveTeamResult(database, teamId, result, previewName)
+                          setSaveAnchor(null)
+                        }}
+                        sx={{ display: 'grid', gap: 1.5 }}
+                      >
+                        <Box>
+                          <Typography sx={{ ...type.title, fontSize: 14.5 }}>
+                            {t(
+                              'teamOpt.result.saveTitle',
+                              'Save builds for team'
+                            )}
+                          </Typography>
+                          <Typography
+                            sx={{ ...type.label, mt: 0.375, lineHeight: 1.4 }}
+                          >
+                            {t('teamOpt.result.saveCountHint', {
+                              count: changed.length,
+                              defaultValue:
+                                'Creates {{count}} new builds used by this team. Equipped gear is untouched.',
+                            })}
+                          </Typography>
+                        </Box>
+                        <TextField
+                          autoFocus
+                          inputRef={saveInputRef}
+                          size="small"
+                          fullWidth
+                          label={t(
+                            'teamOpt.result.buildTagLabel',
+                            'Label in parentheses (optional)'
+                          )}
+                          placeholder={defaultBuildTag}
+                          value={saveTag}
+                          onChange={(e) => setSaveTag(e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          InputProps={{
+                            startAdornment: teamName ? (
+                              <InputAdornment
+                                position="start"
+                                sx={{ mr: 0.5, pointerEvents: 'none' }}
+                              >
+                                <Typography
+                                  component="span"
+                                  sx={{
+                                    color: 'text.disabled',
+                                    fontWeight: 600,
+                                    fontSize: 14,
+                                  }}
+                                >
+                                  (
+                                </Typography>
+                              </InputAdornment>
+                            ) : undefined,
+                            endAdornment: (
+                              <InputAdornment
+                                position="end"
+                                sx={{ ml: 0.25, gap: 0.25 }}
+                              >
+                                {saveTag && (
+                                  <IconButton
+                                    size="small"
+                                    aria-label={t(
+                                      'teamOpt.result.clearLabel',
+                                      'Clear label'
+                                    )}
+                                    onClick={() => {
+                                      setSaveTag('')
+                                      saveInputRef.current?.focus()
+                                    }}
+                                    sx={{
+                                      p: 0.25,
+                                      color: 'text.secondary',
+                                      '&:hover': { color: 'text.primary' },
+                                    }}
+                                  >
+                                    <CloseIcon sx={{ fontSize: 15 }} />
+                                  </IconButton>
+                                )}
+                                {teamName && (
+                                  <Typography
+                                    component="span"
+                                    sx={{
+                                      color: 'text.disabled',
+                                      fontWeight: 600,
+                                      fontSize: 14,
+                                      pointerEvents: 'none',
+                                    }}
+                                  >
+                                    )
+                                  </Typography>
+                                )}
+                              </InputAdornment>
+                            ),
+                          }}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              bgcolor: tokens.inset,
+                              borderRadius: tokens.radius.control,
+                              '&.Mui-focused .MuiOutlinedInput-notchedOutline':
+                                {
+                                  borderColor: alpha(tokens.gold, 0.7),
+                                },
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: giTokens.goldLight,
+                            },
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            ...insetSx,
+                            px: 1.25,
+                            py: 0.875,
+                            display: 'grid',
+                            gap: 0.25,
+                          }}
+                        >
+                          <Typography
+                            sx={{
+                              fontSize: 10.5,
+                              fontWeight: 650,
+                              letterSpacing: '0.05em',
+                              textTransform: 'uppercase',
+                              color: 'text.secondary',
+                            }}
+                          >
+                            {t('teamOpt.result.savedAsHeading', 'Saved as')}
+                          </Typography>
+                          <Typography
+                            sx={{
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: 'text.primary',
+                              wordBreak: 'break-word',
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            {teamName && tagTrimmed ? (
+                              <>
+                                {teamName}{' '}
+                                <Box
+                                  component="span"
+                                  sx={{ color: giTokens.goldLight }}
+                                >
+                                  ({tagTrimmed})
+                                </Box>
+                              </>
+                            ) : (
+                              previewName
+                            )}
+                          </Typography>
+                        </Box>
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: 1,
+                          }}
+                        >
+                          <Button
+                            size="small"
+                            color="inherit"
+                            onClick={() => setSaveAnchor(null)}
+                            sx={{
+                              textTransform: 'none',
+                              color: 'text.secondary',
+                            }}
+                          >
+                            {t('teamOpt.runDialog.cancel', 'Cancel')}
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="small"
+                            variant="contained"
+                            startIcon={<SaveIcon sx={{ fontSize: 16 }} />}
+                            sx={{
+                              ...giCtaSx,
+                              px: 1.75,
+                              textTransform: 'none',
+                              borderRadius: tokens.radius.control,
+                            }}
+                          >
+                            {t('teamOpt.result.saveConfirm', 'Save')}
+                          </Button>
+                        </Box>
+                      </Box>
+                    )
+                  })()}
+                </Popover>
                 <Button
                   variant="contained"
                   color="secondary"
