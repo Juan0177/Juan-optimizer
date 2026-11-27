@@ -661,6 +661,11 @@ export async function refitConstellations({
   onProgress?: (progress: number) => void
 }): Promise<ConsPoint | undefined> {
   const rotation = kqmRunRotation(database, gender, i18n, teamId)
+  const baseEr = Object.fromEntries(
+    Object.entries(result.energyRecharge).flatMap(([ck, er]) =>
+      er ? [[ck, er.minimum]] : []
+    )
+  ) as Partial<Record<CharacterKey, number>>
   return runInvestmentInPool(
     database,
     {
@@ -675,6 +680,7 @@ export async function refitConstellations({
       signatures,
       rotation,
       text,
+      baseEr,
       summaryOnly,
     },
     isCancelled

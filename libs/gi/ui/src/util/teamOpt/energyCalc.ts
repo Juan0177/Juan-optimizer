@@ -646,6 +646,39 @@ function defaultSkillMode(key: CharacterKey, constellation?: number) {
 }
 
 /**
+ * Upgrades un-edited skill modes to any higher `"Constellation N"` mode unlocked by `constellations`
+ * (for ER calculator investment runs without a written rotation; with a written rotation,
+ * `withRotationEnergy` already updates skill modes from the simulation).
+ */
+export function upgradeConstellationModes(
+  settings: TeamOptEnergyCalculator,
+  keys: readonly CharacterKey[],
+  constellations: Partial<Record<CharacterKey, number>>
+): TeamOptEnergyCalculator {
+  let changed = false
+  const members: TeamOptEnergyCalculator['members'] = { ...settings.members }
+  for (const key of keys) {
+    const member = members[key]
+    const cons = constellations[key]
+    if (!member || cons === undefined || member.edited?.includes('skillMode'))
+      continue
+    const mode = defaultSkillMode(key, cons)
+    const curLabel = energyCalcData[key]?.skills[member.skillMode]?.label ?? ''
+    const nextLabel = energyCalcData[key]?.skills[mode]?.label ?? ''
+    if (
+      mode !== member.skillMode &&
+      nextLabel.startsWith('Constellation ') &&
+      (member.skillMode === 0 || curLabel.startsWith('Constellation ')) &&
+      energySkillConstellation(nextLabel) > energySkillConstellation(curLabel)
+    ) {
+      members[key] = { ...member, skillMode: mode }
+      changed = true
+    }
+  }
+  return changed ? { ...settings, members } : settings
+}
+
+/**
  * Saved calculator settings for the team as it is now: members added since get the starting
  * assumptions (and the field time is shared out again), catchers who left are replaced by the
  * member itself, and a skill option the member's constellation does not have by its default.

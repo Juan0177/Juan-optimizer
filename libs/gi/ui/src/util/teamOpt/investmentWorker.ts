@@ -10,6 +10,7 @@ import type {
   ArtCharDatabase,
   ICachedArtifact,
   ICachedWeapon,
+  StatFilters,
   TeamOpt,
 } from '@genshin-optimizer/gi/db'
 import { defaultTeamOptKqm } from '@genshin-optimizer/gi/db'
@@ -18,10 +19,20 @@ import {
   teamOptBonusStats,
   teamOptMembers,
 } from './data'
-import { isCalcEnergyWeapon, isFavonius } from './energyCalc'
+import {
+  calculateEnergyRecharge,
+  isCalcEnergyWeapon,
+  isFavonius,
+  type RotationEnergy,
+  syncEnergyCalculator,
+  upgradeConstellationModes,
+  withRotationEnergy,
+} from './energyCalc'
 import {
   type KqmBuild,
   type KqmPlayed,
+  kqmEnergyRelief,
+  kqmEnergyRequirement,
   kqmMemberConstellation,
   optimizeTeamKqm,
 } from './kqm'
@@ -39,6 +50,7 @@ import { rotationCalculation } from './rotationCalculation'
 import { writtenTeamReplay } from './rotationSearchTeam'
 import { teamRuleConditionals } from './ruleConditionals'
 import { evaluateTeamRotation, type TeamOptResult } from './solve'
+import { teamStatFilters } from './weapons'
 import { simTeamOf, writtenKqmReplay } from './writtenRotation'
 
 const SIM_WEAPONS = new Set<string>(WEAPON_MODULES.map((m) => m.weapon))
@@ -97,6 +109,8 @@ export interface KqmInvestJob {
   signatures?: Partial<Record<CharacterKey, number>>
   rotation?: InvestRotationMeta
   text?: string
+  /** Baseline ER requirements (%) per member so ER-affected teammates can be refitted automatically */
+  baseEr?: Partial<Record<CharacterKey, number>>
   /** Skip full `finish()` graph rebuild when caller only needs team DPS, builds, and unmet flag */
   summaryOnly?: boolean
 }
@@ -158,6 +172,7 @@ async function runKqmInvestJob(
     signatures,
     rotation,
     text,
+    baseEr: jobBaseEr,
     summaryOnly = true,
   } = job
   const kqm = setup.kqm ?? defaultTeamOptKqm
@@ -262,6 +277,64 @@ async function runKqmInvestJob(
         }
       : baseReplay
 
+  // Compute baseline ER targets if caller didn't pass `result.energyRecharge` minimums so we can
+  // detect & refit any non-raised teammate whose ER requirement shifts after the upgrade/replay.
+  let resolvedBaseEr = jobBaseEr
+  if (!resolvedBaseEr || Object.keys(resolvedBaseEr).length === 0) {
+    if (kqm.energySource === 'calculator' && kqm.energyCalculator) {
+      const baseCons = Object.fromEntries(
+        memberKeys.map((ck) => [ck, kqmMemberConstellation(ck, kqm)])
+      ) as Partial<Record<CharacterKey, number>>
+      const baseRotTime =
+        played?.energyRotationTime ??
+        played?.rotationTime ??
+        setup.rotationTime ??
+        kqm.energyCalculator.rotationTime
+      const synced = syncEnergyCalculator(
+        memberKeys,
+        kqm.energyCalculator,
+        baseRotTime,
+        setup.onField ?? memberKeys[0],
+        baseCons
+      )
+      const calcSettings = played?.energy
+        ? withRotationEnergy(synced, memberKeys, played.energy)
+        : synced
+      const baseWeapons = Object.fromEntries(
+        memberKeys.flatMap((ck) =>
+          from[ck] ? [[ck, from[ck]!.weapon.key]] : []
+        )
+      ) as Partial<Record<CharacterKey, WeaponKey>>
+      const baseRefs = Object.fromEntries(
+        memberKeys.flatMap((ck) =>
+          from[ck] ? [[ck, from[ck]!.weapon.refinement]] : []
+        )
+      ) as Partial<Record<CharacterKey, number>>
+      const baseSets = Object.fromEntries(
+        memberKeys.flatMap((ck) => (from[ck] ? [[ck, from[ck]!.sets]] : []))
+      ) as Partial<Record<CharacterKey, Partial<Record<string, number>>>>
+      const est = calculateEnergyRecharge(
+        memberKeys,
+        { ...calcSettings, rotationTime: baseRotTime },
+        baseWeapons,
+        baseRefs,
+        baseSets
+      )
+      if (!est.errors.length) resolvedBaseEr = est.targets
+    } else {
+      const baseWeaponKeys = memberKeys
+        .map((ck) => from[ck]?.weapon.key)
+        .filter(notEmpty)
+      const relief = kqmEnergyRelief(baseWeaponKeys, setup)
+      resolvedBaseEr = Object.fromEntries(
+        memberKeys.map((ck) => [
+          ck,
+          Math.max(100, kqmEnergyRequirement(kqm, ck) - (relief[ck] ?? 0)),
+        ])
+      ) as Partial<Record<CharacterKey, number>>
+    }
+  }
+
   const hasSig = !!signatures && Object.keys(signatures).length > 0
   const found = await optimizeTeamKqm({
     database,
@@ -270,6 +343,7 @@ async function runKqmInvestJob(
     teamOpt,
     replay,
     initialPlayed: cachedPlayed,
+    baseEr: resolvedBaseEr,
     attackStates,
     from: fromBuilds,
     only: [...raisedSet],
@@ -359,6 +433,8 @@ function runInventoryInvestJob(
   const bonusStats = teamOptBonusStats(teamOpt, memberKeys)
   let attacks = teamOpt.attacks
   let seconds = result.rotationTime ?? teamOpt.rotationTime
+  let playedEnergy: RotationEnergy | undefined
+  let energyRotationTime: number | undefined
 
   if (
     needsRotationCalculation(memberKeys) &&
@@ -367,6 +443,8 @@ function runInventoryInvestJob(
   )
     weaponSimChanged = true
 
+  const useCalc =
+    teamOpt.energySource === 'calculator' && !!teamOpt.energyCalculator
   const canSkipReplay =
     !text?.trim() && Object.keys(cons).length === 0 && !weaponSimChanged
   const activeText = text?.trim() || rotation?.text?.trim() || ''
@@ -400,7 +478,7 @@ function runInventoryInvestJob(
       opener: rotation.opener,
       timing: rotation.timing,
       frameData: rotation.frameData,
-      includeEnergy: false,
+      includeEnergy: useCalc,
     })
     if (replay) {
       const overrides = {
@@ -419,8 +497,47 @@ function runInventoryInvestJob(
       })
       attacks = played.attacks
       if (played.rotationTime) seconds = played.rotationTime
+      playedEnergy = played.energy
+      energyRotationTime = played.energyRotationTime
     }
   }
+
+  // Recompute per-member stat/ER constraints with the upgraded weapons, constellations & rotation
+  // energy so `unmet` accurately reflects R1/constellation ER gains or shortfalls.
+  const baseStatFilters = Object.fromEntries(
+    members.map((m) => [
+      m.characterKey,
+      database.optConfigs.get(m.teamChar.optConfigId)?.statFilters ?? {},
+    ])
+  ) as Partial<Record<CharacterKey, StatFilters>>
+  let effectiveTeamOpt = teamOpt
+  if (useCalc && teamOpt.energyCalculator) {
+    const teamConstellations: Partial<Record<CharacterKey, number>> = {
+      ...simTeamOf(members, database).constellations,
+      ...cons,
+    }
+    const calcTime =
+      energyRotationTime ?? seconds ?? teamOpt.energyCalculator.rotationTime
+    const synced = syncEnergyCalculator(
+      memberKeys,
+      teamOpt.energyCalculator,
+      calcTime,
+      teamOpt.onField ?? memberKeys[0],
+      teamConstellations
+    )
+    const nextCalc = {
+      ...(playedEnergy
+        ? withRotationEnergy(synced, memberKeys, playedEnergy)
+        : upgradeConstellationModes(synced, memberKeys, teamConstellations)),
+      rotationTime: calcTime,
+    }
+    effectiveTeamOpt = { ...teamOpt, energyCalculator: nextCalc }
+  }
+  const statFilters = teamStatFilters(
+    baseStatFilters,
+    weapons,
+    effectiveTeamOpt
+  )
 
   const finalAttacks = withAttackStates(attacks, result.attackStates)
   const extraConditionals = teamRuleConditionals(database, teamId, finalAttacks)
@@ -429,6 +546,7 @@ function runInventoryInvestJob(
     arts,
     weapons,
     characters,
+    statFilters,
     mainStatAssumptionLevel,
     onField: teamOpt.onField,
     bonusStats,

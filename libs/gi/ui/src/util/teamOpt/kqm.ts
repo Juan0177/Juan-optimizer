@@ -79,6 +79,7 @@ import {
   isFavonius,
   type RotationEnergy,
   syncEnergyCalculator,
+  upgradeConstellationModes,
   withRotationEnergy,
 } from './energyCalc'
 import { itemConditionals } from './itemConditionals'
@@ -1327,6 +1328,13 @@ interface KqmRunArgs {
   mainsSearched?: number
   /** Pre-played rotation to reuse directly without calling `replay`. */
   initialPlayed?: KqmPlayed
+  /**
+   * With `from` + `only`: baseline ER requirements (%) per member. Any non-raised teammate whose
+   * ER requirement shifts after the upgrade/replay is also refitted (fixed weapon & sets) so
+   * team-wide ER taxes (e.g. dropping Favonius for R1) and ER savings (e.g. battery constellations
+   * or extra Skill casts) are priced accurately into team DPS.
+   */
+  baseEr?: Partial<Record<CharacterKey, number>>
   /** Optional screened-out weapons/sets from a base KQM run for unchanged teammates (only used when !fullSearch). */
   seedScreenedOut?: KqmResult['screenedOut']
   /**
@@ -1423,6 +1431,7 @@ async function runKqm({
   summaryOnly,
   mainsSearched,
   initialPlayed,
+  baseEr,
   seedScreenedOut,
   spaceLimits,
   comparison,
@@ -1452,6 +1461,7 @@ async function runKqm({
   const standardOf = (ck: CharacterKey) => kqmMemberStandard(ck, kqm)
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
+  const isRefit = !!(from && only !== undefined)
   // The rotation the builds are for: as played for them (`replay`), else the team's attacks. A
   // comparison keeps its run's (its `teamOpt` has them).
   let played: KqmPlayed | undefined = initialPlayed ?? comparison?.result.played
@@ -1462,27 +1472,33 @@ async function runKqm({
   const calculatorFor = (
     rotationTime: number | undefined,
     simulation = played
-  ) =>
-    kqm.energySource === 'calculator' && kqm.energyCalculator
-      ? {
-          ...withRotationEnergy(
-            syncEnergyCalculator(
-              keys,
-              kqm.energyCalculator,
-              rotationTime ?? kqm.energyCalculator.rotationTime,
-              teamOpt.onField ?? keys[0],
-              Object.fromEntries(
-                keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
-              )
-            ),
-            keys,
-            simulation?.energyRotationTime !== undefined
-              ? simulation.energy
-              : undefined
-          ),
-          rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
-        }
-      : undefined
+  ) => {
+    if (kqm.energySource !== 'calculator' || !kqm.energyCalculator)
+      return undefined
+    const kqmCons = Object.fromEntries(
+      keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
+    ) as Partial<Record<CharacterKey, number>>
+    const synced = syncEnergyCalculator(
+      keys,
+      kqm.energyCalculator,
+      rotationTime ?? kqm.energyCalculator.rotationTime,
+      teamOpt.onField ?? keys[0],
+      kqmCons
+    )
+    const energy =
+      simulation?.energy &&
+      (isRefit || simulation.energyRotationTime !== undefined)
+        ? simulation.energy
+        : undefined
+    return {
+      ...(energy
+        ? withRotationEnergy(synced, keys, energy)
+        : isRefit
+          ? upgradeConstellationModes(synced, keys, kqmCons)
+          : synced),
+      rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
+    }
+  }
   let calculator = calculatorFor(
     played?.energyRotationTime ?? rotationTimeNow()
   )
@@ -1568,20 +1584,24 @@ async function runKqm({
     from && only !== undefined
       ? new Set<CharacterKey>(typeof only === 'string' ? [only] : only)
       : undefined
-  for (const k of refitted ?? []) {
-    const build = from?.[k]
+  const lockRefitSpace = (k: CharacterKey, build: KqmBuild) => {
     const space = spaces.get(k)
-    if (!build || !space) continue
+    if (!space) return
     const sets = Object.entries(build.sets) as [ArtifactSetKey, number][]
+    const matched = space.weapons.filter(
+      (w) =>
+        w.key === build.weapon.key && w.refinement === build.weapon.refinement
+    )
     spaces.set(k, {
       ...space,
-      weapons: space.weapons.filter(
-        (w) =>
-          w.key === build.weapon.key && w.refinement === build.weapon.refinement
-      ),
-      four: sets.filter(([, n]) => n >= 4).map(([k]) => k),
-      two: sets.filter(([, n]) => n === 2).map(([k]) => k),
+      weapons: matched.length ? matched : [build.weapon],
+      four: sets.filter(([, n]) => n >= 4).map(([s]) => s),
+      two: sets.filter(([, n]) => n === 2).map(([s]) => s),
     })
+  }
+  for (const k of refitted ?? []) {
+    const build = from?.[k]
+    if (build) lockRefitSpace(k, build)
   }
   const keptMembers = new Set<CharacterKey>()
   if (from && spaceLimits) {
@@ -3143,7 +3163,11 @@ async function runKqm({
     const next = playBuilds(state, withGear)
     if (!next) return false
     const playedId = (p: KqmPlayed) =>
-      JSON.stringify([p.attacks, p.rotationTime, p.energyRotationTime])
+      JSON.stringify(
+        isRefit
+          ? [p.attacks, p.rotationTime, p.energyRotationTime, p.energy]
+          : [p.attacks, p.rotationTime, p.energyRotationTime]
+      )
     const changed = !played || playedId(next) !== playedId(played)
     played = next
     if (!changed) return false
@@ -3274,6 +3298,25 @@ async function runKqm({
     // from known scenario-base or refitted builds, so their fixed gear effects apply right away)
     if (!comparison && !initialPlayed)
       replayFor(builds, !!(from && (skipRankings || refitted)))
+    // When a constellation, alt rotation, or R1 swap shifts a non-raised teammate's ER target
+    // (e.g. dropping Favonius for R1, or adding battery particles/C2/C4 energy), refit that
+    // teammate's artifacts too (keeping their weapon & sets fixed) so team DPS prices it accurately.
+    if (refitted && baseEr) {
+      const erFilterKey = JSON.stringify(['basic', 'enerRech_'])
+      const erOf = (f: StatFilters | undefined) =>
+        f?.[erFilterKey]?.find((s) => !s.disabled)?.value ?? 100
+      const currentFilters = filtersFor(builds)
+      for (const m of optimized) {
+        const ck = m.characterKey
+        if (refitted.has(ck) || keptMembers.has(ck) || !from?.[ck]) continue
+        const prevEr = baseEr[ck] ?? 100
+        const nextEr = erOf(currentFilters[ck])
+        if (Math.abs(nextEr - prevEr) > 0.5) {
+          refitted.add(ck)
+          lockRefitSpace(ck, from[ck]!)
+        }
+      }
+    }
     // The first builds, warmed up in the team's order and in reverse (the last ones choose with
     // the first ones' sets on: a team-wide set goes to whoever chooses first), the better kept:
     // which way the rounds settle depends on it, and only the KQM settings decide it
@@ -3425,18 +3468,27 @@ async function runKqm({
   // team damage & ER constraint deficit from the final refitted member's compiled problem.
   if (summaryOnly && refitted && lastDescendScore) {
     const unmetMap: Partial<Record<CharacterKey, number[]>> = {}
-    for (const [ck, isUnmet] of Object.entries(descendUnmet) as [
-      CharacterKey,
-      boolean,
-    ][]) {
-      if (isUnmet) unmetMap[ck] = [0]
-    }
-    if (
-      lastDescendScore.deficit > DEFICIT_TOL &&
-      Object.keys(unmetMap).length === 0
-    ) {
-      const firstRaised = [...refitted][0]
-      if (firstRaised) unmetMap[firstRaised] = [0]
+    if (calculator) {
+      // In ER calculator mode every member's problem checks ALL members' constraints, so only the
+      // final step's deficit reflects the fully-refitted team state (no false positives from order).
+      if (lastDescendScore.deficit > DEFICIT_TOL) {
+        const firstRaised = [...refitted][0]
+        if (firstRaised) unmetMap[firstRaised] = [0]
+      }
+    } else {
+      for (const [ck, isUnmet] of Object.entries(descendUnmet) as [
+        CharacterKey,
+        boolean,
+      ][]) {
+        if (isUnmet) unmetMap[ck] = [0]
+      }
+      if (
+        lastDescendScore.deficit > DEFICIT_TOL &&
+        Object.keys(unmetMap).length === 0
+      ) {
+        const firstRaised = [...refitted][0]
+        if (firstRaised) unmetMap[firstRaised] = [0]
+      }
     }
     return {
       builds: { ...builds },
