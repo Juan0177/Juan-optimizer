@@ -4,13 +4,6 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
-## [v1.47.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.1) (2026-11-27)
-
-### Improved
-
-- Investment comparison runs much faster across parallel workers, skipping redundant rotation replays and formula rebuilds without freezing the page.
-- Investment comparison streams results live as each pull tier finishes, keeps previous results steady while updating, batches Options toggles until closed, and highlights the best +1 pull.
-
 ## [v1.47.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.0) (2026-11-27)
 
 ### New

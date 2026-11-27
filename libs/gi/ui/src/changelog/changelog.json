@@ -1,11 +1,7 @@
 [
   {
     "version": "1.47.1",
-    "date": "2026-11-27",
-    "improved": [
-      "Investment comparison runs much faster across parallel workers, skipping redundant rotation replays and formula rebuilds without freezing the page.",
-      "Investment comparison streams results live as each pull tier finishes, keeps previous results steady while updating, batches Options toggles until closed, and highlights the best +1 pull."
-    ]
+    "date": "2026-11-27"
   },
   {
     "version": "1.47.0",
