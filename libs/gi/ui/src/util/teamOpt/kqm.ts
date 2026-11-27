@@ -2639,6 +2639,18 @@ async function runKqm({
       const chosenMeets = problem.mins.map((min, j) => chosenCons[j] >= min)
       const meetsAsChosen = (score: Score) =>
         score.deficit <= chosen.deficit + DEFICIT_TOL
+      // (the rounds keep a build that a search from scratch may not find again: the row with the
+      // member's own weapon and sets is that build then, never a worse one)
+      const keptIfBetter = <T extends { build: KqmBuild; score: Score }>(
+        top: T | undefined
+      ) =>
+        top &&
+        top.build.weapon.key === best.weapon.key &&
+        top.build.weapon.refinement === best.weapon.refinement &&
+        kqmSetsId(top.build.sets) === kqmSetsId(best.sets) &&
+        better(chosen, top.score)
+          ? { build: best, score: chosen }
+          : top
       const option = (
         r: {
           build: KqmBuild
@@ -2725,10 +2737,13 @@ async function runKqm({
         }
         return options
       }
-      const bySets = await optionsOf(await bySetsFound)
+      const bySets = await optionsOf((await bySetsFound).map(keptIfBetter))
       // (sets with no search to wait for: done too)
       for (let n = setsSearched.done; n < allSets.length; n++) optionDone(1)
-      const byWeapon = await optionsOf(await Promise.all(byWeaponFound), true)
+      const byWeapon = await optionsOf(
+        (await Promise.all(byWeaponFound)).map(keptIfBetter),
+        true
+      )
       const order = (a: KqmOption, b: KqmOption) =>
         Number(a.unmet) - Number(b.unmet) || b.total - a.total
       const withCatchUp = async (options: KqmOption[]) => {
