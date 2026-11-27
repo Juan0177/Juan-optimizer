@@ -1542,24 +1542,34 @@ interface EnergyEventCollector {
 /**
  * Save particle arrivals, flat gains and casts on the same clock as the replay. Late particles
  * cross the seam of a repeating span. A finite opening keeps only events that actually arrive.
+ * `counted`: a whole steady run whose last `counted` repeats are counted (`countedFrom`).
  */
 export function trackedEnergyFromRotation(
   simulation: SimulationResult,
   keys: readonly CharacterKey[],
   rotations: number,
   constellations: Partial<Record<CharacterKey, number>>,
-  repeat: boolean
+  repeat: boolean,
+  counted?: number
 ) {
   const sim = simulation.samples?.[0]?.result ?? simulation
   if (sim.frames <= 0 || !keys.length || sim.unsupported.length)
     return {
       energy: energyFromRotation(simulation, keys, rotations, constellations),
     }
+  const countedFrom =
+    !repeat && counted
+      ? (sim.rotationStarts?.at(-counted) ?? sim.start) - sim.start
+      : undefined
   const events: TeamEnergyEvent[] = []
   const collector: EnergyEventCollector = {
     add(event) {
       const frame = event.frame - sim.start
-      if (frame < 0 || (!repeat && frame >= sim.frames)) return
+      if (
+        frame < 0 ||
+        (!repeat && countedFrom === undefined && frame >= sim.frames)
+      )
+        return
       events.push({ ...event, frame: repeat ? frame % sim.frames : frame })
     },
     pendingOptional: [],
@@ -1592,6 +1602,7 @@ export function trackedEnergyFromRotation(
     ...(collector.pendingOptional.length && {
       pendingOptional: collector.pendingOptional,
     }),
+    ...(countedFrom !== undefined && { countedFrom }),
     repeat,
   }
   return {

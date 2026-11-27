@@ -333,6 +333,70 @@ function gaugeRequirement(
   }
 }
 
+/**
+ * A whole steady run's requirement: each stretch from one of the member's full Bursts (the gauge
+ * empty after it) to its next full Burst in the counted rotations, from an empty gauge. Repeating
+ * the counted span instead would join its end to its start and move effects whose cooldowns don't
+ * follow the rotation (Mitya's C1 every ~8.6 s), checking a window that never happens.
+ */
+function steadyRequirement(
+  events: readonly GaugeEvent[],
+  capacity: number,
+  owner: CharacterKey,
+  allyER: TeamValues<number>,
+  countedFrom: number
+): TrackedEnergyRequirement | undefined {
+  const full = events.flatMap((event, i) =>
+    (event.cost ?? event.minimum ?? 0) >= capacity - EPSILON ? [i] : []
+  )
+  let worst: TrackedEnergyRequirement | undefined
+  for (let k = 1; k < full.length; k++) {
+    if (events[full[k]].frame < countedFrom) continue
+    const loop = events.slice(full[k - 1] + 1, full[k] + 1)
+    const { required, castTime } = gaugeRequirement(
+      loop,
+      capacity,
+      owner,
+      allyER,
+      false,
+      true
+    )
+    if (!worst || required > worst.required)
+      worst = {
+        required,
+        ...(castTime !== undefined && {
+          castTime: Math.max(0, castTime - countedFrom / 60),
+        }),
+      }
+  }
+  return worst
+}
+
+/** A whole steady run's counted rotations as a repeating span */
+function countedSpan(trace: TeamEnergyTrace): TeamEnergyTrace {
+  const from = trace.countedFrom ?? 0
+  return {
+    ...trace,
+    repeat: true,
+    frames: trace.frames - from,
+    countedFrom: undefined,
+    active: [
+      {
+        frame: 0,
+        character:
+          trace.active.filter((a) => a.frame <= from).at(-1)?.character ??
+          trace.members[0],
+      },
+      ...trace.active
+        .filter((a) => a.frame > from)
+        .map((a) => ({ ...a, frame: a.frame - from })),
+    ],
+    events: trace.events
+      .filter((event) => event.frame >= from)
+      .map((event) => ({ ...event, frame: event.frame - from })),
+  }
+}
+
 const cache = new WeakMap<TeamEnergyTrace, Map<string, Requirements>>()
 
 /** For each Burst user, the lowest total ER that pays every required cast on the timeline. */
@@ -362,7 +426,12 @@ export function trackEnergyRecharge(
   if (!entries) cache.set(trace, (entries = new Map()))
   const cached = entries.get(signature)
   if (cached) return cached
+  const steady = !opening && trace.countedFrom !== undefined
   const gauges = gaugeEvents(trace, settings, loadout)
+  // (a member with no full Burst to Burst stretch in the counted rotations: the span repeated)
+  const spanGauges = steady
+    ? gaugeEvents(countedSpan(trace), settings, loadout)
+    : undefined
   let result: Requirements = {}
   let er: TeamValues<number> = {}
   const scaled = trace.events.some(
@@ -376,14 +445,17 @@ export function trackEnergyRecharge(
       const data = energyCalcData[key]
       if (!data) continue
       const capacity = Math.max(0, data.burstCost - data.burstDiscount)
-      const required = gaugeRequirement(
-        events,
-        capacity,
-        key,
-        er,
-        trace.repeat,
-        opening
-      )
+      const required =
+        (steady &&
+          steadyRequirement(events, capacity, key, er, trace.countedFrom!)) ||
+        gaugeRequirement(
+          spanGauges?.get(key) ?? events,
+          capacity,
+          key,
+          er,
+          steady || trace.repeat,
+          opening
+        )
       result[key] = required
       if (Number.isFinite(required.required))
         next[key] = required.required / 100

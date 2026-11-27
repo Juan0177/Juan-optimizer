@@ -442,12 +442,13 @@ export function writtenEnergy(
     trace: ReturnType<typeof trackedEnergyFromRotation>['trace']
   ) =>
     trace && args.burstEvery ? { ...trace, cadence: args.burstEvery } : trace
-  // A finite encounter can spend energy in an uncounted opener before the first counted loop.
+  // A finite encounter can spend energy in an uncounted opener before the first counted loop. The
+  // steady pace is checked on the whole run, Burst to Burst (see `trackEnergyRecharge`).
   let full = sim
-  if (!zeroEnergy && !repeated && sim.start > 0) {
+  if (repeated || (!zeroEnergy && sim.start > 0)) {
     const played = simulateWritten({
       ...args,
-      repeats: 1,
+      repeats: repeated ? args.repeats : 1,
       keep: 'play',
       samples: 4,
       timelineOnly: true,
@@ -460,7 +461,8 @@ export function writtenEnergy(
     members,
     counted,
     constellations,
-    repeated
+    repeated && full === sim,
+    repeated && full !== sim ? STEADY_COUNTED : undefined
   )
   const energy =
     full === sim

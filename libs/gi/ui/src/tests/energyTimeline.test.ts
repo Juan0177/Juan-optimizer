@@ -181,6 +181,40 @@ describe('the written rotation Energy gauge', () => {
     expect(window(35)).toBeCloseTo(1200)
   })
 
+  it('checks a steady run Burst to Burst, not its counted span repeated', () => {
+    // (4 rotations of 10 s, a Burst at 5 s into each, 30 Energy of particles in each but the
+    // 2nd, before the counted rotations, and 10 flat Energy every 8.6 s: each Burst to Burst
+    // stretch has 1 or 2 of them)
+    const flat = (frame: number): TeamEnergyEvent => ({
+      kind: 'flat',
+      frame,
+      amount: 10,
+      character: 'Bennett',
+    })
+    const events = [
+      ...[0, 1, 2, 3].flatMap((r) => [
+        particles(100 + 600 * r, r === 1 ? 5 : 10),
+        cast(300 + 600 * r),
+      ]),
+      ...[0, 516, 1032, 1548, 2064].map(flat),
+    ].sort((a, b) => a.frame - b.frame)
+    const run = { ...trace(events, false), frames: 2400, countedFrom: 1200 }
+    expect(
+      trackEnergyRecharge(run, settings(), {}, false).Bennett?.required
+    ).toBe(166.7)
+    // (rotations 3–4 repeated whole: the stretch across their seam has none)
+    const span = trace(
+      events
+        .filter((e) => e.frame >= 1200)
+        .map((e) => ({ ...e, frame: e.frame - 1200 })),
+      true
+    )
+    expect(
+      trackEnergyRecharge({ ...span, frames: 1200 }, settings(), {}, false)
+        .Bennett?.required
+    ).toBe(200)
+  })
+
   it('credits a particle on the cast frame and respects the selected particle RNG', () => {
     const opening = trace(
       [{ ...particles(180, 20), variance: 0.25 } as TeamEnergyEvent, cast(180)],

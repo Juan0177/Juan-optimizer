@@ -51,6 +51,8 @@ export const energyTraceSchema = z.object({
   pendingOptional: z.array(character).optional(),
   /** Burst cadence used to play the repeating rotation. */
   cadence: z.partialRecord(character, z.number().nonnegative()).optional(),
+  /** A whole steady run: the frame its counted rotations start (late arrivals kept past the end). */
+  countedFrom: frame.optional(),
 })
 export const energyTimelineSchema = z.object({
   rotation: energyTraceSchema.optional(),
