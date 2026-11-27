@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.49.4",
+    "date": "2026-11-27",
+    "fixed": [
+      "Fixed UI lag and freezing when saving builds via \"Save and use on this team\" in Team Optimize."
+    ]
+  },
+  {
     "version": "1.49.3",
     "date": "2026-11-27"
   },

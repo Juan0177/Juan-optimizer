@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.49.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.4) (2026-11-27)
+
+### Fixed
+
+- Fixed UI lag and freezing when saving builds via "Save and use on this team" in Team Optimize.
+
 ## [v1.49.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.0) (2026-11-27)
 
 ### New
