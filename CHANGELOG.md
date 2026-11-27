@@ -9,7 +9,7 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 ### New
 
 - Auto-rank equipment toggle in Team Optimize: automatically compare alternative weapons and artifact sets right after optimization finishes, saved across teams.
-- Customize or append the label in parentheses when clicking "Save and use on this team" in Team Optimize, with a live build name preview and one-click clear.
+- Custom build name format on "Save and use on this team" in Team Optimize: edit the build name per save or persist a reusable format (using {team}) for future saves.
 
 ## [v1.48.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.48.0) (2026-11-27)
 
