@@ -512,7 +512,10 @@ describe('KQM first-time setup', () => {
     const options = (await screen.findAllByRole('option')).map(
       (o) => o.textContent
     )
-    expect(options.filter(Boolean)).toHaveLength(6)
+    expect(options.filter(Boolean)).toHaveLength(7)
+    expect(options.find((o) => /^Casual/.test(o ?? ''))).toMatch(
+      /20 useful rolls/
+    )
     expect(options.find((o) => /^Custom/.test(o ?? ''))).toMatch(/10 to 45/)
     expect(options.find((o) => /^Perfect/.test(o ?? ''))).toMatch(
       /highest value/
@@ -532,18 +535,18 @@ describe('KQM first-time setup', () => {
     await choose(row('KamisatoAyaka')!, /^Great/)
     expect(all().textContent).toBe('Great')
     expect(generated().memberStandards).toBeUndefined()
-    // Custom: a box per member, at the wanted rolls closest to its standard (Great: 35)
+    // Custom: a box per member, at the wanted rolls closest to its standard (Great: 40)
     await choose(all(), /^Custom/)
     for (const key of keys) {
       expect(row(key)).toBeNull()
-      expect(box(key)!.value).toBe('35')
+      expect(box(key)!.value).toBe('40')
     }
-    expect(generated()).toMatchObject({ standard: 35 })
+    expect(generated()).toMatchObject({ standard: 40 })
     fireEvent.change(box('Shenhe')!, { target: { value: '4' } })
     expect(box('Shenhe')!.getAttribute('aria-invalid')).toBe('true')
     fireEvent.change(box('Shenhe')!, { target: { value: '30' } })
     expect(generated()).toMatchObject({
-      standard: 35,
+      standard: 40,
       memberStandards: { Shenhe: 30 },
     })
     await choose(all(), /^KQM Standard/)

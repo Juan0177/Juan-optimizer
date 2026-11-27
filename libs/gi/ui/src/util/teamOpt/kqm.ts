@@ -46,6 +46,7 @@ import {
   KQM_FIXED_ROLLS,
   KQM_ROLLS,
   KQM_SUBSTAT_ROLLS,
+  KQM_TIER_MODEL,
   KqmSearchCancelled,
   kqmProblem,
   kqmRarity,
@@ -198,14 +199,17 @@ export const kqmTalentLevel = (
  * before the tiers: its higher standards placed rolls no set of artifacts can have)
  */
 export const kqmResultStandardChanged = (
-  result: Pick<KqmResult, 'builds' | 'optimized'>,
+  result: Pick<KqmResult, 'builds' | 'optimized' | 'tiers'>,
   kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined
 ) =>
-  result.optimized.some(
-    (ck) =>
-      !!result.builds[ck] &&
-      kqmStandardOf(result.builds[ck]!.standard) !== kqmMemberStandard(ck, kqm)
-  )
+  result.optimized.some((ck) => {
+    const build = result.builds[ck]
+    if (!build) return false
+    const standard = kqmStandardOf(build.standard)
+    // (a tier's build from an older model: its rolls are not what the tier gives now)
+    if (standard !== 'kqms' && (result.tiers ?? 1) < KQM_TIER_MODEL) return true
+    return standard !== kqmMemberStandard(ck, kqm)
+  })
 
 /** A member's artifact standard: its own when set per member, else the team's */
 export const kqmMemberStandard = (
@@ -326,6 +330,8 @@ export interface KqmResult {
   assumed: Partial<Record<CharacterKey, { path: string[]; value: string }[]>>
   optimized: CharacterKey[]
   rounds: number
+  /** The artifact tiers' model its builds were made with (`KQM_TIER_MODEL`; absent: the first) */
+  tiers?: number
   /**
    * The written rotation as it was played for these builds (`KqmRunArgs.replay`); absent: the
    * team's attacks were used as they are (nothing written)
@@ -3287,6 +3293,7 @@ async function runKqm({
       assumed,
       optimized: optimized.map((m) => m.characterKey),
       rounds,
+      tiers: KQM_TIER_MODEL,
       played,
       ...(narrowed ? { screenedOut } : rootOut ? { screenedOut: rootOut } : {}),
     }
@@ -3504,6 +3511,7 @@ async function runKqm({
       assumed: {},
       optimized: optimized.map((m) => m.characterKey),
       rounds,
+      tiers: KQM_TIER_MODEL,
       played,
     }
   }

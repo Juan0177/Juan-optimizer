@@ -403,6 +403,11 @@ describe('KQM Standards builds', () => {
     }
     expect(kqmResultStandardChanged(result, kqm)).toBe(false)
     expect(kqmResultStandardChanged(result, teamOpt.kqm)).toBe(true)
+    // (a run from before the tiers' current model: out of date, whatever its standards)
+    expect(result.tiers).toBeGreaterThanOrEqual(2)
+    expect(kqmResultStandardChanged({ ...result, tiers: undefined }, kqm)).toBe(
+      true
+    )
     // (a better standard on one member: more damage than the team's Great for both)
     const even = (await run(database, teamId, {
       ...teamOpt,

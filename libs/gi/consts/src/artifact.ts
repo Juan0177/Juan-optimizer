@@ -186,10 +186,11 @@ export const allMainSubStatKeys = Array.from(
 export type MainSubStatKey = (typeof allMainSubStatKeys)[number]
 
 /**
- * KQM mode's artifact standards: KQM Standards' own, then tiers up to the best artifacts the game
- * can make (Good, Great, Top, Perfect)
+ * KQM mode's artifact standards, weakest first: Casual, KQM Standards' own, then tiers up to the
+ * best artifacts the game can make (Good, Great, Top, Perfect)
  */
 export const allKqmStandardKeys = [
+  'casual',
   'kqms',
   'good',
   'great',
