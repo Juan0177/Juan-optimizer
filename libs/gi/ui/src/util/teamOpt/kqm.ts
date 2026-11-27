@@ -46,6 +46,7 @@ import {
   KQM_FIXED_ROLLS,
   KQM_ROLLS,
   KQM_SUBSTAT_ROLLS,
+  KQM_TIER_MODEL,
   KqmSearchCancelled,
   kqmProblem,
   kqmRarity,
@@ -58,6 +59,7 @@ import {
   queueKqmSetTasks,
   releaseKqmWorkers,
   scoreOf,
+  searchSet,
   yieldTask,
 } from '@genshin-optimizer/gi/solver'
 import {
@@ -78,10 +80,11 @@ import {
   isFavonius,
   type RotationEnergy,
   syncEnergyCalculator,
+  upgradeConstellationModes,
   withRotationEnergy,
 } from './energyCalc'
 import { itemConditionals } from './itemConditionals'
-import type { KqmBuiltProblem } from './kqmBuild'
+import { buildKqmProblem, type KqmBuiltProblem } from './kqmBuild'
 import { kqmProblemBuilder, releaseKqmBuilders } from './kqmBuildPool'
 import {
   KQM_ONE_COPY,
@@ -196,14 +199,17 @@ export const kqmTalentLevel = (
  * before the tiers: its higher standards placed rolls no set of artifacts can have)
  */
 export const kqmResultStandardChanged = (
-  result: Pick<KqmResult, 'builds' | 'optimized'>,
+  result: Pick<KqmResult, 'builds' | 'optimized' | 'tiers'>,
   kqm: Pick<TeamOptKqm, 'standard' | 'memberStandards'> | undefined
 ) =>
-  result.optimized.some(
-    (ck) =>
-      !!result.builds[ck] &&
-      kqmStandardOf(result.builds[ck]!.standard) !== kqmMemberStandard(ck, kqm)
-  )
+  result.optimized.some((ck) => {
+    const build = result.builds[ck]
+    if (!build) return false
+    const standard = kqmStandardOf(build.standard)
+    // (a tier's build from an older model: its rolls are not what the tier gives now)
+    if (standard !== 'kqms' && (result.tiers ?? 1) < KQM_TIER_MODEL) return true
+    return standard !== kqmMemberStandard(ck, kqm)
+  })
 
 /** A member's artifact standard: its own when set per member, else the team's */
 export const kqmMemberStandard = (
@@ -324,6 +330,8 @@ export interface KqmResult {
   assumed: Partial<Record<CharacterKey, { path: string[]; value: string }[]>>
   optimized: CharacterKey[]
   rounds: number
+  /** The artifact tiers' model its builds were made with (`KQM_TIER_MODEL`; absent: the first) */
+  tiers?: number
   /**
    * The written rotation as it was played for these builds (`KqmRunArgs.replay`); absent: the
    * team's attacks were used as they are (nothing written)
@@ -1323,6 +1331,21 @@ interface KqmRunArgs {
   skipRankings?: boolean
   /** Keep the KQM worker pool warm after the run finishes (e.g. when running several scenarios back-to-back). */
   keepWorkers?: boolean
+  /** Build problems & search inline in the current thread/worker (avoids spawning nested workers). */
+  inline?: boolean
+  /** With `from` + `only`: return the final refitted score & builds directly without rebuilding `finish()`. */
+  summaryOnly?: boolean
+  /** Override how many screened main-stat combinations are refined per set (default `MAINS_SEARCHED`). */
+  mainsSearched?: number
+  /** Pre-played rotation to reuse directly without calling `replay`. */
+  initialPlayed?: KqmPlayed
+  /**
+   * With `from` + `only`: baseline ER requirements (%) per member. Any non-raised teammate whose
+   * ER requirement shifts after the upgrade/replay is also refitted (fixed weapon & sets) so
+   * team-wide ER taxes (e.g. dropping Favonius for R1) and ER savings (e.g. battery constellations
+   * or extra Skill casts) are priced accurately into team DPS.
+   */
+  baseEr?: Partial<Record<CharacterKey, number>>
   /** Optional screened-out weapons/sets from a base KQM run for unchanged teammates (only used when !fullSearch). */
   seedScreenedOut?: KqmResult['screenedOut']
   /**
@@ -1416,6 +1439,11 @@ async function runKqm({
   searchOnly,
   skipRankings,
   keepWorkers,
+  inline,
+  summaryOnly,
+  mainsSearched,
+  initialPlayed,
+  baseEr,
   seedScreenedOut,
   spaceLimits,
   comparison,
@@ -1445,9 +1473,10 @@ async function runKqm({
   const standardOf = (ck: CharacterKey) => kqmMemberStandard(ck, kqm)
   const members = teamOptMembers(database, teamId)
   const keys = members.map((m) => m.characterKey)
+  const isRefit = !!(from && only !== undefined)
   // The rotation the builds are for: as played for them (`replay`), else the team's attacks. A
   // comparison keeps its run's (its `teamOpt` has them).
-  let played: KqmPlayed | undefined = comparison?.result.played
+  let played: KqmPlayed | undefined = initialPlayed ?? comparison?.result.played
   const attacksNow = () => played?.attacks ?? teamOpt.attacks
   const rotationTimeNow = () => played?.rotationTime ?? teamOpt.rotationTime
   // the calculator's settings as they fit the team now (members, rotation time, constellations
@@ -1455,27 +1484,33 @@ async function runKqm({
   const calculatorFor = (
     rotationTime: number | undefined,
     simulation = played
-  ) =>
-    kqm.energySource === 'calculator' && kqm.energyCalculator
-      ? {
-          ...withRotationEnergy(
-            syncEnergyCalculator(
-              keys,
-              kqm.energyCalculator,
-              rotationTime ?? kqm.energyCalculator.rotationTime,
-              teamOpt.onField ?? keys[0],
-              Object.fromEntries(
-                keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
-              )
-            ),
-            keys,
-            simulation?.energyRotationTime !== undefined
-              ? simulation.energy
-              : undefined
-          ),
-          rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
-        }
-      : undefined
+  ) => {
+    if (kqm.energySource !== 'calculator' || !kqm.energyCalculator)
+      return undefined
+    const kqmCons = Object.fromEntries(
+      keys.map((k) => [k, kqmMemberConstellation(k, kqm)])
+    ) as Partial<Record<CharacterKey, number>>
+    const synced = syncEnergyCalculator(
+      keys,
+      kqm.energyCalculator,
+      rotationTime ?? kqm.energyCalculator.rotationTime,
+      teamOpt.onField ?? keys[0],
+      kqmCons
+    )
+    const energy =
+      simulation?.energy &&
+      (isRefit || simulation.energyRotationTime !== undefined)
+        ? simulation.energy
+        : undefined
+    return {
+      ...(energy
+        ? withRotationEnergy(synced, keys, energy)
+        : isRefit
+          ? upgradeConstellationModes(synced, keys, kqmCons)
+          : synced),
+      rotationTime: rotationTime ?? kqm.energyCalculator.rotationTime,
+    }
+  }
   let calculator = calculatorFor(
     played?.energyRotationTime ?? rotationTimeNow()
   )
@@ -1561,20 +1596,25 @@ async function runKqm({
     from && only !== undefined
       ? new Set<CharacterKey>(typeof only === 'string' ? [only] : only)
       : undefined
-  for (const k of searchOnly ? [] : (refitted ?? [])) {
-    const build = from?.[k]
+  const lockRefitSpace = (k: CharacterKey, build: KqmBuild) => {
     const space = spaces.get(k)
-    if (!build || !space) continue
+    if (!space) return
     const sets = Object.entries(build.sets) as [ArtifactSetKey, number][]
+    const matched = space.weapons.filter(
+      (w) =>
+        w.key === build.weapon.key && w.refinement === build.weapon.refinement
+    )
     spaces.set(k, {
       ...space,
-      weapons: space.weapons.filter(
-        (w) =>
-          w.key === build.weapon.key && w.refinement === build.weapon.refinement
-      ),
-      four: sets.filter(([, n]) => n >= 4).map(([k]) => k),
-      two: sets.filter(([, n]) => n === 2).map(([k]) => k),
+      weapons: matched.length ? matched : [build.weapon],
+      four: sets.filter(([, n]) => n >= 4).map(([s]) => s),
+      two: sets.filter(([, n]) => n === 2).map(([s]) => s),
     })
+  }
+  // (juanlab: with `searchOnly`, the members in `only` are searched in full, not refitted)
+  for (const k of searchOnly ? [] : (refitted ?? [])) {
+    const build = from?.[k]
+    if (build) lockRefitSpace(k, build)
   }
   const keptMembers = new Set<CharacterKey>()
   if (from && spaceLimits) {
@@ -1887,8 +1927,8 @@ async function runKqm({
       byPlayed.delete(byPlayed.keys().next().value!)
     return work
   }
-  // (a new run drops the last one's: problems are large)
-  if (!comparison) lastWork = undefined
+  // (a new run drops the last one's: problems are large; concurrent refits keep it intact)
+  if (!comparison && !refitted) lastWork = undefined
   // the work is for the members as they are set up (a member's settings changed since the run:
   // none of it), and for the rotation as played
   const teamStamp = JSON.stringify(
@@ -1946,7 +1986,7 @@ async function runKqm({
     const filters = filtersFor(withWeapon, settings)
     const { arts, weapons } = gearOf(withWeapon)
     delete arts[ck]
-    const built = builder.build(teamId, gender, {
+    const problemSettings = {
       dyn: ck,
       arts,
       attacks: kqmProblemAttacks(
@@ -1963,7 +2003,12 @@ async function runKqm({
       characters,
       onField: teamOpt.onField,
       bonusStats,
-    })
+    }
+    const built = inline
+      ? Promise.resolve(
+          buildKqmProblem(database, teamId, gender, problemSettings)
+        )
+      : builder.build(teamId, gender, problemSettings)
     const problem = built.then((b) => b && compile(b, standardOf(ck)))
     // (one that failed is built again when asked for again; a wait that was cancelled is no error)
     problem.catch(() => {
@@ -2057,18 +2102,22 @@ async function runKqm({
         local: problem,
         sets,
         mains: spaces.get(ck)!.mains,
+        ...(mainsSearched !== undefined && { mainsSearched }),
       }
       const { searches } = work
-      search = queueKqmSetTasks([task], kqmMainValues(), isCancelled)[0].then(
-        (r) => {
-          tried += r?.tried ?? 0
-          // (kept for the comparisons after; the oldest go first)
-          searches.set(key, r)
-          if (searches.size > SEARCHES_KEPT)
-            searches.delete(searches.keys().next().value!)
-          return r
-        }
-      )
+      const rawSearch = inline
+        ? Promise.resolve(
+            searchSet(problem, sets, task.mains, kqmMainValues(), mainsSearched)
+          )
+        : queueKqmSetTasks([task], kqmMainValues(), isCancelled)[0]
+      search = rawSearch.then((r) => {
+        tried += r?.tried ?? 0
+        // (kept for the comparisons after; the oldest go first)
+        searches.set(key, r)
+        if (searches.size > SEARCHES_KEPT)
+          searches.delete(searches.keys().next().value!)
+        return r
+      })
       // (a search nobody waits for any more, after a cancel, is no error)
       search.catch(() => undefined)
       setSearches.set(key, search)
@@ -2422,6 +2471,8 @@ async function runKqm({
   // no other build changed since.
   let rounds = 0
   let changes = 0
+  let lastDescendScore: Score | undefined
+  const descendUnmet: Partial<Record<CharacterKey, boolean>> = {}
   const lastChange: Partial<Record<CharacterKey, number>> = {}
   const settled: Partial<Record<CharacterKey, number>> = {}
   /** Rounds `first` to `last` at most, until one changes no build */
@@ -2490,11 +2541,19 @@ async function runKqm({
         ) {
           changed = true
           builds[ck] = best.build
+          lastDescendScore = best.score
+          descendUnmet[ck] = best.score.deficit > DEFICIT_TOL
           lastChange[ck] = ++changes
           delete settled[ck]
         } else {
-          if (best && (!beforeScore || better(best.score, beforeScore)))
+          if (best && (!beforeScore || better(best.score, beforeScore))) {
             builds[ck] = best.build
+            lastDescendScore = best.score
+            descendUnmet[ck] = best.score.deficit > DEFICIT_TOL
+          } else if (beforeScore) {
+            lastDescendScore = beforeScore
+            descendUnmet[ck] = beforeScore.deficit > DEFICIT_TOL
+          }
           settled[ck] = changes
         }
       }
@@ -3120,7 +3179,11 @@ async function runKqm({
     const next = playBuilds(state, withGear)
     if (!next) return false
     const playedId = (p: KqmPlayed) =>
-      JSON.stringify([p.attacks, p.rotationTime, p.energyRotationTime])
+      JSON.stringify(
+        isRefit
+          ? [p.attacks, p.rotationTime, p.energyRotationTime, p.energy]
+          : [p.attacks, p.rotationTime, p.energyRotationTime]
+      )
     const changed = !played || playedId(next) !== playedId(played)
     played = next
     if (!changed) return false
@@ -3240,6 +3303,7 @@ async function runKqm({
       assumed,
       optimized: optimized.map((m) => m.characterKey),
       rounds,
+      tiers: KQM_TIER_MODEL,
       played,
       ...(narrowed ? { screenedOut } : rootOut ? { screenedOut: rootOut } : {}),
     }
@@ -3248,8 +3312,28 @@ async function runKqm({
   let preview: KqmResult | undefined
   try {
     // the rotation at the KQM constellations, with no weapon or set effects yet (unless starting
-    // from known scenario-base builds, so their gear effects apply right from round 1)
-    if (!comparison) replayFor(builds, !!(from && skipRankings))
+    // from known scenario-base or refitted builds, so their fixed gear effects apply right away)
+    if (!comparison && !initialPlayed)
+      replayFor(builds, !!(from && (skipRankings || refitted)))
+    // When a constellation, alt rotation, or R1 swap shifts a non-raised teammate's ER target
+    // (e.g. dropping Favonius for R1, or adding battery particles/C2/C4 energy), refit that
+    // teammate's artifacts too (keeping their weapon & sets fixed) so team DPS prices it accurately.
+    if (refitted && baseEr) {
+      const erFilterKey = JSON.stringify(['basic', 'enerRech_'])
+      const erOf = (f: StatFilters | undefined) =>
+        f?.[erFilterKey]?.find((s) => !s.disabled)?.value ?? 100
+      const currentFilters = filtersFor(builds)
+      for (const m of optimized) {
+        const ck = m.characterKey
+        if (refitted.has(ck) || keptMembers.has(ck) || !from?.[ck]) continue
+        const prevEr = baseEr[ck] ?? 100
+        const nextEr = erOf(currentFilters[ck])
+        if (Math.abs(nextEr - prevEr) > 0.5) {
+          refitted.add(ck)
+          lockRefitSpace(ck, from[ck]!)
+        }
+      }
+    }
     // The first builds, warmed up in the team's order and in reverse (the last ones choose with
     // the first ones' sets on: a team-wide set goes to whoever chooses first), the better kept:
     // which way the rounds settle depends on it, and only the KQM settings decide it
@@ -3269,11 +3353,16 @@ async function runKqm({
     }
     await descend(1, maxRounds)
     // Played again with the builds found (their weapons' and sets' effects in it): while that
-    // changes what it plays, the builds are searched again from where they are
+    // changes what it plays, the builds are searched again from where they are.
+    // (`refitted` keeps weapons and sets fixed, so replayFor already ran with the exact gear.)
     const maxReplays = skipRankings && maxRounds <= 2 ? 1 : REPLAYS
     for (
       let r = 0;
-      !comparison && maxRounds > 0 && r < maxReplays && replayFor(builds, true);
+      !comparison &&
+      !refitted &&
+      maxRounds > 0 &&
+      r < maxReplays &&
+      replayFor(builds, true);
       r++
     ) {
       for (const ck of Object.keys(settled) as CharacterKey[])
@@ -3384,18 +3473,65 @@ async function runKqm({
   } catch (e) {
     throw cancelled(e)
   } finally {
-    // (a comparison's workers are kept a while: the next pick needs them again)
-    releaseKqmWorkers(comparison || keepWorkers ? COMPARE_WORKERS_KEPT_MS : 0)
-    // (the builders a while longer: a pick in the inspector builds with them)
-    releaseKqmBuilders(COMPARE_WORKERS_KEPT_MS)
+    if (!inline) {
+      // (a comparison's workers are kept a while: the next pick needs them again)
+      releaseKqmWorkers(comparison || keepWorkers ? COMPARE_WORKERS_KEPT_MS : 0)
+      // (the builders a while longer: a pick in the inspector builds with them)
+      releaseKqmBuilders(COMPARE_WORKERS_KEPT_MS)
+    }
+  }
+
+  // Fast summary-only path for investment refits: `lastDescendScore` already holds the exact
+  // team damage & ER constraint deficit from the final refitted member's compiled problem.
+  if (summaryOnly && refitted && lastDescendScore) {
+    const unmetMap: Partial<Record<CharacterKey, number[]>> = {}
+    if (calculator) {
+      // In ER calculator mode every member's problem checks ALL members' constraints, so only the
+      // final step's deficit reflects the fully-refitted team state (no false positives from order).
+      if (lastDescendScore.deficit > DEFICIT_TOL) {
+        const firstRaised = [...refitted][0]
+        if (firstRaised) unmetMap[firstRaised] = [0]
+      }
+    } else {
+      for (const [ck, isUnmet] of Object.entries(descendUnmet) as [
+        CharacterKey,
+        boolean,
+      ][]) {
+        if (isUnmet) unmetMap[ck] = [0]
+      }
+      if (
+        lastDescendScore.deficit > DEFICIT_TOL &&
+        Object.keys(unmetMap).length === 0
+      ) {
+        const firstRaised = [...refitted][0]
+        if (firstRaised) unmetMap[firstRaised] = [0]
+      }
+    }
+    return {
+      builds: { ...builds },
+      constellations,
+      energyRecharge: {},
+      after: {
+        total: lastDescendScore.total,
+        members: {},
+        attacks: {},
+        unmet: unmetMap,
+      },
+      rankings,
+      assumed: {},
+      optimized: optimized.map((m) => m.characterKey),
+      rounds,
+      tiers: KQM_TIER_MODEL,
+      played,
+    }
   }
 
   // (a comparison's builds do not change after its preview: only its rankings are added)
   const out = preview ? { ...preview, rankings } : finish()
   if (!out) return undefined
   rootOf.set(out, root ?? out)
-  // (the run's work, for its comparisons)
-  if (!comparison)
+  // (the run's work, for its comparisons; concurrent refits keep the inspector's work intact)
+  if (!comparison && !refitted)
     lastWork = { root: out, byPlayed: new Map([[workKey(played), work]]) }
   return out
 }

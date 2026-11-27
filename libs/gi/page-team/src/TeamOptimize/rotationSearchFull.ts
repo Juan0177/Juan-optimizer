@@ -291,6 +291,7 @@ export async function fullRotationSearch({
           funded,
           erCost,
           kinds,
+          constellations: base.setup.constellations,
           isCancelled,
           onProgress: progress,
         })

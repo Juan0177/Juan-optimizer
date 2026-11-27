@@ -128,15 +128,39 @@ function teamContext(database: ArtCharDatabase, teamId: string) {
       customTargets: teamChar.customMultiTargets.length || undefined,
     }
   })
-  // (the attacks as a count per member: the rotation text makes them again)
+  // (the attacks as a count per member, Team optimize's and KQM's: the rotation text makes them
+  // again)
   const { attacks, excludedArts, kqm, ...setup } = team.teamOpt ?? {}
-  const attackCounts = (list: Record<string, unknown> | undefined) =>
+  const counts = (list: Record<string, unknown[] | undefined> | undefined) =>
     Object.fromEntries(
-      Object.entries(list ?? {}).map(([k, attacks]) => [
-        k,
-        (attacks as unknown[] | undefined)?.length ?? 0,
-      ])
+      Object.entries(list ?? {}).map(([k, l]) => [k, l?.length ?? 0])
     )
+  const { attacks: kqmAttacks, ...kqmSetup } = kqm ?? {}
+  // (each tab's written rotation, as the team keeps it)
+  const written = (mode: 'inventory' | 'kqm') => {
+    const document = team.rotationDocuments?.[mode]
+    if (!document) return undefined
+    const timing = (() => {
+      try {
+        return document.Timing ? JSON.parse(document.Timing) : undefined
+      } catch {
+        return document.Timing
+      }
+    })()
+    return nonEmpty({
+      text: document.Text,
+      draft: document.Draft,
+      opener: document.Opener,
+      useAttacks: document.UseAttacks,
+      timing,
+    })
+  }
+  const consRotations = Object.fromEntries(
+    members.flatMap((m) => {
+      const value = parsed(`kqmConsRotations_${teamId}_${m.key}`)
+      return value ? [[m.key, value]] : []
+    })
+  )
   return {
     id: teamId,
     name: team.name,
@@ -145,16 +169,72 @@ function teamContext(database: ArtCharDatabase, teamId: string) {
     conditional: nonEmpty(team.conditional),
     teamOpt: {
       ...setup,
-      attacks: attackCounts(attacks),
-      // (KQM's own copy of the attacks, counted the same way: juanlab)
-      kqm: kqm && { ...kqm, attacks: attackCounts(kqm.attacks) },
+      attacks: counts(attacks),
       excludedArts: Array.isArray(excludedArts)
         ? excludedArts.length
         : undefined,
+      kqm: kqm && { ...kqmSetup, attacks: counts(kqmAttacks) },
     },
     rotation: {
-      teamOptimize: rotationOf(team.rotationDocuments?.inventory, false),
-      kqm: rotationOf(team.rotationDocuments?.kqm, true),
+      ...written('inventory'),
+      kqm: written('kqm'),
+      constellations: Object.keys(consRotations).length
+        ? consRotations
+        : undefined,
+      combinations: parsed(`kqmComboRotations_${teamId}`),
+    },
+  }
+}
+
+/**
+ * What settles most reports when the rest is too large: the members, both tabs' rotation text and
+ * how their energy and Bursts are set
+ */
+function essentials(team: Record<string, unknown> | undefined) {
+  if (!team) return undefined
+  const teamOpt = team.teamOpt as Record<string, unknown> | undefined
+  const rotation = team.rotation as Record<string, unknown> | undefined
+  const energy = (settings: Record<string, unknown> | undefined) =>
+    settings && {
+      energySource: settings.energySource,
+      energyRecharge: settings.energyRecharge,
+      burstEvery: Object.fromEntries(
+        Object.entries(
+          ((settings.energyCalculator as Record<string, unknown> | undefined)
+            ?.members ?? {}) as Record<string, { burstEvery?: number }>
+        ).map(([k, m]) => [k, m?.burstEvery])
+      ),
+      constellations: settings.constellations,
+      lockedWeapons: settings.lockedWeapons,
+      standard: settings.standard,
+      memberStandards: settings.memberStandards,
+    }
+  const kqmRotation = rotation?.kqm as Record<string, unknown> | undefined
+  return {
+    id: team.id,
+    name: team.name,
+    members: (team.members as Record<string, unknown>[] | undefined)?.map(
+      ({ key, level, constellation, talent, weapon, sets }) => ({
+        key,
+        level,
+        constellation,
+        talent,
+        weapon,
+        sets,
+      })
+    ),
+    teamOpt: {
+      ...energy(teamOpt),
+      rotationTime: teamOpt?.rotationTime,
+      kqm: energy(teamOpt?.kqm as Record<string, unknown> | undefined),
+    },
+    rotation: {
+      text: rotation?.text,
+      opener: rotation?.opener,
+      kqm: kqmRotation && {
+        text: kqmRotation.text,
+        opener: kqmRotation.opener,
+      },
     },
   }
 }
@@ -229,6 +309,12 @@ function capped(context: Record<string, unknown>) {
     ['constellation rotations', cut('constellations')],
     ['character', () => delete context.character],
     [
+      'rotation timing (KQM)',
+      () =>
+        delete (team?.rotation?.kqm as Record<string, unknown> | undefined)
+          ?.timing,
+    ],
+    [
       'members’ buff states',
       () =>
         team?.members?.forEach(
@@ -243,7 +329,16 @@ function capped(context: Record<string, unknown>) {
     leftOut.push(what)
   }
   if (leftOut.length) context.leftOut = leftOut
-  return size() <= MAX_CONTEXT_CHARS
-    ? context
+  if (size() <= MAX_CONTEXT_CHARS) return context
+  // (still too large: the essentials of the team, else none of it)
+  const kept = {
+    page: context.page,
+    app: context.app,
+    errors: context.errors,
+    team: essentials(context.team as Record<string, unknown> | undefined),
+    leftOut: ['too large: the team’s essentials only'],
+  }
+  return JSON.stringify(kept).length <= MAX_CONTEXT_CHARS
+    ? kept
     : { page: context.page, app: context.app, leftOut: ['too large'] }
 }

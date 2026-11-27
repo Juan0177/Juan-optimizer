@@ -41,6 +41,7 @@ import {
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
+  kqmBurstEvery,
   kqmMemberConstellation,
   kqmSimGear,
   parseFrameData,
@@ -297,6 +298,15 @@ export function writtenRotationOf(database: Database, rid: string) {
  * A tab's saved rotation played and used as "Use this rotation" does, for a team set up outside
  * its page (a KQM version): false when none is written, or it does not play
  */
+/**
+ * The tab's ER calculator "Burst: Every 2nd / 3rd" (Team optimize's or KQM's), played as its runs
+ * play it: those members' Bursts in one of every N rotations
+ */
+function tabBurstEvery(database: Database, teamId: string, kqm?: boolean) {
+  const teamOpt = database.teams.get(teamId)?.teamOpt
+  return kqm ? kqmBurstEvery(teamOpt?.kqm) : teamBurstEvery(teamOpt)
+}
+
 export function applySavedRotation(
   database: Database,
   teamId: string,
@@ -331,6 +341,7 @@ export function applySavedRotation(
       teamId,
       gender,
       openerWarning: (warning) => warning,
+      burstEvery: tabBurstEvery(database, teamId, kqm),
     })
   } catch {
     return false
@@ -829,6 +840,26 @@ export function teamRunRotation(
   }
 }
 
+/** KQM tab's saved rotation metadata (for running replays inside parallel worker threads). */
+export function kqmRunRotation(
+  database: Database,
+  gender: GenderKey,
+  i18n: i18n,
+  teamId: string
+): TeamOptRunRotation {
+  const kqmId = kqmRotationId(teamId)
+  const useAttacks = readStored(database, manualAttacksKey(kqmId)) === '1'
+  return {
+    text: useAttacks ? '' : (readStored(database, storageKey(kqmId)) ?? ''),
+    opener: useAttacks ? '' : (readStored(database, openerKey(kqmId)) ?? ''),
+    timing: parseTiming(
+      useAttacks ? null : readStored(database, timingKey(kqmId))
+    ),
+    frameData: parseFrameData(readStored(database, frameDataKey)),
+    names: memberNamesOf(teamOptMembers(database, teamId), i18n, gender),
+  }
+}
+
 const timedSetEffects = new Map<
   string,
   Partial<Record<CharacterKey, ReadonlySet<string>>> | undefined
@@ -1210,6 +1241,7 @@ export function useRotationWriter({
           teamId,
           gender,
           openerWarning: (warning) => warning,
+          burstEvery: tabBurstEvery(database, teamId, isKqm),
         })
       } catch {
         return
@@ -1742,6 +1774,16 @@ function WriterModal({
   const closing = useRef(false)
   const lastResult = useRef<ReturnType<typeof simulateWritten>>(undefined)
   const isKqm = !!kqm
+  // (members set to Burst every 2nd / 3rd rotation in the tab's ER calculator: played so, as its
+  // runs play them)
+  const savedTeamOpt = useTeam(teamId)?.teamOpt
+  const burstKey = JSON.stringify(
+    (kqm ? kqmBurstEvery(kqm) : teamBurstEvery(savedTeamOpt)) ?? {}
+  )
+  const burstEvery = useMemo(
+    () => JSON.parse(burstKey) as Partial<Record<CharacterKey, number>>,
+    [burstKey]
+  )
   // the window first: the rotation is played once it is open (a play blocks the page for a moment,
   // which would hold the window back and stall its opening)
   const [primed, setPrimed] = useState(false)
@@ -1769,10 +1811,12 @@ function WriterModal({
           defaultValue: 'Opener: {{warning}}',
           warning,
         }),
+      burstEvery,
     }),
     // (the members' constellations are read when the text changes)
     [
       isKqm,
+      burstEvery,
       deferred,
       deferredTiming,
       deferredFrameData,
@@ -2659,6 +2703,41 @@ function WriterModal({
                         gap: 0.75,
                       }}
                     >
+                      {(result.loops ?? 1) > 1 &&
+                        keys
+                          .filter((k) => Math.round(burstEvery[k] ?? 1) >= 2)
+                          .map((k) => {
+                            const every = Math.round(burstEvery[k] ?? 1)
+                            const name =
+                              names.find((n) => n.characterKey === k)?.name ?? k
+                            return (
+                              <SettingChip
+                                key={k}
+                                label={t('teamOpt.writer.burstOf', {
+                                  defaultValue: '{{name}} Burst',
+                                  name,
+                                })}
+                                value={
+                                  every === 2
+                                    ? t(
+                                        'teamOpt.kqm.calc.burstEvery2',
+                                        'Every 2nd'
+                                      )
+                                    : t(
+                                        'teamOpt.kqm.calc.burstEvery3',
+                                        'Every 3rd'
+                                      )
+                                }
+                                edited
+                                tip={t('teamOpt.writer.burstEveryTip', {
+                                  defaultValue:
+                                    'From the ER calculator: {{name}} uses the Burst in 1 of every {{count}} rotations, as the optimizer plays it. The timeline shows them together; in the other rotations, a fallback written as Q/N3 plays instead.',
+                                  name,
+                                  count: every,
+                                })}
+                              />
+                            )
+                          })}
                       <SettingChip
                         label={t('teamOpt.timing.swap', 'Swap time')}
                         value={`${timing.swapFrames ?? DEFAULT_SWAP_FRAMES} f`}
@@ -3222,17 +3301,22 @@ function SettingChip({
   value,
   edited,
   onClick,
+  tip,
 }: {
   label: string
   value: string
   edited: boolean
   onClick?: () => void
+  /** What it is, on hover or focus (a chip without a click) */
+  tip?: string
 }) {
-  return (
+  const chip = (
     <ButtonBase
       onClick={onClick}
-      disabled={!onClick}
+      disabled={!onClick && !tip}
+      disableRipple={!onClick}
       sx={(theme) => ({
+        cursor: onClick ? 'pointer' : 'default',
         gap: 0.75,
         px: 1,
         py: 0.375,
@@ -3259,6 +3343,13 @@ function SettingChip({
         {value}
       </Box>
     </ButtonBase>
+  )
+  return tip ? (
+    <Tooltip title={tip} arrow>
+      {chip}
+    </Tooltip>
+  ) : (
+    chip
   )
 }
 
@@ -3915,6 +4006,13 @@ export function OptionalSyntaxHint({
           'play a fallback when not ready ·'
         )}
       </span>
+      {code('[Q E]?/[N3 N3]')}
+      <span>
+        {t(
+          'teamOpt.writer.optionalHint.group',
+          'a group only when Q is ready, else the fallback ·'
+        )}
+      </span>
       {code('3[N3 CA]')}
       <span>{t('teamOpt.writer.optionalHint.repeat', 'repeats a combo')}</span>
       {onToggleSyntax && (
@@ -3994,7 +4092,7 @@ function SyntaxSheet({
   constellations?: Partial<Record<CharacterKey, number>>
 }) {
   const { t } = useTranslation('page_team')
-  const { teamRows, generalRows } = useMemo(
+  const { teamRows, generalRows, examples } = useMemo(
     () => teamSyntaxRows(members, names, t, constellations),
     [members, names, t, constellations]
   )
@@ -4075,6 +4173,58 @@ function SyntaxSheet({
             <dd>{meaning}</dd>
           </Fragment>
         ))}
+      </Box>
+      {/* whole rotations with the conditional forms, as they are written */}
+      <Box
+        sx={{
+          pt: 1.25,
+          borderTop: `1px solid ${tokens.hairline}`,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.75,
+        }}
+      >
+        <Typography sx={{ ...type.label, fontWeight: 600 }}>
+          {t('teamOpt.writer.syntax.examples', 'Examples')}
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            gap: 1,
+          }}
+        >
+          {examples.map(({ code, meaning }) => (
+            <Box
+              key={code}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 0.5,
+                p: 1,
+                borderRadius: 1.5,
+                bgcolor: tokens.inset,
+              }}
+            >
+              <Box
+                component="code"
+                sx={{
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 12.5,
+                  color: 'text.primary',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {code}
+              </Box>
+              <Typography
+                sx={{ fontSize: 12, lineHeight: 1.45, color: 'text.secondary' }}
+              >
+                {meaning}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
       </Box>
       <Typography sx={{ fontSize: 12, color: 'text.secondary', opacity: 0.8 }}>
         {t(

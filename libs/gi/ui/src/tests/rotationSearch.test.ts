@@ -23,6 +23,7 @@ import {
   kqmWeaponData,
   kqmWeapons,
   mainMember,
+  normalStringLength,
   rotationDamage,
   rotationEdits,
   rotationGuard,
@@ -113,6 +114,10 @@ describe('the members’ order and visits (a player request)', () => {
       'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N1 CA] -> Furina'
     )
     expect(texts()).toContain(
+      'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N2 CA] -> Furina'
+    )
+    // (her string has 3 hits: a longer one only starts it over)
+    expect(texts()).not.toContain(
       'Furina E Q -> Kazuha E P -> Xianyun E -> Neuvillette 2[N6 CA] -> Furina'
     )
   })
@@ -234,7 +239,7 @@ describe('a kit’s own ways of writing an action', () => {
     'Xianyun E -> Beidou hE -> Sandrone E 2[CA N1] HP',
     members
   )
-  const vocabulary = rotationVocabulary(steps)
+  const vocabulary = rotationVocabulary(steps, { Sandrone: 1 })
   const texts = rotationEdits(steps, vocabulary).map(wordsRotationText)
   it('a held Skill only for a kit that plays one otherwise than a tap', () => {
     expect(holdsSkill('Furina')).toBe(false)
@@ -252,6 +257,11 @@ describe('a kit’s own ways of writing an action', () => {
   })
   it('are in the members’ vocabulary', () => {
     expect(vocabulary.Sandrone).toContain('CA[beams=6]')
+    // (before C1 a charge fires 3 beams at most: no more are offered)
+    const c0 = rotationVocabulary(steps, { Sandrone: 0 }).Sandrone ?? []
+    expect(c0).toContain('CA[beams=2]')
+    expect(c0).toContain('CA[beams=3]')
+    expect(c0.some((w) => /beams=[4-6]/.test(w))).toBe(false)
     expect(vocabulary.Beidou).toContain('hE[stacks=1]')
     expect(vocabulary.Sandrone).toContain('LP')
     expect(vocabulary.Xianyun).not.toContain('LP')
@@ -779,4 +789,58 @@ describe('the rotation’s damage, each run of hits worked out once', () => {
       expect(again.total).toBe(first.total)
       expect(cache.size).toBe(size)
     })
+})
+
+describe('Normal Attack strings a search offers', () => {
+  const edited = (text: string, keys: CharacterKey[]) => {
+    const steps = rotationWords(text, names(keys))
+    return rotationEdits(steps, rotationVocabulary(steps)).map(
+      wordsRotationText
+    )
+  }
+  const wordsOf = (texts: string[], member: string) =>
+    new Set(
+      texts.flatMap((t) =>
+        t
+          .split('->')
+          .filter((s) => s.trim().startsWith(member))
+          .flatMap((s) => s.match(/N[1-6]/g) ?? [])
+      )
+    )
+  it('know each kit’s string: 3 hits for Neuvillette, 5 for Raiden, 6 for Hu Tao', () => {
+    expect(normalStringLength('Neuvillette')).toBe(3)
+    expect(normalStringLength('RaidenShogun')).toBe(5)
+    expect(normalStringLength('HuTao')).toBe(6)
+  })
+  it('go no longer than the string, in groups and the vocabulary too', () => {
+    const texts = edited('Furina E Q -> Neuvillette N2 2[N1 CA] Q', [
+      'Furina',
+      'Neuvillette',
+    ])
+    const neuvi = wordsOf(texts, 'Neuvillette')
+    expect(neuvi.has('N3')).toBe(true)
+    for (const n of ['N4', 'N5', 'N6']) expect(neuvi.has(n)).toBe(false)
+    const steps = rotationWords(
+      'Neuvillette N2 CA N2 CA Q',
+      names(['Neuvillette'])
+    )
+    expect(rotationVocabulary(steps).Neuvillette).not.toContain('N4')
+    const raiden = wordsOf(
+      edited('Furina E -> RaidenShogun Q N4 CA N4 CA', [
+        'Furina',
+        'RaidenShogun',
+      ]),
+      'RaidenShogun'
+    )
+    expect(raiden.has('N5')).toBe(true)
+    expect(raiden.has('N6')).toBe(false)
+  })
+  it('keep a longer string the rotation already writes (it starts the string over)', () => {
+    const neuvi = wordsOf(
+      edited('Furina E -> Neuvillette N5 CA Q', ['Furina', 'Neuvillette']),
+      'Neuvillette'
+    )
+    expect(neuvi.has('N4')).toBe(true)
+    expect(neuvi.has('N6')).toBe(false)
+  })
 })

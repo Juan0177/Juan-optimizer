@@ -1,10 +1,12 @@
 import type { CharacterKey } from '@genshin-optimizer/gi/consts'
 import { allCharacterKeys } from '@genshin-optimizer/gi/consts'
+import { getCharEle } from '@genshin-optimizer/gi/stats'
 import type {
   SimBuffOwner,
   SimHit,
   SimulationResult,
 } from '@genshin-optimizer/gi/ui'
+import { polestarBonus } from '@genshin-optimizer/gi/ui'
 import type { BuffEffect } from './buffs'
 
 /** One stretch of a track: its value from `start` to `end` (frames) */
@@ -185,3 +187,133 @@ export const damagingHits = (sim: SimulationResult): SimHit[] =>
       h.t >= sim.start &&
       h.t <= sim.start + sim.frames
   )
+
+/**
+ * What the team plays under over the rotation, by time and by damage: Cryo Resonance (two Cryo
+ * members in a team of four: +15% CRIT Rate against an enemy affected by Cryo or Frozen) and the
+ * Polestar Field (Stellar-Conduct)
+ */
+export interface RotationConditions {
+  cryo?: {
+    /** Share of the rotation the enemy is affected by Cryo or Frozen */
+    time: number
+    /** Share of the damage that can crit dealt then (no transformative reactions) */
+    damage?: number
+  }
+  polestar?: {
+    /** Share of the rotation the field is up */
+    time: number
+    /** Its stacks on average while up */
+    stacks: number
+    /** The stacks the Cryo, Electro and Stellar-Conduct damage got, weighed by that damage */
+    damageStacks?: number
+    /** Members adding stacks to each field record (counted in `stacks`) */
+    bonus: { characterKey: CharacterKey; stacks: number }[]
+  }
+}
+
+const segmentAt = (track: TimelineTrack | undefined, frame: number) =>
+  track?.segments.find((s) => s.start <= frame && frame < s.end)
+
+export function rotationConditions(
+  sim: SimulationResult,
+  tracks: readonly TimelineTrack[],
+  members: readonly CharacterKey[],
+  damage?: (hit: SimHit) => number | undefined
+): RotationConditions {
+  const from = sim.start
+  const to = sim.start + sim.frames
+  if (!(sim.frames > 0)) return {}
+  const inRotation = sim.hits.filter((h) => h.t >= from && h.t < to)
+  const dealt = (h: SimHit) => {
+    const d = damage?.(h)
+    return d !== undefined && Number.isFinite(d) && d > 0 ? d : 0
+  }
+  const out: RotationConditions = {}
+
+  const cryoMembers = members.filter((k) => getCharEle(k) === 'cryo').length
+  if (members.length >= 4 && cryoMembers >= 2) {
+    let cryoFrames = 0
+    const log = sim.auras
+    if (log?.length) {
+      for (const [i, e] of log.entries()) {
+        const start = Math.max(from, e.t)
+        const end = Math.min(to, log[i + 1]?.t ?? to)
+        if (end > start && ('cryo' in e.auras || 'frozen' in e.auras))
+          cryoFrames += end - start
+      }
+    } else {
+      const track = tracks.find(
+        (x) =>
+          x.owner === 'team' && x.path.join('.') === 'resonance.ShatteringIce'
+      )
+      for (const seg of track?.segments ?? [])
+        if (seg.value) cryoFrames += seg.end - seg.start
+    }
+    let on = 0
+    let total = 0
+    if (damage)
+      for (const h of inRotation) {
+        if (h.tag === 'other') continue
+        const d = dealt(h)
+        if (!d) continue
+        total += d
+        if (
+          h.states?.some(
+            (s) => s.path.join('.') === 'resonance.ShatteringIce' && s.value
+          )
+        )
+          on += d
+      }
+    out.cryo = {
+      time: Math.min(1, cryoFrames / sim.frames),
+      ...(total > 0 ? { damage: on / total } : {}),
+    }
+  }
+
+  const stacksTrack = tracks.find(
+    (x) => x.owner === 'team' && x.path.join('.') === 'reaction.polestarStacks'
+  )
+  if (stacksTrack?.segments.some((s) => +s.value > 0)) {
+    const fieldTrack = tracks.find(
+      (x) => x.owner === 'team' && x.path.join('.') === 'reaction.oppInsidePole'
+    )
+    let up = 0
+    for (const seg of (fieldTrack ?? stacksTrack).segments)
+      if (fieldTrack ? seg.value : +seg.value > 0) up += seg.end - seg.start
+    let stackFrames = 0
+    let weighted = 0
+    for (const seg of stacksTrack.segments) {
+      const n = +seg.value
+      if (!(n > 0)) continue
+      stackFrames += seg.end - seg.start
+      weighted += n * (seg.end - seg.start)
+    }
+    let dmg = 0
+    let dmgStacks = 0
+    if (damage)
+      for (const h of inRotation) {
+        if (
+          h.tag !== 'directStellarConduct' &&
+          h.element !== 'cryo' &&
+          h.element !== 'electro'
+        )
+          continue
+        if (h.tag === 'other' && h.path[0] === 'reaction') continue
+        const d = dealt(h)
+        if (!d) continue
+        dmg += d
+        dmgStacks += d * (+(segmentAt(stacksTrack, h.t)?.value ?? 0) || 0)
+      }
+    out.polestar = {
+      time: Math.min(1, up / sim.frames),
+      stacks: stackFrames > 0 ? weighted / stackFrames : 0,
+      ...(dmg > 0 ? { damageStacks: dmgStacks / dmg } : {}),
+      bonus: members.flatMap((characterKey) => {
+        const stacks = polestarBonus[characterKey] ?? 0
+        return stacks > 0 ? [{ characterKey, stacks }] : []
+      }),
+    }
+  }
+  return out
+}

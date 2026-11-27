@@ -83,6 +83,13 @@ describe('turret particles as played', () => {
         'YaeMiko'
       )
     ).toBe(8)
+    // (her Skill hit and each of its five Horn of Spring's Call attacks: kqmsim 6)
+    expect(
+      made(
+        play(`Vodyanitsa E -> Bennett ${N8}`, ['Vodyanitsa', 'Bennett']),
+        'Vodyanitsa'
+      )
+    ).toBe(6)
   })
 
   it('the Eye lasts longer by the hitter’s hitlag (kqmsim NewBaseWithHitlag)', () => {

@@ -7,6 +7,7 @@ import { input } from '@genshin-optimizer/gi/wr'
 import { describe, expect, it } from 'vitest'
 import { getTeamDataWith } from '../'
 import { parseRotation } from '../util/teamOpt/rotation/parse'
+import { icdTracker } from '../util/teamOpt/rotation/reactions'
 import {
   rotationAttacks,
   simulateRotation,
@@ -413,5 +414,32 @@ describe('Anastasya: Lament for the Lost raises a new Stellar Vortex to Level 2'
     expect(
       detonations('Ganyu E -> Sucrose E W240f', ['Odette', 'Ganyu', 'Sucrose'])
     ).toEqual(['stellarswirl_vortex1'])
+  })
+})
+
+describe('Anastasya’s Cryo application (dump AttackAttenuation)', () => {
+  const applied = (hits: ReturnType<typeof run>['hits']) => {
+    const track = icdTracker()
+    return hits.map((h) => (track(h) ? 1 : 0))
+  }
+  it('Blessing of Honor Normal Attacks: every other Cryo hit, the count reset after 2.5 s', () => {
+    const sim = run('Anastasya hE N3 N3 N3 N3 N3 N3', ['Anastasya'])
+    const cryo = sim.hits.filter(
+      (h) => h.path[1]?.startsWith('honor') && h.tag === 'normal' && h.applies
+    )
+    expect(cryo.length).toBeGreaterThanOrEqual(4)
+    expect(cryo.every((h) => h.icdGroup === 'AnastasyaHonorNormal')).toBe(true)
+    // (within one 2.5 s window: 1, 0, 1, 0… for its 8 steps, then none until the reset)
+    const first = cryo.filter((h) => h.t - cryo[0].t < 149)
+    expect(applied(first)).toEqual(
+      first.map((_, i) => (i < 8 && i % 2 === 0 ? 1 : 0))
+    )
+  })
+  it('Palestar Edict: Doom stage 1: 2 of its 5 Cryo hits apply', () => {
+    const sim = run('Anastasya hE Q E', ['Anastasya'])
+    const doom = sim.hits.filter((h) => h.path.join('.') === 'burst.doom1Dmg')
+    if (!doom.length) return
+    expect(doom).toHaveLength(5)
+    expect(applied(doom).reduce((a, b) => a + b, 0)).toBe(2)
   })
 })

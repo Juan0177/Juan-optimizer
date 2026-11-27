@@ -500,14 +500,21 @@ function RotationCompareDialog({
   useEffect(() => {
     if (hasInvalidInstead || !scenarios.length) return
     let cancelled = false
-    const timer = setTimeout(() => {
-      const next: Record<string, ScenarioPreview> = {}
-      for (const sc of scenarios) {
-        if (cancelled) return
-        next[sc.id] = previewRotationScenario(ctx, sc)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const next: Record<string, ScenarioPreview> = {}
+    let idx = 0
+    const step = () => {
+      if (cancelled) return
+      const sc = scenarios[idx++]
+      if (!sc) return
+      next[sc.id] = previewRotationScenario(ctx, sc)
+      if (idx >= scenarios.length) {
+        if (!cancelled) setPreviews({ ...next })
+      } else {
+        timer = setTimeout(step, 0)
       }
-      if (!cancelled) setPreviews(next)
-    }, 30)
+    }
+    timer = setTimeout(step, 30)
     return () => {
       cancelled = true
       clearTimeout(timer)

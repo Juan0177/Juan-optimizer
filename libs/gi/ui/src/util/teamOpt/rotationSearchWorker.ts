@@ -25,13 +25,20 @@ const post = (reply: RotationSearchReply) => self.postMessage(reply)
 self.onmessage = ({ data }: MessageEvent<RotationSearchCommand>) => {
   switch (data.type) {
     case 'data':
-      database = new ArtCharDatabase(
-        data.dbIndex,
-        new SandboxStorage(data.entries)
-      )
-      dataKey = data.key
+      database = undefined
+      dataKey = undefined
       setupKey = undefined
       play = undefined
+      failed = undefined
+      try {
+        database = new ArtCharDatabase(
+          data.dbIndex,
+          new SandboxStorage(data.entries)
+        )
+        dataKey = data.key
+      } catch (e) {
+        failed = String((e as Error)?.message ?? e)
+      }
       return
     case 'setup':
       if (!database) return
