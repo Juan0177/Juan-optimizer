@@ -41,6 +41,7 @@ import {
   KQM_COUNTED,
   KQM_REPEATS,
   kitModels,
+  kqmBurstEvery,
   kqmMemberConstellation,
   kqmSimGear,
   parseFrameData,
@@ -295,6 +296,15 @@ export function writtenRotationOf(database: Database, rid: string) {
  * A tab's saved rotation played and used as "Use this rotation" does, for a team set up outside
  * its page (a KQM version): false when none is written, or it does not play
  */
+/**
+ * The tab's ER calculator "Burst: Every 2nd / 3rd" (Team optimize's or KQM's), played as its runs
+ * play it: those members' Bursts in one of every N rotations
+ */
+function tabBurstEvery(database: Database, teamId: string, kqm?: boolean) {
+  const teamOpt = database.teams.get(teamId)?.teamOpt
+  return kqm ? kqmBurstEvery(teamOpt?.kqm) : teamBurstEvery(teamOpt)
+}
+
 export function applySavedRotation(
   database: Database,
   teamId: string,
@@ -329,6 +339,7 @@ export function applySavedRotation(
       teamId,
       gender,
       openerWarning: (warning) => warning,
+      burstEvery: tabBurstEvery(database, teamId, kqm),
     })
   } catch {
     return false
@@ -1198,6 +1209,7 @@ export function useRotationWriter({
           teamId,
           gender,
           openerWarning: (warning) => warning,
+          burstEvery: tabBurstEvery(database, teamId, isKqm),
         })
       } catch {
         return
@@ -1723,6 +1735,16 @@ function WriterModal({
   const closing = useRef(false)
   const lastResult = useRef<ReturnType<typeof simulateWritten>>(undefined)
   const isKqm = !!kqm
+  // (members set to Burst every 2nd / 3rd rotation in the tab's ER calculator: played so, as its
+  // runs play them)
+  const savedTeamOpt = useTeam(teamId)?.teamOpt
+  const burstKey = JSON.stringify(
+    (kqm ? kqmBurstEvery(kqm) : teamBurstEvery(savedTeamOpt)) ?? {}
+  )
+  const burstEvery = useMemo(
+    () => JSON.parse(burstKey) as Partial<Record<CharacterKey, number>>,
+    [burstKey]
+  )
   // the window first: the rotation is played once it is open (a play blocks the page for a moment,
   // which would hold the window back and stall its opening)
   const [primed, setPrimed] = useState(false)
@@ -1750,10 +1772,12 @@ function WriterModal({
           defaultValue: 'Opener: {{warning}}',
           warning,
         }),
+      burstEvery,
     }),
     // (the members' constellations are read when the text changes)
     [
       isKqm,
+      burstEvery,
       deferred,
       deferredTiming,
       deferredFrameData,
@@ -2640,6 +2664,41 @@ function WriterModal({
                         gap: 0.75,
                       }}
                     >
+                      {(result.loops ?? 1) > 1 &&
+                        keys
+                          .filter((k) => Math.round(burstEvery[k] ?? 1) >= 2)
+                          .map((k) => {
+                            const every = Math.round(burstEvery[k] ?? 1)
+                            const name =
+                              names.find((n) => n.characterKey === k)?.name ?? k
+                            return (
+                              <SettingChip
+                                key={k}
+                                label={t('teamOpt.writer.burstOf', {
+                                  defaultValue: '{{name}} Burst',
+                                  name,
+                                })}
+                                value={
+                                  every === 2
+                                    ? t(
+                                        'teamOpt.kqm.calc.burstEvery2',
+                                        'Every 2nd'
+                                      )
+                                    : t(
+                                        'teamOpt.kqm.calc.burstEvery3',
+                                        'Every 3rd'
+                                      )
+                                }
+                                edited
+                                tip={t('teamOpt.writer.burstEveryTip', {
+                                  defaultValue:
+                                    'From the ER calculator: {{name}} uses the Burst in 1 of every {{count}} rotations, as the optimizer plays it. The timeline shows them together; in the other rotations, a fallback written as Q/N3 plays instead.',
+                                  name,
+                                  count: every,
+                                })}
+                              />
+                            )
+                          })}
                       <SettingChip
                         label={t('teamOpt.timing.swap', 'Swap time')}
                         value={`${timing.swapFrames ?? DEFAULT_SWAP_FRAMES} f`}
@@ -3183,17 +3242,22 @@ function SettingChip({
   value,
   edited,
   onClick,
+  tip,
 }: {
   label: string
   value: string
   edited: boolean
   onClick?: () => void
+  /** What it is, on hover or focus (a chip without a click) */
+  tip?: string
 }) {
-  return (
+  const chip = (
     <ButtonBase
       onClick={onClick}
-      disabled={!onClick}
+      disabled={!onClick && !tip}
+      disableRipple={!onClick}
       sx={(theme) => ({
+        cursor: onClick ? 'pointer' : 'default',
         gap: 0.75,
         px: 1,
         py: 0.375,
@@ -3220,6 +3284,13 @@ function SettingChip({
         {value}
       </Box>
     </ButtonBase>
+  )
+  return tip ? (
+    <Tooltip title={tip} arrow>
+      {chip}
+    </Tooltip>
+  ) : (
+    chip
   )
 }
 
