@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.50.1",
+    "date": "2026-11-28",
+    "fixed": [
+      "Steady DPS ER no longer comes out too high for characters whose Energy comes on its own cooldown, like Mitya’s C1: each Burst is checked against the Energy it really gets in the rotations played."
+    ]
+  },
+  {
     "version": "1.50.0",
     "date": "2026-11-27",
     "new": [

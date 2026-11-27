@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.50.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.1) (2026-11-28)
+
+### Fixed
+
+- Steady DPS ER no longer comes out too high for characters whose Energy comes on its own cooldown, like Mitya’s C1: each Burst is checked against the Energy it really gets in the rotations played.
+
 ## [v1.50.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.0) (2026-11-27)
 
 ### New
