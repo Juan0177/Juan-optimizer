@@ -4,6 +4,13 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.49.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.0) (2026-11-27)
+
+### New
+
+- Auto-rank equipment toggle in Team Optimize: automatically compare alternative weapons and artifact sets right after optimization finishes, saved across teams.
+- Customize or append the label in parentheses when clicking "Save and use on this team" in Team Optimize, with a live build name preview and one-click clear.
+
 ## [v1.48.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.48.0) (2026-11-27)
 
 ### New

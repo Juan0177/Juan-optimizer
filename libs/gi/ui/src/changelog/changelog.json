@@ -1,5 +1,13 @@
 [
   {
+    "version": "1.49.0",
+    "date": "2026-11-27",
+    "new": [
+      "Auto-rank equipment toggle in Team Optimize: automatically compare alternative weapons and artifact sets right after optimization finishes, saved across teams.",
+      "Customize or append the label in parentheses when clicking \"Save and use on this team\" in Team Optimize, with a live build name preview and one-click clear."
+    ]
+  },
+  {
     "version": "1.48.0",
     "date": "2026-11-27",
     "new": [
