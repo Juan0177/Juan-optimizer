@@ -533,6 +533,8 @@ export function simulateRotation({
       )[action] ?? 1
     )
   })
+  /** A Skill cast whose cooldown starts after a delay: a Sacrificial reset before then cancels it */
+  const pendingSkillSpends = new Map<CharacterKey, { cancelled: boolean }>()
   let normalCounter = 0
   let lastNormalActor: CharacterKey | undefined
   const constructs: { end: number; kind?: string }[] = []
@@ -674,6 +676,12 @@ export function simulateRotation({
       sacrificial: {
         random: sacrificialRandom,
         reset: (k, t) => {
+          const pending = pendingSkillSpends.get(k)
+          if (pending) {
+            pending.cancelled = true
+            pendingSkillSpends.delete(k)
+            return
+          }
           for (const key of linkedCooldowns(k, 'skill'))
             cooldowns.reset(`${k}.${key}`, t)
         },
@@ -1893,7 +1901,8 @@ export function simulateRotation({
       const at = now + delay
       // (the Skill's cooldown: 'skill', or 'skill<n>' for a kit whose Burst resets it, Kazuha's and
       // Arlecchino's; not Cyno's 'skillB' or Xilonen's 'skillRecast', which kits set themselves)
-      if (/^skill\d*$/.test(key) && use !== false)
+      const skill = /^skill\d*$/.test(key)
+      if (skill && use !== false)
         skillUses.push({ characterKey, t: at, hold: !!action.hold })
       const spend = () =>
         cooldowns.spend(
@@ -1901,7 +1910,15 @@ export function simulateRotation({
           at,
           cooldownFrames(key, frames, characterKey, at)
         )
-      if (delay) push(at, spend)
+      if (delay && skill) {
+        const pending = { cancelled: false }
+        pendingSkillSpends.set(characterKey, pending)
+        push(at, () => {
+          if (pendingSkillSpends.get(characterKey) === pending)
+            pendingSkillSpends.delete(characterKey)
+          if (!pending.cancelled) spend()
+        })
+      } else if (delay) push(at, spend)
       else spend()
     }
     const next =
