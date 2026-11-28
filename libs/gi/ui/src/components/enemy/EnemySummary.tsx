@@ -439,7 +439,7 @@ export function FightBreakdown({
           ),
           opening: t(
             'enemyEditor.fight.note.opening',
-            'Its first rotation is counted without Bursts: the fight starts with no energy (set in the enemy box)'
+            'The fight starts at 0 Energy and uses the opening rotation.'
           ),
           cocoonApprox: t(
             'enemyEditor.fight.note.cocoonApprox',

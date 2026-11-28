@@ -114,6 +114,8 @@ export interface KqmInvestJob {
   signatures?: Partial<Record<CharacterKey, number>>
   rotation?: InvestRotationMeta
   text?: string
+  /** Optional simulator-verified candidate rotations for deterministic rotation-changing cons */
+  autoCandidates?: string[]
   /** Baseline ER requirements (%) per member so ER-affected teammates can be refitted automatically */
   baseEr?: Partial<Record<CharacterKey, number>>
   /** Skip full `finish()` graph rebuild when caller only needs team DPS, builds, and unmet flag */
@@ -133,6 +135,8 @@ export interface InventoryInvestJob {
   signatures?: Partial<Record<CharacterKey, number>>
   rotation?: InvestRotationMeta
   text?: string
+  /** Optional simulator-verified candidate rotations for deterministic rotation-changing cons */
+  autoCandidates?: string[]
 }
 
 export type InvestJob = KqmInvestJob | InventoryInvestJob
@@ -143,6 +147,8 @@ export interface InvestResult {
   seconds?: number
   builds: Partial<Record<CharacterKey, KqmBuild>>
   unmet?: boolean
+  /** Chosen auto-adapted rotation text when `autoCandidates` strictly beat the base rotation */
+  autoRotation?: string
 }
 
 /**
@@ -156,9 +162,59 @@ export async function runInvestmentJob(
   isCancelled: () => boolean = () => false
 ): Promise<InvestResult | undefined> {
   if (isCancelled()) return undefined
-  return job.mode === 'kqm'
-    ? runKqmInvestJob(database, job, isCancelled)
-    : runInventoryInvestJob(database, job)
+  const dpsOfResult = (r: InvestResult) =>
+    r.seconds ? r.team / r.seconds : r.team
+  const autoCandidates =
+    !job.text?.trim() && job.autoCandidates?.length && job.rotation
+      ? job.autoCandidates
+      : undefined
+
+  if (job.mode === 'kqm') {
+    const baseRes = await runKqmInvestJob(database, job, isCancelled)
+    if (!baseRes || !autoCandidates || isCancelled()) return baseRes
+    let best: InvestResult = baseRes
+    let bestDps = dpsOfResult(baseRes)
+    for (const candText of autoCandidates) {
+      if (isCancelled()) return undefined
+      const candRes = await runKqmInvestJob(
+        database,
+        { ...job, text: candText, autoCandidates: undefined },
+        isCancelled
+      )
+      if (!candRes) continue
+      // Only adopt an auto-adapted rotation if it preserves feasibility and strictly beats base DPS
+      if (candRes.unmet && !baseRes.unmet) continue
+      const candDps = dpsOfResult(candRes)
+      const beatsFeasibility = !candRes.unmet && !!baseRes.unmet
+      if (beatsFeasibility || candDps > bestDps * 1.002) {
+        best = { ...candRes, autoRotation: candText }
+        bestDps = candDps
+      }
+    }
+    return best
+  }
+
+  const baseRes = runInventoryInvestJob(database, job)
+  if (!baseRes || !autoCandidates) return baseRes
+  let best: InvestResult = baseRes
+  let bestDps = dpsOfResult(baseRes)
+  for (const candText of autoCandidates) {
+    if (isCancelled()) return undefined
+    const candRes = runInventoryInvestJob(database, {
+      ...job,
+      text: candText,
+      autoCandidates: undefined,
+    })
+    if (!candRes) continue
+    if (candRes.unmet && !baseRes.unmet) continue
+    const candDps = dpsOfResult(candRes)
+    const beatsFeasibility = !candRes.unmet && !!baseRes.unmet
+    if (beatsFeasibility || candDps > bestDps * 1.002) {
+      best = { ...candRes, autoRotation: candText }
+      bestDps = candDps
+    }
+  }
+  return best
 }
 
 async function runKqmInvestJob(

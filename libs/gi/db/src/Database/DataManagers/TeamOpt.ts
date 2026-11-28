@@ -35,6 +35,8 @@ import { allInputPremodKeys } from '@genshin-optimizer/gi/wr-types'
 import { z } from 'zod'
 import type { TeamEnemy } from './TeamEnemy'
 import { validateTeamEnemy } from './TeamEnemy'
+import type { TeamEnergyTimeline } from './TeamEnergyTimeline'
+import { energyTimelineSchema } from './TeamEnergyTimeline'
 
 /**
  * Attacks per member, at most. The rotation writer makes one per group of hits with the same
@@ -257,7 +259,22 @@ export interface TeamOptEnergyMember {
   edited?: TeamOptEnergyRotationField[]
 }
 
+/** Rotation energy sources between a character's previous Burst and their next required cast. */
+export interface TeamOptOpeningEnergy {
+  characterKey: CharacterKey
+  castTime: number
+  seconds: number
+  cost: number
+  electroInterval: number
+  nightsoulBursts?: number
+  members: TeamOptEnergyCalculator['members']
+  /** Ticks from earlier Bursts that land inside this window (Prototype Amber / The Exile). */
+  burstRefundTicks?: Partial<Record<CharacterKey, number>>
+}
+
 export interface TeamOptEnergyCalculator {
+  /** Existing saves use the rotation average until timed tracking is selected. */
+  method?: 'average' | 'timed'
   rotationTime: number
   clearTime: number
   enemyParticles: number
@@ -267,6 +284,8 @@ export interface TeamOptEnergyCalculator {
   /** Nightsoul Bursts a rotation, as the written rotation plays them (Scroll of the Hero of Cinder City) */
   nightsoulBursts?: number
   members: Partial<Record<CharacterKey, TeamOptEnergyMember>>
+  opening?: TeamOptOpeningEnergy[]
+  timeline?: TeamEnergyTimeline
   /** Encounter inputs set by hand: the written rotation no longer fills them in */
   edited?: 'electroInterval'[]
 }
@@ -592,12 +611,34 @@ const energyMemberSchema = z.object({
     .catch(undefined),
 })
 const energyCalculatorSchema = z.object({
+  method: z.enum(['average', 'timed']).optional().catch(undefined),
   rotationTime: z.number().finite().positive(),
   clearTime: z.number().finite().positive(),
   enemyParticles: z.number().finite().min(0),
   rng: z.enum(['average', 'safe', 'worst']),
   electroInterval: z.number().finite().min(0),
   nightsoulBursts: z.number().finite().min(0).optional().catch(undefined),
+  timeline: energyTimelineSchema.optional().catch(undefined),
+  opening: z
+    .array(
+      z.object({
+        characterKey: z.enum(allCharacterKeys),
+        castTime: z.number().finite().nonnegative(),
+        seconds: z.number().finite().nonnegative(),
+        cost: z.number().finite().positive(),
+        electroInterval: z.number().finite().nonnegative(),
+        nightsoulBursts: z.number().finite().nonnegative().optional(),
+        members: z.partialRecord(z.enum(allCharacterKeys), energyMemberSchema),
+        burstRefundTicks: z
+          .partialRecord(
+            z.enum(allCharacterKeys),
+            z.number().int().nonnegative()
+          )
+          .optional(),
+      })
+    )
+    .optional()
+    .catch(undefined),
   edited: z
     .array(z.enum(['electroInterval']))
     .optional()

@@ -2,14 +2,19 @@
 import { SandboxStorage } from '@genshin-optimizer/common/database'
 import {
   ArtCharDatabase,
+  initTeamOpt,
+  initTeamOptAttack,
   type LoadoutDatum,
   randomDevArtifact,
 } from '@genshin-optimizer/gi/db'
 import type { TeamOptResult } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_BUILD_NAME_FORMAT,
   equipChanges,
   equipTeamResult,
+  formatSavedBuildName,
+  inferBuildNameFormat,
   restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
@@ -136,5 +141,53 @@ describe('Team Optimize Equip recovery', () => {
     expect(undoTeamEquip(database, teamId)).toBe(false)
     expect(database.arts.get(edit)?.location).toBe('Bennett')
     expect(database.arts.get(borrowed)?.location).toBe('')
+  })
+
+  it('expands and infers reusable saved build name formats with {team}', () => {
+    expect(formatSavedBuildName(DEFAULT_BUILD_NAME_FORMAT, 'Rational')).toBe(
+      'Rational (team optimized)'
+    )
+    expect(formatSavedBuildName('{team} - Abyss 12', 'Rational')).toBe(
+      'Rational - Abyss 12'
+    )
+    expect(formatSavedBuildName('[SO] {team}', 'Rational')).toBe(
+      '[SO] Rational'
+    )
+    expect(formatSavedBuildName('{team}', 'Rational')).toBe('Rational')
+    expect(formatSavedBuildName('Custom Static Name', 'Rational')).toBe(
+      'Custom Static Name'
+    )
+    expect(formatSavedBuildName('{team} - Boss', '')).toBe('- Boss')
+
+    expect(inferBuildNameFormat('Rational - Abyss 12', 'Rational')).toBe(
+      '{team} - Abyss 12'
+    )
+    expect(inferBuildNameFormat('[SO] Rational', 'Rational')).toBe(
+      '[SO] {team}'
+    )
+    expect(inferBuildNameFormat('Rational', 'Rational')).toBe('{team}')
+    expect(inferBuildNameFormat('Fixed Name', 'Rational')).toBe('Fixed Name')
+  })
+
+  it('keeps unchanged teamOpt referentially stable across saveTeamResult while validating real edits', () => {
+    const { database, teamId, result } = setup()
+    database.teams.set(teamId, (team) => {
+      team.teamOpt = {
+        ...initTeamOpt(),
+        attacks: { Bennett: [initTeamOptAttack(['burst', 'dmg'], 1)] },
+      }
+    })
+    const teamOptBefore = database.teams.get(teamId)!.teamOpt
+    expect(teamOptBefore).toBeDefined()
+
+    saveTeamResult(database, teamId, result, 'Saved')
+    expect(database.teams.get(teamId)?.teamOpt).toBe(teamOptBefore)
+
+    database.teams.set(teamId, (team) => {
+      team.teamOpt = { ...team.teamOpt!, rotationTime: 24 }
+    })
+    const teamOptAfterEdit = database.teams.get(teamId)?.teamOpt
+    expect(teamOptAfterEdit).not.toBe(teamOptBefore)
+    expect(teamOptAfterEdit?.rotationTime).toBe(24)
   })
 })

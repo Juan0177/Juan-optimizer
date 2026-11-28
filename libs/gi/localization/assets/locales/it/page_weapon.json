@@ -41,7 +41,8 @@
     "confirmUnlock_one": "Vuoi davvero sbloccare {{count}} arma?",
     "confirmUnlock_other": "Vuoi davvero sbloccare {{count}} armi?",
     "confirmDelete_one": "Vuoi davvero eliminare {{count}} arma?",
-    "confirmDelete_other": "Vuoi davvero eliminare {{count}} armi?"
+    "confirmDelete_other": "Vuoi davvero eliminare {{count}} armi?",
+    "levelMax": "Porta al livello 90 (1★–2★ al 70)"
   },
   "chooseWeapon": "Scegli un'arma",
   "filters": {

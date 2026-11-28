@@ -86,6 +86,11 @@ import {
 import type { EnemyOverride, TeamEnemy } from './TeamEnemy'
 import { validateEnemyOverride, validateTeamEnemy } from './TeamEnemy'
 import type {
+  TeamEnergyEvent,
+  TeamEnergyTimeline,
+  TeamEnergyTrace,
+} from './TeamEnergyTimeline'
+import type {
   TeamOpt,
   TeamOptAttack,
   TeamOptBuffLimit,
@@ -94,6 +99,7 @@ import type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
   TeamOptKqm,
+  TeamOptOpeningEnergy,
 } from './TeamOpt'
 import {
   defaultTeamOptKqm,
@@ -160,6 +166,9 @@ export type {
   Team,
   TeamCharacter,
   TeamEnemy,
+  TeamEnergyEvent,
+  TeamEnergyTimeline,
+  TeamEnergyTrace,
   TeamFightSettings,
   TeamOpt,
   TeamOptAttack,
@@ -169,6 +178,7 @@ export type {
   TeamOptEnergyMember,
   TeamOptEnergyRotationField,
   TeamOptKqm,
+  TeamOptOpeningEnergy,
   TeamRotation,
 }
 export {

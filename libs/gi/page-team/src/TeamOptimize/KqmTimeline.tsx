@@ -15,14 +15,16 @@ import {
   GEAR_KEYS,
   ownConditional,
   rotationAttacks,
+  simulateWrittenAsync,
 } from '@genshin-optimizer/gi/ui'
 import { alpha, Box, ButtonBase, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
 import {
+  startTransition,
   useCallback,
-  useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -36,11 +38,11 @@ import { RotationTimeline } from './RotationTimeline'
 import {
   kqmBurstEvery,
   rotationIdOf,
-  simulateWritten,
   useAppliedRotation,
   useMemberNames,
   useRotationSettings,
   useSimTeam,
+  type WrittenRotation,
   writtenSeconds,
 } from './RotationWriter'
 import { conditionsKey, publishConditions } from './rotationConditionsStore'
@@ -194,14 +196,43 @@ export function KqmTimeline({
   const { opener, timing, frameData } = useRotationSettings(rotationId)
   const simTeam = useSimTeam(members, kqm, kqmBuilds)
   const burstEvery = useMemo(() => kqmBurstEvery(kqm), [kqm])
-  const team = useMemo(
-    () => (gear ? { ...simTeam, gear: { ...simTeam.gear, ...gear } } : simTeam),
-    [simTeam, gear]
-  )
+  const prevTeam = useRef<{ sig: string; value: typeof simTeam }>()
+  const team = useMemo(() => {
+    const next = gear
+      ? { ...simTeam, gear: { ...simTeam.gear, ...gear } }
+      : simTeam
+    const sig = JSON.stringify(next)
+    if (prevTeam.current?.sig === sig) return prevTeam.current.value
+    prevTeam.current = { sig, value: next }
+    return next
+  }, [simTeam, gear])
   const names = useMemberNames(members)
-  // (a heavy team's play takes a moment: the page first, the timeline once it is played)
-  const deferredTeam = useDeferredValue(team)
   const isKqm = !!kqm
+  const rosterKey = members
+    .map((m) => `${m.characterKey}:${m.teamCharId}`)
+    .join(',')
+  const memberKeys = useMemo(
+    () =>
+      rosterKey
+        ? (rosterKey
+            .split(',')
+            .map((entry) => entry.split(':')[0]) as CharacterKey[])
+        : [],
+    [rosterKey]
+  )
+  const membersRef = useRef(members)
+  membersRef.current = members
+  // Only the team/member conditionals that `ownConditional` reads affect the played timeline
+  // (not build swaps from Save/Equip, which leave the result's `gear` and conditionals untouched).
+  const teamConditional = database.teams.get(teamId)?.conditional
+  const condsSig = useMemo(
+    () =>
+      JSON.stringify([
+        teamConditional,
+        members.map((m) => database.teamChars.get(m.teamCharId)?.conditional),
+      ]),
+    [teamConditional, members, database]
+  )
   // Match `writtenKqmReplay`'s baseline conditionals when KQM overrides are given, so hits with a
   // timed buff off (e.g. TTDS on cooldown) carry the same `limits` as `kqmAttacks`.
   const current = useMemo(() => {
@@ -213,7 +244,7 @@ export function KqmTimeline({
           | undefined
         return switches
           ? switches[path[0]]?.[path[1]] || undefined
-          : ownConditional(database, teamId, members, owner, path)
+          : ownConditional(database, teamId, membersRef.current, owner, path)
       }
       const kqmSwitch =
         overrides.conditionalOverrides?.[owner]?.[path[0]]?.[path[1]]
@@ -222,7 +253,13 @@ export function KqmTimeline({
         overrides.ownKit !== false &&
         !(overrides.ownBuild === false && GEAR_KEYS.has(path[0]))
       ) {
-        const own = ownConditional(database, teamId, members, owner, path)
+        const own = ownConditional(
+          database,
+          teamId,
+          membersRef.current,
+          owner,
+          path
+        )
         if (own !== undefined) return own
       }
       return (
@@ -231,46 +268,102 @@ export function KqmTimeline({
           | undefined
       )?.[path[0]]?.[path[1]]
     }
-  }, [isKqm, overrides, database, teamId, members])
-  const result = useMemo(
+  }, [isKqm, overrides, database, teamId, rosterKey, condsSig])
+  const simInputsRef = useRef({ team, names, timing, frameData, burstEvery })
+  simInputsRef.current = { team, names, timing, frameData, burstEvery }
+  const simKey = useMemo(
     () =>
       applied.trim()
-        ? simulateWritten({
-            kqm: isKqm,
-            text: applied,
+        ? JSON.stringify([
+            isKqm,
+            applied,
             opener,
             timing,
             frameData,
-            team: deferredTeam,
+            team,
+            burstEvery,
             names,
-            members,
-            database,
+            rosterKey,
+            condsSig,
             teamId,
             gender,
-            current,
-            // (the enemy's auras: an attack's window says which were on when it hit)
-            auraTimeline: true,
-            openerWarning: (warning) => warning,
-            // (a Burst every 2nd rotation, as the run plays it)
-            ...(burstEvery && { burstEvery }),
-          })
-        : undefined,
+          ])
+        : '',
     [
       isKqm,
       applied,
       opener,
       timing,
       frameData,
-      deferredTeam,
+      team,
       burstEvery,
       names,
-      members,
-      database,
+      rosterKey,
+      condsSig,
       teamId,
       gender,
-      current,
     ]
   )
+  // (a heavy team's sampled play can take seconds: yield between samples so clicks and saves paint
+  // first, and never re-run when only unrelated loadout state changes)
+  const [played, setPlayed] = useState<{
+    result: WrittenRotation | undefined
+    gear: typeof team.gear
+  }>()
+  useEffect(() => {
+    if (!simKey) {
+      setPlayed(undefined)
+      return undefined
+    }
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      const {
+        team: activeTeam,
+        names: activeNames,
+        timing: activeTiming,
+        frameData: activeFrameData,
+        burstEvery: activeBurstEvery,
+      } = simInputsRef.current
+      void simulateWrittenAsync(
+        {
+          kqm: isKqm,
+          text: applied,
+          opener,
+          timing: activeTiming,
+          frameData: activeFrameData,
+          team: activeTeam,
+          names: activeNames,
+          members: membersRef.current,
+          database,
+          teamId,
+          gender,
+          current,
+          // (the enemy's auras: an attack's window says which were on when it hit)
+          auraTimeline: true,
+          openerWarning: (warning) => warning,
+          // (a Burst every 2nd rotation, as the run plays it)
+          ...(activeBurstEvery && { burstEvery: activeBurstEvery }),
+        },
+        () => cancelled
+      )
+        .then((next) => {
+          if (!cancelled)
+            startTransition(() =>
+              setPlayed({ result: next, gear: activeTeam.gear })
+            )
+        })
+        .catch(() => {
+          if (!cancelled) setPlayed(undefined)
+        })
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [simKey, isKqm, applied, opener, database, teamId, gender, current])
+  const result = played?.result
+  const heldGear = played?.gear ?? team.gear
   // each hit of the timeline's play, its attack (the play shown, its first sample)
   const mapping = useMemo(() => {
     if (!result?.sim) return undefined
@@ -381,7 +474,7 @@ export function KqmTimeline({
     )
     return {
       attack:
-        samePath.find((x) => sameAttack(x, mine, deferredTeam.gear)) ??
+        samePath.find((x) => sameAttack(x, mine, heldGear)) ??
         (loose ? samePath[0] : undefined) ??
         mine,
       moment: {
@@ -391,7 +484,6 @@ export function KqmTimeline({
     }
   }
   // a hit's damage with these builds: its attack's (the run's same one) over its hits
-  const heldGear = deferredTeam.gear
   const hitDamage = useCallback(
     (hit: SimHit) => {
       const at = mapping?.hitAttacks.get(hit)
@@ -419,11 +511,11 @@ export function KqmTimeline({
         ? rotationConditions(
             result.sim,
             timelineTracks(result.sim),
-            members.map((m) => m.characterKey),
+            memberKeys,
             kqmDamage ? hitDamage : undefined
           )
         : undefined,
-    [result, members, kqmDamage, hitDamage]
+    [result, memberKeys, kqmDamage, hitDamage]
   )
   const shownKey = conditionsKey(teamId, isKqm ? 'kqm' : 'team')
   useEffect(() => {

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import { allArtifactSetKeys } from '@genshin-optimizer/gi/consts'
 import type {
   ArtifactSetKey,
   CharacterKey,
   WeaponKey,
 } from '@genshin-optimizer/gi/consts'
+import { allArtifactSetKeys } from '@genshin-optimizer/gi/consts'
 import type {
   ICachedWeapon,
   StatFilters,
@@ -23,8 +23,17 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_BUILD_NAME_FORMAT } from './apply'
+import {
+  readAutoRankEquipment,
+  setAutoRankEquipment,
+} from './autoRankEquipment'
+import {
+  readSavedBuildNameFormat,
+  setSavedBuildNameFormat,
+} from './savedBuildNameFormat'
 import { TeamOptResults } from './TeamOptResults'
-import { TeamOptTopBuilds } from './TeamOptTopBuilds'
+import { GearRankingControls, TeamOptTopBuilds } from './TeamOptTopBuilds'
 
 const ER_FILTER = JSON.stringify(['basic', 'enerRech_'])
 
@@ -90,16 +99,18 @@ vi.mock('@genshin-optimizer/common/database-ui', () => ({
 vi.mock('@genshin-optimizer/gi/db-ui', () => ({
   useDatabase: () => mockDatabase,
   useDBMeta: () => ({ gender: 'F' }),
-  useTeam: () => undefined,
+  useTeam: () => ({ name: 'Abyss Team' }),
 }))
 vi.mock('./useTeamOpt', () => ({
   useTeamOpt: () => [initTeamOpt(), vi.fn()],
 }))
-vi.mock('./apply', () => ({
+const mockSaveTeamResult = vi.fn()
+vi.mock('./apply', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   changedMembers: () => ['Sandrone'],
   equipChanges: () => [],
   equipTeamResult: vi.fn(),
-  saveTeamResult: vi.fn(),
+  saveTeamResult: (...args: unknown[]) => mockSaveTeamResult(...args),
   undoTeamEquip: vi.fn(),
 }))
 vi.mock('./ResultDetails', () => ({
@@ -147,6 +158,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
 afterEach(() => {
   cleanup()
   optConfigEntries = []
+  setAutoRankEquipment(false)
+  setSavedBuildNameFormat(DEFAULT_BUILD_NAME_FORMAT)
 })
 
 const theme = createTheme({ palette: { mode: 'dark' } })
@@ -399,5 +412,101 @@ describe('TeamOptResults ER requirement display', () => {
     expect(
       await screen.findByText(/it misses their requirements/i)
     ).toBeTruthy()
+  })
+
+  it('persists the Auto-rank after optimize toggle in GearRankingControls', () => {
+    setAutoRankEquipment(false)
+    const onStart = vi.fn()
+    render(
+      <ThemeProvider theme={theme}>
+        <GearRankingControls
+          done={0}
+          total={2}
+          running={false}
+          standalone
+          onStart={onStart}
+          onStop={vi.fn()}
+        />
+      </ThemeProvider>
+    )
+    const toggle = screen.getByRole('checkbox', {
+      name: /Auto-rank after optimize/i,
+    }) as HTMLInputElement
+    expect(toggle.checked).toBe(false)
+    expect(readAutoRankEquipment()).toBe(false)
+
+    fireEvent.click(toggle)
+    expect(toggle.checked).toBe(true)
+    expect(readAutoRankEquipment()).toBe(true)
+    expect(onStart).not.toHaveBeenCalled()
+  })
+
+  it('saves in one click using the persisted format and lets the user customize via the split caret', () => {
+    mockSaveTeamResult.mockClear()
+    render(
+      <ThemeProvider theme={theme}>
+        <TeamOptResults
+          teamId="team_1"
+          members={baseMembers}
+          result={makeResult()}
+          seconds={12}
+          runTeamOpt={initTeamOpt()}
+          rotationTime={20}
+          teamData={undefined}
+          onDiscard={vi.fn()}
+        />
+      </ThemeProvider>
+    )
+
+    // 1. Main button saves in one click with zero popover using the current format
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save and use on this team' })
+    )
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(1)
+    expect(mockSaveTeamResult.mock.calls[0][3]).toBe(
+      'Abyss Team (team optimized)'
+    )
+    expect(screen.queryByLabelText('Build name')).toBeNull()
+
+    // 2. Split caret opens popover to edit build name & persist reusable `{team}` format
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Customize build name or default format',
+      })
+    )
+    const input = screen.getByLabelText('Build name') as HTMLInputElement
+    expect(input.value).toBe('Abyss Team (team optimized)')
+
+    fireEvent.change(input, { target: { value: 'Abyss Team - SO' } })
+    fireEvent.click(
+      screen.getByLabelText(/Save as default format for future saves/i)
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(2)
+    expect(mockSaveTeamResult.mock.calls[1][3]).toBe('Abyss Team - SO')
+    expect(readSavedBuildNameFormat()).toBe('{team} - SO')
+
+    // 3. Subsequent one-click save automatically follows the persisted custom format
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save and use on this team' })
+    )
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(3)
+    expect(mockSaveTeamResult.mock.calls[2][3]).toBe('Abyss Team - SO')
+
+    // 4. One-off custom name edit via caret does not overwrite the persisted format
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Customize build name or default format',
+      })
+    )
+    const input2 = screen.getByLabelText('Build name') as HTMLInputElement
+    expect(input2.value).toBe('Abyss Team - SO')
+    fireEvent.change(input2, { target: { value: 'One-off Boss Run' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(mockSaveTeamResult).toHaveBeenCalledTimes(4)
+    expect(mockSaveTeamResult.mock.calls[3][3]).toBe('One-off Boss Run')
+    expect(readSavedBuildNameFormat()).toBe('{team} - SO')
   })
 })

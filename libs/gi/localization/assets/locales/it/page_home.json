@@ -58,8 +58,9 @@
     "steps": {
       "characters": {
         "title": "Aggiungi i tuoi personaggi",
-        "description": "Scegli i personaggi che usi, poi imposta livello, talenti e costellazione. Oppure importali con l'UID.",
-        "action": "Aggiungi personaggi"
+        "description": "Importali dalla vetrina dei personaggi del gioco con il tuo UID, con le armi e i manufatti che indossano. Oppure sceglili a mano.",
+        "action": "Aggiungi a mano",
+        "enka": "Importa da Enka"
       },
       "artifacts": {
         "title": "Porta armi e manufatti",

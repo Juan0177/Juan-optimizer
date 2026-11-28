@@ -55,6 +55,7 @@
     "confirmUnlock_one": "Are you sure you want to unlock {{count}} weapon?",
     "confirmUnlock_other": "Are you sure you want to unlock {{count}} weapons?",
     "confirmDelete_one": "Are you sure you want to delete {{count}} weapon?",
-    "confirmDelete_other": "Are you sure you want to delete {{count}} weapons?"
+    "confirmDelete_other": "Are you sure you want to delete {{count}} weapons?",
+    "levelMax": "Level to 90 (1★–2★ to 70)"
   }
 }

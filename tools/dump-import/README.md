@@ -32,6 +32,9 @@ such as "Detection Core" / "Gradient Beacons".
 
 - `libs/gi/consts/src/character.ts` → add key to `allNonTravelerCharacterKeys` (alphabetical)
 - `libs/gi/dm/src/mapping/character.ts` → `<avatarId>: '<Key>'`
+- Import from Enka's id table: `node tools/enka/gen-enka-data.mjs` (rewrites
+  `libs/gi/good/src/enka/enkaData_gen.json` from the mappings + the dump's skill depots; the
+  `enkaToGood` test fails when a character, weapon or set is missing from it)
 
 ## 3. Generate data + images from the dump (ONE generator at a time)
 
@@ -148,7 +151,9 @@ Done 2026-11-05 for **TorrentsOfSpring** (12517, claymore), **StarsealedEdict** 
 5. Sheets: `libs/gi/sheets/src/Weapons/<Type>/<Key>/index.tsx` (+ type `index.ts`) /
    `libs/gi/sheets/src/Artifacts/<Key>/index.tsx` (+ `index.ts`); manual strings in
    `libs/gi/localization/assets/locales/en/{weapon,artifact}_<Key>.json`.
-6. Check: typecheck `gi-sheets` and `frontend` (§6), then the Weapons/Artifacts pages, a team view
+6. `node tools/enka/gen-enka-data.mjs` (the weapon/set ids for Import from Enka, from
+   `libs/gi/dm/src/mapping/{weapon,artifact}.ts`).
+7. Check: typecheck `gi-sheets` and `frontend` (§6), then the Weapons/Artifacts pages, a team view
    with the item equipped (toggle every conditional) and the Optimize tab in the browser.
 
 Notes from this batch:

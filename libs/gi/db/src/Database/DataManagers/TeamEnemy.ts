@@ -17,7 +17,7 @@ export type EnemyOverride = Partial<
 export interface TeamFightSettings {
   wardSeconds?: number
   healSeconds?: number
-  /** The fight starts with full energy (default: none, as Stygian Onslaught does) */
+  /** Absent: Stygian fights start empty, custom enemies start full. */
   fullEnergy?: boolean
 }
 /** The most HP an enemy can be given (a trillion) */
@@ -44,7 +44,7 @@ export function validateFightSettings(
       (healSeconds >= 0 && healSeconds <= MAX_HEAL_SECONDS))
       ? { healSeconds: healSeconds === -1 ? -1 : tenth(healSeconds) }
       : {}),
-    ...(fullEnergy === true ? { fullEnergy } : {}),
+    ...(typeof fullEnergy === 'boolean' ? { fullEnergy } : {}),
   }
   return Object.keys(out).length ? out : undefined
 }

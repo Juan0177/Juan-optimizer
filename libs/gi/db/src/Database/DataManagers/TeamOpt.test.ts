@@ -341,6 +341,25 @@ describe('team.teamOpt (Team Optimize settings)', () => {
         energyRecharge: { KamisatoAyaka: 180, Shenhe: 160 },
         energySource: 'calculator',
         energyCalculator: {
+          method: 'timed',
+          timeline: {
+            rotation: {
+              members: ['KamisatoAyaka', 'Shenhe'],
+              frames: 2400,
+              repeat: true,
+              active: [{ frame: 0, character: 'Shenhe' }],
+              events: [
+                {
+                  kind: 'burst',
+                  frame: 400,
+                  character: 'KamisatoAyaka',
+                  amount: 80,
+                  drainDelay: 42,
+                },
+              ],
+              cadence: { KamisatoAyaka: 2 },
+            },
+          },
           rotationTime: 20,
           clearTime: 90,
           enemyParticles: 9,

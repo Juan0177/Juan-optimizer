@@ -3,7 +3,6 @@ import type { ArtCharDatabase, TeamOpt } from '@genshin-optimizer/gi/db'
 import type { TeamDataOverrides, TeamOptMember } from './data'
 import { teamOptMembers } from './data'
 import type { RotationEnergy } from './energyCalc'
-import { energyFromRotation } from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
 import type { RunAttackState } from './lowHpUptime'
 import type {
@@ -15,7 +14,13 @@ import type {
 import { isSacrificialWeapon } from './rotation/sacrificial'
 import type { RotationSearchSetup } from './rotationSearchScore'
 import type { SimTeam } from './writtenRotation'
-import { simTeamOf, simulateWritten, teamBurstEvery } from './writtenRotation'
+import {
+  simTeamOf,
+  simulateWritten,
+  tabStartsWithoutEnergy,
+  teamBurstEvery,
+  writtenEnergy,
+} from './writtenRotation'
 
 /**
  * Team optimize's own play of a written rotation with given builds, as "Use this rotation" plays
@@ -111,11 +116,12 @@ export function writtenTeamReplay({
       exactTime,
       stalls,
       ...(includeEnergy && {
-        energy: energyFromRotation(
+        energy: writtenEnergy(
           energySim ?? sim,
-          own.members,
           rotations,
-          teamConstellations
+          playArgs,
+          played.fromStart === undefined,
+          tabStartsWithoutEnergy(database, teamId)
         ),
         ...(energySim && {
           energyRotationTime:

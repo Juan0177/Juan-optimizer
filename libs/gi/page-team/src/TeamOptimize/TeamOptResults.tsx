@@ -22,7 +22,7 @@ import {
   weaponHasRefinement,
 } from '@genshin-optimizer/gi/stats'
 import { StatIcon } from '@genshin-optimizer/gi/svgicons'
-import { giTokens } from '@genshin-optimizer/gi/theme'
+import { giCtaSx, giTokens } from '@genshin-optimizer/gi/theme'
 import type {
   RunEnemy,
   TeamData,
@@ -68,16 +68,21 @@ import {
   Box,
   Button,
   ButtonBase,
+  Checkbox,
   Collapse,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Divider,
   FormControlLabel,
   IconButton,
+  InputAdornment,
+  Popover,
   Snackbar,
   Switch,
+  TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
@@ -97,8 +102,11 @@ import { useTranslation } from 'react-i18next'
 import { FightTimeline } from '../Enemy/FightTimeline'
 import {
   changedMembers,
+  DEFAULT_BUILD_NAME_FORMAT,
   equipChanges,
   equipTeamResult,
+  formatSavedBuildName,
+  inferBuildNameFormat,
   restoreTeamBuilds,
   saveTeamResult,
   undoTeamEquip,
@@ -114,6 +122,7 @@ import {
 import { MemberAvatar } from './MemberAvatar'
 import type { ResultDetailsData } from './ResultDetails'
 import { MemberDetails, useResultDetails } from './ResultDetails'
+import { useSavedBuildNameFormat } from './savedBuildNameFormat'
 import { TcBuildGear } from './TcBuildGear'
 import { TeamCardButton } from './TeamCardButton'
 import {
@@ -224,6 +233,15 @@ export function TeamOptResults({
   const { t, i18n } = useTranslation('page_team')
   const database = useDatabase()
   const team = useTeam(teamId)
+  const [savedFormat, setSavedFormat] = useSavedBuildNameFormat()
+  const [saveAnchor, setSaveAnchor] = useState<HTMLElement | null>(null)
+  const [saveName, setSaveName] = useState('')
+  const [rememberFormat, setRememberFormat] = useState(false)
+  const [editingFormat, setEditingFormat] = useState(false)
+  const [formatDraft, setFormatDraft] = useState(savedFormat)
+  const saveGroupRef = useRef<HTMLDivElement>(null)
+  const saveInputRef = useRef<HTMLInputElement>(null)
+  const formatInputRef = useRef<HTMLInputElement>(null)
   const { before, after } = result
   // (once, as it appears: not again when the page re-renders it)
   const [reveal] = useState(() => !!fresh && !prefersReducedMotion())
@@ -795,46 +813,543 @@ export function TeamOptResults({
                     <RestoreTeamBuildsButton teamId={teamId} />
                   </>
                 ) : (
-                  <Tooltip
-                    arrow
-                    title={t(
-                      'teamOpt.result.saveHint',
-                      'A new build per member, used by this team. Nothing moves between characters.'
-                    )}
-                  >
-                    <span>
-                      <Button
-                        variant="outlined"
-                        color="inherit"
-                        startIcon={<SaveIcon />}
-                        disabled={noChange || stale}
-                        onClick={() => {
-                          saveTeamResult(
-                            database,
-                            teamId,
-                            result,
-                            t('teamOpt.result.buildName', {
-                              defaultValue: '{{team}} (team optimized)',
-                              team: team?.name ?? '',
-                            })
-                          )
-                        }}
-                        sx={{
-                          borderColor: tokens.hairlineStrong,
+                  <Box
+                    ref={saveGroupRef}
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'stretch',
+                      minHeight: 34,
+                      borderRadius: tokens.radius.control,
+                      border: `1px solid ${tokens.hairlineStrong}`,
+                      overflow: 'hidden',
+                      opacity: noChange || stale ? 0.45 : 1,
+                      transition: 'border-color 150ms ease',
+                      ...(!noChange &&
+                        !stale && {
                           '&:hover': {
                             borderColor: alpha(giTokens.parchment, 0.28),
+                          },
+                        }),
+                      '& > span': { display: 'inline-flex' },
+                      '& > span:first-of-type': { flex: 1 },
+                      '& .MuiButton-root.save-split-main, & .MuiButton-root.save-split-caret':
+                        {
+                          minHeight: 32,
+                          height: '100%',
+                          border: 'none',
+                          borderRadius: 0,
+                          '&:hover': {
                             bgcolor: alpha(giTokens.parchment, 0.06),
                           },
-                        }}
-                      >
-                        {t(
-                          'teamOpt.result.saveAndUse',
-                          'Save and use on this team'
-                        )}
-                      </Button>
-                    </span>
-                  </Tooltip>
+                        },
+                      '& .MuiButton-root.save-split-main': {
+                        flex: 1,
+                        pl: { xs: 1.125, sm: 1.5 },
+                        pr: { xs: 1, sm: 1.25 },
+                      },
+                      '& .MuiButton-root.save-split-caret': {
+                        minWidth: 30,
+                        px: 0.625,
+                      },
+                    }}
+                  >
+                    <Tooltip
+                      arrow
+                      describeChild
+                      title={t('teamOpt.result.saveAsHint', {
+                        defaultValue:
+                          'Save as “{{name}}” for each changed member. Nothing moves between characters.',
+                        name: formatSavedBuildName(
+                          savedFormat,
+                          team?.name ?? ''
+                        ),
+                      })}
+                    >
+                      <span>
+                        <Button
+                          className="save-split-main"
+                          variant="text"
+                          color="inherit"
+                          startIcon={<SaveIcon />}
+                          disabled={noChange || stale}
+                          onClick={() => {
+                            saveTeamResult(
+                              database,
+                              teamId,
+                              result,
+                              formatSavedBuildName(
+                                savedFormat,
+                                team?.name ?? ''
+                              )
+                            )
+                          }}
+                        >
+                          {t(
+                            'teamOpt.result.saveAndUse',
+                            'Save and use on this team'
+                          )}
+                        </Button>
+                      </span>
+                    </Tooltip>
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: '1px',
+                        my: '7px',
+                        bgcolor: tokens.hairlineStrong,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <Tooltip
+                      arrow
+                      title={t(
+                        'teamOpt.result.customizeSaveName',
+                        'Customize build name or default format'
+                      )}
+                    >
+                      <span>
+                        <Button
+                          className="save-split-caret"
+                          variant="text"
+                          color="inherit"
+                          disabled={noChange || stale}
+                          aria-label={t(
+                            'teamOpt.result.customizeSaveName',
+                            'Customize build name or default format'
+                          )}
+                          aria-haspopup="dialog"
+                          aria-expanded={!!saveAnchor}
+                          onClick={(e) => {
+                            setSaveName(
+                              formatSavedBuildName(
+                                savedFormat,
+                                team?.name ?? ''
+                              )
+                            )
+                            setRememberFormat(false)
+                            setEditingFormat(false)
+                            setFormatDraft(savedFormat)
+                            setSaveAnchor(
+                              saveGroupRef.current ?? e.currentTarget
+                            )
+                          }}
+                          sx={{
+                            color: saveAnchor
+                              ? giTokens.goldLight
+                              : 'text.secondary',
+                            '&:hover': { color: 'text.primary' },
+                          }}
+                        >
+                          <ExpandMoreIcon
+                            sx={{
+                              fontSize: 17,
+                              transform: saveAnchor ? 'rotate(180deg)' : 'none',
+                              transition: 'transform 140ms ease',
+                            }}
+                          />
+                        </Button>
+                      </span>
+                    </Tooltip>
+                  </Box>
                 )}
+                <Popover
+                  open={!!saveAnchor}
+                  anchorEl={saveAnchor}
+                  onClose={() => setSaveAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  TransitionProps={{
+                    onEntered: () => {
+                      const el = saveInputRef.current
+                      if (el) {
+                        el.focus()
+                        const end = el.value.length
+                        el.setSelectionRange(end, end)
+                      }
+                    },
+                  }}
+                  slotProps={{
+                    paper: {
+                      sx: {
+                        mt: 0.75,
+                        p: 2,
+                        width: 368,
+                        maxWidth: 'calc(100vw - 24px)',
+                        borderRadius: tokens.radius.inset,
+                        bgcolor: tokens.raised,
+                        border: `1px solid ${tokens.hairlineStrong}`,
+                        boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55)',
+                      },
+                    },
+                  }}
+                >
+                  {(() => {
+                    const teamName = team?.name?.trim() ?? ''
+                    const defaultExpanded = formatSavedBuildName(
+                      savedFormat,
+                      teamName
+                    )
+                    const trimmedName = saveName.trim()
+                    const nameChanged =
+                      !!trimmedName && trimmedName !== defaultExpanded
+                    const inferredFormat = inferBuildNameFormat(
+                      trimmedName,
+                      teamName
+                    )
+                    const applyFormatDraft = (next: string) => {
+                      setFormatDraft(next)
+                      setSaveName(formatSavedBuildName(next, teamName))
+                    }
+                    const commitFormat = () => {
+                      const clean =
+                        formatDraft.trim() || DEFAULT_BUILD_NAME_FORMAT
+                      setSavedFormat(clean)
+                      setFormatDraft(clean)
+                      setSaveName(formatSavedBuildName(clean, teamName))
+                      setRememberFormat(false)
+                      setEditingFormat(false)
+                    }
+                    return (
+                      <Box
+                        component="form"
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          if (!trimmedName) return
+                          if (editingFormat) {
+                            const clean =
+                              formatDraft.trim() || DEFAULT_BUILD_NAME_FORMAT
+                            setSavedFormat(clean)
+                          } else if (rememberFormat && nameChanged) {
+                            setSavedFormat(inferredFormat)
+                          }
+                          saveTeamResult(database, teamId, result, trimmedName)
+                          setSaveAnchor(null)
+                        }}
+                        sx={{ display: 'grid', gap: 1.5 }}
+                      >
+                        <Box>
+                          <Typography sx={{ ...type.title, fontSize: 14.5 }}>
+                            {t(
+                              'teamOpt.result.saveTitle',
+                              'Save builds for team'
+                            )}
+                          </Typography>
+                          <Typography
+                            sx={{ ...type.label, mt: 0.375, lineHeight: 1.4 }}
+                          >
+                            {t('teamOpt.result.saveCountHint', {
+                              count: changed.length,
+                              defaultValue:
+                                'Creates {{count}} new builds used by this team. Equipped gear is untouched.',
+                            })}
+                          </Typography>
+                        </Box>
+
+                        <TextField
+                          autoFocus
+                          inputRef={saveInputRef}
+                          size="small"
+                          fullWidth
+                          label={t(
+                            'teamOpt.result.buildNameLabel',
+                            'Build name'
+                          )}
+                          value={saveName}
+                          onChange={(e) => setSaveName(e.target.value)}
+                          InputProps={{
+                            endAdornment: saveName ? (
+                              <InputAdornment position="end">
+                                <IconButton
+                                  size="small"
+                                  aria-label={t(
+                                    'teamOpt.result.clearName',
+                                    'Clear build name'
+                                  )}
+                                  onClick={() => {
+                                    setSaveName('')
+                                    saveInputRef.current?.focus()
+                                  }}
+                                  sx={{
+                                    p: 0.25,
+                                    color: 'text.secondary',
+                                    '&:hover': { color: 'text.primary' },
+                                  }}
+                                >
+                                  <CloseIcon sx={{ fontSize: 15 }} />
+                                </IconButton>
+                              </InputAdornment>
+                            ) : undefined,
+                          }}
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              bgcolor: tokens.inset,
+                              borderRadius: tokens.radius.control,
+                              '&.Mui-focused .MuiOutlinedInput-notchedOutline':
+                                {
+                                  borderColor: alpha(tokens.gold, 0.7),
+                                },
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: giTokens.goldLight,
+                            },
+                          }}
+                        />
+
+                        {nameChanged && !editingFormat && (
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={rememberFormat}
+                                onChange={(_, checked) =>
+                                  setRememberFormat(checked)
+                                }
+                                sx={{
+                                  py: 0.25,
+                                  color: 'text.secondary',
+                                  '&.Mui-checked': { color: tokens.gold },
+                                }}
+                              />
+                            }
+                            label={
+                              <Box sx={{ lineHeight: 1.3 }}>
+                                <Typography
+                                  sx={{
+                                    fontSize: 12.5,
+                                    color: 'text.primary',
+                                  }}
+                                >
+                                  {t(
+                                    'teamOpt.result.rememberFormat',
+                                    'Save as default format for future saves'
+                                  )}
+                                </Typography>
+                                <Typography
+                                  sx={{
+                                    fontSize: 11.5,
+                                    color: 'text.secondary',
+                                    fontFamily: 'monospace',
+                                  }}
+                                >
+                                  {inferredFormat}
+                                </Typography>
+                              </Box>
+                            }
+                            sx={{
+                              m: 0,
+                              alignItems: 'flex-start',
+                            }}
+                          />
+                        )}
+
+                        <Divider sx={{ borderColor: tokens.hairline }} />
+
+                        {editingFormat ? (
+                          <Box sx={{ display: 'grid', gap: 1 }}>
+                            <TextField
+                              inputRef={formatInputRef}
+                              size="small"
+                              fullWidth
+                              label={t(
+                                'teamOpt.result.defaultFormatLabel',
+                                'Default name format'
+                              )}
+                              placeholder={DEFAULT_BUILD_NAME_FORMAT}
+                              value={formatDraft}
+                              onChange={(e) => applyFormatDraft(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  commitFormat()
+                                }
+                              }}
+                              helperText={t(
+                                'teamOpt.result.defaultFormatHelp',
+                                'Use {team} to insert the current team’s name.'
+                              )}
+                              FormHelperTextProps={{
+                                sx: { mx: 0, mt: 0.5, fontSize: 11.5 },
+                              }}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  bgcolor: tokens.inset,
+                                  borderRadius: tokens.radius.control,
+                                  fontFamily: 'monospace',
+                                  fontSize: 12.5,
+                                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':
+                                    {
+                                      borderColor: alpha(tokens.gold, 0.7),
+                                    },
+                                },
+                                '& .MuiInputLabel-root.Mui-focused': {
+                                  color: giTokens.goldLight,
+                                },
+                              }}
+                            />
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.75,
+                                flexWrap: 'wrap',
+                              }}
+                            >
+                              <ButtonBase
+                                onClick={() => {
+                                  const next = formatDraft.includes('{team}')
+                                    ? formatDraft
+                                    : formatDraft
+                                      ? `{team} ${formatDraft}`
+                                      : '{team}'
+                                  applyFormatDraft(next)
+                                  formatInputRef.current?.focus()
+                                }}
+                                sx={{
+                                  px: 0.875,
+                                  py: 0.25,
+                                  borderRadius: 999,
+                                  fontSize: 11.5,
+                                  fontFamily: 'monospace',
+                                  fontWeight: 600,
+                                  color: giTokens.goldLight,
+                                  bgcolor: alpha(tokens.gold, 0.12),
+                                  border: `1px solid ${alpha(tokens.gold, 0.3)}`,
+                                  ...quickSx,
+                                  '&:hover': {
+                                    bgcolor: alpha(tokens.gold, 0.2),
+                                  },
+                                }}
+                              >
+                                + {'{team}'}
+                              </ButtonBase>
+                              {formatDraft.trim() !==
+                                DEFAULT_BUILD_NAME_FORMAT && (
+                                <Button
+                                  size="small"
+                                  color="inherit"
+                                  onClick={() =>
+                                    applyFormatDraft(DEFAULT_BUILD_NAME_FORMAT)
+                                  }
+                                  sx={{
+                                    textTransform: 'none',
+                                    fontSize: 12,
+                                    minWidth: 0,
+                                    px: 0.75,
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  {t('teamOpt.result.resetFormat', 'Reset')}
+                                </Button>
+                              )}
+                              <Box sx={{ flex: 1 }} />
+                              <Button
+                                size="small"
+                                color="inherit"
+                                onClick={commitFormat}
+                                sx={{
+                                  textTransform: 'none',
+                                  fontSize: 12,
+                                  minWidth: 0,
+                                  px: 1,
+                                  color: giTokens.goldLight,
+                                }}
+                              >
+                                {t('teamOpt.invest.done', 'Done')}
+                              </Button>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 1,
+                            }}
+                          >
+                            <Typography
+                              noWrap
+                              title={savedFormat}
+                              sx={{
+                                fontSize: 12,
+                                color: 'text.secondary',
+                                minWidth: 0,
+                              }}
+                            >
+                              {t('teamOpt.result.formatPrefix', 'Format:')}{' '}
+                              <Box
+                                component="span"
+                                sx={{
+                                  fontFamily: 'monospace',
+                                  color: 'text.primary',
+                                }}
+                              >
+                                {savedFormat}
+                              </Box>
+                            </Typography>
+                            <Button
+                              size="small"
+                              color="inherit"
+                              onClick={() => {
+                                setFormatDraft(savedFormat)
+                                setEditingFormat(true)
+                                requestAnimationFrame(() =>
+                                  formatInputRef.current?.focus()
+                                )
+                              }}
+                              sx={{
+                                textTransform: 'none',
+                                fontSize: 12,
+                                minWidth: 0,
+                                px: 0.75,
+                                py: 0.125,
+                                flexShrink: 0,
+                                color: giTokens.goldLight,
+                              }}
+                            >
+                              {t('teamOpt.result.editFormat', 'Edit format')}
+                            </Button>
+                          </Box>
+                        )}
+
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            gap: 1,
+                          }}
+                        >
+                          <Button
+                            size="small"
+                            color="inherit"
+                            onClick={() => setSaveAnchor(null)}
+                            sx={{
+                              textTransform: 'none',
+                              color: 'text.secondary',
+                            }}
+                          >
+                            {t('teamOpt.runDialog.cancel', 'Cancel')}
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="small"
+                            variant="contained"
+                            disabled={!trimmedName}
+                            startIcon={<SaveIcon sx={{ fontSize: 16 }} />}
+                            sx={{
+                              ...giCtaSx,
+                              px: 1.75,
+                              textTransform: 'none',
+                              borderRadius: tokens.radius.control,
+                            }}
+                          >
+                            {t('teamOpt.result.saveConfirm', 'Save')}
+                          </Button>
+                        </Box>
+                      </Box>
+                    )
+                  })()}
+                </Popover>
                 <Button
                   variant="contained"
                   color="secondary"

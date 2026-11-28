@@ -239,5 +239,11 @@
     "generatedFor": "Build configurations against the criteria for",
     "total": "Total duration:"
   },
-  "levelShort": "Lv."
+  "levelShort": "Lv.",
+  "enka": {
+    "error": {
+      "unknown": "The characters on this showcase are not in Juan-optimizer yet."
+    },
+    "skipped": "Some characters on this showcase are not in Juan-optimizer yet ({{count}})."
+  }
 }

@@ -139,6 +139,38 @@
     },
     "entries": [
       {
+        "date": "2026-11-28",
+        "title": "Update to Stellar Optimizer 1.50.2",
+        "summary": "Stellar Optimizer’s releases 1.48.0 to 1.50.2 arrive.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Import from Enka**: enter your UID to bring in your in-game Character Showcase, with level, constellation, talents, weapon and artifacts. It’s on the Characters page and in Getting Started on the home page.",
+              "**Timed ER**: in the ER calculator, track Energy at every Burst of the written rotation, including 0 starting Energy and opening Bursts.",
+              "**Investment comparison**: auto-adapts rotations for constellations that add Skill casts or beams, with edit, revert and an in-place rotation search.",
+              "**Artifact benchmarks** on character overviews: your equipped useful rolls against KQM Standard, Good and Great.",
+              "Auto-rank equipment after optimizing, custom build names on “Save and use”, and bulk level 90 for filtered weapons."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Mitya C1**: Steady DPS ER no longer comes out too high for Energy on its own cooldown; each Burst is checked against the Energy it really gets.",
+              "Sacrificial weapons reset the Skill when the reset comes from its first hit (Mizuki, Sayu, Freminet, Mavuika).",
+              "ER counts enemy particle drops; saving builds no longer freezes the page; on phones every team tab is in view."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "The new texts are in Italian too, Enka import included.",
+              "Getting Started: the Characters step keeps Stellar’s “Import from Enka”; our UID import (Enka or Akasha) stays in the Artifacts step and the home card."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-27",
         "title": "Update to Stellar Optimizer 1.47.4",
         "summary": "Stellar Optimizer’s releases 1.45.1 to 1.47.4 arrive.",

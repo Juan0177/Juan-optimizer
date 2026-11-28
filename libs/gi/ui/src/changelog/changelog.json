@@ -1,5 +1,67 @@
 [
   {
+    "version": "1.50.2",
+    "date": "2026-11-28",
+    "fixed": [
+      "Sacrificial weapons now reset Mizuki’s Skill when the reset comes from the Skill’s first hit. That reset used to be wasted, so her E? recast rarely played and Sacrificial Fragments looked weak on her. Sayu, Freminet and Mavuika get the same fix."
+    ]
+  },
+  {
+    "version": "1.50.1",
+    "date": "2026-11-28",
+    "fixed": [
+      "Steady DPS ER no longer comes out too high for characters whose Energy comes on its own cooldown, like Mitya’s C1: each Burst is checked against the Energy it really gets in the rotations played."
+    ]
+  },
+  {
+    "version": "1.50.0",
+    "date": "2026-11-27",
+    "new": [
+      "Import from Enka: enter your UID to bring in the characters from your in-game Character Showcase, with their level, constellation, talents, weapon and artifacts. It's on the Characters page and in Getting Started on the home page.",
+      "Importing again updates those characters. Weapons and artifacts you already have are matched, not added twice."
+    ]
+  },
+  {
+    "version": "1.49.4",
+    "date": "2026-11-27",
+    "fixed": [
+      "Fixed UI lag and freezing when saving builds via \"Save and use on this team\" in Team Optimize."
+    ]
+  },
+  {
+    "version": "1.49.3",
+    "date": "2026-11-27"
+  },
+  {
+    "version": "1.49.2",
+    "date": "2026-11-27"
+  },
+  {
+    "version": "1.49.1",
+    "date": "2026-11-27"
+  },
+  {
+    "version": "1.49.0",
+    "date": "2026-11-27",
+    "new": [
+      "Auto-rank equipment toggle in Team Optimize: automatically compare alternative weapons and artifact sets right after optimization finishes, saved across teams.",
+      "Custom build name format on \"Save and use on this team\" in Team Optimize: edit the build name per save or persist a reusable format (using {team}) for future saves."
+    ]
+  },
+  {
+    "version": "1.48.0",
+    "date": "2026-11-27",
+    "new": [
+      "Investment comparison auto-adapts rotations for constellations that add extra Skill casts or beam counts, with one-click Edit, Revert, and an in-place Auto-find rotation search for combo constellations.",
+      "Artifact benchmarks on character overviews compare your equipped useful substat rolls against KQM Standard, Good, and Great targets.",
+      "Timed rotation ER calculation: opt in inside the ER calculator to track Energy at every Burst in your written rotation, including 0 starting Energy on custom enemies and opening Bursts.",
+      "Bulk-level all currently filtered weapons to 90 (1★–2★ to 70) from the Weapons page."
+    ],
+    "fixed": [
+      "KQM weapon and set comparisons always rank a member's own baseline build using the build the run kept, never a weaker refit."
+    ]
+  },
+  {
     "version": "1.47.4",
     "date": "2026-11-27"
   },

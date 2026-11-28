@@ -8,7 +8,7 @@ import type {
 } from '@genshin-optimizer/gi/db'
 import { getCharWeaponType, getWeaponStat } from '@genshin-optimizer/gi/stats'
 import type { TeamOptMember } from './data'
-import { calculateEnergyRecharge } from './energyCalc'
+import { calculateEnergyRecharge, solverEnergyTargets } from './energyCalc'
 
 export const DEFAULT_WEAPON_MIN_RARITY = 4
 export const DEFAULT_WEAPON_MIN_LEVEL = 70
@@ -341,16 +341,24 @@ export function teamCalculatorTargets(
   weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
   teamOpt: Pick<TeamOpt, 'energySource' | 'energyCalculator'>
 ): Partial<Record<CharacterKey, number>> | undefined {
+  const result = teamCalculatorEnergy(keys, weapons, teamOpt)
+  return result && !result.errors.length ? result.targets : undefined
+}
+
+export function teamCalculatorEnergy(
+  keys: readonly CharacterKey[],
+  weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
+  teamOpt: Pick<TeamOpt, 'energySource' | 'energyCalculator'>
+) {
   const calculator = teamOpt.energyCalculator
   if (!teamEnergyAuto(teamOpt) || !calculator) return undefined
   const held = keys.filter((k) => weapons[k])
-  const result = calculateEnergyRecharge(
+  return calculateEnergyRecharge(
     keys,
     calculator,
     Object.fromEntries(held.map((k) => [k, weapons[k]!.key])),
     Object.fromEntries(held.map((k) => [k, weapons[k]!.refinement]))
   )
-  return result.errors.length ? undefined : result.targets
 }
 
 /** `statFilters` with its Energy Recharge requirement set to `target` (undefined: none) */
@@ -397,18 +405,20 @@ export function teamStatFilters(
   weapons: Partial<Record<CharacterKey, ICachedWeapon>>,
   teamOpt: TeamOpt
 ): Partial<Record<CharacterKey, StatFilters>> {
-  const targets = teamCalculatorTargets(
+  const energy = teamCalculatorEnergy(
     Object.keys(base) as CharacterKey[],
     weapons,
     teamOpt
   )
-  if (targets)
+  if (energy && !energy.errors.length) {
+    const targets = solverEnergyTargets(energy)
     return Object.fromEntries(
       Object.entries(base).map(([characterKey, filters]) => [
         characterKey,
         withErTarget(filters ?? {}, targets[characterKey as CharacterKey]),
       ])
     ) as Partial<Record<CharacterKey, StatFilters>>
+  }
   const relief = teamEnergyRelief(weapons, teamOpt)
   return Object.fromEntries(
     Object.entries(base).map(([characterKey, filters]) => [

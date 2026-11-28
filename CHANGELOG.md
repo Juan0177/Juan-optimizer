@@ -4,6 +4,51 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.50.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.2) (2026-11-28)
+
+### Fixed
+
+- Sacrificial weapons now reset Mizuki’s Skill when the reset comes from the Skill’s first hit. That reset used to be wasted, so her E? recast rarely played and Sacrificial Fragments looked weak on her. Sayu, Freminet and Mavuika get the same fix.
+
+## [v1.50.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.1) (2026-11-28)
+
+### Fixed
+
+- Steady DPS ER no longer comes out too high for characters whose Energy comes on its own cooldown, like Mitya’s C1: each Burst is checked against the Energy it really gets in the rotations played.
+
+## [v1.50.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.0) (2026-11-27)
+
+### New
+
+- Import from Enka: enter your UID to bring in the characters from your in-game Character Showcase, with their level, constellation, talents, weapon and artifacts. It's on the Characters page and in Getting Started on the home page.
+- Importing again updates those characters. Weapons and artifacts you already have are matched, not added twice.
+
+## [v1.49.4](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.4) (2026-11-27)
+
+### Fixed
+
+- Fixed UI lag and freezing when saving builds via "Save and use on this team" in Team Optimize.
+
+## [v1.49.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.49.0) (2026-11-27)
+
+### New
+
+- Auto-rank equipment toggle in Team Optimize: automatically compare alternative weapons and artifact sets right after optimization finishes, saved across teams.
+- Custom build name format on "Save and use on this team" in Team Optimize: edit the build name per save or persist a reusable format (using {team}) for future saves.
+
+## [v1.48.0](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.48.0) (2026-11-27)
+
+### New
+
+- Investment comparison auto-adapts rotations for constellations that add extra Skill casts or beam counts, with one-click Edit, Revert, and an in-place Auto-find rotation search for combo constellations.
+- Artifact benchmarks on character overviews compare your equipped useful substat rolls against KQM Standard, Good, and Great targets.
+- Timed rotation ER calculation: opt in inside the ER calculator to track Energy at every Burst in your written rotation, including 0 starting Energy on custom enemies and opening Bursts.
+- Bulk-level all currently filtered weapons to 90 (1★–2★ to 70) from the Weapons page.
+
+### Fixed
+
+- KQM weapon and set comparisons always rank a member's own baseline build using the build the run kept, never a weaker refit.
+
 ## [v1.47.3](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.47.3) (2026-11-27)
 
 ### New

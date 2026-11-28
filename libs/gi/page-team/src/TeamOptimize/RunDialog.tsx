@@ -50,6 +50,7 @@ import type { ReactNode } from 'react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import MainStatSelectionCard from '../CharacterDisplay/Tabs/TabOptimize/Components/MainStatSelectionCard'
+import { AutoRankToggle } from './AutoRankToggle'
 import { formatDamage } from './format'
 import { MemberAvatar } from './MemberAvatar'
 import { DialogHead } from './OptionTile'
@@ -107,7 +108,7 @@ export function RunDialog({
   /** With no member to optimize, Start still computes the team as it is (an imported team's builds) */
   evaluateOnly?: boolean
 }) {
-  const { t } = useTranslation('page_team')
+  const { t } = useTranslation(['page_team', 'charNames_gen'])
   const database = useDatabase()
   // (the set effects the rotation times in a run: their switches play no part)
   const timed = useTimedSetEffects(teamId, teamOpt, open)
@@ -221,23 +222,32 @@ export function RunDialog({
   const asItIs = !!evaluateOnly && !toOptimize.length
   const energy = useTeamEnergy(teamId, members, teamOpt, setTeamOpt)
   const canStart =
-    ((toOptimize.length > 0 && eligible) || asItIs) && !energy.updating
-  const notice = asItIs
-    ? t(
-        'teamOpt.runDialog.asItIs',
-        'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
-      )
-    : toOptimize.length && !eligible
-      ? artifacts.length
-        ? t(
-            'teamOpt.runDialog.incompleteInventory',
-            'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
-          )
-        : t(
-            'teamOpt.runDialog.emptyInventory',
-            'Add or import artifacts before optimizing the team.'
-          )
-      : undefined
+    ((toOptimize.length > 0 && eligible) || asItIs) &&
+    !energy.updating &&
+    !energy.blockedBurst
+  const notice = energy.blockedBurst
+    ? t('teamOpt.kqm.calc.openingBlocked', {
+        defaultValue:
+          '{{character}} can’t charge their Burst by {{time}} s. Move the Burst later or add particles before the cast.',
+        character: t(`charNames_gen:${energy.blockedBurst[0]}`),
+        time: energy.blockedBurst[1].castTime?.toFixed(1),
+      })
+    : asItIs
+      ? t(
+          'teamOpt.runDialog.asItIs',
+          'Every member is on its imported build: Start computes the team as it is. Pick My builds on the page to optimize your own pieces.'
+        )
+      : toOptimize.length && !eligible
+        ? artifacts.length
+          ? t(
+              'teamOpt.runDialog.incompleteInventory',
+              'At least one member is missing an eligible artifact slot. Adjust the inventory filters or keep that member’s current build.'
+            )
+          : t(
+              'teamOpt.runDialog.emptyInventory',
+              'Add or import artifacts before optimizing the team.'
+            )
+        : undefined
   return (
     <ModalWrapper
       open={open}
@@ -374,7 +384,11 @@ export function RunDialog({
           }}
         >
           {notice && (
-            <Alert severity="info" role="status" sx={{ mb: 1.5 }}>
+            <Alert
+              severity={energy.blockedBurst ? 'warning' : 'info'}
+              role="status"
+              sx={{ mb: 1.5 }}
+            >
               {notice}
             </Alert>
           )}
@@ -418,6 +432,18 @@ export function RunDialog({
                 ]}
               />
             </Box>
+            <Box
+              aria-hidden
+              sx={{
+                display: { xs: 'none', sm: 'block' },
+                width: '1px',
+                height: 20,
+                bgcolor: tokens.hairlineStrong,
+              }}
+            />
+            <AutoRankToggle
+              label={t('teamOpt.run.autoRank', 'Auto-rank equipment')}
+            />
             <Box sx={{ flexGrow: 1 }} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               {/* (phones: the title bar's close is the cancel) */}

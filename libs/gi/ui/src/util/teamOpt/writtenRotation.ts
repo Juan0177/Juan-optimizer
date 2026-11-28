@@ -7,10 +7,17 @@ import type {
   TeamOptKqm,
 } from '@genshin-optimizer/gi/db'
 import { getCharEle } from '@genshin-optimizer/gi/stats'
-import { enemyFreezeImmune } from '../../components/enemy/stygianBosses'
+import {
+  enemyFreezeImmune,
+  startsWithoutEnergy,
+} from '../../components/enemy/stygianBosses'
 import type { TeamDataOverrides, TeamOptMember } from './data'
 import type { RotationEnergy } from './energyCalc'
-import { energyFromRotation } from './energyCalc'
+import {
+  energyFromRotation,
+  openingEnergyFromRotation,
+  trackedEnergyFromRotation,
+} from './energyCalc'
 import type { KqmPlayed, KqmReplayInput } from './kqm'
 import {
   everyNthBursts,
@@ -22,13 +29,16 @@ import {
   needsRotationCalculation,
   openerCounted as openerIsCounted,
   parseRotation,
+  type RotationAction,
   type RotationCalculation,
   type RotationMember,
+  type RotationStep,
   type RotationTimingSettings,
   rotationAttacks,
   rotationSamples,
   type SimBuffOwner,
   type SimGear,
+  type SimulationResult,
   STEADY_COUNTED,
   STEADY_REPEATS,
   simulateRotationSamples,
@@ -161,6 +171,40 @@ export function tabEnemyFreezeImmune(
   return enemyFreezeImmune(enemy)
 }
 
+/** The tab's own enemy and starting energy. */
+export function tabStartsWithoutEnergy(
+  database: ArtCharDatabase,
+  teamId: string,
+  kqm?: boolean,
+  teamOpt?: Pick<TeamOpt, 'kqm'>
+): boolean {
+  const team = database.teams.get(teamId)
+  return startsWithoutEnergy(
+    kqm ? ((teamOpt ?? team?.teamOpt)?.kqm?.enemy ?? team) : team
+  )
+}
+
+/** Automatic opener when only a repeat was written. */
+function withoutOpeningBursts(steps: RotationStep[]): RotationStep[] {
+  const strip = (actions: RotationAction[]): RotationAction[] => {
+    const omittedGroups = new Set(
+      actions
+        .filter((a) => a.kind === 'burst' && a.group !== undefined)
+        .map((a) => a.group)
+    )
+    return actions.flatMap((a) => {
+      if (a.inGroup !== undefined && omittedGroups.has(a.inGroup)) return []
+      if (a.kind === 'burst') return strip(a.otherwise ?? [])
+      return [{ ...a, optional: true }]
+    })
+  }
+  return steps.flatMap((step) => {
+    if (!step.actions.length) return [step]
+    const actions = strip(step.actions)
+    return actions.length ? [{ ...step, actions }] : []
+  })
+}
+
 /**
  * The written rotation played frame by frame: its steps, the simulation and each member's attacks
  * (only the buff states that differ from the members' own settings go on the attacks)
@@ -188,6 +232,7 @@ function prepareWritten({
   freezeImmune,
   burstEvery,
   withoutBursts,
+  startingEmpty,
   timelineOnly,
   sacrificial = true,
 }: {
@@ -195,6 +240,8 @@ function prepareWritten({
   kqm?: boolean
   /** Its Bursts left out (a fight that starts with no energy: its first rotation) */
   withoutBursts?: boolean
+  /** Prep a non-burst opener if none was written. Check the first loop too when estimating ER. */
+  startingEmpty?: 'first' | 'checks'
   /** Only shown on a timeline: no attacks worked out */
   timelineOnly?: boolean
   /** Replay with Composed disabled for an ER target that does not rely on resets. */
@@ -250,18 +297,15 @@ function prepareWritten({
     // (a step that was only a Burst is left out: the member is not swapped in for nothing; a
     // Burst's alternative, "Q/N1", is played instead. What is not ready without the Bursts, a
     // Skill their Burst would have reset, is left out rather than waited for, as a player would)
-    const strip = (steps: typeof rotation.steps) =>
-      steps.flatMap((step) => {
-        if (!step.actions.length) return [step]
-        const actions = step.actions
-          .flatMap((a) => (a.kind === 'burst' ? (a.otherwise ?? []) : [a]))
-          .map((a) => ({ ...a, optional: true }))
-        return actions.length ? [{ ...step, actions }] : []
-      })
-    rotation.steps = strip(rotation.steps)
-    if (rotation.opener) rotation.opener = strip(rotation.opener)
+    rotation.steps = withoutOpeningBursts(rotation.steps)
+    if (rotation.opener) rotation.opener = withoutOpeningBursts(rotation.opener)
   }
-  if (!rotation.steps.length) {
+  if (startingEmpty && !rotation.opener?.length)
+    rotation.opener = withoutOpeningBursts(rotation.steps)
+  if (
+    !rotation.steps.length ||
+    (startingEmpty === 'first' && !rotation.opener?.length)
+  ) {
     const empty: UnplayedRotation = { rotation }
     return { empty }
   }
@@ -272,10 +316,14 @@ function prepareWritten({
   // (the writer's and Team optimize's own play: the pace it keeps, as KQM counts it, or the first
   // few rotations from the start when chosen)
   const steady = repeats === undefined
-  const first = firstRotations(timing)
+  const first = startingEmpty === 'first' ? 1 : firstRotations(timing)
   // (counted from the start, the opener is the first rotation, the rotation's copies after it,
   // unless it is a setup before the start)
-  const openerCounted = !!rotation.opener?.length && openerIsCounted(timing)
+  const openerCounted =
+    !!rotation.opener?.length &&
+    (startingEmpty === 'first' ||
+      (startingEmpty === 'checks' && !!first && !opener.trim()) ||
+      openerIsCounted(timing))
   /** The written rotations counted from the start (each played copy is `loops` of them) */
   const fromStart =
     first === undefined
@@ -307,8 +355,16 @@ function prepareWritten({
     swapFrames: timing.swapFrames,
     frameData,
     repeats: first ?? (steady ? STEADY_REPEATS : repeats),
-    keep: first ? 'all' : steady ? 'last2' : keep,
+    keep:
+      keep === 'play' || startingEmpty === 'checks'
+        ? 'play'
+        : first
+          ? 'all'
+          : steady
+            ? 'last2'
+            : keep,
     openerCounted,
+    skipOptionalBursts: !!startingEmpty,
     auraTimeline,
     sacrificial,
     freezeImmune: freezeImmune ?? tabEnemyFreezeImmune(database, teamId, kqm),
@@ -354,6 +410,86 @@ function prepareWritten({
 }
 
 type WrittenOptions = Parameters<typeof prepareWritten>[0]
+
+/** Play a zero-energy start, including the transition to the repeating rotation. */
+function playOpening(args: WrittenOptions, wholeEncounter: boolean) {
+  const onlyOpening =
+    firstRotations(args.timing) === 1 &&
+    (!args.opener.trim() || openerIsCounted(args.timing))
+  const sim = simulateWritten({
+    ...args,
+    timing: wholeEncounter ? args.timing : { ...args.timing, rotations: 0 },
+    startingEmpty: onlyOpening ? 'first' : 'checks',
+    repeats: 1,
+    keep: 'play',
+    samples: 4,
+    timelineOnly: true,
+    sacrificial: false,
+  })?.sim
+  return sim
+}
+
+/** The calculator's editable prefills and the timed gauge used for the written rotation. */
+export function writtenEnergy(
+  sim: SimulationResult,
+  counted: number,
+  args: WrittenOptions,
+  repeated: boolean,
+  zeroEnergy: boolean
+): RotationEnergy {
+  const { members, constellations } = args.team
+  const withCadence = (
+    trace: ReturnType<typeof trackedEnergyFromRotation>['trace']
+  ) =>
+    trace && args.burstEvery ? { ...trace, cadence: args.burstEvery } : trace
+  // A finite encounter can spend energy in an uncounted opener before the first counted loop. The
+  // steady pace is checked on the whole run, Burst to Burst (see `trackEnergyRecharge`).
+  let full = sim
+  if (repeated || (!zeroEnergy && sim.start > 0)) {
+    const played = simulateWritten({
+      ...args,
+      repeats: repeated ? args.repeats : 1,
+      keep: 'play',
+      samples: 4,
+      timelineOnly: true,
+      sacrificial: false,
+    })
+    full = played?.counted?.sim ?? played?.sim ?? sim
+  }
+  const tracked = trackedEnergyFromRotation(
+    full,
+    members,
+    counted,
+    constellations,
+    repeated && full === sim,
+    repeated && full !== sim ? STEADY_COUNTED : undefined
+  )
+  const energy =
+    full === sim
+      ? tracked.energy
+      : energyFromRotation(sim, members, counted, constellations)
+  let opening: typeof tracked.trace
+  if (zeroEnergy) {
+    const first = playOpening(args, false)
+    if (first)
+      energy.opening = openingEnergyFromRotation(first, members, constellations)
+    const whole =
+      !repeated && firstRotations(args.timing) ? playOpening(args, true) : first
+    if (whole)
+      opening = withCadence(
+        trackedEnergyFromRotation(whole, members, 1, constellations, false)
+          .trace
+      )
+  }
+  const rotation =
+    zeroEnergy && !repeated ? undefined : withCadence(tracked.trace)
+  if (rotation || opening)
+    energy.timeline = {
+      rotation,
+      opening,
+    }
+  return energy
+}
 interface UnplayedRotation {
   rotation: ReturnType<typeof parseRotation>
   sim?: never
@@ -547,6 +683,7 @@ export function writtenKqmReplay({
   const burstEvery = kqmBurstEvery(teamOpt.kqm)
   // (the run's own enemy, as its settings have it)
   const freezeImmune = tabEnemyFreezeImmune(database, teamId, true, teamOpt)
+  const zeroEnergy = tabStartsWithoutEnergy(database, teamId, true, teamOpt)
   return ({ constellations, gear, overrides, calculate }) => {
     // the state where no attack sets one, as KQM counts it: KQM's own switches ('' off), else
     // the rule's (never the members' or the team's own, once KQM has its own: `kqmOwnSettings`)
@@ -624,7 +761,13 @@ export function writtenKqmReplay({
       exactTime,
       stalls,
       // (the ER calculator's inputs as this rotation plays them)
-      energy: energyFromRotation(energySim, keys, counted, constellations),
+      energy: writtenEnergy(
+        energySim,
+        counted,
+        playArgs,
+        played.fromStart === undefined,
+        zeroEnergy
+      ),
       ...(energySim !== played.sim && {
         energyRotationTime:
           Math.round((energySim.frames / 60 / counted) * 10) / 10,

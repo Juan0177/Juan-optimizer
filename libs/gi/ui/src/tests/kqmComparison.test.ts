@@ -169,6 +169,22 @@ describe('linked KQM comparisons', () => {
     const result = (await optimizeTeamKqm({ ...args, maxRounds: 1 }))!
     const baseline = structuredClone(result)
     expect(result.builds.Shenhe).toBeTruthy()
+    // a member's own weapon and sets rank as its build, never below it
+    for (const ck of result.optimized) {
+      const own = result.builds[ck]!
+      for (const options of Object.values(result.rankings[ck]!)) {
+        const row = options.find(
+          (o) =>
+            !o.compare &&
+            o.weapon.key === own.weapon.key &&
+            o.weapon.refinement === own.weapon.refinement &&
+            kqmSetsId(o.sets) === kqmSetsId(own.sets)
+        )
+        expect(row!.total).toBeGreaterThanOrEqual(
+          result.after.total * (1 - 1e-9)
+        )
+      }
+    }
     const compare = (
       sets: KqmBuild['sets'],
       weapon = { key: 'AmenomaKageuchi', refinement: 5 } as KqmBuild['weapon']

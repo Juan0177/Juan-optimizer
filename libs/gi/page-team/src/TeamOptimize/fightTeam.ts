@@ -25,14 +25,21 @@ import {
   icdTracker,
   MOONGECKO,
   resMultiplier,
+  simulateWrittenAsync,
   teamOptMembers,
 } from '@genshin-optimizer/gi/ui'
 import { input } from '@genshin-optimizer/gi/wr'
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { attackElement } from './DamageShare'
 import {
   rotationIdOf,
-  simulateWritten,
   useAppliedRotation,
   useMemberNames,
   useRotationSettings,
@@ -54,7 +61,7 @@ export interface FightApplications {
   /** One rotation's hits as played, and how long it takes (its damage over time) */
   played?: PlayedHits
   /**
-   * Its first rotation from no energy: played once from the start without its Bursts, its
+   * Its first rotation from no energy: played once from the start, its
    * attacks and how long it takes
    */
   opening?: {
@@ -367,88 +374,161 @@ export function useRotationApplications(
   const { opener, timing, frameData } = useRotationSettings(rid)
   const team = useSimTeam(members, kqm, kqmBuilds)
   const names = useMemberNames(members)
-  // (played after the page: a heavy team's rotation takes a moment)
-  const deferredTeam = useDeferredValue(team)
   const isKqm = !!kqm
-  return useMemo(() => {
-    if (!enabled || !applied.trim()) return undefined
-    try {
-      const played = simulateWritten({
-        kqm: isKqm,
-        text: applied,
-        opener,
-        timing,
-        frameData,
-        team: deferredTeam,
-        names,
-        members,
-        database,
-        teamId,
-        gender,
-        openerWarning: (warning) => warning,
-        // (applications only: a few samples are enough)
-        samples: 4,
-      })
-      const sim = played?.sim
-      if (!sim || sim.frames <= 0) return undefined
-      const applications: FightApplications = {
-        ...applicationsOf(sim.hits, sim.frames, sim.start, sim),
-        played: {
-          seconds: sim.frames / 60,
-          hits: playedHits(sim.hits, sim.start, sim.frames),
-        },
-      }
-      // (a fight from no energy: its first rotation without Bursts, whatever the tab counts; not
-      // counted from the start, so `repeats` is what plays)
-      const opening = simulateWritten({
-        kqm: isKqm,
-        text: applied,
-        opener,
-        timing: { ...timing, rotations: 0 },
-        frameData,
-        team: deferredTeam,
-        names,
-        members,
-        database,
-        teamId,
-        gender,
-        openerWarning: (warning) => warning,
-        samples: 4,
-        repeats: 1,
-        keep: 'all',
-        withoutBursts: true,
-      })
-      const span = opening?.sim && opening.sim.start + opening.sim.frames
-      return opening?.attacks && span && span > 0
-        ? {
-            ...applications,
-            opening: {
-              attacks: opening.attacks,
-              seconds: span / 60,
-              hits: playedHits(opening.sim?.hits ?? [], 0, span),
-            },
-          }
-        : applications
-    } catch (e) {
-      // (a rotation that cannot be played: no applications counted)
-      if (process.env['NODE_ENV'] === 'development')
-        console.warn('[fight] rotation applications', e)
+  const rosterKey = members
+    .map((m) => `${m.characterKey}:${m.teamCharId}`)
+    .join(',')
+  const teamConditional = database.teams.get(teamId)?.conditional
+  const condsSig = useMemo(
+    () =>
+      JSON.stringify([
+        teamConditional,
+        members.map((m) => database.teamChars.get(m.teamCharId)?.conditional),
+      ]),
+    [teamConditional, members, database]
+  )
+  const inputsRef = useRef({ team, names, members, timing, frameData })
+  inputsRef.current = { team, names, members, timing, frameData }
+  const simKey = useMemo(
+    () =>
+      enabled && applied.trim()
+        ? JSON.stringify([
+            isKqm,
+            applied,
+            opener,
+            timing,
+            frameData,
+            team,
+            names,
+            rosterKey,
+            condsSig,
+            teamId,
+            gender,
+          ])
+        : '',
+    [
+      enabled,
+      isKqm,
+      applied,
+      opener,
+      timing,
+      frameData,
+      team,
+      names,
+      rosterKey,
+      condsSig,
+      teamId,
+      gender,
+    ]
+  )
+  // (played asynchronously after paint so clicks and build saves never stall on rotation replays)
+  const [applications, setApplications] = useState<
+    FightApplications | undefined
+  >()
+  useEffect(() => {
+    if (!simKey) {
+      setApplications(undefined)
       return undefined
     }
-  }, [
-    isKqm,
-    enabled,
-    applied,
-    opener,
-    timing,
-    frameData,
-    deferredTeam,
-    names,
-    members,
-    database,
-    teamId,
-    gender,
-  ])
+    let cancelled = false
+    let nextTimer: ReturnType<typeof setTimeout> | undefined
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      const {
+        team: activeTeam,
+        names: activeNames,
+        members: activeMembers,
+        timing: activeTiming,
+        frameData: activeFrameData,
+      } = inputsRef.current
+      void (async () => {
+        try {
+          const played = await simulateWrittenAsync(
+            {
+              kqm: isKqm,
+              text: applied,
+              opener,
+              timing: activeTiming,
+              frameData: activeFrameData,
+              team: activeTeam,
+              names: activeNames,
+              members: activeMembers,
+              database,
+              teamId,
+              gender,
+              openerWarning: (warning) => warning,
+              // (applications only: a few samples are enough)
+              samples: 4,
+            },
+            () => cancelled
+          )
+          if (cancelled) return
+          const sim = played?.sim
+          if (!sim || sim.frames <= 0) {
+            startTransition(() => setApplications(undefined))
+            return
+          }
+          const base: FightApplications = {
+            ...applicationsOf(sim.hits, sim.frames, sim.start, sim),
+            played: {
+              seconds: sim.frames / 60,
+              hits: playedHits(sim.hits, sim.start, sim.frames),
+            },
+          }
+          await new Promise<void>((resolve) => {
+            nextTimer = setTimeout(resolve, 0)
+          })
+          if (cancelled) return
+          const opening = await simulateWrittenAsync(
+            {
+              kqm: isKqm,
+              text: applied,
+              opener,
+              timing: { ...activeTiming, rotations: 0 },
+              frameData: activeFrameData,
+              team: activeTeam,
+              names: activeNames,
+              members: activeMembers,
+              database,
+              teamId,
+              gender,
+              openerWarning: (warning) => warning,
+              samples: 4,
+              repeats: 1,
+              keep: 'all',
+              startingEmpty: 'first',
+            },
+            () => cancelled
+          )
+          if (cancelled) return
+          const span = opening?.sim && opening.sim.start + opening.sim.frames
+          const next =
+            opening?.attacks && span && span > 0
+              ? {
+                  ...base,
+                  opening: {
+                    attacks: opening.attacks,
+                    seconds: span / 60,
+                    hits: playedHits(opening.sim?.hits ?? [], 0, span),
+                  },
+                }
+              : base
+          startTransition(() => setApplications(next))
+        } catch (e) {
+          // (a rotation that cannot be played: no applications counted)
+          if (process.env['NODE_ENV'] === 'development')
+            console.warn('[fight] rotation applications', e)
+          if (!cancelled) startTransition(() => setApplications(undefined))
+        }
+      })()
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+      if (nextTimer !== undefined) clearTimeout(nextTimer)
+    }
+  }, [simKey, isKqm, applied, opener, database, teamId, gender])
+  return simKey ? applications : undefined
 }
 
 /**
@@ -804,23 +884,31 @@ export function useCocoonEvaluations(
   }>()
   useEffect(() => {
     if (!deferred) return undefined
-    const timer = setTimeout(() => {
-      // (every RES `RES_PROBE` lower than the enemy's: the evaluation's own, else the team's)
-      const shiftedEnemy = () => {
-        const enemy =
-          (deferred as { enemy?: Partial<Record<string, number>> }).enemy ??
-          database.teams.get(teamId)?.enemyOverride ??
-          {}
-        return Object.fromEntries(
-          allElementWithPhyKeys.map((e) => {
-            const v = enemy[`${e}_enemyRes_`] ?? 10
-            return [
-              `${e}_enemyRes_`,
-              v === Number.MAX_VALUE ? v : v - RES_PROBE * 100,
-            ]
-          })
-        )
-      }
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const schedule = (fn: () => void, ms: number) => {
+      timer = setTimeout(() => {
+        if (!cancelled) fn()
+      }, ms)
+    }
+    // (every RES `RES_PROBE` lower than the enemy's: the evaluation's own, else the team's)
+    const shiftedEnemy = () => {
+      const enemy =
+        (deferred as { enemy?: Partial<Record<string, number>> }).enemy ??
+        database.teams.get(teamId)?.enemyOverride ??
+        {}
+      return Object.fromEntries(
+        allElementWithPhyKeys.map((e) => {
+          const v = enemy[`${e}_enemyRes_`] ?? 10
+          return [
+            `${e}_enemyRes_`,
+            v === Number.MAX_VALUE ? v : v - RES_PROBE * 100,
+          ]
+        })
+      )
+    }
+    // Yield between evaluations so up to five full team-rotation runs never freeze the main thread.
+    schedule(() => {
       try {
         const members = teamOptMembers(database, teamId).map(
           (m) => m.characterKey
@@ -841,26 +929,54 @@ export function useCocoonEvaluations(
               ])
             ),
           })
-        setOut({
-          settings: deferred,
-          value: {
-            base: withBonus(),
-            ...(cocoon
-              ? {
-                  cocooned: withBonus(COCOON_BONUS),
-                  disentangled: withBonus(DISENTANGLED_BONUS),
-                }
-              : {}),
-            ...(opening ? { opening: withBonus(undefined, opening) } : {}),
-            shifted: withBonus(undefined, undefined, shiftedEnemy()),
+        const value: CocoonEvaluations = {}
+        const steps: Array<() => void> = [
+          () => {
+            value.base = withBonus()
           },
-        })
+          ...(cocoon
+            ? [
+                () => {
+                  value.cocooned = withBonus(COCOON_BONUS)
+                },
+                () => {
+                  value.disentangled = withBonus(DISENTANGLED_BONUS)
+                },
+              ]
+            : []),
+          ...(opening
+            ? [
+                () => {
+                  value.opening = withBonus(undefined, opening)
+                },
+              ]
+            : []),
+          () => {
+            value.shifted = withBonus(undefined, undefined, shiftedEnemy())
+          },
+        ]
+        let idx = 0
+        const runNext = () => {
+          if (cancelled) return
+          try {
+            steps[idx++]?.()
+            if (idx < steps.length) schedule(runNext, 0)
+            else startTransition(() => setOut({ settings: deferred, value }))
+          } catch (e) {
+            if (process.env['NODE_ENV'] === 'development')
+              console.warn('[fight] cocoon evaluations', e)
+          }
+        }
+        runNext()
       } catch (e) {
         if (process.env['NODE_ENV'] === 'development')
           console.warn('[fight] cocoon evaluations', e)
       }
     }, 150)
-    return () => clearTimeout(timer)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) clearTimeout(timer)
+    }
   }, [database, teamId, gender, deferred, cocoon, opening])
   // (only for the settings asked: an older team's stay out)
   return settings && out?.settings === settings ? out.value : undefined
