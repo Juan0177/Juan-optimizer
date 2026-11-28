@@ -4,6 +4,12 @@ Every release of [Stellar Optimizer](https://gi-beta73.github.io/). The app show
 (home page, and the version in the footer). Generated from
 `libs/gi/ui/src/changelog/changelog.json` by `tools/site/release.mjs`: edit that file, not this one.
 
+## [v1.50.2](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.2) (2026-11-28)
+
+### Fixed
+
+- Sacrificial weapons now reset Mizuki’s Skill when the reset comes from the Skill’s first hit. That reset used to be wasted, so her E? recast rarely played and Sacrificial Fragments looked weak on her. Sayu, Freminet and Mavuika get the same fix.
+
 ## [v1.50.1](https://github.com/s-naveen/stellar-optimizer/releases/tag/v1.50.1) (2026-11-28)
 
 ### Fixed

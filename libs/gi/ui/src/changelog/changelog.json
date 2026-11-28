@@ -1,5 +1,12 @@
 [
   {
+    "version": "1.50.2",
+    "date": "2026-11-28",
+    "fixed": [
+      "Sacrificial weapons now reset Mizuki’s Skill when the reset comes from the Skill’s first hit. That reset used to be wasted, so her E? recast rarely played and Sacrificial Fragments looked weak on her. Sayu, Freminet and Mavuika get the same fix."
+    ]
+  },
+  {
     "version": "1.50.1",
     "date": "2026-11-28",
     "fixed": [
