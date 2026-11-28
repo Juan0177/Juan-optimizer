@@ -2248,28 +2248,55 @@ export const teamDps = (team: FightTeam) =>
   Object.values(team.dps).reduce<number>((sum, v) => sum + (v ?? 0), 0)
 
 /** An enemy set by hand: its HP ÷ the team's DPS (no mechanics) */
-export function customFight(hp: number, team: FightTeam): FightEstimate {
+export function customFight(
+  hp: number,
+  team: FightTeam,
+  settings: FightSettings = { fullEnergy: true }
+): FightEstimate {
   const dps = teamDps(team)
-  const seconds = dps > 0 ? hp / dps : undefined
+  const open = openingOf(team, settings)
+  const openDps = open ? teamDps({ ...team, dps: open.dps }) : 0
+  const openFor = open?.seconds ?? 0
+  const openDone = Math.min(openFor, openDps > 0 ? hp / openDps : openFor)
+  const left = Math.max(0, hp - openDps * openDone)
+  const seconds =
+    left <= 1e-6 && open
+      ? openDone
+      : dps > 0
+        ? openDone + left / dps
+        : undefined
   const end = Math.min(seconds ?? FIGHT_LIMIT, FIGHT_LIMIT)
+  const segments: FightSegment[] = []
+  if (openDone > 0)
+    segments.push({
+      start: 0,
+      end: Math.min(openDone, end),
+      state: 'regular',
+      hpStart: 1,
+      hpEnd: Math.max(0, 1 - (openDps * Math.min(openDone, end)) / hp),
+      dps: openDps,
+    })
+  if (end > openDone || !open)
+    segments.push({
+      start: openDone,
+      end,
+      state: 'regular',
+      hpStart: left / hp,
+      hpEnd: Math.max(0, (left - dps * (end - openDone)) / hp),
+      dps,
+    })
   return {
     seconds:
       seconds !== undefined && seconds <= FIGHT_LIMIT ? seconds : undefined,
-    parts: seconds !== undefined ? [{ key: 'custom', dps, seconds }] : [],
+    parts:
+      seconds !== undefined
+        ? [{ key: 'custom', dps: hp / seconds, seconds }]
+        : [],
     timeline: {
-      segments: [
-        {
-          start: 0,
-          end,
-          state: 'regular',
-          hpStart: 1,
-          hpEnd: Math.max(0, 1 - (dps * end) / hp),
-          dps,
-        },
-      ],
+      segments,
       events: [],
     },
-    notes: [],
+    notes: open ? ['opening'] : [],
     modelled: false,
   }
 }
@@ -2310,7 +2337,11 @@ export function enemyFight(
           enemy.fightSettings
         )
       : undefined
-  return enemy.enemyHp ? customFight(enemy.enemyHp, team) : undefined
+  return enemy.enemyHp
+    ? customFight(enemy.enemyHp, team, {
+        fullEnergy: enemy.fightSettings?.fullEnergy !== false,
+      })
+    : undefined
 }
 
 /**

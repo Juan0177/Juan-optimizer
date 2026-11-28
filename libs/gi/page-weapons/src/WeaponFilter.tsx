@@ -18,6 +18,8 @@ import {
   allLocationCharacterKeys,
   allRarityKeys,
   allWeaponTypeKeys,
+  ascensionMaxLevel,
+  weaponMaxAscension,
 } from '@genshin-optimizer/gi/consts'
 import type { ICachedWeapon } from '@genshin-optimizer/gi/db'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
@@ -29,6 +31,7 @@ import {
 } from '@genshin-optimizer/gi/ui'
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter'
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever'
+import KeyboardDoubleArrowUpIcon from '@mui/icons-material/KeyboardDoubleArrowUp'
 import LockIcon from '@mui/icons-material/Lock'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
 import PersonSearchIcon from '@mui/icons-material/PersonSearch'
@@ -39,6 +42,11 @@ import { useTranslation } from 'react-i18next'
 const lockedValues = ['locked', 'unlocked'] as const
 
 const lockedHandler = handleMultiSelect([...lockedValues])
+
+const maxedOut = (weapon: ICachedWeapon) => {
+  const ascension = weaponMaxAscension[getWeaponStat(weapon.key).rarity]
+  return { ascension, level: ascensionMaxLevel[ascension] }
+}
 
 const filterKeys = [
   'weaponType',
@@ -258,14 +266,18 @@ function WeaponFilter({
   )
 }
 
-/** Delete / lock / unlock every weapon that matches the current filters. */
+/** Level up / delete / lock / unlock every weapon that matches the current filters. */
 function WeaponBulkActions({ weaponIds }: { weaponIds: string[] }) {
   const { t } = useTranslation(['page_weapon', 'ui'])
   const database = useDatabase()
-  const { numDelete, numUnlock, numLock } = useMemo(() => {
+  const { numDelete, numUnlock, numLock, numLevel } = useMemo(() => {
     const weapons = weaponIds.map((id) =>
       database.weapons.get(id)
     ) as ICachedWeapon[]
+    const numLevel = weapons.reduce(
+      (w, weapon) => w + (weapon.level < maxedOut(weapon).level ? 1 : 0),
+      0
+    )
     const numUnlock = weapons.reduce(
       (w, weapon) => w + (weapon.lock ? 0 : 1),
       0
@@ -275,10 +287,26 @@ function WeaponBulkActions({ weaponIds }: { weaponIds: string[] }) {
       (w, weapon) => w + (weapon.lock || weapon.location ? 0 : 1),
       0
     )
-    return { numDelete, numUnlock, numLock }
+    return { numDelete, numUnlock, numLock, numLevel }
   }, [weaponIds, database])
 
   const actions: BulkAction[] = [
+    {
+      key: 'level',
+      icon: <KeyboardDoubleArrowUpIcon />,
+      label: t('bulk.levelMax'),
+      count: numLevel,
+      run: () =>
+        window.confirm(
+          `Are you sure you want to level up ${numLevel} weapons to their max level?`
+        ) &&
+        weaponIds.forEach((id) => {
+          const weapon = database.weapons.get(id)
+          if (!weapon) return
+          const max = maxedOut(weapon)
+          if (weapon.level < max.level) database.weapons.set(id, max)
+        }),
+    },
     {
       key: 'lock',
       icon: <LockIcon />,

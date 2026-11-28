@@ -1,0 +1,17 @@
+# Stellar Optimizer's Enka.Network import: a Cloudflare Worker that fetches a UID's Character Showcase
+# for the site (Enka's API sends no CORS headers and asks for a custom User-Agent), keeps each answer
+# for its `ttl` in the Cloudflare cache and limits requests per visitor.
+# Local: `npx wrangler@4 dev --port 8788`; deploy: `npx wrangler@4 deploy`.
+name = "stellar-enka"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+# (served on the site's own domain; no workers.dev address)
+workers_dev = false
+routes = [
+  { pattern = "stellaroptimizer.com/api/enka/*", zone_name = "stellaroptimizer.com" },
+]
+
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1101"
+simple = { limit = 10, period = 60 }

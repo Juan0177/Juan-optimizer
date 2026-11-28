@@ -517,15 +517,15 @@ describe('rotation gear activation', () => {
       ).toHaveLength(2)
     })
 
-    it('can spend the weapon cooldown on a delayed on-field hit with no Skill to reset', () => {
-      const kit: KitModel = {
+    const delayedKit = (hits: number[], cooldown: number, delay: number) =>
+      ({
         characterKey: 'Mona',
         element: 'hydro',
         source: 'test',
         act(ctx, _state, action) {
           if (action.kind === 'burst') return { frames: 40 }
-          for (const delay of [1, 12])
-            ctx.hit(delay, {
+          for (const at of hits)
+            ctx.hit(at, {
               path: ['skill', 'test'],
               tag: 'skill',
               element: 'hydro',
@@ -533,23 +533,60 @@ describe('rotation gear activation', () => {
             })
           return {
             frames: 20,
-            cooldown: { key: 'skill', frames: 480, delay: 8 },
+            cooldown: { key: 'skill', frames: cooldown, delay },
           }
         },
-      }
-      const result = simulateRotation({
-        rotation: parseRotation('Mona E Q E?', [
-          { characterKey: 'Mona', name: 'Mona' },
-        ]),
+      }) satisfies KitModel
+    const delayedRun = (text: string, kit: KitModel, rolls: number[] = []) => {
+      let roll = 0
+      return simulateRotation({
+        rotation: parseRotation(text, [{ characterKey: 'Mona', name: 'Mona' }]),
         members: ['Mona'],
         constellations: {},
         elements: { Mona: 'hydro' },
         repeats: 1,
         kits: { Mona: kit },
         gear: { Mona: { weapon: 'SacrificialFragments', refinement: 3 } },
-        sacrificialRandom: () => 0,
+        sacrificialRandom: () => rolls[roll++] ?? 0,
       })
+    }
+
+    it('resets a Skill whose hit lands before its cooldown starts', () => {
+      const result = delayedRun('Mona E Q E?', delayedKit([1, 12], 480, 8))
+      expect(result.optionalSkills?.[0]?.played).toBe(true)
+      expect(result.skillUses).toHaveLength(2)
+    })
+
+    it('spends the weapon cooldown on a delayed hit once the Skill is ready again', () => {
+      const result = delayedRun(
+        'Mona E W11 E E?',
+        delayedKit([2, 600], 480, 0),
+        [0.99, 0]
+      )
       expect(result.optionalSkills?.[0]?.played).toBe(false)
+    })
+
+    it('lets Mizuki recast after the E to leave Dreamdrifter', () => {
+      const config = {
+        rotation: parseRotation('YumemizukiMizuki E W2 E E?', [
+          { characterKey: 'YumemizukiMizuki', name: 'YumemizukiMizuki' },
+        ]),
+        members: ['YumemizukiMizuki'] as CharacterKey[],
+        constellations: { YumemizukiMizuki: 0 },
+        elements: { YumemizukiMizuki: 'anemo' as const },
+        repeats: 1,
+        gear: {
+          YumemizukiMizuki: { weapon: 'SacrificialFragments', refinement: 5 },
+        },
+      }
+      expect(
+        simulateRotation({ ...config, sacrificialRandom: () => 0 })
+          .optionalSkills?.[0]?.played
+      ).toBe(true)
+      expect(
+        simulateRotation({ ...config, sacrificial: false }).optionalSkills?.[0]
+          ?.played
+      ).toBe(false)
     })
 
     it('keeps the weapon cooldown across loops', () => {

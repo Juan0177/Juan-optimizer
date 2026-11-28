@@ -133,6 +133,10 @@ export function kqmEnergyUpdate({
     ),
     rotationTime,
   }
+  if (!written) {
+    delete energyCalculator.opening
+    delete energyCalculator.timeline
+  }
   const json = JSON.stringify(energyCalculator)
   if (
     source === 'calculator' &&

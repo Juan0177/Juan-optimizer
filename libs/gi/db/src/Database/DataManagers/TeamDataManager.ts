@@ -33,6 +33,18 @@ import {
 } from './TeamEquipmentUndo'
 import type { TeamOpt } from './TeamOpt'
 import { validateTeamOpt } from './TeamOpt'
+
+/** Serialized JSON of previously validated (frozen) `TeamOpt` objects so unrelated team edits skip re-parsing. */
+const teamOptJsonCache = new WeakMap<TeamOpt, string>()
+function teamOptJson(teamOpt: TeamOpt): string {
+  let json = teamOptJsonCache.get(teamOpt)
+  if (json === undefined) {
+    json = JSON.stringify(teamOpt)
+    teamOptJsonCache.set(teamOpt, json)
+  }
+  return json
+}
+
 import {
   legacyRotationKey,
   legacyRotationMembers,
@@ -313,8 +325,20 @@ export class TeamDataManager extends DataManager<
 
     if (typeof lastEdit !== 'number') lastEdit = Date.now()
 
-    // optional: a team without Team Optimize settings stays without the field
-    const teamOpt = validateTeamOpt((obj as Team).teamOpt)
+    // optional: a team without Team Optimize settings stays without the field.
+    // Reuse the previous validated (frozen) `teamOpt` when unchanged so unrelated team writes
+    // (e.g. saving builds, renaming, editing enemy) skip re-parsing attacks and keep its reference.
+    const previous = this.get(key)
+    const rawTeamOpt = (obj as Team).teamOpt
+    const teamOpt =
+      previous?.teamOpt &&
+      rawTeamOpt &&
+      typeof rawTeamOpt === 'object' &&
+      (rawTeamOpt === previous.teamOpt ||
+        JSON.stringify(rawTeamOpt) === teamOptJson(previous.teamOpt))
+        ? previous.teamOpt
+        : validateTeamOpt(rawTeamOpt)
+    if (teamOpt && teamOpt !== previous?.teamOpt) teamOptJson(teamOpt)
     const {
       enemyPreset,
       enemyHp,
@@ -396,7 +420,6 @@ export class TeamDataManager extends DataManager<
     )
     if (Object.keys(rotationDocuments).length)
       validated.rotationDocuments = rotationDocuments
-    const previous = this.get(key)
     if (previous && previous.lastEdit === lastEdit) {
       const {
         lastEdit: _,

@@ -34,7 +34,6 @@ import {
   actionFrameDefaults,
   CharacterName,
   calculateEnergyRecharge,
-  energyFromRotation,
   type FrameData,
   HEXEREI_CHARACTERS,
   isSacrificialWeapon,
@@ -48,24 +47,27 @@ import {
   parseTiming,
   perRotation,
   type RotationMember,
+  replayTeamAttacks,
   rotationAttacks,
   rotationBuffDefaults,
   type SimHit,
   type SimTeam,
-  simTeamOf,
   STEADY_COUNTED,
   STEADY_REPEATS,
+  simTeamOf,
   simulateWritten,
   simulateWrittenAsync,
   syncEnergyCalculator,
+  tabStartsWithoutEnergy,
   teamBurstEvery,
   teamOptMembers,
   templatesForTeam,
+  trackedEnergyFromRotation,
   type WrittenRotation,
   withRotationEnergy,
+  writtenEnergy,
   writtenKqmReplay,
   writtenSeconds,
-  replayTeamAttacks,
   writtenWaits,
 } from '@genshin-optimizer/gi/ui'
 import type { UIData } from '@genshin-optimizer/gi/uidata'
@@ -622,9 +624,19 @@ export function useRotationSettings(teamId: string) {
 export function useMemberNames(members: TeamOptMember[]) {
   const { i18n } = useTranslation('charNames_gen')
   const { gender } = useDBMeta()
+  const rosterKey = members.map((m) => m.characterKey).join(',')
   return useMemo(
-    () => memberNamesOf(members, i18n, gender),
-    [members, gender, i18n]
+    () =>
+      memberNamesOf(
+        rosterKey
+          ? (rosterKey.split(',') as CharacterKey[]).map((characterKey) => ({
+              characterKey,
+            }))
+          : [],
+        i18n,
+        gender
+      ),
+    [rosterKey, gender, i18n]
   )
 }
 /** `useMemberNames` outside a page */
@@ -656,10 +668,14 @@ export function useSimTeam(
   kqmBuilds?: Partial<Record<CharacterKey, KqmBuild>>
 ) {
   const database = useDatabase()
-  return useMemo(
-    () => simTeamFor(members, database, kqm, kqmBuilds),
-    [members, database, kqm, kqmBuilds]
-  )
+  const prev = useRef<{ sig: string; value: SimTeam }>()
+  return useMemo(() => {
+    const next = simTeamFor(members, database, kqm, kqmBuilds)
+    const sig = JSON.stringify(next)
+    if (prev.current?.sig === sig) return prev.current.value
+    prev.current = { sig, value: next }
+    return next
+  }, [members, database, kqm, kqmBuilds])
 }
 /** `useSimTeam` outside a page */
 export function simTeamFor(
@@ -788,7 +804,7 @@ export function teamRotationEnergy({
     givenBurstEvery !== undefined
       ? givenBurstEvery
       : teamBurstEvery(database.teams.get(teamId)?.teamOpt)
-  const played = simulateWritten({
+  const playArgs = {
     text,
     opener: saved?.opener ?? readStored(database, openerKey(teamId)) ?? '',
     timing:
@@ -803,19 +819,21 @@ export function teamRotationEnergy({
     openerWarning: (w: string) => w,
     team,
     repeats: KQM_REPEATS,
-    keep: 'last2',
+    keep: 'last2' as const,
     samples: 32,
     burstEvery,
     sacrificial: false,
-  })
+  }
+  const played = simulateWritten(playArgs)
   if (!played?.sim || played.sim.frames <= 0) return undefined
   const counted = played.fromStart ?? KQM_COUNTED * (played.loops ?? 1)
   return {
-    energy: energyFromRotation(
+    energy: writtenEnergy(
       played.sim,
-      members.map((m) => m.characterKey),
       counted,
-      team.constellations
+      playArgs,
+      played.fromStart === undefined,
+      tabStartsWithoutEnergy(database, teamId)
     ),
     rotationTime: Math.round((played.sim.frames / 60 / counted) * 10) / 10,
   }
@@ -1989,6 +2007,13 @@ function WriterModal({
           }
           const seconds = run.frames / 60 / rotations
           if (seconds <= 0) return {}
+          const { energy, trace } = trackedEnergyFromRotation(
+            run,
+            team.members,
+            rotations,
+            team.constellations,
+            result?.fromStart === undefined
+          )
           const calc = withRotationEnergy(
             {
               ...syncEnergyCalculator(
@@ -2001,12 +2026,12 @@ function WriterModal({
               rotationTime: seconds,
             },
             team.members,
-            energyFromRotation(
-              run,
-              team.members,
-              rotations,
-              team.constellations
-            )
+            {
+              ...energy,
+              timeline: trace
+                ? { rotation: { ...trace, cadence: playArgs.burstEvery } }
+                : undefined,
+            }
           )
           const current = calculateEnergyRecharge(
             team.members,
@@ -2493,7 +2518,7 @@ function WriterModal({
                         )}
                         info={t('teamOpt.writer.openerTip', {
                           defaultValue:
-                            'Your first rotation, when it differs from the rest (no Energy at the start, a setup skill). Played instead of the rotation the first time through. It only sets up cooldowns, summons and auras and is not counted; counting from the start, tick Counted to make it the first rotation.',
+                            'Write a different first rotation for setup or a 0 Energy start. Automatic ER checks mandatory Bursts at their written cast time. Use Q? to make a Burst optional, or Q/N1 to give it a fallback. With From the start timing, turn on Counted to include the opener in rotation damage.',
                           ...STEADY_RANGE,
                         })}
                         aside={

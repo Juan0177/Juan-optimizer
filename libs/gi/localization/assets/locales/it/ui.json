@@ -276,5 +276,58 @@
     "sentReply": "Potresti ricevere una risposta su Discord.",
     "sentNoReply": "Ogni messaggio viene letto.",
     "issue": "Seguilo su GitHub"
+  },
+  "enka": {
+    "button": "Importa da Enka",
+    "title": "Importa da Enka.Network",
+    "subtitle": "La vetrina dei personaggi del tuo profilo in gioco: livello, costellazione e talenti, con l'arma e i manufatti che indossa ogni personaggio.",
+    "close": "Chiudi",
+    "viewCharacters": "Vedi i personaggi",
+    "cancel": "Annulla",
+    "importOne": "Importa 1 personaggio",
+    "error": {
+      "wrongUid": "Un UID ha 9 o 10 cifre. Il tuo è in basso a destra nella schermata del gioco.",
+      "notFound": "Nessun giocatore ha questo UID.",
+      "unavailable": "Il gioco al momento non condivide questo profilo. Riprova più tardi.",
+      "maintenance": "Genshin Impact è in manutenzione. Riprova quando sarà finita.",
+      "busy": "Troppe richieste in questo momento. Riprova tra un minuto.",
+      "empty": "Questo profilo non mostra personaggi. Aggiungili alla vetrina dei personaggi e attiva Mostra dettagli personaggio, poi riprova tra qualche minuto.",
+      "unknown": "I personaggi di questa vetrina non sono ancora in Juan-optimizer.",
+      "fail": "Impossibile raggiungere Enka.Network. Riprova tra un momento."
+    },
+    "uid": "UID",
+    "fetching": "Caricamento…",
+    "fetch": "Carica",
+    "howto": {
+      "open": "Nel gioco apri il menu Paimon, poi il tuo profilo, poi Modifica profilo.",
+      "showcase": "Metti i personaggi che vuoi nella vetrina dei personaggi e attiva Mostra dettagli personaggio.",
+      "uid": "Inserisci qui il tuo UID. Una modifica nel gioco può metterci qualche minuto a comparire."
+    },
+    "changeUid": "Cambia UID",
+    "selectNone": "Nessuno",
+    "selectAll": "Tutti",
+    "characters": "Personaggi da importare",
+    "withGearOn": "Ogni personaggio indossa quello che ha nel gioco. I pezzi che hai già vengono riconosciuti, non aggiunti due volte.",
+    "withGearOff": "Solo livello, costellazione e talenti. L'equipaggiamento indossato resta com'è.",
+    "status": {
+      "new": "Nuovo",
+      "update": "Aggiorna",
+      "same": "Aggiornato"
+    },
+    "talents": "Talenti",
+    "done": {
+      "title": "Importati",
+      "characters": "Personaggi: {{count}} ({{new}} nuovi, {{updated}} aggiornati)",
+      "weapons": "Armi: {{count}} ({{new}} nuove, {{matched}} che avevi già)",
+      "artifacts": "Manufatti: {{count}} ({{new}} nuovi, {{matched}} che avevi già)"
+    },
+    "import_one": "Importa {{count}} personaggio",
+    "import_other": "Importa {{count}} personaggi",
+    "ar": "RA {{level}}",
+    "uidValue": "UID {{uid}}",
+    "withGear": "Anche le loro armi e i loro manufatti ({{count}})",
+    "skipped": "Alcuni personaggi di questa vetrina non sono ancora in Juan-optimizer ({{count}}).",
+    "level": "Liv. {{level}}",
+    "note": "I dati vengono da <enka>Enka.Network</enka>. Si importa solo quello che indossano i personaggi della vetrina: per tutto l'inventario usa uno <scanner>scanner</scanner>."
   }
 }

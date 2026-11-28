@@ -26,6 +26,7 @@ import {
 } from '@mui/material'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AutoRankToggle } from './AutoRankToggle'
 import { TopBuilds } from './KqmTopTeams'
 import { insetSx, numSx, quickSx, SubsectionTitle, tokens, type } from './ui'
 
@@ -455,6 +456,7 @@ export function GearRankingControls({
             }}
           >
             {actionButton}
+            <AutoRankToggle />
             {error && (
               <Typography
                 role="alert"
@@ -486,7 +488,7 @@ export function GearRankingControls({
       <Box
         sx={{
           display: 'flex',
-          gap: 1.25,
+          gap: 1,
           flexWrap: 'wrap',
           alignItems: 'center',
         }}
@@ -505,6 +507,7 @@ export function GearRankingControls({
         <Typography role="status" sx={{ ...type.label, ...numSx, flex: 1 }}>
           {statusText}
         </Typography>
+        <AutoRankToggle compact />
         {actionButton}
       </Box>
       {(running || done > 0) && (

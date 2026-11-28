@@ -108,6 +108,7 @@ export function useTeamDataNoContext(
         description: _description,
         rotationDocuments: _rotationDocuments,
         equipmentUndo: _equipmentUndo,
+        savedOptimization: _savedOptimization,
         ...data
       } = database.teams.get(teamId) ?? {}
       return JSON.stringify(data)

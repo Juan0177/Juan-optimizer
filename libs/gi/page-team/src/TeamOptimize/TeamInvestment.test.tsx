@@ -62,6 +62,13 @@ vi.mock('./RotationWriter', () => ({
       name: m.characterKey,
     })),
   teamRunRotation: () => undefined,
+  kqmRunRotation: () => ({
+    text: '',
+    opener: '',
+    timing: { edits: {} },
+    frameData: {},
+    names: [],
+  }),
   editorSx: {},
 }))
 
@@ -78,19 +85,25 @@ vi.mock('./consInvestment', async (importOriginal) => {
         cons,
         signatures,
         text,
+        autoCandidates,
       }: {
         cons: Partial<Record<CharacterKey, number>>
         signatures?: Partial<Record<CharacterKey, number>>
         text?: string
+        autoCandidates?: string[]
       }) => {
         const furinaC = cons.Furina ?? 0
         const yelanC = cons.Yelan ?? 0
+        const flinsC = cons.Flins ?? 0
         const furinaSig = signatures?.Furina ? 1 : 0
         const yelanSig = signatures?.Yelan ? 1 : 0
-        const rotBonus = text ? 1.05 : 1
+        const autoRotation =
+          !text && autoCandidates?.length ? autoCandidates[0] : undefined
+        const rotBonus = text || autoRotation ? 1.05 : 1
         const mult =
           (1 + furinaC * 0.14 + (furinaC >= 2 ? 0.1 : 0)) *
           (1 + yelanC * 0.08) *
+          (1 + flinsC * 0.1) *
           (1 + furinaSig * 0.12) *
           (1 + yelanSig * 0.16) *
           rotBonus
@@ -104,6 +117,7 @@ vi.mock('./consInvestment', async (importOriginal) => {
           },
           seconds: 20,
           builds: {},
+          ...(autoRotation ? { autoRotation } : {}),
         }
       }
     ),
@@ -225,8 +239,8 @@ describe('TeamInvestment panel', () => {
     })
   })
 
-  it('opens Options popover and inline Alt rotations editor', () => {
-    const members = [makeMember('Furina'), makeMember('Yelan')]
+  it('opens Options popover and inline Cons rotations editor with constellation hints and direct row focus', async () => {
+    const members = [makeMember('Flins'), makeMember('Furina')]
     render(
       <ThemeProvider theme={theme}>
         <TeamInvestment
@@ -240,12 +254,33 @@ describe('TeamInvestment panel', () => {
       </ThemeProvider>
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Alt rotations' }))
+    // Idle callout highlights Flins C1 rotation hint with a 1-click button
+    expect(screen.getByText(/Flins C1 alters rotation/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Set C1 rotation' }))
     expect(
       screen.getByText('Conditional rotations for unlocked constellations')
     ).toBeTruthy()
+    // Clicking Set C1 rotation jumps straight into Flins C1 edit mode with kit hint & Auto-find
+    expect(screen.getByLabelText('Rotation at C1')).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Auto-find C1 rotation' })
+    ).toBeTruthy()
+
+    // Toggle editor closed via header button
+    fireEvent.click(screen.getByRole('button', { name: 'Cons rotations' }))
+
+    // Run +1 comparison and check clickable `Needs rot` pill on Flins C1 row
+    fireEvent.click(screen.getByRole('button', { name: '+1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Compare investments' }))
+    await waitFor(() => {
+      expect(screen.getByText('Top options for +1 pull')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Needs rot' }))
+    expect(screen.getByLabelText('Rotation at C1')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Save & update' })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Options' }))
     expect(screen.getByText('Members to pull for')).toBeTruthy()
+    expect(screen.getByLabelText(/Auto-adapt cons rotations/)).toBeTruthy()
   })
 })

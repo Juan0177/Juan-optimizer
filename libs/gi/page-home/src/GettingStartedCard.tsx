@@ -5,6 +5,7 @@ import {
 import { CardThemed } from '@genshin-optimizer/common/ui'
 import { useDatabase } from '@genshin-optimizer/gi/db-ui'
 import { giTokens } from '@genshin-optimizer/gi/theme'
+import { EnkaImportButton } from '@genshin-optimizer/gi/ui'
 import CheckIcon from '@mui/icons-material/Check'
 import { Box, Button, CardContent, Typography } from '@mui/material'
 import type { ReactNode } from 'react'
@@ -114,18 +115,37 @@ export default function GettingStartedCard() {
               title={t(`gettingStarted.steps.${step.key}.title`)}
               description={t(`gettingStarted.steps.${step.key}.description`)}
             >
+              {step.key === 'characters' && (
+                <EnkaImportButton
+                  size="small"
+                  variant={index === current ? 'contained' : 'outlined'}
+                  color={index === current ? 'primary' : 'inherit'}
+                  label={t('gettingStarted.steps.characters.enka')}
+                />
+              )}
               <Button
                 size="small"
-                variant={index === current ? 'contained' : 'outlined'}
-                color={index === current ? 'primary' : 'inherit'}
+                variant={
+                  step.key === 'characters'
+                    ? 'text'
+                    : index === current
+                      ? 'contained'
+                      : 'outlined'
+                }
+                color={
+                  index === current && step.key !== 'characters'
+                    ? 'primary'
+                    : 'inherit'
+                }
                 disabled={!step.to}
                 component={RouterLink}
                 to={step.to ?? '#'}
               >
                 {t(`gettingStarted.steps.${step.key}.action`)}
               </Button>
-              {/* juanlab: anche l'import da UID (Enka o Akasha) per personaggi, armi e manufatti */}
-              {(step.key === 'characters' || step.key === 'artifacts') && (
+              {/* juanlab: anche l'import da UID (Enka o Akasha) per armi e manufatti; per i personaggi
+                  c'è già "Importa da Enka" di Stellar qui sopra */}
+              {step.key === 'artifacts' && (
                 <Button
                   size="small"
                   variant="outlined"

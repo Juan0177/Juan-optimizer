@@ -1,3 +1,4 @@
+import { KEEP_BASE_ROTATION } from '@genshin-optimizer/gi/ui'
 import { describe, expect, it } from 'vitest'
 import { comboRotationOf, consRotationOf } from './ConsRotations'
 
@@ -23,6 +24,25 @@ describe('rotations per constellation', () => {
     expect(consRotationOf(rotations, 2, 3)).toEqual({
       text: 'Flins E Q',
       from: 2,
+    })
+  })
+
+  it('respects KEEP_BASE_ROTATION pins so a higher constellation can revert back to the team rotation', () => {
+    const rotations = {
+      1: 'Vesna E E E Q E E N6 E N6 E',
+      3: KEEP_BASE_ROTATION,
+    }
+    expect(consRotationOf(rotations, 1, 0)).toEqual({
+      text: 'Vesna E E E Q E E N6 E N6 E',
+      from: 1,
+    })
+    expect(consRotationOf(rotations, 3, 0)).toEqual({
+      from: 3,
+      pinnedBase: true,
+    })
+    expect(consRotationOf(rotations, 4, 0)).toEqual({
+      from: 3,
+      pinnedBase: true,
     })
   })
 

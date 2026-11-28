@@ -10,7 +10,7 @@ import type {
   TeamOpt,
   TeamOptEnergyCalculator,
 } from '@genshin-optimizer/gi/db'
-import { useDatabase, useDBMeta } from '@genshin-optimizer/gi/db-ui'
+import { useDatabase, useDBMeta, useTeam } from '@genshin-optimizer/gi/db-ui'
 import { giCtaSx } from '@genshin-optimizer/gi/theme'
 import type { RotationEnergy, TeamOptMember } from '@genshin-optimizer/gi/ui'
 import {
@@ -18,7 +18,9 @@ import {
   isCalcEnergyWeapon,
   isFavonius,
   isWeaponExcludedFor,
+  startsWithoutEnergy,
   syncEnergyCalculator,
+  teamCalculatorEnergy,
   teamCalculatorTargets,
   teamEnergyAuto,
   teamOptCurrentWeapons,
@@ -98,6 +100,7 @@ export function useTeamEnergy(
 ) {
   const database = useDatabase()
   const { gender } = useDBMeta()
+  const zeroEnergy = startsWithoutEnergy(useTeam(teamId))
   const inventoryWeapons = useDataManagerValues(database.weapons)
   const optConfigs = useDataManagerEntries(database.optConfigs)
   const keys = useMemo(() => members.map((m) => m.characterKey), [members])
@@ -137,7 +140,7 @@ export function useTeamEnergy(
     ? `${text.trim()}|${JSON.stringify([opener, timing, frameData])}`
     : ''
   const burstEvery = useMemo(() => teamBurstEvery(teamOpt), [teamOpt])
-  const playKey = `${written}|${JSON.stringify([own.constellations, own.gear, burstEvery])}`
+  const playKey = `${written}|${JSON.stringify([own.constellations, own.gear, burstEvery, zeroEnergy])}`
   const [worked, setWorked] = useState<{
     for: string
     energy?: RotationEnergy
@@ -185,21 +188,33 @@ export function useTeamEnergy(
   const playedTime = ready ? worked?.rotationTime : undefined
 
   const calculatorOf = useCallback(
-    (saved: TeamOptEnergyCalculator | undefined) => ({
-      ...withRotationEnergy(
-        syncEnergyCalculator(
-          keys,
-          saved,
-          teamOpt.rotationTime ?? 20,
-          teamOpt.onField ?? keys[0],
-          own.constellations
-        ),
+    (saved: TeamOptEnergyCalculator | undefined) => {
+      const settings = syncEnergyCalculator(
         keys,
-        energy
-      ),
-      rotationTime: playedTime || (teamOpt.rotationTime ?? 20),
-    }),
-    [keys, teamOpt.rotationTime, teamOpt.onField, own, energy, playedTime]
+        saved,
+        teamOpt.rotationTime ?? 20,
+        teamOpt.onField ?? keys[0],
+        own.constellations
+      )
+      if (!zeroEnergy || !written) delete settings.opening
+      if (!written) delete settings.timeline
+      else if (!zeroEnergy && settings.timeline?.opening)
+        settings.timeline = { rotation: settings.timeline.rotation }
+      return {
+        ...withRotationEnergy(settings, keys, energy),
+        rotationTime: playedTime || (teamOpt.rotationTime ?? 20),
+      }
+    },
+    [
+      keys,
+      teamOpt.rotationTime,
+      teamOpt.onField,
+      own,
+      energy,
+      playedTime,
+      zeroEnergy,
+      written,
+    ]
   )
 
   // Automatic ER follows the rotation and the members: it applies by itself once a rotation is
@@ -244,6 +259,23 @@ export function useTeamEnergy(
         : undefined,
     [calculated, keys, currentWeapons, teamOpt]
   )
+  const blockedBurst = useMemo(() => {
+    if (!ready) return undefined
+    const result = teamCalculatorEnergy(keys, currentWeapons, teamOpt)
+    const opening =
+      zeroEnergy &&
+      Object.entries(result?.opening ?? {}).find(
+        ([, burst]) =>
+          !Number.isFinite(burst.required) &&
+          (!teamOpt.optimizeWeapons || burst.castTime === 0)
+      )
+    const loop =
+      !teamOpt.optimizeWeapons &&
+      Object.entries(result?.tracked ?? {}).find(
+        ([, burst]) => !Number.isFinite(burst.required)
+      )
+    return opening || loop || undefined
+  }, [keys, currentWeapons, teamOpt, zeroEnergy, ready])
   // Per member, how a ticked energy / Favonius weapon shifts their ER requirement during a run
   const erHints = useMemo<Partial<Record<CharacterKey, MemberErHint>>>(() => {
     if (!teamOpt.optimizeWeapons) return {}
@@ -379,10 +411,19 @@ export function useTeamEnergy(
     optConfigs,
   ])
 
-  const [draft, setDraft] = useState<TeamOptEnergyCalculator>()
+  const [draftInputs, setDraftInputs] = useState<TeamOptEnergyCalculator>()
+  const draft = useMemo(() => {
+    if (!draftInputs) return undefined
+    const settings = calculatorOf(draftInputs)
+    if (!ready) delete settings.timeline
+    return settings
+  }, [draftInputs, calculatorOf, ready])
+  const updateDraft = (
+    update: (settings: TeamOptEnergyCalculator) => TeamOptEnergyCalculator
+  ) => setDraftInputs((previous) => previous && update(calculatorOf(previous)))
   const openCalculator = () =>
-    setDraft(structuredClone(calculatorOf(teamOpt.energyCalculator)))
-  const closeCalculator = () => setDraft(undefined)
+    setDraftInputs(structuredClone(calculatorOf(teamOpt.energyCalculator)))
+  const closeCalculator = () => setDraftInputs(undefined)
   const applyCalculator = () => {
     if (!draft) return
     setTeamOpt((o) => {
@@ -390,7 +431,7 @@ export function useTeamEnergy(
       o.energyCalculator = structuredClone(draft)
       if (ready) o.energyRotation = written
     })
-    setDraft(undefined)
+    setDraftInputs(undefined)
   }
   /** Automatic ER: the calculator's targets, filled in from the rotation unless set by hand */
   const toAuto = () =>
@@ -407,12 +448,13 @@ export function useTeamEnergy(
   return {
     calculated,
     targets,
+    blockedBurst,
     erHints,
     gear,
     fromRotation: ready,
     updating,
     draft,
-    setDraft,
+    updateDraft,
     draftErrors: draft ? energyEstimate(keys, draft, gear).errors : [],
     openCalculator,
     closeCalculator,
@@ -433,7 +475,7 @@ export function TeamEnergyDrawer({
   energy: TeamEnergy
 }) {
   const { t } = useTranslation('page_team')
-  const { draft, setDraft } = energy
+  const { draft, updateDraft } = energy
   // (the panel keeps its content while it slides out)
   const shown = useRef(draft)
   if (draft) shown.current = draft
@@ -506,9 +548,7 @@ export function TeamEnergyDrawer({
             gear={energy.gear}
             fromRotation={energy.fromRotation}
             settings={settings}
-            setSettings={(update) =>
-              setDraft((previous) => (previous ? update(previous) : previous))
-            }
+            setSettings={updateDraft}
           />
         )}
       </Box>

@@ -5,16 +5,16 @@ import {
   COURAGE,
   courageDrain,
   customFight,
+  DRIFTING_SNOW,
+  DRIFTING_SNOW_BOSS,
   dpsAt,
   enemyFight,
   enemyHpOf,
   FIGHT_LIMIT,
-  MOONGECKO,
-  DRIFTING_SNOW,
-  DRIFTING_SNOW_BOSS,
   LION,
   LION_BOSS,
   LYSIS_BOSS,
+  MOONGECKO,
   MOONGECKO_BOSS,
   OVERSEER_BOSS,
   resMultiplier,
@@ -360,6 +360,23 @@ describe('an enemy set by hand', () => {
     })
     expect(none.seconds).toBeUndefined()
     expect(none.parts).toEqual([])
+  })
+  it('uses the opening rotation only when the custom enemy starts at zero Energy', () => {
+    const enemy = { ...custom, enemyHp: 200_000 }
+    const t = {
+      ...team('pyro', 10_000),
+      opening: { dps: { pyro: 5_000 }, seconds: 10 },
+    }
+    expect(enemyFight(enemy, t)?.seconds).toBe(20)
+    const zero = enemyFight(
+      { ...enemy, fightSettings: { fullEnergy: false } },
+      t
+    )
+    expect(zero?.seconds).toBe(25)
+    expect(zero?.notes).toEqual(['opening'])
+    expect(zero?.timeline.segments.map((segment) => segment.dps)).toEqual([
+      5_000, 10_000,
+    ])
   })
   it('is a Stygian boss’s HP and fight while its preset applies (a custom HP aside)', () => {
     const boss = stygianBoss(1013061)!

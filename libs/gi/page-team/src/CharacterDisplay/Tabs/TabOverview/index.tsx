@@ -17,6 +17,7 @@ import BonusStatsModal from '../../BonusStatsModal'
 import CompareBtn from '../../CompareBtn'
 import { CustomMultiTargetModal } from '../../CustomMultiTarget/CustomMultiTargetModal'
 import { WhatToFarmStrip } from '../TabUpgradeOpt/WhatToFarmStrip'
+import ArtifactBenchmarks from './ArtifactBenchmarks'
 import EquipmentSection from './EquipmentSection'
 
 export default function TabOverview() {
@@ -48,6 +49,7 @@ export default function TabOverview() {
             sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
           >
             <EquipmentRow onClick={onScroll} />
+            <ArtifactBenchmarks />
             <WhatToFarmStrip />
             <CardThemed
               bgt="light"

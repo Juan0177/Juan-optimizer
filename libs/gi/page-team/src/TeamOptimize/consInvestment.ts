@@ -37,6 +37,8 @@ export interface ConsPoint {
   builds: Partial<Record<CharacterKey, KqmBuild>>
   /** whether any member missed an ER/stat requirement with these upgrades */
   unmet?: boolean
+  /** Auto-adapted rotation text when a deterministic rotation-changing con beat the base rotation */
+  autoRotation?: string
 }
 
 /** Damage per second, or per rotation when its length is unknown */
@@ -189,6 +191,10 @@ export interface InvestmentEval {
   dps: number
   seconds?: number
   rotationLabel?: string
+  /** True when the rotation was auto-adapted for a rotation-changing constellation */
+  autoAdapted?: boolean
+  /** Resolved rotation text (custom or auto-adapted) played for this evaluation */
+  rotationText?: string
   unmet?: boolean
   point?: ConsPoint
 }
@@ -205,6 +211,8 @@ export interface InvestmentPath extends InvestmentState {
   gainPerPull: number
   seconds?: number
   rotationLabel?: string
+  autoAdapted?: boolean
+  rotationText?: string
   unmet?: boolean
   point?: ConsPoint
 }
@@ -351,6 +359,8 @@ export async function planInvestments({
       gainPerPull: cost > 0 ? gainPct / cost : 0,
       seconds: ev.seconds,
       rotationLabel: ev.rotationLabel,
+      autoAdapted: ev.autoAdapted,
+      rotationText: ev.rotationText,
       unmet: ev.unmet,
       point: ev.point,
     }
@@ -641,6 +651,7 @@ export async function refitConstellations({
   signatures,
   start,
   text,
+  autoCandidates,
   summaryOnly = false,
   isCancelled,
 }: {
@@ -655,6 +666,8 @@ export async function refitConstellations({
   signatures?: Partial<Record<CharacterKey, number>>
   start?: Partial<Record<CharacterKey, KqmBuild>>
   text?: string
+  /** Optional simulator-verified auto-adapt candidates for deterministic rotation-changing cons */
+  autoCandidates?: string[]
   /** Skip full `finish()` when caller only needs team DPS, builds, and unmet flag */
   summaryOnly?: boolean
   isCancelled?: () => boolean
@@ -689,6 +702,7 @@ export async function refitConstellations({
       signatures,
       rotation,
       text,
+      autoCandidates,
       baseEr,
       summaryOnly,
     },
@@ -709,6 +723,7 @@ export async function evaluateInventoryInvestment({
   cons,
   signatures,
   text,
+  autoCandidates,
   rotation,
   isCancelled,
 }: {
@@ -722,6 +737,8 @@ export async function evaluateInventoryInvestment({
   signatures?: Partial<Record<CharacterKey, number>>
   /** Alternative rotation text for this constellation state (overrides team's written rotation) */
   text?: string
+  /** Optional simulator-verified auto-adapt candidates for deterministic rotation-changing cons */
+  autoCandidates?: string[]
   /** Team Optimize's saved written rotation metadata (for replaying written or alt rotations) */
   rotation?: InvestRotationMeta
   isCancelled?: () => boolean
@@ -743,6 +760,7 @@ export async function evaluateInventoryInvestment({
       signatures,
       rotation,
       text,
+      autoCandidates,
     },
     isCancelled
   )

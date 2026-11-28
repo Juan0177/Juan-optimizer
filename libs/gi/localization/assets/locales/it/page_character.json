@@ -143,8 +143,8 @@
     "title": "Costellazioni"
   },
   "empty": {
-    "add": "Aggiungi personaggi",
-    "description": "Aggiungi i personaggi che usi, poi imposta livello, talenti, costellazione ed equipaggiamento nell'editor del personaggio. I personaggi aggiunti qui si possono usare in qualsiasi squadra.",
+    "add": "Aggiungi a mano",
+    "description": "Importali dalla vetrina dei personaggi del gioco con il tuo UID, oppure aggiungili a mano e imposta livello, talenti, costellazione ed equipaggiamento. I personaggi aggiunti qui si possono usare in qualsiasi squadra.",
     "title": "Ancora nessun personaggio"
   },
   "header": {

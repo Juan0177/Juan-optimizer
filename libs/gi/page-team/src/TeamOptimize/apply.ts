@@ -186,6 +186,40 @@ export function equipTeamResult(
     })
 }
 
+export const DEFAULT_BUILD_NAME_FORMAT = '{team} (team optimized)'
+
+/**
+ * Expands a saved build name format (supporting `{team}`) for a specific team.
+ */
+export function formatSavedBuildName(
+  format: string,
+  teamName: string,
+  fallback = 'team optimized'
+): string {
+  const template = format.trim() || DEFAULT_BUILD_NAME_FORMAT
+  const base = teamName.trim()
+  const filled = template
+    .replace(/\{team\}/gi, base)
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+  return filled || base || fallback
+}
+
+/**
+ * Infers a reusable `{team}` format string from a user-edited build name so saving
+ * as default carries cleanly across other teams.
+ */
+export function inferBuildNameFormat(
+  buildName: string,
+  teamName: string
+): string {
+  const trimmed = buildName.trim()
+  const base = teamName.trim()
+  if (!trimmed) return DEFAULT_BUILD_NAME_FORMAT
+  if (base && trimmed.includes(base)) return trimmed.replace(base, '{team}')
+  return trimmed
+}
+
 /**
  * Saves the result as a new build per member and switches the team to them: nothing is moved
  * between characters (the builds can be equipped later, from each member's build list).

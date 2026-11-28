@@ -139,6 +139,38 @@
     },
     "entries": [
       {
+        "date": "2026-11-28",
+        "title": "Aggiornamento a Stellar Optimizer 1.50.2",
+        "summary": "Arrivano le versioni da 1.48.0 a 1.50.2 di Stellar Optimizer.",
+        "sections": [
+          {
+            "kind": "new",
+            "items": [
+              "**Importa da Enka**: con il tuo UID porta dentro i personaggi della vetrina del gioco, con livello, costellazione, talenti, arma e manufatti. È nella pagina Personaggi e in Per iniziare nella home.",
+              "**ER a tempo**: nel calcolatore di ER puoi controllare l’energia a ogni Tripudio della rotazione scritta, compresi l’inizio a 0 energia e i Tripudi d’apertura.",
+              "**Confronto degli investimenti**: adatta in automatico le rotazioni delle costellazioni che aggiungono abilità o raggi, con modifica, ripristino e ricerca della rotazione sul posto.",
+              "**Benchmark dei manufatti** nella panoramica del personaggio: confronta i roll utili che indossi con Standard KQM, Buono e Ottimo.",
+              "Classifica automatica dell’equipaggiamento dopo l’ottimizzazione, nome personalizzato delle build in “Salva e usa”, e livello 90 in blocco per le armi filtrate."
+            ]
+          },
+          {
+            "kind": "fixed",
+            "items": [
+              "**Mitya C1**: l’ER del DPS a regime non esce più troppo alta per chi riceve energia con una propria ricarica; ogni Tripudio viene controllato con l’energia che riceve davvero.",
+              "Le armi Sacrificali azzerano l’abilità anche quando l’azzeramento arriva dal primo colpo (Mizuki, Sayu, Freminet, Mavuika).",
+              "Il calcolo dell’ER conta le particelle dei nemici; salvare le build non blocca più la pagina; su telefono tutte le schede della squadra sono visibili."
+            ]
+          },
+          {
+            "kind": "juanlab",
+            "items": [
+              "Anche i nuovi testi sono in italiano, compresa l’importazione da Enka.",
+              "Per iniziare: nel passo Personaggi resta “Importa da Enka” di Stellar; il nostro import da UID (Enka o Akasha) resta nel passo Manufatti e nella scheda della home."
+            ]
+          }
+        ]
+      },
+      {
         "date": "2026-11-27",
         "title": "Aggiornamento a Stellar Optimizer 1.47.4",
         "summary": "Arrivano le versioni da 1.45.1 a 1.47.4 di Stellar Optimizer.",
